@@ -38,7 +38,7 @@ import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
 import { vehicleStats } from './stats';
-import { playerSees, refreshVision } from './vision';
+import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
@@ -275,7 +275,7 @@ export function endTurn(
     renewSalvage(w);
     advanceJobs(w);
     startAutoRepair(w);
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     raiseCalls(w);
     assignAutoOrders(w);
     settleAims(w);
@@ -304,7 +304,7 @@ export function endTurn(
     advanceNpcKnockouts(w);
     spawnNpcs(w);
     advanceShops(w);
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     noteEscape(w);
     noteHurt(w);
     watchStalls(w);

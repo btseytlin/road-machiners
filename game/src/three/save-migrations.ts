@@ -255,6 +255,20 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
+  // 9 to 10: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
+  // vehicles go, and a broken prop keeps its id and turn, since the map file holds the prop.
+  (world) => {
+    const { events: _events, removed: _removed, ...rest } = world;
+    const { visible: _visible, ...player } = world.player as SavedJson;
+    const vehicles = (world.vehicles as SavedJson[]).map(({ trail: _trail, ...vehicle }) => vehicle);
+    const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
+    return { ...rest, player, vehicles, broken };
+  },
+  // 10 to 11: contacts and seen clouds go, since load rebuilds them with the rest of the player's view.
+  (world) => {
+    const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
+    return { ...world, player };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

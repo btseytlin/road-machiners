@@ -7,13 +7,12 @@ import { SavePanel, type SavePanelActions } from "./save-panel";
 
 export type GameMenuActions = SavePanelActions & {
   hasSave: () => boolean;
-  requestBoot: (request: BootRequest) => void;
+  reboot: (request: BootRequest) => void;
 };
 
 // A new game is a page reload with a boot request. Boot deletes the autosaves and keeps the manual slots.
-export function startNewGame(requestBoot: (request: "new") => void): void {
-  requestBoot("new");
-  window.location.reload();
+export function startNewGame(reboot: (request: "new") => void): void {
+  reboot("new");
 }
 
 export class GameMenu {
@@ -42,6 +41,6 @@ export class GameMenu {
 
   private newGame(): void {
     if (!window.confirm(CONFIRM_NEW_GAME)) return;
-    startNewGame(this.actions.requestBoot);
+    startNewGame(this.actions.reboot);
   }
 }

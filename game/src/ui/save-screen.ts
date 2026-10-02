@@ -4,14 +4,15 @@
 import type { CarryReport } from '../sim/world';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
-import { el, panel } from './dom';
+import { download, el, panel } from './dom';
 
 export type SaveFate = 'migrate' | 'new';
 
 export const CONFIRM_NEW_GAME = 'Start a new game? The autosaves are deleted. Your save slots stay.';
 
 // Shows the choice and resolves with the player's pick. New game asks first, and a no leaves the screen up.
-export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<SaveFate> {
+// Download save hands the player the stored save as a file, for a bug report.
+export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unknown): Promise<SaveFate> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
     const done = (fate: SaveFate) => {
@@ -29,9 +30,11 @@ export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<Sav
         { class: 'death-buttons' },
         el('button', { onclick: () => done('migrate'), disabled: !canMigrate }, 'Migrate save'),
         el('button', { onclick: confirmNew }, 'New game'),
+        el('button', { onclick: () => downloadSave(stored) }, 'Download save'),
       ),
     );
     if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));
+    root.append(el('div', { class: 'dim' }, 'If this looks like a bug, download the save and attach it to a GitHub issue.'));
   });
 }
 
@@ -45,6 +48,11 @@ export function showCarryReport(report: CarryReport): Promise<void> {
       el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, 'Drive on')),
     );
   });
+}
+
+// A save that never parsed is stored as its text, and goes out as it is.
+function downloadSave(stored: unknown): void {
+  download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
 function savePanel(title: string): HTMLElement {

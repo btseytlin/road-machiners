@@ -4,25 +4,16 @@ import { playerVehicle } from '../sim/damage';
 import { TEST_MAP } from '../test/map';
 import { townAt } from '../sim/sites';
 import { newWorld } from '../sim/world';
-import { loadWorld, saveOf } from './save';
+import { loadWorld, saveOf, savedRunId } from './save';
+import { memoryBackend, SaveSlots } from './save-db';
 import { readCarried, rescueSave } from './save-rescue';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 
 const KIT = startKit('standard');
 const fresh = () => 5;
-
-function makeStorage(): Storage {
-  const values = new Map<string, string>();
-  return {
-    get length() { return values.size; },
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => { values.delete(key); },
-    setItem: (key, value) => { values.set(key, value); },
-  };
-}
+const freshRun = () => 'new-run';
+const makeSlots = () => new SaveSlots(memoryBackend(), new Map());
 
 type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number }; vehicles: { id: string; items: { x: number }[] }[] };
 
@@ -73,35 +64,37 @@ describe('readCarried', () => {
 });
 
 describe('rescueSave', () => {
-  it('turns a save from another map into a world that then loads', () => {
-    const storage = makeStorage();
+  it('turns a save from another map into a world that then loads, in the same run', () => {
+    const slots = makeSlots();
     const save = currentSave();
     save.world.mapHash = 'other';
-    storage.setItem('roam.save', JSON.stringify(save));
-    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow();
-    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
+    slots.put('auto', { ...save, runId: 'old-run' });
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow();
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
     expect(townAt(rescued.world)).not.toBeNull();
     expect(rescued.world.player.money).toBe(4321);
-    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    expect(rescued.runId).toBe('old-run');
+    expect(savedRunId(slots.get('auto'))).toBe('old-run');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
     expect(loaded.player.skills.driving).toBe(800);
     expect(playerVehicle(loaded).chassisId).toBe(KIT.chassis);
   });
 
   it('reads and writes the slot it is given', () => {
-    const storage = makeStorage();
-    storage.setItem('roam.save:slot2', JSON.stringify(currentSave()));
-    const rescued = rescueSave(storage, 'slot2', TEST_MAP, KIT, fresh, 1234)!;
-    expect(JSON.parse(storage.getItem('roam.save:slot2')!).savedAt).toBe(1234);
-    expect(loadWorld(storage, 'slot2', TEST_MAP)!.player.money).toBe(rescued.world.player.money);
-    expect(storage.getItem('roam.save')).toBeNull();
+    const slots = makeSlots();
+    slots.put('slot2', currentSave());
+    const rescued = rescueSave(slots, 'slot2', TEST_MAP, KIT, fresh, freshRun, 1234)!;
+    expect((slots.get('slot2') as { savedAt: number }).savedAt).toBe(1234);
+    expect(loadWorld(slots, 'slot2', TEST_MAP)!.player.money).toBe(rescued.world.player.money);
+    expect(slots.has('auto')).toBe(false);
   });
 
   it('gives nothing for an unparsable or non-object save', () => {
-    const storage = makeStorage();
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
-    storage.setItem('roam.save', '{"nope');
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
-    storage.setItem('roam.save', '[1]');
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
+    const slots = makeSlots();
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
+    slots.put('auto', '{"nope');
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
+    slots.put('auto', [1]);
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
   });
 });

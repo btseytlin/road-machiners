@@ -8,7 +8,7 @@ import type { BootRequest } from "../three/save-slots";
 
 export type DeathActions = SavePanelActions & {
   hasSave: () => boolean;
-  requestBoot: (request: BootRequest) => void;
+  reboot: (request: BootRequest) => void;
 };
 
 export class DeathScreen {
@@ -37,7 +37,7 @@ export class DeathScreen {
         "div",
         { class: "death-buttons" },
         el("button", { onclick: () => this.savePanel.openLoad(), disabled: !saved }, "Load save"),
-        el("button", { onclick: () => startNewGame(this.actions.requestBoot) }, "New game"),
+        el("button", { onclick: () => startNewGame(this.actions.reboot) }, "New game"),
       ),
     );
   }

@@ -70,8 +70,7 @@ import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
-import type { SlotId } from "./save-slots";
-import { SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
+import { GameSaves, turnFailedNote, type Run } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -179,15 +178,18 @@ export class Game {
   private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
   private readonly death: DeathScreen;
+  private readonly saves: GameSaves;
 
   constructor(
     world: World,
+    run: Run,
     container: HTMLElement,
     overlay: HTMLElement,
     player: SoundPlayer,
     private toggleMute: () => void,
   ) {
     this.world = world;
+    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"));
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
 
@@ -286,15 +288,14 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
-    const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
-    this.menu = new GameMenu(guarded, () => this.anim !== null);
+    const saves = this.saves.menuActions(() => this.world);
+    this.menu = new GameMenu(saves, () => this.anim !== null);
     this.death = new DeathScreen(saves);
 
     this.bindInput();
@@ -307,7 +308,7 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
+      apply: (next) => { this.apply(next); this.saves.afterCommand(next); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
       pressTurn: () => this.pressTurn(),
@@ -341,6 +342,7 @@ export class Game {
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
+    this.saves.logWorld(next);
     syncDrive(this.drive, this.world);
     this.refreshUi();
   }
@@ -605,15 +607,8 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
-  private readonly saves = new SaveHold();
-
   holdSaves(): void {
     this.saves.noteError();
-  }
-
-  private saveNow(write: () => void): void {
-    if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
-    write();
   }
 
   // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
@@ -640,6 +635,7 @@ export class Game {
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
+    this.saves.logWorld(world);
     // The score must follow this turn's combat before its crash accents arrive.
     this.updateLoops();
     this.anim = playback;
@@ -711,8 +707,7 @@ export class Game {
     this.crashCues = null;
     this.phase = null;
     this.idleSince = performance.now();
-    this.saves.finishTurn();
-    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now());
+    this.saves.afterTurn(this.world);
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
