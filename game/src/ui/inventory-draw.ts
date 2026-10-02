@@ -9,7 +9,7 @@ import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { wearLabel } from "./format";
-import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
+import { gridItemIcon } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
@@ -61,8 +61,8 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
-// The box an item draws on a grid: its kind color, icon, name and condition bar.
-export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
+// The box an item draws on the grid of a truck of chassisId: its kind color, icon, name and condition bar.
+export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
   const x = Math.min(...cells.map((c) => c.x));
   const y = Math.min(...cells.map((c) => c.y));
@@ -73,7 +73,7 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
   const node = el(
     "div",
     { class: `inv-item ${cls}`, "data-item-id": it.id, style: pos(x, y, size.w, size.h, cell), title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    createIcon(getItemIcon(it)),
+    gridItemIcon(it, chassisId),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));
@@ -157,10 +157,6 @@ export function itemState(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
   if (partDef(it.part.defId).kind === "core") return "Built in";
   return mounted ? "Mounted" : "Spare";
-}
-
-export function getItemIcon(item: GridItem): IconName {
-  return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
 // Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range

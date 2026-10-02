@@ -90,7 +90,7 @@ describe('NPC restraint', () => {
       return fights;
     });
     expect(fought).toBeGreaterThan(0.9);
-  });
+  }, 90_000); // many seeds of planning take a few seconds alone and near 30s when the whole suite shares the cores
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');

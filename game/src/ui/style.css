@@ -1107,8 +1107,10 @@ body {
 .inv-item .icon {
   width: 100%;
   height: 100%;
-  max-width: 62px;
-  max-height: 62px;
+}
+/* Clear of the condition bar. */
+.inv-item:has(.inv-hp) {
+  padding-bottom: 6px;
 }
 .inv-item-name {
   position: absolute;
@@ -1239,6 +1241,7 @@ body {
   font-size: 11px;
 }
 .inv-chip > .icon {
+  flex: none;
   width: 22px;
   height: 22px;
 }
@@ -1889,17 +1892,37 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
+/* The truck's portrait beside its grid, as tall as the grid, so nose and tail line up. */
+.truck-pics {
+  --map-cell: 10px;
+  --map-gap: 1px;
+  --map-pad: 3px;
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. */
+  height: calc(var(--rows) * (var(--map-cell) + var(--map-gap)) - var(--map-gap) + 2 * var(--map-pad));
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .chassis-map {
   display: grid;
-  gap: 1px;
+  gap: var(--map-gap);
   align-self: flex-start;
   width: max-content;
-  padding: 3px;
+  padding: var(--map-pad);
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px;
-  height: 10px;
+  width: var(--map-cell); /* .chassis-portrait height follows this size */
+  height: var(--map-cell);
 }
 .chassis-map .hole {
   background: none;

@@ -1,0 +1,25 @@
+Closest item pairs at 36 px by mean RGB difference (0-255) over the panel color.
+
+top:
+    1.9  slugCannon / recoilless
+    2.0  shotgun / heavyMg
+    2.3  transmissionMid / transmissionHeavy
+    2.4  tankMid / tankHeavy
+    2.5  transmission / transmissionMid
+    2.5  tank / tankLong
+    2.5  wheel / wheelMid
+    2.5  wheelMid / wheelHeavy
+    2.6  tankLong / tankMid
+    2.6  pneumobolter / autocannon
+
+diagonal:
+    1.8  slugCannon / recoilless
+    2.3  transmissionMid / transmissionHeavy
+    2.4  transmission / transmissionMid
+    2.4  tankLong / tankMid
+    2.4  tank / tankLong
+    2.4  tankMid / tankHeavy
+    2.4  slugCannon / tankGun
+    2.4  wheelMid / wheelHeavy
+    2.5  recoilless / tankGun
+    2.5  wheel / wheelMid

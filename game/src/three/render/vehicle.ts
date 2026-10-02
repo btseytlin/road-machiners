@@ -13,12 +13,13 @@ import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfa
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
-import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
+import { baseGrid, isMounted, itemCells, itemSize, plateSide, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
 import { TruckMotion, WHIPS } from './truckMotion';
+import { weaponHead } from './weaponHead';
 
 const T = PHYSICS.truck;
 const CELL = PHYSICS.cell;
@@ -421,7 +422,6 @@ export class VehicleView {
   }
 
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
-  // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
   private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
     const look = weaponLook(item.part.id, item.part.defId);
     const wear = lookOf(item);
@@ -430,18 +430,7 @@ export class VehicleView {
     tint(mount, paint, wear);
     still.add(mount);
 
-    const parts = new THREE.Group();
-    const receiver = model(look.receiver);
-    parts.add(receiver);
-    const barrel = model(look.barrel);
-    barrel.position.copy(socket(look.receiver, 'muzzle'));
-    const tip = socket(look.barrel, 'tip').add(barrel.position);
-    parts.add(barrel);
-    if (look.extra) {
-      const extra = model(look.extra);
-      extra.position.copy(socket(look.receiver, 'extra'));
-      parts.add(extra);
-    }
+    const { head: parts, tip } = weaponHead(look);
     for (const p of parts.children) tint(p, paint, wear);
     const head = mergeStatic(parts);
     mount.updateMatrix();
@@ -671,11 +660,10 @@ export function standingY(v: Pick<Vehicle, 'chassisId'>, item: GridItem): number
   return restOf(v, item).y;
 }
 
-// The side an armor part covers: its mount letter, or for a spare the front if it lies wide and the left if it lies tall.
+// The side an armor part covers, by plateSide(), checked to be one cell deep.
 function armorSide(v: Vehicle, item: PartItem): SideLetter {
   const size = itemSize(item);
-  const side = isMounted(v.chassisId, item) ? sideOf(v, item.part) : size.w >= size.h ? 'F' : 'L';
-  if (!side) throw new Error(`Armor ${item.part.id} is mounted off a side letter`);
+  const side = plateSide(v.chassisId, item);
   const depthCells = ['F', 'B'].includes(side) ? size.h : size.w;
   if (depthCells !== 1) throw new Error(`Armor ${item.part.id} is ${depthCells} cells deep on side ${side}, expected 1`);
   return side;
