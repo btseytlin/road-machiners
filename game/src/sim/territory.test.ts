@@ -3,31 +3,18 @@ import { onOrchardRoad, REGION } from '../data/region';
 import { ECONOMY, GOODS } from '../data/goods';
 import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
+import { PHYSICS } from '../data/physics';
+import { boxDistance, propBoxes, segmentCrossesBox, type PosedBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
+import { boxesOverlap } from '../test/boxes';
 import { siteGap } from './sites';
-import { bayPoints, deckAlongAt, deckGap, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, spotTable, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
+import { hazardZones, isLootSpot, reactorPos, spotTable, territoryAt, territoryCaches, territoryEntries, territoryGrounds, territoryPieces, territoryTracks } from './territory';
 import type { PropKind } from './terrain';
 import type { LandmarkLook, Obstacle } from './types';
 import { dist, lerp, type Vec } from './vec';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
-const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; roads keep clear of it
-
-// Points over a deck's footprint, from its corners: low left, high left, high right, low right.
-function footprint(deck: HullDeck, steps = 12): Vec[] {
-  const [lowLeft, highLeft, highRight, lowRight] = deck.corners;
-  const at = (a: Vec, b: Vec, t: number): Vec => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) });
-  const points: Vec[] = [];
-  for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps; j++) points.push(at(at(lowLeft, highLeft, i / steps), at(lowRight, highRight, i / steps), j / steps));
-  return points;
-}
-
-function hazardOf(deck: HullDeck) {
-  const zone = hazardZones().find((z) => z.id === deck.territory);
-  if (!zone) throw new Error(`Territory ${deck.territory} has no hazard`);
-  return zone;
-}
 
 describe('territory queries', () => {
   it('finds the territory under a point, and none outside', () => {
@@ -41,8 +28,11 @@ describe('territory queries', () => {
     for (const e of entries) expect(dist(e, fallenSun.pos)).toBeCloseTo(fallenSun.radius, 6);
   });
 
-  it('has three roads into the Fallen Sun', () => {
-    expect(territoryEntries(fallenSun as never)).toHaveLength(3);
+  it("has three roads into the Fallen Sun, where the level concept's tracks leave the crater", () => {
+    const entries = territoryEntries(fallenSun as never);
+    const bearings = entries.map((e) => (Math.atan2(e.y - fallenSun.pos.y, e.x - fallenSun.pos.x) * 180) / Math.PI).sort((a, b) => a - b);
+    expect(bearings).toHaveLength(3);
+    [-16, 37, 166].forEach((want, i) => expect(Math.abs(bearings[i] - want)).toBeLessThan(10));
   });
 
   it('keeps every road out of the hazard', () => {
@@ -58,7 +48,7 @@ describe('territory queries', () => {
   });
 
   it('reports the hazard of each territory that has one', () => {
-    expect(hazardZones().map((z) => z.id)).toEqual(Object.keys(TERRITORIES).filter((id) => TERRITORIES[id].hazard));
+    expect(hazardZones().map((z) => z.id)).toEqual(Object.keys(TERRITORIES).filter((id) => TERRITORIES[id].reactor?.hazard));
   });
 
   it('knows a loot spot only inside its territory', () => {
@@ -68,11 +58,11 @@ describe('territory queries', () => {
     expect(isLootSpot({ ...spot, look: 'carWreck' })).toBe(false);
   });
 
-  it('rolls a deck bay from the bay table and a field spot from its rule', () => {
-    const bay = { id: 'deckBay-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'deckBay', yaw: 0 } as const;
-    expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].hull!.bayTable]);
-    expect(spotTable({ ...bay, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
-    expect(() => spotTable({ ...bay, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
+  it('rolls a cache from the cache table and a field spot from the spot table', () => {
+    const cache = { id: 'hullCache-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'hullCache', yaw: 0 } as const;
+    expect(spotTable(cache)).toBe(SALVAGE[TERRITORIES['fallen-sun'].wreck!.cacheTable]);
+    expect(spotTable({ ...cache, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
+    expect(() => spotTable({ ...cache, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
   });
 });
 
@@ -89,21 +79,21 @@ function midValue(table: LootTable): number {
 
 // The summed mid value of every loot spot a territory's rules place.
 function territoryValue(id: string): number {
-  const rules = TERRITORIES[id];
-  const bays = rules.hull ? rules.hull.sections.reduce((n, s) => n + s.bays.length, 0) * midValue(SALVAGE[rules.hull.bayTable]) : 0;
-  const buildings = (rules.farm ? rules.farm.buildings : []).reduce((sum, b) => sum + b.poses.length * midValue(SALVAGE[b.table]), 0);
-  const field = rules.spots.reduce((sum, s) => sum + s.count * midValue(SALVAGE[s.table]), 0);
-  return bays + buildings + field;
+  const { wreck, farm } = TERRITORIES[id];
+  const caches = wreck ? wreck.caches.length * midValue(SALVAGE[wreck.cacheTable]) : 0;
+  const field = wreck ? wreck.patches.reduce((n, p) => n + p.spots, 0) * midValue(SALVAGE[wreck.spotTable]) : 0;
+  const buildings = (farm ? farm.buildings : []).reduce((sum, b) => sum + b.poses.length * midValue(SALVAGE[b.table]), 0);
+  return caches + field + buildings;
 }
 
 describe('the Old Orchard', () => {
   const farm = TERRITORIES.orchard.farm!;
 
-  it('is a territory with an authored farm and no hull, reactor or hazard', () => {
+  it('is a territory with an authored farm and no wreck, reactor or hazard', () => {
     expect(orchard.kind).toBe('territory');
-    expect(TERRITORIES.orchard.hull).toBeNull();
+    expect(TERRITORIES.orchard.wreck).toBeNull();
     expect(TERRITORIES.orchard.reactor).toBeNull();
-    expect(TERRITORIES.orchard.hazard).toBeNull();
+    expect(hazardZones().filter((z) => z.id === 'orchard')).toEqual([]);
     expect(farm.buildings.length).toBeGreaterThan(0);
   });
 
@@ -117,7 +107,6 @@ describe('the Old Orchard', () => {
     expect(new Set(looks).size).toBe(looks.length);
     for (const b of farm.buildings) {
       expect(spotTable(landmarkAt(b.look, orchard.pos)), b.look).toBe(SALVAGE[b.table]);
-      for (const rule of TERRITORIES.orchard.spots) if (rule.look === b.look) expect(rule.table, b.look).toBe(b.table);
     }
   });
 
@@ -200,98 +189,59 @@ function crosses(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
   return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
 }
 
-describe('hull decks', () => {
-  const decks = hullDecks();
+describe('the Fallen Sun layout', () => {
+  const t = fallenSun as never;
+  const rules = TERRITORIES['fallen-sun'].wreck!;
+  const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
+  const pieces = territoryPieces(t);
+  const lowBoxes = (k: number): PosedBox[] => {
+    const p = pieces[k];
+    return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
+  };
+  // The bow holds the reactor in its breach, so it is the one piece the hazard reaches.
+  const housing = pieces.findIndex((p) => p.look === 'shipBow');
+  const trackSegments = territoryTracks(t).flatMap((track) => track.slice(1).map((b, i) => [track[i], b] as const));
 
-  it('builds one deck per hull section', () => {
-    expect(decks.map((d) => d.section.id)).toEqual(TERRITORIES['fallen-sun'].hull!.sections.map((s) => s.id));
-    for (const deck of decks) expect(deck.territory).toBe('fallen-sun');
+  it('keeps every piece centre, cache, track point and patch inside the territory', () => {
+    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t), ...territoryTracks(t).flat()];
+    for (const p of points) expect(dist(p, fallenSun.pos), `${p.x},${p.y}`).toBeLessThan(fallenSun.radius);
+    for (const patch of rules.patches) expect(Math.hypot(patch.at.x, patch.at.y)).toBeLessThan(fallenSun.radius);
   });
 
-  it('measures the share along a deck: 0 at the low end, 1 at the high end, null outside', () => {
-    for (const deck of decks) {
-      expect(deckAlongAt(deck, deck.low), deck.section.id).toBeCloseTo(0, 9);
-      expect(deckAlongAt(deck, deck.high), deck.section.id).toBeCloseTo(1, 9);
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, 0.25), y: lerp(deck.low.y, deck.high.y, 0.25) })).toBeCloseTo(0.25, 9);
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, 1.1), y: lerp(deck.low.y, deck.high.y, 1.1) })).toBeNull();
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, -0.1), y: lerp(deck.low.y, deck.high.y, -0.1) })).toBeNull();
-      const [lowLeft, highLeft] = deck.corners;
-      const beside = { x: lowLeft.x + (lowLeft.x - deck.low.x) * 0.1 + (highLeft.x - lowLeft.x) / 2, y: lowLeft.y + (lowLeft.y - deck.low.y) * 0.1 + (highLeft.y - lowLeft.y) / 2 };
-      expect(deckAlongAt(deck, beside), deck.section.id).toBeNull();
-    }
+  it("keeps caches, tracks, patches and every piece but the reactor's housing out of the hazard", () => {
+    for (const p of [...territoryCaches(t), ...territoryTracks(t).flat()]) expect(dist(p, zone.pos), `${p.x},${p.y}`).toBeGreaterThan(zone.radius);
+    for (const patch of rules.patches) expect(dist({ x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y }, zone.pos) - patch.radius).toBeGreaterThan(zone.radius);
+    pieces.forEach((p, k) => {
+      if (k === housing) return;
+      for (const b of lowBoxes(k)) expect(boxDistance(b, zone.pos), p.look).toBeGreaterThan(zone.radius);
+    });
   });
 
-  it('spans its length and width', () => {
-    for (const deck of decks) {
-      const [lowLeft, highLeft, highRight, lowRight] = deck.corners;
-      expect(dist(deck.low, deck.high)).toBeCloseTo(deck.section.length, 9);
-      expect(dist(lowLeft, highLeft)).toBeCloseTo(deck.section.length, 9);
-      expect(dist(lowLeft, lowRight)).toBeCloseTo(deck.section.width, 9);
-      expect(dist(highLeft, highRight)).toBeCloseTo(deck.section.width, 9);
-    }
-  });
-
-  it('climbs from the ground at its low end by its rise', () => {
-    const deck = decks[0];
-    expect(deckPlane(deck, 1.5, 0)).toBeCloseTo(1.5, 9);
-    expect(deckPlane(deck, 1.5, 0.5)).toBeCloseTo(1.5 + deck.section.rise / 2, 9);
-    expect(deckPlane(deck, 1.5, 1)).toBeCloseTo(1.5 + deck.section.rise, 9);
-  });
-
-  it('keeps decks apart from each other and clear of every road', () => {
-    const reach = REGION.roadWidth / 2 + DECK_EDGE;
-    for (const deck of decks) {
-      for (const p of footprint(deck)) {
-        expect(ROAD_INDEX.nearestWithin(p.x, p.y, reach), deck.section.id).toBe(Infinity);
-        for (const other of decks) if (other !== deck) expect(deckAlongAt(other, p), `${deck.section.id} on ${other.section.id}`).toBeNull();
+  it("keeps every piece's low boxes off the roads, the tracks and the other pieces", () => {
+    pieces.forEach((p, k) => {
+      for (const b of lowBoxes(k)) {
+        expect(ROAD_INDEX.nearestWithin(b.center.x, b.center.y, Math.hypot(b.half.x, b.half.y) + REGION.roadWidth / 2), p.look).toBe(Infinity);
+        for (const [a, c] of trackSegments) expect(segmentCrossesBox(b, a, c), `${p.look} crosses a track at ${a.x},${a.y}`).toBe(false);
+        pieces.forEach((_, other) => {
+          if (other <= k) return;
+          for (const ob of lowBoxes(other)) expect(boxesOverlap(b, ob), `${p.look} and ${pieces[other].look}`).toBe(false);
+        });
       }
-    }
+    });
   });
 
-  it('keeps every deck, bay and rib leg out of the hazard', () => {
-    for (const deck of decks) {
-      const zone = hazardOf(deck);
-      const legs = ribPoses(deck).flatMap((rib) => [-1, 1].map((side) => ({ x: rib.pos.x + Math.cos(rib.yaw) * rib.r * side, y: rib.pos.y + Math.sin(rib.yaw) * rib.r * side })));
-      for (const p of [...footprint(deck), ...bayPoints(deck), ...legs]) expect(dist(p, zone.pos), deck.section.id).toBeGreaterThan(zone.radius);
-    }
+  it('centres the hazard on the reactor', () => {
+    expect(zone.pos).toEqual(reactorPos(t));
   });
 
-  it('runs every rib across its deck, both legs on the deck at one share along it', () => {
-    for (const deck of decks) {
-      const ribs = ribPoses(deck);
-      const step = deck.section.ribStep;
-      if (step === null) expect(ribs, deck.section.id).toEqual([]);
-      else {
-        expect(ribs.length, deck.section.id).toBeGreaterThan(1);
-        ribs.slice(1).forEach((rib, i) => expect(dist(rib.pos, ribs[i].pos)).toBeCloseTo(step, 9));
-      }
-      const along = Math.atan2(deck.high.y - deck.low.y, deck.high.x - deck.low.x);
-      for (const rib of ribs) {
-        expect(Math.cos(rib.yaw - along), deck.section.id).toBeCloseTo(0, 9);
-        const [a, b] = [-1, 1].map((side) => deckAlongAt(deck, { x: rib.pos.x + Math.cos(rib.yaw) * rib.r * side, y: rib.pos.y + Math.sin(rib.yaw) * rib.r * side }));
-        expect(a, deck.section.id).not.toBeNull();
-        expect(a).toBeCloseTo(b!, 9);
-      }
-    }
+  it('has nine caches and fifteen field spots', () => {
+    expect(territoryCaches(t)).toHaveLength(9);
+    expect(rules.patches.reduce((n, p) => n + p.spots, 0)).toBe(15);
   });
 
-  it('measures the gap from a point to a deck: 0 on it, the distance past a side or an end off it', () => {
-    for (const deck of decks) {
-      const across = { x: -Math.sin(deck.section.yaw), y: Math.cos(deck.section.yaw) };
-      const mid = { x: lerp(deck.low.x, deck.high.x, 0.5), y: lerp(deck.low.y, deck.high.y, 0.5) };
-      const out = deck.section.width / 2 + 2;
-      expect(deckGap(deck, mid), deck.section.id).toBe(0);
-      expect(deckGap(deck, { x: mid.x + across.x * out, y: mid.y + across.y * out }), deck.section.id).toBeCloseTo(2, 9);
-      expect(deckGap(deck, { x: lerp(deck.low.x, deck.high.x, 1 + 3 / deck.section.length), y: lerp(deck.low.y, deck.high.y, 1 + 3 / deck.section.length) })).toBeCloseTo(3, 9);
-      expect(deckGap(deck, { x: deck.corners[1].x + (deck.high.x - deck.low.x) / deck.section.length * 3 + across.x * -4, y: deck.corners[1].y + (deck.high.y - deck.low.y) / deck.section.length * 3 + across.y * -4 })).toBeCloseTo(5, 9);
-    }
-  });
-
-  it('stands each bay on its deck at its share of the length', () => {
-    for (const deck of decks) {
-      const bays = bayPoints(deck);
-      expect(bays).toHaveLength(deck.section.bays.length);
-      bays.forEach((p, i) => expect(deckAlongAt(deck, p), deck.section.id).toBeCloseTo(deck.section.bays[i], 9));
-    }
+  it('waits for scavengers at the entries and the patch centres', () => {
+    const grounds = territoryGrounds(t);
+    expect(grounds.slice(0, 3)).toEqual(territoryEntries(t));
+    expect(grounds).toHaveLength(3 + rules.patches.length);
   });
 });

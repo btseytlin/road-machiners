@@ -13,6 +13,7 @@ export const PAL = {
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
+  rimRock: { top: 0xbab3a6, side: 0x948e84, dark: 0x6e6960 }, // the grey crater walls of the Fallen Sun
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],
@@ -37,7 +38,12 @@ export const PAL = {
   flash: 0xfff0a0,
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   truckGlow: 0xffffff, // faint white light over the player truck at night
-  reactorGlow: 0x7cff5a, // the Fallen Sun reactor core and the light it throws
+  reactorLight: 0x38d6e8, // the reactor's light, bluer than its core so on warm sand and hull it still reads green-teal
+  reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core, green-teal as in the level concept
+  hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
+  craterSand: 0xccaa70, // ochre floor of a territory's crater
+  scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
+  rut: 0x8a6034, // twin dirt ruts of the Fallen Sun's crater tracks, darker than the sand they press
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck

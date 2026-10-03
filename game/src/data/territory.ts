@@ -1,55 +1,47 @@
 // Territories: open ground full of loot spots and debris. The bake places the props, the sim reads the rest.
 // A territory is a location of kind "territory" in src/data/region.ts, keyed here by its id.
+//
+// The Fallen Sun is laid out from the committee's level concept (issue 81), an isometric painting close to the game
+// camera. Positions are measured in its pixels and converted to tiles from the crater centre (map +x east, +y south):
+// dx = px - 510, du = (283 - py) / 0.53, k = 50 / 485 tiles per pixel, tiles = k * ((dx - du) / √2, (-dx - du) / √2).
+// The concept's foreground is stretched, so points past 32 tiles ease in toward 43 tiles. Each comment names the
+// concept pixels; a departure from them says why.
 
 import type { PropKind } from '../sim/terrain';
+import type { LandmarkLook } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { onOrchardRoad } from './region';
 
 export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
-export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
-export type SpotRule = {
-  look: PropKind; // the prop kind that is a loot spot
-  count: number;
-  band: [number, number]; // inner and outer distance from the spine, as shares of spine.band
-  radius: [number, number]; // tiles, the prop's footprint
-  table: SpotTable; // the SALVAGE table each spot rolls
-};
 export type Hazard = {
-  radius: number; // tiles around the territory centre
+  radius: number; // tiles around the reactor
   healthPerTurn: number;
   floor: number; // driver health the hazard never takes anyone below
 };
-// A tilted rectangle of hull a truck drives up. Its low end meets the ground and it climbs evenly to its high end.
-export type HullSection = {
-  id: string;
-  at: Vec; // tiles from the territory centre to the deck's middle
-  yaw: number; // radians from map +x toward +y, pointing from the low end to the high end
-  length: number; // tiles from the low end to the high end
-  width: number; // tiles across
-  rise: number; // height units of the high end above the ground at the low end
-  ribStep: number | null; // tiles between ribs along the deck, from the low end; null for a deck without ribs
-  bays: number[]; // shares of the length from the low end where a loot spot stands
-};
-// A straight piece of plating standing on its side. It is cover, not a deck.
-export type HullWall = {
-  at: Vec; // tiles from the territory centre to the wall's middle
-  yaw: number; // radians, along the wall
-  length: number; // tiles
-};
-// A wrecked hull: tilted decks with loot bays, ribs over them and walls of plating.
-export type HullRules = {
-  sections: HullSection[];
-  walls: HullWall[];
-  ribInset: number; // tiles from a deck side in to a rib leg, so a leg stands on the deck and not on its dropping edge
-  bayTable: SpotTable; // the SALVAGE table a loot spot in a deck bay rolls
-  bayRadius: number; // tiles, the footprint of a deck bay's loot spot
-};
+// One authored wreck piece. r is its placement radius in tiles: the model scales evenly from its reference radius
+// to r, so r is half the piece's length along its yaw for the long hull pieces.
+export type HullPiece = { look: LandmarkLook; at: Vec; yaw: number; r: number };
+export type Cache = { at: Vec };
+export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
+// A circle of drawn filler: debris and field spots picked inside it from the map seed.
+export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: number };
+// Rim rocks, chunks of crater wall drawn on an arc of the crater bank. Bearings in radians from map +x toward +y, distances in tiles.
+export type RimRocks = { from: number; to: number; radius: [number, number]; count: number; size: [number, number] };
+// A twin-rut dirt track on the crater floor, a polyline in tiles from the centre. It is only drawn.
+export type Ruts = Vec[];
+// The reactor prop. Its position is also the hazard's centre.
+export type Reactor = { look: PropKind; at: Vec; radius: number; hazard: Hazard | null };
 // An authored farm laid out in its road's frame. Every at and point is tiles from the territory centre, written as
 // onOrchardRoad(s, c); every turn is radians from the road's heading; every size is tiles along and across the road.
 // Authored parts must lie inside the territory's outline. Each group's comment says who put it there and why.
 export type FarmRules = {
+  // The old road the farm lies along, in tiles from the centre; band is the tiles to each side of it where debris is
+  // drawn.
+  spine: { from: Vec; to: Vec; band: number };
+  debris: DebrisRule[]; // drawn in the band
+  grounds: [number, number]; // inner and outer share of spine.band where raiders and vultures wait beside the spine
   roads: FarmRoad[]; // the old asphalt road, the dirt roads and the narrow tracks, marked in list order
   buildings: BuildingGroup[];
   pads: Pad[]; // concrete ground
@@ -92,32 +84,46 @@ export type Run = { look: PropKind; points: Vec[]; segment: number; broken: numb
 // Loose pieces of one look, count of them, each beside a random building of a look in near, from the debris gap past
 // its footprint to reach tiles further out, at a random turn. radius is the piece's footprint in tiles.
 export type ClutterRule = { look: PropKind; count: number; radius: [number, number]; near: PropKind[]; reach: number };
+// A wrecked ship's crater: authored hull pieces and caches, and filler drawn in patches.
+export type WreckRules = {
+  pieces: HullPiece[];
+  caches: Cache[]; // rich loot spots, mostly inside or beside pieces
+  cacheLook: PropKind;
+  cacheTable: SpotTable; // the SALVAGE table a cache rolls
+  cacheRadius: number; // tiles, a cache's footprint
+  patches: Patch[];
+  spotLook: PropKind; // the prop kind of a field spot drawn in a patch
+  spotTable: SpotTable;
+  spotRadius: [number, number]; // tiles, a field spot's footprint
+  seatEase: number; // tiles over which the ground levelled under a piece eases back to the crater relief
+  rimRocks: RimRocks;
+  scree: { at: Vec; radius: number } | null; // tiles from the centre; the ground there is painted red-brown scree
+  tracks: Ruts[];
+};
+// A territory is a wreck or a farm.
 export type TerritoryRules = {
   seed: number; // offset of the territory's own draws, so adding a territory shifts no other's
-  // The line the territory lies along, in tiles from the centre; band is the tiles to each side of the line where
-  // field spots and debris are drawn.
-  spine: { from: Vec; to: Vec; band: number };
-  hull: HullRules | null;
+  wreck: WreckRules | null;
   farm: FarmRules | null;
-  debris: DebrisRule[];
-  spots: SpotRule[]; // field spots, drawn in the band
-  grounds: [number, number]; // inner and outer share of spine.band where raiders and vultures wait beside the spine
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
-  reactor: { look: PropKind; radius: number } | null; // the prop at the centre
-  hazard: Hazard | null;
+  reactor: Reactor | null;
 };
 
-// The Fallen Sun broke its back along one line from the north-west rim to the south-east rim.
-const SUN_CRASH = { from: { x: -40, y: -18 }, to: { x: 40, y: 18 } };
-const SUN_HEADING = Math.atan2(SUN_CRASH.to.y - SUN_CRASH.from.y, SUN_CRASH.to.x - SUN_CRASH.from.x);
+const DEG = Math.PI / 180;
 
-// A point s tiles along the crash line from the centre (toward the south-east) and c tiles across it (toward the
-// south-west side), in tiles from the centre.
-function onSunLine(s: number, c: number): Vec {
-  const [cos, sin] = [Math.cos(SUN_HEADING), Math.sin(SUN_HEADING)];
-  return { x: s * cos - c * sin, y: s * sin + c * cos };
-}
+// Debris of the dense field in the concept's lower half: plates, wrecked trucks, junk piles and girders.
+const DENSE: DebrisRule[] = [
+  { look: 'hullChunk', count: 4, radius: [1, 1.6] },
+  { look: 'hullGantry', count: 1, radius: [0.8, 1.1] },
+  { look: 'carWreck', count: 3, radius: [0.6, 0.8] },
+  { look: 'junk', count: 4, radius: [0.5, 0.8] },
+];
+// The sparse scatter of the concept's upper half.
+const LIGHT: DebrisRule[] = [
+  { look: 'hullChunk', count: 2, radius: [1, 1.6] },
+  { look: 'carWreck', count: 1, radius: [0.6, 0.8] },
+];
 
 const ALONG = 0; // a turn that keeps a building's front along the road, toward its north end
 const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road, toward map east: the road for a building on its west side
@@ -148,69 +154,145 @@ function block(s0: number, s1: number, c0: number, c1: number, rows: GroveBlock[
 export const TERRITORIES: Record<string, TerritoryRules> = {
   'fallen-sun': {
     seed: 0,
-    spine: { ...SUN_CRASH, band: 14 },
-    hull: {
-      // Read from north-west to south-east. Sections keep 10 tiles from the centre, 2 past the hazard, and leave
-      // the floor to the south-west and north-east open for the roads.
-      sections: [
-        // The bow is nose-up: its broken aft end is buried, its torn bow end is 8 m up over the north-west floor. The
-        // floor climbs about 1 unit toward the rim under it, so the rise is 3.
-        { id: 'bow', at: onSunLine(-32, -2), yaw: SUN_HEADING + Math.PI, length: 22, width: 9, rise: 3, ribStep: 4, bays: [0.3, 0.6, 0.85] },
-        // The forward hull slid off the line to the south-west. It is nearly flat and overlooks the reactor pit.
-        { id: 'forward', at: onSunLine(-17, 9.5), yaw: SUN_HEADING, length: 14, width: 8, rise: 0.6, ribStep: 4, bays: [0.3, 0.7] },
-        // The aft hull tilts up toward the south-east. The bank climbs up to 2 units under it, so its rise of 3.6 keeps
-        // the deck clear of the bank and its high end 5 to 7 m over it. Its bays sit between ribs, since a bay under a
-        // rib leaves no way past between the rib legs and the cliff sides.
-        { id: 'aft', at: onSunLine(19, -2), yaw: SUN_HEADING, length: 16, width: 8, rise: 3.6, ribStep: 4, bays: [0.375, 0.625] },
-        // Two plates thrown off the line, small ramps that climb back toward it: sniper perches. They are 7 tiles wide,
-        // so a truck passes the bay in the middle and drives on up to the top.
-        { id: 'plate-ne', at: onSunLine(4, -26), yaw: SUN_HEADING + Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
-        { id: 'plate-sw', at: onSunLine(-4, 26), yaw: SUN_HEADING - Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
+    wreck: {
+      pieces: [
+        // The ship line, from the lower-left of the centre to the upper right.
+        // Bow: aft break (655,325) to nose (905,215), 9 tiles across, moved 1.5 tiles toward its nose so the hub's spine
+        // stops short of its aft break. The nose lies against the north rim.
+        { look: 'shipBow', at: { x: 18, y: -22.9 }, yaw: -1.481, r: 16.5 },
+        // Hub with its ring: (495,285), 12 tiles across. Its spine stub points at the bow's aft break.
+        { look: 'shipHub', at: { x: -0.8, y: 1.4 }, yaw: -0.356, r: 6 },
+        // Ribcage tube: south end (300,430) to north end (465,335), axis north to south. A 3-tile gap to the hub lets
+        // trucks leave its north end.
+        { look: 'shipCage', at: { x: 4.4, y: 22.9 }, yaw: -1.61, r: 12.5 },
+        // Upright shards along the spine: (578,250); and (652,400), moved 10 tiles in along the spine to (17,1.5)
+        // because the south-east drum, pulled in from the stretched foreground, took its place.
+        { look: 'hullShard', at: { x: 0.4, y: -9.5 }, yaw: 0.9, r: 1.6 },
+        { look: 'hullShard', at: { x: 17, y: 1.5 }, yaw: 2.4, r: 1.6 },
+        // Arch shells left of the hub: A (275,222)-(385,228); B (400,212)-(472,214), moved 2 tiles along its axis and 2 north so
+        // a truck fits between the two. Both turn 25° toward east, so their dark open ends face the camera as in the
+        // concept's perspective.
+        { look: 'hullShell', at: { x: -21.1, y: 5.1 }, yaw: -0.2, r: 6 },
+        { look: 'hullShell', at: { x: -13.8, y: -7.9 }, yaw: -0.3, r: 4 },
+        // Top centre: the tilted tower slab (548,168) and the lattice gantry (445,112)-(512,158), moved 1.5 tiles west
+        // off the tower.
+        { look: 'hullTower', at: { x: -13, y: -18.6 }, yaw: -0.785, r: 1.6 },
+        { look: 'hullGantry', at: { x: -24, y: -18.5 }, yaw: 0.133, r: 5.5 },
+        // Huts: the collapsed hut (385,160), moved 4 tiles north-west off the track, and two small huts by the tower (598,140) and (622,132). The shed (258,318).
+        { look: 'shack', at: { x: -29, y: -10.5 }, yaw: 0.4, r: 2 },
+        { look: 'shack', at: { x: -13.3, y: -26.1 }, yaw: -0.8, r: 1.2 },
+        { look: 'shack', at: { x: -12.6, y: -28.9 }, yaw: -0.6, r: 1.2 },
+        { look: 'shack', at: { x: -13.6, y: 23.2 }, yaw: 0.6, r: 2.5 },
+        // Drums: sunk in the north-east wall (690,130)-(755,70); small at the right (918,285), moved 4 tiles out of the
+        // hazard; large at the lower right (765,455)-(955,505), 16 tiles long and moved 6 tiles in from
+        // (39,1.2) so it stays inside the territory.
+        { look: 'hullDrum', at: { x: -8.7, y: -36.6 }, yaw: -1.834, r: 5 },
+        { look: 'hullDrum', at: { x: 31.5, y: -28.5 }, yaw: 0.3, r: 2.5 },
+        { look: 'hullDrum', at: { x: 33, y: 5 }, yaw: -0.325, r: 8 },
+        // Shard clusters: bottom centre (505,545), moved 2 tiles off the south-east road's end; far left (95,400); and
+        // right (885,385), moved 7 tiles north to (36.5,-19), past the east road's end.
+        { look: 'hullShard', at: { x: 27.5, y: 30.5 }, yaw: 0.4, r: 3.5 },
+        { look: 'hullShard', at: { x: -11.9, y: 38.7 }, yaw: 2.1, r: 3.5 },
+        { look: 'hullShard', at: { x: 36.5, y: -19 }, yaw: -1, r: 3.5 },
       ],
-      // The stern: plating rolled onto its side in a broken wall past the aft hull.
-      walls: [
-        { at: onSunLine(30, 2), yaw: SUN_HEADING + 0.15, length: 2 },
-        { at: onSunLine(32.2, 1.2), yaw: SUN_HEADING - 0.1, length: 2 },
-        { at: onSunLine(34.4, 2.2), yaw: SUN_HEADING + 0.2, length: 2 },
-        { at: onSunLine(36.6, 1), yaw: SUN_HEADING, length: 2 },
-        { at: onSunLine(38.8, 2.4), yaw: SUN_HEADING - 0.15, length: 2 },
-        { at: onSunLine(40.8, 1.4), yaw: SUN_HEADING + 0.1, length: 2 },
+      // Inside hull pieces sight is short and an ambush waits at the open ends, so the rich loot lies there.
+      caches: [
+        // Inside the cage (330,410) and (420,360), moved toward its middle and against its east wall, where the lane
+        // between the ribs stays widest beside them.
+        { at: { x: 5.9, y: 26.9 } },
+        { at: { x: 5.6, y: 20.9 } },
+        { at: { x: -21.1, y: 5.1 } }, // inside shell A (325,222)
+        { at: { x: -13.8, y: -7.9 } }, // inside shell B (440,215)
+        { at: { x: -9.5, y: -1 } }, // west of the hub; the concept's (525,300) lies inside the hub
+        { at: { x: 19.5, y: -2.5 } }, // past the spine's end at the bow's aft break, outside the hazard (590,320)
+        { at: { x: -10.5, y: -22 } }, // behind the tower (560,185)
+        { at: { x: 30.8, y: 11 } }, // on the south side of the south-east drum (760,470)
+        { at: { x: 10.2, y: 2.1 } }, // beside the spine (590,320)
       ],
-      ribInset: 0.5,
-      // Deck bays are exposed on high ground, so they roll the rich landmark table, the whole site's stock before.
-      bayTable: 'landmark',
-      // A bay is a stack of crates the size of a field spot, small enough that a truck drives round it on the deck.
-      bayRadius: 0.7,
+      cacheLook: 'hullCache',
+      // Caches roll the rich landmark table, the whole site's stock before territories.
+      cacheTable: 'landmark',
+      // A cache is a stack of crates the size of a field spot, small enough that a truck drives round it inside a hull.
+      cacheRadius: 0.7,
+      patches: [
+        // The dense field of the concept's lower half.
+        { at: { x: -6.5, y: 32.4 }, radius: 10, debris: DENSE, spots: 3 }, // west of the cage (180,400)
+        { at: { x: 14, y: 30 }, radius: 9, debris: DENSE, spots: 2 }, // the bottom centre (400,480)
+        { at: { x: 21, y: 21 }, radius: 8.5, debris: DENSE, spots: 2 }, // the lower right (512,445)
+        { at: { x: 34, y: 16 }, radius: 7, debris: LIGHT, spots: 2 }, // south of the large drum (633,465)
+        { at: { x: -24, y: 29 }, radius: 7, debris: LIGHT, spots: 2 }, // the lower left (146,301)
+        // The sparse scatter of the upper half.
+        { at: { x: 28, y: -11 }, radius: 6, debris: LIGHT, spots: 1 }, // below the bow (777,345)
+        { at: { x: -6.4, y: -13.7 }, radius: 7, debris: LIGHT, spots: 1 }, // the top centre (560,210)
+        { at: { x: 2, y: -27 }, radius: 7, debris: LIGHT, spots: 0 }, // below the north-east drum (709,192)
+        // The west scree (180,200): pale plate fragments.
+        { at: { x: -31.9, y: 11.3 }, radius: 9, debris: [{ look: 'hullChunk', count: 12, radius: [0.5, 1] }], spots: 2 },
+      ],
+      spotLook: 'shipCache',
+      // Field spots roll a scrap-heavy table at road-wreck size. With the 9 caches the Fallen Sun keeps 24 spots.
+      spotTable: 'hullScrap',
+      spotRadius: [0.6, 0.8],
+      seatEase: 3,
+      // Rock walls along the north rim: the concept's grey crags run from (620,40) to (1000,330), bearings -111° to
+      // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. Their
+      // feet stand 37 to 45 tiles out, as at (700,120) and (950,300), so the walls close the crater floor in.
+      rimRocks: { from: -170 * DEG, to: -35 * DEG, radius: [40, 46], count: 28, size: [2.5, 4] },
+      // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110).
+      scree: { at: { x: -38, y: 6 }, radius: 16 },
+      // Twin-rut tracks traced from the concept, bent round the pieces. Each starts or ends at a road end or another
+      // track.
+      tracks: [
+        // From the west road's end north of the shells to the tower and huts: (150,185) (260,172) (395,182) (610,160)
+        [{ x: -38.5, y: 9.6 }, { x: -34.3, y: 8 }, { x: -32, y: 2 }, { x: -28, y: -4 }, { x: -23, y: -10 }, { x: -17, y: -12.5 }, { x: -10.5, y: -13.5 }, { x: -7.5, y: -18 }, { x: -8, y: -24 }],
+        // Down the west side past the shed to the cage's south end: (205,190) (175,265) (230,335) (330,385)
+        [{ x: -34.3, y: 8 }, { x: -31.9, y: 14.8 }, { x: -26.7, y: 21.7 }, { x: -21, y: 25.7 }, { x: -13.3, y: 28.5 }, { x: -6, y: 31 }, { x: 0, y: 36 }, { x: 4.8, y: 37.5 }],
+        // Under the shells to the hub: (175,265) (320,262) (450,250)
+        [{ x: -26.7, y: 21.7 }, { x: -22.8, y: 16.5 }, { x: -16.7, y: 11 }, { x: -10, y: 7.5 }],
+        // A loop round the shed: (330,262) (340,300) (290,345)
+        [{ x: -16.7, y: 11 }, { x: -10.5, y: 14.5 }, { x: -8, y: 19 }, { x: -8.5, y: 25 }, { x: -13.3, y: 28.5 }],
+        // From the cage's south end to the south-east road's end: (390,395) (500,450) (590,520)
+        [{ x: 4.8, y: 37.5 }, { x: 10, y: 39 }, { x: 17, y: 37.5 }, { x: 22.5, y: 32 }, { x: 25, y: 26 }, { x: 31.9, y: 24.1 }],
+        // North past the south-east drum and the spine's end to the east road's end: (680,420) (800,380) (985,425)
+        [{ x: 31.9, y: 24.1 }, { x: 29, y: 17 }, { x: 24, y: 12 }, { x: 22, y: 4 }, { x: 27, y: -4 }, { x: 33, y: -8 }, { x: 38.5, y: -11 }],
+        // Between the hub and the cage's north end to the spine: (600,300) (700,360)
+        [{ x: 22, y: 4 }, { x: 13, y: 5.5 }, { x: 7, y: 8.8 }, { x: 0, y: 9.3 }, { x: -5, y: 9 }, { x: -10, y: 7.5 }],
+        // Along the bow's south flank toward the small drum: (850,345) (935,300)
+        [{ x: 33, y: -8 }, { x: 32, y: -15 }, { x: 31.5, y: -21 }],
+        // North of the hub from the tower to the bow's aft break
+        [{ x: -10.5, y: -13.5 }, { x: -4, y: -12.5 }, { x: 4, y: -12 }, { x: 10, y: -9.5 }],
+      ],
     },
     farm: null,
-    // Debris gives cover, ambush lines and places to hide. Tanks are the stern's thruster housings.
-    debris: [
-      { look: 'hullChunk', count: 30, radius: [1.2, 2] },
-      { look: 'hullRib', count: 8, radius: [0.8, 1.2] },
-      { look: 'carWreck', count: 10, radius: [0.6, 0.8] },
-      { look: 'tank', count: 3, radius: [1.2, 1.6] },
-    ],
-    // Field spots roll a scrap-heavy table at road-wreck size. With the 9 deck bays the Fallen Sun keeps 24 spots.
-    spots: [{ look: 'shipCache', count: 15, band: [0.3, 1], radius: [0.6, 0.8], table: 'hullScrap' }],
-    // Through the band of the field spots, where scavengers come.
-    grounds: [0.3, 1],
     spotGap: 6,
-    debrisGap: 3,
-    reactor: { look: 'reactor', radius: 3 },
-    hazard: {
-      radius: 8,
-      // The starving rule (RULES.starveDamage 5 per turn, floor RULES.starveFloor 30) anchors both numbers: it is the
-      // one other non-combat health drain, and it never kills by itself.
-      healthPerTurn: 5,
-      floor: 30,
+    debrisGap: 1.5,
+    // The core glows in the breach on the bow's near flank (800,278). It stands where the bow model's breach is, 10 m
+    // forward of the bow's centre and 5 m toward that flank, 2 tiles from the concept point.
+    reactor: {
+      look: 'reactor',
+      at: { x: 19.4, y: -25.3 },
+      radius: 1.5,
+      hazard: {
+        radius: 8,
+        // The starving rule (RULES.starveDamage 5 per turn, floor RULES.starveFloor 30) anchors both numbers: it is the
+        // one other non-combat health drain, and it never kills by itself.
+        healthPerTurn: 5,
+        floor: 30,
+      },
     },
   },
   orchard: {
     seed: 1,
-    // The old road through the basin. Field spots and debris are drawn along it, and raiders wait beside it.
-    spine: { from: AT(-30, 0), to: AT(44, 0), band: 30 },
-    hull: null,
+    wreck: null,
     farm: {
+      // The old road through the basin. Debris is drawn along it, and raiders wait beside it.
+      spine: { from: AT(-30, 0), to: AT(44, 0), band: 30 },
+      // Debris along the road band: loose junk and old car wrecks scavengers stripped and pushed off the roads.
+      debris: [
+        { look: 'junk', count: 5, radius: [0.8, 1.2] },
+        { look: 'carWreck', count: 4, radius: [0.6, 0.8] },
+      ],
+      // Beside the old road, between it and the groves' outer rows.
+      grounds: [0.3, 1],
       // Read with docs/concepts/old-orchard-issue-111.jpg: s runs up the old road from the crossroads, c across it
       // toward the map's west, the image's up. Positions are the concept's, stretched about 1.3, then fitted to the
       // basin: the west ridge closes it at c 34, the north ridge stands at s 26-37 west of the road, the north-west
@@ -366,18 +448,8 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'barrier', count: 8, radius: [0.5, 0.5], near: ['quonset', 'guardPost'], reach: 4 },
       ],
     },
-    // Debris along the road band: loose junk and old car wrecks scavengers stripped and pushed off the roads.
-    debris: [
-      { look: 'junk', count: 5, radius: [0.8, 1.2] },
-      { look: 'carWreck', count: 4, radius: [0.6, 0.8] },
-    ],
-    // The orchard's caches are authored with its buildings: its groves leave no open band to draw them in.
-    spots: [],
-    // Beside the old road, between it and the groves' outer rows.
-    grounds: [0.3, 1],
     spotGap: 6,
     debrisGap: 3,
     reactor: null,
-    hazard: null,
   },
 };

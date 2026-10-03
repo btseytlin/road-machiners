@@ -52,5 +52,5 @@ describe('a fuelless majority of NPCs', () => {
 
     expect(stalls).toEqual([]);
     for (const v of broke) expect(getResources(w, w.vehicles.find((x) => x.id === v.id)!).fuel).toBeGreaterThan(0);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 });

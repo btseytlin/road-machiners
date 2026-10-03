@@ -218,7 +218,7 @@ describe('physics turns', () => {
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, 120_000); // three physics runs share this hook; they took over 30s when the whole suite shares the cores
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -600,7 +600,7 @@ describe('physics turns', () => {
     // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  });
+  }, 90_000); // physics turns up a hill take 10s alone and over 30s when the whole suite shares the cores
 
   it('a limping courier crawls up a bank as steep as any chassis limps up', () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // eight physics turns take 10s alone and over 30s when the whole suite shares the cores
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();

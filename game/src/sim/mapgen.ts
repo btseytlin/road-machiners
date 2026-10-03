@@ -152,7 +152,7 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -172,12 +172,8 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   junk: 'junk',
   carWreck: 'wreck',
   hullChunk: 'hull_chunk',
-  hullRib: 'hull_rib',
   shipCache: 'crates',
-  coreWreck: 'tank_hulk',
   reactor: 'reactor',
-  hullWall: 'hull_wall',
-  deckBay: 'crates',
   deadTree: 'dead_tree',
   armyCache: 'crates',
   bunker: 'bunker',
@@ -191,14 +187,57 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   drums: 'drums',
   woodpile: 'woodpile',
   shipWing: 'ship_wing',
+  hullCache: 'crates',
+  shipBow: 'ship_bow',
+  shipCage: 'ship_cage',
+  shipHub: 'ship_hub',
+  hullShell: 'hull_shell',
+  hullDrum: 'hull_drum',
+  hullShard: 'hull_shard',
+  hullTower: 'hull_tower',
+  hullGantry: 'hull_gantry',
+  rimRock: 'rim_rock',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
-// fence or barrier segment is 4 m long and a hull wall segment 8 m, so each radius is half that: each is one
-// straight segment along their yaw. The orchard's buildings, army truck and clutter are built at their size against
-// the 8.1 m army truck, and the orchard poses them at about these radii, so they draw near scale 1 (each radius is
-// stated in its tools/blender script). A hull rib's legs stand at its radius. The building model stretches to its
-// footprint instead. The pole, billboard and tank stand at their real size.
-const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, hull_chunk: 6, hull_rib: 3, crates: 1.5, reactor: 12, hull_wall: 4, farmhouse: 16, barn: 14.7, quonset: 12.9, bunker: 15.6, guard_post: 3.2, army_truck: 4.4, barrier: 2, drums: 1.75, woodpile: 2.6, ship_wing: 26.5 };
+// fence or barrier segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The
+// orchard's buildings, army truck and clutter are built at their size against the 8.1 m army truck, and the orchard
+// poses them at about these radii, so they draw near scale 1 (each radius is stated in its tools/blender script). The
+// Fallen Sun's hull pieces are built at their real size, with half their length along +x as the radius. The building
+// model stretches to its footprint instead. The pole, billboard and tank stand at their real size.
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
+  crag: 1,
+  silo: 2.5,
+  water_tower: 2,
+  ruin_house: 4.8,
+  gas_station: 7.2,
+  bridge_broken: 6,
+  wreck: 0.7 * M,
+  shack: 3.6,
+  junk: 2.4,
+  fence: 2,
+  hull_chunk: 6,
+  crates: 1.5,
+  reactor: 8,
+  farmhouse: 16,
+  barn: 14.7,
+  quonset: 12.9,
+  bunker: 15.6,
+  guard_post: 3.2,
+  army_truck: 4.4,
+  barrier: 2,
+  drums: 1.75,
+  woodpile: 2.6,
+  ship_wing: 26.5,
+  ship_bow: 66,
+  ship_cage: 50,
+  ship_hub: 24,
+  hull_shell: 24,
+  hull_drum: 20,
+  hull_shard: 10,
+  hull_tower: 6,
+  hull_gantry: 22,
+  rim_rock: 8,
+};
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));

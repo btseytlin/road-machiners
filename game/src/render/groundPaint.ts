@@ -3,6 +3,7 @@
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRITORIES } from "../data/territory";
 import { groundSlope, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
@@ -69,15 +70,38 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
+  paintCraters(c);
+  paintScree(c);
+}
+
+// Each crater's bank is rust-tinted. A territory's crater floor is warm open sand, as in the Fallen Sun's level
+// concept; other floors are scorched.
+function paintCraters(c: PaintCanvas): void {
   for (const crater of TERRAIN.features.craters) {
-    disc(
-      c,
-      crater.center,
-      crater.radius + crater.bank,
-      css(PAL.rust.side, 0.18),
-    );
-    disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
+    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
+    disc(c, crater.center, crater.radius, holdsTerritory(crater.center) ? css(PAL.craterSand, 0.6) : css(PAL.rust.dark, 0.25));
   }
+}
+
+// A territory's scree slope, red-brown over the sand.
+function paintScree(c: PaintCanvas): void {
+  for (const t of REGION.locations.filter((l) => l.kind === "territory")) {
+    const scree = TERRITORIES[t.id].wreck?.scree;
+    if (scree) fadedDisc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, PAL.scree, 0.95);
+  }
+}
+
+// A disc that holds its color to half its radius and fades out to the edge, so it reads as a slope, not a stain.
+function fadedDisc(c: PaintCanvas, p: Vec, r: number, color: number, alpha: number): void {
+  const [x, y] = [c.toPx(p.x), c.toPx(p.y)];
+  const fill = c.ctx.createRadialGradient(x, y, 0, x, y, r * c.res);
+  fill.addColorStop(0.5, css(color, alpha));
+  fill.addColorStop(1, css(color, 0));
+  blob(c, p, r, fill);
+}
+
+function holdsTerritory(centre: Vec): boolean {
+  return REGION.locations.some((l) => l.kind === "territory" && Math.hypot(l.pos.x - centre.x, l.pos.y - centre.y) < 1);
 }
 
 // Per-tile inputs of the ground color, computed once per paint instead of once per pixel.
@@ -251,7 +275,7 @@ function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
   blob(c, p, r, style);
 }
 
-function blob(c: PaintCanvas, p: Vec, r: number, style: string): void {
+function blob(c: PaintCanvas, p: Vec, r: number, style: string | CanvasGradient): void {
   c.ctx.fillStyle = style;
   c.ctx.beginPath();
   c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);

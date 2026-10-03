@@ -152,5 +152,5 @@ describe('boulders on the baked map', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
 
     expect(onCliff).toEqual([]);
-  });
+  }, 120_000); // decoding and checking the baked map takes 25s alone and near 40s when the whole suite shares the cores
 });

@@ -250,8 +250,8 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group
-// keeps its glow, so the views can pulse it.
+// The reactor's core glows by itself and lights the breach and the ground before it, so its danger is seen before it
+// is felt. The group keeps its glow, so the views can pulse it.
 function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
   const materials: THREE.MeshLambertMaterial[] = [];
   eachMaterial(reactor, (m) => {
@@ -260,7 +260,7 @@ function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
     m.emissiveIntensity = REACTOR_GLOW.emissive;
     materials.push(m);
   });
-  const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
+  const light = new THREE.PointLight(PAL.reactorLight, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
   light.position.set(0, REACTOR_GLOW.height, 0);
   g.add(light);
   const glow: Glow = { materials, light };
@@ -314,9 +314,10 @@ function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
   for (const id of fixed.treeIds) if (!standing.has(id)) fixed.trees.hide(id);
 }
 
-// Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
-// across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
-const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// Glow strength, light strength, reach and fade in meters, and the light's height above the ground in model meters.
+// The core stands in the bow's breach with a rod about 9 m tall, so the light hangs at the breach and reaches the
+// ground in front of it to about the hazard's edge, not the whole crater.
+const REACTOR_GLOW = { emissive: 2.2, intensity: 500, range: 40, decay: 1.5, height: 8 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };

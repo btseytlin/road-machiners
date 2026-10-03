@@ -13,7 +13,7 @@ import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onDeck } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
@@ -127,14 +127,13 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground types for tile marks of the old world, the new world and territories.
+// Ground types for old-world tile marks.
 const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_OLD_ROAD]: 'asphalt',
   [BUILT_FIELD]: 'field',
   [BUILT_SCRUB]: 'scrub',
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
-  [BUILT_HULL]: 'hull',
   [BUILT_TRACK]: 'track',
   [BUILT_CANAL]: 'canal',
   [BUILT_PAD]: 'concrete',

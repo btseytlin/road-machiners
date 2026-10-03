@@ -11,7 +11,7 @@ const SHORT_RUN = 60;
 // handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
 // to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which triples the time
+const RUN_TIMEOUT = 300_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which made a 16s run take over 120s on a loaded machine
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {

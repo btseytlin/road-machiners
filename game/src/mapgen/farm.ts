@@ -41,7 +41,7 @@ type Line = { points: Vec[]; width: number };
 // stands on them and blocks mark field only on bare ground. Buildings come before the runs, clutter and trees, which
 // keep a parking gap round them.
 export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, farm: FarmRules, rng: Rng): BakedProp[] {
-  const frame = frameOf(rules.spine);
+  const frame = frameOf(farm.spine);
   const onRoad = markRoads(d, t, farm.roads);
   markPads(d, t, frame, farm.pads);
   const canals = farm.canals.map((c) => ({ points: c.points.map((p) => inside(t, shift(t, p), 0, 'canal point')), width: c.width }));
@@ -84,7 +84,7 @@ export function touchesMarks(d: MapDraft, pos: Vec, r: number): boolean {
   return touchedTiles(d.size, pos, r).some((tile) => d.built[tile] === BUILT_OLD_ROAD || d.built[tile] === BUILT_TRACK || d.built[tile] === BUILT_CANAL || d.built[tile] === BUILT_PAD);
 }
 
-function frameOf(spine: TerritoryRules['spine']): Frame {
+function frameOf(spine: FarmRules['spine']): Frame {
   const yaw = bearing(spine.from, spine.to);
   return { yaw, along: { x: Math.cos(yaw), y: Math.sin(yaw) }, across: { x: Math.sin(yaw), y: -Math.cos(yaw) } };
 }

@@ -3,7 +3,7 @@ import { REGION } from '../data/region';
 import { GEOLOGY, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
-import { TYPE_IDS } from '../sim/terrain';
+import { typeOfCode } from '../sim/terrain';
 import { groundLayer, newDraft, type MapDraft } from './bake';
 
 const SEED = 1337;
@@ -13,7 +13,7 @@ const G = GEOLOGY.ground;
 const SMALL = 16;
 
 function typeAt(d: MapDraft, x: number, y: number): TerrainTypeId {
-  return TYPE_IDS[d.types[y * d.size + x]];
+  return typeOfCode(d.types[y * d.size + x])!;
 }
 
 function cornersOf(d: MapDraft, x: number, y: number): number[] {
@@ -121,7 +121,7 @@ describe('ground types from geology marks', () => {
 
     groundLayer(SEED, d);
 
-    const kinds = new Set(Array.from(d.types, (code) => TYPE_IDS[code]));
+    const kinds = new Set(Array.from(d.types, (code) => typeOfCode(code)));
     expect([...kinds].sort()).toEqual(['hardpan', 'road', 'sand']);
   });
 

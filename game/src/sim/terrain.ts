@@ -109,13 +109,19 @@ export function isCliff(t: Terrain, tile: number): boolean {
 //   'KMAP', format version u32, size u32, map seed u32, height scale u32,
 //   corner heights i16 as height * scale, (size + 1)^2 of them in corner order,
 //   tile types u8 as indexes into TYPE_IDS, size^2 of them in tile order,
-//   prop count u32, then per prop: kind u8 as an index into PROP_KINDS, x, y, r and yaw as f32, group and step as u16.
+//   prop count u32, then per prop: kind u8 as an index into PROP_CODES, x, y, r and yaw as f32, group and step as u16.
 // The hash is FNV-1a over every byte, so any change to the file changes it.
 
 // Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
-// New kinds go last, so older files keep their kinds.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing'] as const;
-export type PropKind = (typeof PROP_KINDS)[number];
+// New kinds go last, so older files keep their kinds. A retired kind keeps its slot for the same reason.
+export const PROP_CODES = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock'] as const;
+// The Fallen Sun's old decks, ribs, walls and core wreck. No bake makes them now, and a file that holds one is refused.
+const RETIRED_PROP_KINDS = ['hullRib', 'coreWreck', 'hullWall', 'deckBay'] as const;
+export type PropKind = Exclude<(typeof PROP_CODES)[number], (typeof RETIRED_PROP_KINDS)[number]>;
+// The kinds a bake can place, in stored order.
+export const PROP_KINDS: readonly PropKind[] = PROP_CODES.filter((k): k is PropKind => !(RETIRED_PROP_KINDS as readonly string[]).includes(k));
+// The kind each stored code reads as, undefined for a retired one.
+const KIND_OF_CODE = PROP_CODES.map((code) => PROP_KINDS.find((k) => k === code));
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.
 export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
@@ -123,8 +129,12 @@ export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: Ba
 // What the map file stores of a bake: corner heights, tile type indexes into TYPE_IDS and props.
 export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 
-// Ground types in their stored order: the map file keeps a type as its index here.
-export const TYPE_IDS = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
+// Ground types in their stored order: the map file keeps a type as its index here. The Fallen Sun's old hull plating
+// is retired but keeps its slot, so the types after it keep their codes.
+const RETIRED_TYPE = 'hull';
+const LIVE_TYPES = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
+export const TYPE_IDS: readonly (TerrainTypeId | typeof RETIRED_TYPE)[] = [...LIVE_TYPES.slice(0, LIVE_TYPES.indexOf('track')), RETIRED_TYPE, ...LIVE_TYPES.slice(LIVE_TYPES.indexOf('track'))];
+const TYPE_OF_CODE = TYPE_IDS.map((code) => LIVE_TYPES.find((id) => id === code));
 
 const MAGIC = 'KMAP';
 const VERSION = 2;
@@ -162,7 +172,7 @@ function writeProps(view: DataView, from: number, props: BakedProp[]): void {
   view.setUint32(from, props.length, true);
   props.forEach((p, k) => {
     const at = from + 4 + k * PROP_BYTES;
-    const code = PROP_KINDS.indexOf(p.kind);
+    const code = PROP_CODES.indexOf(p.kind);
     if (code < 0) throw new Error(`Prop ${k} has unknown kind ${p.kind}`);
     view.setUint8(at, code);
     view.setFloat32(at + 1, p.pos.x, true);
@@ -200,7 +210,7 @@ export function decodeMap(bytes: Uint8Array): BakedMap {
 }
 
 function readProp(view: DataView, at: number, k: number): BakedProp {
-  const kind = PROP_KINDS[view.getUint8(at)];
+  const kind = KIND_OF_CODE[view.getUint8(at)];
   if (kind === undefined) throw new Error(`Map file prop ${k} has unknown prop kind ${view.getUint8(at)}`);
   return {
     kind,
@@ -224,9 +234,14 @@ function readHeader(bytes: Uint8Array, view: DataView): { size: number; seed: nu
 }
 
 function readType(code: number, tile: number): TerrainTypeId {
-  const id = TYPE_IDS[code];
+  const id = typeOfCode(code);
   if (id === undefined) throw new Error(`Map file tile ${tile} has unknown ground type ${code}`);
   return id;
+}
+
+// The ground type a map file code stands for, or undefined for an unknown or retired code.
+export function typeOfCode(code: number): TerrainTypeId | undefined {
+  return TYPE_OF_CODE[code];
 }
 
 function fnv1a(bytes: Uint8Array): string {

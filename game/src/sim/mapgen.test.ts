@@ -9,6 +9,7 @@ import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { boxesOverlap } from '../test/boxes';
 import { groundAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
@@ -120,10 +121,11 @@ describe('world from the baked map', () => {
     const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
     const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull rib is an arch: only its two legs stand on the ground, r to each side along its yaw, and the model's leg
-    // reaches under a sixth of r each way. Other props stand under the arch between them.
-    const ground = (o: Obstacle): { pos: Vec; r: number }[] =>
-      o.kind === 'landmark' && o.look === 'hullRib' ? [1, -1].map((k) => ({ pos: { x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) }, r: o.r / 6 })) : [{ pos: o.pos, r: o.r }];
+    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
+    const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
+    const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
+    const rimPair = (a: Obstacle, b: Obstacle) => [a, b].every((o) => o.kind === 'landmark' && o.look === 'rimRock');
     // A segment prop is a line r to each side of its centre, not a disc: it overlaps a disc that reaches its line, and
     // another segment that its line crosses.
     const line = (o: Obstacle): [Vec, Vec] | null => (ends(o).length === 2 ? (ends(o) as [Vec, Vec]) : null);
@@ -131,12 +133,18 @@ describe('world from the baked map', () => {
       const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
       return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
     };
-    const overlap = (a: Obstacle, b: Obstacle) => {
+    const overlap = (a: Obstacle, b: Obstacle): boolean => {
+      if (rimPair(a, b)) return false;
+      if (boxed(a) && boxed(b)) return low(a).some((p) => low(b).some((q) => boxesOverlap(p, q)));
+      if (boxed(a) || boxed(b)) {
+        const [piece, other] = boxed(a) ? [a, b] : [b, a];
+        return low(piece).some((box) => boxDistance(box, other.pos) < other.r - 1e-6);
+      }
       const [la, lb] = [line(a), line(b)];
       if (la && lb) return crosses(la, lb);
-      if (la) return ground(b).some((q) => segmentDist(q.pos, la[0], la[1]) < q.r - 1e-6);
-      if (lb) return ground(a).some((p) => segmentDist(p.pos, lb[0], lb[1]) < p.r - 1e-6);
-      return ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+      if (la) return segmentDist(b.pos, la[0], la[1]) < b.r - 1e-6;
+      if (lb) return segmentDist(a.pos, lb[0], lb[1]) < a.r - 1e-6;
+      return dist(a.pos, b.pos) < a.r + b.r - 1e-6;
     };
     const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
@@ -288,6 +296,9 @@ describe('prop poses', () => {
     expect(() => propShape('nothing')).toThrow(/nothing/);
   });
 });
+
+// The Fallen Sun's hull piece looks, which stand on their low boxes.
+const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);
 
 describe('Broken Wing on the baked map', () => {
   const M = PHYSICS.metersPerTile;

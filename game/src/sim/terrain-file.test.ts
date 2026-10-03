@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPGEN } from '../data/terrain';
 import { newDraft, typeCode, type MapDraft } from '../mapgen/bake';
-import { decodeMap, encodeMap, PROP_KINDS, TYPE_IDS, type BakedProp } from './terrain';
+import { decodeMap, encodeMap, PROP_CODES, PROP_KINDS, TYPE_IDS, type BakedProp } from './terrain';
 
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 
@@ -37,7 +37,7 @@ describe('map file', () => {
   });
 
   it('keeps the stored code of every older prop kind and ground type', () => {
-    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing']);
+    expect(PROP_CODES).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock']);
     expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'hull', 'track', 'canal', 'concrete']);
   });
 
@@ -65,9 +65,19 @@ describe('map file', () => {
   it('refuses a file with an unknown prop kind', () => {
     const d = smallDraft();
     const bytes = encodeMap(d, 1);
-    bytes[bytes.length - PROP_BYTES] = PROP_KINDS.length;
+    bytes[bytes.length - PROP_BYTES] = PROP_CODES.length;
 
     expect(() => decodeMap(bytes)).toThrow(/prop kind/i);
+  });
+
+  it('refuses a file with a retired prop kind or ground type', () => {
+    const props = encodeMap(smallDraft(), 1);
+    props[props.length - PROP_BYTES] = PROP_CODES.indexOf('deckBay');
+    const ground = encodeMap(smallDraft(), 1);
+    ground[ground.length - 4 - smallDraft().props.length * PROP_BYTES - 1] = TYPE_IDS.indexOf('hull');
+
+    expect(() => decodeMap(props)).toThrow(/prop kind/i);
+    expect(() => decodeMap(ground)).toThrow(/ground type/i);
   });
 
   it('refuses a version 1 file, which stored only rocks', () => {
