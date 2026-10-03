@@ -40,6 +40,19 @@ export const START_KITS: Record<string, StartKit> = {
     cargo: { scrap: 2 },
     costBasis: { scrap: 10 },
   },
+  // A reasonably prepared mid-game player, for the income harness: a hauler with a cargo box, two guns, armor and a
+  // diesel, and money for a few loads.
+  midgame: {
+    name: 'Your truck',
+    chassis: 'hauler',
+    parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
+    storage: [],
+    money: 3000,
+    fuel: CHASSIS.hauler.fuelCap,
+    supplies: RULES.baseSupplies,
+    cargo: { parts: 2 },
+    costBasis: {},
+  },
 };
 
 export function startKit(id: string): StartKit {

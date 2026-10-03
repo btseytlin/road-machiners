@@ -15,6 +15,7 @@
     "combat": "vite-node scripts/combat.mjs",
     "loadouts": "vite-node scripts/loadouts.mjs",
     "stuck": "vite-node scripts/stuck.mjs",
+    "income": "vite-node scripts/income.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
     "progression:report": "vite-node scripts/progression-report.mjs",
     "map:bake": "vite-node scripts/map-bake.mjs",

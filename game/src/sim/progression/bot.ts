@@ -14,39 +14,71 @@ import { maxHp } from '../wear';
 import { inCombat } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
-import { chooseOption, currentOptions } from '../dialogue';
+import { isDefeated, isKnockedOut } from '../defeat';
+import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
 import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
-import { moveItem, storePart, takeFromStorage } from '../inventory';
+import { cargoMassRoom, moveItem, storePart, takeFromStorage } from '../inventory';
+import { itemMass } from '../mass';
 import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
+import { topGoal } from '../npc-activities';
 import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
-import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
+import type { ThreatAnswer } from '../parley';
+import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { clockOf } from '../sun';
-import { inTowReach, setBeacon } from '../tow';
-import type { GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import { escortsOf, inTowReach, setBeacon } from '../tow';
+import type { Faction, GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
-import { playerExplored, playerSees } from '../vision';
+import { canVehicleSee, playerExplored, playerSees } from '../vision';
 
 export type Archetype = 'trader' | 'scavenger' | 'fighter' | 'mixed';
 export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter', 'mixed'];
-type Goal = Exclude<Archetype, 'mixed'>;
+// A policy is an archetype of the progression recorder or a robber of the income harness. The selective robber skips
+// guarded targets, and the convoy robber demands from guarded convoys too.
+export type Policy = Archetype | 'robber' | 'convoyRobber';
+export const POLICIES: readonly Policy[] = [...ARCHETYPES, 'robber', 'convoyRobber'];
+type Goal = Exclude<Policy, 'mixed'>;
 // The mixed bot plays one goal per in-game day, in this order.
 const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
-// The world after the bot's commands, and every event those commands raised.
-export type BotTurn = { world: World; events: GameEvent[] };
+// What the bot did that the events do not say: a demand and the driver's answer, and goods and spares it looted.
+export type BotNote =
+  | { kind: 'demand'; target: string; answer: ThreatAnswer; guarded: boolean }
+  | { kind: 'took'; from: string; goods: Record<string, number>; parts: PartInstance[] };
+// The money one command moved, named by what the command was.
+export type MoneyEntry = { reason: string; amount: number };
+// The world after the bot's commands, every event those commands raised, the bot's notes and the money each command
+// moved.
+export type BotTurn = { world: World; events: GameEvent[]; notes: BotNote[]; money: MoneyEntry[] };
 
-// Applies commands one after another and keeps the events of each.
+// Applies commands one after another and keeps the events of each. A command that moves money must name why.
 class Orders {
   readonly events: GameEvent[] = [];
+  readonly notes: BotNote[] = [];
+  readonly money: MoneyEntry[] = [];
   constructor(public world: World) {}
 
-  run(command: (w: World) => World): void {
+  run(command: (w: World) => World, reason: string | null = null): void {
+    const before = this.world.player.money;
     this.world = command(this.world);
     this.events.push(...this.world.events);
+    const amount = this.world.player.money - before;
+    if (amount === 0) return;
+    if (reason === null) throw new Error(`A bot command moved ${amount} money without a reason`);
+    this.money.push({ reason, amount });
+  }
+
+  // Runs a loot command and notes the goods and spares it brought in from `from`.
+  loot(from: string, command: (w: World) => World): void {
+    const goods = goodsCount(this.me);
+    const spares = new Set(spareItems(this.me).map((s) => s.partId));
+    this.run(command);
+    const gained = Object.entries(goodsCount(this.me)).flatMap(([good, n]) => (n > (goods[good] ?? 0) ? [[good, n - (goods[good] ?? 0)] as const] : []));
+    const parts = this.me.items.flatMap((it) => (it.kind === 'part' && !isMounted(this.me.chassisId, it) && !spares.has(it.part.id) ? [structuredClone(it.part)] : []));
+    if (gained.length > 0 || parts.length > 0) this.notes.push({ kind: 'took', from, goods: Object.fromEntries(gained), parts });
   }
 
   get me(): Vehicle {
@@ -58,16 +90,20 @@ export function isArchetype(value: string): value is Archetype {
   return (ARCHETYPES as readonly string[]).includes(value);
 }
 
+export function isPolicy(value: string): value is Policy {
+  return (POLICIES as readonly string[]).includes(value);
+}
+
 // The player's commands for this turn. A knocked-out or towed player gets none, and turns still run.
-export function botOrders(world: World, archetype: Archetype): BotTurn {
+export function botOrders(world: World, policy: Policy): BotTurn {
   const o = new Orders(world);
   answerCall(o);
   if (playerCanAct(o.world)) {
-    const goal = goalOf(o.world, archetype);
+    const goal = goalOf(o.world, policy);
     keepSwitches(o);
     if (!holds(o) && !serviceTrip(o)) GOALS[goal](o);
   }
-  return { world: o.world, events: o.events };
+  return { world: o.world, events: o.events, notes: o.notes, money: o.money };
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -77,8 +113,8 @@ export function parkedOnPurpose(world: World): boolean {
   return playerVehicle(world).job !== null || patchDeal(world) !== null || townAt(world) !== null;
 }
 
-function goalOf(world: World, archetype: Archetype): Goal {
-  if (archetype !== 'mixed') return archetype;
+function goalOf(world: World, policy: Policy): Goal {
+  if (policy !== 'mixed') return policy;
   return MIXED_ROTATION[(clockOf(world.turn).day - 1) % MIXED_ROTATION.length];
 }
 
@@ -92,7 +128,7 @@ function answerCall(o: Orders): void {
     if (seen.has(at)) throw new Error(`Bot call loops back to ${at}`);
     seen.add(at);
     const pick = call.topic ? 0 : currentOptions(o.world).length - 1;
-    o.run((w) => chooseOption(w, pick));
+    o.run((w) => chooseOption(w, pick), `call ${call.topic ?? 'hub'}`);
   }
 }
 
@@ -190,7 +226,7 @@ function restoreEngine(o: Orders): void {
   if (!engineSpot(o.me, engine.defId) && hasCargo(o.me)) sellCargo(o);
   const spot = engineSpot(o.me, engine.defId);
   if (!spot) throw new Error('No free engine mount for a new engine');
-  o.run((w) => buyStockPart(w, engine.id));
+  o.run((w) => buyStockPart(w, engine.id), 'buy engine');
   mountBought(o, engine.id, spot);
 }
 
@@ -228,15 +264,21 @@ function isBadlyDamaged(part: PartInstance): boolean {
 function serviceHere(o: Orders): void {
   for (const kind of ['fuel', 'supplies'] as const) {
     const n = Math.min(supplyRoom(o.world, kind), Math.floor(o.world.player.money / ECONOMY.supplyPrice[kind]));
-    if (n > 0) o.run((w) => buySupply(w, kind, n));
+    if (n > 0) o.run((w) => buySupply(w, kind, n), `buy ${kind}`);
   }
   const cost = repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money) o.run(repairAll);
+  if (cost > 0 && cost <= o.world.player.money) o.run(repairAll, 'repair');
 }
 
 // ---- Goals.
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, fighter: fight };
+const GOALS: Record<Goal, (o: Orders) => void> = {
+  trader: traderGoal,
+  scavenger: scavengerGoal,
+  fighter: fight,
+  robber: (o) => robberGoal(o, false),
+  convoyRobber: (o) => robberGoal(o, true),
+};
 
 // A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
 // grows back, so a bot with neither left waits in the nearest town.
@@ -266,7 +308,7 @@ function trade(o: Orders): boolean {
 
 function buyThere(o: Orders, buy: Purchase): true {
   if (townAt(o.world)?.id !== buy.town.id) driveToSite(o, buy.town);
-  else o.run((w) => buyGood(w, buy.good, buy.count));
+  else o.run((w) => buyGood(w, buy.good, buy.count), 'buy goods');
   return true;
 }
 
@@ -393,7 +435,7 @@ function lootHere(o: Orders): void {
   const stock = salvageHere(o.world);
   if (!stock || !canLoot(o.world, stock.id) || freeCells(o.me) === 0) return;
   if (lootBlocker(o.world, o.me, stock.id)) return;
-  o.run((w) => takeAllLoot(w, stock.id));
+  o.loot(stock.id, (w) => takeAllLoot(w, stock.id));
 }
 
 // A player cannot start a search with a hostile in sight or while another truck loots the stock, so the bot waits
@@ -405,6 +447,166 @@ function visitStock(o: Orders, stock: SalvageStock): void {
   }
   const site = REGION.locations.find((l) => l.id === stock.id);
   driveTo(o, site ? nearestPad(site, o.me.pos) : besideStop(o.world, stock.pos, stock.radius));
+}
+
+// ---- Robbery.
+
+// The goal lines under a seen driver that say it carries cargo or goes to load it. They are the reasons
+// src/sim/npc-activities.ts gives the trade, sell and haul goals.
+export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'buy profitable cargo', 'load cargo at its source'];
+// The factions a robber demands cargo from.
+const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
+// The towns a robber drives between while it looks for a target.
+const PATROL: readonly string[] = ['bowl', 'nose'];
+
+// A careful robber. It sells at its best market once its cells are full, and in any town it stops at. Otherwise it
+// takes what lies in reach, fights a foe it is engaged with, demands cargo from a target in sight, goes for a pile, a
+// wreck or a knocked-out target it sees, or drives between the towns. With `guarded`, it also demands from targets
+// whose escort is in sight.
+function robberGoal(o: Orders, guarded: boolean): void {
+  if (freeCells(o.me) === 0 && hasCargo(o.me)) {
+    sellAtMarket(o);
+    return;
+  }
+  sellInTown(o);
+  lootHere(o);
+  const foe = engagedFoe(o.world);
+  if (foe) return driveTo(o, foe);
+  demandInSight(o, guarded);
+  if (freeCells(o.me) > 0) collectOrPatrol(o);
+}
+
+function sellInTown(o: Orders): void {
+  if (townAt(o.world) && hasCargo(o.me)) sellCargo(o);
+}
+
+// Demands cargo from the nearest target in sight, unless the player is in a fight.
+function demandInSight(o: Orders, guarded: boolean): void {
+  const target = inCombat(o.world, o.me) ? null : robTarget(o.world, guarded);
+  if (target) demand(o, target);
+  if (o.world.player.call) throw new Error(`The robber left a call with ${o.world.player.call.with} open`);
+}
+
+// Strips a knocked-out target in sight, or goes for a pile or wreck in sight, or drives on between the towns.
+function collectOrPatrol(o: Orders): void {
+  const downed = downedTarget(o.world);
+  if (downed) return takeFromTarget(o, downed);
+  const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => !isSiteStock(s) && playerSees(o.world, s.pos)));
+  if (stock) return visitStock(o, stock);
+  patrol(o);
+}
+
+// The nearest truck in a fight with the player: a hostile in sight, or one heard while their combat lasts. Combat
+// lapses after STATE_TURNS.combat turns with no hostile act, so a target that got out of sight is given up then.
+function engagedFoe(world: World): Vec | null {
+  const me = playerVehicle(world);
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && !isDefeated(v) && hostileToPlayer(world, v));
+  const seen = hostile.filter((v) => playerSees(world, v.pos)).map((v) => v.pos);
+  const fighting = new Set(world.states.filter((s) => s.kind === 'combat' && (s.holder === me.id || s.other === me.id)).map((s) => (s.holder === me.id ? s.other : s.holder)));
+  const heard = world.player.contacts.filter((c) => fighting.has(c.vehicleId) && hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center);
+  return nearest(me.pos, seen) ?? nearest(me.pos, heard);
+}
+
+// The nearest truck the robber would demand cargo from. It reads only what the player sees: a driver in sight, at
+// peace and awake, of a trader or convoy faction, whose goal line says it carries cargo, with no more mounted guns
+// than the player's truck, that the player has not robbed before. Without `guarded`, a target with an awake escort
+// in sight is skipped.
+export function robTarget(world: World, guarded: boolean): Vehicle | null {
+  const me = playerVehicle(world);
+  const guns = mountedParts(me, 'weapon').length;
+  const targets = world.vehicles.filter((v) => isRobberyPrey(world, v) && saysCarriesCargo(v) && mountedParts(v, 'weapon').length <= guns && (guarded || !guardedInSight(world, v)));
+  return targets.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+// An awake trader or convoy driver in sight and radio reach, at peace with the player, not robbed by it before.
+function isRobberyPrey(world: World, v: Vehicle): boolean {
+  if (!isAwakeDriverOf(world, v, ROB_FACTIONS)) return false;
+  return inRadioSight(world, v) && !hostileToPlayer(world, v) && world.player.talked[v.id]?.rob === undefined;
+}
+
+function isAwakeDriverOf(world: World, v: Vehicle, factions: readonly Faction[]): boolean {
+  return v.id !== world.player.vehicleId && v.brain !== null && !isDefeated(v) && factions.includes(v.faction);
+}
+
+function inRadioSight(world: World, v: Vehicle): boolean {
+  return playerSees(world, v.pos) && canVehicleSee(world, playerVehicle(world), v.pos);
+}
+
+// The goal line under the driver says it carries cargo or goes to load it.
+function saysCarriesCargo(v: Vehicle): boolean {
+  const reason = topGoal(v)?.reason;
+  return reason !== undefined && CARGO_REASONS.includes(reason);
+}
+
+function guardedInSight(world: World, v: Vehicle): boolean {
+  return escortsOf(world, v.id).some((e) => !isDefeated(e) && playerSees(world, e.pos));
+}
+
+// Radios the target and demands its cargo. The driver answers with its one reply, which the bot notes. A driver whose
+// hub offers no demand, like one with nothing on its grid or one busy fighting another truck, gets a hang up.
+function demand(o: Orders, target: Vehicle): void {
+  o.run((w) => callVehicle(w, target.id));
+  const rob = currentOptions(o.world).findIndex((opt) => opt.topic === 'rob' && opt.option === null);
+  if (rob < 0) {
+    o.run(hangUp);
+    return;
+  }
+  o.run((w) => chooseOption(w, rob), 'call rob');
+  const replies = currentOptions(o.world).filter((opt) => opt.option !== null);
+  if (replies.length !== 1) throw new Error(`A demand on ${target.id} offers ${replies.length} replies, not one`);
+  o.run((w) => chooseOption(w, 0), 'call rob');
+  const call = o.world.player.call;
+  if (call?.topic !== 'rob') throw new Error(`A demand on ${target.id} left the rob topic`);
+  const answer = threatAnswerOf(call.node);
+  o.notes.push({ kind: 'demand', target: target.id, answer, guarded: guardedInSight(o.world, target) });
+  answerCall(o);
+}
+
+function threatAnswerOf(node: string): ThreatAnswer {
+  if (node === 'comply' || node === 'fightBack' || node === 'flee') return node;
+  throw new Error(`Unknown rob call node ${node}`);
+}
+
+// A knocked-out trader or convoy in sight with loose items on its grid, which the player strips on the loot grid.
+function downedTarget(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  const downed = world.vehicles.filter((v) => ROB_FACTIONS.includes(v.faction) && isKnockedOut(v) && playerSees(world, v.pos) && hasLooseItems(v) && !lootBlocker(world, me, v.id));
+  return downed.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+function hasLooseItems(v: Vehicle): boolean {
+  return v.items.some((it) => !isMounted(v.chassisId, it));
+}
+
+// Parks beside a knocked-out target, then takes each loose good and spare that fits, one command each.
+function takeFromTarget(o: Orders, target: Vehicle): void {
+  if (!canLootTruck(o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
+    const spot = looseSpot(o.me, item);
+    if (spot) o.loot(target.id, (w) => takeFromTruck(w, target.id, item.id, spot));
+  }
+}
+
+// A free spot off the mounts for a looted item, or null when it does not fit by cells or mass.
+function looseSpot(me: Vehicle, item: GridItem): Spot | null {
+  if (itemMass(item) > cargoMassRoom(me)) return null;
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(me), me.items, { ...item, id: 'loot-probe' }, null, avoid);
+}
+
+// Drives between the patrol towns: on to the next one from a town, to the nearest one from the road, and on with an
+// order already bound for one of them.
+function patrol(o: Orders): void {
+  const towns = PATROL.map((id) => {
+    const town = REGION.towns.find((t) => t.id === id);
+    if (!town) throw new Error(`No patrol town ${id}`);
+    return town;
+  });
+  const order = o.me.order;
+  if (order?.kind === 'stopAt' && towns.some((t) => canUseSite(order.dest, t))) return;
+  const here = townAt(o.world);
+  const at = here ? towns.findIndex((t) => t.id === here.id) : -1;
+  driveToSite(o, at >= 0 ? towns[(at + 1) % towns.length] : byDistance(o.world, towns)[0]);
 }
 
 // ---- Cargo.
@@ -427,10 +629,10 @@ function hasCargo(v: Vehicle): boolean {
 
 // Sells the goods for sale, and sells spare parts through garage storage.
 function sellCargo(o: Orders): void {
-  for (const [good, n] of Object.entries(cargoForSale(o.me))) o.run((w) => sellGood(w, good, n));
+  for (const [good, n] of Object.entries(cargoForSale(o.me))) o.run((w) => sellGood(w, good, n), 'sell goods');
   for (const { itemId, partId } of spareItems(o.me)) {
     o.run((w) => storePart(w, itemId));
-    o.run((w) => sellPart(w, partId));
+    o.run((w) => sellPart(w, partId), 'sell parts');
   }
 }
 
