@@ -58,3 +58,7 @@ Each truck is one base model per chassis plus shared kit parts on its inventory 
 - A material named `paint` takes the faction color, and `trim` on a base takes the faction's second color. Other materials keep their colors.
 - `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
 - Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.
+
+## Fortress kit
+
+`tools/blender/fort_kit.py` holds the shared parts for `fort_<style>_<piece>.py`: three styles (masonry, ship metal, scrap) of five pieces (wall, tower, gate, bastion, inner). Walls stand 3 tiles tall and the other pieces 4, over 3x the tallest truck. The wall model is 2 tiles long and the game stretches it along its length only, so keep its detail repeatable along that axis. Sizes live in `FORTRESS` in `src/data/fortress.ts`. Run `npm run models:shapes` after a change, as for any prop.

@@ -3,13 +3,17 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { FORTRESS } from '../../data/fortress';
+import { insideCurtain } from '../../sim/fortress';
+import { guardedSites } from '../../sim/guards';
+import { groundPoint, type V3 } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { siteGates } from '../../sim/sites';
+import { isFortress, siteGates } from '../../sim/sites';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
-import { angleDiff, segmentDist } from '../../sim/vec';
+import { angleDiff, segmentDist, type Vec } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -137,16 +141,28 @@ class SiteBuilder {
   }
 }
 
+// Whether a box of width w and depth d centered at (x, z) from the site lies inside the curtain, off its walls.
+function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
+  return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
+}
+
+// Whether a house may stand at (x, z): inside the curtain, off the open center and off the roads.
+function isHomeSpot(site: Site, x: number, z: number, limit: number): boolean {
+  const layout = REGION.settlement;
+  if (Math.hypot(x, z) > limit) return false;
+  if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) return false;
+  if (!fitsCurtain(site, x, z, layout.houseWidth + 0.3, layout.houseDepth + 0.3)) return false;
+  const pos = { x: site.pos.x + x, y: site.pos.y + z };
+  return !REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth));
+}
+
 function buildSettlement(b: SiteBuilder, site: Site): void {
   const layout = REGION.settlement;
   const limit = site.radius - layout.houseWidth - 0.3;
   let homes = 0;
   for (let x = -limit; x <= limit; x += layout.streetSpacing) {
     for (let z = -limit; z <= limit; z += layout.streetSpacing) {
-      if (Math.hypot(x, z) > limit) continue;
-      if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) continue;
-      const pos = { x: site.pos.x + x, y: site.pos.y + z };
-      if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth))) continue;
+      if (!isHomeSpot(site, x, z, limit)) continue;
       const h = layout.houseHeights[homes % layout.houseHeights.length];
       const w = layout.houseWidth;
       const d = layout.houseDepth;
@@ -179,31 +195,27 @@ type WallStyle = {
   height: number;
   thickness: number;
   segment: number; // tiles per straight section around the curve
-  towerEvery: number | null; // sections between wall towers
   ragged: boolean; // sections vary in height, like scrap and posts
   fence: boolean; // posts and two rails instead of solid sections
   colors: number[]; // section colors, one picked per section
   postColor: number;
   doorColor: number;
-  guarded: boolean; // a guard tower on each gate side and a banner pole at each gate
 };
 
 const SET = REGION.settlement;
-const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, guarded: false };
-const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
-  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
-  palisade: PALISADE,
-  // Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
-  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, guarded: true },
-  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, guarded: false },
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, towerEvery: null, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, guarded: false },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
+const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
+  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal },
+  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
 };
+const LAMP_REACH = 0.3; // tiles a gate lamp bracket stands out of the gatehouse face
+const GUN_LENGTH = 0.8; // tiles of gate gun barrel
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
 function edgeStyle(site: Site): WallStyle {
-  return EDGE_STYLES['kind' in site ? site.edge : 'town'];
+  const edge = 'edge' in site ? site.edge : undefined;
+  if (edge === undefined) throw new Error(`Site ${site.id} has no edge style`);
+  return EDGE_STYLES[edge];
 }
 
 // The edge circle cut into straight sections whose outer corners lie on the collision edge. Sections near a
@@ -248,7 +260,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
     const p = { x: Math.cos(a) * ring.mid, z: Math.sin(a) * ring.mid };
     if (style.fence) addFenceSection(b, ring, style, p, a, i);
     else b.addBox(p.x, p.z, style.thickness, height + SINK, ring.length, color, -SINK, -a);
-    if (hasTower(ring, style, i)) addPost(b, ring, i * ring.step, style.thickness * 2, style.height * 1.4, style.postColor);
     sections++;
   }
   return sections;
@@ -258,10 +269,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
 function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
   for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
   addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
-}
-
-function hasTower(ring: Ring, style: WallStyle, i: number): boolean {
-  return style.towerEvery !== null && i % style.towerEvery === 0 && !ring.open[(i + ring.count - 1) % ring.count];
 }
 
 function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: number, color: number): void {
@@ -282,13 +289,9 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts or guard towers on both sides, and two door leaves hinged at the posts that meet in the middle.
+// Posts on both sides, and two door leaves hinged at the posts that meet in the middle.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) {
-    if (style.guarded) addGuardTower(b, ring, style, a);
-    else addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
-  }
-  if (style.guarded) addBanner(b, ring, from);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
@@ -307,32 +310,58 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
 
 // A lamp on a post, or on the tower top, beside each gate, so a stop shows from far away.
 function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
+  const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
-  if (!style.guarded) b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
-  b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
-  b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
+  b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
+  addLampHead(b, q.x, q.z, top, -a);
 }
 
-
-function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const t = style.thickness;
-  addPost(b, ring, a, t * 2.4, tower, style.postColor);
-  const q = onEdge(ring, a, t * 2.4);
-  b.addBox(q.x, q.z, t * 3.2, 0.12, t * 3.2, PAL.wall.dark, tower, -a);
-  const gun = onEdge(ring, a, -t * 1.4);
-  b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
+// The housing and the lit lamp on top of a post or a gate bracket.
+function addLampHead(b: SiteBuilder, x: number, z: number, top: number, yaw: number): void {
+  b.addBox(x, z, 0.2, 0.35, 0.6, PAL.metal, top, yaw);
+  b.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
 }
 
-// The pole rises from the gate's first tower. Its banner hangs across the tangent, so it faces the road.
-function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const q = onEdge(ring, a, 1);
-  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight - tower, 0.12, PAL.trunk, tower);
-  const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
-  b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1, -a);
+// Where a fortress gate's gun sights from, in meters: over the gate point at the gatehouse parapet.
+export function gateGunPoint(t: Terrain, gate: Vec): V3 {
+  const g = groundPoint(t, gate);
+  return { x: g.x, y: g.y + (FORTRESS.gate.height + FORTRESS.gunLift) * S, z: g.z };
 }
+
+// The gatehouse models carry no furniture. Each gate gets two lamps on brackets either side of the arch, below the
+// parapet, and at guarded sites a gun on the parapet with a banner pole behind it. Offsets are from the gate point.
+function dressGates(b: SiteBuilder, site: Site): void {
+  const guarded = guardedSites().includes(site);
+  const first = b.root.children.length;
+  const at = (gate: Vec, out: number, side: number) => {
+    const a = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
+    return { a, x: gate.x - site.pos.x + Math.cos(a) * out - Math.sin(a) * side, z: gate.y - site.pos.y + Math.sin(a) * out + Math.cos(a) * side };
+  };
+  for (const gate of siteGates(site)) {
+    for (const side of [-1, 1]) {
+      const p = at(gate, LAMP_REACH, (side * FORTRESS.gate.width) / 4);
+      const bracket = at(gate, LAMP_REACH / 2, (side * FORTRESS.gate.width) / 4);
+      b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -p.a);
+      addLampHead(b, p.x, p.z, SET.lampHeight, -p.a);
+    }
+    if (!guarded) continue;
+    // The barrel ends at the gun point, and its mount stands behind it.
+    const parapet = FORTRESS.gate.height;
+    const lift = (x: number, z: number) => b.groundAt(gate.x - site.pos.x, gate.y - site.pos.y) - b.groundAt(x, z);
+    const barrel = at(gate, -GUN_LENGTH / 2, 0);
+    b.addBox(barrel.x, barrel.z, GUN_LENGTH, 0.14, 0.14, PAL.metal, parapet + FORTRESS.gunLift - 0.07 + lift(barrel.x, barrel.z), -barrel.a);
+    const mount = at(gate, -GUN_LENGTH, 0);
+    b.addBox(mount.x, mount.z, 0.5, FORTRESS.gunLift, 0.5, PAL.metal, parapet + lift(mount.x, mount.z), -mount.a);
+    const pole = at(gate, -FORTRESS.gate.depth / 2, FORTRESS.gate.width / 2 - 0.6);
+    const base = parapet + lift(pole.x, pole.z);
+    b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - parapet, 0.12, PAL.trunk, base, -pole.a);
+    const flag = at(gate, -FORTRESS.gate.depth / 2 + 0.5, FORTRESS.gate.width / 2 - 0.6);
+    b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -flag.a);
+  }
+  // Furniture stands on the gatehouses, which are part of the curtain, so it is no interior piece.
+  for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
+}
+
 
 function buildGranary(b: SiteBuilder): void {
   // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
@@ -348,8 +377,8 @@ function buildPump(b: SiteBuilder): void {
 }
 
 function buildLock(b: SiteBuilder): void {
-  for (const x of [-2, 2]) b.addBox(x, 0, 0.6, 1.1, 8, PAL.wall.side);
-  b.addBox(0, 0, 3.6, 0.05, 8, PAL.water);
+  for (const x of [-1.6, 1.6]) b.addBox(x, 0, 0.6, 1.1, 3.8, PAL.wall.side);
+  b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
   // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
@@ -465,6 +494,52 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
+// Fortress sites stand behind baked curtain pieces and need no edge of their own, only an interior inside them.
+function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
+  if (isFortress(site)) {
+    pullInside(site, b.root, t);
+    dressGates(b, site);
+  } else {
+    if (guardedSites().includes(site)) throw new Error(`Guarded site ${site.id} has no fortress`);
+    addWall(b, site, edgeStyle(site));
+  }
+}
+
+// Whether every vertex of the object lies inside the site's curtain.
+function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
+  const v = new THREE.Vector3();
+  let inside = true;
+  obj.updateMatrixWorld(true);
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || !inside) return;
+    const pos = o.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count && inside; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      inside = insideCurtain(site, { x: v.x / S, y: v.z / S });
+    }
+  });
+  return inside;
+}
+
+// A fortress interior was laid out for the whole circle. Every piece moves toward the center by one shared factor, the
+// largest one that puts all of them inside the curtain, so the arrangement stays and no piece touches a wall.
+function pullInside(site: Site, root: THREE.Group, t: Terrain): void {
+  const cx = site.pos.x * S;
+  const cz = site.pos.y * S;
+  const homes = root.children.map((child) => child.position.clone());
+  let fits = false;
+  for (let step = 20; step >= 0 && !fits; step--) {
+    const k = step / 20;
+    root.children.forEach((child, i) => child.position.set(cx + (homes[i].x - cx) * k, homes[i].y, cz + (homes[i].z - cz) * k));
+    fits = root.children.every((child) => insideSiteCurtain(site, child));
+  }
+  if (!fits) throw new Error(`The interior of ${site.id} does not fit inside its curtain`);
+  // The ground differs at the new spot, so each piece keeps its height over the ground.
+  root.children.forEach((child, i) => {
+    child.position.y += (heightAt(t, child.position.x / S, child.position.z / S) - heightAt(t, homes[i].x / S, homes[i].z / S)) * S;
+  });
+}
+
 type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
 
 const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
@@ -496,7 +571,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
   const decor = SITE_DECOR[site.id];
   if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
   decor(b, site, t);
-  addWall(b, site, edgeStyle(site));
+  closeSite(b, site, t);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();

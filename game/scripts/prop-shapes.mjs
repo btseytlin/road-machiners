@@ -5,7 +5,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { capBoxes, fnv1a, formatShapes, loadTriangles, mergeCells, rasterize, roundBox, shapeOf } from './shape-lib.mjs';
 
-// Every model a static prop view draws: landmark looks, buildings, wrecks, rocks and junk piles.
+// Every model a static prop view draws: landmark looks, fortress pieces, buildings, wrecks, rocks and junk piles.
 // Site decor keeps its circle, so its models are not here.
 const PROP_MODELS = [
   'army_truck',
@@ -21,6 +21,21 @@ const PROP_MODELS = [
   'drums',
   'farmhouse',
   'fence',
+  'fort_masonry_bastion',
+  'fort_masonry_gate',
+  'fort_masonry_inner',
+  'fort_masonry_tower',
+  'fort_masonry_wall',
+  'fort_scrap_bastion',
+  'fort_scrap_gate',
+  'fort_scrap_inner',
+  'fort_scrap_tower',
+  'fort_scrap_wall',
+  'fort_ship_bastion',
+  'fort_ship_gate',
+  'fort_ship_inner',
+  'fort_ship_tower',
+  'fort_ship_wall',
   'gas_station',
   'guard_post',
   'hull_chunk',

@@ -1,6 +1,4 @@
 import { CONFIG } from "../config";
-import { PHYSICS } from "../data/physics";
-import { REGION } from "../data/region";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
 import { mountedParts } from "../sim/grid";
@@ -10,6 +8,7 @@ import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
 import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { gateGunPoint } from "./render/sites";
 import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
@@ -127,8 +126,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
 function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" }>, rows: Map<string, number>, breaks: BreakCues): number | null {
   const b = host.eventPoint(e.target);
   if (!b) return null;
-  const g = groundPoint(host.world.terrain, e.from);
-  const a: V3 = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
+  const a = gateGunPoint(host.world.terrain, e.from);
   return playVolley(host, a, () => towardFrom(a, b), b, e, breaks, "guard", e.target, rows, false);
 }
 

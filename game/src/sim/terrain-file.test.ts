@@ -37,7 +37,7 @@ describe('map file', () => {
   });
 
   it('keeps the stored code of every older prop kind and ground type', () => {
-    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing']);
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'fortMasonryWall', 'fortMasonryTower', 'fortMasonryGate', 'fortMasonryBastion', 'fortMasonryInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortShipBastion', 'fortShipInner', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapBastion', 'fortScrapInner']);
     expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'hull', 'track', 'canal', 'concrete']);
   });
 

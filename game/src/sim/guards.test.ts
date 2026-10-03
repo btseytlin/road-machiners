@@ -3,7 +3,7 @@ import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
 import { fireWeapons } from "./combat";
 import { corePart, mountedParts } from "./grid";
-import { fireGuards } from "./guards";
+import { fireGuards, guardedSites } from "./guards";
 import { siteGates } from "./sites";
 import { addVehicle, emptyWorld } from "./testkit";
 import type { Vec } from "./vec";
@@ -92,5 +92,17 @@ describe("town guards", () => {
     fireWeapons(w);
     fireGuards(w);
     expect(w.events.some((e) => e.t === "guardShot" && e.target === me.id)).toBe(true);
+  });
+});
+
+describe("guardedSites", () => {
+  it("lists the towns and the raider camps, and every guard shot comes from one of them", () => {
+    expect(guardedSites().map((s) => s.id)).toEqual(["bowl", "nose", "scrapjaw", "kiln"]);
+    const near = raiderFiringAt(outside(4));
+    fireWeapons(near.w);
+    fireGuards(near.w);
+    const shots = near.w.events.filter((e) => e.t === "guardShot");
+    expect(shots.length).toBeGreaterThan(0);
+    for (const e of shots) expect(guardedSites().map((s) => s.id)).toContain(e.site);
   });
 });

@@ -14,6 +14,7 @@ import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
+import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -240,5 +241,21 @@ describe('save migration 9 to 10', () => {
     expect(pendingPerkPairs(w).map((pair) => `${pair.skill} ${pair.level}`)).toEqual(['toughness 4', 'social 2']);
     expect(() => choosePerk(w, 'cannibal')).toThrow(/already picked/);
     expect(choosePerk(w, 'rumorMill').player.perks).toContain('rumorMill');
+  });
+});
+
+describe('save migration 10 to 11', () => {
+  it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
+    const next = MIGRATIONS[10](FORMAT_2_10) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'pond-dustwell', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_10.obstacles[5]);
+  });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_10, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[10](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });
 });

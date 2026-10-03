@@ -66,9 +66,10 @@ describe('runPolicy', () => {
     expect(r.perDay.map((d) => d.day)).toEqual([1, 2, 3]);
   });
 
-  it('greedy buys at least one upgrade within a few days on seed 1', () => {
-    const r = run(1, 'greedy', 3);
-    expect(r.telemetry.upgradesBought).toBeGreaterThan(0);
+  it('greedy buys an upgrade within three days on most seeds', () => {
+    // One seed tests where the random stream lands, not the policy.
+    const buying = [1, 2, 3, 4, 5, 6].filter((seed) => run(seed, 'greedy', 3).telemetry.upgradesBought > 0);
+    expect(buying.length).toBeGreaterThanOrEqual(4);
   });
 
   it('idle never trades, fights or accepts a contract', () => {

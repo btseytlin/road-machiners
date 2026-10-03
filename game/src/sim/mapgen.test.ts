@@ -1,9 +1,10 @@
+import { FORT_MODELS } from './fortress';
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
-import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox, touchesObstacle } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
@@ -20,6 +21,8 @@ const prop = (kind: BakedProp['kind'], x: number, extra: Partial<BakedProp> = {}
 function mapWith(props: BakedProp[]): BakedMap {
   return { ...TEST_MAP, props };
 }
+
+const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && FORT_MODELS.has(o.look);
 
 describe('baked map obstacles', () => {
   it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
@@ -103,8 +106,9 @@ describe('world from the baked map', () => {
   it('keeps every baked landmark off every road surface and out of every site', () => {
     // A territory's own props stand inside it.
     const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
+    // Fortress pieces make up the site edge and its gates, which cross roads. src/sim/fortress.test.ts holds them to their circle.
     // The ship wing is the exception: it hangs over its road and reaches the Broken Wing hull by design.
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && o.look !== 'shipWing');
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && !isFortPiece(o) && o.look !== 'shipWing');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -133,6 +137,11 @@ describe('world from the baked map', () => {
       return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
     };
     const overlap = (a: Obstacle, b: Obstacle) => {
+      // Fortress pieces meet end to end and share their joints, so only the ones of another kind count. A long wall
+      // leaves its circle mostly empty, so its boxes decide.
+      if (isFortPiece(a) && isFortPiece(b)) return false;
+      if (isFortPiece(a)) return touchesObstacle(a, b.pos, b.r);
+      if (isFortPiece(b)) return touchesObstacle(b, a.pos, a.r);
       const [la, lb] = [line(a), line(b)];
       if (la && lb) return crosses(la, lb);
       if (la) return ground(b).some((q) => segmentDist(q.pos, la[0], la[1]) < q.r - 1e-6);

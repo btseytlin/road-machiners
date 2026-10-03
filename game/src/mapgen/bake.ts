@@ -15,6 +15,7 @@ import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { fortressLayer } from './fortress';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
@@ -26,7 +27,8 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('new world', () => newWorldLayer(seed, d));
   d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
-  return timed('rocks', () => rockLayer(seed, d));
+  d = timed('rocks', () => rockLayer(seed, d));
+  return timed('fortresses', () => fortressLayer(d));
 }
 
 function timed(layer: string, run: () => MapDraft): MapDraft {

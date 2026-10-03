@@ -1,24 +1,25 @@
 // Obstacle placement: the baked map's props, then seeded site props and road wrecks.
 
+import { FORTRESS } from '../data/fortress';
+import { FORT_MODELS, type FortModel } from './fortress';
 import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
+import { PROP_KINDS, type BakedMap, type BakedProp, type PropKind } from './terrain';
+import { isFortress, siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
-import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
 import { DECKS } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
-import { siteGap } from './sites';
-import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
+import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
-
 // Baked props come first and never change in play, so a save leaves them out and a load puts them back in
 // the same place in the list.
 export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
   const baked = mapObstacles(map);
-  const sites = placeSites(world);
+  const sites = placeSites();
   const out = [...baked, ...sites];
   placeRoadWrecks(world, out);
   return out;
@@ -38,7 +39,7 @@ export function mapObstacles(map: BakedMap): Obstacle[] {
 
 function propObstacle(p: BakedProp, k: number): Obstacle {
   if (p.kind === 'rock') return { id: `rock${k}`, pos: { ...p.pos }, r: p.r, kind: 'rock' };
-  const id = p.kind === 'pole' ? `pole-${p.group}-${p.step}` : `${p.kind}-${k}`;
+  const id = p.kind === 'pole' ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
 }
 
@@ -49,40 +50,18 @@ export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
 }
 
-// Buildings ring each town with gaps where roads leave. Wrecks sit at the convoy, a pond at the oasis.
-function placeSites(world: World): Obstacle[] {
+// A circle marks each abandoned site. Wrecks sit at the convoy, a pond at the oasis.
+function placeSites(): Obstacle[] {
   const S = REGION.sites;
-  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
-  for (const town of REGION.towns) {
-    const exits = roadExits(town.pos);
-    for (let i = 0; i < S.buildingsPerTown; i++) {
-      const a = (i / S.buildingsPerTown) * Math.PI * 2 + randRange(world, -0.3, 0.3);
-      if (exits.some((e) => Math.abs(angleDiff(a, e)) < S.roadGapAngle)) continue;
-      const d = town.radius * randRange(world, S.buildingRing[0], S.buildingRing[1]);
-      const pos = { x: town.pos.x + Math.cos(a) * d, y: town.pos.y + Math.sin(a) * d };
-      const r = randRange(world, S.buildingRadius[0], S.buildingRadius[1]);
-      if (!overlapsAny(out, pos, r)) out.push({ id: `bld-${town.id}-${i}`, pos, r, kind: 'building' });
-    }
-  }
+  // A fortress site has no circle: its baked pieces are its walls, and the town houses come from the render.
+  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
   for (const loc of REGION.locations) {
     if (loc.kind === 'oasis') out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
-    if (loc.kind === 'convoy')
+    // A fortress yard holds its wrecks inside the curtain, where no truck reaches them.
+    if (loc.kind === 'convoy' && !isFortress(loc))
       S.convoyWrecks.forEach((o, i) => out.push({ id: `cw-${loc.id}-${i}`, pos: { x: loc.pos.x + o.x, y: loc.pos.y + o.y }, r: 0.65, kind: 'wreck' }));
   }
   return out;
-}
-
-// Directions of roads leaving a point that lies on a road end or vertex.
-export function roadExits(p: Vec): number[] {
-  const exits: number[] = [];
-  for (const road of REGION.roads) {
-    road.forEach((q, i) => {
-      if (dist(q, p) > 0.01) return;
-      if (i > 0) exits.push(bearing(p, road[i - 1]));
-      if (i + 1 < road.length) exits.push(bearing(p, road[i + 1]));
-    });
-  }
-  return exits;
 }
 
 function placeRoadWrecks(world: World, out: Obstacle[]): void {
@@ -151,12 +130,13 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 // One box of a model's collision shape, in model meters: x forward, y sideways, z up.
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
+type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | FortModel;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
-const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
+const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   crag: 'crag',
   ruin: 'ruin_house',
   house: 'building',
@@ -219,10 +199,17 @@ export function propShape(model: string): readonly ShapeBox[] {
   return boxes;
 }
 
+function landmarkModel(look: LandmarkLook): PropModel {
+  const model = FORT_MODELS.get(look)?.model ?? LANDMARK_MODELS[look as Exclude<LandmarkLook, FortLook>];
+  if (model === undefined) throw new Error(`Landmark look ${look} has no model`);
+  return model;
+}
+
 // A landmark faces its baked yaw. A pole turns a quarter more, so its crossbar lies across its line.
 function landmarkPose(o: Landmark): PropPose {
-  const model = LANDMARK_MODELS[o.look];
+  const model = landmarkModel(o.look);
   const pos = { ...o.pos };
+  if (FORT_MODELS.get(o.look)?.piece === 'wall') return { model, pos, yaw: o.yaw, scale: { x: o.r / FORTRESS.wallLength * 2, y: 1, z: 1 } };
   const yaw = o.look === 'pole' ? o.yaw + Math.PI / 2 : o.yaw;
   if (model === 'building') return { model, pos, yaw, scale: buildingScale(o) };
   const radius = MODEL_RADIUS[model];
@@ -295,6 +282,15 @@ export function propReach(o: Obstacle): number {
 // pond, which have no model.
 export function obstacleReach(o: Obstacle): number {
   return o.kind === 'site' || o.kind === 'water' ? o.r : propReach(o);
+}
+
+// Whether a disc of radius r at pos comes within margin of the obstacle. A prop is judged by its boxes that block trucks, since its
+// reach circle holds gaps a long gatehouse leaves open beside it.
+export function touchesObstacle(o: Obstacle, pos: Vec, r: number, margin: number = 0): boolean {
+  const reach = obstacleReach(o);
+  if (dist(o.pos, pos) >= reach + r + margin) return false;
+  if (o.kind === 'site' || o.kind === 'water') return true;
+  return blockingBoxes(o).some((b) => boxDistance(b, pos) < r + margin);
 }
 
 // Names a prop's model, turn, scale and position: two props with one key have the same boxes.

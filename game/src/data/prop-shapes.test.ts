@@ -2,8 +2,10 @@
 // changed after the last npm run models:shapes.
 
 import { describe, expect, it } from 'vitest';
+import { FORTRESS } from './fortress';
 import { PHYSICS } from './physics';
 import SHAPES from './prop-shapes.json';
+import TRUCKS from './truck-shapes.json';
 
 type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
@@ -146,5 +148,24 @@ describe('prop shapes', () => {
     expect(sign.x0).toBeGreaterThan(4.5);
     expect(sign.y0).toBeGreaterThan(2.5);
     expect(boxes.some((b) => b.x0 < -6 && b.x1 < -2 && b.z1 > 2.5)).toBe(true);
+  });
+
+  it('gives FORTRESS.gate.height as the parapet of each gatehouse model (IV13)', () => {
+    const parapet = FORTRESS.gate.height * PHYSICS.metersPerTile;
+    for (const name of names.filter((n) => /^fort_.*_gate$/.test(n))) {
+      const top = Math.max(...SHAPES[name].boxes.map((b) => b.z1));
+      // Only the masonry gatehouse ends at its parapet. The scrap and ship ones carry a post or a tower top 1.5 to 2.2 m above it, beside the gate gun.
+      expect(top, name).toBeGreaterThanOrEqual(parapet - 0.5);
+      expect(top, name).toBeLessThanOrEqual(name.includes('masonry') ? parapet + 0.5 : parapet + 2.5);
+    }
+  });
+
+  it('stands every fortress piece at least 3x the tallest truck (IV4)', () => {
+    const tallest = Math.max(...Object.values(TRUCKS).flatMap((t) => t.boxes.map((b) => b.z1)));
+    const forts = names.filter((n) => n.startsWith('fort_'));
+    expect(forts).toHaveLength(15);
+    for (const name of forts) {
+      expect(Math.max(...SHAPES[name].boxes.map((b) => b.z1)), name).toBeGreaterThanOrEqual(tallest * 3);
+    }
   });
 });

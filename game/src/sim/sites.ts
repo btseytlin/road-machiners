@@ -1,5 +1,6 @@
 // Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
+import { FORTRESS_SITES } from '../data/fortress';
 import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
@@ -12,6 +13,11 @@ export type Site = TownDef | LocationDef;
 const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
+
+// Whether the site stands behind a fortress curtain of baked pieces, in place of a circle collider.
+export function isFortress(site: Site): boolean {
+  return site.id in FORTRESS_SITES;
+}
 
 // Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {

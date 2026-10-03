@@ -24,8 +24,15 @@ export function fireGuards(world: World): void {
     return target.faction === 'raiders';
   };
   const fired = new Set(world.events.flatMap((e) => (e.t === 'shot' && !raider(e.target) ? [e.shooter] : [])));
-  for (const town of REGION.towns) fireSite(world, town, (v) => fired.has(v.id));
-  for (const camp of REGION.locations) if (camp.kind === 'camp') fireSite(world, camp, (v) => v.faction !== 'raiders');
+  for (const site of guardedSites()) {
+    if ('kind' in site) fireSite(world, site, (v) => v.faction !== 'raiders');
+    else fireSite(world, site, (v) => fired.has(v.id));
+  }
+}
+
+// The sites whose gates carry a gun: every town and every raider camp. The render draws the guns from this list too.
+export function guardedSites(): Site[] {
+  return [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
 }
 
 // Guards spare a knocked-out driver, whatever its cab. A player fighting through on a broken cab is still awake.
