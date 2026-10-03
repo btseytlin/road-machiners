@@ -1,0 +1,89 @@
+#!/bin/bash
+# Puts a committee image on a GitHub issue as a native user-attachments image, and proves it landed.
+#   factory-issue-image check
+#   factory-issue-image attach <issue> <image file> <alt text>
+# It needs gh with `issue edit --attach` (v2.102.0 or newer). On any failure it exits nonzero and says HELD,
+# and the caller keeps every image-dependent stage held. It never falls back to another URL.
+set -euo pipefail
+
+MIN_GH=2.102.0
+MAX_BYTES=$((10 * 1024 * 1024))
+
+held() {
+  echo "HELD: $*" >&2
+  echo "The image is not on the issue. Keep every image-dependent stage held, tell the committee, and do not use another URL." >&2
+  exit 1
+}
+
+check_gh() {
+  local have
+  have=$(gh --version 2>/dev/null | sed -n '1s/^gh version \([0-9][0-9.]*\).*/\1/p')
+  [ -n "$have" ] || held "gh is missing or reports no version"
+  [ "$(printf '%s\n%s\n' "$MIN_GH" "$have" | sort -V | head -n1)" = "$MIN_GH" ] || held "gh $have is older than $MIN_GH"
+  gh issue edit --help 2>&1 | grep -q -- '--attach' || held "gh $have has no 'issue edit --attach'"
+  echo "gh $have supports --attach"
+}
+
+# The image type by magic bytes, as its content type.
+image_type() {
+  local head
+  head=$(head -c 12 "$1" | od -An -tx1 | tr -d ' \n')
+  case "$head" in
+    89504e470d0a1a0a*) echo image/png ;;
+    ffd8ff*) echo image/jpeg ;;
+    47494638*) echo image/gif ;;
+    52494646????????57454250*) echo image/webp ;;
+    *) echo "" ;;
+  esac
+}
+
+attachment_urls() {
+  grep -oE 'https://github\.com/user-attachments/assets/[0-9a-f-]{36}' || true
+}
+
+attach() {
+  local issue=$1 file=$2 alt=$3
+  [[ "$issue" =~ ^[0-9]+$ ]] || held "issue must be a number"
+  [ -f "$file" ] && [ ! -L "$file" ] || held "image is not a plain file"
+  case "$file" in *'#'*) held "image path holds '#'" ;; esac
+  case "$alt" in *$'\n'*) held "alt text holds a newline" ;; esac
+  local real
+  real=$(realpath "$file")
+  # Reports and job output hold private data. Only an image the committee sent may go to GitHub.
+  case "$real" in
+    */adhoc-artifacts/*|*/hermes-jobs/*|*/state/*|*/logs/*|*/committee/*|*/.env|*/.env.*|*/.config/*|*/.ssh/*) held "refusing a private path" ;;
+  esac
+  local size type
+  size=$(stat -c %s "$real")
+  [ "$size" -gt 0 ] && [ "$size" -le "$MAX_BYTES" ] || held "image is empty or over 10 MB"
+  type=$(image_type "$real")
+  [ -n "$type" ] || held "file is not a PNG, JPEG, GIF or WebP"
+  check_gh >/dev/null
+
+  local repo=() before after new url want got ctype tmp
+  [ -z "${FACTORY_REPO:-}" ] || repo=(-R "$FACTORY_REPO")
+  before=$(gh issue view "$issue" "${repo[@]}" --json body -q .body) || held "cannot read issue #$issue"
+  gh issue edit "$issue" "${repo[@]}" --attach "$real#$alt" >/dev/null || held "gh upload failed"
+  after=$(gh issue view "$issue" "${repo[@]}" --json body -q .body) || held "cannot read issue #$issue back"
+  new=$(comm -13 <(printf '%s\n' "$before" | attachment_urls | sort -u) <(printf '%s\n' "$after" | attachment_urls | sort -u))
+  url=$(printf '%s\n' "$new" | tail -n1)
+  [ -n "$url" ] || held "issue #$issue body has no new github.com/user-attachments URL after upload"
+
+  # Fetch the bytes back with the token on the first hop only. curl drops it on a redirect to another host.
+  tmp=$(mktemp)
+  trap "rm -f '$tmp'" EXIT
+  ctype=$(curl -sSL --fail --max-filesize "$MAX_BYTES" -m 60 -H "Authorization: Bearer $(gh auth token)" -o "$tmp" -w '%{content_type}' "$url") || held "cannot fetch $url back"
+  want=$(sha256sum "$real" | cut -d' ' -f1)
+  got=$(sha256sum "$tmp" | cut -d' ' -f1)
+  [ "$want" = "$got" ] || held "bytes read back from $url differ from the original"
+  [ "${ctype%%;*}" = "$type" ] || held "content type read back is '$ctype', expected $type"
+  [ "$(image_type "$tmp")" = "$type" ] || held "read back file is not the original image type"
+
+  echo "ATTACHED $url sha256=$got type=$type"
+}
+
+case "${1:-}" in
+  check) check_gh ;;
+  attach) [ $# -eq 4 ] || held "usage: factory-issue-image attach <issue> <image file> <alt text>"; attach "$2" "$3" "$4" ;;
+  *) echo "usage: factory-issue-image check | attach <issue> <image file> <alt text>" >&2; exit 2 ;;
+esac

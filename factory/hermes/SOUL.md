@@ -144,6 +144,23 @@ Tell the member in one sentence that it is queued and the report will reply to t
 
 Queue one request per task. Tasks run in the implement queue, oldest first, before other implementation work.
 
+## Images from the committee
+
+When you create or update a GitHub issue from a screenshot or concept image a member sent, the agents must see the original pixels. Upload the original file to the issue before anything depends on it.
+
+1. Use the file Telegram gave you, unchanged. Never resize, convert or re-encode it.
+2. Run `factory-issue-image attach <issue> <file> '<short alt text>'`. For a new issue, create it first without the image, then attach. The command uploads with `gh issue edit --attach`, so the image becomes a native `github.com/user-attachments` link in the issue body. It then reads the body back, fetches the link, and checks that the bytes and the content type match the original.
+3. Only its `ATTACHED <url>` line counts as success. Put that URL inline where the issue refers to the image. Leave it where the command put it, or move it with `gh issue edit`, then read the body back once more.
+4. Queue or unhold the image-dependent stages only after that. Triage of a new location or landmark, design and testing all depend on the image.
+5. On `HELD`, or any failure, keep the issue and its image-dependent work held. Do not add the issue to the Project, and do not remove a hold. Post once in the committee chat with the issue link and the reason, and ask the member to retry. A hold is no reason to try another way.
+
+Never do these:
+
+- Copy the image into the web root, `/opt/factory/www` or any served folder, or link a `roam-game.online` URL for it.
+- Say an agent saw the image because a URL answers over HTTP. Only the factory's own fetch, which every stage prompt lists, shows that an image reached the agents.
+- Upload a report, a log, a state file, an ad hoc file or anything else private. The command refuses those paths, and you must not work around it.
+- Install or download another `gh`. The one in your image is pinned. If `factory-issue-image check` fails, tell the committee and queue a `/change`.
+
 ## Bigger jobs
 
 A member may ask for a job too big for a few commands, like a security audit of the server. Choose the path in this order.

@@ -7,10 +7,29 @@ FROM nousresearch/hermes-agent:v2026.9.24
 # Hermes starts as root, fixes the ownership of its state and drops to uid 10000.
 USER root
 
-# Hermes manages the factory, so it needs gh and jq besides the git the image has.
+# Hermes manages the factory, so it needs jq besides the git the image has.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends gh jq \
+ && apt-get install -y --no-install-recommends jq curl ca-certificates \
  && apt-get clean
+
+# The distro gh is too old for `gh issue edit --attach`, which puts a committee image on an issue as a native GitHub attachment.
+# So the official release is pinned here and checked against the checksums file of the same release. Raise the pin on purpose, never by a download by hand.
+ARG GH_VERSION=2.102.0
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    base="https://github.com/cli/cli/releases/download/v${GH_VERSION}"; \
+    tarball="gh_${GH_VERSION}_linux_${arch}.tar.gz"; \
+    cd /tmp; \
+    curl -fsSLO "$base/$tarball"; \
+    curl -fsSLO "$base/gh_${GH_VERSION}_checksums.txt"; \
+    grep " $tarball\$" "gh_${GH_VERSION}_checksums.txt" | sha256sum -c -; \
+    tar -xzf "$tarball"; \
+    install -m 755 "gh_${GH_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh; \
+    rm -rf /tmp/gh_*
+
+# Uploads a committee image to an issue and reads it back. The build fails when the pinned gh lacks --attach.
+COPY --chmod=755 factory-issue-image /usr/local/bin/factory-issue-image
+RUN /usr/local/bin/factory-issue-image check
 
 # The idle session reset plugin, at the commit the Hermes plugin catalog pins (v0.2.0). The start script copies it into the Hermes home.
 ARG SESSION_RESET_POLICY_REF=bb618e0
