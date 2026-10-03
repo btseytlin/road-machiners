@@ -34,6 +34,7 @@ export const PAL = {
   contact: 0xf4f1ea, // faint white sound waves around a contact
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
+  beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls
   flash: 0xfff0a0,
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   radioLight: { on: 0xff3020, off: 0x4a1a14 }, // antenna bulb, lit while the truck is on the radio
