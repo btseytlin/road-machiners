@@ -8,7 +8,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
-import { propPose, propReach } from '../../sim/mapgen';
+import { propPose, propReach, type PropPose } from '../../sim/mapgen';
+import { bodyOf } from '../../sim/body';
+import { baseModel, grayed, HULK_TILT, HULK_TONE, WEAR_LOOK_STEPS } from '../../render/partLooks';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
 import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types';
@@ -16,6 +18,7 @@ import { dist } from '../../sim/vec';
 import type { V3, VehicleFrame } from '../../phys/frames';
 import type { TurnResult } from '../../phys/drive';
 import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
+import { jag } from './vehicle';
 import { instancedModel, model, socket } from './models';
 import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
@@ -239,15 +242,44 @@ function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: 
   return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
 
-// Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
+// Wrecks, hulks, settlement buildings and baked landmarks. A building gets a roof color from its id.
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
+  if (pose.model === 'hulk') return buildHulk(t, o, pose);
   const g = posed(t, pose);
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
   if (pose.model === 'reactor') lightCore(obj, g);
   return g;
+}
+
+export type HulkPose = Extract<PropPose, { model: 'hulk' }>;
+
+// A hulk is the chassis a dead truck leaves as its wreck: its base model with no wheels, parts or paint, lying on its
+// belly where the truck died, charred and jagged. Its collision boxes come from the same model, see hulkBoxes() in
+// src/sim/body.ts. The base model sits with its collider center at its origin, so it rises by half the chassis height
+// to lie on the ground.
+export function buildHulk(t: Terrain, o: Obstacle, pose: HulkPose): THREE.Group {
+  const g = posed(t, pose);
+  const obj = model(baseModel(pose.chassisId));
+  char(obj);
+  jag(obj, o.id, WEAR_LOOK_STEPS);
+  obj.position.y = bodyOf(pose.chassisId).half.y;
+  obj.rotation.set((hashStr(`${o.id}:roll`) * 2 - 1) * HULK_TILT, 0, (hashStr(`${o.id}:pitch`) * 2 - 1) * HULK_TILT);
+  g.add(obj);
+  return g;
+}
+
+// Every material fades fully to the worn gray and darkens to the burnt tone. Lamps and glass no longer glow.
+function char(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const mat = o.material;
+    if (!(mat instanceof THREE.MeshLambertMaterial)) throw new Error(`Hulk mesh ${o.name} has material ${mat.type}, expected one Lambert material`);
+    mat.color.setHex(grayed(mat.color.getHex(), 1)).multiplyScalar(HULK_TONE);
+    mat.emissive.setHex(0x000000);
+  });
 }
 
 // The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group

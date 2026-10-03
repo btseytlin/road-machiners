@@ -237,8 +237,13 @@ export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; 
 // Every baked prop but a rock is a landmark of its prop kind.
 export type LandmarkLook = Exclude<PropKind, "rock">;
 
+// The chassis a dead truck leaves as its wreck. yaw is the truck's heading when it died, in radians from map +x toward +y.
+export type Hulk = { chassisId: string; yaw: number };
+
 export type Obstacle =
-  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // Only a kill wreck has a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 

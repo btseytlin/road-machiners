@@ -3,7 +3,8 @@ import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
-import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { blockingBoxes, boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propKey, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { hulkBoxes } from './body';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
@@ -169,6 +170,31 @@ describe('prop poses', () => {
     expect(pose.model).toBe('wreck');
     expect(pose.yaw).toBeCloseTo(0.30278265313245356 * Math.PI * 2, 12);
     expect(pose.scale).toEqual(even(0.91 / 0.7));
+  });
+
+  it('poses a kill wreck with a hulk as its chassis, at full size along the dead truck heading', () => {
+    const hulk = (chassisId: string, yaw: number, id = 'wreck-npc7'): Obstacle => ({ id, pos: { x: 12, y: 34 }, r: 0.9, kind: 'wreck', hulk: { chassisId, yaw } });
+    const flat = propBoxes(hulk('bus', 0));
+    const turned = propBoxes(hulk('bus', Math.PI / 2));
+
+    expect(propPose(hulk('bus', 0.4))).toEqual({ model: 'hulk', chassisId: 'bus', pos: { x: 12, y: 34 }, yaw: 0.4, scale: even(1) });
+    expect(flat.map((b) => b.z0)).toEqual(hulkBoxes('bus').map((b) => b.z0));
+    flat.forEach((b, i) => {
+      // A quarter turn carries map offset (x, y) to (-y, x).
+      expect(turned[i].center.x - 12).toBeCloseTo(-(b.center.y - 34), 9);
+      expect(turned[i].center.y - 34).toBeCloseTo(b.center.x - 12, 9);
+    });
+    expect(propKey(hulk('bus', 0))).not.toBe(propKey(hulk('buggy', 0)));
+    expect(propReach(hulk('bus', 0))).toBeGreaterThan(propReach(hulk('buggy', 0)));
+    expect(blockingBoxes(hulk('buggy', 0)).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the generic wreck pose and shape for a kill wreck without a hulk', () => {
+    const plain: Obstacle = { id: 'wreck-npc7', pos: { x: 12, y: 34 }, r: 0.9, kind: 'wreck' };
+
+    expect(propPose(plain).model).toBe('wreck');
+    expect(propKey(plain).startsWith('wreck|')).toBe(true);
+    expect(propBoxes(plain).length).toBe(propShape('wreck').length);
   });
 
   it('stretches a building to its footprint, with a height and half turn from its id', () => {

@@ -277,6 +277,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { skills, ...player } = world.player as SavedJson;
     return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
+  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

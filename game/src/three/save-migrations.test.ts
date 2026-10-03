@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
 import { emptyWorld } from '../sim/testkit';
-import type { Player, Vehicle } from '../sim/types';
+import type { Obstacle, Player, Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -14,6 +15,7 @@ import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
+import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -240,5 +242,21 @@ describe('save migration 9 to 10', () => {
     expect(pendingPerkPairs(w).map((pair) => `${pair.skill} ${pair.level}`)).toEqual(['toughness 4', 'social 2']);
     expect(() => choosePerk(w, 'cannibal')).toThrow(/already picked/);
     expect(choosePerk(w, 'rumorMill').player.perks).toContain('rumorMill');
+  });
+});
+
+describe('save migration 10 to 11', () => {
+  const next = MIGRATIONS[10](FORMAT_2_10) as { obstacles: Obstacle[] };
+
+  it('keeps the world as it was', () => {
+    expect(next).toEqual(FORMAT_2_10);
+  });
+
+  it('leaves an old kill wreck without a hulk, so it draws as the generic wreck', () => {
+    const kill = next.obstacles.find((o) => o.id === 'wreck-npc7');
+
+    expect(kill).toBeDefined();
+    expect(kill && 'hulk' in kill).toBe(false);
+    expect(kill && propPose(kill).model).toBe('wreck');
   });
 });

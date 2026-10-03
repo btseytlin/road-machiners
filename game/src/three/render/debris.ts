@@ -73,6 +73,7 @@ export class DebrisSim {
   // or null for a prop broken out of view, which topples over.
   burst(o: Obstacle, push: V3 | null, near: readonly Obstacle[]): THREE.Group {
     const pose = propPose(o);
+    if (pose.model === 'hulk') throw new Error(`Hulk ${o.id} is not breakable`);
     const origin = new THREE.Vector3(pose.pos.x * S, heightAt(this.terrain, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pose.yaw);
     const scale = new THREE.Vector3(pose.scale.x, pose.scale.z, pose.scale.y);

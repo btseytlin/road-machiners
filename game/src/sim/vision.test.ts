@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
+import { PHYSICS } from '../data/physics';
+import { hulkBoxes } from './body';
 import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
@@ -68,6 +70,22 @@ describe('vision', () => {
 
     expect(canVehicleSee(w, npc, { x: 36.5, y: 30 })).toBe(true);
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
+  // A hulk hides what lies past it only where its chassis boxes reach eye height, so a tall tractor cab hides and a low buggy hulk is seen over.
+  it('is blocked by a kill wreck hulk only where its chassis reaches eye height', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const eye = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile;
+    const line = (chassisId: string) => {
+      w.obstacles = [{ id: 'wreck-npc7', pos: { x: 33, y: 30 }, r: 0.9, kind: 'wreck', hulk: { chassisId, yaw: Math.PI / 2 } }];
+      return hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 });
+    };
+    const reachesEye = (chassisId: string) => hulkBoxes(chassisId).some((b) => b.z0 <= eye && b.z1 >= eye && b.x0 <= 0 && b.x1 >= 0);
+
+    expect(reachesEye('tractor')).toBe(true);
+    expect(reachesEye('buggy')).toBe(false);
+    expect(line('tractor')).toBe(false);
+    expect(line('buggy')).toBe(true);
   });
 
   it('sees over a junk pile lower than the eye', () => {

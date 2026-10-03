@@ -132,6 +132,18 @@ describe('combat', () => {
     expect(w.player.money).toBe(money);
   });
 
+  it('a kill wreck keeps the dead truck chassis and heading as a hulk', () => {
+    const { w, me, buggy } = duel();
+    buggy.heading = 1.25;
+    getResources(w, buggy).health = 0;
+    buggy.lastHitBy = me.id;
+    const r = vehicleStats(w, buggy).radius * RULES.wreckRadiusScale;
+    resolveDestroyed(w);
+    const wreck = w.obstacles.find((o) => o.id === `wreck-${buggy.id}`);
+    expect(wreck).toEqual({ id: `wreck-${buggy.id}`, pos: buggy.pos, r, kind: 'wreck', hulk: { chassisId: buggy.chassisId, yaw: 1.25 } });
+    expect(w.salvage.some((s) => s.id === `wreck-${buggy.id}`)).toBe(true);
+  });
+
   it('old kill wrecks are cleared past the cap', () => {
     const { w, me } = duel();
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {

@@ -945,7 +945,8 @@ function damagedByShots(world: World): Set<string> {
   return hurt;
 }
 
-// The truck leaves the world as a wreck obstacle with a stock of what it carried.
+// The truck leaves the world as a wreck obstacle with a stock of what it carried. The wreck is the truck's chassis as a
+// hulk, where and how it lay when it died.
 export function wreckVehicle(world: World, v: Vehicle): void {
   createWreckSalvage(world, v);
   world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
@@ -955,6 +956,7 @@ export function wreckVehicle(world: World, v: Vehicle): void {
     pos: { ...v.pos },
     r: vehicleStats(world, v).radius * RULES.wreckRadiusScale,
     kind: "wreck",
+    hulk: { chassisId: v.chassisId, yaw: v.heading },
   });
   world.events.push({
     t: "destroyed",

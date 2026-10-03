@@ -260,8 +260,10 @@ function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: 
 }
 
 // A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall, a broke driver only in a town.
+// A truck stranded for good goes where serveStranded refits it, since no stall fits an engine.
 function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
+  if (isStrandedForGood(vehicle)) return servingSiteIds(profile);
   return pumpsOf(vehicle, profile, isBroke(world, vehicle));
 }
 
