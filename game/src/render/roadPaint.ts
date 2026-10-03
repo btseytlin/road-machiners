@@ -18,6 +18,7 @@ const SITES = [...REGION.towns, ...REGION.locations];
 const WIDTH = REGION.roadWidth * 0.9; // tiles across the painted road, before its edge wanders
 const BLUR = 2.4; // tiles of mask blur, so the tone can move the edge
 const STEP = 0.5; // tiles between points of a road line
+const CRACK_MIX = 0.3; // mix toward the crack color on crack lines, faint since packed dirt barely cracks
 const CRACK_CELL = 16; // detail pixels between crack polygon centers
 const POTHOLES = 4; // potholes in one detail image
 const STONE_SHARE = 0.012; // share of detail pixels that are loose stones
@@ -101,7 +102,7 @@ function detailColor(x: number, y: number, cracks: Vec[], holes: Pothole[]): num
   const mottle = 0.94 + 0.08 * loopNoise(x / 16, y / 16, ROAD_DETAIL_SIDE / 16) + 0.04 * loopNoise(x / 8, y / 8, ROAD_DETAIL_SIDE / 8);
   let color = shade(PAL.road, mottle * (0.975 + 0.05 * hash2(x, y)));
   if (loopNoise(x / 32, y / 32, ROAD_DETAIL_SIDE / 32) > 0.64) color = mix(color, PAL.sand[3], 0.15);
-  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, 0.55);
+  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, CRACK_MIX);
   color = potholeColor(x, y, holes) ?? color;
   return stoneColor(x, y) ?? color;
 }

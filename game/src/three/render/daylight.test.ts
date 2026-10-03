@@ -15,3 +15,10 @@ describe('daylightAt', () => {
     expect(late.sunIntensity).toBeLessThan(daylightAt(turnAt(12)).sunIntensity);
   });
 });
+
+describe('noon light', () => {
+  it('lets the sun outweigh the sky, so shadow sides read darker than lit sides', () => {
+    const noon = daylightAt(turnAt(12));
+    expect(noon.sunIntensity / noon.skyIntensity).toBeGreaterThan(2.5);
+  });
+});

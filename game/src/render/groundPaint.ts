@@ -1,4 +1,5 @@
-// Map-space ground painter: tile type colors and hillshade. The ground shader draws roads over it, see render/roadPaint.ts. Pebbles and scrub are 3D, in
+// Map-space ground painter: tile type colors, a warm sand base with slow light and deep patches on open desert,
+// and hillshade. Open desert drops most of the per-pixel speckle, so the 3D ground's facets carry its texture. The ground shader draws roads over it, see render/roadPaint.ts. Pebbles and scrub are 3D, in
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";
@@ -11,6 +12,41 @@ import { PAL, mix, shade } from "./palette";
 export const TERRAIN_MARGIN = 10; // tiles of dim ground drawn past the map edge
 const TYPE_JITTER = 0.6; // tiles; jittered sampling frays the blend between tile types
 const JITTER_GRID = 6; // samples per tile for the type-jitter hash, independent of paint resolution
+const PATCH_TILES = 24; // tiles per cell of the slow noise that lays sand patches over open desert
+const PATCH_MIX = 0.15; // strongest mix toward a patch color, at full desert weight
+const SAND_WARM = 0.85; // mix toward PAL.desertSand at full desert weight
+const DESERT_CALM = 0.85; // share of the speckle and fine noise that full desert weight removes
+const PATCH_OFFSET = 41.5; // lattice cells; keeps the patch noise from sharing corners with the other ground noise
+
+// How much each ground type takes the warm sand and its patches. Farmland and its tracks, canals and slabs, old
+// highways, hull plating and pools keep their color, so the marks of a place read against the desert.
+const DESERT_WEIGHT: Record<TerrainTypeId, number> = {
+  road: 1, // road tiles paint as hardpan
+  hardpan: 1,
+  sand: 0.6,
+  scrub: 0.5,
+  gravel: 0.4,
+  scree: 0.3,
+  field: 0,
+  asphalt: 0,
+  ash: 0,
+  saltCrust: 0,
+  mud: 0,
+  dirtyWater: 0,
+  toxic: 0,
+  hull: 0,
+  track: 0,
+  canal: 0,
+  concrete: 0,
+};
+
+// The ground paint of hardpan at mean noise, before hillshade and patches. Roads lie on hardpan, and the road
+// shader takes the ground's shade relative to this color.
+export const ROAD_GROUND = mix(mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1), PAL.desertSand, SAND_WARM);
+
+export function desertWeight(type: TerrainTypeId): number {
+  return DESERT_WEIGHT[type];
+}
 
 // A map-space canvas: canvas pixel (px, py) covers map point (from + px / res, from + py / res).
 export type PaintCanvas = {
@@ -81,17 +117,27 @@ export function paintGroundCanvas(
 }
 
 // Per-tile inputs of the ground color, computed once per paint instead of once per pixel.
-type TileLook = { t: Terrain; color: Int32Array; shade: Float64Array; broad: CellNoise; fine: CellNoise };
+type TileLook = {
+  t: Terrain;
+  color: Int32Array;
+  desert: Float32Array;
+  shade: Float64Array;
+  broad: CellNoise;
+  fine: CellNoise;
+  patch: CellNoise;
+};
 
 function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const count = t.size * t.size;
   const color = new Int32Array(count);
+  const desert = new Float32Array(count);
   const shadeBy = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     color[i] = paintColor(t.types[i]);
+    desert[i] = desertWeight(t.types[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
-  return { t, color, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise() };
+  return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise() };
 }
 
 // valueNoise that keeps the corner hashes of the last lattice cell. Neighbouring pixels share a cell, so most
@@ -145,7 +191,33 @@ function tileIndex(size: number, x: number, y: number): number {
 }
 
 // Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
-function typeColor(look: TileLook, x: number, y: number): number {
+function typeColor(look: TileLook, { i, j, fx, fy }: Jittered): number {
+  const size = look.t.size;
+  const a = look.color[tileIndex(size, i + 0.5, j + 0.5)];
+  const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
+  const c = look.color[tileIndex(size, i + 0.5, j + 1.5)];
+  const d = look.color[tileIndex(size, i + 1.5, j + 1.5)];
+  // Inside one type all four match, and blending equal colors returns the color.
+  if (a === b && a === c && a === d) return a;
+  return mix(mix(a, b, fx), mix(c, d, fx), fy);
+}
+
+// The desert weight blends between tile centers like typeColor, so patches fray at type borders too.
+function desertAt(look: TileLook, { i, j, fx, fy }: Jittered): number {
+  const size = look.t.size;
+  const a = look.desert[tileIndex(size, i + 0.5, j + 0.5)];
+  const b = look.desert[tileIndex(size, i + 1.5, j + 0.5)];
+  const c = look.desert[tileIndex(size, i + 0.5, j + 1.5)];
+  const d = look.desert[tileIndex(size, i + 1.5, j + 1.5)];
+  const top = a + (b - a) * fx;
+  return top + (c + (d - c) * fx - top) * fy;
+}
+
+// The tile cell and blend fractions of a jittered point, measured from tile centers. One pixel's typeColor and
+// desertAt share it.
+type Jittered = { i: number; j: number; fx: number; fy: number };
+
+function jittered(x: number, y: number): Jittered {
   const jx =
     x +
     (hash2(Math.floor(x * JITTER_GRID), Math.floor(y * JITTER_GRID) + 7) -
@@ -160,16 +232,15 @@ function typeColor(look: TileLook, x: number, y: number): number {
     0.5;
   const i = Math.floor(jx);
   const j = Math.floor(jy);
-  const size = look.t.size;
-  const a = look.color[tileIndex(size, i + 0.5, j + 0.5)];
-  const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
-  const c = look.color[tileIndex(size, i + 0.5, j + 1.5)];
-  const d = look.color[tileIndex(size, i + 1.5, j + 1.5)];
-  // Inside one type all four match, and blending equal colors returns the color.
-  if (a === b && a === c && a === d) return a;
-  const fx = jx - i;
-  const fy = jy - j;
-  return mix(mix(a, b, fx), mix(c, d, fx), fy);
+  return { i, j, fx: jx - i, fy: jy - j };
+}
+
+// Warm sand with slow deep and light patches over open desert. Patch noise near 0.5 leaves the sand as it is.
+function desertSand(look: TileLook, color: number, weight: number, x: number, y: number): number {
+  if (weight === 0) return color;
+  const sand = mix(color, PAL.desertSand, weight * SAND_WARM);
+  const n = look.patch.at(x / PATCH_TILES + PATCH_OFFSET, y / PATCH_TILES + PATCH_OFFSET);
+  return mix(sand, n < 0.5 ? PAL.sandShade : PAL.sandLight, Math.abs(n - 0.5) * 2 * PATCH_MIX * weight);
 }
 
 // Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
@@ -179,13 +250,14 @@ function paintColor(type: TerrainTypeId): number {
 
 function groundColor(look: TileLook, x: number, y: number): number {
   const t = look.t;
-  const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3;
-  let color = mix(typeColor(look, x, y), PAL.sand[3], n * 0.2);
-  color = shade(
-    color,
-    (0.97 + hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05) *
-      look.shade[tileIndex(t.size, x, y)],
-  );
+  const cell = jittered(x, y);
+  const weight = desertAt(look, cell);
+  const calm = 1 - weight * DESERT_CALM;
+  const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3 * calm;
+  let color = mix(typeColor(look, cell), PAL.sand[3], n * 0.2);
+  color = desertSand(look, color, weight, x, y);
+  const speckle = 1 + (hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05 - 0.03) * calm;
+  color = shade(color, speckle * look.shade[tileIndex(t.size, x, y)]);
   const out = Math.max(-x, -y, x - t.size, y - t.size, 0);
   if (out > 0)
     color = mix(color, PAL.sandFar, Math.min(1, 0.35 + out / TERRAIN_MARGIN));
