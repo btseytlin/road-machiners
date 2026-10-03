@@ -19,6 +19,11 @@ import { mountPart } from "../sim/inventory";
 import { emptyWorld } from "../sim/testkit";
 import type { World } from "../sim/types";
 import { sitePads } from "../sim/sites";
+import { TRAITS } from "./npcs";
+import { START_KITS } from "./start";
+import { getUpkeepReserve } from "../sim/npc-decisions";
+import { newWorld } from "../sim/world";
+import { TEST_MAP } from "../test/map";
 
 let world: World;
 beforeAll(() => {
@@ -308,4 +313,18 @@ describe("chassis drive parts", () => {
       expect(hpOf("wagon", role)).toBeGreaterThan(hpOf("hauler", role));
     }
   });
+});
+
+describe("NPC wallets and trade stakes", () => {
+  // Every driver may roll a trade at the minimum chance, so every trait needs a stake.
+  it("gives every trait a trade stake", () => {
+    for (const [id, trait] of Object.entries(TRAITS)) expect(trait.tradeStake, id).toBeGreaterThan(0);
+  });
+
+  it("starts every spawned driver with at least its upkeep reserve", () => {
+    for (const seed of [1, 2, 3]) {
+      const w = newWorld(seed, START_KITS.standard, TEST_MAP);
+      for (const v of w.vehicles.filter((x) => x.brain)) expect(v.resources!.money, v.brain!.templateId).toBeGreaterThanOrEqual(getUpkeepReserve(v));
+    }
+  }, 30_000);
 });

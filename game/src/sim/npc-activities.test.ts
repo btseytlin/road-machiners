@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
-import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
+import { getUpkeepReserve, optionChances, optionWeights, tradeSpend, visibleDowned, visibleSalvage } from './npc-decisions';
 import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
@@ -248,6 +248,40 @@ describe('NPC activities', () => {
     expect(npc.resources!.money).toBeGreaterThan(0);
     expect(Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0)).toBeGreaterThan(0);
     expect(topGoal(npc)?.kind).toBe('sell');
+  });
+
+  it('spends at most the trade stake on one load', () => {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.resources!.money = 5000;
+    forceOption('idle', 'trade');
+    planNpcOrders(w);
+    const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
+    npc.pos = { ...sitePads(source)[0] };
+    resolveNpcActivities(w);
+    expect(topGoal(npc)?.kind).toBe('sell');
+    expect(5000 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
+  });
+
+  it('gives a trade the wallet above the upkeep reserve, capped by the stake', () => {
+    const { w, npc } = createTrader();
+    const reserve = getUpkeepReserve(npc);
+    npc.resources!.money = reserve + 200;
+    expect(tradeSpend(w, npc)).toBe(200);
+    npc.resources!.money = reserve + 10_000;
+    expect(tradeSpend(w, npc)).toBe(TRAITS.trader.tradeStake);
+  });
+
+  it('fails loud when a driver with no trade stake weighs a trade', () => {
+    const { w, npc } = createScavenger();
+    const stake = TRAITS.scavenger.tradeStake;
+    TRAITS.scavenger.tradeStake = 0;
+    try {
+      expect(() => tradeSpend(w, npc)).toThrow(/trade stake/);
+    } finally {
+      TRAITS.scavenger.tradeStake = stake;
+    }
   });
 
   it('a raider can knock out an NPC, strip its cargo and sell it', () => {

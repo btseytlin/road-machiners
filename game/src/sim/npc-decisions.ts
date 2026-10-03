@@ -56,6 +56,7 @@ export type NpcProfile = {
   boldness: number;
   fuelMargin: number;
   robs: Trait['robs'];
+  tradeStake: number;
 };
 
 export function npcTraits(v: Vehicle): TraitId[] {
@@ -71,7 +72,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
 }
 
 // Known sites are the union over traits, in trait order. The widest contact radius wins. Boldness and fuel margin
-// multiply. One trait that never robs makes the driver never rob.
+// multiply. One trait that never robs makes the driver never rob. The highest trade stake wins.
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
@@ -91,6 +92,7 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     boldness: defs.reduce((product, t) => product * t.boldness, 1),
     fuelMargin: defs.reduce((product, t) => product * t.fuelMargin, 1),
     robs: defs.some((t) => t.robs === 'never') ? 'never' : 'offDuty',
+    tradeStake: Math.max(...defs.map((t) => t.tradeStake)),
   };
 }
 
@@ -213,11 +215,18 @@ export function getUpkeepReserve(vehicle: Vehicle): number {
 
 export type TradePlan = { source: string; good: string; sellShop: string };
 
+// The money a driver may spend on one trade load: its wallet above the upkeep reserve, capped by its trade stake.
+export function tradeSpend(world: World, vehicle: Vehicle): number {
+  const stake = npcProfile(vehicle).tradeStake;
+  if (!(stake > 0)) throw new Error(`${vehicle.id} weighs a trade with a trade stake of ${stake}`);
+  return Math.min(getResources(world, vehicle).money - getUpkeepReserve(vehicle), stake);
+}
+
 // Every affordable profitable run: a good bought at one shop and sold at another. Its weight is the profit per unit
 // over the tiles of the trip, from the driver to the source and on to the buyer. Near runs win most rolls, but not
 // all, so traders spread over every shop pair instead of all taking the one best run.
 export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
-  const spend = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
+  const spend = tradeSpend(world, vehicle);
   const shops = Object.values(SHOPS);
   return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
 }

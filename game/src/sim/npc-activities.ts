@@ -17,7 +17,7 @@ import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  tradeOffers, tradeSpend, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
 } from './npc-decisions';
@@ -1238,14 +1238,13 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   finishGoal(world, vehicle, 'sold cargo');
 }
 
-// Buys what the wallet above the upkeep reserve and the free cells allow, then delivers it as the long-term goal.
+// Buys what the trade spend and the free cells allow, then delivers it as the long-term goal.
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteTown(vehicle, site.id);
-  const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
-  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), tradeSpend(world, vehicle));
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
