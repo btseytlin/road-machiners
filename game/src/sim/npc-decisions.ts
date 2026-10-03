@@ -19,7 +19,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
-import { isKnockedOut } from './defeat';
+import { isDefeated, isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
@@ -37,7 +37,7 @@ import { canUseSite, isTerritory, siteGates, sitePads, siteUnder, type Site } fr
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
-import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
+import { canHire, canTakeEscort, declineFactor, escortsOf, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -764,9 +764,15 @@ function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   return feud?.data.kind === 'feud' && feud.data.robbery;
 }
 
-// A driver hands its cargo to a threat.
+// A driver hands its cargo to a threat, and seldom while its escort watches.
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+  const threat = danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+  return guardedNow(world, vehicle) ? threat * NPC_BEHAVIOR.guardedComply : threat;
+}
+
+// An escort of the driver that is not knocked out and that the driver sees.
+function guardedNow(world: World, vehicle: Vehicle): boolean {
+  return escortsOf(world, vehicle.id).some((e) => !isDefeated(e) && canVehicleSee(world, vehicle, e.pos));
 }
 
 // A stranded truck that can crawl to a gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown at a
