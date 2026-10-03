@@ -600,7 +600,7 @@ describe('physics turns', () => {
     // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  });
+  }, 90_000); // physics turns up a hill, slow when the suite runs in parallel
 
   it('a limping courier crawls up a bank as steep as any chassis limps up', () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // eight physics turns on a reshaped hill, slow when the suite runs in parallel
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();

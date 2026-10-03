@@ -203,8 +203,14 @@ export type NpcBrain = {
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    lastTown?: string; // id of the last town where this driver finished a service or trade
+    // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
+    memories: Memory[];
 };
+
+// A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
+// prices: a shop's standing pressure for each good it trades, when the driver did business there.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
   id: string;
@@ -293,6 +299,7 @@ export type CallVar =
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
+  | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null } // a trading tip, or none
   | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 

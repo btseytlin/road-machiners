@@ -23,6 +23,8 @@ import {
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
+import { standingPressures } from './market';
+import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
@@ -1206,15 +1208,15 @@ function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof g
   return site;
 }
 
-// A driver remembers the last town it did business in, and tells its prices on the radio.
-function noteTown(vehicle: Vehicle, siteId: string): void {
-  if (REGION.towns.some((t) => t.id === siteId)) vehicle.brain!.lastTown = siteId;
+// A driver remembers the prices of a shop it did business at, and tells of them on the radio.
+function noteShop(world: World, vehicle: Vehicle, siteId: string): void {
+  if (siteId in SHOPS) remember(world, vehicle, { kind: 'prices', shop: siteId, pressure: standingPressures(world, siteId) });
 }
 
 function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   serviceAt(world, vehicle, site);
   scrapFuelIfBroke(world, vehicle, npcProfile(vehicle), site.id);
   finishGoal(world, vehicle, 'finished service');
@@ -1234,7 +1236,7 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   if (!site) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }
 
@@ -1243,7 +1245,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {

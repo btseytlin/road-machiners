@@ -31,6 +31,7 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
 import { inCombat } from './combat';
 import { refreshVision } from './vision';
+import { recall } from './memory';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -127,12 +128,40 @@ describe('NPC activities', () => {
     ]);
   });
 
-  it.each(['sell', 'resupply'] as const)('remembers the town where it finished %s', (kind) => {
+  it.each(['sell', 'resupply'] as const)('remembers the prices of the town where it finished %s', (kind) => {
     const { w, npc } = createScavenger();
+    const town = REGION.towns[1].id;
     npc.pos = { ...sitePads(REGION.towns[1])[0] };
-    npc.brain!.goals = [{ kind, targetId: REGION.towns[1].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind, targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
     resolveNpcActivities(w);
-    expect(npc.brain!.lastTown).toBe(REGION.towns[1].id);
+    expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: w.shops[town].pressure } }]);
+  });
+
+  it('remembers the prices of a stall where it resupplied', () => {
+    const { w, npc } = createScavenger();
+    const granary = REGION.locations.find((l) => l.id === 'granary')!;
+    npc.pos = { ...sitePads(granary)[0] };
+    npc.brain!.goals = [{ kind: 'resupply', targetId: granary.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    resolveNpcActivities(w);
+    expect(recall(npc, 'prices').map((m) => m.fact.shop)).toEqual(['granary']);
+  });
+
+  it('replaces its memory of a town on a second visit', () => {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[1].id;
+    const visit = () => {
+      npc.pos = { ...sitePads(REGION.towns[1])[0] };
+      npc.brain!.goals = [{ kind: 'resupply', targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+      resolveNpcActivities(w);
+    };
+    visit();
+    const first = recall(npc, 'prices')[0].fact.pressure;
+    w.turn += 5;
+    const good = Object.keys(w.shops[town].pressure)[0];
+    w.shops[town].pressure[good] = 0.3;
+    visit();
+    expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: expect.objectContaining({ [good]: 0.3 }) } }]);
+    expect(first[good]).not.toBe(0.3);
   });
 
   it('leaves the goal of a knocked-out NPC with a working cab untouched', () => {
@@ -144,7 +173,7 @@ describe('NPC activities', () => {
     expect(npc.brain!.goals).toHaveLength(1);
   });
 
-  it('does not remember a site that is not a town', () => {
+  it('remembers no prices at a site without a shop', () => {
     const { w, npc } = createScavenger();
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     npc.pos = { ...sitePads(oasis)[0] };
@@ -152,7 +181,7 @@ describe('NPC activities', () => {
     w.events = [];
     resolveNpcActivities(w);
     expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
-    expect(npc.brain!.lastTown).toBeUndefined();
+    expect(npc.brain!.memories).toEqual([]);
   });
 
   it('records failure when a salvage target disappears', () => {

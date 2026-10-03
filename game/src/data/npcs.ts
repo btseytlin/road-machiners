@@ -1225,4 +1225,4 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
 };
 
-export { FIRST_NAMES, HUNT, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES } from './npc-behavior';
+export { FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';

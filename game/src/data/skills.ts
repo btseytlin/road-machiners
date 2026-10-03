@@ -143,7 +143,7 @@ export const PERKS: Record<PerkId, PerkDef> = {
   stormRider: { skill: 'toughness', level: 2, name: 'Storm rider', rule: 'Dust storms do not cut your sight or aim.' },
   fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab, or a hit on a cab below half, does not knock you out while health is above half.' },
   longHaul: { skill: 'toughness', level: 4, name: 'Long haul', rule: 'You heal while driving, not only while parked.' },
-  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left.' },
+  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left, as they were then.' },
   rumorMill: { skill: 'social', level: 2, name: 'Rumor mill', rule: 'A driver you call marks a wreck or site it passed.' },
   paidTruce: { skill: 'social', level: 4, name: 'Paid truce', rule: 'You can pay a hostile driver to end its feud with you.' },
   bountyTalk: { skill: 'social', level: 4, name: 'Bounty talk', rule: 'A raider that gives up to you counts for bounty contracts.' },

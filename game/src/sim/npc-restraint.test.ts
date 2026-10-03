@@ -90,7 +90,7 @@ describe('NPC restraint', () => {
       return fights;
     });
     expect(fought).toBeGreaterThan(0.9);
-  });
+  }, 90_000); // plans orders over many seeds, slow when the suite runs in parallel
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');

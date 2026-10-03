@@ -32,6 +32,7 @@ import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
 import { advanceStates } from './states';
+import { forgetOld } from './memory';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
@@ -296,6 +297,7 @@ export function endTurn(
     advanceAid(w);
     advanceStates(w);
     checkBeacon(w);
+    forgetOld(w);
     resolveNpcActivities(w);
     noteEngagements(w);
     discoverSites(w);

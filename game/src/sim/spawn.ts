@@ -157,6 +157,7 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       goal: null,
       home: { ...pos },
       stepIndex: 0,
+      memories: [],
     },
   });
   world.vehicles.push(v);

@@ -2,7 +2,7 @@
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
 // hovered truck and H honks.
 
-import { DEAL_LINES } from '../data/dialogue';
+import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
@@ -64,6 +64,13 @@ function aidText(v: Extract<CallVar, { kind: 'aid' }>): string {
   return parts.join(' and ');
 }
 
+// A trading tip in words: the site and the good, never a number.
+export function tipText(v: Extract<CallVar, { kind: 'tip' }>): string {
+  if (!v.tip) return TIP_LINES.none;
+  const line = v.tip.dear ? TIP_LINES.dear : TIP_LINES.cheap;
+  return line.replace('{site}', siteName(v.tip.shop)).replace('{good}', GOODS[v.tip.good].name.toLowerCase());
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
 
 const VAR_TEXT: VarText = {
@@ -76,6 +83,7 @@ const VAR_TEXT: VarText = {
   deal: dealText,
   prices: pricesText,
   aid: aidText,
+  tip: tipText,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
