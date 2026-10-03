@@ -22,6 +22,9 @@ const BASE_MODELS: Record<string, ModelName> = {
   convertible: 'base_convertible',
   bus: 'base_bus',
   loader: 'base_loader',
+  niva: 'base_niva',
+  bukhanka: 'base_bukhanka',
+  lincoln: 'base_lincoln',
 };
 
 export function baseModel(chassisId: string): ModelName {

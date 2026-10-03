@@ -283,7 +283,7 @@ describe('Broken Wing', () => {
 
   // The baked map's world with only the player truck, driving carelessly straight through `to`.
   function onMap(from: Vec, heading: number, to: Vec): World {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, false);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     me(w).pos = { ...from };
     me(w).heading = heading;
