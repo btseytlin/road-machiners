@@ -133,13 +133,14 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: { idle: { prowl: { add: 10 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 20 } }, crashed: { retaliate: { add: 0.5 } } },
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
-  // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
-  // fights and leave them to their guard, and mostly give way when threatened or warned off a wreck. A convoy never robs. A trade
-  // load costs at most the stake of 2500.
+  // hauls about two trips in three and trades between towns on the side the third, haul 30 against trade 15. A trade
+  // load costs at most the stake of 2500. It stops for salvage only at about the minimum chance. Like traders, convoys
+  // avoid fights and leave them to their guard, and mostly give way when threatened or warned off a wreck. A convoy
+  // never robs.
   supplier: {
     towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never', tradeStake: 2500,
     weights: {
-      idle: { haul: { add: 30 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
+      idle: { haul: { add: 30 }, trade: { add: 15 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } }, warnedOff: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
     },
   },
