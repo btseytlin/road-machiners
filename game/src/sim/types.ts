@@ -322,6 +322,7 @@ export type Player = {
   townPatched: boolean; // this visit to a town already got its free critical repair; leaving the town clears it
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
+  headlights: boolean; // the player's headlight switch; NPC lamps follow the clock, see src/three/render/daylight.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town

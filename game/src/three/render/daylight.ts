@@ -9,6 +9,7 @@ import { hashStr } from "../../render/noise";
 import type { V3, VehicleFrame } from "../../phys/frames";
 import { PAL } from "../../render/palette";
 import { bodyOf } from "../../sim/body";
+import type { Vehicle, World } from "../../sim/types";
 import { DEG, type Vec } from "../../sim/vec";
 
 const MIN_LIGHT_ELEVATION = 6; // degrees; a lower light would stretch every shadow across the whole view
@@ -220,16 +221,29 @@ const GLOW_RANGE = 4.5; // meters where the glow fades to nothing
 const GLOW_DECAY = 1; // below the physical 2, so the roof under the light does not burn white
 const GLOW_HEIGHT = 3; // meters above the truck center
 
-// on: the vehicle's lamps shine now. Beams of vehicles with lamps off stay in the pool at zero.
-// Each vehicle switches its lamps at its own moment within the turn that dusk or dawn falls on.
-// lightTurn: the clock the light shows, fractional while a turn plays.
+// Whether a vehicle's lamps shine now. The player's truck follows the player's switch; every other vehicle follows
+// the clock. lightTurn: the clock the light shows, fractional while a turn plays.
+export function vehicleLampsOn(world: World, v: Vehicle, lightTurn: number): boolean {
+  return v.id === world.player.vehicleId ? world.player.headlights : lampsOn(v.id, lightTurn);
+}
+
+// The clock rule for NPC lamps. Callers use vehicleLampsOn. Each vehicle switches its lamps at its own moment
+// within the turn that dusk or dawn falls on.
 export function lampsOn(id: string, lightTurn: number): boolean {
   // The share of the movement that plays before the switch, in (0, 1]. A vehicle at rest shows its turn's state.
   const delay = 1 - hashStr(id);
   return !sunAt(Math.floor(lightTurn + 1 - delay));
 }
 
-export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean };
+// on: the vehicle's lamps shine now. Beams of vehicles with lamps off stay in the pool at zero.
+// player: the player's truck, whose lamps follow the switch and not the clock.
+export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean; player: boolean };
+
+// Whether the night lights should exist. At dawn NPC lamps switch off one by one, so the night lights stay until the
+// last one is off. The player's switch never keeps them, so lamps switched on by day light only the lamp faces.
+export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "player">[]): boolean {
+  return !sunAt(turn) || lit.some((v) => !v.player && v.on);
+}
 
 // A change in light count recompiles every material. So the lights exist only at night, and through the night
 // the beam pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.

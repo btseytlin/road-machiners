@@ -277,6 +277,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { skills, ...player } = world.player as SavedJson;
     return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
+  // 10 to 11: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

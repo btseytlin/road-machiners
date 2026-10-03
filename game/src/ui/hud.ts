@@ -63,6 +63,8 @@ type HudActions = {
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
+  toggleHeadlights: () => void;
+  headlightsOn: () => boolean; // the live switch, since the HUD draws the world before the turn while it plays
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -334,7 +336,16 @@ export class Hud {
     );
   }
 
+  // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const headlights = createSwitch({
+      on: "Lights on",
+      off: "Lights off",
+      checked: this.actions.headlightsOn(),
+      key: "L",
+      title: "Headlights [L]",
+      onclick: () => this.actions.toggleHeadlights(),
+    });
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
@@ -354,7 +365,7 @@ export class Hud {
       },
       "Cool engine [G]",
     );
-    return [overdrive, douse];
+    return [headlights, overdrive, douse];
   }
 
   // The character button, marked while a perk pair waits for a pick or the XP pool pays for a rank.

@@ -98,6 +98,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       townPatched: false,
       engineHeat: 0,
       overdrive: false,
+      headlights: false,
       discovered: [],
       scavenged: [],
       storage: [],
@@ -363,6 +364,12 @@ export function setAutoRepair(world: World, on: boolean): World {
 export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
     w.player.overdrive = on;
+  });
+}
+
+export function setHeadlights(world: World, on: boolean): World {
+  return update(world, (w) => {
+    w.player.headlights = on;
   });
 }
 
