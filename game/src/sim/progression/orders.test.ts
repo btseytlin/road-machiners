@@ -10,7 +10,8 @@ import { emptyWorld } from '../testkit';
 import type { World } from '../types';
 import { Orders, upgradeGear, type UpgradeStyle } from './orders';
 
-const STYLE: UpgradeStyle = { skip: [], chassis: 'value', job: 'fighter' };
+const STYLE: UpgradeStyle = { skip: [], chassis: 'value', job: 'courier' };
+const FIGHTER: UpgradeStyle = { ...STYLE, job: 'fighter' };
 const capital = startKit('standard').money;
 
 // The player parked on a pad of Bowl, which has a garage, with plenty of money.
@@ -55,7 +56,7 @@ describe('upgradeGear', () => {
     const o = new Orders(w);
     const gunsBefore = mountedParts(playerVehicle(w), 'weapon').length;
 
-    upgradeGear(o, STYLE);
+    upgradeGear(o, FIGHTER);
 
     expect(mountedParts(playerVehicle(o.world), 'weapon').length).toBeGreaterThan(gunsBefore);
     expect(o.world.player.money).toBeLessThan(capital);
@@ -69,9 +70,19 @@ describe('upgradeGear', () => {
     w.player.storage.push(spare);
     const o = new Orders(w);
 
-    upgradeGear(o, { skip: ['weapon', 'armor', 'cargo', 'store'], chassis: 'value', job: 'fighter' });
+    upgradeGear(o, { ...STYLE, skip: ['weapon', 'armor', 'cargo', 'store'] });
 
     expect(mountedParts(playerVehicle(o.world), 'engine').map((p) => p.id)).toEqual([spare.id]);
+  });
+
+  it('lets a fighter save for a gun instead of spending on armor', () => {
+    const w = atBowl();
+    shopState(w, 'bowl').stock = [makePart(w, 'steelPlate', 0), makePart(w, 'cage', 0)];
+    const o = new Orders(w);
+
+    upgradeGear(o, FIGHTER);
+
+    expect(o.world.player.money).toBe(w.player.money);
   });
 
   it('never buys a kind its style skips', () => {
@@ -94,7 +105,7 @@ describe('upgradeGear', () => {
     const spent = new Orders(fighter);
 
     upgradeGear(kept, { ...STYLE, job: 'trader' });
-    upgradeGear(spent, STYLE);
+    upgradeGear(spent, FIGHTER);
 
     expect(roomOf(kept.world)).toBeGreaterThanOrEqual(roomOf(trader));
     expect(roomOf(spent.world)).toBeLessThan(roomOf(fighter));

@@ -999,9 +999,7 @@ export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
 // budget. Executing the purchase differs between the player and an NPC, so this section only chooses.
 //
 // A job is what the truck earns by: a fighter by its guns and armor, a trader and a carrier by cargo room, a courier by
-// speed. A carrier hauls or salvages and needs no goods money. A part that lowers its job's score is never taken. A
-// part that adds nothing to it ranks by its own worth, so a trader still takes a better engine but never gives up
-// cargo room for one.
+// speed. A carrier hauls or salvages and needs no goods money. A driver takes only parts that raise its job's score.
 
 export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
 
@@ -1022,11 +1020,12 @@ export function goodsRoom(v: Vehicle): number {
   return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
 }
 
-// The number a job grows by.
+// The number a job grows by. A fighter hunts with its guns, and armor only keeps it alive. A trader or carrier moves
+// cargo, so its score is room times speed.
 export function jobScore(world: World, v: Vehicle, job: GearJob): number {
-  if (job === 'fighter') return vehicleDanger(world, v);
+  if (job === 'fighter') return firepower(world, v);
   if (job === 'courier') return vehicleStats(world, v).maxSpeed;
-  return goodsRoom(v);
+  return goodsRoom(v) * vehicleStats(world, v).maxSpeed;
 }
 
 // The money a trader keeps to buy a load, one unit of an average good per free cell at the buy price. Gear comes from
@@ -1094,8 +1093,9 @@ export function gearPlans<O extends Offer>(world: World, v: Vehicle, offers: rea
   });
 }
 
-// The plan with the most job gain within the budget, ties broken by worth gained. Nothing when no plan gains.
+// The plan with the most job gain within the budget, ties broken by worth gained. Nothing when no plan gains in the
+// job, so a driver saving for a gun does not spend its money on a part that does not help it.
 export function bestPlan<O extends Offer>(plans: readonly Plan<O>[], budget: number): Plan<O> | null {
-  const gains = plans.filter((p) => p.cost <= budget && (p.jobGain > 0 || p.worthGain > 0));
+  const gains = plans.filter((p) => p.cost <= budget && p.jobGain > 0);
   return gains.reduce<Plan<O> | null>((best, p) => (!best || p.jobGain > best.jobGain || (p.jobGain === best.jobGain && p.worthGain > best.worthGain) ? p : best), null);
 }
