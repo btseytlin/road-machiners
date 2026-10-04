@@ -345,7 +345,7 @@ function purchase(world: World, { source, market, good, spend }: { source: TownD
   const me = playerVehicle(world);
   const none = { town: source, good, count: 0, profit: 0 };
   if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
-  const lotProfit = (count: number) => getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy');
+  const lotProfit = (count: number) => (count === 0 ? 0 : getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy'));
   // Each extra unit adds less profit than the one before, so the best lot is the last one whose last unit still pays.
   let low = 0;
   let high = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);

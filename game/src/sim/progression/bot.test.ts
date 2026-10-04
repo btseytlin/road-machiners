@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../../data/region';
 import { playerVehicle, vehicleById } from '../damage';
 import { makePart } from '../factory';
+import { getTradePrice } from '../economy';
+import { getUpkeepReserve } from '../npc-decisions';
 import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
@@ -48,6 +50,16 @@ describe('botOrders', () => {
 
     expect(turn.world).toBe(w);
     expect(turn.events).toEqual([]);
+  });
+
+  it('has a trader with money for one unit buy that one unit', () => {
+    const w = saltGlut(parkedAt('nose'));
+    const me = playerVehicle(w);
+    w.player.money = getUpkeepReserve(me) + getTradePrice(w, me, 'nose', 'salt', 'buy') + 1;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(goodsCount(playerVehicle(turn.world)).salt).toBe(1);
   });
 
   // Nose sells salt cheap, and Bowl pays well for it.
