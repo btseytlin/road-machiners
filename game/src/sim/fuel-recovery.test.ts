@@ -43,9 +43,11 @@ describe('a fuelless majority of NPCs', () => {
     spawn('hauler', ['stockEngine'], 'trader', NPCS.trader.traits, off(bowl, 12), true);
 
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
-    const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
+    // A broke driver with cargo sells it at a market first, so the trip to its camp can be several times the straight line.
+    const bound = 4 * Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    for (let turn = 0; turn < bound; turn++) {
+    const recovered = () => broke.every((v) => getResources(w, w.vehicles.find((x) => x.id === v.id)!).fuel > 0);
+    for (let turn = 0; turn < bound && !recovered(); turn++) {
       w = endTurn(w, moveAllFar);
       stalls.push(...w.events.filter((e) => e.t === 'stall'));
     }

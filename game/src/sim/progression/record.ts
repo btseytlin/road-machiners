@@ -23,7 +23,7 @@ import { isTowed } from '../tow';
 import type { GameEvent, NpcActivity, Vehicle, World, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
-import { maxHp, partValue } from '../wear';
+import { isJunk, maxHp, partValue, restorePart } from '../wear';
 import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
@@ -259,7 +259,7 @@ export function worthOf(world: World): Worth {
 
 function repairedTradeIn(world: World): number {
   return chassisTradeIn(update(world, (w) => {
-    for (const p of mountedParts(playerVehicle(w), 'core')) p.hp = maxHp(p);
+    for (const p of mountedParts(playerVehicle(w), 'core')) if (!isJunk(p)) restorePart(p, maxHp(p));
   }));
 }
 
