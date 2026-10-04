@@ -16,7 +16,7 @@ import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder
 import { playerVehicle, vehicleById } from '../damage';
 import { isDefeated, isKnockedOut } from '../defeat';
 import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
-import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getLotTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
 import { cargoMassRoom, moveItem, storePart, takeFromStorage } from '../inventory';
 import { itemMass } from '../mass';
@@ -338,12 +338,23 @@ function bestPurchase(world: World): Purchase | null {
   return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
 }
 
-// Buying as much of a good at the source as fits and the money allows, to sell at the market.
+// Buying the lot of a good at the source that sells at the market for the most profit, within what fits and the
+// money allows. Each unit bought raises the price and each unit sold lowers it, so a big lot can lose money that a
+// smaller one makes; the lot prices count that.
 function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
   const me = playerVehicle(world);
-  const buy = getTradePrice(world, me, source.id, good, 'buy');
-  const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
-  return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
+  const none = { town: source, good, count: 0, profit: 0 };
+  if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
+  const lotProfit = (count: number) => getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy');
+  // Each extra unit adds less profit than the one before, so the best lot is the last one whose last unit still pays.
+  let low = 0;
+  let high = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (lotProfit(mid) > lotProfit(mid - 1)) low = mid;
+    else high = mid - 1;
+  }
+  return low > 0 && lotProfit(low) > 0 ? { ...none, count: low, profit: lotProfit(low) } : none;
 }
 
 function sellAt(world: World, town: TownDef, good: string): number {
