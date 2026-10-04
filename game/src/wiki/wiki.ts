@@ -20,6 +20,7 @@ import { SOUNDS } from '../data/sounds';
 import { TIME } from '../data/time';
 import { TOW } from '../data/tow';
 import { UNITS } from '../data/units';
+import { oilSlickLength } from '../data/utilities';
 import { CONDITION, PATCH, REPAIR, WEAR } from '../data/wear';
 import { baseModel, PART_MODELS, WEAPON_POOLS } from '../render/partLooks';
 import { STATE_KINDS } from '../sim/states';
@@ -162,7 +163,8 @@ const TABLES: WikiTable[] = [
   partTable('stores', 'store', ['holds', 'amount (units)'], (p) => [p.holds, p.amount]),
   partTable('utilities', 'utility', ['effect', 'reload (turns)', 'effect numbers', 'shot range (tiles)'], (p) => {
     const { type, ...numbers } = p.effect;
-    return [type, p.reload, numbers, p.shot ? p.shot.range : null];
+    const shown = type === 'oil' ? { slick: oilSlickLength(), ...numbers } : numbers;
+    return [type, p.reload, shown, p.shot ? p.shot.range : null];
   }),
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {

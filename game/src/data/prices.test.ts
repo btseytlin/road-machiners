@@ -24,9 +24,11 @@ function bumpUtility(copy: Record<string, unknown>, field: 'turns' | 'reach'): v
   else effect.radius += 1;
 }
 
-// A passive utility has no priced stat.
+// A passive utility has no priced stat. An oil spill's reach is the shared slick in OIL, not a stat of the part.
 function pricedStats(def: PartDef): string[] {
-  return def.kind === 'utility' && def.reload === null ? [] : PRICED_STATS[def.kind];
+  if (def.kind === 'utility' && def.reload === null) return [];
+  if (def.kind === 'utility' && def.effect.type === 'oil') return ['turns'];
+  return PRICED_STATS[def.kind];
 }
 
 const PRICED_STATS: Record<PartDef['kind'], string[]> = {

@@ -47,7 +47,7 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 3,
     tall: false,
     reload: 6,
-    effect: { type: 'oil', radius: 1.25, turns: 8, behind: 1, fuel: 2 },
+    effect: { type: 'oil', turns: 8, behind: 1, fuel: 2 }, // a streak of OIL.blobs patches, see OIL
   },
   patcherCrane: {
     id: 'patcherCrane',
@@ -158,9 +158,21 @@ export const CALTROPS = {
   damage: 8, // to each of the four wheels of a truck that drives through, once per field
 };
 
+// One spill is a streak of `blobs` oil fields along the path behind the truck, `spacing` apart, so they overlap.
 export const OIL = {
-  grip: 0.3, // share of friction slip and side friction stiffness left to a wheel on oil
+  blobs: 6, // oil fields per spill
+  blobR: 0.9, // tiles, the radius of each field
+  spacing: 0.8, // tiles along the path between field centers
+  grip: 0.12, // share of friction slip and side friction stiffness left to a wheel on oil
+  safeSpeed: 4, // tiles per turn; at or below it oil gives no tail kick
+  kick: 0.35, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
+  maxKick: 1.6, // rad/s, the cap on one tail kick
 };
+
+// Tiles from one end of a spill's streak to the other, on a straight path.
+export function oilSlickLength(): number {
+  return (OIL.blobs - 1) * OIL.spacing + 2 * OIL.blobR;
+}
 
 // The harpoon line: a one-sided spring between the two anchors once they are farther apart than the line's length.
 // Settled in src/phys/line.test.ts at 60 steps per second, with a parked hauler holding a 1.3 t scout: the spring is

@@ -1,22 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
-import { CALTROPS } from '../data/utilities';
+import { CALTROPS, OIL } from '../data/utilities';
 import { routeBlockers } from './ai';
 import { bodyOf } from './body';
 import { stateOf, strayData } from './states';
 import { coreParts } from './grid';
 import { makePart } from './factory';
-import { caltropHits, dropField, oilPatches } from './hazards';
+import { caltropHits, dropClearance, dropField, oilPatches, pathBehind, spillOil } from './hazards';
 import { mountPart } from './inventory';
 import { route } from './path';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { GroundField, PartInstance, Pose, Vehicle, World } from './types';
 import { activateUtilities, advanceUtilityEffects, utilityOrderError } from './utility';
-import { segmentDist, type Vec } from './vec';
+import { dist, segmentDist, type Vec } from './vec';
 import { sightRadius } from './vision';
 
 const DROP = { radius: 1.25, turns: 10, behind: 1 };
+const SPILL = { turns: 8, behind: 1, fuel: 2 };
 
 // The player's truck with the utility mounted on a free deck cell.
 function playerWith(defId: string): { w: World; me: Vehicle; part: PartInstance } {
@@ -47,7 +48,7 @@ function wheelHp(v: Vehicle): number[] {
 }
 
 describe('dropField', () => {
-  it('puts the near edge of the field `behind` tiles behind the rear of the truck', () => {
+  it('puts the near edge of the field `behind` tiles behind the rear of a stopped truck', () => {
     const { w, me } = playerWith('caltrops');
     me.heading = Math.PI / 2;
 
@@ -60,6 +61,18 @@ describe('dropField', () => {
     expect(f).toMatchObject({ kind: 'caltrops', source: me.id, r: DROP.radius, turnsLeft: DROP.turns, hit: [] });
   });
 
+  it('puts the field on the ground the truck drove over, not behind its end heading', () => {
+    const { w, me } = playerWith('caltrops');
+    drive(me, { x: 20, y: 30 }, { x: 30, y: 30 });
+    me.heading = Math.PI / 2;
+
+    dropField(w, me, 'caltrops', DROP);
+
+    const [f] = w.fields;
+    expect(f.pos.x).toBeCloseTo(30 - dropClearance(me, DROP.behind) - DROP.radius);
+    expect(f.pos.y).toBeCloseTo(30);
+  });
+
   it('leaves the dropper clear of its fresh field', () => {
     const { w, me } = playerWith('caltrops');
     drive(me, { x: 30, y: 30 }, { x: 30, y: 30 });
@@ -69,6 +82,141 @@ describe('dropField', () => {
     caltropHits(w);
 
     expect(wheelHp(me)).toEqual(before);
+  });
+});
+
+describe('pathBehind', () => {
+  it('walks back along the trail from the truck', () => {
+    const { me } = playerWith('caltrops');
+    drive(me, { x: 20, y: 30 }, { x: 30, y: 30 });
+
+    expect(pathBehind(me, 4)).toEqual({ x: 26, y: 30 });
+  });
+
+  it('goes on straight past the start of the trail, the way the trail started', () => {
+    const { me } = playerWith('caltrops');
+    me.trail = [{ x: 30, y: 26, heading: Math.PI / 2 }, { x: 30, y: 28, heading: 0 }, { x: 30, y: 30, heading: 0 }];
+    me.pos = { x: 30, y: 30 };
+
+    const p = pathBehind(me, 7);
+
+    expect(p.x).toBeCloseTo(30);
+    expect(p.y).toBeCloseTo(23);
+  });
+
+  it('throws on a negative distance', () => {
+    const { me } = playerWith('caltrops');
+
+    expect(() => pathBehind(me, -0.1)).toThrow();
+  });
+});
+
+// IV18: every field a drop makes lies on the dropper's path, at least the clearance from its end position, and none
+// lies ahead of it in its travel.
+describe('drops land on the path behind in travel', () => {
+  const unit = (h: number): Vec => ({ x: Math.cos(h), y: Math.sin(h) });
+  const END = { x: 30, y: 30 };
+
+  // The truck's trail this turn, ending at END with heading h, and the direction it traveled in.
+  type Motion = { name: string; lay: (v: Vehicle, h: number) => Vec };
+  const MOTIONS: Motion[] = [
+    {
+      name: 'driving forward',
+      lay: (v, h) => {
+        drive(v, { x: END.x - 6 * unit(h).x, y: END.y - 6 * unit(h).y }, END);
+        return unit(h);
+      },
+    },
+    {
+      name: 'reversing',
+      lay: (v, h) => {
+        drive(v, { x: END.x + 6 * unit(h).x, y: END.y + 6 * unit(h).y }, END);
+        v.heading = h;
+        v.trail = v.trail.map((p) => ({ ...p, heading: h }));
+        return { x: -unit(h).x, y: -unit(h).y };
+      },
+    },
+    {
+      name: 'stopped',
+      lay: (v, h) => {
+        drive(v, END, END);
+        v.heading = h;
+        return unit(h);
+      },
+    },
+  ];
+  const HEADINGS = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+  const CASES = MOTIONS.flatMap((m) => HEADINGS.map((h) => [m.name, h, m] as const));
+
+  function expectBehind(v: Vehicle, fields: GroundField[], travel: Vec, gap: number): void {
+    const clearance = dropClearance(v, gap);
+    for (const f of fields) {
+      const off = { x: f.pos.x - END.x, y: f.pos.y - END.y };
+      expect(dist(f.pos, END)).toBeGreaterThanOrEqual(clearance);
+      expect(off.x * travel.x + off.y * travel.y).toBeLessThanOrEqual(1e-9);
+      expect(Math.abs(off.x * travel.y - off.y * travel.x)).toBeLessThan(1e-9);
+    }
+  }
+
+  it.each(CASES)('drops caltrops behind a truck %s at heading %f', (_name, h, motion) => {
+    const { w, me } = playerWith('caltrops');
+    const travel = motion.lay(me, h);
+
+    dropField(w, me, 'caltrops', DROP);
+
+    expectBehind(me, w.fields, travel, DROP.behind);
+  });
+
+  it.each(CASES)('spills oil behind a truck %s at heading %f', (_name, h, motion) => {
+    const { w, me } = playerWith('oilSpiller');
+    w.player.fuel = 5;
+    const travel = motion.lay(me, h);
+
+    spillOil(w, me, SPILL);
+
+    expectBehind(me, w.fields, travel, SPILL.behind);
+  });
+});
+
+describe('spillOil', () => {
+  it('spills one streak of OIL.blobs oil fields, spaced along the path', () => {
+    const { w, me } = playerWith('oilSpiller');
+    w.player.fuel = 5;
+    drive(me, { x: 10, y: 30 }, { x: 30, y: 30 });
+
+    spillOil(w, me, SPILL);
+
+    expect(OIL.blobs).toBe(6);
+    expect(w.fields).toHaveLength(6);
+    expect(new Set(w.fields.map((f) => f.id)).size).toBe(6);
+    expect(w.fields.every((f) => f.kind === 'oil' && f.source === me.id && f.r === OIL.blobR && f.turnsLeft === SPILL.turns)).toBe(true);
+    const first = 30 - dropClearance(me, SPILL.behind) - OIL.blobR;
+    w.fields.forEach((f, i) => {
+      expect(f.pos.x).toBeCloseTo(first - i * OIL.spacing);
+      expect(f.pos.y).toBeCloseTo(30);
+    });
+    expect(w.player.fuel).toBe(3);
+  });
+
+  it('lays the streak on a curved trail, each blob on the curve', () => {
+    const { w, me } = playerWith('oilSpiller');
+    w.player.fuel = 5;
+    // A quarter circle of radius 6 around 30,24, from 24,24 heading +y to the end at 30,30 heading +x.
+    const arc = Array.from({ length: 31 }, (_, i) => {
+      const a = Math.PI - (i / 30) * (Math.PI / 2);
+      return { x: 30 + 6 * Math.cos(a), y: 24 + 6 * Math.sin(a), heading: a - Math.PI / 2 };
+    });
+    me.trail = arc;
+    me.pos = { x: arc[30].x, y: arc[30].y };
+    me.heading = 0;
+
+    spillOil(w, me, SPILL);
+
+    const points: Vec[] = [...me.trail, me.pos];
+    const toTrail = (p: Vec): number => Math.min(...points.slice(1).map((q, i) => segmentDist(p, points[i], q)));
+    for (const f of w.fields) expect(toTrail(f.pos)).toBeLessThanOrEqual(0.1);
+    // Off the straight line behind the end heading, where round 1 put the patch.
+    expect(Math.max(...w.fields.map((f) => Math.abs(f.pos.y - 30)))).toBeGreaterThan(0.5);
   });
 });
 
@@ -200,7 +348,7 @@ describe('the caltrops and the oil spiller in use', () => {
     expect(w.player.fuel).toBe(1.9);
   });
 
-  it('spends 2 fuel units on an oil patch', () => {
+  it('spends 2 fuel units on an oil streak', () => {
     const { w, me, part } = playerWith('oilSpiller');
     w.player.fuel = 5;
     me.utilityOrders[part.id] = { kind: 'self' };
@@ -208,7 +356,7 @@ describe('the caltrops and the oil spiller in use', () => {
     activateUtilities(w);
 
     expect(w.player.fuel).toBe(3);
-    expect(w.fields.map((f) => [f.kind, f.turnsLeft])).toEqual([['oil', 8]]);
+    expect(w.fields.map((f) => [f.kind, f.turnsLeft])).toEqual(Array.from({ length: OIL.blobs }, () => ['oil', 8]));
   });
 
   it('end fields after their turns', () => {

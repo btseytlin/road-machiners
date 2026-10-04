@@ -151,7 +151,7 @@ Yellow deck parts with one job each. An active utility acts once on an order and
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | sprout | Sprout | 1 | 170 | 1 x 1 | 60 | 25 | 2 | false | sprout | 10 | {"radius":5,"turns":6} |  |
 | caltrops | Caltrops | 1 | 140 | 1 x 1 | 70 | 30 | 3 | false | caltrops | 10 | {"radius":1.25,"turns":10,"behind":1} |  |
-| oilSpiller | Oil spiller | 1 | 161 | 1 x 1 | 90 | 30 | 3 | false | oil | 6 | {"radius":1.25,"turns":8,"behind":1,"fuel":2} |  |
+| oilSpiller | Oil spiller | 1 | 170 | 1 x 1 | 90 | 30 | 3 | false | oil | 6 | {"slick":5.8,"turns":8,"behind":1,"fuel":2} |  |
 | patcherCrane | Patcher crane | 1 | 180 | 1 x 2 | 150 | 50 | 4 | false | crane |  | {} |  |
 | harpoon | Harpoon | 2 | 300 | 1 x 2 | 120 | 40 | 4 | false | harpoon | 5 | {"turns":3} | 8 |
 | smokeMortar | Smoke mortar | 2 | 320 | 1 x 2 | 110 | 36 | 3 | false | mortar | 8 | {"radius":4,"turns":5,"minRange":5,"maxRange":16} |  |

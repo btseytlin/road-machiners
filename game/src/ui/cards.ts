@@ -3,6 +3,7 @@
 // Stat values are in display units, so a difference reads the same as the value.
 
 import { RULES } from "../data/rules";
+import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
@@ -388,11 +389,12 @@ function utilityStats(part: PartInstance): Stat[] {
   return [...reload, ...utilityReach(d), ...lasts];
 }
 
-// How far a utility sends its effect, or the radius it covers around the truck.
+// How far a utility sends its effect, the length of its oil slick, or the radius it covers around the truck.
 function utilityReach(d: UtilityDef): Stat[] {
   const e = d.effect;
   if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
   if (d.shot) return [stat("range", "Range", meters(d.shot.range), "m", "more")];
+  if (e.type === "oil") return [stat("range", "Slick length", meters(oilSlickLength()), "m", "more")];
   return "radius" in e ? [stat("range", "Radius", meters(e.radius), "m", "more")] : [];
 }
 
