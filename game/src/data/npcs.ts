@@ -44,7 +44,8 @@ export type NpcLoadoutTable = {
 // budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
 // multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
 // a poor truck may end below its targets. Armor comes first in the fill order, so the budget cuts extra guns before
-// armor, and from the standard level up every edge cell is armored.
+// armor, and from the light level up every edge cell is armored, unless JOB_ARMOR cuts the share. Only the poor
+// drive half bare.
 // Extra guns stop before their power draw slows the truck by more than this share, see gunDrag() in src/sim/stats.ts.
 // A stronger engine carries more guns. The template's minimum guns ignore it.
 export const MAX_GUN_SLOWDOWN = 0.35;
@@ -57,7 +58,7 @@ export const SPEED_FLOOR: Record<NpcTemplate['fightStyle'], number> = { circle: 
 
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
   poor: { fill: 0, armor: 0.5, budget: 0.6, wearShift: 1, cargo: 0.5 },
-  light: { fill: 0.1, armor: 0.75, budget: 0.85, wearShift: 0, cargo: 0.75 },
+  light: { fill: 0.1, armor: 1, budget: 0.85, wearShift: 0, cargo: 0.75 },
   standard: { fill: 0.25, armor: 1, budget: 1.15, wearShift: 0, cargo: 1 },
   heavy: { fill: 0.45, armor: 1, budget: 1.6, wearShift: -1, cargo: 1 },
   loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: -2, cargo: 1.5 },
@@ -121,6 +122,9 @@ export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; 
 // A fighter earns by its guns, a trader and a carrier by cargo room, a courier by speed. A carrier hauls or salvages
 // and needs no goods money.
 export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
+
+// Multiplies a gear level's armor share by the driver's job. A courier lives on speed, so it bolts on half the armor.
+export const JOB_ARMOR: Record<GearJob, number> = { fighter: 1, trader: 1, courier: 0.5, carrier: 1 };
 
 export type NpcTemplate = {
   id: string;
@@ -215,7 +219,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.8, 1.8], armor: [0.4, 0.7] },
+    targets: { guns: [0.8, 1.8], armor: [0.75, 1] },
     spares: null,
   },
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
@@ -322,7 +326,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
-    targets: { guns: [1.1, 2.2], armor: [0.6, 0.95] },
+    targets: { guns: [1.1, 2.2], armor: [0.85, 1] },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -373,7 +377,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.9, 1.6], armor: [0.4, 0.7] },
+    targets: { guns: [0.9, 1.6], armor: [0.75, 1] },
     spares: null,
   },
   // Bowl Farmers drive farm chassis.
@@ -453,7 +457,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    targets: { guns: [0.9, 1.7], armor: [0.25, 0.55] },
+    targets: { guns: [0.9, 1.7], armor: [0.3, 0.6] },
     spares: null,
   },
   // A roamer's rig is a scavenger's, a bit better kept.
@@ -500,7 +504,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.9, 1.7], armor: [0.45, 0.8] },
+    targets: { guns: [0.9, 1.7], armor: [0.8, 1] },
     spares: null,
   },
   // A vulture picks its way along lonely roads with a long gun, plates and cargo packs, and never rolls without a

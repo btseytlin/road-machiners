@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, SCRAP_ARMOR, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { GEAR_LEVELS, GEAR_LEVEL_IDS, JOB_ARMOR, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, SCRAP_ARMOR, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
@@ -291,7 +291,7 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
   let v = withFreshIds(probe, chooseRequiredParts(probe, rng, template, sampleWeighted(rng, chassisChoices)));
   v = chooseOptionalPart(probe, rng, v, { budget: required, floor }, table.cargoPart);
-  v = addArmor(probe, rng, table, level, v, { budget, floor });
+  v = addArmor(probe, rng, table, level.armor * JOB_ARMOR[template.gearJob], v, { budget, floor });
   return addGuns(probe, rng, table, level, v, { budget, floor });
 }
 
@@ -333,11 +333,11 @@ function pickFitting(world: World, rng: Rng, pool: Weighted<string>[], mount: (i
 const SIDE_ORDER: Cell[][] = [['F'], ['L', 'R'], ['B']];
 const EDGES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 
-// Armors sides in order, the front, both flanks, the rear, until the level's share of edge cells is armored. Each
-// side takes one armor type, picked among those that fit there. Flanks alternate pieces so both sides match. Cells the
-// typed armor leaves bare get scrap, so a driver short of money or mass room still bolts something on every side.
-function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, fit: Fit): Vehicle {
-  const target = Math.round(edgeCells(v.chassisId) * level.armor);
+// Armors sides in order, the front, both flanks, the rear, until `share` of the edge cells is armored. Each side takes
+// one armor type, picked among those that fit there. Flanks alternate pieces so both sides match. Cells the typed
+// armor leaves bare get scrap, so a driver short of money or mass room still bolts something on every side.
+function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, share: number, v: Vehicle, fit: Fit): Vehicle {
+  const target = Math.round(edgeCells(v.chassisId) * share);
   for (const sides of SIDE_ORDER) {
     if (armoredCells(v) >= target) break;
     const typed = pickFitting(world, rng, table.armor, (id) => tryMountExtra(world, v, id, fit, [sides[0]]));
@@ -346,7 +346,9 @@ function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, 
     const type = mountedItems(v, 'armor').at(-1)!.part.defId;
     v = fillSides(world, v, type, sides, fit, target);
   }
-  for (const sides of SIDE_ORDER) v = fillSides(world, v, SCRAP_ARMOR, sides, fit, target);
+  // Scrap is what a driver scavenges for nothing, so it costs no budget. Mass room still limits it.
+  const scrap = { budget: Infinity, floor: fit.floor };
+  for (const sides of SIDE_ORDER) v = fillSides(world, v, SCRAP_ARMOR, sides, scrap, target);
   return v;
 }
 

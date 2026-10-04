@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPC_WEAR, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPC_WEAR, NPCS, SCRAP_ARMOR, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -71,7 +71,8 @@ describe('NPC equipment generation', () => {
       expect(loose).toHaveLength(loadout.spares.length);
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
-      const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
+      // Scrap armor costs no budget.
+      const cost = CHASSIS[v.chassisId].value + loadout.parts.filter((p) => p.defId !== SCRAP_ARMOR).reduce((sum, p) => sum + PARTS[p.defId].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
       expect(v.resources?.money).toBe(fixture.player.money);
     }
@@ -163,8 +164,8 @@ describe('NPC equipment generation', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build
-    expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
+    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build but free scrap
+    expect(loadout.parts.map((p) => p.defId).filter((id) => id !== SCRAP_ARMOR)).toEqual(['stockEngine', 'mg']);
   });
 
   it('rejects impossible required equipment without consuming RNG or IDs', () => {

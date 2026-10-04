@@ -78,17 +78,18 @@ export function chassisModifier(def: ChassisInput): number {
   return m.perDeckCell * count('D') + m.perArmorCell * count('FBLR') + m.perTopSpeed * def.maxSpeed;
 }
 
-// The rated mass is the truck with a full tier 1 fighting kit: its core parts, a stock engine, a scrap sheet on every
-// armor cell and a machine gun on half the deck cells. So every truck can armor all its sides with the heaviest
-// armor and still mount guns. Cargo and heavier gear go past the rating.
-export const RATED_KIT = { engine: 'stockEngine', armorPerCell: 'scrapSheet', gun: 'mg', gunDeckShare: 0.5 };
+// The rated mass is the truck with a full fighting kit: its core parts, a stock engine, armorKgPerCell on every armor
+// cell and a machine gun on half the deck cells. armorKgPerCell is fixed, not read from an armor part, so lighter
+// armor leaves room for cargo instead of lowering the rating. Every armor part weighs less per cell, so every truck can
+// armor all its sides and still mount guns and carry some cargo.
+export const RATED_KIT = { engine: 'stockEngine', armorKgPerCell: 100, gun: 'mg', gunDeckShare: 0.5 };
 
 export function ratedMassOf(def: ChassisInput): number {
   const cells = def.layout.join('');
   const count = (marks: string) => [...cells].filter((c) => marks.includes(c)).length;
   const core = def.core.reduce((sum, c) => sum + PARTS[c.defId].mass, 0);
   const guns = Math.ceil(count('D') * RATED_KIT.gunDeckShare);
-  return def.mass + core + PARTS[RATED_KIT.engine].mass + count('FBLR') * PARTS[RATED_KIT.armorPerCell].mass + guns * PARTS[RATED_KIT.gun].mass;
+  return def.mass + core + PARTS[RATED_KIT.engine].mass + count('FBLR') * RATED_KIT.armorKgPerCell + guns * PARTS[RATED_KIT.gun].mass;
 }
 
 function finishChassis(def: ChassisInput): ChassisDef {

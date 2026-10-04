@@ -100,17 +100,17 @@ Each weapon's round:
 <!-- wiki:armor -->
 | id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| plates | Steel plates | 2 | 304 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |
-| cage | Rebar cage | 1 | 218 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |
-| ram | Ram bar | 2 | 328 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |
-| scrapPanels | Scrap panels | 1 | 150 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |
-| ceramicPlates | Ceramic plates | 2 | 450 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |
-| spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |
-| reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |
-| plowRam | Plow ram | 3 | 602 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |
-| steelPlate | Steel plate | 2 | 198 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |
-| scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |
-| ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |
+| plates | Steel plates | 2 | 304 | 1 x 3 | 112 | 80 | 12 | false | 12 | capped | 1 |
+| cage | Rebar cage | 1 | 218 | 1 x 2 | 55 | 60 | 2 | false | 20 | capped | 1 |
+| ram | Ram bar | 2 | 256 | 3 x 1 | 135 | 100 | 8 | false | 8 | capped | 2 |
+| scrapPanels | Scrap panels | 1 | 150 | 1 x 2 | 80 | 44 | 5 | false | 5 | full | 1 |
+| ceramicPlates | Ceramic plates | 2 | 450 | 1 x 2 | 50 | 36 | 22 | false | 8 | none | 1 |
+| spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 130 | 110 | 10 | false | 28 | capped | 1 |
+| reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 90 | 130 | 4 | false | 26 | capped | 1.2 |
+| plowRam | Plow ram | 3 | 500 | 3 x 1 | 126 | 170 | 10 | false | 10 | none | 2.8 |
+| steelPlate | Steel plate | 2 | 198 | 1 x 1 | 40 | 28 | 12 | false | 12 | capped | 1 |
+| scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 40 | 22 | 5 | false | 5 | full | 1 |
+| ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 25 | 18 | 22 | false | 8 | none | 1 |
 <!-- /wiki:armor -->
 
 ## Cargo
