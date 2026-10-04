@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
 import type { World, XpSource } from '../types';
+import { cumulativeCost } from '../progress';
 import { emptyWorld } from '../testkit';
 import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
 import { replay } from './replay';
@@ -42,7 +43,9 @@ describe('record', () => {
       expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
     }
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
-    expect(pool).toBeCloseTo(world.player.xp, 6);
+    // The bot spends the pool on ranks as it goes, so the earned XP is what is left plus what the ranks cost.
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + cumulativeCost(world.player.ranks[skill]), 0);
+    expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
 });
 

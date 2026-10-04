@@ -10,7 +10,7 @@ import { emptyWorld } from '../testkit';
 import type { World } from '../types';
 import { Orders, upgradeGear, type UpgradeStyle } from './orders';
 
-const STYLE: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: false };
+const STYLE: UpgradeStyle = { skip: [], chassis: 'value', job: 'fighter' };
 const capital = startKit('standard').money;
 
 // The player parked on a pad of Bowl, which has a garage, with plenty of money.
@@ -36,16 +36,30 @@ describe('upgradeGear', () => {
     expect(engineIds(o.world)).toEqual(['turbine']);
   });
 
-  it('spends no money that belongs to the trade capital', () => {
+  it('keeps the trade capital of a trader', () => {
     const w = atBowl();
     w.player.money = capital;
     shopState(w, 'bowl').stock.push(makePart(w, 'turbine', 0));
     const o = new Orders(w);
 
-    upgradeGear(o, STYLE);
+    upgradeGear(o, { ...STYLE, job: 'trader' });
 
     expect(engineIds(o.world)).toEqual(engineIds(w));
     expect(o.world.player.money).toBe(capital);
+  });
+
+  it('lets a fighter spend its starting money on a gun, since it keeps no goods money', () => {
+    const w = atBowl();
+    w.player.money = capital;
+    shopState(w, 'bowl').stock.push(makePart(w, 'heavyMg', 0));
+    const o = new Orders(w);
+    const gunsBefore = mountedParts(playerVehicle(w), 'weapon').length;
+
+    upgradeGear(o, STYLE);
+
+    expect(mountedParts(playerVehicle(o.world), 'weapon').length).toBeGreaterThan(gunsBefore);
+    expect(o.world.player.money).toBeLessThan(capital);
+    expect(shopState(o.world, 'bowl').stock.some((p) => p.defId === 'heavyMg')).toBe(false);
   });
 
   it('mounts a better part from garage storage instead of buying one', () => {
@@ -55,7 +69,7 @@ describe('upgradeGear', () => {
     w.player.storage.push(spare);
     const o = new Orders(w);
 
-    upgradeGear(o, { skip: ['weapon', 'armor', 'cargo', 'store'], chassis: 'value', keepRoom: false });
+    upgradeGear(o, { skip: ['weapon', 'armor', 'cargo', 'store'], chassis: 'value', job: 'fighter' });
 
     expect(mountedParts(playerVehicle(o.world), 'engine').map((p) => p.id)).toEqual([spare.id]);
   });
@@ -65,12 +79,12 @@ describe('upgradeGear', () => {
     shopState(w, 'bowl').stock.push(makePart(w, 'turbine', 0));
     const o = new Orders(w);
 
-    upgradeGear(o, { skip: ['engine'], chassis: 'value', keepRoom: false });
+    upgradeGear(o, { skip: ['engine'], chassis: 'value', job: 'fighter' });
 
     expect(engineIds(o.world)).toEqual(engineIds(w));
   });
 
-  it('with keepRoom, takes no gun that would fill cargo cells, where a fighter would', () => {
+  it('as a trader, takes no gun that would fill cargo cells, where a fighter would', () => {
     const roomOf = (world: World) => freeCells({ ...playerVehicle(world), items: playerVehicle(world).items.filter((it) => it.kind === 'part') });
     const offer = (world: World) => shopState(world, 'bowl').stock.push(makePart(world, 'heavyMg', 0));
     const trader = atBowl();
@@ -79,7 +93,7 @@ describe('upgradeGear', () => {
     const kept = new Orders(trader);
     const spent = new Orders(fighter);
 
-    upgradeGear(kept, { ...STYLE, keepRoom: true });
+    upgradeGear(kept, { ...STYLE, job: 'trader' });
     upgradeGear(spent, STYLE);
 
     expect(roomOf(kept.world)).toBeGreaterThanOrEqual(roomOf(trader));

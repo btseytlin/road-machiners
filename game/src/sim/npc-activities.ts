@@ -17,7 +17,7 @@ import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveThreat, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
 } from './npc-decisions';
@@ -589,7 +589,7 @@ export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle,
   if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
   vehicle.brain!.noticed[key] = world.turn;
   const seen = decision === 'hostileSeen' || decision === 'preySeen';
-  return decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
+  return decide(world, vehicle, decision, id, seen ? perceiveThreat(world, vehicle, vehicleById(world, id)) : null);
 }
 
 // Pushes a danger goal. A tower in danger drops its tow for free.
@@ -662,7 +662,7 @@ function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
     brain.attackers[shooter.id] = true;
     brain.noticed[`hostileSeen:${shooter.id}`] = world.turn;
     if (isFighting(vehicle, shooter.id)) continue;
-    const option = decide(world, vehicle, 'attacked', shooter.id, perceiveDanger(world, vehicle, shooter));
+    const option = decide(world, vehicle, 'attacked', shooter.id, perceiveThreat(world, vehicle, shooter));
     if (option === 'keep') continue;
     if (option === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, shooter, 'fight back'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, shooter.id, shooter.pos, 'escape an attacker'));
@@ -694,7 +694,7 @@ function onGrievances(world: World, vehicle: Vehicle): void {
 function onParley(world: World, vehicle: Vehicle): void {
   const foe = hurtingFoe(world, vehicle);
   if (!foe) return;
-  const option = decide(world, vehicle, 'parley', foe.id, perceiveDanger(world, vehicle, foe));
+  const option = decide(world, vehicle, 'parley', foe.id, perceiveThreat(world, vehicle, foe));
   if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
 }
 

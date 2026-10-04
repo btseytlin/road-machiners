@@ -512,7 +512,7 @@ describe('the hunter', () => {
   it('has a hunter strip a spare part for repair parts where a trader sells it', () => {
     const turnOf = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
-      expect(stowPart(w, playerVehicle(w), makePart(w, 'mg', 0))).toBe(true);
+      expect(stowPart(w, playerVehicle(w), makePart(w, 'scanner', 0))).toBe(true);
       return botOrders(w, archetype);
     };
 
@@ -602,16 +602,27 @@ describe('the hunter', () => {
     expect(demandedBy([])).toBeGreaterThan(0);
   });
 
-  it('drives at the weaker of two raiders in sight', () => {
+  it('drives at a weak raider in sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     playerVehicle(w).speed = 0;
-    const strong = addVehicle(w, 'raiders', 'buggy', ['mg', 'mg', 'stockEngine'], { x: 30, y: 42 });
+    const weak = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 42, y: 30 });
+    weak.brain = npcBrain('buggy', weak.pos, ['raider']);
+
+    const turn = botOrders(w, 'hunter');
+
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: weak.pos });
+  });
+
+  it('leaves a weak raider alone while a stronger one stands in sight, as an NPC does', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).speed = 0;
+    const strong = addVehicle(w, 'raiders', 'buggy', ['mg', 'mg', 'mg', 'stockEngine'], { x: 30, y: 45 });
     const weak = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 42, y: 30 });
     for (const raider of [strong, weak]) raider.brain = npcBrain('buggy', raider.pos, ['raider']);
 
     const turn = botOrders(w, 'hunter');
 
-    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: weak.pos });
+    expect(playerVehicle(turn.world).order).not.toEqual({ kind: 'stopAt', dest: weak.pos });
   });
 
   it('leaves the world random stream where it was', () => {

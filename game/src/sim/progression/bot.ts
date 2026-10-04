@@ -29,7 +29,7 @@ import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, site
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
-import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, perceiveDanger, perceiveThreat, withinReach } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -55,14 +55,13 @@ const CLIMB_GUNS = 3;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
 // Traders and scavengers earn with cargo room, so their gear never takes it.
-const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
-  trader: CARGO_GEAR,
-  scavenger: CARGO_GEAR,
+  trader: { skip: [], chassis: 'value', job: 'trader' },
+  scavenger: { skip: [], chassis: 'value', job: 'carrier' },
   // A hunter keeps the chassis it starts with: a swap pays the shop's spread, and gear is where its edge comes from.
-  hunter: { skip: [], chassis: 'keep', keepRoom: false },
-  fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
-  hauler: CARGO_GEAR,
+  hunter: { skip: [], chassis: 'keep', job: 'fighter' },
+  fastTrader: { skip: ['armor'], chassis: 'speed', job: 'courier' },
+  hauler: { skip: [], chassis: 'value', job: 'carrier' },
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
@@ -609,13 +608,14 @@ function engageFoe(o: Orders): boolean {
   return heard !== null;
 }
 
-// A hunter picks a fight only against a foe this many times less dangerous than itself. In the snowball runs, fights
-// below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost next to nothing. A foe it will not
-// fight it outruns, as a player does.
-const HUNT_MARGIN = 4;
+// How bold each goal is, as an NPC trait is: a fight is taken while the threat stays within the bot's own danger times
+// its boldness. A hunter picks a fight only when it is at least 4 times more dangerous than every hostile in sight
+// together. In the snowball runs, fights below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost
+// next to nothing. A foe it will not fight it outruns, as a player does.
+const BOLDNESS: Record<Goal, number> = { trader: 1, scavenger: 1, hunter: 0.25, fastTrader: 1, hauler: 1 };
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe)) return false;
+  if (!canTakeOn(o, foe, 'hunter') || !isSoftTarget(o.world, foe)) return false;
   setFire(o, true);
   aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
@@ -693,13 +693,25 @@ function charge(o: Orders, foe: Vehicle, goal: Goal): void {
 }
 
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
-  const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
-  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+  return canTakeOn(o, foe, goal) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+}
+
+// The shared fight rule, npc-decisions.ts: the threat of the foe and every other hostile in sight against the bot's
+// own danger and its goal's boldness. Reading the threat rolls world randomness, so the roll is put back.
+function canTakeOn(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  const rng = o.world.rngState;
+  const threat = perceiveThreat(o.world, o.me, foe);
+  o.world.rngState = rng;
+  return withinReach(o.world, o.me, threat, BOLDNESS[goal]);
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
 function outmatchedBy(world: World, foe: Vehicle): boolean {
-  return dangerOf(world, foe) > ownDanger(world, playerVehicle(world)) && !outruns(world, playerVehicle(world), foe);
+  const me = playerVehicle(world);
+  const rng = world.rngState;
+  const threat = perceiveThreat(world, me, foe);
+  world.rngState = rng;
+  return !withinReach(world, me, threat, 1) && !outruns(world, me, foe);
 }
 
 function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {

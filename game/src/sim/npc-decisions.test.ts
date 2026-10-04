@@ -6,7 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, isWeak, lawmanTowns, perceiveThreat, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
@@ -623,5 +623,44 @@ describe('warn-off decisions', () => {
 
   it('never fights back without a working gun, and can always back off or refuse', () => {
     expect(Object.keys(warnChances(['raider'], ['stockEngine'])).sort()).toEqual(['comply', 'refuse']);
+  });
+});
+
+describe('perceived threat', () => {
+  const setup = () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 }, ['mg', 'stockEngine']);
+    const weak = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
+    const strong = addVehicle(w, 'bowl', 'wagon', ['autocannon'], { x: 10, y: 22 });
+    strong.faction = 'raiders';
+    refreshVision(w);
+    return { w, npc, weak, strong };
+  };
+
+  it('counts every hostile in sight, not only the one it judges', () => {
+    const { w, npc, weak, strong } = setup();
+    const alone = cloneWorld(w);
+    alone.vehicles = alone.vehicles.filter((v) => v.id !== strong.id);
+
+    const together = perceiveThreat(w, npc, weak);
+    const lone = perceiveThreat(alone, find(alone, npc.id), find(alone, weak.id));
+
+    expect(together).toBeGreaterThan(lone + vehicleDanger(w, strong) * (1 - NPC_BEHAVIOR.dangerSpread) - 1);
+  });
+
+  it('counts a truck once when two sightings share it', () => {
+    const { w, npc, strong } = setup();
+    const spread = NPC_BEHAVIOR.dangerSpread;
+
+    const threat = perceiveThreat(w, npc, strong);
+
+    expect(threat).toBeLessThanOrEqual(vehicleDanger(w, strong) * (1 + spread) + vehicleDanger(w, w.vehicles.find((v) => v.faction === 'raiders' && v.id !== strong.id)!) * (1 + spread));
+  });
+
+  it('leaves out a hostile that is knocked out', () => {
+    const { w, npc, weak, strong } = setup();
+    strong.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+
+    expect(perceiveThreat(w, npc, weak)).toBeLessThanOrEqual(vehicleDanger(w, weak) * (1 + NPC_BEHAVIOR.dangerSpread));
   });
 });
