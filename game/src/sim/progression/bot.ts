@@ -603,7 +603,7 @@ function wantsBounty(world: World, c: Contract): boolean {
 function engageFoe(o: Orders): boolean {
   const seen = weakestFoe(o.world);
   if (seen) return engageSeen(o, seen);
-  const heard = heardFoe(o.world);
+  const heard = heardFoe(o);
   if (heard) driveTo(o, heard);
   return heard !== null;
 }
@@ -675,15 +675,19 @@ function dangerOf(world: World, foe: Vehicle): number {
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
 // stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
 // fight still costs repairs, and broken wheels leave the truck for the next raider. A foe that drops out of sight
-// for a turn is still on its tail, so the bot keeps running until the combat ends. The hunter instead follows its
-// goal, which chases the foe it hears. True when the turn's command went to the fight.
+// for a turn is still on its tail, so the bot keeps running until the combat ends. A hunter that hears a foe it would
+// take on instead follows its goal, which chases it. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
-  if (!foe && goal === 'hunter') return false;
+  if (!foe && chasesHeard(o, goal)) return false;
   if (foe && fights(o, foe, goal)) charge(o, foe, goal);
   else driveToSite(o, nearestTown(o.world));
   return true;
+}
+
+function chasesHeard(o: Orders, goal: Goal): boolean {
+  return goal === 'hunter' && heardFoe(o) !== null;
 }
 
 // Drives at the foe. A hunter also aims its guns at the foe's critical parts.
@@ -730,11 +734,11 @@ function demandYield(o: Orders, foe: Vehicle): boolean {
   return true;
 }
 
-// Where an unseen hostile is: the center of its contact circle. Nearest first.
-function heardFoe(world: World): Vec | null {
-  const me = playerVehicle(world);
-  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v));
-  return nearest(me.pos, world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center));
+// Where an unseen hostile the hunter would take on is: the center of its contact circle. Nearest first. A contact
+// it would not fight, like a gunwagon that just shot at it, is never chased.
+function heardFoe(o: Orders): Vec | null {
+  const prey = o.world.vehicles.filter((v) => v.id !== o.me.id && hostileToPlayer(o.world, v) && canTakeOn(o, v, 'hunter'));
+  return nearest(o.me.pos, o.world.player.contacts.filter((c) => prey.some((v) => v.id === c.vehicleId)).map((c) => c.center));
 }
 
 function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null {

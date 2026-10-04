@@ -602,6 +602,20 @@ describe('the hunter', () => {
     expect(demandedBy([])).toBeGreaterThan(0);
   });
 
+  it('follows a weak raider it hears, and never a strong one', () => {
+    const heardAt = (guns: string[]) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      playerVehicle(w).speed = 0;
+      const raider = addVehicle(w, 'raiders', 'buggy', [...guns, 'stockEngine'], { x: 90, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      w.player.contacts = [{ vehicleId: raider.id, center: { x: 88, y: 32 }, radius: 4, sources: ['sound'], loudness: 1 }];
+      return playerVehicle(botOrders(w, 'hunter').world).order;
+    };
+
+    expect(heardAt([])).toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
+    expect(heardAt(['mg', 'mg', 'mg'])).not.toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
+  });
+
   it('drives at a weak raider in sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     playerVehicle(w).speed = 0;
