@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // physics turns up a hill take over 30s when the whole suite shares the cores
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
