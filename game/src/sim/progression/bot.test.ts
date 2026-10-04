@@ -1,5 +1,5 @@
 import { PRESSURE_MAX } from '../../data/market';
-import type { World } from '../types';
+import type { PartInstance, World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
@@ -12,14 +12,14 @@ import { goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
-import { isStranded, vehicleStats } from '../stats';
+import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { dist } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
 import { NPCS } from '../../data/npcs';
 import { playerTow } from '../tow';
 import { towData } from '../states';
 import { endTurn } from '../world';
-import { partTradePrice, repairCost } from '../economy';
+import { basicsRepairCost, partRepairCost, partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { botOrders } from './bot';
@@ -535,17 +535,39 @@ describe('the hunter', () => {
     expect(playerVehicle(turn.world).job?.kind).not.toBe('strip');
   });
 
-  it('has a hunter leave a worn gun to field repair where a trader pays the garage', () => {
-    const repairsOf = (archetype: 'hunter' | 'trader') => {
+  it('has a hunter and a trader both pay the garage for a broken gun', () => {
+    const gunAfter = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
       const gun = mountedParts(playerVehicle(w)).find((p) => partDef(p.defId).kind === 'weapon');
       if (!gun) throw new Error('The start truck mounts no gun');
-      gun.hp = 1;
-      return botOrders(w, archetype).ledger.repairs;
+      gun.hp = 0;
+      const after = mountedParts(playerVehicle(botOrders(w, archetype).world)).find((p) => p.id === gun.id)!;
+      return after.hp / maxHp(after);
     };
 
-    expect(repairsOf('hunter')).toBe(0);
-    expect(repairsOf('trader')).toBeLessThan(0);
+    expect(gunAfter('hunter')).toBe(1);
+    expect(gunAfter('trader')).toBe(1);
+  });
+
+  it('has a bot short of money repair the built-in parts, then the most damaged part it can pay for', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    const wheel = mountedParts(me, 'core').find((p) => p.defId === 'wheel')!;
+    const gun = mountedParts(me).find((p) => partDef(p.defId).kind === 'weapon')!;
+    const armor = mountedParts(me).find((p) => partDef(p.defId).kind === 'armor')!;
+    wheel.hp = 1;
+    gun.hp = 0;
+    armor.hp = Math.floor(maxHp(armor) / 2);
+    w.player.money = basicsRepairCost(w) + partRepairCost(w, gun);
+    w.player.fuel = fuelCap(me);
+    w.player.supplies = suppliesCap(me);
+
+    const after = mountedParts(playerVehicle(botOrders(w, 'trader').world));
+    const hpOf = (part: PartInstance) => after.find((p) => p.id === part.id)!.hp;
+
+    expect(hpOf(wheel)).toBe(maxHp(wheel));
+    expect(hpOf(gun)).toBe(maxHp(gun));
+    expect(hpOf(armor)).toBe(armor.hp);
   });
 
   it('has a hauler take the haul on the board it is parked at before it trades', () => {

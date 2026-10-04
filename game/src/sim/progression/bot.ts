@@ -11,7 +11,7 @@ import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { ENGINE_HEAT } from '../../data/wear';
 import { TOPICS, type TopicId } from '../../data/dialogue';
-import { maxHp, partValue } from '../wear';
+import { isJunk, maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
 import { startStrip, stripYield } from '../jobs';
 import { aimGuns, isSoftTarget } from './aim';
@@ -22,7 +22,7 @@ import { isTownGuarded } from '../guards';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
-import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, canRebuild, partRepairCost, partTradePrice, getTradePrice, repairBasics, repairCost, repairPart, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
@@ -397,13 +397,22 @@ function needsService(o: Orders): boolean {
   return lowFuel || lowSupplies || needsRepair(o);
 }
 
-// A badly damaged part the money covers, once the fight is over: repairing under fire pays for the next hit. A junk
-// part no garage can rebuild has no repair, so it adds nothing to the cost. A field repairer counts only the built-in
-// parts and their bill.
+// A badly damaged part whose repair the money covers, once the fight is over: repairing under fire pays for the next
+// hit. A junk part no garage can rebuild has no repair.
 function needsRepair(o: Orders): boolean {
-  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
-  const parts = o.fieldRepair ? mountedParts(o.me, 'core') : mountedParts(o.me);
-  return parts.some(isBadlyDamaged) && cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me);
+  return !underFire(o.world, o.me) && garageFixes(o).some(isBadlyDamaged);
+}
+
+// The mounted parts a garage can repair, most damaged first.
+function garageFixes(o: Orders): PartInstance[] {
+  const fixable = (part: PartInstance) => !isJunk(part) || canRebuild(o.world, part);
+  const share = (part: PartInstance) => part.hp / maxHp(part);
+  return mountedParts(o.me).filter(fixable).filter((part) => affordsRepair(o, part)).sort((a, b) => share(a) - share(b));
+}
+
+function affordsRepair(o: Orders, part: PartInstance): boolean {
+  const cost = partRepairCost(o.world, part);
+  return cost > 0 && cost <= o.world.player.money;
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
@@ -419,10 +428,12 @@ function serviceHere(o: Orders): void {
   repairAtGarage(o);
 }
 
-// A field repairer pays the garage for the built-in parts at every visit and leaves guns and armor to the field.
+// The built-in parts the truck drives on come first. Then each other part, most damaged first, while the money lasts.
 function repairAtGarage(o: Orders): void {
-  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(o.fieldRepair ? repairBasics : repairAll, 'repairs');
+  if (underFire(o.world, o.me)) return;
+  const basics = basicsRepairCost(o.world);
+  if (basics > 0 && basics <= o.world.player.money) o.run(repairBasics, 'repairs');
+  for (const part of garageFixes(o)) if (affordsRepair(o, part)) o.run((w) => repairPart(w, part.id), 'repairs');
 }
 
 // ---- Goals.
