@@ -254,7 +254,7 @@ export type Vehicle = {
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
-  utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses
+  utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses; a harpoon target stands until it fires
   shutDown?: { from: number; until: number }; // the turns an emitter pulse shuts the truck down, both included; set at the end of the pulse turn and cleared after until; see settleShutdowns in src/sim/utility.ts
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;

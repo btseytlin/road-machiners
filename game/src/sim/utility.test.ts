@@ -4,7 +4,7 @@ import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
 import type { PartInstance, Vehicle, World } from './types';
-import { activateUtilities, advanceUtilityEffects, hasWorkingUtility, tickCharges, utilityBlock, utilityOrderError, wornReload } from './utility';
+import { activateUtilities, advanceUtilityEffects, hasWorkingUtility, pointReach, tickCharges, utilityBlock, utilityOrderError, wornReload } from './utility';
 import { setUtilityOrder } from './world';
 
 // A trader truck with the given utility mounted on its deck.
@@ -155,6 +155,44 @@ describe('the activation step', () => {
     expect(v.utilityOrders).toEqual({});
     expect(part.charge).toEqual({ reload: 0 });
     expect(w.smoke).toEqual([]);
+  });
+
+  it('clears a self order after it acts once', () => {
+    const { w, v, part } = withUtility('sprout');
+    v.utilityOrders[part.id] = { kind: 'self' };
+
+    activateUtilities(w);
+
+    expect(v.utilityOrders).toEqual({});
+    expect(w.smoke).toHaveLength(1);
+    expect(part.charge).toEqual({ reload: wornReload(part) });
+  });
+
+  it('clears a self order on a recharging part without acting, rather than waiting on the charge', () => {
+    const { w, v, part } = withUtility('sprout');
+    v.utilityOrders[part.id] = { kind: 'self' };
+    part.charge = { reload: 1 };
+
+    activateUtilities(w);
+
+    expect(v.utilityOrders).toEqual({});
+    expect(w.smoke).toEqual([]);
+  });
+
+  it('clears a point order after it acts once, and one out of reach without acting', () => {
+    const near = withUtility('smokeMortar');
+    const far = withUtility('smokeMortar');
+    const { maxRange } = pointReach(near.part);
+    near.v.utilityOrders[near.part.id] = { kind: 'point', pos: { x: near.v.pos.x + maxRange - 1, y: near.v.pos.y } };
+    far.v.utilityOrders[far.part.id] = { kind: 'point', pos: { x: far.v.pos.x + maxRange + 5, y: far.v.pos.y } };
+
+    activateUtilities(near.w);
+    activateUtilities(far.w);
+
+    expect(near.v.utilityOrders).toEqual({});
+    expect(near.w.smoke).toHaveLength(1);
+    expect(far.v.utilityOrders).toEqual({});
+    expect(far.w.smoke).toEqual([]);
   });
 
   it('hands an accepted arming order to the claymore ram, which keeps its reload at 0', () => {

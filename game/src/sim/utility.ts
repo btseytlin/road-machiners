@@ -14,6 +14,7 @@ import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
 import { deploySmoke, dropField, launchFlare, oilShort, spillOil } from './hazards';
 import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+import { canVehicleSee } from './vision';
 import { wornDef, wornTurns } from './wear';
 
 // What a part does when used: a utility effect, or arming a claymore ram.
@@ -138,16 +139,19 @@ export function utilityBlock(world: World, v: Vehicle, part: PartInstance): Fire
 }
 
 // Why the vehicle cannot give this order to the part, or null when it can. Throws when the truck has no such part
-// or the part is not a utility.
+// or the part is not a utility. A truck order is refused only as a gun target is, plus a broken or unmounted part:
+// recharge, range, arc and cover are waits (harpoonWait), not refusals. Self and point orders are refused for every
+// reason the part cannot act this turn.
 export function utilityOrderError(world: World, v: Vehicle, partId: string, order: UtilityOrder): string | null {
   const { part } = partOn(v, partId);
   const def = partDef(part.defId);
   const wanted = ORDER_KIND[useKindOf(def)];
   if (wanted === null) return `${def.name} is passive and takes no order`;
   if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
+  if (order.kind === 'truck') return truckOrderError(world, v, part, order);
   const charge = chargeError(world, v, part);
   if (charge) return `${def.name}: ${charge}`;
-  return costError(world, v, def) ?? targetError(world, v, part, order);
+  return costError(world, v, def) ?? pointError(v, part, order);
 }
 
 // Why the part's charge cannot take an order now: a block, or a claymore ram that is armed already.
@@ -161,8 +165,7 @@ function costError(world: World, v: Vehicle, def: PartDef): string | null {
   return oilShort(world, v, def.effect.fuel) ? `${def.name}: fuel` : null;
 }
 
-function targetError(world: World, v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {
-  if (order.kind === 'truck') return truckOrderError(world, v, part, order);
+function pointError(v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {
   if (order.kind === 'point' && pointBlock(v, part, order.pos)) return `${partDef(part.defId).name}: range`;
   return null;
 }
@@ -182,28 +185,87 @@ export function pointBlock(v: Vehicle, part: PartInstance, pos: Vec): FireBlock 
   return d < minRange || d > maxRange ? 'range' : null;
 }
 
-// A truck order follows the gun rules: the harpoon's sight, cover, range and arc.
-function truckOrderError(world: World, v: Vehicle, part: PartInstance, order: Extract<UtilityOrder, { kind: 'truck' }>): string | null {
+type TruckOrder = Extract<UtilityOrder, { kind: 'truck' }>;
+
+// A truck order is refused like a gun target: a missing truck, the truck itself, a missing aimed part or a truck out
+// of sight. A broken or unmounted part takes no order either.
+function truckOrderError(world: World, v: Vehicle, part: PartInstance, order: TruckOrder): string | null {
   const target = world.vehicles.find((x) => x.id === order.targetId);
-  if (!target || target.id === v.id) return `Bad target ${order.targetId}`;
-  if (order.aim !== 'body' && !findPart(target, order.aim)) return `Target has no part ${order.aim}`;
-  const block = harpoonBlock(world, v, part, target);
-  return block ? `${partDef(part.defId).name}: ${block}` : null;
+  const bad = targetError(v, target, order);
+  if (bad || !target) return bad ?? `Bad target ${order.targetId}`;
+  const name = partDef(part.defId).name;
+  const broken = partBroken(v, part);
+  if (broken) return `${name}: ${broken}`;
+  return canVehicleSee(world, v, target.pos) ? null : `${name}: unseen`;
 }
 
-// The activation step, after movement and vision and before the guns fire. Every order acts once and is cleared.
-// An order the part refuses by now does nothing. A part that left the truck since the order was given drops it.
+function targetError(v: Vehicle, target: Vehicle | undefined, order: TruckOrder): string | null {
+  if (!target || target.id === v.id) return `Bad target ${order.targetId}`;
+  return order.aim !== 'body' && !findPart(target, order.aim) ? `Target has no part ${order.aim}` : null;
+}
+
+// 'unmounted' or 'disabled' for a part that is off the deck or at 0 HP, else null.
+function partBroken(v: Vehicle, part: PartInstance): FireBlock | null {
+  if (!partOn(v, part.id).mounted) return 'unmounted';
+  return part.hp <= 0 ? 'disabled' : null;
+}
+
+// Why a standing truck order waits this turn, or null when it fires: the part's own block, recharge included, then the
+// harpoon's sight, cover, range and arc.
+export function harpoonWait(world: World, v: Vehicle, part: PartInstance, target: Vehicle): FireBlock | null {
+  return utilityBlock(world, v, part) ?? harpoonBlock(world, v, part, target);
+}
+
+// The activation step, after movement and vision and before the guns fire. A self or point order acts once if the part
+// still takes it, and is cleared either way. A truck order stands like a gun's target: it fires when harpoonWait
+// allows and is then cleared, it waits through recharge, range, arc and sight, and it is dropped when its target is
+// gone or knocked out or the part left the truck, left the deck or broke.
 export function activateUtilities(world: World): void {
-  const uses: Use[] = [];
-  for (const vehicle of world.vehicles) {
-    for (const [partId, order] of Object.entries(vehicle.utilityOrders)) {
-      const held = vehicle.items.some((it) => it.kind === 'part' && it.part.id === partId);
-      if (held && utilityOrderError(world, vehicle, partId, order) === null) uses.push(useOf(vehicle, partId, order));
-    }
-    vehicle.utilityOrders = {};
-  }
+  const uses = world.vehicles.flatMap((vehicle) => takeUses(world, vehicle));
   uses.sort((a, b) => USE_ORDER[a.kind] - USE_ORDER[b.kind]);
   for (const use of uses) act(world, use);
+}
+
+// This turn's uses of the vehicle's orders. Each order that does not wait is cleared.
+function takeUses(world: World, vehicle: Vehicle): Use[] {
+  const uses: Use[] = [];
+  for (const [partId, order] of Object.entries(vehicle.utilityOrders)) {
+    const use = order.kind === 'truck' ? standingUse(world, vehicle, partId, order) : oneShotUse(world, vehicle, partId, order);
+    if (use === 'wait') continue;
+    delete vehicle.utilityOrders[partId];
+    if (use) uses.push(use);
+  }
+  return uses;
+}
+
+function held(vehicle: Vehicle, partId: string): boolean {
+  return vehicle.items.some((it) => it.kind === 'part' && it.part.id === partId);
+}
+
+function oneShotUse(world: World, vehicle: Vehicle, partId: string, order: UtilityOrder): Use | null {
+  return held(vehicle, partId) && utilityOrderError(world, vehicle, partId, order) === null ? useOf(vehicle, partId, order) : null;
+}
+
+// The use of a standing truck order this turn, 'wait' to keep it, or null to drop it. An aimed part that left the
+// target makes it a body shot, as settleAims does for a gun, since the truck it chose is still there.
+function standingUse(world: World, vehicle: Vehicle, partId: string, order: TruckOrder): Use | 'wait' | null {
+  if (!held(vehicle, partId)) return null;
+  const { part } = partOn(vehicle, partId);
+  const target = liveTarget(world, order);
+  if (!target || partBroken(vehicle, part)) return null;
+  settleAim(target, order);
+  return harpoonWait(world, vehicle, part, target) === null ? useOf(vehicle, partId, order) : 'wait';
+}
+
+// An aimed part that left the target makes the order a body shot.
+function settleAim(target: Vehicle, order: TruckOrder): void {
+  if (order.aim !== 'body' && !findPart(target, order.aim)) order.aim = 'body';
+}
+
+// The order's target, or null when it left the world or is knocked out.
+function liveTarget(world: World, order: TruckOrder): Vehicle | null {
+  const target = world.vehicles.find((x) => x.id === order.targetId);
+  return target && !isKnockedOut(target) ? target : null;
 }
 
 function useOf(vehicle: Vehicle, partId: string, order: UtilityOrder): Use {

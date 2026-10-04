@@ -8,6 +8,7 @@ import { assignUtilityOrders } from './npc-utility';
 import { siteGates } from './sites';
 import { addState } from './states';
 import { sunAt } from './sun';
+import { activateUtilities } from './utility';
 import { addVehicle, emptyWorld, npcBrain, startCombat, testDrive } from './testkit';
 import { endTurn } from './world';
 import type { NpcActivity, PartInstance, Vehicle, World } from './types';
@@ -79,14 +80,51 @@ describe('NPC harpoon', () => {
     expect(npc.utilityOrders[part.id]).toBeUndefined();
   });
 
-  it('holds fire at a target out of range', () => {
+  it('sets a standing order on a target out of range, which waits for it', () => {
     const { w, npc, part } = npcWith('harpoon');
     const foe = foeAt(w, npc, 12, 0);
     npc.brain!.goals = [goal('fight', foe)];
 
     assignUtilityOrders(w);
+    activateUtilities(w);
+
+    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
+  });
+
+  it('keeps its standing order while the fight with that target goes on', () => {
+    const { w, npc, part } = npcWith('harpoon');
+    const foe = foeAt(w, npc, 12, Math.PI);
+    npc.brain!.goals = [goal('fight', foe)];
+    npc.utilityOrders[part.id] = { kind: 'truck', targetId: foe.id, aim: 'body' };
+
+    assignUtilityOrders(w);
+
+    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
+  });
+
+  it('clears its standing order when its fight with that target ends', () => {
+    const { w, npc, part } = npcWith('harpoon');
+    const foe = foeAt(w, npc, 12, 0);
+    npc.brain!.goals = [goal('fight', foe)];
+    assignUtilityOrders(w);
+    expect(npc.utilityOrders[part.id]).toBeDefined();
+
+    npc.brain!.goals = [];
+    assignUtilityOrders(w);
 
     expect(npc.utilityOrders[part.id]).toBeUndefined();
+  });
+
+  it('moves its standing order to a new fight target', () => {
+    const { w, npc, part } = npcWith('harpoon');
+    const old = foeAt(w, npc, 12, 0);
+    const foe = foeAt(w, npc, 6, 0);
+    npc.utilityOrders[part.id] = { kind: 'truck', targetId: old.id, aim: 'body' };
+    npc.brain!.goals = [goal('fight', foe)];
+
+    assignUtilityOrders(w);
+
+    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
   });
 });
 
@@ -151,6 +189,20 @@ describe('NPC caltrops and oil', () => {
     assignUtilityOrders(w);
 
     expect(npc.utilityOrders[part.id]).toBeUndefined();
+  });
+
+  it.each(['caltrops', 'oilSpiller'])('drops %s on the ground it drove over while fleeing east', (defId) => {
+    const { w, npc, part } = npcWith(defId);
+    npc.speed = 8;
+    npc.trail = Array.from({ length: 5 }, (_, i) => ({ x: npc.pos.x - 8 + i * 2, y: npc.pos.y, heading: 0 }));
+    fleeing(w, npc, foeAt(w, npc, -6));
+
+    assignUtilityOrders(w);
+    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'self' });
+
+    activateUtilities(w);
+    expect(npc.utilityOrders).toEqual({});
+    expect(w.fields.filter((f) => f.source === npc.id).length).toBeGreaterThan(0);
   });
 
   it('keeps caltrops when the hostile behind is far', () => {

@@ -35,8 +35,8 @@ const RULES: Record<UseKind, Rule> = {
   scraper: () => null,
 };
 
-// Gives every NPC's ready utilities the orders its rules want. The player's truck is never touched, and an order
-// already given this turn stays.
+// Gives every NPC's utilities the orders its rules want. The player's truck is never touched. An order already given
+// stays, except a standing harpoon order whose fight has ended, which is cleared first.
 export function assignUtilityOrders(world: World): void {
   for (const v of world.vehicles) if (isNpc(world, v)) planUses(world, v);
 }
@@ -45,13 +45,27 @@ function isNpc(world: World, v: Vehicle): v is Npc {
   return v.brain !== null && v.id !== world.player.vehicleId;
 }
 
-// An order the part refuses now, broken, recharging, out of range or shut down, is not given.
+// An order the part refuses now is not given: for a self or point order that is broken, recharging, out of range or
+// shut down, and for a truck order broken or unseen. A truck order then waits on range, arc and recharge.
 function planUses(world: World, v: Npc): void {
   for (const part of chargedParts(v)) {
+    dropEndedFight(v, part.id);
     if (part.id in v.utilityOrders) continue;
     const order = RULES[useKindOf(partDef(part.defId))](world, v, part);
     if (order && utilityOrderError(world, v, part.id, order) === null) v.utilityOrders[part.id] = order;
   }
+}
+
+// Clears a standing truck order once the driver no longer fights its target, as setUtilityOrder clears.
+function dropEndedFight(v: Npc, partId: string): void {
+  const standing = v.utilityOrders[partId];
+  if (standing?.kind === 'truck' && !fightsWith(v, standing.targetId)) delete v.utilityOrders[partId];
+}
+
+// Whether the fight on top of the driver's goals is with this truck.
+function fightsWith(v: Npc, targetId: string): boolean {
+  const goal = topGoal(v);
+  return goal?.kind === 'fight' && goal.targetId === targetId;
 }
 
 function fleeing(v: Npc): boolean {
@@ -74,8 +88,8 @@ function unguarded(trucks: Vehicle[]): boolean {
   return trucks.every((x) => !isTownGuarded(x.pos));
 }
 
-// Harpoon: the fight target is driving away from the driver, outside any town guard. Range, arc and sight are the
-// order's own checks.
+// Harpoon: the fight target is driving away from the driver, outside any town guard. Sight is the order's own check,
+// and the order then stands through range, arc and recharge until it fires or the fight ends.
 function harpoonOrder(world: World, v: Npc): UtilityOrder | null {
   const goal = topGoal(v);
   const target = goal?.kind === 'fight' ? world.vehicles.find((x) => x.id === goal.targetId) : undefined;
