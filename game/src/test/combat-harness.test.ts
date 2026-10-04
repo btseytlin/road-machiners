@@ -9,7 +9,7 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-const FIGHT: Fight = { a: parseLineup('stand'), b: parseLineup('buggy'), seed: 3, gap: 8, orbit: 6, maxTurns: 4 };
+const FIGHT: Fight = { a: parseLineup('stand'), b: parseLineup('buggy'), seed: 3, gap: 8, orbit: 6, maxTurns: 4, arena: null };
 
 describe('combat harness', () => {
   it('gives the same report for the same fight', () => {
@@ -42,6 +42,21 @@ describe('combat harness', () => {
     expect(r.a.rounds).toBeGreaterThan(0);
     expect(r.b.rounds).toBeGreaterThan(0);
     expect(r.a.speed).toBeGreaterThan(0);
+  });
+
+  it('names the side that runs from a far stronger truck', () => {
+    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 40 });
+    expect(r.outcome).toBe('b fled');
+  });
+
+  it('keeps every truck inside the arena ring', () => {
+    const arena = 15;
+    let farthest = 0;
+    runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 30, arena }, (w) => {
+      const center = w.obstacles.reduce((s, o) => ({ x: s.x + o.pos.x / w.obstacles.length, y: s.y + o.pos.y / w.obstacles.length }), { x: 0, y: 0 });
+      for (const v of w.vehicles.filter((x) => x.id !== w.player.vehicleId)) farthest = Math.max(farthest, Math.hypot(v.pos.x - center.x, v.pos.y - center.y));
+    });
+    expect(farthest).toBeLessThan(arena);
   });
 
   it('sets an existing balance number', () => {

@@ -19,10 +19,11 @@ import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
 import { maxHp } from '../sim/wear';
 import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
+import { topGoal } from '../sim/npc-activities';
 import { spawnAt } from '../sim/spawn';
 import { addState } from '../sim/states';
 import { vehicleStats } from '../sim/stats';
-import type { Vehicle, World } from '../sim/types';
+import type { Obstacle, Vehicle, World } from '../sim/types';
 import { bearing, dist, type Vec } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
 import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder } from '../sim/world';
@@ -53,12 +54,16 @@ export type Fight = {
   gap: number; // tiles between the sides at the start
   orbit: number; // tiles; orbit radius and charge stop distance of a scripted driver
   maxTurns: number;
+  arena: number | null; // radius in tiles of a closed ring of rocks around the fight, so no driver can run; null for open ground
 };
 
 // odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its trucks still in the fight.
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
-// won: every truck of side b is out. lost: every truck of side a is out. fled: the sides drove apart.
-export type Outcome = 'won' | 'lost' | 'fled' | 'timeout';
+// won: every truck of side b is out. lost: every truck of side a is out. a fled, b fled: the sides drove apart, and
+// the side named left the fight: the side that last dropped its fight goal while the other side fought on. When that
+// never happened, the side farther from the middle of the fight.
+export type Outcome = 'won' | 'lost' | 'a fled' | 'b fled' | 'timeout';
+const OUTCOMES: Outcome[] = ['won', 'lost', 'a fled', 'b fled', 'timeout'];
 // crashes counts collisions between trucks of opposite sides, rams included. bHpLeft is the share of max part HP the
 // side b trucks keep at the end of a won fight, wrecks included, and null for any other outcome.
 export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; a: Side; b: Side; bHpLeft: number | null };
@@ -69,6 +74,8 @@ const FLED_RANGE = 40; // tiles between the sides; this far apart, the fight is 
 // Where the player truck waits when brains drive both sides: past any sight range, so no driver notices it.
 const PARKED: Vec = { x: CENTER.x - 200, y: CENTER.y };
 const LINE_SPACING = 3; // tiles between trucks of one side
+const ARENA_ROCK = 1; // tiles; radius of each rock in the arena ring
+const ARENA_STEP = 1.6; // tiles between rock centers along the ring, less than a rock's width, so no gap opens
 
 // Parses `driver:gear`, or `driver` alone. A driver without gear drives its own template's rolled loadout, and a
 // scripted driver the standard kit. Gear is a start kit id, `template` or `template@level`, or `gun/armor+ram` for an
@@ -138,27 +145,38 @@ function subTable(obj: Table, key: string, path: string): Table {
   return sub as Table;
 }
 
-// Flat road ground with no obstacles and no NPCs, and no spawns later. The base world is built once per kit and
-// cloned for each fight, so every fight shares one frozen terrain and its cached route grids.
+// Flat road ground with no NPCs and no spawns later, open or ringed by the arena. The base world is built once per kit
+// and arena and cloned for each fight, so every fight shares one frozen terrain, one obstacle list and its cached
+// route grids.
 const BASES = new Map<string, World>();
 
-function baseWorld(kit: string): World {
-  const cached = BASES.get(kit);
+function baseWorld(kit: string, arena: number | null): World {
+  const key = `${kit}|${arena}`;
+  const cached = BASES.get(key);
   if (cached) return cached;
   const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, false);
   const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road') };
   Object.freeze(terrain.heights);
   Object.freeze(terrain.types);
   w.terrain = Object.freeze(terrain);
-  w.obstacles = [];
+  w.obstacles = arena === null ? [] : arenaRing(arena);
   w.states = [];
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // only the fight's trucks drive here
   const me = w.vehicles[0];
   me.pos = { ...CENTER };
   me.heading = 0;
   me.speed = 0;
-  BASES.set(kit, w);
+  BASES.set(key, w);
   return w;
+}
+
+// Rocks edge to edge around the center, so routes and bodies both stop at the ring.
+function arenaRing(radius: number): Obstacle[] {
+  const count = Math.ceil((2 * Math.PI * radius) / ARENA_STEP);
+  return Array.from({ length: count }, (_, i) => {
+    const a = (2 * Math.PI * i) / count;
+    return { id: `arena${i}`, pos: { x: CENTER.x + Math.cos(a) * radius, y: CENTER.y + Math.sin(a) * radius }, r: ARENA_ROCK, kind: 'rock' };
+  });
 }
 
 function missing(what: string, id: string): never {
@@ -184,18 +202,20 @@ function baseKit(t: Truck | null): string {
 
 type Ids = { a: string[]; b: string[] };
 
-// Side a stands at the center facing side b across the gap. Every pair of opposite trucks starts in a feud, so even
-// two drivers of one faction fight. Cowards drop their trait, since a fleeing driver measures nothing about the fight.
+// The sides face each other across the gap, centered on the arena. Every pair of opposite trucks starts in a feud, so
+// even two drivers of one faction fight. Cowards drop their trait, since a fleeing driver measures nothing about the
+// fight.
 function setup(fight: Fight): { w: World; ids: Ids } {
+  if (fight.arena !== null && fight.arena <= fight.gap / 2 + LINE_SPACING) throw new Error(`An arena of ${fight.arena} tiles leaves no room for a gap of ${fight.gap}`);
   const scripted = scriptedTruck(fight);
-  const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted))), seedStreams(fight.seed));
+  const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted), fight.arena)), seedStreams(fight.seed));
   const player = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   if (scripted?.gear.kind === 'outfit') outfit(w, player, scripted.gear.outfit);
-  if (!scripted) player.pos = { ...PARKED };
+  player.pos = scripted ? { x: CENTER.x - fight.gap / 2, y: CENTER.y } : { ...PARKED };
   const npcA = scripted ? [] : fight.a;
   const ids: Ids = { a: scripted ? [player.id] : [], b: [] };
-  ids.a.push(...placeSide(w, npcA, CENTER.x, 0));
-  ids.b.push(...placeSide(w, fight.b, CENTER.x + fight.gap, Math.PI));
+  ids.a.push(...placeSide(w, npcA, CENTER.x - fight.gap / 2, 0));
+  ids.b.push(...placeSide(w, fight.b, CENTER.x + fight.gap / 2, Math.PI));
   for (const a of ids.a) for (const b of ids.b) setAgainst(w, a, b);
   refreshVision(w);
   return { w: setAutoFire(w, true), ids };
@@ -281,7 +301,8 @@ export function turnLine(w: World, turn: number): string {
 const partHp = (v: Vehicle) => mountedParts(v).reduce((sum, p) => sum + p.hp, 0);
 const side = (): Side => ({ rounds: 0, hits: 0, odds: 0, damage: 0, speed: 0 });
 
-type Count = { ids: Ids; a: Side; b: Side; crashes: number };
+// leaver is the side that last dropped its fight while the other side fought on.
+type Count = { ids: Ids; a: Side; b: Side; crashes: number; leaver: 'a' | 'b' | null };
 
 // A truck is out once defeated or gone from the world. The player truck is out once the player is not active.
 function inFight(w: World, ids: string[]): Vehicle[] {
@@ -332,8 +353,26 @@ function outcomeOf(w: World, c: Count): Outcome | null {
   const b = inFight(w, c.ids.b);
   if (a.length === 0) return 'lost';
   if (b.length === 0) return 'won';
-  if (b.every((v) => dist(v.pos, nearest(v, a).pos) > FLED_RANGE)) return 'fled';
+  if (b.every((v) => dist(v.pos, nearest(v, a).pos) > FLED_RANGE)) return fledSide(a, b, c.leaver);
   return null;
+}
+
+// A scripted driver never leaves, and a brain stays while its top goal is a fight.
+function staysInFight(v: Vehicle): boolean {
+  return !v.brain || topGoal(v)?.kind === 'fight';
+}
+
+function noteLeaver(w: World, c: Count): void {
+  const aStays = inFight(w, c.ids.a).some(staysInFight);
+  const bStays = inFight(w, c.ids.b).some(staysInFight);
+  if (aStays !== bStays) c.leaver = aStays ? 'b' : 'a';
+}
+
+// The side that last left while the other fought on. With none, the side farther from the middle of the fight.
+function fledSide(a: Vehicle[], b: Vehicle[], leaver: 'a' | 'b' | null): Outcome {
+  if (leaver) return `${leaver} fled`;
+  const away = (side: Vehicle[]) => Math.max(...side.map((v) => dist(v.pos, CENTER)));
+  return away(a) > away(b) ? 'a fled' : 'b fled';
 }
 
 // Plays one turn and counts it. Returns the next physics drive.
@@ -345,6 +384,7 @@ function playTurn(w: World, d: Drive, c: Count): { w: World; d: Drive } {
   countShots(w, c);
   countDamage(w, c, before);
   countMoves(w, c);
+  noteLeaver(w, c);
   return { w, d: next! };
 }
 
@@ -360,7 +400,7 @@ function steer(w: World, fight: Fight, c: Count): World {
 export function runFight(fight: Fight, watch?: (w: World, turn: number) => void): FightReport {
   const start = setup(fight);
   let w = start.w;
-  const c: Count = { ids: start.ids, a: side(), b: side(), crashes: 0 };
+  const c: Count = { ids: start.ids, a: side(), b: side(), crashes: 0, leaver: null };
   let d = buildDrive(w);
   let outcome: Outcome | null = null;
   let turns = 0;
@@ -405,10 +445,10 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `# Combat harness`,
     '',
     `${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
-    'A truck is driver:gear. Won means every side b truck is out, lost every side a truck. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
+    'A truck is driver:gear. Won means every side b truck is out, lost every side a truck. A fled and b fled name the side that left the fight. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
     '',
-    '| a | b | won | lost | fled | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| a | b | won | lost | a fled | b fled | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';
@@ -423,7 +463,7 @@ function groupRow(g: Group): string {
     const rounds = sum((r) => pick(r).rounds);
     return [(sum((r) => pick(r).speed) / turns).toFixed(1), pct(sum((r) => pick(r).hits), rounds), pct(sum((r) => pick(r).odds), rounds), (sum((r) => pick(r).damage) / turns).toFixed(1)];
   };
-  const cells = [g.a, g.b, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.a), ...sideCells((r) => r.b), hpLeftCell(rs)];
+  const cells = [g.a, g.b, ...OUTCOMES.map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.a), ...sideCells((r) => r.b), hpLeftCell(rs)];
   return `| ${cells.join(' | ')} |`;
 }
 
