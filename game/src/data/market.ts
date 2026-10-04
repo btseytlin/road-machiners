@@ -1,6 +1,6 @@
 // Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts.
 
-import { PARTS } from './parts';
+import { PARTS, type PartDef } from './parts';
 import type { Weighted } from './npcs';
 import { TIME } from './time';
 
@@ -184,13 +184,17 @@ const STALL_WEAR: Weighted<number>[] = [
   { value: 4, weight: 1 },
 ];
 
-// Every non-core part for the two general-stock garages, equal weight except the rare ones.
-const NON_CORE_PART_IDS = Object.values(PARTS)
-  .filter((def) => def.kind !== 'core')
-  .map((def) => def.id);
-// The emitter is ship tech: a garage shelf holds one about a fifth as often as any other part.
-const RARE_PART_WEIGHT: Record<string, number> = { emitter: 0.2 };
-const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PART_IDS.map((id) => ({ value: id, weight: RARE_PART_WEIGHT[id] ?? 1 }));
+// Every non-core part for the two general-stock garages. A utility is stocked three times as often as any other part,
+// so most shelves show one. The emitter is ship tech, stocked at a fifth of another utility's weight. The weights
+// change which parts a shelf shows, not how many: stockSize is the same.
+const NON_CORE_PARTS = Object.values(PARTS).filter((def) => def.kind !== 'core');
+const PART_SHELF_WEIGHT = { utility: 3, emitter: 0.6, other: 1 };
+const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PARTS.map((def) => ({ value: def.id, weight: shelfWeightOf(def) }));
+
+function shelfWeightOf(def: PartDef): number {
+  if (def.id === 'emitter') return PART_SHELF_WEIGHT.emitter;
+  return def.kind === 'utility' ? PART_SHELF_WEIGHT.utility : PART_SHELF_WEIGHT.other;
+}
 
 export type PartStockTable = { parts: Weighted<string>[]; wear: Weighted<number>[] };
 

@@ -243,13 +243,25 @@ describe("utilities", () => {
     expect(stalls.some((shop) => shop.partStock.parts.some((e) => e.value === "claymoreRam"))).toBe(true);
   });
 
-  it("keeps the emitter rare: weight 0.2 in garages, and loot only from landmarks", () => {
+  it("stocks garages with utilities three times as often as other parts, and the emitter at 0.6", () => {
     const garages = Object.values(SHOPS).filter((shop) => shop.kind === "garage");
     for (const shop of garages) {
-      expect(shop.partStock.parts.find((e) => e.value === "emitter")?.weight, shop.id).toBe(0.2);
-      expect(shop.partStock.parts.find((e) => e.value === "sprout")?.weight, shop.id).toBe(1);
+      const weightOf = (id: string) => shop.partStock.parts.find((e) => e.value === id)?.weight;
+      expect(weightOf("emitter"), shop.id).toBe(0.6);
+      for (const def of utilities.filter((u) => u.id !== "emitter")) expect(weightOf(def.id), `${shop.id} ${def.id}`).toBe(3);
+      expect(weightOf("mg"), shop.id).toBe(1);
     }
-    const holders = Object.entries(SALVAGE).filter(([, entry]) => typeof entry === "object" && "spareParts" in entry && entry.spareParts.includes("emitter"));
+  });
+
+  it("lists each utility twice in the loot tables that have it, and the emitter only at landmarks", () => {
+    const tables = Object.entries(SALVAGE).filter((entry): entry is [string, LootTable] => typeof entry[1] === "object" && "spareParts" in entry[1]);
+    for (const [id, table] of tables) {
+      for (const def of utilities) {
+        const count = table.spareParts.filter((part) => part === def.id).length;
+        expect([0, 2], `${id} ${def.id}`).toContain(count);
+      }
+    }
+    const holders = tables.filter(([, table]) => table.spareParts.includes("emitter"));
     expect(holders.map(([id]) => id)).toEqual(["landmark"]);
   });
 

@@ -7,31 +7,37 @@ import type { GearLevel, Weighted } from './npcs';
 // that may roll it, so rare gear stays with well-equipped drivers.
 export type UtilityRoll = Weighted<string | null> & { levels?: GearLevel[] };
 
+// Every gear level but poor, for tier-2 rolls: a poor driver makes do with tier-1 gear.
+const NOT_POOR: GearLevel[] = ['light', 'standard', 'heavy', 'loaded'];
+
 // Lawmen light up the night and hook runners.
 const LAW_UTILITY: UtilityRoll[] = [
-  { value: null, weight: 4 },
-  { value: 'flareCannon', weight: 2 },
-  { value: 'harpoon', weight: 2 },
+  { value: null, weight: 1.5 },
+  { value: 'flareCannon', weight: 3, levels: NOT_POOR },
+  { value: 'harpoon', weight: 3, levels: NOT_POOR },
 ];
 
-// Keyed by NPC template id. The drivers who patch and tow others, scavengers, roamers and convoys, favor the crane.
+// Keyed by NPC template id. A utility is the usual outcome. The drivers who patch and tow others, scavengers, roamers
+// and convoys, favor the crane. Where a deck often has no room for a 1x2 part, a 1x1 utility is weighted up, so the
+// template still carries one.
 export const NPC_UTILITY_PARTS: Record<string, UtilityRoll[]> = {
-  buggy: [{ value: null, weight: 6 }, { value: 'caltrops', weight: 2 }, { value: 'harpoon', weight: 1 }],
-  gunwagon: [{ value: null, weight: 5 }, { value: 'harpoon', weight: 2 }],
-  trader: [{ value: null, weight: 5 }, { value: 'sprout', weight: 1 }, { value: 'oilSpiller', weight: 1 }],
-  scavenger: [{ value: null, weight: 3 }, { value: 'patcherCrane', weight: 4 }, { value: 'scrapersKnife', weight: 2 }],
+  buggy: [{ value: null, weight: 1.5 }, { value: 'caltrops', weight: 3 }, { value: 'oilSpiller', weight: 1 }, { value: 'harpoon', weight: 1, levels: NOT_POOR }],
+  gunwagon: [{ value: null, weight: 1.5 }, { value: 'harpoon', weight: 2, levels: NOT_POOR }, { value: 'caltrops', weight: 2 }],
+  trader: [{ value: null, weight: 1.5 }, { value: 'sprout', weight: 2 }, { value: 'oilSpiller', weight: 2 }],
+  scavenger: [{ value: null, weight: 1.5 }, { value: 'patcherCrane', weight: 4 }, { value: 'scrapersKnife', weight: 2, levels: NOT_POOR }],
   bowlFarmer: LAW_UTILITY,
   noseArmy: LAW_UTILITY,
-  courier: [{ value: null, weight: 4 }, { value: 'oilSpiller', weight: 2 }, { value: 'sprout', weight: 1 }],
-  roamer: [{ value: null, weight: 4 }, { value: 'patcherCrane', weight: 3 }],
-  vulture: [{ value: null, weight: 4 }, { value: 'harpoon', weight: 1 }, { value: 'scrapersKnife', weight: 2 }],
-  convoy: [{ value: null, weight: 3 }, { value: 'patcherCrane', weight: 3 }],
-  convoyGuard: [{ value: null, weight: 4 }, { value: 'smokeMortar', weight: 1 }, { value: 'flareCannon', weight: 2 }],
+  courier: [{ value: null, weight: 1.5 }, { value: 'oilSpiller', weight: 3 }, { value: 'sprout', weight: 2 }],
+  roamer: [{ value: null, weight: 1.5 }, { value: 'patcherCrane', weight: 3 }, { value: 'sprout', weight: 1 }],
+  vulture: [{ value: null, weight: 1.5 }, { value: 'harpoon', weight: 2, levels: NOT_POOR }, { value: 'caltrops', weight: 3 }, { value: 'scrapersKnife', weight: 1, levels: NOT_POOR }],
+  convoy: [{ value: null, weight: 1.5 }, { value: 'patcherCrane', weight: 3 }, { value: 'sprout', weight: 1 }],
+  convoyGuard: [{ value: null, weight: 1.5 }, { value: 'smokeMortar', weight: 2, levels: NOT_POOR }, { value: 'flareCannon', weight: 2, levels: NOT_POOR }, { value: 'sprout', weight: 1 }],
   // Ship tech: only a heavy or loaded merc rolls the emitter, and few merc decks keep a 2x2 spot beside the main gun.
+  // When one does, the emitter is the likely pick.
   merc: [
-    { value: null, weight: 4 },
-    { value: 'harpoon', weight: 2 },
-    { value: 'smokeMortar', weight: 2 },
-    { value: 'emitter', weight: 2, levels: ['heavy', 'loaded'] },
+    { value: null, weight: 1.5 },
+    { value: 'harpoon', weight: 2, levels: NOT_POOR },
+    { value: 'smokeMortar', weight: 2, levels: NOT_POOR },
+    { value: 'emitter', weight: 6, levels: ['heavy', 'loaded'] },
   ],
 };
