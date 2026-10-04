@@ -55,7 +55,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const build = await ctx.repo.headHash(BRANCH(issue));
   // An approved card merges with no post, so only a card that will be posted needs the approval and the evidence. They are read before the checks, so a bad manifest fails fast.
   const approver = approvedAlready(ctx, issue, item.labels);
-  const shown = approver === null ? { approval: readApproval(home), evidence: readEvidence(home, build) } : null;
+  const shown = approver === null ? { approval: readApproval(home), evidence: readEvidence(home, build, issue) } : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
   const failure = await checkPatiently(ctx, issue, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
@@ -163,9 +163,10 @@ const TRIM_MARK = '…';
 export async function post(ctx: Ctx, issue: number, approval: Approval, evidence: Evidence, url: string, base: string): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
-  const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
-  await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
-  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
+  const pr = await pullRequestUrl(ctx, issue, item.title, approval, evidence, base);
+  const notice = waiverNotice(evidence.waived);
+  await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${notice === '' ? '' : `${notice}\n\n`}${approval.description}\n\nHow to try: ${approval.howToTry}`);
+  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence.waived);
   await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), {
     add: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption } })),
     drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id) })),
@@ -177,11 +178,12 @@ function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
 }
 
 // A feedback round reuses the pull request of the first round.
-async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, base: string): Promise<string> {
+async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, evidence: Evidence, base: string): Promise<string> {
   const open = await ctx.github.pullRequestFor(BRANCH(issue));
   if (open !== null) return open;
   const closes = [issue, ...bundleOf(readState(ctx.statePath), issue)].map((n) => `#${n}`).join(', ');
-  const body = `Closes ${closes}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
+  const notice = waiverNotice(evidence.waived);
+  const body = `Closes ${closes}.\n\n${notice === '' ? '' : `${notice}\n\n`}${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 
@@ -190,10 +192,17 @@ export function approvalButtons(issue: number, base: string): InlineButton[][] {
   return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
 }
 
-export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string): string {
+// The committee waived the three-view minimum for some locations. The post says so up front, so reviewers play the build themselves.
+export function waiverNotice(waived: string[]): string {
+  if (waived.length === 0) return '';
+  return `⚠️ EVIDENCE WAIVER: the committee waived the three-views-per-location count for this issue only: ${waived.join(', ')}. Every other check passed. Play the build yourself and inspect these locations before you approve.`;
+}
+
+export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, waived: string[] = []): string {
   // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
   const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
-  const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
+  const notice = waiverNotice(waived);
+  const head = `${warning}${notice === '' ? '' : `${notice}\n\n`}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
   const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;

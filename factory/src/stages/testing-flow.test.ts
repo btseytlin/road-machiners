@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
-import type { AgentRun, Ctx } from '../types';
+import { WORK_DIR, type AgentRun, type Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
@@ -817,5 +817,90 @@ describe('visual review of the candidate', () => {
     writeState(`${home}/state.json`, { ...state(), approvedResolving: { 7: 'Ann' } });
     await runStage(fakeCtx(() => undefined), 7);
     expect(readState(`${home}/state.json`).pendingApprovals).toEqual({ 7: 'Ann' });
+  });
+});
+
+describe('location view waiver of issue 80', () => {
+  const yard = [{ name: 'Yard', kind: 'location' }];
+  const twoViews = [['Yard'], ['Yard']];
+  const notice = 'EVIDENCE WAIVER';
+  function writeTwoViews(out: string): void {
+    mkdirSync(out, { recursive: true });
+    writeFileSync(`${out}/approval.json`, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    const images = twoViews.map((names, i) => {
+      const file = i === 0 ? 'screenshot.png' : `view${i}.png`;
+      writeFileSync(`${out}/${file}`, pngBytes(i));
+      return { file, description: `View ${i}`, covers: names };
+    });
+    writeFileSync(`${out}/evidence.json`, JSON.stringify({ commit: 'abc1234', features: yard, images }));
+    writeFileSync(`${out}/visual-review.json`, JSON.stringify(visualReview(out, yard, images.map((image) => image.file))));
+  }
+  const capture = (run: AgentRun): void => writeTwoViews(`${run.clone}/${run.dir}/.factory`);
+
+  it('runs the checks and posts an approval that states the waiver, for #80 only', async () => {
+    await runStage(fakeCtx(capture), 80);
+    expect(calls).toContain('checks');
+    const photo = calls.find((call) => call.startsWith('photo')) ?? '';
+    expect(photo).toContain(notice);
+    expect(photo).toContain('Yard (2 views)');
+    expect(photo).toContain('Play the build yourself');
+    expect(commentBodies[0]).toContain(notice);
+    expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain(notice);
+    expect(calls.at(-1)).toBe('move 80 Approval');
+  });
+
+  it('does not waive another issue, and posts nothing', async () => {
+    await expect(runStage(fakeCtx(capture), 81)).rejects.toThrow('needs 3 different views');
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+    expect(calls).not.toContain('checks');
+  });
+
+  it('does not waive a stale commit, and posts nothing', async () => {
+    const stale = (run: AgentRun): void => {
+      capture(run);
+      const out = `${run.clone}/${run.dir}/.factory`;
+      const manifest = JSON.parse(readFileSync(`${out}/evidence.json`, 'utf8')) as object;
+      writeFileSync(`${out}/evidence.json`, JSON.stringify({ ...manifest, commit: 'fff9999' }));
+    };
+    await expect(runStage(fakeCtx(stale), 80)).rejects.toThrow('Capture the views again');
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+  });
+
+  it('fails with no evidence manifest, and still runs no check', async () => {
+    await expect(runStage(fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }), visualReview(`${run.clone}/${run.dir}/.factory`, [], []))), 80)).rejects.toThrow();
+    expect(calls).not.toContain('checks');
+  });
+
+  describe('resuming from the kept evidence', () => {
+    const out = () => `${WORK_DIR(home, 80)}/game/.factory`;
+    const noAgent = (): void => { throw new Error('the agent must not capture again'); };
+
+    it('skips the agent round, runs the checks in a fresh clone and posts', async () => {
+      writeTwoViews(out());
+      await runStage(fakeCtx(noAgent), 80);
+      expect(calls).toContain('checks');
+      expect(calls.find((call) => call.startsWith('photo'))).toContain(notice);
+      expect(calls.at(-1)).toBe('move 80 Approval');
+    });
+
+    it('runs the agent round when the kept evidence is from an older commit', async () => {
+      writeTwoViews(out());
+      writeFileSync(`${out()}/evidence.json`, readFileSync(`${out()}/evidence.json`, 'utf8').replace('abc1234', 'fff9999'));
+      let rounds = 0;
+      await runStage(fakeCtx((run) => { rounds += 1; capture(run); }), 80);
+      expect(rounds).toBe(1);
+    });
+
+    it('runs the agent round when the base is not merged into the branch', async () => {
+      writeTwoViews(out());
+      merged = false;
+      await expect(runStage(fakeCtx(noAgent), 80)).rejects.toThrow('the agent must not capture again');
+    });
+
+    it('does not skip the agent round for another issue', async () => {
+      mkdirSync(`${WORK_DIR(home, 81)}/game`, { recursive: true });
+      writeTwoViews(`${WORK_DIR(home, 81)}/game/.factory`);
+      await expect(runStage(fakeCtx(noAgent), 81)).rejects.toThrow('the agent must not capture again');
+    });
   });
 });

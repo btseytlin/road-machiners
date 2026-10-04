@@ -80,7 +80,7 @@ async function candidateEvidence(ctx: Ctx, issue: number, home: string, branch: 
     return readEvidence(home, await ctx.repo.headHash(branch));
   } catch (error) {
     ctx.log('candidate', issue, `evidence manifest ignored: ${error instanceof Error ? error.message : String(error)}`);
-    return { images: [{ path: join(home, OUT_DIR, 'screenshot.png'), description: '', covers: [], sheet: false }], features: [] };
+    return { images: [{ path: join(home, OUT_DIR, 'screenshot.png'), description: '', covers: [], sheet: false }], features: [], waived: [] };
   }
 }
 

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { readEvidence } from './evidence';
+import { LOCATION_VIEW_WAIVERS, readEvidence } from './evidence';
 import { pngBytes } from './photo-fixtures';
 
 let home = '';
@@ -126,5 +126,53 @@ describe('readEvidence', () => {
     const text = read().images[0].description;
     expect(text).toHaveLength(200);
     expect(text.endsWith('…')).toBe(true);
+  });
+});
+
+describe('location view waiver', () => {
+  const yard = [{ name: 'Yard', kind: 'location' }];
+  const waived = (head = 'abc1234def') => readEvidence(home, head, 80);
+
+  it('lets issue 80 pass a location with two views and names it as waived', () => {
+    shots(2);
+    write({ features: yard, images: [image(0, ['Yard']), image(1, ['Yard'])] });
+    expect(waived().waived).toEqual(['Yard (2 views)']);
+  });
+
+  it('names nothing as waived when the location has three views', () => {
+    shots(3);
+    write({ features: yard, images: [image(0, ['Yard']), image(1, ['Yard']), image(2, ['Yard'])] });
+    expect(waived().waived).toEqual([]);
+  });
+
+  it('still fails another issue, or no issue, with two views', () => {
+    shots(2);
+    write({ features: yard, images: [image(0, ['Yard']), image(1, ['Yard'])] });
+    expect(() => readEvidence(home, 'abc1234def', 81)).toThrow('needs 3 different views');
+    expect(() => readEvidence(home, 'abc1234def', null)).toThrow('needs 3 different views');
+    expect(read).toThrow('needs 3 different views');
+  });
+
+  it('keeps a floor of two views under the waiver', () => {
+    shots(1);
+    write({ features: yard, images: [image(0, ['Yard'])] });
+    expect(waived).toThrow(`needs ${LOCATION_VIEW_WAIVERS[80]!.minViews} different views`);
+  });
+
+  it('still fails a stale commit, a missing cover and a duplicate image', () => {
+    shots(2);
+    write({ features: yard, images: [image(0, ['Yard']), image(1, ['Yard'])] });
+    expect(() => waived('fff9999')).toThrow('Capture the views again');
+    write({ features: [...yard, { name: 'Gate', kind: 'item' }], images: [image(0, ['Yard']), image(1, ['Yard'])] });
+    expect(waived).toThrow('No evidence image covers "Gate"');
+    writeFileSync(join(out, 'view1.png'), pngBytes(0));
+    write({ features: yard, images: [image(0, ['Yard']), image(1, ['Yard'])] });
+    expect(waived).toThrow('duplicates another image');
+  });
+
+  it('does not relax the contact sheet rule for a system change', () => {
+    shots(2);
+    write({ features: [{ name: 'Grids', kind: 'system' }], images: [image(0, ['Grids']), image(1, ['Grids'])] });
+    expect(waived).toThrow('contact sheet');
   });
 });

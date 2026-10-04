@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { readEvidence } from '../evidence';
+import { LOCATION_VIEW_WAIVERS, readEvidence } from '../evidence';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
@@ -30,6 +30,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const mode = testMode(ctx, issue, item.labels);
   if (readState(ctx.statePath).testPhase[String(issue)] === 'fix') return fixRound(ctx, issue, base, mode);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
+  if (mode === 'preview' && (await reuseWaivedEvidence(ctx, issue, base, home))) return;
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
@@ -44,6 +45,27 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
     if (mode === 'full' && !(await agentRound(ctx, issue, 'test', 'test', base, true))) return;
   }
   setPhase(ctx, issue, 'checks');
+}
+
+// A card with a location-view waiver may already hold the final evidence from rounds that failed only the view count. Capturing again would repeat that doomed pass.
+// When the pushed head holds the base, and the approval, the evidence under the waiver and the visual review all pass for that head, the card goes straight to the checks.
+// Anything less, or a send-back by the visual review, takes the normal round. The checks still run in a fresh clone before any post.
+async function reuseWaivedEvidence(ctx: Ctx, issue: number, base: string, home: string): Promise<boolean> {
+  if (LOCATION_VIEW_WAIVERS[issue] === undefined) return false;
+  try {
+    await ctx.repo.fetch();
+    if (!(await ctx.repo.isMerged(base, BRANCH(issue)))) return false;
+    const head = await ctx.repo.headHash(BRANCH(issue));
+    readApproval(home);
+    const evidence = readEvidence(home, head, issue);
+    if (!(await visualGate(ctx, issue, home, head, evidence))) return true;
+  } catch (error) {
+    ctx.log('verify', issue, `the kept evidence cannot be reused, testing runs again: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+  ctx.log('verify', issue, 'location-view waiver: the kept evidence holds for the final head, no new capture');
+  setPhase(ctx, issue, 'checks');
+  return true;
 }
 
 // The checks stage left the end of its log in `.factory/check-failure.md`, next to the approval and evidence of the first round.
@@ -88,7 +110,7 @@ async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | '
   await guardAndPush(ctx, issue, base, 'verify');
   if (!shows) return true;
   const head = await ctx.repo.headHash(BRANCH(issue));
-  return visualGate(ctx, issue, home, head, readEvidence(home, head));
+  return visualGate(ctx, issue, home, head, readEvidence(home, head, issue));
 }
 
 export function readApproval(home: string): Approval {

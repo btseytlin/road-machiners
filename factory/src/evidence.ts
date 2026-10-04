@@ -9,6 +9,11 @@ export const EVIDENCE_MAX = 10;
 export const PRIMARY_FILE = 'screenshot.png';
 export const MANIFEST_FILE = 'evidence.json';
 const LOCATION_VIEWS = 3;
+// One-time waivers of the three-view minimum for a location, by issue number. The committee granted each in an issue comment.
+// A waiver lowers only that count, to its `minViews`. Provenance, distinctness, coverage, the final commit and every other rule still apply, and so do the checks and the approval.
+export const LOCATION_VIEW_WAIVERS: Readonly<Record<number, { minViews: number; granted: string }>> = {
+  80: { minViews: 2, granted: '2026-10-04T14:20:36Z' },
+};
 const DESCRIPTION_LIMIT = 200;
 const KINDS = ['location', 'item', 'system', 'other'] as const;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
@@ -19,22 +24,23 @@ type Feature = { name: string; kind: Kind };
 export type EvidenceImage = { path: string; description: string; covers: string[]; sheet: boolean };
 // The ordered images of one task. The first is the primary, `.factory/screenshot.png`.
 // `features` names what the manifest says changed. It is empty when there is no manifest.
-export type Evidence = { images: EvidenceImage[]; features: string[] };
+// `waived` names the locations that passed under a location-view waiver, with the views each has. It is empty for every other card.
+export type Evidence = { images: EvidenceImage[]; features: string[]; waived: string[] };
 
 // The agent's manifest `.factory/evidence.json`:
 // {"commit": "<git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}],
 //  "images": [{"file": "screenshot.png", "description": "Gate and approach", "covers": ["Salvage yard"], "sheet": false}]}
 // With no manifest the single screenshot stands, as before. A manifest that fails any rule throws, so no post goes out with doubtful evidence.
-export function readEvidence(home: string, head: string | null): Evidence {
+export function readEvidence(home: string, head: string | null, issue: number | null = null): Evidence {
   const out = join(home, OUT_DIR);
   const manifest = join(out, MANIFEST_FILE);
-  if (!existsSync(manifest)) return { images: [{ path: join(out, PRIMARY_FILE), description: '', covers: [], sheet: false }], features: [] };
+  if (!existsSync(manifest)) return { images: [{ path: join(out, PRIMARY_FILE), description: '', covers: [], sheet: false }], features: [], waived: [] };
   const data = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown>;
   if (head !== null) requireHead(data.commit, head);
   const features = parseFeatures(data.features);
   const images = parseImages(data.images, features, out);
-  requireCoverage(features, images);
-  return { images, features: features.map((feature) => feature.name) };
+  const waived = requireCoverage(features, images, issue === null ? undefined : LOCATION_VIEW_WAIVERS[issue]?.minViews);
+  return { images, features: features.map((feature) => feature.name), waived };
 }
 
 // The evidence must come from the final branch. An agent that changed code after it captured has to capture again.
@@ -102,12 +108,20 @@ function requireDistinct(images: EvidenceImage[]): void {
 }
 
 // Every changed feature needs a view. A location needs several views, and a system-wide change needs a labeled sheet.
-function requireCoverage(features: Feature[], images: EvidenceImage[]): void {
-  for (const feature of features) requireViews(feature, images.filter((image) => image.covers.includes(feature.name)));
+// Returns the locations that have fewer views than the rule asks for but enough for the waiver.
+function requireCoverage(features: Feature[], images: EvidenceImage[], waivedMin?: number): string[] {
+  const waived: string[] = [];
+  for (const feature of features) {
+    const views = images.filter((image) => image.covers.includes(feature.name));
+    requireViews(feature, views, waivedMin);
+    if (feature.kind === 'location' && views.length < LOCATION_VIEWS) waived.push(`${feature.name} (${views.length} views)`);
+  }
+  return waived;
 }
 
-function requireViews(feature: Feature, views: EvidenceImage[]): void {
+function requireViews(feature: Feature, views: EvidenceImage[], waivedMin?: number): void {
   if (views.length === 0) throw new Error(`No evidence image covers "${feature.name}"`);
-  if (feature.kind === 'location' && views.length < LOCATION_VIEWS) throw new Error(`The location "${feature.name}" needs ${LOCATION_VIEWS} different views (layout and landmarks, approach, traversal), it has ${views.length}`);
+  const needed = waivedMin === undefined ? LOCATION_VIEWS : Math.min(LOCATION_VIEWS, waivedMin);
+  if (feature.kind === 'location' && views.length < needed) throw new Error(`The location "${feature.name}" needs ${needed} different views (layout and landmarks, approach, traversal), it has ${views.length}`);
   if (feature.kind === 'system' && !views.some((image) => image.sheet)) throw new Error(`The system change "${feature.name}" needs one labeled contact sheet ("sheet": true) built from real screenshots`);
 }

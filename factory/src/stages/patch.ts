@@ -22,7 +22,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   readApproval(home);
   await guardAndPush(ctx, issue, base, 'patch');
   await requireBaseMerged(ctx, issue, base, merged);
-  readEvidence(home, await ctx.repo.headHash(BRANCH(issue)));
+  readEvidence(home, await ctx.repo.headHash(BRANCH(issue)), issue);
   endPatch(ctx, issue);
   setPhase(ctx, issue, 'checks');
   await ctx.github.move(issue, 'Testing');
