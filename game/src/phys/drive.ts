@@ -233,19 +233,22 @@ function noteOwner(owner: Map<number, string>, body: RAPIER.RigidBody, vehicleId
   for (let i = 0; i < body.numColliders(); i++) owner.set(body.collider(i).handle, vehicleId);
 }
 
-type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult };
+// oil holds the oil patches the car can reach this turn, in physics space. kicked is true once oil kicked its tail this turn.
+type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult; oil: Circle[]; kicked: boolean };
 
 function run(d: Drive, w: World, steps: number): TurnResult {
   const world = RAPIER.World.restoreSnapshot(d.world.takeSnapshot());
   world.timestep = DT;
   const events = new RAPIER.EventQueue(true);
   const memory: Record<string, Memory> = structuredClone(d.memory);
+  // Oil patches are fixed for the turn, so each car keeps the ones it can reach once, and the steps never read the sim.
+  const oil = oilPatches(w);
   const cars: Car[] = w.vehicles.filter((v) => d.bodies[v.id] !== undefined).map((v) => {
     const body = world.getRigidBody(d.bodies[v.id]);
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false }, oil: oilInReach(oil, v, s, body), kicked: false };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
@@ -254,13 +257,11 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const contacts = new Contacts(w);
   const landings = new Landings();
-  // Oil patches are fixed for the turn, so they convert once and the steps never read the sim.
-  const oil = oilPatches(w).map((p) => toPhysCircle(p.pos, p.r));
-  // Harpoon lines too: their anchors come in body space, so the steps only read the bodies.
+  // Harpoon lines are fixed for the turn too: their anchors come in body space, so the steps only read the bodies.
   const lines = new Lines(lineAnchors(w), cars);
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
-    for (const c of cars) driveStep(c, w.terrain, oil);
+    for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
     lines.pull(i);
     landings.note(cars, before, i);
@@ -564,13 +565,12 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield. A wheel whose hub lies over any oil patch keeps OIL.grip of its friction slip and side
-// friction stiffness. Overlapping patches count once.
-function applyTerrainGrip(c: Car, terrain: Terrain, oil: readonly Circle[]): void {
+// the heightfield. A wheel whose hub lies over any oil patch, as `slick` says in wheelMounts order, keeps OIL.grip of
+// its friction slip and side friction stiffness. Overlapping patches count once.
+function applyTerrainGrip(c: Car, terrain: Terrain, slick: readonly boolean[]): void {
   const p = c.body.translation();
   const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
   const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
-  const slick = oiledWheels(c, oil);
   for (let i = 0; i < 4; i++) {
     const share = slick[i] ? OIL.grip : 1;
     c.ctl.setWheelFrictionSlip(i, grip * share);
@@ -578,8 +578,17 @@ function applyTerrainGrip(c: Car, terrain: Terrain, oil: readonly Circle[]): voi
   }
 }
 
-// Whether each wheel's hub, in wheelMounts order, lies over any oil patch.
-function oiledWheels(c: Car, oil: readonly Circle[]): boolean[] {
+// The oil patches a car can reach this turn: those within its top speed for the turn, or its speed now if faster,
+// plus its half diagonal and the patch's radius. One pass over the turn's patches per car per turn.
+function oilInReach(patches: readonly { pos: Vec; r: number }[], v: Vehicle, s: VehicleStats, body: RAPIER.RigidBody): Circle[] {
+  const half = bodyOf(v.chassisId).half;
+  const reach = Math.max(s.maxSpeed, toTilesPerTurn(flatSpeed(body))) + Math.hypot(half.x, half.z) / S;
+  return patches.filter((p) => dist(p.pos, v.pos) <= reach + p.r).map((p) => toPhysCircle(p.pos, p.r));
+}
+
+// Whether each wheel's hub, in wheelMounts order, lies over any oil patch the car can reach.
+function oiledWheels(c: Car): boolean[] {
+  const oil = c.oil;
   if (oil.length === 0) return [false, false, false, false];
   const p = c.body.translation();
   const h = headingOf(c.body.rotation());
@@ -595,8 +604,10 @@ function oiledWheels(c: Car, oil: readonly Circle[]): boolean[] {
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
 // it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
-function driveStep(c: Car, terrain: Terrain, oil: readonly Circle[]): void {
-  applyTerrainGrip(c, terrain, oil);
+function driveStep(c: Car, terrain: Terrain): void {
+  const slick = oiledWheels(c);
+  applyTerrainGrip(c, terrain, slick);
+  oilKick(c, slick);
   const speed = forwardSpeed(c.body);
   const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
@@ -606,6 +617,41 @@ function driveStep(c: Car, terrain: Terrain, oil: readonly Circle[]): void {
   }
   turnWheels(c, command.steerTo);
   applyPedals(c, command.target, speed);
+}
+
+// The tail kick. At the first step this turn that a rear wheel is on oil, the yaw rate about the truck's up axis jumps
+// by tailKick. Physics then decides how far the swing grows on the low grip.
+function oilKick(c: Car, slick: readonly boolean[]): void {
+  if (c.kicked || !(slick[2] || slick[3])) return;
+  c.kicked = true;
+  const up = rotateBy(c.body.rotation(), { x: 0, y: 1, z: 0 });
+  const spin = c.body.angvel();
+  const kick = tailKick(toTilesPerTurn(flatSpeed(c.body)), slick, spin.x * up.x + spin.y * up.y + spin.z * up.z);
+  c.body.setAngvel({ x: spin.x + up.x * kick, y: spin.y + up.y * kick, z: spin.z + up.z * kick }, true);
+}
+
+// The tail kick's yaw rate change in rad/s about the truck's up axis, for a truck at `speed` tiles per turn whose
+// wheels in wheelMounts order are on oil as `slick` says, turning at `yawRate` rad/s about its up axis. A positive
+// rate turns the nose toward the truck's left. The kick is OIL.kick for each OIL.safeSpeed above OIL.safeSpeed, up
+// to OIL.maxKick. It swings the tail toward the oiled rear wheel. With both rear wheels on oil it adds to the yaw
+// rate, and with no yaw rate it turns the nose left. Throws without a rear wheel on oil.
+export function tailKick(speed: number, slick: readonly boolean[], yawRate: number): number {
+  const size = Math.min(OIL.maxKick, (OIL.kick * Math.max(0, speed - OIL.safeSpeed)) / OIL.safeSpeed);
+  return size * kickSide(slick, yawRate);
+}
+
+// +1 turns the nose left and the tail right, -1 the other way. Wheel 2 is the left rear and 3 the right rear.
+function kickSide(slick: readonly boolean[], yawRate: number): number {
+  if (slick[2] && slick[3]) return yawRate < 0 ? -1 : 1;
+  if (slick[2]) return -1;
+  if (slick[3]) return 1;
+  throw new Error('A tail kick needs a rear wheel on oil');
+}
+
+// The body's speed along the ground in m/s, whichever way it moves.
+function flatSpeed(body: RAPIER.RigidBody): number {
+  const v = body.linvel();
+  return Math.hypot(v.x, v.z);
 }
 
 type Command = { target: number; steerTo: number }; // target in m/s along the nose, steerTo in radians of wheel angle

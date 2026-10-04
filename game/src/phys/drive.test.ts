@@ -8,13 +8,16 @@ import { loadFactor, vehicleMass } from '../sim/mass';
 import { corePart, mountedParts } from '../sim/grid';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
-import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, DEG, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
-import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
+import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, tailKick, type Drive, type TurnResult } from './drive';
+import { headingOf, upOf } from './frames';
+import { dropClearance, spillOil, type OilSpill } from '../sim/hazards';
+import { OIL, oilSlickLength } from '../data/utilities';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
@@ -76,6 +79,7 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 const LIMP_GRADE = 0.35; // height per tile, a steep bank beside a road
+const KICK_SEEN = 0.2; // rad/s of yaw rate change in one step; steering alone never turns a truck this fast
 
 describe('physics turns', () => {
   // A handle that once belonged to a collider, as a record left behind by a removal would hold.
@@ -780,14 +784,105 @@ describe('oil patches', () => {
     return out;
   }
 
-  it('a truck crossing straight at a steady speed keeps its line', () => {
-    const dest = { x: 80, y: 30 };
-    const dry = endOfTurn(oiled(dest, []));
+  // The oil spiller's spill, from the part data.
+  function spillOf(): OilSpill {
+    const def = partDef('oilSpiller');
+    if (def.kind !== 'utility' || def.effect.type !== 'oil') throw new Error('The oil spiller spills no oil');
+    return def.effect;
+  }
 
-    const wet = endOfTurn(oiled(dest, slick(30, 40, 30, 30)));
+  // The player at 30,30 facing +x at `speed` tiles per turn, on a drive-through order to 80,30 under its route driver.
+  // `spills` times, a truck ahead on the same line spilled a streak back toward the player and drove off. The streak's
+  // near edge lies `gap` tiles ahead of the player's center. The player has not seen the streak, so its route runs
+  // straight over it.
+  function streakAhead(speed: number, spills: number, gap = 2): World {
+    const w = ordered({ kind: 'through', dest: { x: 80, y: 30 } }, speed);
+    const spill = spillOf();
+    const dropper = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 0, y: 30 });
+    dropper.pos = { x: 30 + gap + dropClearance(dropper, spill.behind) + oilSlickLength(), y: 30 };
+    for (let i = 0; i < spills; i++) spillOil(w, dropper, spill);
+    w.vehicles = w.vehicles.filter((v) => v.id !== dropper.id);
+    w.player.visible = [];
+    return w;
+  }
 
-    expect(dry.x).toBeLessThan(40 * PHYSICS.metersPerTile); // the whole turn is on oil
-    expect(Math.abs(wet.z - dry.z)).toBeLessThan(0.5);
+  // One turn of the player from w: its end pose in meters and radians, the lowest up vector y over the turn, and the
+  // steps where its yaw rate jumped by more than steering can turn it in one step, which only a tail kick does.
+  function crossing(w: World): { x: number; z: number; heading: number; lowestUp: number; kicks: number } {
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    const frames = r.frames[me(w).id];
+    freeDrive(r.next);
+    freeDrive(d);
+    const yaw = frames.slice(1).map((f, i) => angleDiff(headingOf(frames[i].rot), headingOf(f.rot)) * PHYSICS.stepsPerSecond);
+    const kicks = yaw.slice(1).filter((rate, i) => Math.abs(rate - yaw[i]) > KICK_SEEN).length;
+    const end = frames.at(-1)!;
+    return { x: end.pos.x, z: end.pos.z, heading: headingOf(end.rot), lowestUp: Math.min(...frames.map((f) => upOf(f.rot))), kicks };
+  }
+
+  it('a truck crossing a slick straight at 10 tiles per turn loses its line', () => {
+    const dry = crossing(streakAhead(10, 0));
+
+    const wet = crossing(streakAhead(10, 1));
+
+    const turned = Math.abs(angleDiff(dry.heading, wet.heading)) >= 20 * DEG;
+    const offset = Math.abs(wet.z - dry.z) >= 2;
+    expect(turned || offset).toBe(true);
+  });
+
+  it('a truck crossing a slick straight at 3 tiles per turn keeps its line', () => {
+    const dry = crossing(streakAhead(3, 0, 0.5));
+
+    const wet = crossing(streakAhead(3, 1, 0.5));
+
+    expect(Math.hypot(wet.x - dry.x, wet.z - dry.z)).toBeLessThan(0.5);
+  });
+
+  it('kicks the tail once in a turn, however long the rear wheels stay on oil', () => {
+    const dry = crossing(streakAhead(10, 0));
+
+    const wet = crossing(streakAhead(10, 1));
+
+    expect(dry.kicks).toBe(0);
+    expect(wet.kicks).toBe(1);
+  });
+
+  it('gives no kick at 4 tiles per turn', () => {
+    expect(crossing(streakAhead(4, 1, 0.5)).kicks).toBe(0);
+  });
+
+  it('gives the same end pose twice from the same input', () => {
+    expect(crossing(streakAhead(10, 1))).toEqual(crossing(streakAhead(10, 1)));
+  });
+
+  it('two slicks on one spot act as one', () => {
+    expect(crossing(streakAhead(10, 2))).toEqual(crossing(streakAhead(10, 1)));
+  });
+
+  it('leaves no truck rolled over after a kick', () => {
+    for (const speed of [5, 6, 8, 10, 12]) expect(crossing(streakAhead(speed, 1)).lowestUp).toBeGreaterThan(0.5);
+  });
+
+  it('sizes the kick by speed over the safe speed, up to the cap', () => {
+    const left = [false, false, true, false];
+
+    expect(Math.abs(tailKick(OIL.safeSpeed, left, 0))).toBe(0);
+    expect(Math.abs(tailKick(OIL.safeSpeed * 2, left, 0))).toBeCloseTo(OIL.kick);
+    expect(Math.abs(tailKick(1000, left, 0))).toBe(OIL.maxKick);
+  });
+
+  it('swings the tail toward the oiled rear wheel, and with both on oil with the yaw rate or else to the left', () => {
+    const fast = OIL.safeSpeed * 3;
+
+    expect(tailKick(fast, [false, false, true, false], 0)).toBeLessThan(0); // the left rear: nose right, tail left
+    expect(tailKick(fast, [false, false, false, true], 0)).toBeGreaterThan(0); // the right rear: nose left
+    expect(tailKick(fast, [false, false, true, true], -0.1)).toBeLessThan(0);
+    expect(tailKick(fast, [false, false, true, true], 0.1)).toBeGreaterThan(0);
+    expect(tailKick(fast, [false, false, true, true], 0)).toBeGreaterThan(0); // no yaw: the nose turns left
+  });
+
+  it('refuses a kick with no rear wheel on oil', () => {
+    expect(() => tailKick(10, [true, true, false, false], 0)).toThrow();
   });
 
   it('a truck steering hard on oil slides out of its dry line', () => {
