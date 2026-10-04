@@ -52,7 +52,7 @@ export const MAX_GUN_SLOWDOWN = 0.35;
 // The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo, by fight style. Loadouts
 // stop adding weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's
 // minimum build ignores it. See npcMassRoom() in src/sim/stats.ts. A driver that circles its target chases it, so it
-// stays nearly as fast as it can be; a driver that holds its spot carries more instead.
+// keeps three quarters of its speed; a driver that holds its spot carries more instead.
 export const SPEED_FLOOR: Record<NpcTemplate['fightStyle'], number> = { circle: 0.75, hold: 0.6 };
 
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
