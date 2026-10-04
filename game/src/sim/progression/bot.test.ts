@@ -220,6 +220,15 @@ describe('botOrders for robbers', () => {
     expect(turn.world.player.talked[trader.id]?.rob).toBeDefined();
   });
 
+  it('radios a trader whose goal line says it sells carried cargo, and skips one going for repairs', () => {
+    const w = robberWorld();
+    const seller = addTrader(w, { x: 64, y: 60 });
+    seller.brain!.goals[0].reason = 'sell carried cargo';
+    expect(radioed(botOrders(w, 'robber'), seller)).toBe(true);
+    seller.brain!.goals[0].reason = 'needs repairs';
+    expect(radioed(botOrders(w, 'robber'), seller)).toBe(false);
+  });
+
   it('skips a trader with more guns than the player', () => {
     const w = robberWorld();
     const trader = addTrader(w, { x: 64, y: 60 }, ['mg', 'mg', 'stockEngine']);
