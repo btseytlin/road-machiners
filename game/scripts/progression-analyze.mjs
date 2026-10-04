@@ -4,6 +4,7 @@
 // Usage: npm run progression:analyze -- <dir> [--run trader-1]
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { JobTally } from '../src/sim/progression/job-checks.ts';
 
 // A loss of more than this share of net worth within LOSS_TURNS counts as a big loss: about one stolen gun.
 const LOSS_SHARE = 0.1;
@@ -42,6 +43,7 @@ function analyze(name, turns) {
   const last = turns[turns.length - 1];
   console.log(`\n=== ${name}: turns ${turns[0].t}-${last.t}, net worth ${turns[0].nw} -> ${last.nw}, money ${last.money}, ${last.chassis}`);
   printTime(turns);
+  printJob(name.slice(0, name.lastIndexOf('-')), turns);
   printFights(turns);
   printLosses(turns);
   printTows(turns);
@@ -55,6 +57,17 @@ function printTime(turns) {
   const share = (test) => `${Math.round((100 * turns.filter(test).length) / turns.length)}%`;
   const flags = ['combat', 'stranded', 'towed', 'beacon'].map((f) => `${f} ${share((l) => l.flags.includes(f))}`);
   console.log(`time: ${flags.join(', ')}, job ${share((l) => l.job !== null)}, no order ${share((l) => l.order === null)}`);
+}
+
+// Whether the bot did its job: the first day end where it fell below its floor in src/sim/progression/job-checks.ts.
+function printJob(archetype, turns) {
+  const tally = new JobTally();
+  for (const line of turns) {
+    tally.note(line);
+    const failure = tally.failure(archetype);
+    if (failure) return console.log(`job: FAIL turn ${line.t}: ${failure}`);
+  }
+  console.log('job: ok');
 }
 
 // Stretches of turns where a test holds, with start, end and length.
