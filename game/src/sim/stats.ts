@@ -3,7 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
-import { MIN_NPC_SPEED_SHARE } from '../data/npcs';
+import { SPEED_FLOOR, type NpcTemplate } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
@@ -124,10 +124,15 @@ export function gunDrag(v: Vehicle, capacity: number): number {
   return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
 }
 
-// Kilograms an NPC truck can still take before load and gun drag cut its speed below MIN_NPC_SPEED_SHARE of the unloaded
-// speed. Zero when it is already below. Speed falls as mass rises, so a bisection finds the limit.
-export function npcMassRoom(v: Vehicle): number {
-  const needed = neededLoadFactor(v);
+// The share of its unloaded speed an NPC truck keeps, set by its template's fight style; see SPEED_FLOOR.
+export function speedFloorOf(template: NpcTemplate): number {
+  return SPEED_FLOOR[template.fightStyle];
+}
+
+// Kilograms an NPC truck can still take before load and gun drag cut its speed below `floor`, the share of the
+// unloaded speed it keeps. Zero when it is already below. Speed falls as mass rises, so a bisection finds the limit.
+export function npcMassRoom(v: Vehicle, floor: number): number {
+  const needed = neededLoadFactor(v, floor);
   if (loadFactor(v) < needed) return 0;
   let low = 0;
   let high = chassisDef(v.chassisId).ratedMass;
@@ -140,15 +145,15 @@ export function npcMassRoom(v: Vehicle): number {
   return low;
 }
 
-// Whether the truck keeps MIN_NPC_SPEED_SHARE of its unloaded speed.
-export function meetsSpeedFloor(v: Vehicle): boolean {
-  return loadFactor(v) >= neededLoadFactor(v);
+// Whether the truck keeps `floor` of its unloaded speed.
+export function meetsSpeedFloor(v: Vehicle, floor: number): boolean {
+  return loadFactor(v) >= neededLoadFactor(v, floor);
 }
 
-// The load factor that, with the gun drag, still gives MIN_NPC_SPEED_SHARE.
-function neededLoadFactor(v: Vehicle): number {
+// The load factor that, with the gun drag, still gives `floor`.
+function neededLoadFactor(v: Vehicle, floor: number): number {
   const engine = mountedParts(v, 'engine')[0];
-  return MIN_NPC_SPEED_SHARE / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
+  return floor / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
 }
 
 // Only the player's truck has engine overdrive.

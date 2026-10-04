@@ -14,7 +14,8 @@ import { PERK_NUMBERS } from '../data/skills';
 import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
 import { fitStores } from './resources';
 import { itemMass } from './mass';
-import { npcMassRoom, vehicleStats } from './stats';
+import { npcMassRoom, speedFloorOf, vehicleStats } from './stats';
+import { NPCS } from '../data/npcs';
 import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
@@ -72,7 +73,7 @@ function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null 
 // Kilograms of cargo the truck can take. An NPC truck stops at its speed floor, see npcMassRoom(). The player has no cap,
 // since weight only slows the player's truck.
 export function cargoMassRoom(v: Vehicle): number {
-  return v.brain ? npcMassRoom(v) : Infinity;
+  return v.brain ? npcMassRoom(v, speedFloorOf(NPCS[v.brain.templateId])) : Infinity;
 }
 
 // Units of a good that fit the grid and the mass room.

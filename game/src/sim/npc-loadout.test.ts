@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPC_WEAR, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPC_WEAR, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -14,7 +14,7 @@ import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
-import { gunDrag, isStranded, npcMassRoom } from './stats';
+import { gunDrag, isStranded, npcMassRoom, speedFloorOf } from './stats';
 import { addGoods } from './inventory';
 import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
@@ -119,7 +119,7 @@ describe('NPC equipment generation', () => {
         const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         const engine = mountedItems(v, 'engine')[0];
         const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
-        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
+        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(speedFloorOf(template) - 0.02);
       }
     }
   }, budget(120_000));
@@ -127,7 +127,7 @@ describe('NPC equipment generation', () => {
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
     const world = { ...fixture, rngState: 3 };
     const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
-    const room = npcMassRoom(npc);
+    const room = npcMassRoom(npc, speedFloorOf(NPCS.gunwagon));
     const free = freeCells(npc);
     const added = addGoods(world, npc, 'tools', 1000);
     expect(added * GOODS.tools.mass).toBeLessThanOrEqual(room);

@@ -8,7 +8,7 @@ import { makePart, makeVehicle, newId, type PartSpec } from './factory';
 import { baseGrid, cellKey, freeCells, gridOf, itemCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
-import { gunDrag, meetsSpeedFloor, npcMassRoom } from './stats';
+import { gunDrag, meetsSpeedFloor, npcMassRoom, speedFloorOf, vehicleStats } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { Vehicle, World } from './types';
 import { partValue } from './wear';
@@ -118,11 +118,13 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mo
   return everyGunFires(candidate) ? candidate : null;
 }
 
-// A part beyond the template minimum. It must also leave the truck above the NPC speed floor, so its weight and gun
-// draw never slow it below MIN_NPC_SPEED_SHARE.
-function tryMountExtra(world: World, v: Vehicle, id: string, budget: number, mount?: Cell[]): Vehicle | null {
-  const next = tryMountChoice(world, v, id, budget, mount);
-  return next && meetsSpeedFloor(next) ? next : null;
+// What a part beyond the template minimum must fit: the equipment budget, and the speed floor, the share of its
+// unloaded speed the truck keeps after the part's weight and gun draw.
+type Fit = { budget: number; floor: number };
+
+function tryMountExtra(world: World, v: Vehicle, id: string, fit: Fit, mount?: Cell[]): Vehicle | null {
+  const next = tryMountChoice(world, v, id, fit.budget, mount);
+  return next && meetsSpeedFloor(next, fit.floor) ? next : null;
 }
 
 // One wear roll from NPC_WEAR per mounted non-core part, shifted by the gear level and clamped so a spawned part is
@@ -194,9 +196,12 @@ function addRequiredGuns(world: World, table: NpcLoadoutTable, v: Vehicle, budge
   return v;
 }
 
-function chooseRequiredParts(rng: Rng, table: NpcLoadoutTable, choices: ArmedChoice[]): Vehicle {
+// The engine and main gun. A driver that circles its target chases it, so it takes the fastest engine that fits its
+// budget and keeps up under its armor. Every other driver rolls its engine by weight.
+function chooseRequiredParts(world: World, rng: Rng, template: NpcTemplate, choices: ArmedChoice[]): Vehicle {
+  const table = template.loadout;
   const engines = table.engine.filter((entry) => choices.some((choice) => choice.engine === entry.value));
-  const engine = sampleWeighted(rng, engines);
+  const engine = template.fightStyle === 'circle' ? fastestEngine(world, choices) : sampleWeighted(rng, engines);
   const weapons = table.weapon.filter((entry) => choices.some((choice) => choice.engine === engine && choice.weapon === entry.value));
   const weapon = sampleWeighted(rng, weapons);
   const choice = choices.find((entry) => entry.engine === engine && entry.weapon === weapon);
@@ -204,10 +209,16 @@ function chooseRequiredParts(rng: Rng, table: NpcLoadoutTable, choices: ArmedCho
   return choice.vehicle;
 }
 
-function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, budget: number, pool: Weighted<string | null>[]): Vehicle {
+// The engine of the fitting build with the highest top speed. Ties go to the first in table order.
+function fastestEngine(world: World, choices: ArmedChoice[]): string {
+  const speed = (choice: ArmedChoice) => vehicleStats(world, choice.vehicle).maxSpeed;
+  return choices.reduce((best, choice) => (speed(choice) > speed(best) ? choice : best)).engine;
+}
+
+function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, fit: Fit, pool: Weighted<string | null>[]): Vehicle {
   const choices: Weighted<Vehicle>[] = [];
   for (const entry of pool) {
-    const candidate = entry.value === null ? v : tryMountExtra(world, v, entry.value, budget);
+    const candidate = entry.value === null ? v : tryMountExtra(world, v, entry.value, fit);
     if (candidate) choices.push({ value: candidate, weight: entry.weight });
   }
   if (!choices.length) throw new Error(`No eligible optional equipment for ${v.chassisId}. Add an explicit empty outcome or a fitting part.`);
@@ -235,9 +246,10 @@ function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room)
 
 // Repair parts, goods and spares, in that order of priority, loaded onto a copy of the truck with the same calls
 // the factory uses, so everything chosen fits at spawn. Rated mass caps the load too.
-function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): { spares: PartSpec[]; carried: Record<string, number> } {
+function chooseCargo(world: World, rng: Rng, wearRng: Rng, template: NpcTemplate, level: Level, v: Vehicle): { spares: PartSpec[]; carried: Record<string, number> } {
+  const table = template.loadout;
   const load = { ...v, items: [...v.items] };
-  const massLeft = () => Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load));
+  const massLeft = () => Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load, speedFloorOf(template)));
   const carried: Record<string, number> = {};
   const addGood = (good: string, n: number) => {
     const added = addGoods(world, load, good, n);
@@ -273,22 +285,23 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   // The required build and the utility part get at least the template budget, so a poor roll still drives, shoots
   // and hauls. The level budget limits the extra guns and armor.
   const required = Math.max(budget, table.budget);
+  const floor = speedFloorOf(template);
   const chassis = chassisId === null ? table.chassis : table.chassis.filter((entry) => entry.value === chassisId);
   const chassisChoices = chassis.map((entry) => ({ value: armedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
-  let v = withFreshIds(probe, chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices)));
-  v = chooseOptionalPart(probe, rng, v, required, table.cargoPart);
-  v = addArmor(probe, rng, table, level, v, budget);
-  return addGuns(probe, rng, table, level, v, budget);
+  let v = withFreshIds(probe, chooseRequiredParts(probe, rng, template, sampleWeighted(rng, chassisChoices)));
+  v = chooseOptionalPart(probe, rng, v, { budget: required, floor }, table.cargoPart);
+  v = addArmor(probe, rng, table, level, v, { budget, floor });
+  return addGuns(probe, rng, table, level, v, { budget, floor });
 }
 
 // Every free deck cell is a spot for one more gun, and each rolls the level's fill chance once. A roll that hits
 // mounts the first gun that fits, budget, rated mass and MAX_GUN_SLOWDOWN allowing. The template minimum is already
 // mounted.
-function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
+function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, fit: Fit): Vehicle {
   for (let spot = freeDeckCells(v); spot > 0; spot--) {
     if (nextRandom(rng) >= Math.min(1, level.fill * table.gunFill)) continue;
-    const next = pickFitting(world, rng, table.extraGun, (id) => withinGunSlowdown(tryMountExtra(world, v, id, budget)));
+    const next = pickFitting(world, rng, table.extraGun, (id) => withinGunSlowdown(tryMountExtra(world, v, id, fit)));
     if (!next) break;
     v = next;
   }
@@ -323,26 +336,26 @@ const EDGES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 // Armors sides in order, the front, both flanks, the rear, until the level's share of edge cells is armored. Each
 // side takes one armor type, picked among those that fit there. Flanks alternate pieces so both sides match. Cells the
 // typed armor leaves bare get scrap, so a driver short of money or mass room still bolts something on every side.
-function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
+function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, fit: Fit): Vehicle {
   const target = Math.round(edgeCells(v.chassisId) * level.armor);
   for (const sides of SIDE_ORDER) {
     if (armoredCells(v) >= target) break;
-    const typed = pickFitting(world, rng, table.armor, (id) => tryMountExtra(world, v, id, budget, [sides[0]]));
+    const typed = pickFitting(world, rng, table.armor, (id) => tryMountExtra(world, v, id, fit, [sides[0]]));
     if (!typed) continue;
     v = typed;
     const type = mountedItems(v, 'armor').at(-1)!.part.defId;
-    v = fillSides(world, v, type, sides, budget, target);
+    v = fillSides(world, v, type, sides, fit, target);
   }
-  for (const sides of SIDE_ORDER) v = fillSides(world, v, SCRAP_ARMOR, sides, budget, target);
+  for (const sides of SIDE_ORDER) v = fillSides(world, v, SCRAP_ARMOR, sides, fit, target);
   return v;
 }
 
-function fillSides(world: World, v: Vehicle, type: string, sides: Cell[], budget: number, target: number): Vehicle {
+function fillSides(world: World, v: Vehicle, type: string, sides: Cell[], fit: Fit, target: number): Vehicle {
   for (let progress = true; progress && armoredCells(v) < target; ) {
     progress = false;
     for (const side of sides) {
       if (armoredCells(v) >= target) break;
-      const next = tryMountExtra(world, v, type, budget, [side]);
+      const next = tryMountExtra(world, v, type, fit, [side]);
       if (next) [v, progress] = [next, true];
     }
   }
@@ -370,7 +383,7 @@ export function generateNpcLoadout(world: World, template: NpcTemplate, chassisI
   const gear = level ?? sampleWeighted(rng, table.levels);
   const v = chooseVehicle(probe, rng, template, chassisId, GEAR_LEVELS[gear]);
   rollWear(probe, wearRng, GEAR_LEVELS[gear], v);
-  const { spares, carried } = chooseCargo(probe, rng, wearRng, table, GEAR_LEVELS[gear], v);
+  const { spares, carried } = chooseCargo(probe, rng, wearRng, template, GEAR_LEVELS[gear], v);
   world.rngState = rng.rngState;
   world.marketRng = wearRng;
   return { chassisId: v.chassisId, level: gear, parts: mountedNonCore(v), spares, cargo: carried };

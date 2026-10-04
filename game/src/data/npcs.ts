@@ -49,10 +49,11 @@ export type NpcLoadoutTable = {
 // A stronger engine carries more guns. The template's minimum guns ignore it.
 export const MAX_GUN_SLOWDOWN = 0.35;
 
-// The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo. Loadouts stop adding
-// weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's minimum
-// build ignores it. See npcMassRoom() in src/sim/stats.ts.
-export const MIN_NPC_SPEED_SHARE = 0.6;
+// The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo, by fight style. Loadouts
+// stop adding weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's
+// minimum build ignores it. See npcMassRoom() in src/sim/stats.ts. A driver that circles its target chases it, so it
+// stays nearly as fast as it can be; a driver that holds its spot carries more instead.
+export const SPEED_FLOOR: Record<NpcTemplate['fightStyle'], number> = { circle: 0.75, hold: 0.6 };
 
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
   poor: { fill: 0, armor: 0.5, budget: 0.6, wearShift: 1, cargo: 0.5 },
@@ -117,11 +118,16 @@ const TRADER_SPARES: SpareTable = {
 // its own timer.
 export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; ids: string[] } | { kind: 'escort'; of: string };
 
+// A fighter earns by its guns, a trader and a carrier by cargo room, a courier by speed. A carrier hauls or salvages
+// and needs no goods money.
+export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
+
 export type NpcTemplate = {
   id: string;
   name: string;
   profession: string; // the noun texts put before the driver's name
   faction: Faction;
+  gearJob: GearJob; // what the driver earns by, which decides the gear it wants; see the gear choice in src/sim/npc-decisions.ts
   traits: TraitId[]; // every NPC of the template has these
   extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
   loadout: NpcLoadoutTable;
@@ -209,7 +215,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.8, 1.8], armor: [0.6, 0.95] },
+    targets: { guns: [0.8, 1.8], armor: [0.4, 0.7] },
     spares: null,
   },
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
@@ -694,6 +700,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
     id: 'buggy', name: 'Raider outrider', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
+    gearJob: 'fighter',
     aggroRange: 11,
     preferredRange: 3,
     fightStyle: 'circle',
@@ -706,6 +713,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   gunwagon: {
     id: 'gunwagon', name: 'Gunwagon', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
+    gearJob: 'fighter',
     aggroRange: 12,
     preferredRange: 6,
     fightStyle: 'hold',
@@ -719,6 +727,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     // One trader in four is a scumbag, and one in four a coward, as with every neutral driver.
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
+    gearJob: 'trader',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -730,6 +739,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'scavenger', name: 'Scavenger', profession: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
+    gearJob: 'carrier',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -740,6 +750,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   bowlFarmer: {
     id: 'bowlFarmer', name: 'Bowl Farmers patrol', profession: 'Bowl Farmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
+    gearJob: 'fighter',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -752,6 +763,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   noseArmy: {
     id: 'noseArmy', name: 'Nose Army patrol', profession: 'Nose soldier', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
+    gearJob: 'fighter',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -764,6 +776,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'courier', name: 'Courier', profession: 'Courier', faction: 'couriers', traits: ['courier'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
+    gearJob: 'courier',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -776,6 +789,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'roamer', name: 'Roamer', profession: 'Roamer', faction: 'roamers', traits: ['roamer'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
+    gearJob: 'carrier',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -788,6 +802,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'vulture', name: 'Vulture', profession: 'Vulture', faction: 'vultures', traits: ['vulture'],
     extraTraits: VULTURE_EXTRAS,
     loadout: LOADOUTS.vulture,
+    gearJob: 'carrier',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -799,6 +814,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   convoy: {
     id: 'convoy', name: 'Supply convoy', profession: 'Convoy driver', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
+    gearJob: 'carrier',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -810,6 +826,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   convoyGuard: {
     id: 'convoyGuard', name: 'Convoy guard', profession: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
+    gearJob: 'fighter',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',
@@ -821,6 +838,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   merc: {
     id: 'merc', name: 'Merc', profession: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
+    gearJob: 'fighter',
     aggroRange: 0,
     preferredRange: 0,
     fightStyle: 'hold',

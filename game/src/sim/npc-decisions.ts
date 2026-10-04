@@ -14,7 +14,7 @@ import { partDef, type PartKind } from '../data/parts';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
-  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
+  type DecisionId, type DecisionOptions, type GearJob, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -1000,8 +1000,6 @@ export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
 //
 // A job is what the truck earns by: a fighter by its guns and armor, a trader and a carrier by cargo room, a courier by
 // speed. A carrier hauls or salvages and needs no goods money. A driver takes only parts that raise its job's score.
-
-export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
 
 export type PartItem = Extract<GridItem, { kind: 'part' }>;
 
