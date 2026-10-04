@@ -456,12 +456,12 @@ function visitStock(o: Orders, stock: SalvageStock): void {
 export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'sell carried cargo', 'buy profitable cargo', 'load cargo at its source'];
 // The factions a robber demands cargo from.
 const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
-// The shops a robber drives round, in a ring, while it looks for a target. Traders and convoys run between these.
-const PATROL: readonly string[] = ['bowl', 'pump-station', 'granary', 'nose', 'salvage-yard'];
+// The towns a robber drives between while it looks for a target.
+const PATROL: readonly string[] = ['bowl', 'nose'];
 
 // A careful robber. It sells at its best market once its cells are full, and in any town it stops at. Otherwise it
 // takes what lies in reach, fights a foe it is engaged with, demands cargo from a target in sight, goes for a pile, a
-// wreck or a knocked-out target it sees, or drives round the shops. With `guarded`, it also demands from targets
+// wreck or a knocked-out target it sees, or drives between the towns. With `guarded`, it also demands from targets
 // whose escort is in sight.
 function robberGoal(o: Orders, guarded: boolean): void {
   if (freeCells(o.me) === 0 && hasCargo(o.me)) {
@@ -594,12 +594,12 @@ function looseSpot(me: Vehicle, item: GridItem): Spot | null {
   return findSpot(gridOf(me), me.items, { ...item, id: 'loot-probe' }, null, avoid);
 }
 
-// Drives round the patrol shops: on to the next one from a shop, to the nearest one from the road, and on with an
+// Drives between the patrol towns: on to the next one from a town, to the nearest one from the road, and on with an
 // order already bound for one of them.
 function patrol(o: Orders): void {
   const sites = PATROL.map((id) => {
-    const site = [...REGION.towns, ...REGION.locations].find((t) => t.id === id);
-    if (!site) throw new Error(`No patrol site ${id}`);
+    const site = REGION.towns.find((t) => t.id === id);
+    if (!site) throw new Error(`No patrol town ${id}`);
     return site;
   });
   const order = o.me.order;
