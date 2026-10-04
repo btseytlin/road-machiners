@@ -10,6 +10,8 @@ import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
+import { wornReload } from "../sim/utility";
+import { UtilityAim } from "../three/utility-aim";
 import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
 
 function createDuel() {
@@ -331,7 +333,8 @@ class FakeNode {
   constructor(readonly tag: string) {}
   append(...c: (FakeNode | string)[]) { this.children.push(...c); }
   replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
-  setAttribute() {}
+  attrs: Record<string, string> = {};
+  setAttribute(k: string, v: string) { this.attrs[k] = v; }
   addEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
   removeEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, (this.listeners.get(type) ?? []).filter((f) => f !== fn)); }
   text(): string { return this.children.map((c) => (typeof c === "string" ? c : c.text())).join(""); }
@@ -453,7 +456,7 @@ describe("the utility row", () => {
     const { world, row, sprout } = build();
     row.selectUtility(0);
     expect(world.w.vehicles[0].utilityOrders).toEqual({ [sprout.id]: { kind: "self" } });
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "use this turn", ready: true });
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "set", text: "fires this turn" });
     row.selectUtility(0);
     expect(world.w.vehicles[0].utilityOrders).toEqual({});
   });
@@ -467,7 +470,7 @@ describe("the utility row", () => {
     expect(host.selectUtility).toHaveBeenLastCalledWith(null);
   });
 
-  it("a recharging utility shows its turns and its press does nothing", () => {
+  it("a recharging utility shows its turns left out of its reload and its press does nothing", () => {
     const { world, host, row, sprout, mortar } = build();
     sprout.charge = { reload: 3 };
     mortar.charge = { reload: 1 };
@@ -475,21 +478,35 @@ describe("the utility row", () => {
     row.selectUtility(1);
     expect(host.apply).not.toHaveBeenCalled();
     expect(host.selectUtility).toHaveBeenLastCalledWith(null);
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "recharging 3 turns", ready: false });
-    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "recharging 1 turn", ready: false });
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "recharging", text: "recharging 3 turns", reload: { left: 3, total: wornReload(sprout) } });
+    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "recharging", text: "recharging 1 turn", reload: { left: 1, total: wornReload(mortar) } });
   });
 
-  it("shows a broken utility, an armed claymore, a selected point utility and a set point", () => {
+  it("shows a broken utility, a ready one, a selected point utility, a set point and an armed claymore", () => {
     const { world, sprout, mortar } = build();
     sprout.hp = 0;
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "broken", ready: false });
-    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "ready", ready: true });
-    expect(utilityStatus(world.w, mortar, true)).toEqual({ text: "click the ground", ready: true });
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "blocked", text: "broken" });
+    expect(utilityStatus(world.w, mortar, false)).toEqual({ state: "ready", text: "ready" });
+    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "aiming", text: "aim: click the ground" });
     world.w.vehicles[0].utilityOrders[mortar.id] = { kind: "point", pos: { x: 40, y: 30 } };
-    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "point set", ready: true });
+    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "set", text: "fires this turn" });
     const claymore = makePart(world.w, "claymoreRam", 0);
     claymore.charge = { reload: 0, armed: true };
-    expect(utilityStatus(world.w, claymore, false)).toEqual({ text: "armed", ready: true });
+    expect(utilityStatus(world.w, claymore, false)).toEqual({ state: "armed", text: "armed" });
+  });
+
+  it("blocks an oil spiller with too little fuel to spill", () => {
+    const { world } = build();
+    const spiller = makePart(world.w, "oilSpiller", 0);
+    mountPart(world.w, world.w.vehicles[0], spiller);
+    world.w.player.fuel = 0;
+    expect(utilityStatus(world.w, spiller, false)).toEqual({ state: "blocked", text: "no fuel" });
+  });
+
+  it("throws for a passive utility, which has no slot", () => {
+    const { world } = build();
+    const crane = makePart(world.w, "patcherCrane", 0);
+    expect(() => utilityStatus(world.w, crane, false)).toThrow(/passive/);
   });
 
   it("ignores presses while a turn plays and on an empty slot", () => {
@@ -499,5 +516,129 @@ describe("the utility row", () => {
     row.selectUtility(0);
     expect(host.apply).not.toHaveBeenCalled();
     expect(host.selectUtility).not.toHaveBeenCalled();
+  });
+});
+
+// The player facing east with a harpoon on its deck and a trader hauler `gap` tiles east of it, in sight.
+function harpoonDuel(gap = 5) {
+  const w = emptyWorld();
+  const me = w.vehicles[0];
+  const harpoon = makePart(w, "harpoon", 0);
+  if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
+  const target = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: me.pos.x + gap, y: me.pos.y }, Math.PI / 2);
+  refreshVision(w);
+  return { w, me, harpoon, target };
+}
+
+describe("the harpoon's standing order", () => {
+  it("aims while recharging, since its order waits for the charge", () => {
+    const { w, harpoon } = harpoonDuel();
+    harpoon.charge = { reload: 2 };
+    expect(utilityStatus(w, harpoon, true)).toEqual({ state: "aiming", text: "aim: click a truck" });
+  });
+
+  it("shows its waiting reason on the slot, or that it fires this turn", () => {
+    const near = harpoonDuel(5);
+    const far = harpoonDuel(9);
+    for (const s of [near, far]) s.me.utilityOrders[s.harpoon.id] = { kind: "truck", targetId: s.target.id, aim: "body" };
+    expect(utilityStatus(near.w, near.harpoon, false)).toEqual({ state: "set", text: "fires this turn" });
+    expect(utilityStatus(far.w, far.harpoon, true)).toEqual({ state: "set", text: "out of range" });
+    near.harpoon.charge = { reload: 2 };
+    expect(utilityStatus(near.w, near.harpoon, false)).toEqual({ state: "set", text: "recharging 2 turns" });
+  });
+
+  it("marks its target with the harpoon's key, look and waiting reason", () => {
+    const far = harpoonDuel(9);
+    far.me.utilityOrders[far.harpoon.id] = { kind: "truck", targetId: far.target.id, aim: "body" };
+    const key = utilitySlots(far.w).indexOf(far.harpoon) + 5;
+    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot: key, look: "harpoon", status: "out of range", ready: false }]);
+    far.target.pos = { x: far.me.pos.x + 5, y: far.me.pos.y };
+    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot: key, look: "harpoon", status: "ready", ready: true }]);
+  });
+
+  function aimAt(s: ReturnType<typeof harpoonDuel>) {
+    const world = { w: s.w };
+    const note = vi.fn();
+    const aim = new UtilityAim({ world: () => world.w, apply: (next) => { world.w = next; }, note });
+    aim.select(s.harpoon.id);
+    return { world, note, aim };
+  }
+
+  it("a truck click out of range sets a waiting order, not a refusal, and keeps the harpoon aimed", () => {
+    const s = harpoonDuel(9);
+    const { world, note, aim } = aimAt(s);
+    expect(aim.click(s.target, null)).toBe(true);
+    expect(note).not.toHaveBeenCalled();
+    expect(world.w.vehicles[0].utilityOrders[s.harpoon.id]).toEqual({ kind: "truck", targetId: s.target.id, aim: "body" });
+    expect(aim.selectedId).toBe(s.harpoon.id);
+  });
+
+  it("a second click on the target clears the order", () => {
+    const s = harpoonDuel();
+    const { world, aim } = aimAt(s);
+    aim.click(s.target, null);
+    aim.click(world.w.vehicles.find((v) => v.id === s.target.id) ?? null, null);
+    expect(world.w.vehicles[0].utilityOrders).toEqual({});
+  });
+
+  it("a click on a truck it cannot take notes the reason and sets nothing", () => {
+    const s = harpoonDuel(80);
+    const { world, note, aim } = aimAt(s);
+    aim.click(s.target, null);
+    expect(note).toHaveBeenCalledWith(expect.stringMatching(/unseen/));
+    expect(world.w.vehicles[0].utilityOrders).toEqual({});
+  });
+});
+
+describe("a utility slot's look", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Renders the row of a truck with a Sprout and a Smoke mortar, with the mortar selected.
+  function renderRow(edit: (w: World, parts: { sprout: string; mortar: string }) => void) {
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) });
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const sprout = makePart(w, "sprout", 0);
+    const mortar = makePart(w, "smokeMortar", 0);
+    for (const part of [sprout, mortar]) if (!mountPart(w, me, part)) throw new Error(`No room for ${part.defId}`);
+    edit(w, { sprout: sprout.id, mortar: mortar.id });
+    const host = { selectedUtility: () => mortar.id } as unknown as UiHost;
+    const row = new UtilityRow(host).render(w) as unknown as FakeNode;
+    const slots = row.children as FakeNode[];
+    const badge = (slot: FakeNode) => slot.find((n) => n.className === "slot-badge")?.attrs["data-badge"] ?? null;
+    const bar = (slot: FakeNode) => {
+      const fill = slot.find((n) => n.className === "recharge-bar")?.children[0];
+      return fill instanceof FakeNode ? fill.attrs.style : null;
+    };
+    return { slots, badge, bar, sprout, mortar };
+  }
+
+  it("gives each slot one data-state, its badge, and at most one aiming slot", () => {
+    const { slots, badge } = renderRow((w, p) => { w.vehicles[0].utilityOrders[p.sprout] = { kind: "self" }; });
+    expect(slots.map((s) => s.attrs["data-state"])).toEqual(["set", "aiming"]);
+    expect(slots.map(badge)).toEqual(["check", "crosshair"]);
+    expect(slots.filter((s) => s.attrs["data-state"] === "aiming")).toHaveLength(1);
+  });
+
+  it("fills the recharge bar as the reload counts down", () => {
+    const { slots, bar, sprout } = renderRow((w, p) => {
+      const part = mountedParts(w.vehicles[0]).find((x) => x.id === p.sprout);
+      if (!part) throw new Error("No Sprout");
+      part.charge = { reload: 1 };
+    });
+    const total = wornReload(sprout);
+    expect(slots[0].attrs["data-state"]).toBe("recharging");
+    expect(bar(slots[0])).toBe(`width:${Math.round(((total - 1) / total) * 100)}%`);
+    expect(bar(slots[1])).toBeNull();
+  });
+
+  it("shows a broken utility blocked, with no badge", () => {
+    const { slots, badge } = renderRow((w, p) => {
+      const part = mountedParts(w.vehicles[0]).find((x) => x.id === p.sprout);
+      if (!part) throw new Error("No Sprout");
+      part.hp = 0;
+    });
+    expect(slots.map((s) => s.attrs["data-state"])).toEqual(["blocked", "aiming"]);
+    expect(badge(slots[0])).toBeNull();
   });
 });

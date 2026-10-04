@@ -8,7 +8,8 @@ import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/typ
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
 import { playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
-import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError } from "../sim/utility";
+import { chargeOf, chargedParts, harpoonWait, orderKindOf, utilityBlock, utilityOrderError, wornReload } from "../sim/utility";
+import { oilShort } from "../sim/hazards";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -34,7 +35,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
 };
 
 // One weapon aimed at a vehicle, as its marker shows it.
-export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
+export type WeaponMark = { slot: number; look: "mg" | "cannon" | "harpoon"; status: string; ready: boolean };
 // Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
 export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
@@ -55,6 +56,7 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
     if (readout.target)
       markOf(readout.target.id).weapons.push({ slot: i + 1, look: mw.def.look, status: readout.status, ready: readout.canFire });
   });
+  markHarpoons(w, markOf);
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
@@ -65,6 +67,19 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
     }
   }
   return marks;
+}
+
+// A mark on the seen target of each standing truck order on the utility row, with the slot's key and why it waits.
+function markHarpoons(w: World, markOf: (id: string) => VehicleMark): void {
+  const orders = playerVehicle(w).utilityOrders;
+  utilitySlots(w).forEach((part, i) => {
+    const order = orders[part.id];
+    if (order?.kind !== "truck") return;
+    const target = w.vehicles.find((v) => v.id === order.targetId);
+    if (!target || !playerSees(w, target.pos)) return;
+    const wait = truckWait(w, part, order);
+    markOf(target.id).weapons.push({ slot: i + 1 + UTILITY_SLOTS, look: "harpoon", status: wait ?? "ready", ready: wait === null });
+  });
 }
 
 function seenNpcJob(w: World, v: Vehicle): JobMark | null {
@@ -174,30 +189,73 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
 
 export const UTILITY_SLOTS = 4; // keys 5 to 8
 
-// What a set order reads as on its slot, and what a selected slot waits for.
-const ORDER_TEXT: Record<UtilityOrder["kind"], string> = { self: "use this turn", truck: "target set", point: "point set" };
-const PICK_TEXT: Record<UtilityOrder["kind"], string> = { self: "", truck: "click a truck", point: "click the ground" };
+// What a selected slot asks for, and what a slot with an order that acts this turn reads.
+const PICK_TEXT: Record<"truck" | "point", string> = { truck: "aim: click a truck", point: "aim: click the ground" };
+const FIRES_TEXT = "fires this turn";
+
+// A utility slot's look: an order set, a claymore armed, waiting for its target click, recharging, blocked or ready.
+// Only the selected slot can be aiming. reload: the turns left of the recharge, out of the part's whole reload.
+export type UtilityState = "ready" | "aiming" | "set" | "armed" | "recharging" | "blocked";
+export type UtilityStatus = { state: UtilityState; text: string; reload?: { left: number; total: number } };
+
+type TruckOrder = Extract<UtilityOrder, { kind: "truck" }>;
 
 // The parts in the utility row, in slot order: active utilities and claymore rams, working or not.
 export function utilitySlots(w: World): PartInstance[] {
   return chargedParts(playerVehicle(w)).slice(0, UTILITY_SLOTS);
 }
 
-// A utility slot's state: an order set this turn, waiting for its target click, armed, ready, recharging or blocked.
-export function utilityStatus(w: World, part: PartInstance, selected: boolean): { text: string; ready: boolean } {
-  const me = playerVehicle(w);
-  const order = me.utilityOrders[part.id];
-  if (order) return { text: ORDER_TEXT[order.kind], ready: true };
-  if (chargeOf(part).armed) return { text: "armed", ready: true };
-  const block = utilityBlock(w, me, part);
-  if (block) return { text: utilityBlockText(part, block), ready: false };
-  return { text: selected ? pickText(part) : "ready", ready: true };
-}
-
-function pickText(part: PartInstance): string {
+// The slot's state and text. Throws for a passive utility, which has no slot.
+export function utilityStatus(w: World, part: PartInstance, selected: boolean): UtilityStatus {
   const kind = orderKindOf(part);
   if (kind === null) throw new Error(`${partDef(part.defId).name} is passive and has no slot`);
-  return PICK_TEXT[kind];
+  const order = playerVehicle(w).utilityOrders[part.id];
+  if (order) return { state: "set", text: order.kind === "truck" ? orderWait(w, part, order) : FIRES_TEXT };
+  if (chargeOf(part).armed) return { state: "armed", text: "armed" };
+  return aimingStatus(w, part, kind, selected) ?? idleStatus(w, part);
+}
+
+// The selected truck or point utility waits for its target click while it can aim, or null.
+function aimingStatus(w: World, part: PartInstance, kind: UtilityOrder["kind"], selected: boolean): UtilityStatus | null {
+  if (!selected || kind === "self" || aimBlock(w, part) !== null) return null;
+  return { state: "aiming", text: PICK_TEXT[kind] };
+}
+
+// A slot with no order, armed charge or aim: recharging with its turns, blocked with the reason, or ready.
+function idleStatus(w: World, part: PartInstance): UtilityStatus {
+  const block = utilityBlock(w, playerVehicle(w), part);
+  if (block === "cooldown") return { state: "recharging", text: utilityBlockText(part, block), reload: { left: chargeOf(part).reload, total: wornReload(part) } };
+  if (block) return { state: "blocked", text: utilityBlockText(part, block) };
+  return noFuel(w, part) ? { state: "blocked", text: "no fuel" } : { state: "ready", text: "ready" };
+}
+
+// Whether the part spills oil the tank holds too little fuel for.
+function noFuel(w: World, part: PartInstance): boolean {
+  const def = partDef(part.defId);
+  return def.kind === "utility" && def.effect.type === "oil" && oilShort(w, playerVehicle(w), def.effect.fuel);
+}
+
+// A standing truck order's slot text: why it waits, or that it fires this turn.
+function orderWait(w: World, part: PartInstance, order: TruckOrder): string {
+  return truckWait(w, part, order) ?? FIRES_TEXT;
+}
+
+// Why a standing truck order waits this turn, in words, or null when it fires.
+function truckWait(w: World, part: PartInstance, order: TruckOrder): string | null {
+  const target = w.vehicles.find((v) => v.id === order.targetId);
+  if (!target) return "target gone";
+  const block = harpoonWait(w, playerVehicle(w), part, target);
+  return block && utilityBlockText(part, block);
+}
+
+// Blocks a truck order waits through rather than refuses, so a truck utility can be aimed through them.
+const TRUCK_WAITS: ReadonlySet<FireBlock> = new Set<FireBlock>(["cooldown", "shutDown"]);
+
+// Why the part cannot be selected to aim, or null when it can. A truck utility aims while it recharges or is shut
+// down, since its standing order waits for both.
+export function aimBlock(w: World, part: PartInstance): FireBlock | null {
+  const block = utilityBlock(w, playerVehicle(w), part);
+  return block && orderKindOf(part) === "truck" && TRUCK_WAITS.has(block) ? null : block;
 }
 
 export function utilityBlockText(part: PartInstance, block: FireBlock): string {
@@ -208,6 +266,15 @@ export function utilityBlockText(part: PartInstance, block: FireBlock): string {
 // The utility row of the weapon panel. A slot press, by key or click, toggles a self use for this turn, or selects a
 // truck or point utility so the next click on a truck or the ground gives its order. A press on a slot with an order
 // clears it.
+// The badge each slot state shows in its corner, drawn by the slot CSS. States without one show none.
+const BADGE: Partial<Record<UtilityState, string>> = { aiming: "crosshair", set: "check", armed: "fuse" };
+
+// A bar along the slot's bottom that fills as the recharge counts down.
+function rechargeBar(reload: { left: number; total: number }): HTMLElement {
+  const share = Math.max(0, (reload.total - reload.left) / reload.total);
+  return el("span", { class: "recharge-bar", "aria-hidden": "true" }, el("span", { style: `width:${Math.round(share * 100)}%` }));
+}
+
 export class UtilityRow {
   constructor(private host: UiHost) {}
 
@@ -224,7 +291,7 @@ export class UtilityRow {
     const key = i + 1 + UTILITY_SLOTS;
     return el(
       "div",
-      { class: "weapon-slot utility-slot", "data-utility": part.id },
+      { class: "weapon-slot utility-slot", "data-utility": part.id, "data-state": status.state },
       el(
         "button",
         {
@@ -237,7 +304,9 @@ export class UtilityRow {
         el("span", { class: "weapon-number" }, `${key}`),
         el("span", { class: "weapon-name" }, name),
         createIcon("utility"),
-        el("span", { class: status.ready ? "good" : "dim", "data-status": "" }, status.text),
+        BADGE[status.state] ? el("span", { class: "slot-badge", "data-badge": BADGE[status.state], "aria-hidden": "true" }) : null,
+        el("span", { "data-status": "" }, status.text),
+        status.reload ? rechargeBar(status.reload) : null,
       ),
     );
   }
@@ -253,11 +322,11 @@ export class UtilityRow {
     this.togglePick(w, part);
   }
 
-  // Selects a truck or point utility to wait for its target click, or drops the selection on a repeat press. A
-  // blocked part is not selected. The slot already shows why.
+  // Selects a truck or point utility to wait for its target click, or drops the selection on a repeat press. A part
+  // that cannot aim (aimBlock) is not selected. The slot already shows why.
   private togglePick(w: World, part: PartInstance): void {
     const repeat = this.host.selectedUtility() === part.id;
-    this.host.selectUtility(repeat || utilityBlock(w, playerVehicle(w), part) ? null : part.id);
+    this.host.selectUtility(repeat || aimBlock(w, part) ? null : part.id);
   }
 
   private clearOrder(w: World, part: PartInstance): void {

@@ -5,10 +5,9 @@
 import { partDef, type UtilityDef } from '../data/parts';
 import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
-import { harpoonBlock } from '../sim/harpoon';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, PartInstance, Vehicle, World } from '../sim/types';
-import { chargedParts, orderKindOf, shutDownTurnsLeft, utilityBlock } from '../sim/utility';
+import { chargedParts, harpoonWait, orderKindOf, shutDownTurnsLeft } from '../sim/utility';
 import { DEG } from '../sim/vec';
 import { wornDef } from '../sim/wear';
 import { el } from './dom';
@@ -67,7 +66,7 @@ function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle,
 
 // A harpoon's row: its chance to land on the target, or why it cannot fire now. The chance is the round's.
 function utilityRow(world: World, shooter: Vehicle, part: PartInstance, target: Vehicle, name: string): HitRow {
-  const block = utilityBlock(world, shooter, part) ?? harpoonBlock(world, shooter, part, target);
+  const block = harpoonWait(world, shooter, part, target);
   if (block !== null) return { label: name, odds: null, text: utilityBlockText(part, block), cause: null, detail: null };
   const order = shooter.utilityOrders[part.id];
   const aim = order?.kind === 'truck' && order.targetId === target.id ? order.aim : 'body';

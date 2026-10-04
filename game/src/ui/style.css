@@ -417,8 +417,108 @@ body {
   padding-left: 6px;
   border-left: 1px solid #b39a3a;
 }
-#ui .utility-slot .weapon-pick:not(.on) {
-  box-shadow: inset 0 0 0 2px #7a6a2c;
+/* One look per utility slot state (data-state in src/ui/weapons.ts). Only aiming fills the slot. */
+#ui .utility-slot .weapon-pick {
+  overflow: hidden;
+}
+#ui .utility-slot[data-state="ready"] .weapon-pick {
+  box-shadow: inset 0 0 0 2px #d4b04a;
+}
+.utility-slot[data-state="ready"] .icon svg {
+  fill: #b39a3a;
+  stroke: #f4e2b0;
+}
+#ui .utility-slot[data-state="aiming"] .weapon-pick {
+  background: #e8c35a;
+  border-color: #fbe3a0;
+  color: #1d1a12;
+  box-shadow: inset 0 0 0 2px #8a6d1c;
+  animation: aim-pulse 1.2s ease-in-out infinite;
+}
+.utility-slot[data-state="aiming"] .weapon-number {
+  color: #1d1a12;
+}
+.utility-slot[data-state="aiming"] .icon svg {
+  fill: #c9a640;
+  stroke: #1d1a12;
+}
+@keyframes aim-pulse {
+  50% {
+    outline: 2px solid #fbe3a0;
+    outline-offset: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ui .utility-slot[data-state="aiming"] .weapon-pick {
+    animation: none;
+    outline: 2px solid #fbe3a0;
+    outline-offset: 2px;
+  }
+}
+#ui .utility-slot[data-state="set"] .weapon-pick {
+  box-shadow: inset 0 0 0 2px #7fae4e;
+}
+.utility-slot[data-state="set"] [data-status] {
+  color: #c0cf92;
+}
+#ui .utility-slot[data-state="armed"] .weapon-pick {
+  box-shadow: inset 0 0 0 2px #d0482c;
+}
+.utility-slot[data-state="armed"] [data-status] {
+  color: #f0a080;
+}
+.utility-slot[data-state="recharging"] .icon {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+.utility-slot[data-state="recharging"] [data-status] {
+  color: var(--muted);
+}
+#ui .utility-slot[data-state="blocked"] .weapon-pick {
+  box-shadow: inset 0 0 0 2px #7a2a22;
+  background: repeating-linear-gradient(135deg, #3a2422 0 6px, #2a1e1d 6px 12px);
+}
+.utility-slot[data-state="blocked"] .icon {
+  opacity: 0.4;
+}
+.utility-slot[data-state="blocked"] [data-status] {
+  color: #e08a70;
+}
+.slot-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font: bold 13px / 1 var(--font-mono);
+}
+.slot-badge[data-badge="crosshair"]::before {
+  content: "\2295";
+  color: #1d1a12;
+}
+.slot-badge[data-badge="check"]::before {
+  content: "\2713";
+  color: #a6d36a;
+}
+.slot-badge[data-badge="fuse"]::before {
+  content: "\2739";
+  color: #ff8a3a;
+  text-shadow: 0 0 4px #ff5a1a;
+}
+.recharge-bar {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  height: 3px;
+  background: #1a1c1d;
+}
+.recharge-bar > span {
+  display: block;
+  height: 100%;
+  background: #b39a3a;
+}
+/* A truck utility waiting for its target turns the pointer over a truck into a crosshair. */
+canvas.view.aim-truck {
+  cursor: crosshair;
 }
 #ui .weapon-pick {
   position: relative;

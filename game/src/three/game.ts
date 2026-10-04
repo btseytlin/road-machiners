@@ -1097,6 +1097,7 @@ export class Game {
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
+    this.utilityAim.cursor(this.renderer.domElement, this.pickRing.visible);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     this.hazards.update(this.world, this.world.terrain, this.views, performance.now());
