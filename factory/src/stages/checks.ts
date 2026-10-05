@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readApproval, type Approval } from '../clone-checks';
 import { readEvidence, type Evidence } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
@@ -8,7 +9,7 @@ import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type 
 import { consumeWaiver, visualWaiverOf, waiverNotice } from '../visual-waiver';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
-import { readApproval, setPhase, type Approval } from './verify';
+import { setPhase } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.

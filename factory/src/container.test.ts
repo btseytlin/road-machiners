@@ -1,7 +1,7 @@
-import { rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dockerContainer } from './container';
+import { EVIDENCE_CHECK_COMMAND, dockerContainer } from './container';
 import { takeUsage } from './ledger';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
@@ -67,6 +67,23 @@ describe('dockerContainer', () => {
     const args = runCall(calls).args;
     expect(args.filter((a) => a === '-v')).toHaveLength(3);
     expect(args).toContain('/h/state:/factory/state:ro');
+  });
+
+  it('mounts the bundled evidence check read only, and only when the run asks for it', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', evidenceCheck: true });
+    const args = runCall(calls).args;
+    expect(args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
+    expect(existsSync(`${HOME}/agent-check/check.mjs`)).toBe(true);
+    const plain = fakeRun();
+    await dockerContainer(plain.run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
+  });
+
+  it('tells the agents that write evidence to run the mounted command as their last step', () => {
+    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch'], ['test-waived', 'waived']]) {
+      expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
+    }
   });
 
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {

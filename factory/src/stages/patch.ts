@@ -1,9 +1,10 @@
+import { readApproval } from '../clone-checks';
 import { readEvidence } from '../evidence';
 import { readState, updateState } from '../state';
 import { visualWaiverOf } from '../visual-waiver';
 import { BRANCH, FEEDBACK_HEADING, GAME_DIR, TASK_FILE, type Ctx } from '../types';
 import { agentHome, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
-import { mergeBase, readApproval, requireBaseMerged, setPhase } from './verify';
+import { mergeBase, requireBaseMerged, setPhase } from './verify';
 
 // Applies a small committee reply to a card the committee already played, in one agent run on the build model.
 // It skips design and the code review, since the plan stands and the branch passed the review before. The factory checks run next as usual.
@@ -16,7 +17,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
-  await runAgent(ctx, issue, 'patch', 'patch', fillPrompt('patch', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), played }));
+  await runAgent(ctx, issue, 'patch', 'patch', fillPrompt('patch', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), played }), { evidenceCheck: true });
   throwIfNeedsCommittee(home);
   const redesign = readOutput(home, 'needs-redesign.md');
   if (redesign !== null) return toDesign(ctx, issue, redesign);
