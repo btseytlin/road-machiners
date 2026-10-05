@@ -19,6 +19,8 @@ import { NPCS } from '../../data/npcs';
 import { playerTow } from '../tow';
 import { towData } from '../states';
 import { endTurn } from '../world';
+import { plead } from '../parley';
+import { stateOf } from '../states';
 import { basicsRepairCost, partRepairCost, partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
@@ -577,14 +579,87 @@ describe('the hunter', () => {
     expect(botOrders(w, 'hauler').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
   });
 
-  it('has a climber with fewer than three guns haul, and take no bounty', () => {
+  it('has a climber buy a gun toward hunting while still earning by trade', () => {
+    const w = parkedAt('bowl');
+    w.player.money = 3000;
+    w.shops.bowl.stock = [makePart(w, 'mg', 0)];
+    const before = mountedParts(playerVehicle(w), 'weapon').length;
+
+    const turn = botOrders(w, 'climber');
+
+    expect(mountedParts(playerVehicle(turn.world), 'weapon')).toHaveLength(before + 1);
+    expect(turn.ledger.gear).toBeLessThan(0);
+  });
+
+  it('has a climber trade before taking a haul when it is building its weapons', () => {
+    const w = saltGlut(parkedAt('nose'));
+    w.shops.nose.contracts = [{ id: 'ct-haul', shop: 'nose', kind: 'haul', good: 'scrap', units: 3, to: 'bowl', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 }];
+
+    const turn = botOrders(w, 'climber');
+
+    expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+    expect(turn.world.player.contracts).toEqual([]);
+  });
+
+  it('has a climber with three guns trade between fights', () => {
+    const w = saltGlut(parkedAt('nose'));
+    const me = playerVehicle(w);
+    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+
+    const bought = botOrders(w, 'climber');
+    const carried = botOrders(bought.world, 'climber');
+
+    expect(Object.keys(goodsCount(playerVehicle(bought.world)))).toEqual(['salt']);
+    expect(goodsCount(playerVehicle(carried.world))).toEqual(goodsCount(playerVehicle(bought.world)));
+    expect(carried.ledger.goodsSold).toBe(0);
+  });
+
+  it('has a climber accept a truce that a pure hunter refuses', () => {
+    const acceptsTruce = (archetype: 'climber' | 'hunter') => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      plead(w, raider, me, 'truce');
+      w.player.call = { with: raider.id, topic: 'truceOffer', node: 'offer', vars: {}, line: { text: 'Enough of this. We both drive away.', vars: {} } };
+
+      const after = botOrders(w, archetype).world;
+      return stateOf(after, 'truce', me.id, raider.id) !== null;
+    };
+
+    expect(acceptsTruce('climber')).toBe(true);
+    expect(acceptsTruce('hunter')).toBe(false);
+  });
+
+  it('has a climber strip nearby loot before leaving for repairs', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    const engine = mountedParts(me, 'engine')[0];
+    engine.hp = Math.floor(maxHp(engine) / 4);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
+    raider.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+
+    const turn = botOrders(w, 'climber');
+
+    expect(playerVehicle(turn.world).job?.kind).toBe('refit');
+  });
+
+  it('has a climber with fewer than three guns work instead of taking a bounty', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [
       { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
       { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 
-    expect(botOrders(w, 'climber').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
+    const after = botOrders(w, 'climber').world;
+    expect(after.player.contracts.map((c) => c.id)).not.toContain('ct-bounty');
+    expect(playerVehicle(after).order?.kind).toBe('stopAt');
   });
 
   it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {

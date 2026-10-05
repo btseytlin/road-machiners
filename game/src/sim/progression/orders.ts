@@ -49,10 +49,9 @@ export class Orders {
   }
 }
 
-// skip names the part kinds a bot also leaves alone. job is what the bot earns by, and gear-choice.ts picks the parts
-// that add most to it. chassis is what a better chassis means to the bot. A bot with chassis keep stays on the chassis
-// it has, since every swap pays the shop's spread.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; job: GearJob };
+// skip names part kinds a bot leaves alone. job picks parts that help it fight or earn. budgetJob lets a driver that
+// trades and hunts reserve trading capital while buying fighting gear. A chassis kept avoids paying the swap spread.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; job: GearJob; budgetJob?: GearJob };
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
@@ -66,12 +65,16 @@ export function upgradeGear(o: Orders, style: UpgradeStyle): void {
 function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   const shop = shopAt(o.world);
   if (!shop || shopDef(shop).kind !== 'garage') return null;
-  const budget = gearBudget(o.world, o.me, style.job);
+  const budget = gearBudget(o.world, o.me, chooseBudgetJob(style));
   const chassis = strongest(chassisOptions(o, style).filter((option) => option.cost <= budget));
   if (style.chassis === 'speed' && chassis) return chassis;
   const buyer = { job: style.job, skip: style.skip, resale: (part: PartInstance) => partTradePrice(o.world, o.me, part, 'sell') };
   const plan = bestPlan(gearPlans(o.world, o.me, candidates(o, shop), buyer), budget);
   return plan ? { gain: plan.worthGain, cost: plan.cost, take: (orders) => mount(orders, plan.offer, plan.replaces) } : chassis;
+}
+
+function chooseBudgetJob(style: UpgradeStyle): GearJob {
+  return style.budgetJob ?? style.job;
 }
 
 // A bot with no gun mounts the cheapest one the garage sells or it holds as a spare, from money above the upkeep

@@ -28,7 +28,7 @@ import { getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
-import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, downedHere, downedNear, salvageHere, takeAllLoot } from '../locations';
 import { firepower, getUpkeepReserve, isWeak, perceiveDanger, perceiveThreat, withinReach } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
@@ -45,7 +45,7 @@ import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyl
 // goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
 // every board it reads and trades only with none. The markov bot plays a random one of the others, but the hauler, for
 // a stretch of turns, then draws again.
-// The climber plays a player's snowball: it hauls and scavenges until the truck mounts CLIMB_GUNS guns, then hunts.
+// The climber earns by trading while building a fighting truck, then hunts safe prey and trades between fights.
 export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
 export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
 type Goal = Exclude<Archetype, 'markov' | 'climber'>;
@@ -64,6 +64,8 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   hauler: { skip: [], chassis: 'value', job: 'carrier' },
 };
 
+const CLIMBER_GEAR: UpgradeStyle = { skip: [], chassis: 'keep', job: 'fighter', budgetJob: 'trader' };
+
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
@@ -81,19 +83,32 @@ export function botOrders(world: World, archetype: Archetype, options: BotOption
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
   o.fieldRepair = goal === 'hunter';
-  const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
+  const replies = goal === 'hunter' && archetype !== 'climber' ? HUNTER_REPLIES : DEFENDER_REPLIES;
   answerCall(o, takesTowOffer(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
     keepSwitches(o);
-    act(o, goal);
+    act(o, goal, archetype);
   }
   return { world: o.world, events: o.events, ledger: o.ledger };
 }
 
-// A hold, a service stop and a fight each take the turn's command before the goal does.
-function act(o: Orders, goal: Goal): void {
-  if (holds(o) || serviceTrip(o, GEAR_STYLES[goal]) || defend(o, goal)) return;
-  GOALS[goal](o);
+// A hold comes first. The mixed hunter collects a nearby knockout before leaving for service. Defense comes next.
+function act(o: Orders, goal: Goal, archetype: Archetype): void {
+  if (holds(o) || collectNearbyKnockout(o, goal, archetype)) return;
+  if (serviceTrip(o, archetype === 'climber' ? CLIMBER_GEAR : GEAR_STYLES[goal]) || defend(o, goal)) return;
+  followGoal(o, goal, archetype);
+}
+
+// A reachable knocked-out truck pays for the fight, unless the hunter is stranded or still fighting.
+function collectNearbyKnockout(o: Orders, goal: Goal, archetype: Archetype): boolean {
+  if (archetype !== 'climber' || goal !== 'hunter') return false;
+  if (isStranded(o.world, o.me) || inCombat(o.world, o.me)) return false;
+  return downedNear(o.world) !== null && stripDowned(o);
+}
+
+function followGoal(o: Orders, goal: Goal, archetype: Archetype): void {
+  if (archetype === 'climber' && goal === 'hunter') hunterGoal(o, true);
+  else GOALS[goal](o);
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -104,7 +119,7 @@ export function parkedOnPurpose(world: World): boolean {
 }
 
 function climberGoal(world: World): Goal {
-  return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'hauler';
+  return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'trader';
 }
 
 function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
@@ -118,8 +133,8 @@ function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
 
 // ---- Calls and switches.
 
-// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The hunter also
-// refuses a truce and answers a plea for mercy with a demand to be stripped.
+// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The pure
+// hunter refuses truces and demands a strip. The climber accepts pleas to stop costly fights.
 const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
 const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
 const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
@@ -582,16 +597,25 @@ function findSalvageSite(o: Orders): boolean {
 }
 
 // The hunter strips a knocked-out truck it sees of its parts and goods. It drives at the weakest hostile it sees and
-// demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
-// it sees, sells in town when full and otherwise patrols the roads between the shops.
-function hunterGoal(o: Orders): void {
+// demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears and loots wrecks.
+// The pure hunter patrols for prey, while the climber trades between fights.
+function hunterGoal(o: Orders, tradeWhenIdle = false): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, true);
+  if (!tradeWhenIdle) sellHunterCargo(o);
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
-  collectOrHunt(o);
+  earnAfterHunt(o, tradeWhenIdle);
+}
+
+function sellHunterCargo(o: Orders): void {
+  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, true);
+}
+
+function earnAfterHunt(o: Orders, tradeWhenIdle: boolean): void {
+  if (tradeWhenIdle) traderGoal(o);
+  else collectOrHunt(o);
 }
 
 // A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
@@ -619,10 +643,8 @@ function engageFoe(o: Orders): boolean {
   return heard !== null;
 }
 
-// How bold each goal is, as an NPC trait is: a fight is taken while the threat stays within the bot's own danger times
-// its boldness. A hunter picks a fight only when it is at least 4 times more dangerous than every hostile in sight
-// together. In the snowball runs, fights below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost
-// next to nothing. A foe it will not fight it outruns, as a player does.
+// A fight is taken while the combined visible threat stays within the bot's own danger times its boldness. A hunter
+// starts one at a four-to-one edge. Other trucks can arrive afterward, so the edge does not guarantee a cheap fight.
 const BOLDNESS: Record<Goal, number> = { trader: 1, scavenger: 1, hunter: 0.25, fastTrader: 1, hauler: 1 };
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
