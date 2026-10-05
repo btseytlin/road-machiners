@@ -67,7 +67,7 @@ export type DeckColliders = { deck: number; rails: number[] };
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s into the ground along the contact normal
+export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s into the ground along the contact normal, and no more than downward
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -292,7 +292,8 @@ class Landings {
 }
 
 // The hardest speed into the ground over the wheels touching it, from the body's motion before the step: the
-// motion at each contact point against that wheel's contact normal. A truck meeting a slope along it lands softly.
+// motion at each contact point against that wheel's contact normal. Only motion that is also downward counts, so a
+// truck meeting a slope along it lands softly, and one whose wheels meet a rising bump face drives up it.
 function landingImpact(c: Car, motion: ImpactMotion): number {
   const com = c.body.worldCom();
   const { velocity: v, spin: w } = motion;
@@ -304,7 +305,7 @@ function landingImpact(c: Car, motion: ImpactMotion): number {
     if (!point || !normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact point`);
     const r = { x: point.x - com.x, y: point.y - com.y, z: point.z - com.z };
     const at = { x: v.x + w.y * r.z - w.z * r.y, y: v.y + w.z * r.x - w.x * r.z, z: v.z + w.x * r.y - w.y * r.x };
-    impact = Math.max(impact, -(at.x * normal.x + at.y * normal.y + at.z * normal.z));
+    impact = Math.max(impact, Math.min(-(at.x * normal.x + at.y * normal.y + at.z * normal.z), -at.y));
   }
   return impact;
 }

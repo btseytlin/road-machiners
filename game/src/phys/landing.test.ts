@@ -7,6 +7,7 @@ import { bodyOf } from '../sim/body';
 import { PHYSICS } from '../data/physics';
 import type { Quat } from './frames';
 import type { World } from '../sim/types';
+import type { Vec } from '../sim/vec';
 import { endTurn, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
@@ -30,28 +31,29 @@ function drop(rise: number, pose: Quat): { lost: Map<string, number>; wheels: st
   return play(w, d);
 }
 
-// Puts the player truck on ground that falls along +x by grade height per tile, parallel to the slope and rise meters
-// above its ride height, moving speed m/s down the slope with a drive-through order down it. Plays two turns and
-// returns the HP each part lost.
-function slide(grade: number, rise: number, speed: number): { lost: Map<string, number>; wheels: string[] } {
+// Puts the player truck on ground that falls along +x by grade height per tile up to x 60, or rises for a negative
+// grade, parallel to the slope and rise meters above its ride height, moving at velocity m/s (x along +x, y up) with
+// a drive-through order along +x. Plays two turns and returns the HP each part lost.
+function slide(grade: number, rise: number, velocity: Vec): { lost: Map<string, number>; wheels: string[] } {
   let w = emptyWorld();
   const t = editableTerrain(w);
   const n = t.size;
-  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) t.heights[j * (n + 1) + i] = Math.max(0, 60 - i) * grade;
+  const heightOf = (x: number) => Math.max(0, 60 - x) * grade + Math.max(0, -60 * grade);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) t.heights[j * (n + 1) + i] = heightOf(i);
   w = setMoveOrder(w, { kind: 'through', dest: { x: 59, y: 30 } });
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   const b = bodyOf(me.chassisId);
   const d = buildDrive(w);
   const body = d.world.getRigidBody(d.bodies[me.id]);
-  // Height is in tiles like x, so grade is also the rise per meter.
+  // Height is in tiles like x, so grade is also the drop per meter.
   const angle = Math.atan(grade);
   const normal = { x: Math.sin(angle), y: Math.cos(angle) };
   const lift = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY + rise;
-  const ground = Math.max(0, 60 - me.pos.x) * grade * PHYSICS.metersPerTile;
-  body.setTranslation({ x: me.pos.x * PHYSICS.metersPerTile + normal.x * lift, y: ground + normal.y * lift, z: me.pos.y * PHYSICS.metersPerTile }, true);
+  const S = PHYSICS.metersPerTile;
+  body.setTranslation({ x: me.pos.x * S + normal.x * lift, y: heightOf(me.pos.x) * S + normal.y * lift, z: me.pos.y * S }, true);
   // Nose down by the slope angle: a turn about z, where a positive angle raises the nose.
   body.setRotation({ x: 0, y: 0, z: Math.sin(-angle / 2), w: Math.cos(angle / 2) }, true);
-  body.setLinvel({ x: Math.cos(angle) * speed, y: -Math.sin(angle) * speed, z: 0 }, true);
+  body.setLinvel({ x: velocity.x, y: velocity.y, z: 0 }, true);
   return play(w, d);
 }
 
@@ -94,11 +96,17 @@ describe('ground impacts', () => {
 
   it('a truck touching down while it drives along a downslope takes no damage', () => {
     // Coming off a crest: the truck moves at 20 m/s down the slope, so its downward speed alone is past a hard landing.
-    expect(total(slide(0.45, 0.6, 20).lost)).toBe(0);
+    const angle = Math.atan(0.45);
+    expect(total(slide(0.45, 0.6, { x: Math.cos(angle) * 20, y: -Math.sin(angle) * 20 }).lost)).toBe(0);
+  });
+
+  it('a truck whose wheels meet a rising slope while it drives level takes no damage', () => {
+    // Off a small hop onto the face of the next bump: 20 m/s against the slope, though the truck hardly falls.
+    expect(total(slide(-0.45, 0.6, { x: 20, y: 0 }).lost)).toBe(0);
   });
 
   it('a truck dropped 3 m onto a slope still hurts its wheels', () => {
-    const { lost, wheels } = slide(0.45, 3, 0);
+    const { lost, wheels } = slide(0.45, 3, { x: 0, y: 0 });
     for (const id of wheels) expect(lost.get(id)).toBeGreaterThan(0);
   });
 });
