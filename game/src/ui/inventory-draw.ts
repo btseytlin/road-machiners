@@ -1,7 +1,7 @@
 // Drawing pieces of the inventory view: the grid, item boxes, labels and the items a running refit moves.
 
 import { GOODS } from "../data/goods";
-import { partDef, type PartKind, type WeaponDef } from "../data/parts";
+import { partDef, type WeaponDef } from "../data/parts";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { maxHp } from "../sim/wear";
 import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
@@ -9,7 +9,7 @@ import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { wearLabel } from "./format";
-import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
+import { gridItemIcon, toneStyle } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
@@ -21,15 +21,6 @@ const CELL_TITLE: Record<Cell, string> = {
   R: "right armor mount",
   X: "built-in part",
   ".": "",
-};
-export const KIND_CLASS: Record<PartKind, string> = {
-  weapon: "k-weapon",
-  engine: "k-engine",
-  armor: "k-armor",
-  cargo: "k-cargo",
-  core: "k-core",
-  scanner: "k-weapon",
-  store: "k-cargo",
 };
 
 // The item a garage storage chip stands for. Its id starts with store- so it never clashes with a grid item.
@@ -61,23 +52,28 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
-// The box an item draws on a grid: its kind color, icon, name and condition bar.
-export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
+// The box an item draws on the grid of a truck of chassisId: its tone, icon, name and condition bar.
+export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
   const x = Math.min(...cells.map((c) => c.x));
   const y = Math.min(...cells.map((c) => c.y));
   const size = itemSize(it);
-  const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
-  const state = core ? "fixed" : mounted ? "mounted" : "spare";
-  const cls = it.kind === "part" ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${state}` : `k-good g-${it.good}`;
+  const id = it.kind === "part" ? it.part.defId : it.good;
   const node = el(
     "div",
-    { class: `inv-item ${cls}`, "data-item-id": it.id, style: pos(x, y, size.w, size.h, cell), title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    createIcon(getItemIcon(it)),
+    { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
+    gridItemIcon(it, chassisId),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));
   return node;
+}
+
+// A part's box says whether it is built in, mounted or spare. A good's box is plain.
+function itemClass(it: GridItem, mounted: boolean): string {
+  if (it.kind === "good") return "inv-item";
+  if (partDef(it.part.defId).kind === "core") return "inv-item fixed";
+  return mounted ? "inv-item mounted" : "inv-item spare";
 }
 
 // Items on a knocked-out truck that a running player refit is taking off it.
@@ -157,10 +153,6 @@ export function itemState(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
   if (partDef(it.part.defId).kind === "core") return "Built in";
   return mounted ? "Mounted" : "Spare";
-}
-
-export function getItemIcon(item: GridItem): IconName {
-  return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
 // Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range

@@ -1,6 +1,7 @@
 // All colors in one place. Warm dust palette.
 
 import type { Faction } from '../sim/types';
+import type { ItemTone } from './partLooks';
 
 export const PAL = {
   bg: 0x1a1410,
@@ -72,6 +73,15 @@ export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: n
   convoys: { top: 0xb8b8b0, side: 0x86867e, cab: 0x9a5a34, cabSide: 0x6e3e24 }, // white-grey with rust
   mercs: { top: 0x2a2a2c, side: 0x1a1a1c, cab: 0x5a6068, cabSide: 0x3e4248 }, // black with gunmetal
 };
+
+// Item icon backgrounds by category tone, from itemTone() in partLooks.ts. The inventory grid boxes, loot chips, standalone
+// item icons and card borders set them as --tone, and the icon atlases fill their tiles with them. Each keeps at least
+// 4.5:1 contrast with LINE_STYLE.line.
+export const ITEM_TONES = { weapon: 0x8c3a30, armor: 0x686c6f, cargo: 0x6e5236, other: 0x35587a } satisfies Record<ItemTone, number>;
+
+// The item icons' line style, drawn by src/three/icons/render.ts: thick lines in line over a see-through fill, so the
+// tone shows darker inside the shape. fillAlpha is 0-255.
+export const LINE_STYLE = { line: 0xf4efe6, fill: 0x000000, fillAlpha: 77 };
 
 // Multiply a color's channels by k.
 export function shade(color: number, k: number): number {
