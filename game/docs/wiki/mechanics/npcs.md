@@ -24,7 +24,7 @@ NPCs carry and use utilities by the player's rules. At spawn each truck may roll
 - Sprout: an attacker is in sight, and the driver flees a fight or its cab is below half.
 - Caltrops and Oil spiller: the driver flees with a hostile in sight behind it within 10 tiles.
 - Smoke mortar: a fleeing driver shells the midpoint between itself and its nearest attacker in sight.
-- Harpoon: its fight target drives away from it.
+- Harpoon: its fight target drives away from it. The order stands like the player's, and the driver drops it once its top goal is no longer a fight with that target.
 - Flare cannon: at night, a driver investigating a contact lights the contact.
 - Emitter: in combat, every truck it sees in range is hostile, and there is at least one.
 - Claymore ram: the driver has chosen to ram.
