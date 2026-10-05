@@ -250,6 +250,8 @@ export function revealed(text: string, elapsedMs: number, charsPerSecond: number
 export class RadioPanel {
   readonly root = panel('radio', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
+  // The transport keys sit in a strip above the screen.
+  readonly keys = el('div', { class: 'radio-keys' });
   // Screen readers wait for aria-busy to clear, so they read a broadcast once, whole.
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
   private streaming: { text: string; start: number } | null = null;
@@ -257,7 +259,7 @@ export class RadioPanel {
   constructor(private station: RadioStation) {
     const band = el('div', { class: 'radio-band' }, el('span', {}, 'WOT RADIO'), el('span', {}, 'FM 66.6'));
     const ghost = el('div', { class: 'radio-ghost', 'aria-hidden': 'true' }, '\u2588'.repeat(3 * 30));
-    this.root.append(el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
+    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
   }
 
   hear(world: World): void {
