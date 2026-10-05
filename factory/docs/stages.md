@@ -88,7 +88,7 @@ A member can ask Hermes for one-off work, like "simulate 10 battles and tell me 
 
 ## Model routing
 
-The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. Triage moves design to Sonnet for every card but a hard one. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
+The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
 
 - `design-sonnet` runs design on Sonnet.
 - `implementation-opus` runs implementation on Opus. Every testing round and the review stay on Sonnet.
@@ -98,8 +98,8 @@ The baseline is triage Sonnet, design Opus, implementation Sonnet and testing So
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.
 
 - `trivial` is one file or one small piece of logic, with no new state or cross-system rule. Triage adds `design-sonnet`.
-- `intermediate` is everything else, and any case in doubt. Triage adds `design-sonnet`.
-- `hard` is three or more interacting systems, a change to shared state or a data format, a cross-system bug with no known cause, or real tradeoffs. Triage adds `implementation-opus`, and design stays on Opus.
+- `hard` is three or more interacting systems, a change to shared state or a data format, a cross-system bug with no known cause, or real tradeoffs. Triage adds `implementation-opus`.
+- `intermediate` or in doubt adds no label.
 
 A label already on the issue wins, and triage never changes labels. A later triage run adds nothing once its routing comment exists. A member can add or remove a label at any time, and the next agent run reads it.
 

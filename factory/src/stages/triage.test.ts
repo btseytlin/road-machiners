@@ -61,17 +61,17 @@ describe('triage stage', () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(calls).toContain('agent sonnet');
     expect(effort).toBe('low');
-    expect(calls.find((call) => call.startsWith('comment 7 Triage passed: Clear goal'))).toContain('Model routing from triage: intermediate, label design-sonnet');
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed: Clear goal'))).toContain('Model routing from triage: intermediate, default models');
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(prompt).not.toContain('{{');
-    expect(calls.filter((call) => call.startsWith('push') || call.startsWith('message') || call.startsWith('addLabel'))).toEqual(['addLabel 7 design-sonnet']);
+    expect(calls.filter((call) => call.startsWith('push') || call.startsWith('message') || call.startsWith('addLabel'))).toEqual([]);
   });
 
   it('explains the 20/80 model target and the routing effects without replacing the complexity rubric', async () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(prompt).toContain('20% Opus and 80% Sonnet');
-    expect(prompt).toContain('`trivial` and `intermediate` move design to Sonnet');
-    expect(prompt).toContain('`hard` keeps design on Opus and moves implementation to Opus');
+    expect(prompt).toContain('`trivial` moves design to Sonnet');
+    expect(prompt).toContain('`hard` moves implementation to Opus');
     expect(prompt).toContain('Do not change a complexity rating to chase the target');
   });
 
@@ -97,9 +97,9 @@ describe('triage stage', () => {
     expect(calls).not.toContain('addLabel 7 design-sonnet');
   });
 
-  it('adds design-sonnet for an intermediate task, and triage itself runs on the build model', async () => {
+  it('adds no label for an intermediate task, and triage itself runs on the build model', async () => {
     await runStage(fakeCtx(verdict({})), 7);
-    expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual(['addLabel 7 design-sonnet']);
+    expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual([]);
     expect(calls).toContain('agent sonnet');
   });
 
