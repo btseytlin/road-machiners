@@ -244,6 +244,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // from the depot road to the depot hangar.
         { points: [AT(6, 18), AT(10.75, 22), AT(10.75, 31)], width: 2, surface: 'track', grade: TERRAIN.roadGrade },
         { points: [AT(40, -33), AT(45.5, -33)], width: 2, surface: 'track', grade: TERRAIN.roadGrade },
+        // The army's dozer track from the highway cutting up onto the north ridge's crest and its gun shelf. It leaves
+        // the highway at (42, 1), south of the gap's crate stack, and not at (50, 4.5): from there it ran along the
+        // ridge's west scarp at (45, 8), where its bank cut a cliff beside the stack. Its next points moved from (45, 8)
+        // and (38, 8.5) to (39, 5.5) and (36, 7), up the crest over the cutting and off the shelf's north scarp, where
+        // its bank cut a cliff beside the shelf's stack.
+        { points: [AT(42, 1), AT(39, 5.5), AT(36, 7), AT(33.5, 10)], width: 2, surface: 'track', grade: 0.25 },
       ],
       buildings: [
         // The ruined two-storey farmhouse above the road at the middle, its long side and yard toward the road. The
