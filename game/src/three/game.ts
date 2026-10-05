@@ -960,12 +960,7 @@ export class Game {
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     const lit = this.world.vehicles
       .filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos))
-      .map((v) => ({
-        chassisId: v.chassisId,
-        frame: this.frames[v.id],
-        on: vehicleLampsOn(this.world, v, this.lightTurn()),
-        player: v.id === this.world.player.vehicleId,
-      }));
+      .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: vehicleLampsOn(this.world, v, this.lightTurn()), player: v.id === this.world.player.vehicleId }));
     this.nightLights.update(nightLightsWanted(this.world.turn, lit), truck, lit);
     const at = playerVehicle(this.world).pos;
     const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
