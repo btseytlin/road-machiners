@@ -18,6 +18,7 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -295,5 +296,11 @@ describe('save migration 12 to 13', () => {
     const next = MIGRATIONS[12](FORMAT_2_12);
 
     expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  it('keeps the world as it was, an NPC truck with no goods included', () => {
+    expect(MIGRATIONS[13](FORMAT_2_13)).toEqual(FORMAT_2_13);
   });
 });

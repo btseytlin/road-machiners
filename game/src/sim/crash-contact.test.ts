@@ -51,7 +51,8 @@ describe('crash contacts', () => {
     if (!ram || !engine) throw new Error('Missing front armor or engine');
     ram.hp = 1;
     const hp = engine.hp;
-    applyContactCrash(world, vehicle, null, 'rock', 9, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
+    // Slow enough that the bar's armor stops the crash in every lane.
+    applyContactCrash(world, vehicle, null, 'rock', 5, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
     expect(ram.hp).toBe(0);
     expect(engine.hp).toBe(hp);
   });

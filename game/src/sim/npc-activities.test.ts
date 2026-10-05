@@ -2,7 +2,7 @@ import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
 import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
-import { planNpcOrders } from './ai';
+import { planNpcOrders, turnCornered } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -805,6 +805,22 @@ describe('a trader too poor to trade', () => {
 });
 
 describe('repair goal in combat', () => {
+  it('turns on a visible foe when the driver cannot reach repairs, even after the combat timer expires', () => {
+    const { w, npc } = createScavenger();
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    addState(w, 'feud', npc.id, foe.id, { kind: 'feud', robbery: false });
+    npc.brain!.goals = [
+      { kind: 'fight', targetId: foe.id, destination: { ...foe.pos }, phase: 'travel', reason: 'fight back' },
+      { kind: 'resupply', targetId: 'bowl', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'needs repairs' },
+    ];
+    refreshVision(w);
+    expect(inCombat(w, npc)).toBe(false);
+
+    expect(turnCornered(w, npc)).toBe(true);
+    expect(topGoal(npc)?.kind).toBe('fight');
+    expect(topGoal(npc)?.targetId).toBe(foe.id);
+  });
+
   it('is given up when no repair is under way, since none can start', () => {
     const { w, npc } = createScavenger();
     npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' }];

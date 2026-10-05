@@ -9,23 +9,25 @@
 
 import { dealAvailable } from './patch';
 import { canSpareFor } from './aid';
-import { ECONOMY } from '../data/goods';
+import { ECONOMY, GOODS } from '../data/goods';
+import { partDef, type PartKind } from '../data/parts';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
-  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
+  type DecisionId, type DecisionOptions, type GearJob, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { canNpcOpenFireAt, fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
 import { cargoValue } from './market';
-import { maxHp } from './wear';
-import { corePart, freeCells, hasLoot, mountedParts } from './grid';
+import { isJunk, maxHp, partValue } from './wear';
+import { corePart, freeCells, hasLoot, mountedItems, mountedParts, type Spot } from './grid';
+import { getLayoutError, installSpot } from './inventory';
 import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
@@ -38,7 +40,7 @@ import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GridItem, NpcActivity, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -145,6 +147,18 @@ export function perceiveDanger(world: World, observer: Vehicle, other: Vehicle):
   return danger * randRange(world, 1 - spread, 1 + spread);
 }
 
+// The danger a driver faces in a fight with `other`, as one sighting judges it: the local group of `other` and the local
+// group of every other hostile the observer sees, each truck counted once. A foe that stands next to a stronger one is
+// not a weak foe. The bots and the NPCs decide fights by it.
+export function perceiveThreat(world: World, observer: Vehicle, other: Vehicle): number {
+  const members = new Map<string, Vehicle>();
+  const upright = visibleHostiles(world, observer).filter((v) => !isKnockedOut(v));
+  for (const hostile of [other, ...upright]) for (const v of localGroup(world, observer, hostile)) members.set(v.id, v);
+  const spread = NPC_BEHAVIOR.dangerSpread;
+  const danger = [...members.values()].reduce((sum, v) => sum + vehicleDanger(world, v), 0);
+  return danger * randRange(world, 1 - spread, 1 + spread);
+}
+
 // The driver's own danger with its visible faction mates nearby that are not at odds with it.
 export function ownDanger(world: World, vehicle: Vehicle): number {
   const group = localGroup(world, vehicle, vehicle).filter((v) => v.id === vehicle.id || !isHostile(world, vehicle, v));
@@ -152,8 +166,12 @@ export function ownDanger(world: World, vehicle: Vehicle): number {
 }
 
 // Whether a perceived danger stays within the driver's own group danger times threat ratio and boldness.
+export function withinReach(world: World, vehicle: Vehicle, danger: number, boldness: number): boolean {
+  return danger <= ownDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * boldness;
+}
+
 function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
-  return danger <= ownDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
+  return withinReach(world, vehicle, danger, npcProfile(vehicle).boldness);
 }
 
 // Combat condition or driver health at or below the flee condition, or below the higher recover condition while
@@ -448,6 +466,17 @@ function subjectOf(world: World, decision: DecisionId, subject: string | null): 
   return vehicleById(world, subject);
 }
 
+// A fighter sees its target, or remembers the center of a contact when it cannot see the truck.
+export function findFightTargetAt(world: World, vehicle: Vehicle, target: Vehicle, contacts: Contact[]): Vec | undefined {
+  if (canVehicleSee(world, vehicle, target.pos)) return target.pos;
+  return contacts.find((c) => c.vehicleId === target.id)?.center;
+}
+
+export function findFightImpediment(world: World, vehicle: Vehicle, target: Vehicle): string | null {
+  if (!canNpcOpenFireAt(world, vehicle, target)) return 'cannot fire inside guarded town';
+  return vehicleStats(world, vehicle).weapons.length === 0 ? 'no gun left to fight with' : null;
+}
+
 // A fight needs a working gun and the subject in sight.
 function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
@@ -455,7 +484,8 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
 
 // A stranded driver holds off a robbery against a target that is not fighting it.
 function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  return canFight(world, vehicle, decision, subject) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+  const target = subjectOf(world, decision, subject);
+  return canFight(world, vehicle, decision, subject) && canNpcOpenFireAt(world, vehicle, target) && !holdsOffRobbery(world, vehicle, target);
 }
 
 function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
@@ -974,4 +1004,108 @@ export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
     endState(world, s, 'broken');
     addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
   }
+}
+
+// ---- Gear choice. The progression bots and the NPCs choose what to buy at a garage by one rule. It takes the offers a
+// driver can mount, scores each by what it adds to the driver's job, and picks the one that adds most within the
+// budget. Executing the purchase differs between the player and an NPC, so this section only chooses.
+//
+// A job is what the truck earns by: a fighter by its guns and armor, a trader and a carrier by cargo room, a courier by
+// speed. A carrier hauls or salvages and needs no goods money. A driver takes only parts that raise its job's score.
+
+export type PartItem = Extract<GridItem, { kind: 'part' }>;
+
+// A part a driver could take and what it costs: a shop's stock at its price, or a spare the driver holds at 0.
+export type Offer = { part: PartInstance; price: number };
+
+// What taking an offer does. replaces is the mounted part sold first when no mount is free. cost is the price less
+// that sale. jobGain is the change in the job's score, and worthGain the change in the parts' worth.
+export type Plan<O extends Offer = Offer> = { offer: O; replaces: PartItem | null; cost: number; spot: Spot; jobGain: number; worthGain: number };
+
+// Kinds no driver buys: built-in parts cannot be traded, and no driver reads a scanner.
+const NEVER: readonly PartKind[] = ['core', 'scanner'];
+
+// The cells goods could use if the truck carried none.
+export function goodsRoom(v: Vehicle): number {
+  return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
+}
+
+// The number a job grows by. A fighter hunts with its guns, and armor only keeps it alive. A trader or carrier moves
+// cargo, so its score is room times speed.
+export function jobScore(world: World, v: Vehicle, job: GearJob): number {
+  if (job === 'fighter') return firepower(world, v);
+  if (job === 'courier') return vehicleStats(world, v).maxSpeed;
+  return goodsRoom(v) * vehicleStats(world, v).maxSpeed;
+}
+
+// The money a trader keeps to buy a load, one unit of an average good per free cell at the buy price. Gear comes from
+// money above it. Every other job earns without goods money.
+function tradeCapital(v: Vehicle): number {
+  const values = Object.values(GOODS).map((g) => g.value);
+  const average = values.reduce((a, b) => a + b, 0) / values.length;
+  return goodsRoom(v) * average * (1 + ECONOMY.spread);
+}
+
+// What a driver may spend on gear: its money above the upkeep reserve, and above the trade capital for a trader.
+export function gearBudget(world: World, v: Vehicle, job: GearJob): number {
+  const spendable = getResources(world, v).money - getUpkeepReserve(v);
+  return job === 'trader' ? spendable - tradeCapital(v) : spendable;
+}
+
+// A part's worth at its wear and health.
+export function quality(part: PartInstance): number {
+  return partValue(part) * (part.hp / maxHp(part));
+}
+
+// A part as a grid item, to ask where it would mount.
+export function probe(part: PartInstance): PartItem {
+  return { id: 'gear-probe', x: 0, y: 0, rot: 0, kind: 'part', part };
+}
+
+function weakestOfKind(v: Vehicle, kind: PartKind): PartItem | null {
+  return mountedItems(v, kind).reduce<PartItem | null>((weak, it) => (!weak || quality(it.part) < quality(weak.part) ? it : weak), null);
+}
+
+// The truck as it stands after the plan: the replaced part gone, the offered part on its spot.
+function after(v: Vehicle, offer: Offer, replaces: PartItem | null, spot: Spot): Vehicle {
+  const kept = v.items.filter((it) => it.id !== replaces?.id && !(it.kind === 'part' && it.part.id === offer.part.id));
+  return { ...v, items: [...kept, { ...probe(offer.part), ...spot }] };
+}
+
+// Where the offer goes and what it replaces: a free mount, or else the weakest mounted part of its kind when the offer
+// is better than it and the truck holds together without it. Goods stowed on cells a replaced part provides, like a
+// cargo rack, would fall off the grid.
+function placement(v: Vehicle, offer: Offer): { replaces: PartItem | null; spot: Spot } | null {
+  const free = installSpot(v, probe(offer.part));
+  if (free) return { replaces: null, spot: free };
+  const weakest = weakestOfKind(v, partDef(offer.part.defId).kind);
+  if (!weakest || quality(offer.part) <= quality(weakest.part)) return null;
+  const rest = { ...v, items: v.items.filter((it) => it.id !== weakest.id) };
+  const spot = installSpot(rest, probe(offer.part));
+  return spot && getLayoutError(v, rest.items) === null ? { replaces: weakest, spot } : null;
+}
+
+// How a driver buys: `skip` names part kinds it also leaves alone, and `resale` is what the shop pays for the part a
+// plan replaces.
+export type Buyer = { job: GearJob; skip: readonly PartKind[]; resale: (part: PartInstance) => number };
+
+// Every plan that does not lower the job's score.
+export function gearPlans<O extends Offer>(world: World, v: Vehicle, offers: readonly O[], buyer: Buyer): Plan<O>[] {
+  const now = jobScore(world, v, buyer.job);
+  return offers.filter((o) => !isJunk(o.part) && ![...NEVER, ...buyer.skip].includes(partDef(o.part.defId).kind)).flatMap((offer) => {
+    const place = placement(v, offer);
+    if (!place) return [];
+    const jobGain = jobScore(world, after(v, offer, place.replaces, place.spot), buyer.job) - now;
+    if (jobGain < 0) return [];
+    const resale = place.replaces ? buyer.resale(place.replaces.part) : 0;
+    const given = place.replaces ? quality(place.replaces.part) : 0;
+    return [{ offer, ...place, cost: offer.price - resale, jobGain, worthGain: quality(offer.part) - given }];
+  });
+}
+
+// The plan with the most job gain within the budget, ties broken by worth gained. Nothing when no plan gains in the
+// job, so a driver saving for a gun does not spend its money on a part that does not help it.
+export function bestPlan<O extends Offer>(plans: readonly Plan<O>[], budget: number): Plan<O> | null {
+  const gains = plans.filter((p) => p.cost <= budget && p.jobGain > 0);
+  return gains.reduce<Plan<O> | null>((best, p) => (!best || p.jobGain > best.jobGain || (p.jobGain === best.jobGain && p.worthGain > best.worthGain) ? p : best), null);
 }

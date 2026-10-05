@@ -162,6 +162,19 @@ const FULL_ROB = TRAITS.scumbag.weights.preySeen!.rob!.add!;
 const robWeight = (w: World, robber: Vehicle, target: Vehicle, danger: number) => optionWeights(w, robber, 'preySeen', target.id, danger).rob;
 
 describe('robbery checks', () => {
+  it('drops a robbery fight when the prey reaches a guarded town instead of waiting to fire forever', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
+    robber.brain!.goals = [{ kind: 'fight', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'rob cargo', perceived: w.turn }];
+    target.pos = outFromGate(GUARDED);
+    robber.pos = outFromGate(UNGUARDED);
+
+    expect(optionWeights(w, robber, 'hostileSeen', target.id, 0)).not.toHaveProperty('fight');
+    thinkNpc(w, robber);
+
+    expect(robber.brain!.goals.some((goal) => goal.kind === 'fight' && goal.targetId === target.id)).toBe(false);
+  });
+
   it('a weaker truck with loot in sight away from towns gets the full rob weight', () => {
     const { w, robber, target } = passing();
     expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);

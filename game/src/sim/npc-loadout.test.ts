@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPC_WEAR, NPCS, SCRAP_ARMOR, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -14,7 +14,7 @@ import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
-import { gunDrag, isStranded, npcMassRoom } from './stats';
+import { gunDrag, isStranded, npcMassRoom, speedFloorOf } from './stats';
 import { addGoods } from './inventory';
 import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
@@ -71,7 +71,8 @@ describe('NPC equipment generation', () => {
       expect(loose).toHaveLength(loadout.spares.length);
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
-      const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
+      // Scrap armor costs no budget.
+      const cost = CHASSIS[v.chassisId].value + loadout.parts.filter((p) => p.defId !== SCRAP_ARMOR).reduce((sum, p) => sum + PARTS[p.defId].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
       expect(v.resources?.money).toBe(fixture.player.money);
     }
@@ -119,7 +120,7 @@ describe('NPC equipment generation', () => {
         const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         const engine = mountedItems(v, 'engine')[0];
         const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
-        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
+        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(speedFloorOf(template) - 0.02);
       }
     }
   }, budget(120_000));
@@ -127,7 +128,7 @@ describe('NPC equipment generation', () => {
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
     const world = { ...fixture, rngState: 3 };
     const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
-    const room = npcMassRoom(npc);
+    const room = npcMassRoom(npc, speedFloorOf(NPCS.gunwagon));
     const free = freeCells(npc);
     const added = addGoods(world, npc, 'tools', 1000);
     expect(added * GOODS.tools.mass).toBeLessThanOrEqual(room);
@@ -163,8 +164,8 @@ describe('NPC equipment generation', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build
-    expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
+    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build but free scrap
+    expect(loadout.parts.map((p) => p.defId).filter((id) => id !== SCRAP_ARMOR)).toEqual(['stockEngine', 'mg']);
   });
 
   it('rejects impossible required equipment without consuming RNG or IDs', () => {
@@ -188,8 +189,6 @@ describe('NPC equipment generation', () => {
     ['no guns required', (t: NpcTemplate) => { t.loadout.minGuns = 0; }],
     ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'tiny', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
-    ['wear step past the last rebuildable step', (t: NpcTemplate) => { t.loadout.wear = [{ value: CONDITION.maxWear + 1, weight: 1 }]; }],
-    ['negative wear step', (t: NpcTemplate) => { t.loadout.wear = [{ value: -1, weight: 1 }]; }],
     ['a core part in the spare pool', (t: NpcTemplate) => { t.loadout.spares = { pool: [{ value: 'cab', weight: 1 }], count: [{ value: 1, weight: 1 }] }; }],
     ['a negative spare count', (t: NpcTemplate) => { t.loadout.spares = { pool: [{ value: null, weight: 1 }], count: [{ value: -1, weight: 1 }] }; }],
   ] as const)('fails loudly on %s without changing the input world', (_name, invalidate) => {
@@ -226,12 +225,12 @@ describe('NPC equipment generation', () => {
 });
 
 describe('part wear', () => {
-  it.each(Object.values(NPCS))('rolls a wear step within $id\'s table for every mounted, non-core part', (template) => {
+  it.each(Object.values(NPCS))('rolls a wear step within the world wear table for every mounted, non-core part of $id', (template) => {
     const rolled = new Set<number>();
     for (let seed = 1; seed <= 40; seed++) {
       const loadout = generateNpcLoadout({ ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 } }, template);
       const shift = GEAR_LEVELS[loadout.level].wearShift;
-      const allowed = new Set(template.loadout.wear.map((entry) => Math.min(CONDITION.maxWear, Math.max(0, entry.value + shift))));
+      const allowed = new Set(NPC_WEAR.map((entry) => Math.min(CONDITION.maxWear, Math.max(0, entry.value + shift))));
       for (const { defId: id, wear } of loadout.parts) {
         expect(wear, id).toBeGreaterThanOrEqual(0);
         expect(wear, id).toBeLessThanOrEqual(CONDITION.maxWear);
@@ -247,6 +246,16 @@ describe('part wear', () => {
     const loadoutB = generateNpcLoadout({ ...fixture, rngState: 7 }, NPCS.trader);
     expect(loadoutA.parts).toEqual(loadoutB.parts);
     expect(loadoutA.spares).toEqual(loadoutB.spares);
+  });
+
+  it('makes pristine parts rare and near-junk parts common at the standard level', () => {
+    const wears: number[] = [];
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const p of generateNpcLoadout({ ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 } }, NPCS.trader, null, 'standard').parts) wears.push(p.wear);
+    }
+    const share = (wear: number) => wears.filter((w) => w === wear).length / wears.length;
+    expect(share(0)).toBeLessThan(0.08);
+    expect(share(CONDITION.maxWear)).toBeGreaterThan(0.4);
   });
 
   it('a poor level wears parts more than a loaded one', () => {
@@ -268,7 +277,8 @@ describe('trader spare parts', () => {
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 2, weight: 1 }] };
-    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+    // A poor truck carries the least armor, which leaves rated mass for spares.
+    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template, null, 'poor');
     expect(loadout.spares.length).toBeGreaterThan(0);
     for (const spare of loadout.spares) {
       expect(spare.defId).toBe('mg');

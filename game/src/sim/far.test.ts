@@ -9,6 +9,7 @@ import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
 import { advanceFar, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
+import { addState } from './states';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
@@ -301,6 +302,20 @@ describe('far travel contact', () => {
     advanceFar(w, mover);
     expect(mover.order).toBeNull();
     expect(mover.speed).toBe(0);
+  });
+
+  it('drives through the position of a truck hitched to its tow rope', () => {
+    const { w, mover } = far();
+    const towed = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 121, y: 120 });
+    addState(w, 'tow', mover.id, towed.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true });
+    const dest = { x: 200, y: 120 };
+    mover.brain = npcBrain('trader', mover.pos, ['trader']);
+    mover.brain.farRoute = { dest, points: [dest] };
+    mover.order = { kind: 'through', dest };
+
+    advanceFar(w, mover);
+
+    expect(mover.pos.x).toBeGreaterThan(120);
   });
 
   it('lets two trucks on the same point drive apart', () => {

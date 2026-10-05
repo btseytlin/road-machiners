@@ -13,7 +13,7 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
-import { isOnRope } from './tow';
+import { getHitchedTowIds, isOnRope } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -59,11 +59,12 @@ export function advanceFar(w: World, v: Vehicle): void {
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
   const stored = keptFarRoute(v);
+  const onRope = getHitchedTowIds(w);
   // A new route steers around parked vehicles, like the physics driver's, and around slower ones it could reach.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, farBlockers(w, v, s), v);
+  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, farBlockers(w, v, s, onRope), v);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
-  const block = firstContact(w, v, planned.path, full.radius);
+  const block = firstContact(w, v, planned.path, full.radius, onRope);
   const walk = block ? follow(v.pos, points, block.clear) : planned;
   const end = walk.path[walk.path.length - 1];
   const reach = order.kind === 'stopAt' ? RULES.arriveRadius : RULES.passRadius;
@@ -88,11 +89,11 @@ export function advanceFar(w: World, v: Vehicle): void {
 
 // The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
 // a turn's drive of it, so it overtakes them as a driver would instead of trailing them. A ram target stays a target.
-function farBlockers(w: World, v: Vehicle, s: VehicleStats): Blocker[] {
+function farBlockers(w: World, v: Vehicle, s: VehicleStats, onRope: ReadonlySet<string>): Blocker[] {
   const target = v.brain?.ramTarget;
   const reach = s.maxSpeed + radiusOf(v);
-  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
-  return [...parkedVehicles(w, v.id), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
+  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && !onRope.has(o.id) && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
+  return [...parkedVehicles(w, v.id, onRope), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
 }
 
 function radiusOf(v: Vehicle): number {
@@ -126,8 +127,8 @@ const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, bel
 
 // The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
 // vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
-function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
-  const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+function firstContact(w: World, v: Vehicle, path: Vec[], radius: number, onRope: ReadonlySet<string>): { other: Vehicle; clear: number; contact: number } | null {
+  const others = w.vehicles.filter((o) => o.id !== v.id && !onRope.has(o.id)).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
   for (let seg = 1; seg < path.length; seg++) {
     const a = path[seg - 1];

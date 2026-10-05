@@ -6,6 +6,7 @@ import { chassisDef } from "../data/chassis";
 import type { VehicleStats } from "./stats";
 import type { Blocker } from "./path";
 import { nearestPad, siteUnder } from "./sites";
+import { getHitchedTowIds } from "./tow";
 import { straightClear } from "./path";
 import type { MoveOrder, Vehicle, World } from "./types";
 import { clamp, DEG, dist, type Vec } from "./vec";
@@ -94,10 +95,10 @@ function groundOrder(dest: Vec, shift: boolean, current: MoveOrder | null): Move
   return { kind: "through", dest };
 }
 
-export function parkedVehicles(world: World, selfId: string): Blocker[] {
+export function parkedVehicles(world: World, selfId: string, onRope: ReadonlySet<string> = getHitchedTowIds(world)): Blocker[] {
   const target = world.vehicles.find((v) => v.id === selfId)?.brain?.ramTarget;
   return world.vehicles
-    .filter((x) => x.id !== selfId && x.id !== target && x.speed < RULES.parkedSpeed)
+    .filter((x) => x.id !== selfId && x.id !== target && !onRope.has(x.id) && x.speed < RULES.parkedSpeed)
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));
 }
 
