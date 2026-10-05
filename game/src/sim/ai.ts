@@ -5,13 +5,13 @@ import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
 import { fightCornered, getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
-import { route, routeLength, straightClear, type Blocker } from "./path";
+import { clearLines, route, routeLength, type Blocker } from "./path";
 import { towData } from "./states";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
+import { escortsOf, followPace, getHitchedTowIds, isOnRope, towHeldBy } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
 import { ramsReadily, visibleHostiles } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
@@ -239,13 +239,14 @@ export function fightPoint(world: World, v: Vehicle, target: Vehicle, range: num
   const lead = leadOf(target);
   const turn = circleTurn(world, v);
   const radius = vehicleStats(world, v).radius;
+  const clear = clearLines(world, radius, []);
   let best: Candidate | null = null;
   for (let i = 0; i < F.angles; i++) {
     const a = (2 * Math.PI * i) / F.angles;
     const p = { x: lead.x + Math.cos(a) * range, y: lead.y + Math.sin(a) * range };
     const score = scorePoint(world, v, target, lead, range, p, turn);
     const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
-    const open = straightClear(world, v.pos, p, radius, []);
+    const open = clear(v.pos, p);
     if (!best || beats({ p, score, fires, open }, best)) best = { p, score, fires, open };
   }
   return best!.p;
@@ -339,7 +340,7 @@ export function fightOrder(world: World, v: Vehicle, target: Vehicle, dest: Vec)
 // turn of closing before it could make them stop. The player routes around parked vehicles only, since the player
 // steers for itself.
 export function routeBlockers(world: World, v: Vehicle): Blocker[] {
-  const parked = parkedVehicles(world, v.id);
+  const parked = parkedVehicles(world, v.id, getHitchedTowIds(world));
   if (!v.brain) return parked;
   return [...parked, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
 }
@@ -354,7 +355,7 @@ export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   if (facesOncoming(world, v)) return true;
   const moving = conflicts(world, v, 0);
   if (moving.length === 0) return false;
-  const parked = parkedVehicles(world, v.id);
+  const parked = parkedVehicles(world, v.id, getHitchedTowIds(world));
   const radius = vehicleStats(world, v).radius;
   const open = route(world, v.pos, dest, radius, parked, v);
   const around = route(world, v.pos, dest, radius, [...parked, ...moving.flatMap((x) => sweptPath(world, v, x))], v);

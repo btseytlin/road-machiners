@@ -6,6 +6,7 @@ import { backsToDestination, clickOrder, parkedVehicles, setDownSpot, throttleFo
 import { DEG, dist } from "./vec";
 import { addVehicle, emptyWorld, npcBrain } from "./testkit";
 import { addState } from "./states";
+import { getHitchedTowIds } from "./tow";
 
 function setup(speed: number) {
   const w = emptyWorld();
@@ -92,7 +93,7 @@ describe("parked blockers", () => {
     const towed = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 32, y: 30 });
     addState(w, "tow", tower.id, towed.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
 
-    expect(parkedVehicles(w, tower.id)).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
+    expect(parkedVehicles(w, tower.id, getHitchedTowIds(w))).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
   });
 });
 

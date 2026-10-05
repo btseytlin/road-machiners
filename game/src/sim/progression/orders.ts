@@ -12,7 +12,8 @@ import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } fr
 import { type Spot, goodsCount, mountedItems } from '../grid';
 import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
-import { bestPlan, gearBudget, gearPlans, getUpkeepReserve, probe, type Offer } from '../npc-decisions';
+import { getUpkeepReserve } from '../npc-decisions';
+import { bestPlan, gearBudget, gearPlans, probe, type Offer } from './gear';
 import type { GearJob } from '../../data/npcs';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk } from '../wear';

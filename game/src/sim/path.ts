@@ -97,9 +97,15 @@ function exitCell(layer: NavLayer, overlay: Overlay, start: number, target: numb
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
+  return clearLines(world, radius, extra)(a, b);
+}
+
+// The same test for many lines: the blockers are built once, and each call checks one line against them.
+export function clearLines(world: World, radius: number, extra: Blocker[]): (a: Vec, b: Vec) => boolean {
   const statics = staticSet(world.obstacles, world.terrain);
   const nav = terrainNav(world.terrain);
-  return lineCost(nav, statics, dynamicBlockers(world.obstacles, world.terrain, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
+  const blockers = dynamicBlockers(world.obstacles, world.terrain, extra);
+  return (a, b) => lineCost(nav, statics, blockers, a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
 }
 
 // A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that

@@ -31,7 +31,7 @@ import type { Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
-import { isTowed, setBeacon, unhitch } from "../sim/tow";
+import { getHitchedTowIds, isTowed, setBeacon, unhitch } from "../sim/tow";
 import { inCombat } from "../sim/combat";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckContext, TruckControls } from "./truck-controls";
@@ -886,7 +886,7 @@ export class Game {
         ? [v.pos, order.dest]
         : [
             v.pos,
-            ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, parkedVehicles(w, v.id), v),
+            ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, parkedVehicles(w, v.id, getHitchedTowIds(w)), v),
           ]
       : null;
     const first =

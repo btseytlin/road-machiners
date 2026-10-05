@@ -29,7 +29,7 @@ import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, site
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, downedNear, salvageHere, takeAllLoot } from '../locations';
-import { firepower, getUpkeepReserve, isWeak, perceiveDanger, perceiveThreat, withinReach } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, groupDanger, groupThreat, withinReach } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -699,10 +699,7 @@ function weakestFoe(world: World): Vehicle | null {
 }
 
 function dangerOf(world: World, foe: Vehicle): number {
-  const rng = world.rngState;
-  const danger = perceiveDanger(world, playerVehicle(world), foe);
-  world.rngState = rng;
-  return danger;
+  return groupDanger(world, playerVehicle(world), foe);
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
@@ -734,21 +731,15 @@ function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
 }
 
 // The shared fight rule, npc-decisions.ts: the threat of the foe and every other hostile in sight against the bot's
-// own danger and its goal's boldness. Reading the threat rolls world randomness, so the roll is put back.
+// own danger and its goal's boldness. The bot reads the threat without the misjudge roll, so it draws no randomness.
 function canTakeOn(o: Orders, foe: Vehicle, goal: Goal): boolean {
-  const rng = o.world.rngState;
-  const threat = perceiveThreat(o.world, o.me, foe);
-  o.world.rngState = rng;
-  return withinReach(o.world, o.me, threat, BOLDNESS[goal]);
+  return withinReach(o.world, o.me, groupThreat(o.world, o.me, foe), BOLDNESS[goal]);
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
 function outmatchedBy(world: World, foe: Vehicle): boolean {
   const me = playerVehicle(world);
-  const rng = world.rngState;
-  const threat = perceiveThreat(world, me, foe);
-  world.rngState = rng;
-  return !withinReach(world, me, threat, 1) && !outruns(world, me, foe);
+  return !withinReach(world, me, groupThreat(world, me, foe), 1) && !outruns(world, me, foe);
 }
 
 function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {

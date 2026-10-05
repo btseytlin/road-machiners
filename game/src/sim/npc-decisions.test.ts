@@ -6,7 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, lawmanTowns, perceiveThreat, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, groupThreat, huntingGrounds, isWeak, lawmanTowns, perceiveThreat, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
@@ -655,6 +655,16 @@ describe('perceived threat', () => {
     const threat = perceiveThreat(w, npc, strong);
 
     expect(threat).toBeLessThanOrEqual(vehicleDanger(w, strong) * (1 + spread) + vehicleDanger(w, w.vehicles.find((v) => v.faction === 'raiders' && v.id !== strong.id)!) * (1 + spread));
+  });
+
+  it('sums the group danger exactly and draws no random number', () => {
+    const { w, npc, weak, strong } = setup();
+    const before = w.rngState;
+
+    const threat = groupThreat(w, npc, weak);
+
+    expect(w.rngState).toEqual(before);
+    expect(threat).toBeGreaterThanOrEqual(vehicleDanger(w, weak) + vehicleDanger(w, strong) - 1);
   });
 
   it('leaves out a hostile that is knocked out', () => {
