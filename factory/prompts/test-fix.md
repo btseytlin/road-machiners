@@ -35,8 +35,7 @@ Run the tests near your fixes with `npx vitest run <files>`, and `npm run typech
 Run `{{playtest}}` only when a fix touched what the playtest covers.
 
 Reference images from the issue are listed at the end of this prompt.
-If your fixes change what a player sees and the issue wants the result to look like an image, redo the visual comparison.
-Read the image, take a screenshot, compare, and update "Visual comparison" in the Conclusion of {{taskFile}}.
+When a post follows this round, the rules below say how to capture the look again and review it.
 
 {{evidenceRules}}
 Commit on the current branch.
