@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readLedger } from './ledger';
 import { resumedStage } from './sessions';
-import { chooseJobs, tick, type TickDeps } from './tick';
+import { chooseJobs, evaluateSchedule, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
@@ -187,6 +187,15 @@ describe('chooseJobs', () => {
     expect(chooseJobs(state({ devFailed: 'dev0002' }), [], NOW, CFG, 'dev0003')).toEqual([{ stage: 'dev', issue: null }]);
   });
 
+  it('holds the checks of cards whose base is broken, and nothing else', () => {
+    const broken = { dev: { files: ['src/sim/wear.test.ts'], head: DEV, at: '' } };
+    const s = state({ testPhase: { 1: 'checks', 2: 'checks-after-fix', 3: 'fix', 5: 'checks' }, brokenBases: broken });
+    const cards = [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(4, 'Design'), card(5, 'Testing', ['hotfix'])];
+    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 })).toEqual([{ stage: 'checks', issue: 5 }, { stage: 'verify', issue: 3 }, { stage: 'design', issue: 4 }]);
+    const waits = evaluateSchedule(s, cards, NOW, CFG).decisions.filter((d) => d.reasons.includes('base-broken')).map((d) => d.issue);
+    expect(waits).toEqual([1, 2]);
+  });
+
   it('skips stuck cards, Approval and Done', () => {
     const cards = [card(1, 'Testing', [STUCK_LABEL]), card(2, 'Approval'), card(3, 'Done'), card(4, 'Design')];
     expect(chooseJobs(state(), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 4 }]);
@@ -244,6 +253,27 @@ describe('tick', () => {
     expect(h.killed).toEqual([]);
     expect(args(h)).toEqual([['design', '8']]);
     expect(readState(h.ctx.statePath).jobs.map((j) => [j.issue, j.pid])).toEqual([[5, 42], [8, 77]]);
+  });
+
+  it('keeps a broken base while its branch stands still, and starts the held checks once it moves', async () => {
+    const entry = { files: ['src/sim/wear.test.ts'], head: 'dev0000', at: '' };
+    const h = harness(null, true, [card(4, 'Testing')], [], 'dev0000');
+    writeState(h.ctx.statePath, state({ devBuild: 'dev0000', testPhase: { 4: 'checks' }, brokenBases: { dev: entry } }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([]);
+    expect(Object.keys(readState(h.ctx.statePath).brokenBases)).toEqual(['dev']);
+    const moved = harness(null, true, [card(4, 'Testing')], [], 'dev0001');
+    writeState(moved.ctx.statePath, state({ devBuild: 'dev0001', testPhase: { 4: 'checks' }, brokenBases: { dev: entry } }));
+    await tick(moved.ctx, '/code', moved.deps);
+    expect(readState(moved.ctx.statePath).brokenBases).toEqual({});
+    expect(args(moved)).toEqual([['checks', '4']]);
+  });
+
+  it('drops the broken base of a release branch that is gone', async () => {
+    const h = harness(null, true, []);
+    writeState(h.ctx.statePath, state({ brokenBases: { 'release/2026-01-05': { files: ['src/a.test.ts'], head: 'r000', at: '' } } }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).brokenBases).toEqual({});
   });
 
   it('starts each job on the CPUs of its pool, verify beside implement and checks alone on the test pool', async () => {

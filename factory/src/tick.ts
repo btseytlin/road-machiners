@@ -13,6 +13,7 @@ import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
+import { BASE_BRANCH, HOTFIX_BASE, baseBranchIn } from './stages/common';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
 
@@ -73,10 +74,17 @@ function testingStage(state: FactoryState, issue: number): JobStage {
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
 const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(label);
 
+// A Testing card whose checks wait because its base branch fails the same tests. The card stays in its phase until the base moves.
+function heldByBase(state: FactoryState, card: Card): boolean {
+  if (card.column !== 'Testing' || testingStage(state, card.issue) !== 'checks') return false;
+  const base = baseBranchIn(state, card.labels);
+  return base !== null && base in state.brokenBases;
+}
+
 // Card jobs in order: hotfixes, ad hoc tasks, factory changes, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
 function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
-  const open = openCards(cards).filter(lacks(RELEASE_LABEL));
+  const open = openCards(cards).filter(lacks(RELEASE_LABEL)).filter((card) => !heldByBase(state, card));
   const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
   const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
@@ -141,7 +149,7 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval' | 'base-broken';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -156,6 +164,7 @@ function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
   if (card.labels.includes(NEEDS_INFO_LABEL)) reasons.push('needs-info');
   if (card.column === 'Approval') reasons.push('approval');
+  if (heldByBase(state, card)) reasons.push('base-broken');
   return reasons.length ? [{ stage: readWaitingStage(state, card), issue: card.issue, reasons }] : [];
 }
 function readWaitingStage(state: FactoryState, card: Card): JobStage {
@@ -338,6 +347,18 @@ async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise
   updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
 }
 
+// A broken base is over when its branch moves. The held cards then run their checks again, and the first one that still fails records the base again.
+// An entry of a branch that is gone, like a shipped release branch, goes too.
+async function releaseFixedBases(ctx: Ctx): Promise<void> {
+  const state = readState(ctx.statePath);
+  const live = [BASE_BRANCH, HOTFIX_BASE, ...(state.release ? [state.release.branch] : [])];
+  for (const [base, broken] of Object.entries(state.brokenBases)) {
+    if (live.includes(base) && await ctx.repo.headHash(base) === broken.head) continue;
+    updateState(ctx.statePath, (current) => ({ ...current, brokenBases: Object.fromEntries(Object.entries(current.brokenBases).filter(([name]) => name !== base)) }));
+    ctx.log('tick', null, `${base} moved, the cards held for its broken tests run their checks again`);
+  }
+}
+
 // A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
 async function expireReplies(ctx: Ctx): Promise<void> {
   const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
@@ -369,6 +390,7 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
   }
   await ctx.repo.fetch();
+  await releaseFixedBases(ctx);
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);
   const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);

@@ -34,6 +34,8 @@ let albumFails = false;
 let openPr: string | null = null;
 let labels: string[] = [];
 let bases: string[] = [];
+// What the failing test files do on the base branch. Null means they pass there.
+let baseFailure: string | null = null;
 // The merges testing queued for the approve job.
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
@@ -60,6 +62,7 @@ beforeEach(() => {
   openPr = null;
   labels = [];
   bases = [];
+  baseFailure = null;
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -71,6 +74,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat', gpu: false },
     log: () => undefined,
+    now: () => new Date('2026-10-04T10:00:00Z'),
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
@@ -101,6 +105,12 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
       },
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
+        // The run of the failing test files on the base branch.
+        if (script.includes('npx vitest run')) {
+          calls.push(`base-checks ${script.split('npx vitest run ')[1].trim()}`);
+          if (baseFailure !== null) throw new Error(baseFailure);
+          return;
+        }
         shellScript = script;
         shellEnv = env;
         calls.push('checks');
@@ -315,6 +325,82 @@ describe('testing stage', () => {
     await runChecks(ctx, 7);
     expect(calls.at(-1)).toBe('move 7 Approval');
     expect(readState(ctx.statePath).testPhase).toEqual({});
+  });
+
+  describe('a failure that is also on the base', () => {
+    const WEAR = ' FAIL  src/sim/wear.test.ts > wear > wears tires\nAssertionError: expected 3 to be 4\n FAIL  src/sim/fuel-recovery.test.ts > recovers fuel\nAssertionError: expected 1 to be 2';
+    const approve = (run: AgentRun): void => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+
+    it('holds the card with its phase, no fix round and no blame, and records the base once', async () => {
+      const prompts: string[] = [];
+      baseFailure = WEAR;
+      const ctx = fakeCtx((run) => { prompts.push(run.prompt); approve(run); }, 1, WEAR);
+      await runVerify(ctx, 7);
+      await runChecks(ctx, 7);
+      expect(prompts).toHaveLength(1);
+      expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks' });
+      expect(readState(ctx.statePath).failures).toEqual([]);
+      expect(readState(ctx.statePath).brokenBases).toEqual({ dev: { files: ['src/sim/wear.test.ts', 'src/sim/fuel-recovery.test.ts'], head: 'abc123', at: expect.any(String) } });
+      expect(calls).toContain('base-checks src/sim/wear.test.ts src/sim/fuel-recovery.test.ts');
+      expect(bases).toContain('prepare dev');
+      expect(commentBodies.at(-1)).toContain('fail on dev too');
+      expect(calls).not.toContain('move 7 Approval');
+    });
+
+    it('checks a hotfix against main', async () => {
+      labels = ['hotfix'];
+      baseFailure = WEAR;
+      const ctx = fakeCtx(approve, 1, WEAR);
+      await runVerify(ctx, 7);
+      await runChecks(ctx, 7);
+      expect(Object.keys(readState(ctx.statePath).brokenBases)).toEqual(['main']);
+    });
+
+    it('gives a card the fix round when its tests pass on the base', async () => {
+      const ctx = fakeCtx(approve, 1, WEAR);
+      await runVerify(ctx, 7);
+      await runChecks(ctx, 7);
+      expect(calls).toContain('base-checks src/sim/wear.test.ts src/sim/fuel-recovery.test.ts');
+      expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'fix' });
+      expect(readState(ctx.statePath).brokenBases).toEqual({});
+    });
+
+    it('gives a card the fix round when only some of its failing tests fail on the base', async () => {
+      baseFailure = ' FAIL  src/sim/wear.test.ts > wear > wears tires\nAssertionError: expected 3 to be 4';
+      const ctx = fakeCtx(approve, 1, WEAR);
+      await runVerify(ctx, 7);
+      await runChecks(ctx, 7);
+      expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'fix' });
+      expect(readState(ctx.statePath).brokenBases).toEqual({});
+    });
+
+    it('runs nothing on the base for a failure with no test file, like a playtest', async () => {
+      const ctx = fakeCtx(approve, 1, 'playtest: the truck never moved');
+      await runVerify(ctx, 7);
+      await runChecks(ctx, 7);
+      expect(calls.filter((call) => call.startsWith('base-checks'))).toEqual([]);
+      expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'fix' });
+    });
+
+    it('fails loud when the base run breaks with no test file in it', async () => {
+      baseFailure = 'npm ci failed: network down';
+      const ctx = fakeCtx(approve, 1, WEAR);
+      await runVerify(ctx, 7);
+      await expect(runChecks(ctx, 7)).rejects.toThrow('The tests of dev did not run');
+    });
+
+    it('makes one entry for several cards, and runs the base only for the first', async () => {
+      baseFailure = WEAR;
+      const ctx = fakeCtx(approve, 3, WEAR);
+      for (const issue of [7, 8, 9]) {
+        await runVerify(ctx, issue);
+        await runChecks(ctx, issue);
+      }
+      expect(calls.filter((call) => call.startsWith('base-checks'))).toHaveLength(1);
+      expect(readState(ctx.statePath).brokenBases.dev.files).toEqual(['src/sim/wear.test.ts', 'src/sim/fuel-recovery.test.ts']);
+      expect(Object.keys(readState(ctx.statePath).brokenBases)).toEqual(['dev']);
+      expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks', 8: 'checks', 9: 'checks' });
+    });
   });
 
   it('refuses checks for a card verify has not finished', async () => {

@@ -18,6 +18,7 @@ digraph testing {
   XI [label="Implementation", fillcolor="#f3f4f6", color="#6b7280"];
   XD [label="Design", fillcolor="#f3f4f6", color="#6b7280"];
   XS [label="factory-stuck", fillcolor="#f3f4f6", color="#6b7280"];
+  XB [label="Wait for the base\nto move", fillcolor="#fde68a", color="#b45309"];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
   PC -> PC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
   HC -> HC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
@@ -28,4 +29,6 @@ digraph testing {
   HR -> XD [label="second FAIL"];
   PC -> XS [label="fails after the fix"];
   HC -> XS [label="fails after the fix"];
+  PC -> XB [label="tests fail on the base too"];
+  HC -> XB [label="tests fail on the base too"];
 }

@@ -51,7 +51,7 @@ When your purpose changes, call `factory_report_activity` with an allowed activi
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, or a server health line from the section Server health. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. The factory posts nothing about failures, so your message is the only one the committee sees.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a broken base in `brokenBases` (see Failures and Hermes in `docs/operations.md`), a failed factory update in `/factory/home/update-failed`, or a server health line from the section Server health. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. The factory posts nothing about failures, so your message is the only one the committee sees.
 
 Post to the committee only when a member must act or decide: you ask a question, or you could not fix the incident. Then your post is their only news of it. Name the stage and the issue with its link, say in one line what broke, then what you ask or what is still broken. No more than that.
 

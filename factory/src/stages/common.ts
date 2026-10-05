@@ -7,18 +7,23 @@ import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
 import { readState } from '../state';
 import { bundleOf } from './bundle';
-import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
+import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type FactoryState, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 export const HOTFIX_BASE = 'main';
 
-// A hotfix works on main, a release task on the release branch, every other card on dev. No open release is a bug, so it throws.
-export function baseBranchFor(ctx: Ctx, labels: string[]): string {
+// A hotfix works on main, a release task on the release branch, every other card on dev. Null when a release task has no open release.
+export function baseBranchIn(state: FactoryState, labels: string[]): string | null {
   if (labels.includes(HOTFIX_LABEL)) return HOTFIX_BASE;
   if (!labels.includes(RELEASE_TASK_LABEL)) return BASE_BRANCH;
-  const release = readState(ctx.statePath).release;
-  if (release === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);
-  return release.branch;
+  return state.release?.branch ?? null;
+}
+
+// No open release for a release task is a bug, so it throws.
+export function baseBranchFor(ctx: Ctx, labels: string[]): string {
+  const base = baseBranchIn(readState(ctx.statePath), labels);
+  if (base === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);
+  return base;
 }
 
 export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {

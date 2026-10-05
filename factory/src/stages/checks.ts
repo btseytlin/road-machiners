@@ -61,7 +61,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const shown = approver === null ? { approval: readApproval(home, waiver !== null), evidence: waiver === null ? readEvidence(home, build) : null } : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
   const failure = await checkPatiently(ctx, issue, base, build);
-  if (failure !== null) return failed(ctx, issue, home, phase, failure);
+  if (failure !== null) return failed(ctx, issue, home, phase, base, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
   if (shown !== null) await post(ctx, issue, shown.approval, shown.evidence, url, base, waiver);
@@ -78,7 +78,9 @@ function checksPhase(ctx: Ctx, issue: number): TestPhase {
 }
 
 // The phase goes on a second failure too, so a retry after Hermes clears the stuck label starts again from verify.
-async function failed(ctx: Ctx, issue: number, home: string, phase: TestPhase, failure: string): Promise<void> {
+// A test that fails on the base too is not the card's. The card keeps its phase and waits for the base to move.
+async function failed(ctx: Ctx, issue: number, home: string, phase: TestPhase, base: string, failure: string): Promise<void> {
+  if (await heldByBase(ctx, issue, base, failure)) return;
   if (phase === 'checks-after-fix') {
     clearPhase(ctx, issue);
     throw new Error(`The factory checks failed twice.\n${failure}`);
@@ -156,6 +158,59 @@ function checkFailure(log: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const tail = existsSync(log) ? readFileSync(log, 'utf8').split('\n').slice(-FAILURE_TAIL_LINES).join('\n') : message;
   return stripAnsi(tail);
+}
+
+// The test files a vitest failure names, in order and once each. Only plain paths count, since they go into a shell command.
+export function failedTestFiles(failure: string): string[] {
+  return [...new Set([...failure.matchAll(/^\s*FAIL\s+([\w./-]+\.test\.ts)\b/gm)].map((match) => match[1]))];
+}
+
+// Whether the failing tests of a card fail on its base branch too. Then the base is broken, and the card is not to blame.
+// The tick holds every checks card of that base until the base moves, and Hermes's incident watch reports the entry once.
+// A failure with no test file in it, like a failed playtest or typecheck, is the card's.
+async function heldByBase(ctx: Ctx, issue: number, base: string, failure: string): Promise<boolean> {
+  const files = failedTestFiles(failure);
+  if (files.length === 0) return false;
+  const known = readState(ctx.statePath).brokenBases[base];
+  if (known === undefined || !files.every((file) => known.files.includes(file))) {
+    const head = await ctx.repo.headHash(base);
+    const broken = await baseFailures(ctx, issue, base, files);
+    if (!files.every((file) => broken.includes(file))) return false;
+    recordBrokenBase(ctx, base, head, broken);
+  }
+  ctx.log('checks', issue, `${files.join(', ')} fail on ${base} too, the card waits for ${base} to move`);
+  await ctx.github.comment(issue, `The checks failed in ${files.join(', ')}, and those tests fail on ${base} too. The failure is not in this card. The card waits, and its checks run again when ${base} moves.`);
+  return true;
+}
+
+// Adds the files to the base's entry, or starts a new entry when the base moved since the last one.
+function recordBrokenBase(ctx: Ctx, base: string, head: string, files: string[]): void {
+  updateState(ctx.statePath, (state) => {
+    const same = state.brokenBases[base]?.head === head ? state.brokenBases[base].files : [];
+    const entry = { files: [...new Set([...same, ...files])], head, at: ctx.now().toISOString() };
+    return { ...state, brokenBases: { ...state.brokenBases, [base]: entry } };
+  });
+}
+
+// Runs the card's failing test files on a fresh clone of the base. Returns the files that fail there.
+// A run that fails with no test file in the output is a broken run, not a verdict, so it throws.
+// A run that only timed out says the machine was slow, so it counts as a pass.
+async function baseFailures(ctx: Ctx, issue: number, base: string, files: string[]): Promise<string[]> {
+  const dir = checkDir(ctx, issue);
+  rmSync(dir, { recursive: true, force: true });
+  await ctx.repo.prepareWorkClone(base, base, dir);
+  const log = agentLog(ctx, issue, 'checks-base');
+  rmSync(log, { force: true });
+  try {
+    await ctx.container.shell(dir, `set -e\nmkdir -p tmp\nnpm ci\nnpx vitest run ${files.join(' ')}\n`, log);
+    return [];
+  } catch (error) {
+    const failure = checkFailure(log, error);
+    if (timeoutOnly(failure)) return [];
+    const failed = failedTestFiles(failure);
+    if (failed.length === 0) throw new Error(`The tests of ${base} did not run, so the failure of #${issue} is unclear.\n${failure}`);
+    return failed;
+  }
 }
 
 // Telegram caps a photo caption at 1024 characters.

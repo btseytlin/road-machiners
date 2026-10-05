@@ -46,7 +46,21 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 
 A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
-Hermes manages the factory. Its incident watch wakes it on a stuck issue, a failed job, a tick crash in `lastTickError`, a failed `/dev/` build, a failed factory update, low disk, low memory, no tick for 20 minutes or a pause older than an hour. Hermes reads the logs, the state and the chat, then fixes the incident or asks the committee. [hermes/SOUL.md](../hermes/SOUL.md) holds its rules.
+Hermes manages the factory. Its incident watch wakes it on a stuck issue, a failed job, a tick crash in `lastTickError`, a broken base, a failed `/dev/` build, a failed factory update, low disk, low memory, no tick for 20 minutes or a pause older than an hour. Hermes reads the logs, the state and the chat, then fixes the incident or asks the committee. [hermes/SOUL.md](../hermes/SOUL.md) holds its rules.
+
+## Broken base
+
+A base branch can fail tests no card touched. The base is `dev` for a card, `main` for a hotfix and the release branch for a release task. When a card's checks fail in test files, the checks run those files on a fresh clone of the base. If every failing file fails there too, the failure is not the card's.
+
+- The state records the base in `brokenBases` with the failing files and the branch head.
+- The card gets no fix round, no `factory-stuck` label and no failure record. It keeps its test phase, and one comment on its issue says why it waits.
+- The tick starts no checks for a card of that base. The dashboard shows the wait as `base-broken`.
+- Another card that fails in files already recorded joins the wait with no base run, so the base is checked once per head.
+- The incident watch prints one line per broken base, so six waiting cards are one incident.
+- When the base branch moves, the tick drops the entry and the waiting cards run their checks again. If the new head still fails, the first card to fail records it again. An entry of a branch that is gone is dropped too.
+- Hermes fixes the tests on the base branch. A merge of that fix is the move that frees the cards. Hermes removes the entry from `brokenBases` by hand only if the tests are not broken.
+
+A failure with no test file in it, like a failed playtest, typecheck or build, never goes this way.
 
 While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. A paused tick also skips its job checks, so a dead job stays in `jobs` until the pause ends. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
 

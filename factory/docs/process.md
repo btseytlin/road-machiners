@@ -56,6 +56,7 @@ Limits:
 - A card gets two visual send-backs. A third fails the stage.
 - A check failure gets one fix round. A second failure fails the stage.
 - Checks that fail only on timeouts run up to 3 times with no agent.
+- Failing tests that fail on the card's base branch too are not the card's. The card gets no fix round and no label. It waits in Testing until the base branch moves, then its checks run again. Hermes gets one incident per broken base. See [operations.md](operations.md#broken-base).
 
 ## Committee inputs
 

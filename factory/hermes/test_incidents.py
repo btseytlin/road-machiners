@@ -10,10 +10,10 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None) -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, broken_bases: dict | None = None) -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
-    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
+    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None, "brokenBases": broken_bases or {}}))
     if health is not None:
         (home / "health").write_text(json.dumps(health))
     if pause_age_minutes is not None:
@@ -69,3 +69,8 @@ def test_only_a_pause_over_an_hour_is_reported(tmp_path):
     fresh = health()
     assert run(tmp_path / "new", fresh, pause_age_minutes=10) == []
     assert run(tmp_path / "old", fresh, pause_age_minutes=90) == ["paused over an hour: Hermes fixing #5"]
+
+
+def test_a_broken_base_prints_one_line_per_branch(tmp_path):
+    out = run(tmp_path, health(), broken_bases={"dev": {"files": ["src/sim/wear.test.ts", "src/sim/fuel-recovery.test.ts"], "head": "abc1234", "at": at(5)}})
+    assert out == ["base broken: dev fails src/sim/wear.test.ts src/sim/fuel-recovery.test.ts"]

@@ -7,6 +7,8 @@ gh issue list -R "$FACTORY_REPO" --label factory-stuck --state open --json numbe
 jq -r '.failures // [] | .[] | "failed \(.stage)\(if .issue then " #\(.issue)" else "" end): \(.error | split("\n")[0]) (log \(.log // "none"))"' /factory/home/state/state.json
 jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/home/state/state.json
 jq -r '.devFailed // empty | "dev build failed at " + .' /factory/home/state/state.json
+# A base branch whose own tests fail. One line per branch, whatever the number of cards it holds.
+jq -r '.brokenBases // {} | to_entries[] | "base broken: \(.key) fails \(.value.files | join(" "))"' /factory/home/state/state.json
 # factory-update could not deploy main. Its log is logs/update.log.
 if [ -f /factory/home/update-failed ]; then echo "update failed: $(cat /factory/home/update-failed)"; fi
 # Every tick, paused or not, writes the health file. A tick waits up to 15 minutes on the repo lock and the timer runs every minute, so 20 minutes without one means ticks stopped.

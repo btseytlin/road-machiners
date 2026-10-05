@@ -146,7 +146,11 @@ export type FactoryState = {
   visualWaivers: Record<string, VisualWaiver>; // issue number -> the committee's waiver of the screenshot of its next approval post. The post consumes it.
   textPosts: string[]; // Telegram message ids of approval posts sent as text, since a waived post has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  brokenBases: Record<string, BrokenBase>; // base branch -> the tests that fail on it. Its cards wait in the checks, and Hermes's incident watch reports it. The tick drops the entry when the branch moves.
 };
+
+// `files` are test files that fail on the base branch itself. `head` is the short hash of the branch when they failed, and `at` an ISO time.
+export type BrokenBase = { files: string[]; head: string; at: string };
 
 // A committee member's recorded decision to post an issue for approval with no screenshot. `by` is the Telegram user id, `at` an ISO time.
 export type VisualWaiver = { by: string; byName: string | null; reason: string; at: string };
