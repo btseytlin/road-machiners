@@ -81,7 +81,7 @@ function resuming(ctx: Ctx, stage: JobStage, issue: number | null): boolean {
   return issue !== null && readState(ctx.statePath).interrupted.includes(issue) && resumedStage(ctx.cfg.home, issue) === stage;
 }
 
-// Only agent and test jobs run agents with sessions. A branch job's id may be a change id, no issue number.
+// Only agent and test jobs run agents with sessions.
 function clearSessionsOf(ctx: Ctx, stage: JobStage, issue: number | null): void {
   if (issue !== null && QUEUE_OF[stage] !== 'branch') clearSessions(ctx.cfg.home, issue);
 }
@@ -105,7 +105,7 @@ async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Jo
 function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
   updateState(ctx.statePath, (state) => {
     const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
-    // Only agent and test jobs resume. A change job's id is no issue number, so it never clears a mark.
+    // Only agent and test jobs resume.
     const interrupted = QUEUE_OF[stage] === 'branch' ? state.interrupted : state.interrupted.filter((item) => item !== issue);
     return { ...clearQueued(state, stage, issue), jobs, interrupted };
   });
