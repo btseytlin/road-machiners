@@ -87,10 +87,10 @@ async function checkReleaseAndManager(page) {
   assert.equal(await page.locator('#connection').textContent(), 'Live');
   const waiting = structuredClone(fixture);
   waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
-  waiting.live.value.workers[0].milestone = 'validating';
+  waiting.live.value.workers[0].milestone = 'Building orchard buildings';
   await sendSnapshot(page, waiting);
   assert.match(await page.locator('#manager-action').textContent(), /Waiting for model · 16m in phase/);
-  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /Checking changes/);
+  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /^Building orchard buildings: /);
   waiting.live.value.workers[0].status = 'stale';
   await sendSnapshot(page, waiting);
   assert.equal(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), 'Activity stale');
