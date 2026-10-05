@@ -3,7 +3,7 @@ import { CLONE_ROUNDS, HOST_ONLY_CHECKS, checkClone } from './clone-checks';
 
 const USAGE = `Usage: factory-check <${CLONE_ROUNDS.join('|')}>, run from your folder after your last commit`;
 
-// The command an agent runs in its container as its last step, from its folder. Argument: the round, test, patch or waived.
+// The command an agent runs in its container as its last step, from its folder. Argument: the round, test or patch.
 // It prints each failure with the factory's own message and returns the exit code. The factory still gates after the stage.
 export function runAgentCheck(args: string[], cwd: string, print: (line: string) => void): number {
   const round = args.length === 1 ? CLONE_ROUNDS.find((known) => known === args[0]) : undefined;

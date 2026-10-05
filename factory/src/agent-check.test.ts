@@ -57,7 +57,7 @@ describe('runAgentCheck', () => {
     git('commit', '-q', '--allow-empty', '-m', 'later');
     const { code, text } = lines(['test']);
     expect(code).toBe(1);
-    expect(text).toMatch(/Failed: \.factory\/evidence\.json is from commit [0-9a-f]{40}, the final branch is at [0-9a-f]{40}/);
+    expect(text).toMatch(/Failed: The evidence manifest was dropped: \.factory\/evidence\.json is from commit [0-9a-f]{40}, the final branch is at [0-9a-f]{40}/);
     expect(text).toContain('Failed: .factory/visual-review.json is from commit');
   });
 
@@ -71,16 +71,15 @@ describe('runAgentCheck', () => {
   it('reports a missing screenshot and a missing visual review', () => {
     capture();
     rmSync(join(out, 'screenshot.png'));
-    expect(lines(['test']).text).toContain('Failed: The testing stage wrote no .factory/screenshot.png');
+    expect(lines(['test']).text).toContain('Failed: The testing agent wrote no .factory/screenshot.png. The post drops the images it cannot show.');
     capture();
     rmSync(join(out, 'visual-review.json'));
     expect(lines(['test']).text).toContain('Failed: The testing stage wrote no .factory/visual-review.json');
   });
 
-  it('checks only the approval for a waived round and skips the review for a patch', () => {
+  it('skips the review for a patch', () => {
     capture();
     git('commit', '-q', '--allow-empty', '-m', 'later');
-    expect(lines(['waived']).code).toBe(0);
     expect(lines(['patch']).text).toContain('evidence.json is from commit');
     expect(lines(['patch']).text).not.toContain('visual-review.json');
   });
@@ -88,6 +87,7 @@ describe('runAgentCheck', () => {
   it('refuses a missing or unknown round', () => {
     expect(lines([]).code).toBe(2);
     expect(lines(['full']).code).toBe(2);
+    expect(lines(['waived']).code).toBe(2);
     expect(lines(['test', 'patch']).code).toBe(2);
   });
 
@@ -111,7 +111,7 @@ describe('the bundled command', () => {
     const dir = await buildCheckBundle(join(home, 'factory-home'));
     const result = spawnSync('node', [join(dir, 'check.mjs'), 'test'], { cwd: home, encoding: 'utf8' });
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('Failed: .factory/evidence.json is from commit');
+    expect(result.stdout).toContain('Failed: The evidence manifest was dropped: .factory/evidence.json is from commit');
     expect(result.stdout).toBe(`${lines(['test']).text}\n`);
   });
 });

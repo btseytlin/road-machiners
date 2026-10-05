@@ -4,7 +4,7 @@ import { readState, updateState } from './state';
 import type { Ctx, FactoryState } from './types';
 
 // Commands that leave the post as it is: they act on no post, or Hermes answers and the post stays open.
-const UNMARKED = ['change', 'adhoc', 'reply', 'answer', 'waste-change', 'waive-visual'] as const;
+const UNMARKED = ['change', 'adhoc', 'reply', 'answer', 'waste-change'] as const;
 type PostKind = Exclude<InboxCommand['kind'], (typeof UNMARKED)[number]>;
 
 // The line a committee action adds under the post it acted on.
@@ -39,7 +39,7 @@ export async function markPost(ctx: Ctx, command: InboxCommand, by: string): Pro
   const caption = postCaptions[key];
   if (caption === undefined) throw new Error(`No caption is recorded for post ${key}`);
   const next = withStatus(caption, STATUS[kind](by, command.issue));
-  // A waived approval post is a text message, so its status edits the text.
+  // An approval post with no screenshot is a text message, so its status edits the text.
   if (textPosts.includes(key)) await ctx.telegram.editText(ctx.cfg.committeeChat, command.postId, next);
   else await ctx.telegram.editCaption(ctx.cfg.committeeChat, command.postId, next);
   updateState(ctx.statePath, (state) => ({ ...state, postCaptions: { ...state.postCaptions, [key]: next } }));

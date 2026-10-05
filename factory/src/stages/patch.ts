@@ -1,7 +1,5 @@
 import { readApproval } from '../clone-checks';
-import { readEvidence } from '../evidence';
 import { readState, updateState } from '../state';
-import { visualWaiverOf } from '../visual-waiver';
 import { BRANCH, FEEDBACK_HEADING, GAME_DIR, TASK_FILE, type Ctx } from '../types';
 import { agentHome, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { mergeBase, requireBaseMerged, setPhase } from './verify';
@@ -21,11 +19,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   throwIfNeedsCommittee(home);
   const redesign = readOutput(home, 'needs-redesign.md');
   if (redesign !== null) return toDesign(ctx, issue, redesign);
-  const waived = visualWaiverOf(ctx, issue) !== null;
-  readApproval(home, waived);
+  readApproval(home);
   await guardAndPush(ctx, issue, base, 'patch');
   await requireBaseMerged(ctx, issue, base, merged);
-  if (!waived) readEvidence(home, await ctx.repo.headHash(BRANCH(issue)));
   endPatch(ctx, issue);
   setPhase(ctx, issue, 'checks');
   await ctx.github.move(issue, 'Testing');

@@ -1,16 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readEvidence, type Evidence } from './evidence';
+import { readShown, type Evidence } from './evidence';
 import { OUT_DIR } from './types';
 import { readVisualReview } from './visual-review';
 
 export type Approval = { description: string; howToTry: string };
 
-// A committee waiver of the screenshot is the only case that accepts an approval with no image.
-export function readApproval(home: string, waived = false): Approval {
+export function readApproval(home: string): Approval {
   const raw = readOutput(home, 'approval.json');
   if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (!waived && readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
   return parseApproval(JSON.parse(raw));
 }
 
@@ -25,13 +23,12 @@ function readOutput(home: string, name: string): string | null {
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
-// The rounds that leave evidence for a post. `test` also leaves the visual review. `patch` leaves evidence with no review. `waived` leaves an approval with no images.
-export type CloneRound = 'test' | 'patch' | 'waived';
-export const CLONE_ROUNDS: readonly CloneRound[] = ['test', 'patch', 'waived'];
+// The rounds that leave evidence for a post. `test` also leaves the visual review. `patch` leaves evidence with no review.
+export type CloneRound = 'test' | 'patch';
+export const CLONE_ROUNDS: readonly CloneRound[] = ['test', 'patch'];
 
 // What the factory checks after the stage and a clone cannot answer alone.
 export const HOST_ONLY_CHECKS = [
-  'whether the committee waived the screenshot, which the state file holds',
   'the guard on the pushed diff: factory paths and a SAVE_MAJOR bump',
   'the merge of the base branch into the work branch',
   'the fresh-clone tests, typecheck, playtest and build',
@@ -41,26 +38,23 @@ export type CloneReport = { failures: string[]; notes: string[] };
 
 // Runs every check that reads only the clone's files and git state, the same functions the factory calls after the stage.
 // It keeps going after a failure, so one run lists them all. A visual review that sends the card back is a valid outcome, so it is a note.
+// Missing or broken evidence does not stop the card, but the post then drops the images, so the check reports it for the agent to fix.
 export function checkClone(home: string, head: string, round: CloneRound): CloneReport {
   const report: CloneReport = { failures: [], notes: [] };
-  attempt(report.failures, () => readApproval(home, round === 'waived'));
-  if (round !== 'waived') checkEvidence(home, head, round, report);
+  attempt(report.failures, () => readApproval(home));
+  const shown = readShown(home, head);
+  if (shown.problem !== null) report.failures.push(`${shown.problem} The post drops the images it cannot show.`);
+  if (round === 'test') checkReview(home, head, shown.evidence, report);
   return report;
 }
 
-function checkEvidence(home: string, head: string, round: CloneRound, report: CloneReport): void {
-  const evidence = attempt(report.failures, () => readEvidence(home, head));
-  if (round === 'test') checkReview(home, head, evidence, report);
-}
-
-// The review reads the shown images from the manifest. A manifest from an older commit still names them, so the review gets checked too.
+// The factory reads the review against the same evidence the post shows.
 function checkReview(home: string, head: string, evidence: Evidence | null, report: CloneReport): void {
-  const shown = evidence ?? attempt([], () => readEvidence(home, null));
-  if (shown === null) {
-    report.notes.push('The visual review is not checked, since it needs readable evidence.');
+  if (evidence === null) {
+    report.notes.push('The visual review is not checked, since there is no screenshot.');
     return;
   }
-  const review = attempt(report.failures, () => readVisualReview(home, head, shown));
+  const review = attempt(report.failures, () => readVisualReview(home, head, evidence));
   if (review?.visual === true && review.sendBack !== null) report.notes.push(`The visual review sends the card back to ${review.sendBack.to}. That is a valid outcome.`);
 }
 

@@ -81,7 +81,7 @@ describe('dockerContainer', () => {
   });
 
   it('tells the agents that write evidence to run the mounted command as their last step', () => {
-    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch'], ['test-waived', 'waived']]) {
+    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch']]) {
       expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
     }
   });
