@@ -237,23 +237,32 @@ export class SoundDirector {
 }
 
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
+export type LoopState = { stormTiles: number; inCombat: boolean; inTown: boolean; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
+  townGain: number;
   combatGain: number;
   musicCutoffHz: number;
   paused: boolean;
 };
 
+// Which music plays: combat wins, then town, then calm road music.
+function musicOf(s: LoopState): "calm" | "town" | "combat" {
+  if (s.inCombat) return "combat";
+  return s.inTown ? "town" : "calm";
+}
+
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
   const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const music = musicOf(s);
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
-    calmGain: s.inCombat ? 0 : 1,
-    combatGain: s.inCombat ? 1 : 0,
+    calmGain: Number(music === "calm"),
+    townGain: Number(music === "town"),
+    combatGain: Number(music === "combat"),
     musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
     paused: s.paused,
   };
@@ -318,6 +327,7 @@ export class SoundLoops {
   private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
+  private town: LoopHandle;
   // Calm tracks play in a playlist shuffled once per session, so every track plays before any repeats.
   private playlist = shuffled(SOUNDS["music-calm"].files, Math.random);
   private track = 0;
@@ -328,6 +338,7 @@ export class SoundLoops {
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
     this.calm = player.loop("music-calm", silent, this.playlist[0]);
+    this.town = player.loop("music-town", silent);
   }
 
   drive(g: Glide, chassisId: string): void {
@@ -358,9 +369,10 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight as the next playlist track.
+  // Calm music comes back after a fight or a town as the next playlist track. Town music plays inside town guard range.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
+    this.updateTown(l.townGain, was);
     if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);
     this.score.setPaused(l.paused);
     if (was?.combatGain !== l.combatGain) this.score.setCombat(l.combatGain > 0, MIX.music.fadeSeconds);
@@ -372,6 +384,10 @@ export class SoundLoops {
     if (was?.calmGain === 0) this.nextCalm(fade);
     this.calm.setGain(gain, fade);
 }
+
+  private updateTown(gain: number, was: LoopLevels | null): void {
+    if (was?.townGain !== gain) this.town.setGain(gain, MIX.music.fadeSeconds);
+  }
 
   // The radio's next button crossfades to another calm track at the current calm level.
   nextTrack(): void {
