@@ -12,13 +12,15 @@ import { model, socket, type ModelName } from '../render/models';
 import { wheelMounts } from '../../phys/body';
 import { bareVehicle } from '../../sim/factory';
 import { bodyOf } from '../../sim/body';
+import { baseGrid } from '../../sim/grid';
+import { PLAN_PAD } from '../../render/partLooks';
 import { VehicleView } from '../render/vehicle';
 import { weaponHead } from '../render/weaponHead';
-import { blueprintOf, blueprintSvg, GLASS_MATERIAL, paintBlueprint, type BlueprintColors } from './blueprint';
+import { blueprintOf, blueprintPlanSvg, blueprintSvg, calmed, GLASS_MATERIAL, paintBlueprint, type BlueprintColors, type Calm } from './blueprint';
 import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 9;
+export const ICON_STYLE_VERSION = 10;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -60,6 +62,9 @@ const OUTER_CELLS = 0.04;
 const INNER_CELLS = 0.022;
 // Armor is built as a front plate with its outer face at +x. It turns this far about y, so the face looks at the camera.
 const ARMOR_YAW = -Math.PI / 2;
+// A plan's outline width in screen pixels, and the condition panel's cell size it is judged at.
+const PLAN_STROKE = 2;
+const PLAN_CELL_PX = 30;
 const TOON_OUTLINE_PX = 4; // toon silhouette outline width at cell size
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 // The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
@@ -90,8 +95,9 @@ function renderer(): { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } 
 }
 
 // The icon at size x size pixels with a transparent background, and for an item its blueprint as one SVG group in
-// size x size units.
-export function renderIcon(entry: IconEntry, view: IconView, size: number): { icon: HTMLCanvasElement; svg: string | null } {
+// size x size units, once in its tone and once in TINT_COLORS.
+export type RenderedIcon = { icon: HTMLCanvasElement; svg: string | null; tint: string | null };
+export function renderIcon(entry: IconEntry, view: IconView, size: number): RenderedIcon {
   const big = size * SUPERSAMPLE;
   const { scene, camera } = stage(entry, view);
   if (iconStyle(entry) === 'line') {
@@ -103,7 +109,12 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): { ic
     icon.width = size;
     icon.height = size;
     paintBlueprint(context(icon), bp, colors);
-    return { icon, svg: `<g transform="scale(${size / big})">${blueprintSvg(bp, colors, `clip-${entry.id}`)}</g>` };
+    const group = (svg: string): string => `<g transform="scale(${size / big})">${svg}</g>`;
+    return {
+      icon,
+      svg: group(blueprintSvg(bp, colors, `clip-${entry.id}`)),
+      tint: group(blueprintSvg(calmed(bp, TINT_CALM), TINT_COLORS, `tint-clip-${entry.id}`, TINT_PEN)),
+    };
   }
   const color = draw(scene, camera, big, null);
   const normal = draw(scene, camera, big, new THREE.MeshNormalMaterial({ flatShading: true }));
@@ -111,7 +122,41 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): { ic
   toonInk(color, creaseMask(color, normal, depth), TOON_OUTLINE_PX * SUPERSAMPLE);
   const solid = solidMask(color);
   if (entry.rank > 1) paint(color, stripes(solid, boundsOf(solid), entry.rank - 1, TOON_OUTLINE_PX * SUPERSAMPLE), [...rgbOf(INK), 255]);
-  return { icon: shrink(color, size), svg: null };
+  return { icon: shrink(color, size), svg: null, tint: null };
+}
+
+// Blueprint colors from CSS variables, so a screen sets them: the condition panel draws a part in its condition color.
+const TINT_COLORS: BlueprintColors = { line: 'var(--tint-line)', fill: 'var(--tint-fill)', shadow: 'var(--tint-shadow)', glass: 'var(--tint-glass)', light: 'var(--tint-light)' };
+// How much the small drawings calm down, see calmed(). A chassis plan straightens harder, so the truck reads as one
+// clean outline. A tinted icon straightens the small steps of dents and bevels.
+const PLAN_CALM: Calm = { tolerance: 0.012, minArea: 0.03, minPatch: 0 };
+const TINT_CALM: Calm = { tolerance: 0.015, minArea: 0.03, minPatch: 0.08 };
+const TINT_PEN = { outer: 'var(--tint-outer)', inner: 'var(--tint-inner)' };
+
+// A chassis plan: the bare truck's outline from straight above, nose up, as SVG in size x size units. Its box is the
+// inner grid columns and every row, with PLAN_PAD cells around it, so the game can stretch it over those cells.
+export function renderPlan(entry: IconEntry, size: number): string {
+  if (entry.section !== 'chassis') throw new Error(`Plan of ${entry.id}: only a chassis has a plan`);
+  const { root } = build(entry);
+  toon(root, 'line');
+  const scene = new THREE.Scene();
+  scene.add(root);
+  const grid = baseGrid(entry.id);
+  const { half } = bodyOf(entry.id);
+  const col = (2 * half.z) / (grid.w - 2);
+  const x = half.x + (PLAN_PAD * 2 * half.x) / grid.h;
+  const z = half.z + PLAN_PAD * col;
+  const camera = new THREE.OrthographicCamera(-z, z, x, -x, 0.01, 100);
+  camera.position.set(0, 30, 0);
+  camera.up.set(1, 0, 0);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  camera.updateProjectionMatrix();
+  // Drawing pixels per screen pixel, with the panel's cells PLAN_CELL_PX across.
+  const scale = size / ((2 * z) / col) / PLAN_CELL_PX;
+  const pen = { outer: PLAN_STROKE * scale, inner: PLAN_STROKE * scale };
+  const bp = blueprintOf(scene, camera, size, pen, (m) => draw(scene, camera, size, m));
+  return blueprintPlanSvg(calmed(bp, PLAN_CALM), PLAN_STROKE);
 }
 
 // The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue.

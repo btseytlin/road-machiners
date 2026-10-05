@@ -163,7 +163,7 @@ export class InventoryView {
     const me = playerVehicle(w);
     const g = gridOf(me);
     this.showSelection(w);
-    const grid = gridEl(g, this.cell);
+    const grid = gridEl(g, me.chassisId, this.cell);
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     this.showFan(me, this.selectedGun(me));
@@ -175,12 +175,7 @@ export class InventoryView {
         el(
           "div",
           { class: "inv-truck" },
-          el(
-            "div",
-            { class: "truck-shell" },
-            el("div", { class: "truck-nose", "aria-hidden": "true" }),
-            grid,
-          ),
+          el("div", { class: "truck-shell" }, grid),
           this.legend(),
         ),
         el(
@@ -215,12 +210,12 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Top view, nose up. D: deck mounts for weapons, scanners and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
+        "Top view, nose up. Brown cells are deck mounts for weapons, scanners and cargo frames. Blue-grey cells are the engine mount. The cells around the truck are armor mounts. Hover a cell to see what it mounts.",
       ),
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. The marks on a gun show its blocked sides.",
+        "A part works only when it lies fully on one kind of mount. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
@@ -650,14 +645,14 @@ export class InventoryView {
     const target = w.vehicles.find((v) => v.id === truckId);
     if (!target || !isKnockedOut(target))
       return el("div", { class: "inv-truck inv-target" }, el("h3", {}, "The truck got away"));
-    const grid = gridEl(gridOf(target), this.cell);
+    const grid = gridEl(gridOf(target), target.chassisId, this.cell);
     const removing = removalIds(w, target);
     grid.append(...target.items.map((it) => this.truckItemEl(w, target, it, grid, removing.has(it.id))));
     return el(
       "div",
       { class: "inv-truck inv-target" },
       el("h3", {}, `${npcName(target)}, ${gaveUp(target) ? "gave up" : "knocked out"}`),
-      el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
+      el("div", { class: "truck-shell" }, grid),
       el("div", { class: "dim" }, "Drag items onto your grid."),
     );
   }

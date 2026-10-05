@@ -21,6 +21,7 @@ import {
   ICON_VIEWS,
   MARGIN,
   renderIcon,
+  renderPlan,
   type BarrelRead,
   type IconCategory,
   type IconView,
@@ -32,6 +33,7 @@ const VIEWS: readonly IconView[] = ['top', 'diagonal'];
 const SMALL = [36, 22]; // the card and chip sizes the atlas shows beside each large icon
 const REPORT_SIZE = 36;
 const REPORT_PAIRS = 10;
+const PLAN_SIZE = 512; // a plan's drawing square, which sets how fine its raster passes are
 
 const SECTION_TITLES: Record<IconSection, string> = {
   weapon: 'Weapons',
@@ -56,7 +58,8 @@ const MUTED = 0xaaa69e;
 
 type Sheet = 'items' | 'chassis';
 // svg: an item's blueprint in the view the game shows, as an SVG group in cell units. Null for a chassis.
-type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement>; svg: string | null };
+// tint: the same blueprint in colors from CSS variables. Null for a chassis.
+type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement>; svg: string | null; tint: string | null };
 // A drawn extent as shares of the cell: x, y, w, h.
 type Box = [number, number, number, number];
 type Cell = { index: number; hash: string; box: Box };
@@ -85,9 +88,11 @@ async function build(): Promise<IconBuild> {
     const sheet: Sheet = entry.section === 'chassis' ? 'chassis' : 'items';
     const top = renderIcon(entry, 'top', CELL[sheet]);
     const diagonal = renderIcon(entry, 'diagonal', CELL[sheet]);
-    return { entry, sheet, views: { top: top.icon, diagonal: diagonal.icon }, svg: (iconView(entry) === 'top' ? top : diagonal).svg };
+    const shown = iconView(entry) === 'top' ? top : diagonal;
+    return { entry, sheet, views: { top: top.icon, diagonal: diagonal.icon }, svg: shown.svg, tint: shown.tint };
   });
   const files: Record<string, string> = {
+    'public/icons/tint.svg': `data:image/svg+xml;base64,${btoa(tintSheetOf(rendered))}`,
     'public/icons/items.svg': `data:image/svg+xml;base64,${btoa(svgSheetOf(rendered))}`,
     'public/icons/chassis.png': sheetOf(rendered, 'chassis').toDataURL('image/png'),
     'public/icons/atlas/atlas-top.png': atlasOf(sectionsOf(rendered, () => 'top'), TOP_CAPTION).toDataURL('image/png'),
@@ -130,6 +135,19 @@ function svgSheetOf(rendered: readonly Rendered[]): string {
   });
   const [w, h] = [cols * cell, Math.ceil(items.length / cols) * cell];
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${cells.join('')}</svg>\n`;
+}
+
+// The tint sheet: every part's blueprint in colors from CSS variables, one symbol tint-<id> each, cropped to its
+// drawing. The condition panel joins it to the page and colors each part by its condition.
+function tintSheetOf(rendered: readonly Rendered[]): string {
+  const cell = CELL.items;
+  const symbols = inSheet(rendered, 'items').flatMap((r) => {
+    if (r.entry.section === 'good') return [];
+    if (r.tint === null) throw new Error(`Part ${r.entry.id} has no tinted blueprint`);
+    const [x, y, w, h] = boxOf(r.views[iconView(r.entry)]).map((v) => v * cell);
+    return [`<symbol id="tint-${r.entry.id}" viewBox="${x} ${y} ${w} ${h}">${r.tint}</symbol>`];
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" style="display:none">${symbols.join('')}</svg>\n`;
 }
 
 function sheetOf(rendered: readonly Rendered[], sheet: Sheet): HTMLCanvasElement {
@@ -282,8 +300,21 @@ function meanDiff(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
 
 declare global {
   interface Window {
-    __ICONS__?: { build: () => Promise<IconBuild> };
+    __ICONS__?: { build: () => Promise<IconBuild>; plans: () => Promise<Record<string, string>> };
   }
 }
 
-window.__ICONS__ = { build };
+// The plans sheet: each chassis outline from straight above as one SVG symbol, plan-<id>, which the condition panel
+// stretches over its grid.
+async function plans(): Promise<Record<string, string>> {
+  await loadModels();
+  const catalog = iconCatalog(PARTS, GOODS, CHASSIS, ICON_WEAPON_PICKS).filter((e) => e.section === 'chassis');
+  const symbols = catalog.map((entry) => {
+    const s = PLAN_SIZE;
+    return `<symbol id="plan-${entry.id}" viewBox="0 0 ${s} ${s}" preserveAspectRatio="none">${renderPlan(entry, s)}</symbol>`;
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none">${symbols.join('')}</svg>\n`;
+  return { 'public/icons/plans.svg': `data:image/svg+xml;base64,${btoa(svg)}` };
+}
+
+window.__ICONS__ = { build, plans };
