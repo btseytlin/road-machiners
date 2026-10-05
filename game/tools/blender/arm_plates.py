@@ -1,7 +1,7 @@
 """Welded steel plates for the 'plates' armor.
 
 A front-edge row of 3 cells: 1.45 m across, 0.65 m deep, outer face at +X. Three riveted plates, one per cell,
-stand upright on the outer edge, 0.9 m tall, braced from behind. The top band takes the faction paint.
+stand upright on the outer edge, 0.9 m tall, on a foot with a short gusset behind each. The top band takes the faction paint.
 Run: blender --background --python tools/blender/arm_plates.py -- public/models/arm_plates.glb [tmp/arm_plates.png]
 """
 
@@ -36,7 +36,7 @@ def build_row(kit: Kit, n: int) -> None:
         ys = spread(3, CELL_ACROSS / 2 - 0.06)
         rivets(kit, f"rivet_lo{c}_", face + 0.01, [y + v for v in ys], 0.1)
         rivets(kit, f"rivet_mid{c}_", face + 0.01, [y + v for v in ys[::2]], 0.45)
-        strut(kit, f"brace{c}", (PLATE_X - 0.03, y, h * 0.75), (PLATE_X - 0.4, y, 0.02), 0.05, "metal", dent_by=0.004)
+        strut(kit, f"gusset{c}", (PLATE_X - 0.03, y, 0.32), (PLATE_X - 0.13, y, 0.06), 0.05, "metal", dent_by=0.004)
     kit.box("top_lip", (0.14, half * 2, 0.04), (PLATE_X - 0.02, 0, HEIGHT - 0.02), "metal_light", rot=(0, math.radians(-12), 0))
     for c in range(1, n):
         kit.box(f"weld{c}", (0.02, 0.03, HEIGHT - 0.1), (face + 0.005, -half + CELL_ACROSS * c, (HEIGHT - 0.1) / 2), "dark")

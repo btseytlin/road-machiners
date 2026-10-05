@@ -33,12 +33,12 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
-import { canUseSite, isTerritory, siteGates, sitePads, siteUnder, type Site } from './sites';
+import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
-import { addState, boundTo, endState, givesWord, stateOf, statesHeld } from './states';
+import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, escortsOf, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
+import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -310,7 +310,7 @@ let grounds: readonly Vec[] | null = null;
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
-  const lonely = (p: Vec) => sites.every((site) => dist(p, site.pos) - site.radius >= HUNT.siteDistance);
+  const lonely = (p: Vec) => sites.every((site) => siteGap(site, p) >= HUNT.siteDistance);
   const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
   const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
   const inTerritories = REGION.locations.filter(isTerritory).flatMap(territoryGrounds);
@@ -741,7 +741,7 @@ function refuseFactor(world: World, vehicle: Vehicle, _decision: DecisionId, sub
 function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
   if (subject === null) return false;
   const target = vehicleById(world, subject);
-  return robbingFeud(world, vehicle, target) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
+  return robbing(world, vehicle.id, target.id) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
 }
 
 // Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
@@ -751,17 +751,12 @@ export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): bool
 
 // The driver's hostility toward the target is only for its cargo.
 export function robbedFor(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  return robbingFeud(world, vehicle, target) || huntsForLoot(world, vehicle, target);
+  return robbing(world, vehicle.id, target.id) || huntsForLoot(world, vehicle, target);
 }
 
 // A stranded driver cannot carry out a robbery, unless the target is fighting it. The one stranded robbery rule.
 export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
-}
-
-function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  const feud = stateOf(world, 'feud', vehicle.id, target.id);
-  return feud?.data.kind === 'feud' && feud.data.robbery;
 }
 
 // A driver hands its cargo to a threat, and seldom while its escort watches.
@@ -994,8 +989,4 @@ export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
     endState(world, s, 'broken');
     addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
   }
-}
-
-function isRobberyFeud(s: NpcState): boolean {
-  return s.kind === 'feud' && s.data.kind === 'feud' && s.data.robbery;
 }

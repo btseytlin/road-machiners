@@ -8,7 +8,7 @@ import { thinkNpc } from './npc-activities';
 import { canRob, decide, wantsLoot, lootAppeal, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { isHostile, resolveDestroyed } from './combat';
 import { cargoValue, goodValue } from './market';
 import { checkKnockout, knockOutNpc } from './defeat';
@@ -308,7 +308,7 @@ describe('scumbag robbery', () => {
     }
     expect(robs / seeds).toBeGreaterThan(0.003);
     expect(robs / seeds).toBeLessThan(0.02);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('a scumbag scavenger with no prey still scavenges', () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -513,27 +513,27 @@ describe('looting', () => {
 });
 
 describe('social on robbery danger', () => {
-  // A danger just under what the robber judges stronger than itself, and just over it once raised by level 5.
+  // A danger just under what the robber judges stronger than itself, and just over it once raised by rank 5.
   function nearThreshold(w: World, robber: Vehicle): number {
     const threshold = ownDanger(w, robber) * npcProfile(robber).boldness;
     return threshold / (1 + 2.5 * SKILL_EFFECTS.social.robberyDanger);
   }
 
-  it('a scumbag sees a level 5 player truck as stronger', () => {
+  it('a scumbag sees a rank 5 player truck as stronger', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
     addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     const danger = nearThreshold(w, robber);
     expect(robWeight(w, robber, me, danger)).toBe(FULL_ROB);
-    w.player.skills.social = XP_TO_REACH[5];
+    w.player.ranks.social = 5;
     expect(robWeight(w, robber, me, danger)).toBeLessThanOrEqual(FULL_ROB * 0.1);
   });
 
   it('leaves robbery of an NPC truck unchanged', () => {
     const { w, robber, target } = passing();
     const danger = nearThreshold(w, robber);
-    w.player.skills.social = XP_TO_REACH[5];
+    w.player.ranks.social = 5;
     expect(robWeight(w, robber, target, danger)).toBe(FULL_ROB);
   });
 });

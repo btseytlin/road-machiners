@@ -1,4 +1,4 @@
-// The income harness. It plays one policy in the player truck on the mid-game kit, with every skill at level 2,
+// The income harness. It plays one policy in the player truck on the mid-game kit, with every skill at rank 2,
 // through the real turn pipeline with every truck on far travel, and measures what the run earns: net worth per
 // in-game hour, a ledger of every money change by reason, per-day net, robbery attempts and NPC wallets. It reads
 // prices, repair costs and goals through the sim and keeps no copy of any rule.
@@ -9,11 +9,14 @@ import { playerVehicle } from '../damage';
 import { getLotTradePrice, partTradePrice, repairCost } from '../economy';
 import { goodsCount, isMounted } from '../grid';
 import type { GameEvent, PartInstance, Vehicle, World } from '../types';
-import type { BotNote, BotTurn, Policy } from './bot';
+import type { Policy } from './bot';
+import { LEDGER_KEYS, type BotNote, type BotTurn } from './orders';
 import { playTurns, startWorld } from './record';
 
 export const INCOME_KIT = 'midgame';
-export const INCOME_SKILL_LEVEL = 2;
+export const INCOME_SKILL_RANK = 2;
+// The bot buys no gear: net worth counts money, goods and spares, so a gear purchase would read as a loss.
+const INCOME_BOT = { noGear: true };
 const HOURS_PER_DAY = 24;
 
 export type TargetKind = 'trader' | 'convoy';
@@ -52,7 +55,7 @@ export type IncomeRun = {
 
 export function playIncome(seed: number, policy: Policy, days: number): IncomeRun {
   const turns = Math.round(days * TIME.turnsPerDay);
-  const start = startWorld(seed, INCOME_KIT, INCOME_SKILL_LEVEL);
+  const start = startWorld(seed, INCOME_KIT, INCOME_SKILL_RANK);
   const startWorth = worth(start);
   const ledger: Record<string, number> = {};
   const attempts = new AttemptLog();
@@ -63,8 +66,8 @@ export function playIncome(seed: number, policy: Policy, days: number): IncomeRu
   let knockouts = 0;
   let played = 0;
   let last = start;
-  for (const { orders, next } of playTurns(start, `seed ${seed} ${policy}`, policy, turns)) {
-    for (const entry of orders.money) add(ledger, entry.reason, entry.amount);
+  for (const { orders, next } of playTurns(start, `seed ${seed} ${policy}`, policy, turns, INCOME_BOT)) {
+    addCommands(ledger, orders);
     for (const [reason, amount] of pipelineMoney(orders.world, next)) add(ledger, reason, amount);
     attempts.note(orders, next);
     knockouts += next.events.filter((e) => e.t === 'knockout').length;
@@ -114,6 +117,11 @@ function spareParts(v: Vehicle): PartInstance[] {
 function reconcile(label: string, ledger: Record<string, number>, change: number): void {
   const total = Object.values(ledger).reduce((sum, n) => sum + n, 0);
   if (Math.abs(total - change) > 1e-6) throw new Error(`${label}: the ledger sums to ${total}, but money changed by ${change}`);
+}
+
+// The money the bot's commands moved, by ledger key.
+function addCommands(ledger: Record<string, number>, orders: BotTurn): void {
+  for (const key of LEDGER_KEYS) if (orders.ledger[key] !== 0) add(ledger, key, orders.ledger[key]);
 }
 
 function add(ledger: Record<string, number>, reason: string, amount: number): void {
@@ -178,7 +186,7 @@ class AttemptLog {
 
   note(orders: BotTurn, next: World): void {
     for (const note of orders.notes) this.noteBot(orders.world, note);
-    for (const entry of orders.money) if (this.open && entry.reason === 'repair') this.open.repairSpent -= entry.amount;
+    if (this.open) this.open.repairSpent -= orders.ledger.repairs;
     for (const e of [...orders.events, ...next.events]) this.noteEvent(e, orders.world.player.vehicleId);
   }
 
@@ -230,7 +238,7 @@ export function formatIncomeReport(runs: readonly IncomeRun[]): string {
   const lines = [
     '# Income report',
     '',
-    `Seeds ${seeds.join(', ')}. Kit ${INCOME_KIT}, every skill at level ${INCOME_SKILL_LEVEL}. Every truck travels far, so physics crashes and rams are absent and fight damage may read low.`,
+    `Seeds ${seeds.join(', ')}. Kit ${INCOME_KIT}, every skill at rank ${INCOME_SKILL_RANK}. Every truck travels far, so physics crashes and rams are absent and fight damage may read low.`,
     '',
     '| Policy | Runs | Days | Net per hour | ± SE | Daily p10 | p50 | p90 | Knockouts | Deaths |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',

@@ -33,7 +33,6 @@ export type NpcLoadoutTable = {
   armor: Weighted<string>[]; // one type per armored side
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
-  wear: Weighted<number>[]; // wear step rolled for every mounted, non-core part and every spare, before the level's shift
   spares: SpareTable | null; // loose parts a driver carries to sell; null for none
   // Bands the averages over many rolls must stay in: guns per truck, and the share of chassis edge cells armored.
   targets: { guns: [number, number]; armor: [number, number] };
@@ -44,7 +43,8 @@ export type NpcLoadoutTable = {
 // 0.5 for convoys, couriers and small buggies, 0.7 for scavengers and roamers, 1 for gunwagons, mercs and patrols; see addGuns() in src/sim/npc-loadout.ts. armor is the share of the chassis edge cells to armor.
 // budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
 // multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
-// a poor truck may end below its targets. Guns come first in the fill order, so the budget cuts armor before guns.
+// a poor truck may end below its targets. Armor comes first in the fill order, so the budget cuts extra guns before
+// armor, and from the standard level up every edge cell is armored.
 // Extra guns stop before their power draw slows the truck by more than this share, see gunDrag() in src/sim/stats.ts.
 // A stronger engine carries more guns. The template's minimum guns ignore it.
 export const MAX_GUN_SLOWDOWN = 0.35;
@@ -55,10 +55,10 @@ export const MAX_GUN_SLOWDOWN = 0.35;
 export const MIN_NPC_SPEED_SHARE = 0.6;
 
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
-  poor: { fill: 0, armor: 0.1, budget: 0.6, wearShift: 1, cargo: 0.5 },
-  light: { fill: 0.1, armor: 0.3, budget: 0.85, wearShift: 0, cargo: 0.75 },
-  standard: { fill: 0.25, armor: 0.5, budget: 1.15, wearShift: 0, cargo: 1 },
-  heavy: { fill: 0.45, armor: 0.75, budget: 1.6, wearShift: -1, cargo: 1 },
+  poor: { fill: 0, armor: 0.5, budget: 0.6, wearShift: 1, cargo: 0.5 },
+  light: { fill: 0.1, armor: 0.75, budget: 0.85, wearShift: 0, cargo: 0.75 },
+  standard: { fill: 0.25, armor: 1, budget: 1.15, wearShift: 0, cargo: 1 },
+  heavy: { fill: 0.45, armor: 1, budget: 1.6, wearShift: -1, cargo: 1 },
   loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: -2, cargo: 1.5 },
 };
 
@@ -78,25 +78,19 @@ const LONG_GUNS: Weighted<string>[] = [
   { value: "battleRifle", weight: 1 },
 ];
 
-// Shared wear rolls for spawned kit. Raiders run rougher rigs than traders, who keep theirs closer to new.
-// Values stay within CONDITION.maxWear, so a freshly spawned NPC never carries junk.
-const WEAR_TRADER: Weighted<number>[] = [
-  { value: 0, weight: 6 },
-  { value: 1, weight: 3 },
-  { value: 2, weight: 1 },
-];
-const WEAR_SCAVENGER: Weighted<number>[] = [
-  { value: 0, weight: 3 },
-  { value: 1, weight: 4 },
-  { value: 2, weight: 2 },
-  { value: 3, weight: 1 },
-];
-const WEAR_RAIDER: Weighted<number>[] = [
-  { value: 0, weight: 2 },
-  { value: 1, weight: 3 },
-  { value: 2, weight: 3 },
-  { value: 3, weight: 1 },
-  { value: 4, weight: 1 },
+// The wear step of every part an NPC spawns with, mounted or spare, before its gear level's shift. Each step is twice
+// as likely as the one before, so about 3% of parts are pristine and about half are one step from junk. Most loot off
+// a beaten truck is worn, and good gear is mostly bought. Values stay within CONDITION.maxWear, so a freshly spawned
+// NPC never carries junk.
+// The armor any driver can bolt on, one cell at a time. It covers the edge cells a template's own armor leaves bare.
+export const SCRAP_ARMOR = 'scrapSheet';
+
+export const NPC_WEAR: Weighted<number>[] = [
+  { value: 0, weight: 1 },
+  { value: 1, weight: 2 },
+  { value: 2, weight: 4 },
+  { value: 3, weight: 8 },
+  { value: 4, weight: 16 },
 ];
 
 // A trader's spare stock: mostly nothing, sometimes a gun, some armor plate or a rack it picked up cheap.
@@ -173,13 +167,13 @@ const MOSTLY_NO_CARGO_PART: Weighted<string | null>[] = [
 const LOADOUTS: Record<string, NpcLoadoutTable> = {
   outrider: {
     budget: 4100,
-    levels: [{ value: "light", weight: 4 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }, { value: "loaded", weight: 0.3 }],
+    levels: [{ value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
     chassis: [
       { value: "buggy", weight: 6 },
       { value: "courier", weight: 3 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 1 },
-      { value: "jeep", weight: 3 },
+      { value: "jeep", weight: 3 }, { value: "niva", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -216,14 +210,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    wear: WEAR_RAIDER,
-    targets: { guns: [0.8, 1.8], armor: [0.3, 0.6] },
+    targets: { guns: [0.8, 1.8], armor: [0.6, 0.95] },
     spares: null,
   },
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
   gunwagon: {
     budget: 6900,
-    levels: [{ value: "light", weight: 2 }, { value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
+    levels: [{ value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
     chassis: [
       { value: "wagon", weight: 6 },
       { value: "carrier", weight: 2 },
@@ -269,8 +262,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
-    wear: WEAR_RAIDER,
-    targets: { guns: [2.6, 5.1], armor: [0.5, 0.8] },
+    targets: { guns: [2.6, 5.1], armor: [0.8, 1] },
     spares: null,
   },
   trader: {
@@ -282,7 +274,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "tractor", weight: 1 },
       { value: "scout", weight: 2 },
-      { value: "bus", weight: 2 },
+      { value: "bus", weight: 2 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 4 },
@@ -325,8 +317,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
-    wear: WEAR_TRADER,
-    targets: { guns: [1.4, 2.2], armor: [0.3, 0.6] },
+    targets: { guns: [1.1, 2.2], armor: [0.6, 0.95] },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -338,7 +329,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 2 },
       { value: "buggy", weight: 2 },
       { value: "hauler", weight: 1 },
-      { value: "jeep", weight: 2 },
+      { value: "jeep", weight: 2 }, { value: "niva", weight: 2 }, { value: "bukhanka", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -377,8 +368,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    wear: WEAR_SCAVENGER,
-    targets: { guns: [1.0, 1.6], armor: [0.2, 0.5] },
+    targets: { guns: [0.9, 1.6], armor: [0.4, 0.7] },
     spares: null,
   },
   // Bowl Farmers drive farm chassis.
@@ -398,8 +388,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    wear: WEAR_TRADER,
-    targets: { guns: [4.2, 6.5], armor: [0.5, 0.85] }, // MAX_GUN_SLOWDOWN caps the guns
+    targets: { guns: [4.2, 6.5], armor: [0.85, 1] }, // MAX_GUN_SLOWDOWN caps the guns
     spares: null,
   },
   // The Nose Army drives wagons and carriers.
@@ -418,8 +407,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    wear: WEAR_TRADER,
-    targets: { guns: [3.0, 5.2], armor: [0.5, 0.85] },
+    targets: { guns: [3.0, 5.2], armor: [0.85, 1] },
     spares: null,
   },
   // Light and fast. A courier carries a few small valuables and little armor.
@@ -460,8 +448,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    wear: WEAR_TRADER,
-    targets: { guns: [0.9, 1.7], armor: [0.15, 0.45] },
+    targets: { guns: [0.9, 1.7], armor: [0.25, 0.55] },
     spares: null,
   },
   // A roamer's rig is a scavenger's, a bit better kept.
@@ -474,7 +461,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "buggy", weight: 2 },
       { value: "courier", weight: 1 },
       { value: "convertible", weight: 1 },
-      { value: "jeep", weight: 1 },
+      { value: "jeep", weight: 1 }, { value: "niva", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -508,8 +495,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    wear: WEAR_SCAVENGER,
-    targets: { guns: [1.05, 1.7], armor: [0.3, 0.6] },
+    targets: { guns: [0.9, 1.7], armor: [0.45, 0.8] },
     spares: null,
   },
   // A vulture picks its way along lonely roads with a long gun, plates and cargo packs, and never rolls without a
@@ -522,7 +508,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "jeep", weight: 2 },
       { value: "hauler", weight: 2 },
-      { value: "longbed", weight: 1 },
+      { value: "longbed", weight: 1 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -559,8 +545,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 2 },
       { value: { good: "batteries", count: 1 }, weight: 2 },
     ],
-    wear: WEAR_SCAVENGER,
-    targets: { guns: [1.2, 2.0], armor: [0.35, 0.6] },
+    targets: { guns: [1.2, 2.0], armor: [0.7, 1] },
     spares: null,
   },
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
@@ -602,8 +587,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "fuelDrums", count: 6 }, weight: 1 },
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
-    wear: WEAR_TRADER,
-    targets: { guns: [2.6, 3.9], armor: [0.4, 0.7] },
+    targets: { guns: [2.0, 3.9], armor: [0.7, 1] },
     spares: null,
   },
   // A guard is quick enough to keep up with its convoy and armed to fight for it.
@@ -642,8 +626,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    wear: WEAR_TRADER,
-    targets: { guns: [1.55, 3.5], armor: [0.5, 0.85] },
+    targets: { guns: [1.55, 3.5], armor: [0.8, 1] },
     spares: null,
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
@@ -654,7 +637,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "wagon", weight: 4 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 2 },
-      { value: "carrier", weight: 1 },
+      { value: "carrier", weight: 1 }, { value: "lincoln", weight: 2 },
     ],
     engine: [
       { value: "tunedEngine", weight: 3 },
@@ -689,8 +672,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    wear: WEAR_SCAVENGER,
-    targets: { guns: [1.85, 4.4], armor: [0.6, 0.9] },
+    targets: { guns: [1.85, 4.4], armor: [0.85, 1] },
     spares: null,
   },
 };
@@ -1065,7 +1047,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
-  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that truck, or until the
+  // truck drives again.
   towPromise: null,
   // A grudge against the player fades after 10 days, unless the driver settles it first.
   revenge: 2000,
@@ -1081,5 +1064,5 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
 };
 
 
-export { FIRST_NAMES, HUNT, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES } from './npc-behavior';
+export { FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';
 export { TRAITS, type Trait } from './npc-traits';

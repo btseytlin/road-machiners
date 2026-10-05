@@ -53,6 +53,19 @@ export const START_KITS: Record<string, StartKit> = {
     cargo: { parts: 2 },
     costBasis: {},
   },
+  // The gear of a player who snowballed on raiders: a convertible with two machine guns, a slug cannon, a shotgun, a
+  // ram and plates. Measures what that truck earns, not how it is earned.
+  snowball: {
+    name: 'Your truck',
+    chassis: 'convertible',
+    parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
+    storage: [],
+    money: 2500,
+    fuel: CHASSIS.convertible.fuelCap,
+    supplies: RULES.baseSupplies,
+    cargo: {},
+    costBasis: {},
+  },
 };
 
 export function startKit(id: string): StartKit {

@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { loadConfig } from './config';
 import { dockerContainer } from './container';
 import { realRun } from './exec';
-import { JOB_ID_ENV } from './jobs';
+import { createObservedRun } from './activity';
+import { JOB_CPUS_ENV, JOB_ID_ENV } from './jobs';
 import { ghClient } from './github';
 import { hostRepo } from './repo';
 import { botClient } from './telegram';
@@ -14,13 +15,15 @@ export function realContext(env: Record<string, string | undefined>): Ctx {
   const cfg = loadConfig(env);
   const stateDir = join(cfg.home, 'state');
   mkdirSync(stateDir, { recursive: true });
+  const jobId = env[JOB_ID_ENV] ?? null;
+  const run = jobId === null ? realRun : createObservedRun(realRun, cfg.home, jobId, cfg.observationHeartbeatMs, cfg.observationMaxEventBytes);
   return {
     cfg,
-    run: realRun,
-    github: ghClient(realRun, cfg),
+    run,
+    github: ghClient(run, cfg),
     telegram: botClient(cfg.telegramToken, fetch),
-    container: dockerContainer(realRun, cfg, env[JOB_ID_ENV] ?? null),
-    repo: hostRepo(realRun, cfg),
+    container: dockerContainer(run, cfg, jobId, env[JOB_CPUS_ENV] ?? null),
+    repo: hostRepo(run, cfg, jobId),
     statePath: join(stateDir, 'state.json'),
     now: () => new Date(),
     log: (stage, issue, msg) => console.log(`${new Date().toISOString()} [${stage}${issue === null ? '' : ` #${issue}`}] ${msg}`),

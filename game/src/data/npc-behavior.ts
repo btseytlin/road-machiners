@@ -2,6 +2,8 @@
 
 import { RULES } from './rules';
 import { TERRAIN } from './terrain';
+import { TIME } from './time';
+import type { MemoryFact } from '../sim/types';
 
 export const NPC_BEHAVIOR = {
   // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
@@ -189,6 +191,17 @@ export const HUNT = {
   // Tiles from any lawman town gate within which a raider never hunts: the farthest lawman patrol stop plus its sight.
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
 };
+
+// Driver memories; see src/sim/memory.ts. Each kind's lifetime in turns is explicit. One game day is the default:
+// long enough to tell of a town on the road away from it, short enough that the facts still hold.
+export const MEMORY = {
+  turns: { prices: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
+};
+
+// Trade tips; see tradeTip() in src/sim/dialogue-rules.ts. A remembered price at least this share off a good's value
+// is worth telling. At rest every good a shop makes sits at 0.75 of value, and a good far from its maker climbs past
+// 1.2.
+export const TRADE_TIP = { share: 0.2 };
 
 // Name pools for NPC drivers. Each driver gets one first name and one surname at spawn.
 export const FIRST_NAMES: readonly string[] = [

@@ -3,16 +3,18 @@ import { FIRST_NAMES, NPCS, SPAWN, SURNAMES } from '../data/npcs';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
-import { siteGates, sitePads } from './sites';
-import { npcName, spawnNpcs } from './spawn';
+import { siteGap, siteGates, sitePads } from './sites';
+import { isFree, npcName, spawnNpcs } from './spawn';
+import { territoryPieces } from './territory';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 const NEUTRAL_SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'camp')];
 const nearestSite = (pos: { x: number; y: number }) =>
-  NEUTRAL_SITES.reduce((best, site) => (dist(pos, site.pos) - site.radius < dist(pos, best.pos) - best.radius ? site : best));
+  NEUTRAL_SITES.reduce((best, site) => (siteGap(site, pos) < siteGap(best, pos) ? site : best));
 
 describe('NPC spawns', () => {
   it('names each driver from the pools and keeps the name through turns', () => {
@@ -26,13 +28,13 @@ describe('NPC spawns', () => {
     expect(new Set(npcs.map((v) => v.brain!.driver)).size).toBeGreaterThan(1);
     const later = endTurn(endTurn(w, testDrive), testDrive);
     for (const v of npcs) expect(later.vehicles.find((x) => x.id === v.id)?.brain?.driver).toBe(v.brain!.driver);
-  }, 15_000);
+  }, budget(15_000));
 
   it('places the first drivers by the world seed', () => {
     const spots = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).vehicles.filter((v) => v.brain).map((v) => v.pos);
     expect(spots(1337)).toEqual(spots(1337));
     expect(spots(1337)).not.toEqual(spots(42));
-  }, 15_000);
+  }, budget(15_000));
 
   it('starts the whole roster on every seed, with at most one dealt neutral driver per site', () => {
     const guards = SPAWN.initial.filter((id) => id === 'convoy').map(() => 'convoyGuard');
@@ -50,7 +52,7 @@ describe('NPC spawns', () => {
         expect(count).toBeLessThanOrEqual(1 + traffic);
       }
     }
-  }, 60_000);
+  }, budget(60_000));
 
   it('starts traders at the gate of the town the start road leaves', () => {
     const w = newWorld(2, START_KITS.standard, TEST_MAP);
@@ -59,7 +61,7 @@ describe('NPC spawns', () => {
     const gate = siteGates(town).reduce((a, b) => (dist(player.pos, a) <= dist(player.pos, b) ? a : b));
     const atGate = w.vehicles.filter((v) => v.brain?.templateId === 'trader' && dist(v.pos, gate) <= SPAWN.gateSpread + 3);
     expect(atGate.length).toBeGreaterThanOrEqual(SPAWN.startTraffic.templates.length);
-  }, 15_000);
+  }, budget(15_000));
 
   it('starts each driver with its template wallet', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
@@ -103,5 +105,25 @@ describe('npcName', () => {
 
   it('throws for an unknown template', () => {
     expect(() => npcName(npcOf('nope', 'Silas Kane'))).toThrow('Unknown NPC template nope');
+  });
+});
+
+describe('free spots', () => {
+  const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+  world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
+  const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+  const cage = territoryPieces(fallenSun as never).find((p) => p.look === 'shipCage')!;
+  const hub = territoryPieces(fallenSun as never).find((p) => p.look === 'shipHub')!;
+
+  it('counts the lane inside a hull a truck drives through as free, by its low boxes', () => {
+    // On the cage's axis, 1.5 tiles toward its south end: under the ribs, clear of both caches.
+    const lane = { x: cage.pos.x + Math.cos(cage.yaw) * -1.5, y: cage.pos.y + Math.sin(cage.yaw) * -1.5 };
+    expect(isFree(world, lane, 0.6, null)).toBe(true);
+  });
+
+  it('keeps a solid piece and its walls taken', () => {
+    expect(isFree(world, hub.pos, 0.6, null)).toBe(false);
+    const wall = { x: cage.pos.x + Math.sin(cage.yaw) * 3.8, y: cage.pos.y - Math.cos(cage.yaw) * 3.8 };
+    expect(isFree(world, wall, 0.6, null)).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { cloneWorld } from './world';
+import { budget } from '../test/budget';
 
 function siteById(id: string) {
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
@@ -314,7 +315,7 @@ describe('vultures', () => {
       }
     }
     expect(seen).toBeGreaterThan(10);
-  }, 60_000);
+  }, budget(60_000));
 
   it('stop for a wreck they pass nearly every time', () => {
     const w = emptyWorld({ x: 300, y: 300 });

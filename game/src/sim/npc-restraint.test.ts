@@ -17,6 +17,7 @@ import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
 import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
+import { budget } from '../test/budget';
 import type { NpcActivity, Vehicle, World } from './types';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
@@ -53,7 +54,7 @@ describe('NPC restraint', () => {
     });
     expect(raiders.some((npc) => Object.entries(goodsCount(npc)).some(([good, count]) => good !== 'parts' && count > 0))).toBe(true);
     expect(raiders.some((npc) => (goodsCount(npc).parts ?? 0) > 0)).toBe(true);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('mostly keeps civilian work and never opens fire at an uninvolved hostile', () => {
     const { world, npc } = createNpc();
@@ -91,7 +92,7 @@ describe('NPC restraint', () => {
       return fights;
     });
     expect(fought).toBeGreaterThan(0.9);
-  });
+  }, budget(90_000)); // many seeds of planning take a few seconds alone and near 30s when the whole suite shares the cores
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');
@@ -113,6 +114,7 @@ describe('NPC restraint', () => {
 describe('NPC field repairs', () => {
   it('parks in nearby reachable shade and spends carried parts to patch damage', () => {
     const { world, npc } = createNpc();
+    world.vehicles[0].pos = { x: 60, y: 60 }; // inside the live range, so shade counts
     addGoods(world, npc, 'parts', 2);
     const cab = corePart(npc, 'cab');
     cab.hp = partDef(cab.defId).hp * 0.2;

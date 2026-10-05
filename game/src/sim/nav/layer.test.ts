@@ -13,6 +13,7 @@ import { CELL, CLEARANCE, dynamicBlockers, makeTaste, navLayer, tasteAt, tasteOf
 import { emptyWorld, npcBrain } from '../testkit';
 import { newWorld } from '../world';
 import { TEST_MAP } from '../../test/map';
+import { budget } from '../../test/budget';
 
 const { scale, strength } = REGION.navigation.taste;
 
@@ -75,7 +76,7 @@ describe('prop footprints', () => {
     const w = emptyWorld();
     w.obstacles = [{ id: 'wreck9', pos: { x: 40.2, y: 40.3 }, r: 1.2, kind: 'wreck' }];
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, []), radius);
     const boxes = propBoxes(w.obstacles[0]);
     const near = (p: Vec) => boxes.some((b) => boxDistance(b, p) < radius + CLEARANCE);
 
@@ -116,7 +117,7 @@ describe('prop footprints', () => {
       expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, 0))]).toBe(0);
       for (const side of [-1, 1]) expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, (side * deck.width) / 2))]).toBe(1);
     }
-  }, 60_000);
+  }, budget(60_000));
 
   // The gas station at scale 3. Model point (-3.1, -4.8) m lies under the canopy, 3.1 m from the nearest box
   // that reaches below truck roofs.
