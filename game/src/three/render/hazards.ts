@@ -6,7 +6,8 @@
 // Smoke clouds from world.smoke: a dense black plume of puffs in two height layers that fill the circle out to its
 // radius, with a ragged soft edge from each puff's own size and offset. Its center hides the ground and trucks behind
 // it; trucks inside still show through their stencil outlines. A new cloud billows out from its source: the Sprout's
-// truck, or where the mortar's shell lands. A cloud thins in its last turn.
+// truck, or where the mortar's shell lands. A cloud thins in its last turn. Puffs between the camera and the player's
+// truck thin out, so the player always finds its own truck inside a cloud.
 //
 // Ground fields from world.fields: a caltrop field is steel spikes strewn densest along the line its dropper drove and
 // thinning toward the radius. An oil field is a flat, opaque, glossy black blob with a noise-shaped rim and a faint
@@ -64,8 +65,9 @@ export class HazardViews {
   }
 
   // views: the vehicle views by vehicle id, which flights leave from, harpoon lines run between and sparks crackle on.
-  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
-    this.smoke.update(world, terrain, views, nowMs, clock);
+  // camera: the one drawing the scene, for the smoke's cutaway over the player's truck.
+  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, camera: THREE.Camera): void {
+    this.smoke.update(world, terrain, views, nowMs, clock, cutawayOf(world, views, camera));
     this.fields.update(world, terrain, clock);
     this.flares.update(world, terrain, views, nowMs, clock);
     const fresh = new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
@@ -261,6 +263,9 @@ const SMOKE_LOOK = {
   lastTurn: 0.55, // opacity share in the cloud's last turn, so a thinning cloud reads as ending
   wobble: 0.35, // tiles each puff wanders
   wobbleSeconds: 5,
+  // Over the player's truck: a puff is thinnest while its center lies within `inner` of its half width of the truck on
+  // screen, whole once it is `clear` tiles past its half width, and keeps `floor` of its opacity at its thinnest.
+  cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
 };
 // The mortar's shell: a dark round with a gray smoke trail on a low arc.
 const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
@@ -281,7 +286,7 @@ class SmokeCloudsView {
     this.root.add(this.shells.root);
   }
 
-  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
+  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, cutaway: Cutaway | null): void {
     const shown = new Map(world.smoke.filter((c) => volleyShown(clock, 'smoke', c.id) && isShown(world, c)).map((c) => [c.id, c]));
     for (const [id, view] of this.views) {
       if (shown.has(id)) continue;
@@ -291,7 +296,7 @@ class SmokeCloudsView {
     }
     for (const c of shown.values()) {
       const view = this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs);
-      place(terrain, view, c, nowMs);
+      place(terrain, view, c, nowMs, cutaway);
     }
     this.shells.update(nowMs);
   }
@@ -323,7 +328,7 @@ class SmokeCloudsView {
 }
 
 // The cloud's puffs, laid out once from its id. The low layer fills the circle; the high layer piles over its middle.
-function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
+export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
   const count = Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r);
   const seed = hashId(c.id);
   return Array.from({ length: count }, (_, i) => {
@@ -353,8 +358,32 @@ function isShown(world: World, c: { source: string; pos: Vec; r: number }): bool
   return [c.pos, ...rim].some((p) => p.x >= 0 && p.y >= 0 && p.x < world.size && p.y < world.size && playerSees(world, p));
 }
 
+// Where the player's truck is drawn and which way the camera looks, so puffs over the truck can thin out.
+export type Cutaway = { at: THREE.Vector3; look: THREE.Vector3 };
+
+function cutawayOf(world: World, views: ReadonlyMap<string, VehicleView>, camera: THREE.Camera): Cutaway | null {
+  const truck = views.get(world.player.vehicleId);
+  return truck ? { at: new THREE.Vector3().copy(truck.center()), look: camera.getWorldDirection(new THREE.Vector3()) } : null;
+}
+
+const CUT_OFF = new THREE.Vector3();
+const PUFF_AT = new THREE.Vector3();
+
+// Opacity share of a puff at p of this half width: low where it lies between the camera and the player's truck,
+// rising to whole once it clears the truck on screen by SMOKE_LOOK.cutaway.clear.
+export function cutShare(cut: Cutaway | null, p: THREE.Vector3, half: number): number {
+  if (!cut) return 1;
+  const off = CUT_OFF.copy(p).sub(cut.at);
+  const along = off.dot(cut.look);
+  if (along > 0) return 1; // behind the truck as seen
+  const across = off.addScaledVector(cut.look, -along).length();
+  const { inner, clear, floor } = SMOKE_LOOK.cutaway;
+  const t = Math.min(1, Math.max(0, (across - half * inner) / (half * (1 - inner) + clear * S)));
+  return floor + (1 - floor) * t * t * (3 - 2 * t);
+}
+
 // Each puff swells out from the billow's start to its spot, and wanders a little.
-function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number): void {
+function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number, cutaway: Cutaway | null): void {
   view.group.position.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
   const grown = easeOut(Math.min(1, Math.max(0, (nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
   const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1);
@@ -364,7 +393,8 @@ function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number):
     const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
     p.sprite.position.lerpVectors(view.from, p.home, grown).add({ x: wx, y: 0, z: wz });
     p.sprite.scale.setScalar(p.size * S * (0.3 + 0.7 * grown));
-    p.sprite.material.opacity = p.opacity * fade;
+    const at = PUFF_AT.copy(p.sprite.position).add(view.group.position);
+    p.sprite.material.opacity = p.opacity * fade * cutShare(cutaway, at, (p.size * S) / 2);
   }
 }
 
@@ -406,14 +436,17 @@ const FIELD_LOOK = {
   across: 0.45, // share of the radius most spikes lie within across the drop line
 };
 const OIL_LOOK = {
-  rim: { min: 0.7, max: 1.15 }, // the blob's rim, in shares of the field's radius
+  rim: { min: 0.6, max: 1.25 }, // the blob's rim, in shares of the field's radius
   lobes: { min: 2, max: 3 },
-  noise: 0.45, // share of the rim's shape from noise; the rest from the lobes
+  noise: 0.6, // share of the rim's shape from noise; the rest from the lobes
   angles: 32, // rim points
   rings: [0.5, 1], // shares of the rim the draped rings lie at, so the blob follows the ground
   lift: 0.06, // meters above the ground
   roughness: 0.25,
-  sheen: { size: 0.7, shift: 0.3, opacity: 0.22 }, // the rainbow highlight: its size and offset in shares of the radius
+  // The rainbow highlight: on `share` of the blobs, so a streak has no repeating pattern. Size and offset in shares of
+  // the radius.
+  sheen: { share: 0.35, size: 0.45, shift: 0.3, opacity: 0.14 },
+  wobble: 2.4, // noise cycles around the rim
 };
 
 type FieldView = { objects: THREE.Object3D[]; materials: THREE.Material[] };
@@ -449,13 +482,17 @@ class GroundFieldsView {
     return view;
   }
 
-  // A flat glossy blob with a noise-shaped rim draped on the ground, and a faint sheen spot on it.
+  // A flat glossy blob with a noise-shaped rim draped on the ground, and on some blobs a faint sheen spot.
   private blob(terrain: Terrain, f: GroundField): FieldView {
     const seed = hashId(f.id);
     const slick = new THREE.Mesh(blobGeometry(terrain, f, seed), this.oilMaterial);
     slick.renderOrder = FIELD_ORDER;
-    const { size, shift, opacity } = OIL_LOOK.sheen;
-    const material = new THREE.MeshBasicMaterial({ map: this.sheenTexture, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending });
+    const { share, size, shift, opacity } = OIL_LOOK.sheen;
+    if (hash2(seed, 29) >= share) return { objects: [slick], materials: [] };
+    // Pushed toward the camera past every blob's own offset, so a neighbor blob never clips it.
+    const material = new THREE.MeshBasicMaterial({
+      map: this.sheenTexture, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    });
     const sheen = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
     const a = hash2(seed, 31) * 2 * Math.PI;
     const at = { x: f.pos.x + Math.cos(a) * f.r * shift, y: f.pos.y + Math.sin(a) * f.r * shift };
@@ -523,7 +560,7 @@ function rimRadius(r: number, seed: number, a: number): number {
   const { lobes, noise, rim } = OIL_LOOK;
   const count = lobes.min + Math.floor(hash2(seed, 41) * (lobes.max - lobes.min + 1));
   const lobe = 0.5 + 0.5 * Math.cos(count * a + hash2(seed, 43) * 2 * Math.PI);
-  const n = valueNoise((seed % 97) + Math.cos(a) * 1.7, (seed % 89) + Math.sin(a) * 1.7);
+  const n = valueNoise((seed % 97) + Math.cos(a) * OIL_LOOK.wobble, (seed % 89) + Math.sin(a) * OIL_LOOK.wobble);
   return r * (rim.min + (rim.max - rim.min) * ((1 - noise) * lobe + noise * n));
 }
 

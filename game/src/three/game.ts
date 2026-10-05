@@ -1106,7 +1106,7 @@ export class Game {
     this.utilityAim.cursor(this.renderer.domElement, this.pickRing.visible);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
-    this.hazards.update(this.world, this.world.terrain, this.views, performance.now(), this.turnClock());
+    this.hazards.update(this.world, this.world.terrain, this.views, performance.now(), this.turnClock(), this.rig.camera);
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     const listener = meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos;

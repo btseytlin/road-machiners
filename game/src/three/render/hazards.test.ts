@@ -20,7 +20,7 @@ vi.mock('./zones', async (load) => {
   return { ...zones, GroundBand: RecordedBand };
 });
 
-const { HazardViews, fieldShown, volleyShown } = await import('./hazards');
+const { HazardViews, cutShare, fieldShown, volleyShown } = await import('./hazards');
 
 // A canvas that takes the texture drawing calls, since Node has no DOM.
 function stubCanvas(): void {
@@ -123,6 +123,22 @@ describe('volleyShown', () => {
   });
 });
 
+describe('cutShare', () => {
+  // The player's truck at the origin, seen by a camera looking straight down.
+  const cut = { at: new THREE.Vector3(0, 0, 0), look: new THREE.Vector3(0, -1, 0) };
+  const half = 6; // meters, a 3-tile puff
+
+  it('thins a puff between the camera and the player truck', () => {
+    expect(cutShare(cut, new THREE.Vector3(0.5, 4, 0), half)).toBeLessThan(0.2);
+  });
+
+  it('leaves whole a puff clear of the truck on screen, one behind it, and every puff with no truck', () => {
+    expect(cutShare(cut, new THREE.Vector3(12, 4, 0), half)).toBe(1);
+    expect(cutShare(cut, new THREE.Vector3(0.5, -4, 0), half)).toBe(1);
+    expect(cutShare(null, new THREE.Vector3(0.5, 4, 0), half)).toBe(1);
+  });
+});
+
 describe('HazardViews', () => {
   beforeEach(() => {
     stubCanvas();
@@ -142,7 +158,7 @@ describe('HazardViews', () => {
     world.events = [{ t: 'pulse', vehicle: me.id, pos: { ...me.pos }, hit: [npc.id] }];
     const views = new HazardViews();
 
-    views.update(world, world.terrain, new Map(), 1000, null);
+    views.update(world, world.terrain, new Map(), 1000, null, new THREE.PerspectiveCamera());
 
     const meshes: THREE.Object3D[] = [];
     views.root.traverse((o) => {
