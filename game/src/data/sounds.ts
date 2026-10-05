@@ -71,6 +71,15 @@ const DEFS = {
   // Loops.
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
+  // The strained engine plays while heat damages the engine. Each variant is the engine variant with the same number,
+  // played three times through ffmpeg -stream_loop 2 with F = 28/4 (rod knock) and W = 3/4 (pitch waver), so
+  // every period fits the loop, then cut to the middle pass so no filter edge reaches the seam:
+  // "aresample=48000,vibrato=f=W:d=0.12,asplit=2[a][b];
+  //  [a]aeval='val(0)*(0.35+0.65*exp(-6*mod(t*F,1)))*(1-0.4*eq(mod(floor(t*F),4),3))'[body];
+  //  [b]highpass=f=900,lowpass=f=4500,aeval='val(0)*6*exp(-35*mod(t*F+0.02,1))*(1-0.5*eq(mod(floor(t*F),4),1))'[knock];
+  //  [body][knock]amix=inputs=2:normalize=0,equalizer=f=2000:t=o:w=1.5:g=5,volume=6dB,asoftclip=type=atan,
+  //  atrim=start_sample=192000:end_sample=384000" before import. The recordings decode to 192000 samples.
+  "engine-strain": { bus: "sfx", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop."], seconds: 90 },
 
@@ -160,6 +169,20 @@ export function scorePhaseOf(file: string): number {
 export function engineFileFor(chassisId: string): string {
   const file = ENGINE_FILES[chassisId];
   if (!file) throw new Error(`Unknown chassis ${chassisId}`);
+  return file;
+}
+
+// Each engine recording's strained copy, made from it and the same length, so the two loops stay aligned.
+const STRAIN_FILES: Record<string, string> = {
+  "engine-1.ogg": "engine-strain-1.ogg",
+  "engine-2.ogg": "engine-strain-2.ogg",
+  "engine-3.ogg": "engine-strain-3.ogg",
+};
+
+export function engineStrainFileFor(chassisId: string): string {
+  const engine = engineFileFor(chassisId);
+  const file = STRAIN_FILES[engine];
+  if (!file) throw new Error(`Engine recording ${engine} has no strained copy`);
   return file;
 }
 

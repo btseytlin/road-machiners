@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
-import { engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
+import { engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
 import type { SoundPlayer } from "../audio/player";
 import { accentOf, CombatScore, CombatWatch, engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { CameraRig } from "./render/camera";
@@ -87,6 +87,15 @@ describe("engine sound assignment", () => {
     }
     expect(engineFileFor("scout")).not.toBe(engineFileFor("hauler"));
     expect(() => engineFileFor("unknown")).toThrow("Unknown chassis");
+  });
+
+  it("gives every chassis a strained copy of its own engine recording", () => {
+    for (const id of Object.keys(CHASSIS)) {
+      const strained = engineStrainFileFor(id);
+      expect(SOUNDS["engine-strain"].files).toContain(strained);
+      expect(strained).toBe(engineFileFor(id).replace("engine-", "engine-strain-"));
+    }
+    expect(() => engineStrainFileFor("unknown")).toThrow("Unknown chassis");
   });
 
   it("changes the engine loop only when the chassis changes", () => {
