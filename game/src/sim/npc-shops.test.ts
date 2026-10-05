@@ -31,6 +31,16 @@ describe('NPCs use stalls as well as towns', () => {
     expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply', targetId: 'pump-station' });
   });
 
+  it('sends a truck with no engine past the stall it stands at to a town, since only a town refits it', () => {
+    const w = emptyWorld({ x: 5, y: 5 });
+    const npc = addVehicle(w, 'traders', 'hauler', [], sitePads(site('salvage-yard'))[0]);
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.resources!.money = 5_000;
+    const activity = thinkNpc(w, npc);
+    expect(activity.kind).toBe('resupply');
+    expect(REGION.towns.map((t) => t.id)).toContain(activity.targetId);
+  });
+
   it('sends a damaged raider to a camp', () => {
     const w = emptyWorld({ x: 5, y: 5 });
     const npc = addVehicle(w, 'raiders', 'hauler', [], sitePads(site('pump-station'))[0]);
