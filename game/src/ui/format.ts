@@ -565,7 +565,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   townPatch: () => ({ text: 'You patch your truck with scrap.', cls: 'good' }),
   scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
-  npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
+  npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} regains consciousness`, cls: 'dim' }),
   stateEnded: stateEndedText,
   empty: () => null, // the HUD shows ammo; the log holds no gun state
   say: sayText,
