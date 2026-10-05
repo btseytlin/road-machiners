@@ -1,5 +1,6 @@
 const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
+const milestones = { understanding: 'Understanding task', planning: 'Planning approach', implementing: 'Making changes', validating: 'Checking changes', reviewing: 'Reviewing result', 'preparing-release': 'Preparing release' };
 const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
 const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
@@ -9,6 +10,7 @@ const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'U
 let snapshot = null;
 let selectedDays = 7;
 let metric = 'cost';
+let grouping = 'stage';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
@@ -100,7 +102,10 @@ function readDoing(activity) {
   if (activity.phase === 'completed') return 'Next operation pending';
   return formatActivity(activity);
 }
-function formatActivity(activity) { return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity]; }
+function formatActivity(activity) {
+  if (activity.milestone) return `Reported: ${milestones[activity.milestone]} · ${actions[activity.activity]}`;
+  return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity];
+}
 function createWorkerRow(job) {
   const row = createNode('tr');
   const title = createNode('td');
@@ -118,32 +123,47 @@ function renderWorkers() {
   renderTable('worker', operations?.jobs ?? [], createWorkerRow, operations ? 'No running jobs' : 'State unavailable', 4);
   renderCapacity(operations);
 }
-function readQueueReason(queue) {
-  if (readOperations()?.status === 'paused') return 'Starts paused';
-  return readScheduledQueueReason(queue);
-}
-function readScheduledQueueReason(queue) {
-  const scheduler = readLive()?.scheduler;
-  if (!scheduler || scheduler.freshness !== 'ok') return 'Reason unavailable';
-  if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
-  const waiting = readQueueWaits(queue);
-  if (!waiting.length) return 'No eligible work';
-  return waiting.map((item) => `${item.issue === null ? stages[item.stage] : `#${item.issue}`} ${item.reasons.map((reason) => reasons[reason]).join(', ') || 'Selected at last check'}`).join(', ');
-}
-function readQueueWaits(queue) {
+function readQueueWaits() {
   const decisions = readLive()?.scheduler?.decisions ?? [];
-  return decisions.filter((item) => item.queue === queue && item.reasons.length > 0 && !item.reasons.includes('issue-running'));
+  return decisions.filter((item) => item.reasons.length > 0 && !item.reasons.includes('issue-running'));
+}
+function readWaitingStatus(operations) {
+  if (!operations) return 'State unavailable';
+  if (operations.status === 'paused') return 'Starts paused';
+  return readSchedulerAvailability(readLive()?.scheduler);
+}
+function readSchedulerAvailability(scheduler) {
+  if (!scheduler) return 'Scheduler unavailable';
+  if (scheduler.freshness !== 'ok') return 'Scheduler stale';
+  if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
+  return null;
+}
+function renderFreeSlots(operations) {
+  if (!operations) {
+    setText('free-count', '');
+    return replaceContents('free-slots', [createNode('span', 'Capacity unavailable')]);
+  }
+  const queues = Object.entries(operations.queues);
+  const total = queues.reduce((sum, [, queue]) => sum + queue.total, 0);
+  const free = queues.reduce((sum, [, queue]) => sum + queue.total - queue.busy, 0);
+  setText('free-count', `${snapshot.operations.status === 'ok' ? '' : 'Last known: '}${free} / ${total}`);
+  const available = queues.filter(([, queue]) => queue.busy < queue.total).map(([name, queue]) => createNode('span', `${queueNames[name]}: ${queue.total - queue.busy} free`));
+  replaceContents('free-slots', available.length ? available : [createNode('span', 'All slots occupied')]);
+}
+function createWaitingRow(item) {
+  const row = createNode('div', '', 'capacity-row');
+  row.append(createNode('span', item.issue === null ? stages[item.stage] : `#${item.issue} ${stages[item.stage]}`), createNode('span', item.reasons.map((reason) => reasons[reason]).join(', ')));
+  return row;
 }
 function renderCapacity(operations) {
-  const rows = operations ? Object.entries(operations.queues).filter(([name, queue]) => queue.total > queue.busy || readQueueWaits(name).length > 0) : [];
+  renderFreeSlots(operations);
+  const status = readWaitingStatus(operations);
+  setText('capacity-status', status ?? '');
+  const waiting = status === null ? readQueueWaits() : [];
   const capacity = Math.max(1, Math.floor(getElement('capacity-rows').clientHeight / 24));
-  const visible = selectPage('capacity', rows, capacity);
-  replaceContents('capacity-rows', visible.map(([name, queue]) => {
-    const row = createNode('div', '', 'capacity-row');
-    row.append(createNode('span', `${queueNames[name]}: ${Math.max(0, queue.total - queue.busy)} free`), createNode('span', readQueueReason(name)));
-    return row;
-  }));
-  if (!rows.length) replaceContents('capacity-rows', [createNode('p', operations ? 'All slots occupied' : 'State unavailable', 'empty')]);
+  const visible = selectPage('capacity', waiting, capacity);
+  const empty = status === null ? 'No recorded waiting cards' : status === 'Starts paused' ? status : 'Reasons unavailable';
+  replaceContents('capacity-rows', visible.length ? visible.map(createWaitingRow) : [createNode('p', empty, 'empty')]);
 }
 function renderFunnel() {
   const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
@@ -173,6 +193,7 @@ function renderRelease() {
   renderReleaseItems(release);
   setText('release-gate', formatReleaseGate(readLive()?.scheduler?.release));
   renderReleaseLinks(release);
+  if (getElement('release-dialog').open) renderReleaseDialog(release);
 }
 function createReleaseItem(feature) {
   const item = createNode('li');
@@ -185,6 +206,23 @@ function renderReleaseItems(release) {
   const visible = selectPage('release', features, 3);
   const empty = release ? 'No changes on dev' : 'Contents unavailable';
   replaceContents('release-items', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
+}
+function readDialogCapacity(id) {
+  const list = getElement(id);
+  const row = parseFloat(getComputedStyle(list).getPropertyValue('--dialog-row-height'));
+  if (!Number.isFinite(row) || row <= 0) throw new Error('Invalid dialog row height');
+  return Math.max(1, Math.floor(list.clientHeight / row));
+}
+function renderReleaseDialog(release) {
+  const features = release?.features ?? [];
+  setText('release-dialog-count', release ? `${features.length} changes` : '');
+  setText('release-dialog-gate', formatReleaseGate(readLive()?.scheduler?.release));
+  renderReleaseDialogItems(features, release !== null);
+}
+function renderReleaseDialogItems(features, available) {
+  const visible = selectPage('release-dialog', features, readDialogCapacity('release-dialog-rows'));
+  const empty = available ? 'No changes on dev' : 'Contents unavailable';
+  replaceContents('release-dialog-rows', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
 function renderReleaseLinks(release) {
   const operations = readOperations();
@@ -204,7 +242,8 @@ function readManagerAction(manager) {
   if (!manager) return 'Activity unavailable';
   if (manager.status !== 'ok') return 'Activity stale';
   if (manager.phase === 'completed') return `Idle for ${formatAge(manager.since)}`;
-  return manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
+  const phase = manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
+  return `${phase} · ${formatAge(manager.since)} in phase`;
 }
 function renderManager() {
   const live = readLive();
@@ -232,7 +271,9 @@ function renderServer() {
   const host = snapshot.host.value;
   setText('server-age', `Sampled ${formatAge(snapshot.host.at)} ago`);
   replaceContents('server-totals', createServerTotals(host));
-  renderTable('server', host?.containers?.value ?? [], createResourceRow, 'Container readings unavailable', 3);
+  const containers = host?.containers?.value;
+  const rows = containers ? [...containers].sort((a, b) => b.cpu - a.cpu) : [];
+  renderTable('server', rows, createResourceRow, containers ? 'No measured containers' : 'Container readings unavailable', 3);
   setText('server-note', readStorageNote(host));
 }
 function createServerTotals(host) {
@@ -249,12 +290,31 @@ function createEvent(event) {
   node.title = event.at;
   return node;
 }
+function readEvents() { return snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? null; }
+function createDialogEvent(event) {
+  const row = createNode('div', '', 'event-row');
+  const time = createNode('time', `${event.at.slice(0, 16).replace('T', ' ')} UTC`);
+  time.dateTime = event.at;
+  row.append(time, createNode('span', `${stages[event.stage]} ${event.outcome}`));
+  if (event.issue !== null) {
+    const link = createLink(`#${event.issue}`, getIssueUrl(event.issue));
+    link.dataset.key = `${event.at}-${event.stage}-${event.issue}`;
+    row.append(link);
+  }
+  return row;
+}
+function renderEventDialog(events) {
+  setText('event-dialog-count', events ? `${events.length} events` : '');
+  const visible = selectPage('event-dialog', events ?? [], readDialogCapacity('event-dialog-rows'));
+  replaceContents('event-dialog-rows', visible.length ? visible.map(createDialogEvent) : [createNode('p', events ? 'No recorded events' : 'Events unavailable', 'empty')]);
+}
 function renderEvents() {
-  const events = snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? [];
+  const events = readEvents();
   const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--event-width'));
   const capacity = Math.max(1, Math.floor(getElement('event-log').clientWidth / width));
-  const visible = selectPage('event', events, capacity);
-  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', 'No recorded events', 'muted')]);
+  const visible = selectPage('event', events ?? [], capacity);
+  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events ? 'No recorded events' : 'Events unavailable', 'muted')]);
+  if (getElement('event-dialog').open) renderEventDialog(events);
 }
 function renderCounters(summary) {
   if (!summary) return clearCounters();
@@ -274,36 +334,58 @@ function clearCounters() {
   for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
-function readDailyValue(day) { return metric === 'tokens' ? countTokens(day.tokens) : day.cost; }
-function formatDailyValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
-function createDailyBar(day, maximum) {
-  const value = readDailyValue(day);
-  const column = createNode('div', '', 'chart-column');
-  const space = createNode('div', '', 'bar-space');
-  const bar = createNode('div', '', value === null ? 'no-value' : 'bar');
-  if (value !== null) bar.style.height = `${100 * value / maximum}%`;
-  space.append(bar);
-  column.append(createNode('span', formatDailyValue(value), 'chart-value'), space, createNode('span', day.day.slice(5), 'chart-label'));
-  column.tabIndex = 0;
-  column.dataset.detail = `${day.day}: ${formatDailyValue(value)}`;
-  return column;
-}
-function readDailyBuckets(summary) {
-  if (!summary) return [];
+// The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
+function readUsageSlots(summary) {
+  const hourly = summary.days === 1;
   const end = new Date(snapshot.generatedAt);
-  end.setUTCHours(0, 0, 0, 0);
-  return Array.from({ length: summary.days + 1 }, (_, index) => {
-    const day = new Date(end.getTime() - (summary.days - index) * 86400000).toISOString().slice(0, 10);
-    return summary.daily.find((row) => row.day === day) ?? { day, cost: null, tokens: null };
+  if (hourly) end.setUTCMinutes(0, 0, 0); else end.setUTCHours(0, 0, 0, 0);
+  // The range starts inside the first slot, so it spans one slot more than its length.
+  const count = hourly ? 25 : summary.days + 1;
+  return Array.from({ length: count }, (_, index) => {
+    const start = new Date(end.getTime() - (count - 1 - index) * (hourly ? 3600000 : 86400000)).toISOString().slice(0, hourly ? 13 : 10);
+    return { label: hourly ? `${start.slice(11)}:00` : start.slice(5), bucket: summary.buckets.find((row) => row.start === start) ?? null };
   });
 }
-function renderDailyChart(summary) {
-  setText('daily-title', metric === 'cost' ? 'Daily spend' : 'Daily tokens');
-  const days = readDailyBuckets(summary);
-  const capacity = Math.max(1, Math.floor(getElement('daily-chart').clientWidth / 48));
-  const visible = selectPage('daily', days, capacity);
-  const maximum = Math.max(1, ...days.map((day) => readDailyValue(day) ?? 0));
-  replaceContents('daily-chart', visible.length ? visible.map((day) => createDailyBar(day, maximum)) : [createNode('p', 'No recorded usage', 'empty')]);
+function readSegments(bucket) { return bucket === null ? {} : bucket[grouping === 'stage' ? 'stages' : 'models']; }
+function readSegmentValue(bucket, key) {
+  if (bucket === null || (metric === 'tokens' && bucket.tokens === null)) return null;
+  return readSegments(bucket)[key]?.[metric] ?? 0;
+}
+function readSegmentKeys(slots) {
+  const totals = new Map();
+  for (const slot of slots) for (const [key, segment] of Object.entries(readSegments(slot.bucket))) totals.set(key, (totals.get(key) ?? 0) + segment[metric]);
+  return [...totals.keys()].filter((key) => totals.get(key) > 0).sort((a, b) => totals.get(b) - totals.get(a));
+}
+function readSegmentLabel(key) {
+  if (grouping === 'stage') return stages[key] ?? key;
+  return key === 'unattributed' ? 'No model data' : key.replace(/^claude-/, '');
+}
+function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
+const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
+let usageChart = null;
+function createUsageChart() {
+  Chart.defaults.color = '#a5aaa7';
+  Chart.defaults.font.family = 'Plex';
+  Chart.defaults.font.size = 10;
+  return new Chart(getElement('usage-chart'), { type: 'bar', data: { labels: [], datasets: [] }, options: {
+    animation: false, maintainAspectRatio: false,
+    scales: { x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0 } }, y: { stacked: true, grid: { color: '#424d52' }, ticks: { callback: (value) => formatUsageValue(value) } } },
+    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}` } } },
+  } });
+}
+function renderUsageChart(summary) {
+  setText('usage-title', metric === 'cost' ? 'Spend' : 'Tokens');
+  usageChart ??= createUsageChart();
+  const hidden = new Set(usageChart.data.datasets.filter((_, index) => !usageChart.isDatasetVisible(index)).map((dataset) => dataset.label));
+  const slots = summary ? readUsageSlots(summary) : [];
+  const keys = readSegmentKeys(slots);
+  usageChart.data.labels = slots.map((slot) => slot.label);
+  usageChart.data.datasets = keys.map((key, index) => {
+    const label = readSegmentLabel(key);
+    return { label, hidden: hidden.has(label), data: slots.map((slot) => readSegmentValue(slot.bucket, key)), backgroundColor: segmentColors[index % segmentColors.length] };
+  });
+  usageChart.update();
+  getElement('usage-empty').hidden = keys.length > 0;
 }
 function readStageRows(summary) {
   if (!summary) return [];
@@ -372,7 +454,7 @@ function renderStageModels(summary) {
 function renderAnalytics() {
   const summary = readSummary();
   renderCounters(summary);
-  renderDailyChart(summary);
+  renderUsageChart(summary);
   renderStageChart(summary);
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderStageModels(summary);
@@ -444,15 +526,26 @@ function navigateTabs(event, tab) {
   next.focus();
 }
 for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
+for (const button of document.querySelectorAll('[data-dialog]')) button.addEventListener('click', () => {
+  const dialog = getElement(button.dataset.dialog);
+  dialog.showModal();
+  if (dialog.id === 'release-dialog') renderReleaseDialog(getRelease());
+  else renderEventDialog(readEvents());
+});
+for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
 function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
 for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
 for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+for (const button of document.querySelectorAll('[data-grouping]')) button.addEventListener('click', () => { grouping = button.dataset.grouping; selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
 document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
 document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') { detailOwner?.focus({ preventScroll: true }); hideDetail(); }
+  if (event.key === 'Escape') {
+    if (document.querySelector('dialog[open]')) { hideDetail(); return; }
+    detailOwner?.focus({ preventScroll: true }); hideDetail();
+  }
   if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
 });
 window.addEventListener('resize', () => { hideDetail(); requestRender(); });

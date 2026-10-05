@@ -7,20 +7,23 @@ import type { Observation, SchedulerData } from '../observability';
 const DAY_MS = 86_400_000;
 type Job = Extract<LedgerLine, { kind: 'job' }>;
 type Counts = { input: number; output: number; cacheRead: number; cacheWrite: number };
+// A bucket is one UTC hour for the 24-hour range and one UTC day otherwise. Segment tokens count measured usage only.
+type Segment = { cost: number; tokens: number };
+type Bucket = { start: string; cost: number; tokens: Counts | null; stages: Record<string, Segment>; models: Record<string, Segment> };
+const UNATTRIBUTED = 'unattributed';
 type Summary = {
   days: number; since: string | null; completed: number; failed: number; timeouts: number; workerMs: number;
   cost: number | null; tokens: Counts | null; missingUsage: number; collectionFaults: number;
   models: ModelUsage[]; stageModels: (ModelUsage & { stage: JobStage })[]; stages: { stage: string; workerMs: number; cost: number | null }[];
   issues: { issue: number; workerMs: number; cost: number | null }[];
-  daily: { day: string; cost: number; tokens: Counts | null }[];
+  buckets: Bucket[];
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
   waitingMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
   retries: { outcome: string; runs: number; workerMs: number; cost: number | null }[];
 };
 type StageRow = Summary['stages'][number];
 type IssueRow = Summary['issues'][number];
-type DailyRow = Summary['daily'][number];
-type Totals = { stages: Map<string, StageRow>; issues: Map<number, IssueRow>; models: Map<string, ModelUsage>; stageModels: Map<string, ModelUsage & { stage: JobStage }>; daily: Map<string, DailyRow> };
+type Totals = { stages: Map<string, StageRow>; issues: Map<number, IssueRow>; models: Map<string, ModelUsage>; stageModels: Map<string, ModelUsage & { stage: JobStage }>; buckets: Map<string, Bucket> };
 const createCounts = (): Counts => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
 function addCounts(target: Counts, value: Counts): void {
   target.input += value.input;
@@ -32,7 +35,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], daily: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -41,19 +44,32 @@ function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost
 }
 function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage, stage: StageRow, issue: IssueRow | null): void {
   addCost(summary, stage, issue, agent.costUsd);
-  const day = job.endedAt.slice(0, 10);
-  const daily = totals.daily.get(day) ?? { day, cost: 0, tokens: null };
-  daily.cost += agent.costUsd;
-  totals.daily.set(day, daily);
-  if (!agent.modelUsage?.length) { summary.missingUsage++; return; }
-  addMeasuredUsage(summary, totals, daily, job.stage, agent.modelUsage);
+  const bucket = getBucket(totals, job.endedAt.slice(0, summary.days === 1 ? 13 : 10));
+  bucket.cost += agent.costUsd;
+  addSegment(bucket.stages, job.stage, agent.costUsd, 0);
+  if (!agent.modelUsage?.length) { summary.missingUsage++; addSegment(bucket.models, UNATTRIBUTED, agent.costUsd, 0); return; }
+  addMeasuredUsage(summary, totals, bucket, job.stage, agent.modelUsage);
 }
-function addMeasuredUsage(summary: Summary, totals: Totals, daily: DailyRow, stage: JobStage, measurements: ModelUsage[]): void {
+function getBucket(totals: Totals, start: string): Bucket {
+  const bucket = totals.buckets.get(start) ?? { start, cost: 0, tokens: null, stages: {}, models: {} };
+  totals.buckets.set(start, bucket);
+  return bucket;
+}
+function addSegment(segments: Record<string, Segment>, key: string, cost: number, tokens: number): void {
+  const segment = segments[key] ?? { cost: 0, tokens: 0 };
+  segment.cost += cost;
+  segment.tokens += tokens;
+  segments[key] = segment;
+}
+const sumCounts = (value: Counts): number => value.input + value.output + value.cacheRead + value.cacheWrite;
+function addMeasuredUsage(summary: Summary, totals: Totals, bucket: Bucket, stage: JobStage, measurements: ModelUsage[]): void {
   summary.tokens ??= createCounts();
-  daily.tokens ??= createCounts();
+  bucket.tokens ??= createCounts();
   for (const usage of measurements) {
-    addModel(summary.tokens, totals.models, daily.tokens, usage);
+    addModel(summary.tokens, totals.models, bucket.tokens, usage);
     addStageModel(totals.stageModels, stage, usage);
+    addSegment(bucket.stages, stage, 0, sumCounts(usage));
+    addSegment(bucket.models, usage.model, usage.cost, sumCounts(usage));
   }
 }
 function addStageModel(rows: Totals['stageModels'], stage: JobStage, usage: ModelUsage): void {
@@ -63,9 +79,9 @@ function addStageModel(rows: Totals['stageModels'], stage: JobStage, usage: Mode
   row.cost += usage.cost;
   rows.set(key, row);
 }
-function addModel(tokens: Counts, models: Map<string, ModelUsage>, daily: Counts, usage: ModelUsage): void {
+function addModel(tokens: Counts, models: Map<string, ModelUsage>, bucket: Counts, usage: ModelUsage): void {
   addCounts(tokens, usage);
-  addCounts(daily, usage);
+  addCounts(bucket, usage);
   const model = models.get(usage.model) ?? { model: usage.model, cost: 0, ...createCounts() };
   addCounts(model, usage);
   model.cost += usage.cost;
@@ -208,7 +224,7 @@ export class DashboardHistory {
   }
   summarize(now: Date, days: number): Summary {
     const summary = createSummary(days, this.first);
-    const totals: Totals = { stages: new Map(), issues: new Map(), models: new Map(), stageModels: new Map(), daily: new Map() };
+    const totals: Totals = { stages: new Map(), issues: new Map(), models: new Map(), stageModels: new Map(), buckets: new Map() };
     const jobs = reconcileJobs(this.records);
     for (const job of jobs) {
       if (Date.parse(job.endedAt) < now.getTime() - days * DAY_MS) continue;
@@ -220,7 +236,7 @@ export class DashboardHistory {
     summary.issues = [...totals.issues.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
     summary.models = [...totals.models.values()];
     summary.stageModels = [...totals.stageModels.values()];
-    summary.daily = [...totals.daily.values()].sort((a, b) => a.day.localeCompare(b.day));
+    summary.buckets = [...totals.buckets.values()].sort((a, b) => a.start.localeCompare(b.start));
     summary.activity.sort((a, b) => b.at.localeCompare(a.at));
     return summary;
   }

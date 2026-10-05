@@ -17,7 +17,8 @@ function createSummary(days) {
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
   return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
-    daily: [...(days > 1 ? [{ day: yesterday, cost: 2, tokens: null }] : []), { day: now.slice(0, 10), cost: 14.5, tokens }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
+    buckets: [...(days > 1 ? [{ start: yesterday, cost: 2, tokens: null, stages: { design: { cost: 2, tokens: 0 } }, models: { unattributed: { cost: 2, tokens: 0 } } }] : []),
+      { start: now.slice(0, days > 1 ? 10 : 13), cost: 14.5, tokens, stages: { design: { cost: 9.5, tokens: 1000000 }, verify: { cost: 5, tokens: 600000 } }, models: { 'claude-opus-5-5': { cost: 7.25, tokens: 850000 }, 'claude-sonnet-5-5': { cost: 7.25, tokens: 750000 } } }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
     models: [{ model: 'claude-opus-5-5', input: 500000, output: 200000, cacheRead: 100000, cacheWrite: 50000, cost: 7.25 },
       { model: 'claude-sonnet-5-5', input: 500000, output: 100000, cacheRead: 100000, cacheWrite: 50000, cost: 7.25 }],
     stageModels: [
@@ -44,7 +45,7 @@ const server = createServer(async (request, response) => {
   try {
     const path = request.url === '/factory/' ? 'index.html' : request.url.replace('/factory/', '');
     if (path.includes('..')) throw new Error('Invalid path');
-    const bytes = await readFile(new URL(path, root));
+    const bytes = await readFile(path === 'chart.js' ? new URL('../node_modules/chart.js/dist/chart.umd.min.js', root) : new URL(path, root));
     response.setHeader('Content-Type', readContentType(path));
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     response.end(bytes);
@@ -84,6 +85,60 @@ async function checkReleaseAndManager(page) {
   await sendSnapshot(page, idle);
   assert.match(await page.locator('#manager-action').textContent(), /Idle for 12h/);
   assert.match(await page.locator('#manager-age').textContent(), /Reported/);
+  const waiting = structuredClone(fixture);
+  waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
+  waiting.live.value.workers[0].milestone = 'validating';
+  await sendSnapshot(page, waiting);
+  assert.match(await page.locator('#manager-action').textContent(), /Waiting for model · 16m in phase/);
+  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /Checking changes/);
+  waiting.live.value.workers[0].status = 'stale';
+  await sendSnapshot(page, waiting);
+  assert.equal(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), 'Activity stale');
+  await sendSnapshot(page, fixture);
+}
+async function checkExpandedViews(page) {
+  await page.locator('#overview-tab').click();
+  const releaseButton = page.getByRole('button', { name: 'Expand next release' });
+  await releaseButton.click();
+  const release = page.getByRole('dialog', { name: 'Next release' });
+  assert.equal(await release.isVisible(), true);
+  assert.match(await release.textContent(), /34 changes/);
+  assert.ok((await release.locator('a').count()) < 34);
+  assert.equal(await release.locator('#release-dialog-rows').evaluate((node) => node.scrollWidth > node.clientWidth), false);
+  await page.screenshot({ path: `${evidence}/release-dialog-${page.viewportSize().width}.png` });
+  await release.getByRole('button', { name: 'Next release dialog' }).click();
+  await sendSnapshot(page, fixture);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'release-dialog-Next');
+  await page.keyboard.press('Escape');
+  assert.equal(await release.isVisible(), false);
+  assert.equal(await releaseButton.evaluate((node) => node === document.activeElement), true);
+  const eventsButton = page.getByRole('button', { name: 'Expand event log' });
+  await eventsButton.click();
+  const events = page.getByRole('dialog', { name: 'Event log' });
+  assert.equal(await events.isVisible(), true);
+  assert.match(await events.locator('time').first().textContent(), /^\d{4}-\d\d-\d\d \d\d:\d\d UTC$/);
+  assert.ok((await events.locator('.event-row').count()) < 45);
+  await page.screenshot({ path: `${evidence}/event-dialog-${page.viewportSize().width}.png` });
+  await events.getByRole('button', { name: 'Next event dialog' }).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await events.isVisible(), false);
+  assert.equal(await eventsButton.evaluate((node) => node === document.activeElement), true);
+}
+async function checkCapacityAndCpu(page) {
+  await page.locator('#overview-tab').click();
+  assert.match(await page.locator('#free-slots').textContent(), /Branch.*5/);
+  assert.match(await page.locator('#capacity-rows').textContent(), /#42.*Needs author reply/);
+  const usage = structuredClone(fixture);
+  usage.host.value.containers.value[0].cpu = 1;
+  usage.host.value.containers.value[1].cpu = 8;
+  usage.host.value.containers.value[2].cpu = 3;
+  await sendSnapshot(page, usage);
+  assert.equal(await page.locator('#server-rows tr').first().locator('td').first().textContent(), '#2');
+  const stale = structuredClone(usage);
+  stale.live.value.scheduler.freshness = 'stale';
+  await sendSnapshot(page, stale);
+  assert.match(await page.locator('#capacity-status').textContent(), /Scheduler stale/);
+  assert.match(await page.locator('#capacity-rows').textContent(), /Reasons unavailable/);
   await sendSnapshot(page, fixture);
 }
 async function checkCounters(page) {
@@ -120,13 +175,26 @@ async function checkCounters(page) {
   await sendSnapshot(page, fixture);
   assert.match(await page.locator('#coverage').textContent(), /History from .*UTC.*2 runs lack token counts/);
   assert.equal(await page.getByRole('button', { name: 'Cost', exact: true }).getAttribute('aria-pressed'), 'true');
-  assert.ok((await page.locator('.chart-column').allTextContents()).some((text) => text.includes('$2.00')));
+  const readChart = () => page.evaluate(() => { const chart = window.Chart.getChart('usage-chart'); return { labels: chart.data.labels, datasets: chart.data.datasets.map((set) => ({ label: set.label, data: set.data })) }; });
+  let chart = await readChart();
+  assert.equal(chart.labels.length, 8);
+  assert.deepEqual(chart.datasets.map((set) => set.label), ['Design', 'Verify']);
+  assert.deepEqual(chart.datasets[0].data.slice(-2), [2, 9.5]);
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await waitForRender(page);
+  assert.deepEqual((await readChart()).datasets.map((set) => set.label), ['opus-5-5', 'sonnet-5-5', 'No model data']);
   await page.getByRole('button', { name: 'Tokens', exact: true }).click();
   await waitForRender(page);
-  assert.ok((await page.locator('.chart-column').allTextContents()).some((text) => text.includes('—')));
+  chart = await readChart();
+  assert.equal(chart.datasets[0].data.at(-2), null);
+  assert.deepEqual(chart.datasets.map((set) => set.label), ['opus-5-5', 'sonnet-5-5']);
   await page.getByRole('button', { name: '24 hours', exact: true }).click();
   await waitForRender(page);
-  assert.equal(await page.locator('.chart-column').count(), 2);
+  chart = await readChart();
+  assert.equal(chart.labels.length, 25);
+  assert.equal(chart.labels.at(-1), `${now.slice(11, 13)}:00`);
+  await page.screenshot({ path: `${evidence}/analytics-hourly-${page.viewportSize().width}.png` });
+  for (const name of ['Stage', 'Cost', '7 days']) await page.getByRole('button', { name, exact: true }).click();
 }
 async function checkPagination(page) {
   await page.locator('#overview-tab').click();
@@ -174,6 +242,9 @@ async function checkNarrow(page) {
   assert.equal(await page.getByRole('button', { name: 'Next release', exact: true }).isVisible(), true);
   assert.equal(await page.locator('#server-rows tr').count() > 0, true);
   await page.screenshot({ path: `${evidence}/overview-narrow.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Expand event log' }).click();
+  assert.equal(await page.getByRole('dialog', { name: 'Event log' }).evaluate((node) => node.getBoundingClientRect().right > innerWidth), false);
+  await page.keyboard.press('Escape');
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -189,10 +260,16 @@ async function checkUntrustedAndMissingData(page) {
   assert.equal(await page.locator('#worker-rows img').count(), 0);
   assert.ok((await page.locator('#worker-rows').textContent()).includes('<img'));
   assert.ok(!(await page.locator('body').textContent()).includes('PRIVATE CHAT MUST NOT RENDER'));
+  malicious.github.value.features[0].title = '<img src=x onerror="window.injected=true">';
+  await sendSnapshot(page, malicious);
+  await page.getByRole('button', { name: 'Expand next release' }).click();
+  assert.equal(await page.getByRole('dialog', { name: 'Next release' }).locator('img').count(), 0);
+  await page.keyboard.press('Escape');
   const missing = structuredClone(fixture);
   for (const name of ['operations', 'github', 'live', 'host', 'analytics']) missing[name] = { status: 'unavailable', value: null, at: null };
   await sendSnapshot(page, missing);
   assert.ok((await page.locator('#worker-rows').textContent()).includes('unavailable'));
+  assert.match(await page.locator('#event-log').textContent(), /Events unavailable/);
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
@@ -233,6 +310,8 @@ try {
     await sendSnapshot(page, fixture);
     await checkLayout(page, size);
     await checkReleaseAndManager(page);
+    await checkExpandedViews(page);
+    await checkCapacityAndCpu(page);
     await checkCounters(page);
     await checkPagination(page);
     await checkPause(page);

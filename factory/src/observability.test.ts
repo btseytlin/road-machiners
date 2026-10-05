@@ -39,6 +39,9 @@ it('rejects traversal and unknown activity names instead of persisting arbitrary
   expect(() => observations.readObservation(home, '../state')).toThrow('producer');
   expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'reading', phase: 'running', source: 'PRIVATE' } as never)).toThrow('source');
   expect(() => observations.recordObservation(home, 'bad', { type: 'scheduler', status: 'PRIVATE', report: null, counts: {} } as never)).toThrow('scheduler');
-  expect(observations.parseAgentActivity('{"type":"factory_status","activity":"PRIVATE secret"}')).toBeNull();
-  expect(observations.parseAgentActivity('{"type":"factory_status","activity":"tests"}')).toBe('tests');
+  expect(observations.parseAgentStatus('{"type":"factory_status","activity":"PRIVATE secret"}')).toBeNull();
+  expect(observations.parseAgentStatus('{"type":"factory_status","activity":"tests"}')).toEqual({ activity: 'tests' });
+  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"PRIVATE secret"}')).toBeNull();
+  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"validating","note":"PRIVATE secret"}')).toBeNull();
+  expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'tests', phase: 'running', source: 'runner', milestone: 'PRIVATE secret' } as never)).toThrow('milestone');
 });
