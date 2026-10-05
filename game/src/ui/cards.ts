@@ -1,5 +1,5 @@
-// Icon artwork, and the cards built from it for shop and inventory screens: a part or truck with icon stats
-// and the change against the player's own.
+// Icon artwork, item icons rendered from the game's models, and the cards built from them for shop and inventory
+// screens: a part or truck with icon stats and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
 import { RULES } from "../data/rules";
@@ -7,7 +7,11 @@ import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
-import type { PartInstance, Vehicle } from "../sim/types";
+import type { GridItem, PartInstance, Vehicle } from "../sim/types";
+import { GOODS } from "../data/goods";
+import { BODY_PARTS, itemTone } from "../render/partLooks";
+import { ITEM_TONES } from "../render/palette";
+import ICONS from "../data/item-icons.json";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -32,20 +36,7 @@ const ART = {
     '<rect x="10" y="3" width="20" height="34" rx="5"/><path d="M12 9h16M12 16h16M12 23h16M12 30h16M20 4v32"/>',
   transmission: '<path d="M7 16h26v10H7zM14 9v24M26 9v24M4 21h32"/>',
   cab: '<path d="M6 9l5-5h18l5 5v26H6zM10 9h20v13H10zM20 9v13M10 28h20"/>',
-  scrap: '<path d="M5 10l25-5 5 25-26 6zM10 14l8 7-4 10M20 8l4 12 9 4"/>',
   salt: '<path d="M12 5h16l-3 7 8 17q1 8-13 8T7 29l8-17zM14 13h12M16 25h8M20 21v8"/>',
-  meds: '<path d="M7 11h26v25H7zM14 5h12v6M17 17h6v5h5v6h-5v5h-6v-5h-5v-6h5z"/>',
-  grain:
-    '<path d="M20 36V6M20 13Q5 14 9 4q10 0 11 9M20 21Q4 22 8 12q11 0 12 9M20 29Q4 30 8 20q11 0 12 9M20 13Q35 14 31 4q-10 0-11 9M20 21q16 1 12-9-11 0-12 9M20 29q16 1 12-9-11 0-12 9"/>',
-  textiles:
-    '<path d="M6 8h24q7 0 7 7v18H11q-7 0-7-7V13q0-5 7-5M11 8q7 0 7 6t-7 6H5M18 14h18M11 20v12"/>',
-  batteries:
-    '<path d="M7 9h26v27H7zM11 4h6v5M23 4h6v5M21 13l-7 11h7l-2 9 9-13h-8z"/>',
-  electronics:
-    '<path d="M8 8h24v24H8zM14 14h12v12H14zM14 3v5M20 3v5M26 3v5M14 32v5M20 32v5M26 32v5M3 14h5M3 20h5M3 26h5M32 14h5M32 20h5M32 26h5"/>',
-  fuelDrums:
-    '<ellipse cx="11.5" cy="9" rx="6.5" ry="3"/><ellipse cx="28.5" cy="9" rx="6.5" ry="3"/><path d="M5 9v25q6.5 4 13 0V9M22 9v25q6.5 4 13 0V9M5 18q6.5 4 13 0M5 27q6.5 4 13 0M22 18q6.5 4 13 0M22 27q6.5 4 13 0"/>',
-  water: '<path d="M20 4Q8 19 8 26a12 12 0 0 0 24 0Q32 19 20 4zM13 27q2 5 7 5"/>',
   star: '<path d="M20 3l5 11 12 1-9 8 3 12-11-7-11 7 3-12-9-8 12-1z"/>',
   turn: '<path d="M5 14h16V5l16 15-16 15v-9H5z"/>',
   tools:
@@ -97,18 +88,10 @@ const ICON_NAMES: Record<IconName, string> = {
   wheel: "Wheel",
   transmission: "Transmission",
   cab: "Cab",
-  scrap: "Scrap",
   salt: "Salt",
-  meds: "Medicine",
   turn: "End turn",
   tools: "Machine tools",
-  grain: "Grain",
-  textiles: "Textiles",
-  batteries: "Batteries",
-  electronics: "Electronics",
   parts: "Parts",
-  fuelDrums: "Fuel drums",
-  water: "Water",
   scanner: "Radio scanner",
   damage: "Damage",
   pen: "Penetration",
@@ -154,32 +137,116 @@ export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   return dial;
 }
 
-const GOOD_ICON: Record<string, IconName> = {
-  scrap: "scrap",
-  salt: "salt",
-  meds: "meds",
-  grain: "grain",
-  textiles: "textiles",
-  tools: "tools",
-  batteries: "batteries",
-  electronics: "electronics",
-  parts: "parts",
-  fuelDrums: "fuelDrums",
-  water: "water",
+// ---- Item icons: cells of the sprite sheets that npm run icons renders from the game's models. See docs/art.md.
+
+type Sheet = "items" | "chassis";
+type View = "top" | "diagonal";
+
+// A share of a cell: x, y, w, h.
+export type Box = { x: number; y: number; w: number; h: number };
+
+// Where one icon sits on its sheet, as a share of the sheet: col and row of cols and rows cells. box is the share of
+// the cell that holds its drawn pixels, and view how npm run icons drew it.
+export type IconCell = {
+  sheet: Sheet;
+  label: string;
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+  box: Box;
+  view: View;
 };
 
-export function goodIcon(good: string): IconName {
-  const icon = GOOD_ICON[good];
-  if (!icon) throw new Error(`No inventory artwork for good: ${good}`);
+type ManifestCell = { index: number; box: number[] };
+
+export function itemIconCell(id: string): IconCell {
+  const good = id in GOODS;
+  const label = good ? GOODS[id].name : partDef(id).name;
+  const icons: Record<string, ManifestCell> = ICONS.items;
+  const icon = icons[id];
+  if (!icon) throw new Error(`No items icon for ${id}. Run npm run icons.`);
+  return { ...sheetCell("items", icon, label), view: viewOf(good ? ICONS.views.good : ICONS.views.part) };
+}
+
+export function chassisPortraitCell(chassisId: string): IconCell {
+  const icons: Record<string, ManifestCell> = ICONS.chassis;
+  const icon = icons[chassisId];
+  if (!icon) throw new Error(`No chassis icon for ${chassisId}. Run npm run icons.`);
+  return { ...sheetCell("chassis", icon, chassisDef(chassisId).name), view: viewOf(ICONS.views.chassis) };
+}
+
+function viewOf(view: string): View {
+  if (view !== "top" && view !== "diagonal") throw new Error(`Unknown icon view ${view}. Run npm run icons.`);
+  return view;
+}
+
+function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCell, "view"> {
+  const cols = ICONS.cols[sheet];
+  const rows = Math.ceil(Object.keys(ICONS[sheet]).length / cols);
+  const [x, y, w, h] = icon.box;
+  return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows, box: { x, y, w, h } };
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+// Items are vector blueprints, so they stay sharp at any slot size. Chassis portraits are toon renders.
+const SHEET_FILES: Record<Sheet, string> = { items: "items.svg", chassis: "chassis.png" };
+
+// The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
+// crop: the share of the cell to show.
+function sheetIcon(cell: IconCell, cls: string, crop: Box): HTMLElement {
+  const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${crop.w} ${crop.h}`);
+  svg.setAttribute("focusable", "false");
+  const clip = document.createElementNS(SVG_NS, "svg");
+  clip.setAttribute("viewBox", `${cell.col + crop.x} ${cell.row + crop.y} ${crop.w} ${crop.h}`);
+  for (const [k, v] of [["width", crop.w], ["height", crop.h]] as const) clip.setAttribute(k, String(v));
+  const image = document.createElementNS(SVG_NS, "image");
+  image.setAttribute("href", `${import.meta.env.BASE_URL}icons/${SHEET_FILES[cell.sheet]}`);
+  image.setAttribute("width", String(cell.cols));
+  image.setAttribute("height", String(cell.rows));
+  image.setAttribute("preserveAspectRatio", "none");
+  clip.append(image);
+  svg.append(clip);
+  icon.append(svg);
   return icon;
 }
 
-export function partIcon(part: PartInstance): IconName {
-  const def = partDef(part.defId);
-  if (def.kind === "weapon") return def.look;
-  if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
-  if (def.kind === "store") return def.holds;
-  return def.kind;
+// A part's or good's icon, upright and cropped to its drawing, on its tone, named for screen readers and on hover.
+export function createItemIcon(id: string): HTMLElement {
+  const cell = itemIconCell(id);
+  const icon = sheetIcon(cell, "icon item-icon", cell.box);
+  icon.setAttribute("style", toneStyle(id));
+  return icon;
+}
+
+// The inline style that gives an item's box, chip, icon or card its category tone. The stylesheet reads --tone.
+export function toneStyle(id: string): string {
+  return `--tone:#${ITEM_TONES[itemTone(id)].toString(16).padStart(6, "0")}`;
+}
+
+// Cabs have no model of their own, are built in and never trade, so they keep the cab glyph.
+export function partIconEl(part: PartInstance): HTMLElement {
+  return BODY_PARTS.has(part.defId) ? createIcon("cab") : createItemIcon(part.defId);
+}
+
+export function itemIconEl(item: GridItem): HTMLElement {
+  return item.kind === "good" ? createItemIcon(item.good) : partIconEl(item.part);
+}
+
+// An item's icon in its inventory grid box, upright and fit to the box whatever the item's rotation.
+export function gridItemIcon(item: GridItem): HTMLElement {
+  if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
+  const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
+  return sheetIcon(cell, "icon item-icon", cell.box);
+}
+
+// A truck seen as the shop shows it, beside its grid, cropped to its drawing. The stylesheet gives every truck one box,
+// and the drawing fits inside it.
+export function chassisPortrait(chassisId: string): HTMLElement {
+  const cell = chassisPortraitCell(chassisId);
+  return sheetIcon(cell, "chassis-portrait", cell.box);
 }
 
 // One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.
@@ -245,11 +312,11 @@ export function partCard(o: PartCardOptions): HTMLElement {
   const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
   const card = el(
     "div",
-    { class: `card k-${def.kind}` },
+    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
     el(
       "div",
       { class: "card-head" },
-      createIcon(partIcon(o.part)),
+      partIconEl(o.part),
       el("div", { class: "card-name" }, el("b", {}, def.name)),
       footprint(def.w, def.h),
     ),

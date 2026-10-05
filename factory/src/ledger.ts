@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'nod
 import { join } from 'node:path';
 import { withLockSync } from './lock';
 import type { JobStage, Route } from './types';
+import { reportAttempt, type Observation } from './observability';
 
 // One agent run: its model, its cost in dollars and its run time.
 export type ModelUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
@@ -10,9 +11,10 @@ export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout';
 
 // One line per ended job and per routed committee reply. The waste review derives queue wait and reruns from these lines.
 export type LedgerLine =
-  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[] }
+  | Observation
+  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; retryOf?: string | null }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
-  | { kind: 'post'; id: number; text: string; at: string };
+  | { kind: 'post'; id: number; channel?: string; text: string; at: string };
 
 // An append is one small write, so a writer that waits this long found a stuck lock.
 const LEDGER_LOCK_MS = 30_000;
@@ -81,7 +83,8 @@ export function takeUsage(home: string, jobId: string): AgentUsage[] {
 export function recordJob(home: string, endedAt: Date, job: { id: string | null; stage: JobStage; issue: number | null; startedAt: string }, outcome: JobOutcome): void {
   const id = job.id ?? 'hand-run';
   const agents = job.id === null ? [] : takeUsage(home, job.id);
-  appendLedger(home, { kind: 'job', id, stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, agents });
+  const retryOf = job.id === null ? undefined : reportAttempt(home, { ...job, id }, outcome, endedAt);
+  appendLedger(home, { kind: 'job', id, stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, agents, ...(retryOf === undefined ? {} : { retryOf }) });
 }
 
 export function appendLedger(home: string, line: LedgerLine): void {

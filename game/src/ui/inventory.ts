@@ -43,20 +43,18 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid, toneStyle } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
   clearFan,
   fanSvg,
   weaponDefOf,
-  getItemIcon,
   gridEl,
   itemBox,
   itemLabel,
   itemName,
   itemState,
-  KIND_CLASS,
   lootGoodItem,
   lootPartItem,
   partTitle,
@@ -236,7 +234,7 @@ export class InventoryView {
     const me = playerVehicle(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
     const inspect = () => this.showItem(w, it, mounted);
@@ -395,7 +393,7 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
@@ -532,8 +530,8 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
         footprintEl(d.w, d.h),
@@ -562,8 +560,8 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
         footprintEl(d.w, d.h),
@@ -586,8 +584,8 @@ export class InventoryView {
       const item = lootGoodItem(good);
       const chip = el(
         "div",
-        { class: "inv-chip k-good" },
-        createIcon(getItemIcon(item)),
+        { class: "inv-chip", style: toneStyle(good) },
+        itemIconEl(item),
         `${GOODS[good].name} x${count}`,
       );
       this.markSelected(chip, item);
@@ -666,7 +664,7 @@ export class InventoryView {
 
   private truckItemEl(w: World, target: Vehicle, it: GridItem, grid: HTMLElement, removing: boolean): HTMLElement {
     const mounted = it.kind === "part" && isMounted(target.chassisId, it);
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
     node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
@@ -684,7 +682,7 @@ export class InventoryView {
 
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
     );
   }

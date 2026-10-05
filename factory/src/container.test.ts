@@ -48,7 +48,10 @@ describe('dockerContainer', () => {
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
     expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' });
-    expect(call.opts?.input).toBe('Your folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+    expect(call.opts?.input).toMatch(/^Your folder is \/work\/game\./);
+    expect(call.opts?.input).toContain('When your activity changes, run factory-status');
+    expect(call.opts?.input).toContain('factory-status milestone');
+    expect(call.opts?.input).toMatch(/\n\ndo it$/);
     expect(call.opts?.logPath).toBe('/l.log');
     expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
     expect(call.args).toContain('/w/c:/work');
@@ -101,7 +104,8 @@ describe('dockerContainer', () => {
   it('puts a skill command on the first line, before the outputs note', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });
-    expect(runCall(calls).opts?.input).toBe('/code-review\n\nYour folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+    expect(runCall(calls).opts?.input).toMatch(/^\/code-review\n\nYour folder is \/work\/game\./);
+    expect(runCall(calls).opts?.input).toMatch(/\n\ndo it$/);
   });
 
   it('puts a restricted agent on the internal network with the proxy env', async () => {

@@ -1247,8 +1247,10 @@ body {
 .inv-item .icon {
   width: 100%;
   height: 100%;
-  max-width: 62px;
-  max-height: 62px;
+}
+/* Clear of the condition bar. */
+.inv-item:has(.inv-hp) {
+  padding-bottom: 6px;
 }
 .inv-item-name {
   position: absolute;
@@ -1308,32 +1310,21 @@ body {
 .inv-hp.broken {
   background: #f0a080;
 }
-.k-weapon {
-  background: #675347;
+/* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
+   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles. */
+.inv-item,
+.inv-chip,
+.item-icon {
+  background: var(--tone);
 }
-.k-engine {
-  background: #515f66;
+.item-icon {
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 2px;
 }
-.k-armor {
-  background: #59676e;
-}
-.k-cargo {
-  background: #655a4c;
-}
-.k-core {
-  background: #404f57;
-}
-.k-good {
-  background: #736352;
-}
-.g-scrap {
-  background: #666f73;
-}
-.g-salt {
-  background: #938e82;
-}
-.g-meds {
-  background: #556d66;
+.inv-item .item-icon {
+  padding: 0;
+  border-radius: 0;
 }
 .inv-side {
   display: flex;
@@ -1379,6 +1370,7 @@ body {
   font-size: 11px;
 }
 .inv-chip > .icon {
+  flex: none;
   width: 22px;
   height: 22px;
 }
@@ -1686,18 +1678,8 @@ canvas.view {
 .card:hover {
   border-color: #8e8a73;
 }
-.card.k-weapon,
-.card.k-scanner {
-  border-left-color: #a07a5e;
-}
-.card.k-engine {
-  border-left-color: #6f8a96;
-}
-.card.k-armor {
-  border-left-color: #8d9ca3;
-}
-.card.k-cargo {
-  border-left-color: #a08c68;
+.card.toned {
+  border-left-color: var(--tone);
 }
 .card-head {
   display: flex;
@@ -2049,17 +2031,40 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
+/* The truck's portrait beside its grid. */
+.truck-pics {
+  --map-cell: 10px;
+  --map-gap: 1px;
+  --map-pad: 3px;
+  --portrait-w: 128px;
+  --portrait-h: 80px;
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+  /* One box for every truck, so the garage lines them up. The drawing fits inside it, centered. */
+  width: var(--portrait-w);
+  height: var(--portrait-h);
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .chassis-map {
   display: grid;
-  gap: 1px;
+  gap: var(--map-gap);
   align-self: flex-start;
   width: max-content;
-  padding: 3px;
+  padding: var(--map-pad);
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px;
-  height: 10px;
+  width: var(--map-cell);
+  height: var(--map-cell);
 }
 .chassis-map .hole {
   background: none;

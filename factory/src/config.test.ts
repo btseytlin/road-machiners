@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig, readEnvFiles } from './config';
 
 const FULL = {
+  FACTORY_OBSERVATION_HEARTBEAT_MS: '10000', FACTORY_OBSERVATION_MAX_EVENT_BYTES: '1048576',
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
   FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', FACTORY_GPU: 'on', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
@@ -18,6 +19,8 @@ const FULL = {
 describe('loadConfig', () => {
   it('parses numbers and bootstrap member', () => {
     const cfg = loadConfig(FULL);
+    expect(cfg.observationHeartbeatMs).toBe(10000);
+    expect(cfg.observationMaxEventBytes).toBe(1048576);
     expect(cfg.minVotes).toBe(5);
     expect(cfg.committeeBootstrapGithub).toBe('boss');
     expect(cfg.committeeBootstrapTelegram).toBe('1');

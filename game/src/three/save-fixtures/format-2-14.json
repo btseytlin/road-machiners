@@ -1,0 +1,11 @@
+{
+  "vehicles": [
+    {
+      "id": "v7",
+      "faction": "raiders",
+      "chassisId": "buggy",
+      "items": [{ "id": "i8", "kind": "part", "part": { "id": "p9", "defId": "stockEngine", "hp": 60, "wear": 4 }, "x": 1, "y": 2, "rot": 0 }]
+    }
+  ],
+  "turn": 300
+}

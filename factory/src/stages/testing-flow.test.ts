@@ -242,30 +242,30 @@ describe('testing stage', () => {
     expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('runs the test round and the check-fix retry on Opus with implementation-opus', async () => {
+  it('runs the test round and the check-fix retry on Sonnet even with implementation-opus', async () => {
     labels = ['implementation-opus'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
     await runStage(ctx, 7);
-    expect(models).toEqual(['opus', 'opus']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('honors a label removed between the test round and the fix round', async () => {
+  it('keeps verify on Sonnet when an implementation label changes between rounds', async () => {
     labels = ['implementation-opus'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); labels = []; writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
     await runStage(ctx, 7);
-    expect(models).toEqual(['opus', 'sonnet']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('keeps the selection when a conflict sends the card back to testing in a new job', async () => {
+  it('keeps verify on Sonnet when a conflict sends the card back to testing', async () => {
     labels = ['implementation-opus'];
     conflicts = ['game/src/a.ts'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); });
     await runStage(ctx, 7);
     await runStage(fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }), 7);
-    expect(models).toEqual(['opus', 'opus']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
   it('reruns checks that only timed out, with no agent round, then posts', async () => {
@@ -371,11 +371,17 @@ describe('testing stage', () => {
     // The review runs in the hardening round, after the committee approved the preview.
     beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } }));
 
-    it('runs /code-review once on the design model after the hardening round and before the checks', async () => {
+    it('runs /code-review once on Sonnet after the hardening round and before the checks', async () => {
       await runStage(fakeCtx(outputs), 7);
-      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review opus /code-review']);
-      expect(calls.indexOf('review opus /code-review')).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review sonnet /code-review']);
+      expect(calls.indexOf('review sonnet /code-review')).toBeLessThan(calls.indexOf('checks'));
       expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('keeps review on Sonnet for an implementation-opus issue', async () => {
+      labels = ['implementation-opus'];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review sonnet /code-review']);
     });
 
     it('pastes the incident log and the principles of the clone into the review prompt', async () => {

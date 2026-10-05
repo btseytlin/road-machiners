@@ -15,6 +15,7 @@ describe('runJob', () => {
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
     writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 4, pid: 1, startedAt: '', log: 'l' }, { id: 'b', stage: 'change', issue: 9, pid: 1, startedAt: '', log: 'l' }], pendingChanges: [{ id: 9, text: 't', by: 'b' }], interrupted: [9] });
+    mkdirSync(join(ROOT, 'sessions', 'issue-9'), { recursive: true });
     const posts: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
@@ -26,11 +27,12 @@ describe('runJob', () => {
     const state = readState(statePath);
     expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
-    // Change 9 is no issue 9, so the mark of issue 9 stays.
-    expect(state.interrupted).toEqual([9]);
+    // A change resumes like an agent job, so its end clears its mark and sessions.
+    expect(state.interrupted).toEqual([]);
+    expect(existsSync(join(ROOT, 'sessions', 'issue-9'))).toBe(false);
     expect(posts).toEqual([]);
     expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
-    expect(readLedger(ROOT, new Date(0))).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
+    expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
   });
 
   it('writes one ledger line with the agent runs of a job that finished', async () => {
@@ -45,7 +47,7 @@ describe('runJob', () => {
       container: { shell: async () => undefined },
     } as unknown as Ctx;
     await runJob(ctx, 'dev', null).catch(() => undefined);
-    expect(readLedger(ROOT, new Date(0))).toEqual([{ kind: 'job', id: 'dev-1', stage: 'dev', issue: null, startedAt: '2026-01-10T11:00:00Z', endedAt: '2026-01-10T12:00:00.000Z', outcome: expect.any(String), agents: [{ model: 'sonnet', costUsd: 0.5, minutes: 4 }] }]);
+    expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toEqual([{ kind: 'job', retryOf: null, id: 'dev-1', stage: 'dev', issue: null, startedAt: '2026-01-10T11:00:00Z', endedAt: '2026-01-10T12:00:00.000Z', outcome: expect.any(String), agents: [{ model: 'sonnet', costUsd: 0.5, minutes: 4 }] }]);
   });
 
   it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {
@@ -88,7 +90,7 @@ describe('runJob', () => {
     const sessions = (issue: number) => join(ROOT, 'sessions', `issue-${issue}`);
 
     // The design stage asks GitHub for the issue first, so the fake sees the sessions as the job starts.
-    async function run(stage: 'design' | 'change', issue: number, interrupted: number[], died: JobStage | null = null): Promise<boolean[]> {
+    async function run(stage: 'design' | 'approve', issue: number, interrupted: number[], died: JobStage | null = null): Promise<boolean[]> {
       rmSync(ROOT, { recursive: true, force: true });
       mkdirSync(sessions(issue), { recursive: true });
       mkdirSync(sessions(9), { recursive: true });
@@ -122,8 +124,8 @@ describe('runJob', () => {
       expect(await run('design', 7, [7], 'implement')).toEqual([false]);
     });
 
-    it('never touches the sessions of an issue for a branch job that shares its number', async () => {
-      await run('change', 7, []);
+    it('never touches the sessions of an issue for a branch job', async () => {
+      await run('approve', 7, []);
       expect(existsSync(sessions(7))).toBe(true);
     });
   });
