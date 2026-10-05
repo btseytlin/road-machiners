@@ -35,6 +35,7 @@ const NAMES = [
   'dead_tree',
   'bunker',
   'sandbags',
+  'tank_trap',
   'silo',
   'ship_hull',
   'ship_nose',
