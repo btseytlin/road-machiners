@@ -17,7 +17,14 @@ function createSummary(days) {
   return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
     daily: [...(days > 1 ? [{ day: yesterday, cost: 2, tokens: null }] : []), { day: now.slice(0, 10), cost: 14.5, tokens }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
-    models: Array.from({ length: 20 }, (_, i) => ({ model: `model-${i}-${'long'.repeat(30)}`, input: 100000, output: 300, cacheRead: 100, cacheWrite: 200, cost: 0.5 })),
+    models: [{ model: 'claude-opus-5-5', input: 500000, output: 200000, cacheRead: 100000, cacheWrite: 50000, cost: 7.25 },
+      { model: 'claude-sonnet-5-5', input: 500000, output: 100000, cacheRead: 100000, cacheWrite: 50000, cost: 7.25 }],
+    stageModels: [
+      { stage: 'design', model: 'claude-opus-5-5', input: 400000, output: 100000, cacheRead: 80000, cacheWrite: 40000, cost: 5 },
+      { stage: 'verify', model: 'claude-opus-5-5', input: 100000, output: 100000, cacheRead: 20000, cacheWrite: 10000, cost: 2.25 },
+      { stage: 'verify', model: 'claude-sonnet-5-5', input: 300000, output: 80000, cacheRead: 50000, cacheWrite: 30000, cost: 5 },
+      { stage: 'implement', model: 'claude-sonnet-5-5', input: 200000, output: 20000, cacheRead: 50000, cacheWrite: 20000, cost: 2.25 },
+    ],
     activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })) };
 }
 const fixture = {
@@ -88,8 +95,23 @@ async function checkCounters(page) {
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#full-text').isVisible(), false);
   assert.equal(await page.locator('#usage-tokens').evaluate((node) => node === document.activeElement), true);
-  assert.deepEqual(await page.locator('#model-rows tr').first().locator('td').allTextContents(),
-    [`model-0-${'long'.repeat(30)}`, '100K', '300', '100', '200', '$0.50']);
+  assert.equal(await page.locator('#usage-input').textContent(), '1.3M');
+  assert.equal(await page.locator('#usage-input').getAttribute('data-exact'), '1300000');
+  assert.equal(await page.locator('#usage-output').textContent(), '300K');
+  assert.equal(await page.locator('#usage-output').getAttribute('data-exact'), '300000');
+  assert.deepEqual(await page.locator('#stage-model-header th').allTextContents(), ['Stage', 'claude-opus-5-5', 'claude-sonnet-5-5']);
+  const verify = page.locator('#stage-model-rows tr').filter({ has: page.locator('td:first-child', { hasText: 'Verify' }) });
+  assert.deepEqual(await verify.locator('td').allTextContents(), ['Verify + review', '130K / 100K', '380K / 80K']);
+  const extra = structuredClone(fixture);
+  for (const range of extra.analytics.value.ranges) {
+    range.models.push({ model: 'extra-model', input: 3, output: 4, cacheRead: 0, cacheWrite: 0, cost: 0.01 });
+    range.stageModels.push({ stage: 'verify', model: 'extra-model', input: 3, output: 4, cacheRead: 0, cacheWrite: 0, cost: 0.01 });
+  }
+  await sendSnapshot(page, extra);
+  await page.getByRole('button', { name: 'Next model column', exact: true }).click();
+  await waitForRender(page);
+  assert.ok((await page.locator('#stage-model-header').textContent()).includes('extra-model'));
+  await sendSnapshot(page, fixture);
   assert.match(await page.locator('#coverage').textContent(), /History from .*UTC.*2 runs lack token counts/);
   assert.equal(await page.getByRole('button', { name: 'Cost', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.ok((await page.locator('.chart-column').allTextContents()).some((text) => text.includes('$2.00')));
@@ -146,7 +168,7 @@ async function checkNarrow(page) {
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  assert.equal(await page.locator('#model-rows tr').first().locator('td').count(), 6);
+  assert.equal(await page.locator('#stage-model-header th').count(), 3);
   await page.screenshot({ path: `${evidence}/analytics-narrow.png`, fullPage: true });
 }
 async function checkUntrustedAndMissingData(page) {
@@ -165,7 +187,9 @@ async function checkUntrustedAndMissingData(page) {
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
   assert.equal(await page.locator('#usage-wait').textContent(), '—');
-  assert.equal(await page.locator('#model-rows').textContent(), 'No reported models');
+  assert.equal(await page.locator('#usage-input').textContent(), '—');
+  assert.equal(await page.locator('#usage-output').textContent(), '—');
+  assert.equal(await page.locator('#stage-model-rows').textContent(), 'Unavailable');
 }
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 await mkdir(evidence, { recursive: true });

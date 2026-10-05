@@ -163,6 +163,7 @@ TDD: yes for the pure rules: intake marking, the tick choice, reply parsing, the
 
 - PC1 — Every post and log line names the issue number and stage, so a stuck card is traceable from the chat to the log.
 - PC2 — The host checks results itself. Agent reports feed the approval post but never pass a gate.
+- PC3 — Aim for a 20% Opus / 80% Sonnet mix in measured factory-agent tokens. Use Opus for design, selected hard implementation, release candidate work and incident judgment; use Sonnet for verify and review. Automatic merges and deploys use no model.
 
 ### Assumptions
 

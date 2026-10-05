@@ -148,20 +148,20 @@ describe('model routing', () => {
     expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
   });
 
-  it('implementation-opus forces Opus for implementation and verify, never triage', () => {
-    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'opus-id']);
+  it('implementation-opus changes implementation only, leaving verification on Sonnet', () => {
+    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'sonnet-id']);
   });
 
   it('both labels apply independently', () => {
-    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'opus-id']);
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'sonnet-id']);
   });
 
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
     const labels: string[] = ['implementation-opus'];
     const { ctx, runs } = agentCtx(labels);
-    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
     labels.length = 0;
-    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
