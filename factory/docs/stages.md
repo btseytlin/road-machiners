@@ -33,34 +33,19 @@ Implementation runs Sonnet with up:uexecute on the task file. For a change a pla
 
 ## Testing
 
-Testing is a verify job and a checks job. The diagram in [process.md](process.md#testing-column) shows the order.
+[process.md](process.md#testing-column) shows the order of the rounds and their limits. These are the rules behind them.
 
-Verify first merges the current base into the issue branch, so the build matches what approve will merge. The agent resolves any conflict, and an unfinished merge fails the stage. Then it runs the rounds of the card's mode.
-
-- preview, for a new card, uses `prompts/test.md`. The agent plays the feature, fixes what blocks it, captures the evidence and writes the visual review. It runs no review, so the committee sees the card early.
-- harden, for an approved card or a cleanup task, uses `prompts/harden.md`. The agent runs up:uverify and up:ureview, fixes nitpicks and checks the run-time cost. It writes no evidence.
-- full, for a hotfix, runs harden and then preview, since its approval ships at once.
-
-After a harden round, a blocking review runs Claude Code's `/code-review` on the design model over the whole branch diff. Its prompt is `prompts/review.md` with `docs/incident-log.md` and `game/docs/architecture/principles.md` from `dev` pasted in. It writes `.factory/review.md` ending in `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, and a file with no clear verdict fails the stage.
-
-- A FAIL writes `.factory/review-findings.md`, runs one review-fix round with `prompts/test-fix.md` and reviews again.
-- A second FAIL comments the review under "## Review findings", drops the approval and moves the card to Design.
-- A card that already went back to Design for the review fails the stage instead.
-
-Checks runs no agent. It runs `npm ci`, the tests, the typecheck and the playtest, then builds the branch and publishes it at `/<hash>/`.
-
-- A failure where every error is a timeout reruns the checks, up to 3 runs. Then the stage fails with the phase kept.
-- A first real failure writes the end of the log to `.factory/check-failure.md` and hands the card to verify for one check-fix round.
-- A failure after that fix fails the stage.
-- A pass on an approved card moves it to Approval and queues the merge with no post. A pass on any other card posts it.
-
-The post holds a screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. The pull request goes against `dev`, or the base of a release task or hotfix.
+- Verify first merges the current base into the issue branch, so the committee plays what approve will merge. The agent resolves any conflict, and an unfinished merge fails the stage.
+- The preview round uses `prompts/test.md`, and the harden round uses `prompts/harden.md`. A cleanup task only hardens, since it merges with no post.
+- The review runs `/code-review` on Opus over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
+- A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
+- Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
+- The post holds a screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons.
 
 ## Approval
 
-- Approve on a previewed card records the approver in `approvedResolving` and sends the card back to Testing to harden. The checks after hardening queue the merge.
-- The merge takes the branch into `dev` and rebuilds `/dev/`. The issue gets the label `release-candidate` and stays open until its release ships.
-- A merge conflict with a newer `dev` sends the card back to Testing with its approver kept. Testing runs a full hardening round again, and its checks queue the merge with no new post.
+- Approve on a previewed card records the approver in `approvedResolving` and sends the card back to Testing to harden.
+- The merge takes the branch into `dev` and rebuilds `/dev/`.
 - Deny labels the issue `wont-do` and closes it and its pull request as not planned.
 
 ## Approval replies
@@ -77,21 +62,17 @@ A patch or a redesign goes on the issue under "## Committee feedback", closes th
 
 ## Release
 
-Every `FACTORY_RELEASE_DAYS`, the release cut makes `release/<day>` from `dev`. It merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup issues, for optimization and code janitor work, labeled `release-task` and `maintenance`. Release tasks run the card stages against the release branch. Cleanup tasks merge with no post.
+The release cut opens two cleanup issues, for optimization and code janitor work, labeled `release-task` and `maintenance`. Release tasks run the card stages against the release branch.
 
-When no release task is open, the candidate job builds the release at `/rc/`. The release agent writes the changelog, one line `- [#N] what changed` per change, and the job fails when the lines do not name the release's changes exactly. The post has a screenshot, the play link, the pull request, the count of changes and a Ship button. The changelog follows in a message under it.
-
-- `remove #N` reverts feature N in the release and `dev`, reopens its issue and moves it to Design.
-- Any other reply opens a new `release-task` issue with the reply as its body.
-- A merge into the release drops the Ship button of the current post. A build that finds a new release task is not posted.
+When no release task is open, the candidate job builds the release at `/rc/`. The release agent writes the changelog, one line `- [#N] what changed` per change, and the job fails when the lines do not name the release's changes exactly. The post has a screenshot, the play link, the pull request, the count of changes and a Ship button. The changelog follows in a message under it, since a caption holds only 1024 characters. Any reply other than `ship` or `remove #N` opens a new `release-task` issue with the reply as its body.
 
 ## Ship
 
-Ship runs on the current candidate post only, with no release task open. It checks the changelog again, then merges `main` into the release, the release into `main` and `main` into `dev` in one atomic push. A change to `game/` on `main` that the release lacks fails Ship, since the committee did not play it. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
+Ship runs on the current candidate post only, with no release task open. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks fails Ship, since the committee did not play it. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
 
 ## Hotfix
 
-A hotfix fixes a bug in the shipped game. Its jobs run before other cards and at the daily cap. Its branch starts from `main`, testing merges `main` into it, and it runs the full testing mode. The post opens with a hotfix warning, and its button reads "Approve and ship to players". Approve merges it into `main`, then `main` into `dev` and the open release, in one atomic push. Then it ships to itch.io. The public channel and a GitHub release tagged `hotfix-<day>-issue-<N>` get a one-line changelog. The open release gets a new candidate.
+A hotfix fixes a bug in the shipped game. Its jobs run before other cards and at the daily cap. Its branch starts from `main`, and testing merges `main` into it. The post opens with a hotfix warning, and its button reads "Approve and ship to players". Approve merges and ships it like a release. The public channel and a GitHub release tagged `hotfix-<day>-issue-<N>` get a one-line changelog. The open release gets a new candidate.
 
 ## Incident
 

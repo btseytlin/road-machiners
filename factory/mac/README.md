@@ -1,34 +1,21 @@
 # Factory on the Mac
 
-Use this to test the factory on your Mac before the server.
-The server setup is in `factory/infra/README.md`.
+Run the factory on your Mac to test it before the server. The server setup is in [infra/README.md](../infra/README.md). Run every command from the repo root.
 
 ## Steps
 
-Run every command from the repo root, unless a step says otherwise.
-
-1. Copy `factory/.env.example` to `factory/.env`. Fill in the factory keys. Set `FACTORY_HOME` to a folder under your home, for example `/Users/you/factory-home`. Set `FACTORY_WEB_ROOT` to a folder too. Set `FACTORY_GPU=off`, since Docker on a Mac has no GPU. Run `export FACTORY_UID=$(id -u)` in the shell of the compose commands below, since the Hermes compose file runs Hermes as that user. The other settings, like `FACTORY_TICK_MINUTES`, are in `factory/settings.env`.
-2. Make the folders. Run `mkdir -p "$FACTORY_HOME"/{inbox,committee,state,logs,hermes} "$FACTORY_WEB_ROOT"` with those values set.
-3. Build the agent image and the egress proxy image. Run `docker build -t "$FACTORY_IMAGE" factory/docker` and `docker build -t "$FACTORY_IMAGE-proxy" factory/docker/proxy`.
-4. Start Hermes. Run `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env up -d --build`.
-5. Sign Hermes in to ChatGPT, which it uses for chat. Run `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env run --rm --no-deps hermes hermes auth add openai-codex`. The login stays in `$FACTORY_HOME/hermes`.
-6. Start the tick loop in tmux. Run `tmux new -s factory 'factory/mac/tick-loop.sh'`.
-7. Serve the web root. Run `python3 -m http.server 8080 --directory "$FACTORY_WEB_ROOT"`. Set `FACTORY_PUBLIC_URL` to `http://localhost:8080`.
-
-## Committee
-
-- `FACTORY_COMMITTEE_BOOTSTRAP` and `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` name the first member. That member is the whole committee until `$FACTORY_HOME/committee/committee.json` exists.
-- Members manage the list in the chat. `/committee list` shows it. `/committee add`, `/committee remove` and `/committee github` change it.
-- The bot answers committee members only.
+1. Copy `factory/.env.example` to `factory/.env` and fill it in. Set `FACTORY_HOME` and `FACTORY_WEB_ROOT` to folders under your home, `FACTORY_PUBLIC_URL=http://localhost:8080` and `FACTORY_GPU=off`, since Docker on a Mac has no GPU.
+2. Run `export FACTORY_UID=$(id -u)` in the shell you use for the compose commands. The Hermes compose file runs Hermes as that user.
+3. Make the folders: `mkdir -p "$FACTORY_HOME"/{inbox,committee,state,logs,hermes} "$FACTORY_WEB_ROOT"`.
+4. Build the images: `docker build -t "$FACTORY_IMAGE" factory/docker` and `docker build -t "$FACTORY_IMAGE-proxy" factory/docker/proxy`.
+5. Start Hermes: `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env up -d --build`.
+6. Sign Hermes in to ChatGPT: `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env run --rm --no-deps hermes hermes auth add openai-codex`. The login stays in `$FACTORY_HOME/hermes`.
+7. Start the tick loop: `tmux new -s factory 'factory/mac/tick-loop.sh'`.
+8. Serve the web root: `python3 -m http.server 8080 --directory "$FACTORY_WEB_ROOT"`.
 
 ## Watch and stop
 
-- The tick log is `$FACTORY_HOME/logs/tick.log`. Job logs are in the same folder.
+- The tick log and the job logs are in `$FACTORY_HOME/logs/`.
 - Stop the loop with Ctrl-C in its tmux window.
-- Stop Hermes with `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env down`.
-
-## Agent network
-
-- Agents run on the internal Docker network `roam-factory-agents`. The container `roam-factory-proxy` is their only way out. The factory starts both before a run.
-- The proxy allows only the hosts in `factory/docker/proxy/allowlist`. After you edit it, rebuild the proxy image and run `docker rm -f roam-factory-proxy`. The next run starts a fresh proxy.
-- A collaborator can label an issue `open-network`. Its agent then runs on the normal network with no proxy.
+- Stop Hermes with the step 5 command, with `down` in place of `up -d --build`.
+- After an edit to `factory/docker/proxy/allowlist`, rebuild the proxy image and run `docker rm -f roam-factory-proxy`. The next run starts a fresh proxy.
