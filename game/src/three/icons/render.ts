@@ -14,11 +14,11 @@ import { bareVehicle } from '../../sim/factory';
 import { bodyOf } from '../../sim/body';
 import { VehicleView } from '../render/vehicle';
 import { weaponHead } from '../render/weaponHead';
-import { blueprintOf, blueprintSvg, paintBlueprint, type BlueprintColors } from './blueprint';
+import { blueprintOf, blueprintSvg, GLASS_MATERIAL, paintBlueprint, type BlueprintColors } from './blueprint';
 import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 8;
+export const ICON_STYLE_VERSION = 9;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -69,7 +69,6 @@ const INK = PAL.outline;
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
 const PAINT = 'paint';
 const TRIM = 'trim';
-const GLASS = 'glass';
 
 type Vec2 = { x: number; y: number };
 
@@ -119,7 +118,7 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): { ic
 export function blueprintColors(entry: IconEntry): BlueprintColors {
   const tone = new THREE.Color(ITEM_TONES[itemTone(entry.id)]);
   const mix = (to: number, t: number): string => `#${tone.clone().lerp(new THREE.Color(to), t).getHexString()}`;
-  return { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75) };
+  return { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
 }
 
 // Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
@@ -201,8 +200,10 @@ function toon(root: THREE.Object3D, style: IconStyle): void {
       o.visible = false;
       return;
     }
-    const color = { [PAINT]: paint.top, [TRIM]: paint.cab, [GLASS]: GLASS_COLOR }[old.name] ?? old.color.getHex();
+    const color = { [PAINT]: paint.top, [TRIM]: paint.cab, [GLASS_MATERIAL]: GLASS_COLOR }[old.name] ?? old.color.getHex();
     o.material = style === 'toon' ? new THREE.MeshToonMaterial({ color, gradientMap: ramp }) : new THREE.MeshBasicMaterial({ color });
+    // A blueprint finds the glass by its material name.
+    o.material.name = old.name;
     old.dispose();
   });
 }

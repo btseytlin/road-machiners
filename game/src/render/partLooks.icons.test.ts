@@ -14,9 +14,14 @@ const entry = (id: string) => {
 };
 
 describe('icon catalog', () => {
-  it('has one entry per non-body part, good and chassis, and nothing else', () => {
-    const expected = [...Object.keys(PARTS).filter((id) => !BODY_PARTS.has(id)), ...Object.keys(GOODS), ...Object.keys(CHASSIS)];
+  it('has one entry per part, good and chassis, and nothing else', () => {
+    const expected = [...Object.keys(PARTS), ...Object.keys(GOODS), ...Object.keys(CHASSIS)];
     expect(catalog.map((e) => e.id).sort()).toEqual(expected.sort());
+  });
+
+  it('draws every cab from its icon-only model', () => {
+    const models = [...BODY_PARTS].map((id) => catalog.find((e) => e.id === id)?.models);
+    expect(models).toEqual([['cab_seat'], ['cab_pickup'], ['cab_hardtop']]);
   });
 
   it('gives no two entries the same render key once ranks count', () => {
