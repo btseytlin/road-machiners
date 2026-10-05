@@ -112,6 +112,8 @@ const NAMES = [
   'ship_hull_ring',
   'ship_hull_ribs',
   'ship_hull_stern',
+  'nose_rise',
+  'nose_crag',
   'radar_dish',
   'scrap_shelter_flat',
   'scrap_shelter_lean',

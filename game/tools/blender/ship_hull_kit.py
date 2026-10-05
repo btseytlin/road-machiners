@@ -1,10 +1,12 @@
 """The shared loft profile, plate colors and builders of Nose's colony-ship wreck (C5): ship_nose, ship_hull_ring,
 ship_hull_ribs and ship_hull_stern. They share one profile, so their joints meet.
 
-The hull is a 16-sided cylinder of radius 16 m (32 m across) whose axis runs along X, 10 m over the ground, so the
-hull sinks 6 m, a fifth of its diameter, into the sand. Face 0 looks along +Y, the side the game turns toward its
-camera; the top face looks up. The shell is plates 4 m long and about 3 m wide, laid as slabs 0.35 m thick with 0.1 m seams over a dark core,
-so the seams read as dark rivet lines. Plates whose corners all lie more than 0.3 m under the ground are left out.
+The hull is a 12-sided prism of corner radius 18 m (36 m across), about 180 m long over its four sections. Its axis
+runs along X through the model origin, which is the hull axis at the section's joint, so the game poses the whole
+ship by one point and a pitch. Face 2 looks up and face 11 looks along +Y, the side the game turns toward its camera.
+The shell is large rectangular plates, about 9 m by 9 m (one per face, a quarter of them split in two), laid as slabs
+0.5 m thick with 0.16 m seams over a dark core, so the seams read as dark rivet lines. Each plate has a rust strip
+along its rear edge and a line of rivets. Raised dark ring frames stand between the sections, as in C5.
 
 Each section script calls its own build function and Kit.export(). Geometry stays in meters, Z up.
 """
@@ -23,16 +25,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3  # noqa: E402
 from shapes import loft, strut  # noqa: E402
 
-RADIUS = 16.0
-SINK = 6.0
-AXIS_Z = RADIUS - SINK
-SIDES = 16
-PLATE = 4.0  # plate length along the hull; each face takes two plates across
-THICK = 0.35  # plate slab thickness
-SEAM = 0.05  # half the gap between neighbouring plates
-FRAME = 1.4  # a raised ring frame's length along the hull
-FRAME_RISE = 0.45  # how far a frame stands proud of the plates
-BURIED = -0.3  # plates whose corners are all lower than this are left out
+RADIUS = 18.0
+AXIS_Z = 0.0
+SIDES = 12
+PLATE = 9.0  # plate length along the hull; each face takes one plate across, and a quarter take two
+THICK = 0.5  # plate slab thickness
+SEAM = 0.08  # half the gap between neighbouring plates
+FRAME = 2.0  # a raised ring frame's length along the hull
+FRAME_RISE = 0.8  # how far a frame stands proud of the plates
+BURIED = -1e9  # plates are never left out: the rise covers whatever lies under the hull
+SPLIT_SHARE = 0.25  # share of faces whose plate is split in two across
 
 # Colors from src/render/palette.ts. C5's hull is pale grey-beige plates with rust patches and rust-brown frames.
 COLORS = {
@@ -47,7 +49,7 @@ COLORS = {
     "glow": 0xFFF2C8,  # PAL.lamp.on, lit cockpit panes
 }
 # Plate colors and their weights.
-PLATES = (("pale", 0.6), ("bone", 0.32), ("grey", 0.06), ("rust", 0.02))
+PLATES = (("pale", 0.55), ("bone", 0.3), ("grey", 0.1), ("rust", 0.05))
 
 # A station is (x, radius, axis height) at one place along the hull.
 Station = tuple[float, float, float]
@@ -136,18 +138,39 @@ def stations(x0: float, x1: float, profile: Callable[[float], tuple[float, float
 
 def plating(kit: Kit, name: str, rings: list[Station], keep: Callable[[int, int], bool] = lambda i, k: True,
             lined: bool = False) -> None:
-    """Plates between each pair of stations on every face that keep(i, k) allows."""
+    """Plates between each pair of stations on every face that keep(i, k) allows. A face takes one plate across, or
+    two when the rng splits it. Each plate gets a rust strip along its rear edge and a rivet line."""
     for i, (s0, s1) in enumerate(zip(rings, rings[1:])):
         lo, hi = (s0, s1) if s0[0] < s1[0] else (s1, s0)
         for k in range(SIDES):
             if not keep(i, k):
                 continue
-            # Two plates across each face, about 3 m wide, as C5's plates are.
             mid = (corner(k) + corner(k + 1)) / 2
-            slab(kit, f"{name}_{i}_{k}a", lo, hi, corner(k), mid, plate_color(kit))
-            slab(kit, f"{name}_{i}_{k}b", lo, hi, mid, corner(k + 1), plate_color(kit))
+            spans = [(corner(k), corner(k + 1))] if kit.rng.random() >= SPLIT_SHARE else [(corner(k), mid), (mid, corner(k + 1))]
+            for j, (a0, a1) in enumerate(spans):
+                slab(kit, f"{name}_{i}_{k}_{j}", lo, hi, a0, a1, plate_color(kit))
+                edge(kit, f"{name}_edge_{i}_{k}_{j}", lo, hi, a0, a1)
             if lined:
                 liner(kit, f"{name}_lin_{i}_{k}", lo, hi, corner(k), corner(k + 1))
+
+
+def edge(kit: Kit, name: str, lo: Station, hi: Station, a0: float, a1: float) -> None:
+    """A rust strip along a plate's trailing edge and a rivet line a quarter of the way along."""
+    (x0, r0, z0), (x1, r1, z1) = lo, hi
+    length = x1 - x0
+    t = lambda f: (x0 + (x1 - x0) * f, r0 + (r1 - r0) * f, z0 + (z1 - z0) * f)  # noqa: E731
+    strip = (t(0.0), t(min(0.1, 0.9 / max(length, 1.0))))
+    slab(kit, name + "_rust", strip[0], strip[1], a0, a1, "rust", lift=0.1, thick=0.3, seam=0.2)
+    rivets = (t(0.25), t(0.25 + 0.5 / max(length, 1.0)))
+    slab(kit, name + "_rivets", rivets[0], rivets[1], a0, a1, "grey", lift=0.06, thick=0.2, seam=0.5)
+
+
+def cap(kit: Kit, name: str, ring: Station, length: float, shrink: float, mat: str = "pale") -> None:
+    """A faceted cap on the end ring: its polygon narrowing to shrink of its size over length meters beyond it,
+    toward +X when length is positive."""
+    x, r, z = ring
+    pts = [point(x, r + 0.1, z, corner(k)) for k in range(SIDES)] + [point(x + length, r * shrink, z, corner(k)) for k in range(SIDES)]
+    hull(kit, name, pts, mat)
 
 
 def core(kit: Kit, name: str, rings: list[Station]) -> None:
@@ -188,7 +211,7 @@ def brace(kit: Kit, name: str, x0: float, x1: float, k: int, size: float = 0.3) 
     strut(kit, f"{name}_b", point(x0, r, AXIS_Z, a1), point(x1, r, AXIS_Z, a0), size, "rib")
 
 
-def deck(kit: Kit, name: str, x0: float, x1: float, z: float = 2.0) -> None:
+def deck(kit: Kit, name: str, x0: float, x1: float, z: float = -9.0) -> None:
     """A dark deck across the inside at height z, so an open bay shows a floor rather than the sand."""
     half = math.sqrt(RADIUS**2 - (AXIS_Z - z) ** 2) - THICK - 0.1
     kit.box(name, (abs(x1 - x0), 2 * half, 0.4), ((x0 + x1) / 2, 0, z), "core")

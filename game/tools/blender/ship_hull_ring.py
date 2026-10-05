@@ -1,8 +1,8 @@
-"""A closed plated section of the colony ship's hull (C5), laid twice behind ship_nose.
+"""A closed plated section of the colony ship's hull (C5), between the nose and the open ribs.
 
-Built at its in-game size on the shared hull profile (ship_hull_kit.py): 32 m long and 32 m across with its axis 10 m
-up, sunk 6 m. The origin is on the ground under its rear joint, and it runs +X to its front joint at X = 32. Two
-raised ring frames stand at the rear joint and halfway along, so a frame covers every joint behind the nose.
+Built at its in-game size on the shared hull profile (ship_hull_kit.py): 45 m long and 36 m across. The origin is the
+hull axis at its rear joint, and it runs +X to its front joint at X = 45. Raised dark ring frames stand at the rear
+joint and halfway along, so a frame covers every joint.
 Run: blender --background --python tools/blender/ship_hull_ring.py -- public/models/ship_hull_ring.glb [tmp/ship_hull_ring.png]
 """
 
@@ -16,7 +16,7 @@ from kit import Kit, parse_args  # noqa: E402
 from ship_hull_kit import COLORS, FRAME, core, frame, plating, stations  # noqa: E402
 
 SEED = 24
-LENGTH = 32.0
+LENGTH = 45.0
 
 
 def build(kit: Kit) -> None:
@@ -31,7 +31,7 @@ def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    kit.export("ship_hull_ring", args, view_size=50)
+    kit.export("ship_hull_ring", args, view_size=90)
 
 
 if __name__ == "__main__":
