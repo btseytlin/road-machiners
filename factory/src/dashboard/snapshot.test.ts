@@ -16,10 +16,10 @@ it('publishes only explicit operational fields, never private state or raw error
   };
   const result = buildOperations(state, false, { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' });
   expect(result.status).toBe('blocked');
-  expect(result.jobs).toEqual([{ key: expect.stringMatching(/^[a-f0-9]{64}$/), stage: 'change', issue: null, startedAt: '2026-01-01T00:00:00Z', queue: 'branch' }]);
+  expect(result.jobs).toEqual([{ key: expect.stringMatching(/^[a-f0-9]{64}$/), stage: 'change', issue: null, startedAt: '2026-01-01T00:00:00Z', queue: 'implement' }]);
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   expect(JSON.stringify(result)).not.toContain('private-job-id');
-  expect(result.queues.branch).toEqual({ busy: 1, total: 1 });
+  expect(result.queues.implement).toEqual({ busy: 1, total: 2 });
 });
 
 it('only publishes a candidate link while the current candidate is valid', () => {

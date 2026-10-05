@@ -11,7 +11,7 @@ digraph testing {
   }
   subgraph cluster_harden {
     label="Harden: approved card"; labelloc=b; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
-    HM [label="Merge the base\ninto the branch"]; HH [label="Harden round\nverify, review, cost"]; HR [label="/code-review\non Opus"];
+    HM [label="Merge the base\ninto the branch"]; HH [label="Harden round\nverify, review, cost"]; HR [label="/code-review\non Sonnet"];
     HC [label="Checks\ntests, playtest, build"]; HQ [label="Queue merge\nno post"];
     HM -> HH -> HR -> HC -> HQ [weight=100];
   }

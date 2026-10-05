@@ -50,6 +50,10 @@ Hermes manages the factory. Its incident watch wakes it on a stuck issue, a fail
 
 While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. A paused tick also skips its job checks, so a dead job stays in `jobs` until the pause ends. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
 
+## Activity and status
+
+Each job reports a heartbeat every `FACTORY_OBSERVATION_HEARTBEAT_MS`. Agents report their phase with `factory-status`, and Hermes with its hooks and `factory_report_activity`, with no free text. The tick reports why each job waits. The public [dashboard](../dashboard/README.md) shows all of it, and Hermes's `factory_status` tool reads the same snapshot.
+
 ## Chat answers
 
 When a member acts on a post by button or reply, the factory adds a status line under its caption, like "Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back. A command on a post answers with that status line alone. `/change` gets one reply from the tick. An ad hoc task gets Hermes's reply, then the report, then any files. Errors always get a reply.

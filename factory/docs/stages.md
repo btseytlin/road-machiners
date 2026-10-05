@@ -37,7 +37,7 @@ Implementation runs Sonnet with up:uexecute on the task file. For a change a pla
 
 - Verify first merges the current base into the issue branch, so the committee plays what approve will merge. The agent resolves any conflict, and an unfinished merge fails the stage.
 - The preview round uses `prompts/test.md`, and the harden round uses `prompts/harden.md`. A cleanup task only hardens, since it merges with no post.
-- The review runs `/code-review` on Opus over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
+- The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
 - Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
 - The post holds a screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons.
@@ -91,8 +91,9 @@ A member can ask Hermes for one-off work, like "simulate 10 battles and tell me 
 The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
 
 - `design-sonnet` runs design on Sonnet.
-- `implementation-opus` runs implementation and every testing round on Opus.
-- The review, incident and factory change jobs always run Opus. Triage, patch, ad hoc, waste review and candidate agents always run Sonnet.
+- `implementation-opus` runs implementation on Opus. Every testing round and the review stay on Sonnet.
+- The candidate, incident and factory change agents always run Opus. Triage, patch, ad hoc and waste review agents always run Sonnet.
+- The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.
 

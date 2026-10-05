@@ -41,6 +41,14 @@ GitHub holds every branch. A merge goes to GitHub at once, or fails with nothing
 - Do what members ask of the factory, with your tools. Retry a step, move a card, drop a queued action, fix a branch.
 - Keep notes a member asks you to keep in your memory, so they survive a new chat.
 
+## Factory status
+
+Call `factory_status` for current factory status. It returns the same JSON snapshot as the dashboard, including pause reasons, work, release state, usage and source freshness. Use that snapshot for status answers instead of reconstructing a separate view from state files, logs and the board. Treat stale or unavailable measurements as unknown. If the request fails, report that status is unavailable.
+
+## Activity reporting
+
+When your purpose changes, call `factory_report_activity` with an allowed activity, such as `investigate` or `review`. Hooks report tool activity automatically. Do not send notes, conversation text, commands or private task details. Report at phase changes only, without extra narration.
+
 ## Incidents
 
 An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, or a server health line from the section Server health. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. The factory posts nothing about failures, so your message is the only one the committee sees.
@@ -122,7 +130,7 @@ The server runs the factory from GitHub's `main` and deploys each new commit wit
 
 ## Ad hoc tasks
 
-A member may ask for one-off work that needs running code, like a simulation, a balance check or an investigation. Answer a question about the factory yourself, from the state file, the logs and the board. Queue an ad hoc task only when the answer needs real work, with the `factory_queue_task` tool. Do not guess the answer.
+A member may ask for one-off work that needs running code, like a simulation, a balance check or an investigation. Answer a current-status question with `factory_status`, and use the logs and the board to investigate a cause. Queue an ad hoc task only when the answer needs real work, with the `factory_queue_task` tool. Do not guess the answer.
 
 - The agent works in a clone of the game repo on `dev`, with the state file and the job logs read only. It may build any tool it needs.
 - Write the request so a coding agent can act on it alone, since it sees nothing of this chat. Say what to run, what to measure and what to report. Queue one request per task.
