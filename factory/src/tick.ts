@@ -218,7 +218,7 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
 
 async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
-  recordJob(ctx.cfg.home, ctx.now(), job, alive ? 'timeout' : 'died');
+  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, alive ? 'timeout' : 'died');
   dropJob(ctx, job.id);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
@@ -256,7 +256,7 @@ function forgetResume(ctx: Ctx, job: Job): void {
 // Its card stays where it is, so the next tick starts the stage again. The dead job's cap slot frees, since the restart takes a new one.
 async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps): Promise<void> {
   await deps.removeContainers(ctx.run, job.id);
-  recordJob(ctx.cfg.home, ctx.now(), job, 'died');
+  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, 'died');
   markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => {
     // Jobs started by one tick share a start time, so only one of them goes.

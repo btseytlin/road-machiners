@@ -24,6 +24,7 @@ export type FactoryConfig = {
   designModel: string;
   buildModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
+  tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
@@ -55,6 +56,9 @@ export type FactoryConfig = {
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
 };
+
+// Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
+export type TokenPrice = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
