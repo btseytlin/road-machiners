@@ -3,7 +3,7 @@
 
 import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
-import { spatial } from "../audio/pick";
+import { shuffled, spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
   Glide,
@@ -318,13 +318,16 @@ export class SoundLoops {
   private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
+  // Calm tracks play in a playlist shuffled once per session, so every track plays before any repeats.
+  private playlist = shuffled(SOUNDS["music-calm"].files, Math.random);
+  private track = 0;
   private last: LoopLevels | null = null;
 
   constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "setPaused" | "tick">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
-    this.calm = player.loop("music-calm", silent);
+    this.calm = player.loop("music-calm", silent, this.playlist[0]);
   }
 
   drive(g: Glide, chassisId: string): void {
@@ -355,7 +358,7 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight as a new random track.
+  // Calm music comes back after a fight as the next playlist track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
     if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);
@@ -379,6 +382,7 @@ export class SoundLoops {
 
   private nextCalm(fadeSeconds: number): void {
     this.calm.stop(fadeSeconds * 1000);
-    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 });
+    this.track = (this.track + 1) % this.playlist.length;
+    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 }, this.playlist[this.track]);
   }
 }

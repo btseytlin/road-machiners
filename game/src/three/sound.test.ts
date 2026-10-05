@@ -112,11 +112,11 @@ describe("engine sound assignment", () => {
 
 describe("next track", () => {
   const fake = () => {
-    const calm: { gains: number[]; stops: number[] }[] = [];
+    const calm: { file?: string; gains: number[]; stops: number[] }[] = [];
     const player = {
       setBusTone: () => {},
-      loop: (id: string) => {
-        const handle = { gains: [] as number[], stops: [] as number[] };
+      loop: (id: string, _at: unknown, file?: string) => {
+        const handle = { file, gains: [] as number[], stops: [] as number[] };
         if (id === "music-calm") calm.push(handle);
         return { glide: () => {}, once: () => {}, setGain: (g: number) => handle.gains.push(g), stop: (ms: number) => handle.stops.push(ms) };
       },
@@ -131,6 +131,15 @@ describe("next track", () => {
     expect(calm).toHaveLength(2);
     expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
     expect(calm[1].gains).toEqual([1]);
+  });
+
+  it("plays every calm track once before any repeats", () => {
+    const { calm, loops } = fake();
+    const files = SOUNDS["music-calm"].files;
+    for (let i = 0; i < files.length; i++) loops.nextTrack();
+    const cycle = calm.slice(0, files.length).map((c) => c.file);
+    expect([...cycle].sort()).toEqual([...files].sort());
+    expect(calm[files.length].file).toBe(cycle[0]);
   });
 
   it("keeps the new track silent in combat", () => {
