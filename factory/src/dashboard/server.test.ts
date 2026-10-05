@@ -33,6 +33,9 @@ describe('public dashboard HTTP', () => {
     expect(await page.text()).toContain('Factory');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(page.headers.get('x-content-type-options')).toBe('nosniff');
+    const chart = await fetch(`${url}/factory/chart.js`);
+    expect(chart.status).toBe(200);
+    expect(chart.headers.get('content-type')).toContain('javascript');
     const snapshot = await fetch(`${url}/factory/api/snapshot`);
     const data = await snapshot.json() as Snapshot;
     expect(data.operations.value?.jobs).toEqual([]);

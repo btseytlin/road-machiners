@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'U
 let snapshot = null;
 let selectedDays = 7;
 let metric = 'cost';
+let grouping = 'stage';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
@@ -333,36 +334,58 @@ function clearCounters() {
   for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
-function readDailyValue(day) { return metric === 'tokens' ? countTokens(day.tokens) : day.cost; }
-function formatDailyValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
-function createDailyBar(day, maximum) {
-  const value = readDailyValue(day);
-  const column = createNode('div', '', 'chart-column');
-  const space = createNode('div', '', 'bar-space');
-  const bar = createNode('div', '', value === null ? 'no-value' : 'bar');
-  if (value !== null) bar.style.height = `${100 * value / maximum}%`;
-  space.append(bar);
-  column.append(createNode('span', formatDailyValue(value), 'chart-value'), space, createNode('span', day.day.slice(5), 'chart-label'));
-  column.tabIndex = 0;
-  column.dataset.detail = `${day.day}: ${formatDailyValue(value)}`;
-  return column;
-}
-function readDailyBuckets(summary) {
-  if (!summary) return [];
+// The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
+function readUsageSlots(summary) {
+  const hourly = summary.days === 1;
   const end = new Date(snapshot.generatedAt);
-  end.setUTCHours(0, 0, 0, 0);
-  return Array.from({ length: summary.days + 1 }, (_, index) => {
-    const day = new Date(end.getTime() - (summary.days - index) * 86400000).toISOString().slice(0, 10);
-    return summary.daily.find((row) => row.day === day) ?? { day, cost: null, tokens: null };
+  if (hourly) end.setUTCMinutes(0, 0, 0); else end.setUTCHours(0, 0, 0, 0);
+  // The range starts inside the first slot, so it spans one slot more than its length.
+  const count = hourly ? 25 : summary.days + 1;
+  return Array.from({ length: count }, (_, index) => {
+    const start = new Date(end.getTime() - (count - 1 - index) * (hourly ? 3600000 : 86400000)).toISOString().slice(0, hourly ? 13 : 10);
+    return { label: hourly ? `${start.slice(11)}:00` : start.slice(5), bucket: summary.buckets.find((row) => row.start === start) ?? null };
   });
 }
-function renderDailyChart(summary) {
-  setText('daily-title', metric === 'cost' ? 'Daily spend' : 'Daily tokens');
-  const days = readDailyBuckets(summary);
-  const capacity = Math.max(1, Math.floor(getElement('daily-chart').clientWidth / 48));
-  const visible = selectPage('daily', days, capacity);
-  const maximum = Math.max(1, ...days.map((day) => readDailyValue(day) ?? 0));
-  replaceContents('daily-chart', visible.length ? visible.map((day) => createDailyBar(day, maximum)) : [createNode('p', 'No recorded usage', 'empty')]);
+function readSegments(bucket) { return bucket === null ? {} : bucket[grouping === 'stage' ? 'stages' : 'models']; }
+function readSegmentValue(bucket, key) {
+  if (bucket === null || (metric === 'tokens' && bucket.tokens === null)) return null;
+  return readSegments(bucket)[key]?.[metric] ?? 0;
+}
+function readSegmentKeys(slots) {
+  const totals = new Map();
+  for (const slot of slots) for (const [key, segment] of Object.entries(readSegments(slot.bucket))) totals.set(key, (totals.get(key) ?? 0) + segment[metric]);
+  return [...totals.keys()].filter((key) => totals.get(key) > 0).sort((a, b) => totals.get(b) - totals.get(a));
+}
+function readSegmentLabel(key) {
+  if (grouping === 'stage') return stages[key] ?? key;
+  return key === 'unattributed' ? 'No model data' : key.replace(/^claude-/, '');
+}
+function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
+const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
+let usageChart = null;
+function createUsageChart() {
+  Chart.defaults.color = '#a5aaa7';
+  Chart.defaults.font.family = 'Plex';
+  Chart.defaults.font.size = 10;
+  return new Chart(getElement('usage-chart'), { type: 'bar', data: { labels: [], datasets: [] }, options: {
+    animation: false, maintainAspectRatio: false,
+    scales: { x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0 } }, y: { stacked: true, grid: { color: '#424d52' }, ticks: { callback: (value) => formatUsageValue(value) } } },
+    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}` } } },
+  } });
+}
+function renderUsageChart(summary) {
+  setText('usage-title', metric === 'cost' ? 'Spend' : 'Tokens');
+  usageChart ??= createUsageChart();
+  const hidden = new Set(usageChart.data.datasets.filter((_, index) => !usageChart.isDatasetVisible(index)).map((dataset) => dataset.label));
+  const slots = summary ? readUsageSlots(summary) : [];
+  const keys = readSegmentKeys(slots);
+  usageChart.data.labels = slots.map((slot) => slot.label);
+  usageChart.data.datasets = keys.map((key, index) => {
+    const label = readSegmentLabel(key);
+    return { label, hidden: hidden.has(label), data: slots.map((slot) => readSegmentValue(slot.bucket, key)), backgroundColor: segmentColors[index % segmentColors.length] };
+  });
+  usageChart.update();
+  getElement('usage-empty').hidden = keys.length > 0;
 }
 function readStageRows(summary) {
   if (!summary) return [];
@@ -431,7 +454,7 @@ function renderStageModels(summary) {
 function renderAnalytics() {
   const summary = readSummary();
   renderCounters(summary);
-  renderDailyChart(summary);
+  renderUsageChart(summary);
   renderStageChart(summary);
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderStageModels(summary);
@@ -513,6 +536,7 @@ for (const button of document.querySelectorAll('[data-close]')) button.addEventL
 function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
 for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
 for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+for (const button of document.querySelectorAll('[data-grouping]')) button.addEventListener('click', () => { grouping = button.dataset.grouping; selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
 document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
 document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
