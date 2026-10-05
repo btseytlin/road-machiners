@@ -18,6 +18,7 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -342,5 +343,15 @@ describe('save migration 12 to 13', () => {
   it('keeps the loot total of every stock', () => {
     const total = (s: Loot) => Object.values(s.goods).reduce((a: number, b) => a + (b ?? 0), 0) + s.parts.length + (s.fuel ?? 0) + (s.supplies ?? 0);
     for (const s of next.salvage) expect(total(s) + total(s.hidden), s.id).toBe(total(before(s.id)));
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  const next = MIGRATIONS[13](FORMAT_2_13) as typeof FORMAT_2_13;
+
+  it('keeps the world as it was, with each utility charge and order', () => {
+    expect(next).toEqual(FORMAT_2_13);
+    expect(next.vehicles[0].items[0].part.charge).toEqual({ reload: 3 });
+    expect(next.vehicles[0].utilityOrders).toEqual({ p11: { kind: 'self' } });
   });
 });

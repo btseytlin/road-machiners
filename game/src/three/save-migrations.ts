@@ -340,6 +340,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
   (world) => withHiddenStock_12_13(withUtilities_12_13(world)),
+  // 13 to 14: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
+  // types are the same, so a save keeps its world as it was.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
