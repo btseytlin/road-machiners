@@ -37,7 +37,7 @@ A save records its format, `SAVE_FORMAT` in `src/three/save-migrations.ts`. The 
 
 ## Rescue
 
-A save that cannot load, from another map, another major format, a newer minor format or with an invalid shape, shows the save screen: Migrate save, New game behind a confirm, or Download save, which hands the player the stored save as a file to attach to a bug report. `src/three/save-rescue.ts` reads the raw save defensively, `carriedWorld()` in `src/sim/world.ts` rebuilds the world on the current map from a new game and carries the skills, perks, money, truck, parts with wear, garage storage, cargo, fuel, supplies and discovered places, parks the truck on a town pad and refunds what no longer fits, and `src/ui/save-screen.ts` shows the choice and the report. Unknown ids are lost and listed. The rescue writes the new save at once.
+A save that cannot load, from another map, another major format, a newer minor format or with an invalid shape, shows the save screen: Migrate save, New game behind a confirm, or Download save, which hands the player the stored save as a file to attach to a bug report. `src/three/save-rescue.ts` reads the raw save defensively, `carriedWorld()` in `src/sim/world.ts` rebuilds the world on the current map from a new game and carries the skill ranks, XP, perks, money, truck, parts with wear, garage storage, cargo, fuel, supplies and discovered places, parks the truck on a town pad and refunds what no longer fits, and `src/ui/save-screen.ts` shows the choice and the report. Unknown ids are lost and listed. The rescue writes the new save at once.
 
 ## Migration details
 

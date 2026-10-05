@@ -4,7 +4,8 @@ import { writeState, readState, EMPTY_STATE } from '../state';
 import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
-const { approve, deny, feedback } = await import('./approval');
+const { approve, deny, routeFeedback } = await import('./approval');
+const { readLedger } = await import('../ledger');
 
 let home = '';
 let calls: string[] = [];
@@ -34,7 +35,7 @@ function fakeCtx(): Ctx {
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
-      comment: record('comment'), addLabel: record('addLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
+      comment: record('comment'), addLabel: record('addLabel'), removeLabel: record('removeLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
       createRelease: record('release'),
     },
     telegram: { sendMessage: record('message') },
@@ -48,6 +49,22 @@ function fakeCtx(): Ctx {
 }
 
 describe('approve', () => {
+  // The queued merge of a hardened card. The committee approved its preview, and the hardening round and its checks passed.
+  beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'bob' } }));
+
+  it('sends an approved preview back to Testing to harden, with no merge and no chat post', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(calls).toEqual([
+      'comment 7 Approved by bob in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into dev by itself, with no new post.',
+      'move 7 Testing',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.pendingApprovals).toEqual({});
+  });
+
   it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
@@ -67,7 +84,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -108,6 +125,7 @@ describe('approve', () => {
     expect(state.release?.postId).toBeNull();
     expect(state.pendingShip).toBeNull();
     expect(state.pendingApprovals).toEqual({});
+    expect(state.pendingIncidents).toEqual([7]);
   });
 
   it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
@@ -127,6 +145,7 @@ describe('approve', () => {
 
   it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
     labels = ['hotfix'];
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     const ctx = fakeCtx();
     ctx.repo.merge = async (steps: MergeStep[]) => {
       const step = steps.find((item) => item.branch === 'main');
@@ -136,10 +155,11 @@ describe('approve', () => {
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });
 
-  it('clears a kept approver once the merge lands', async () => {
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' } });
+  it('clears a kept approver and a leftover test phase once the merge lands', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' }, testPhase: { 7: 'checks', 8: 'fix' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
+    expect(readState(`${home}/state.json`).testPhase).toEqual({ 8: 'fix' });
   });
 
   it('refuses a hotfix without itch.io keys before any git call', async () => {
@@ -163,12 +183,59 @@ describe('approve', () => {
   });
 });
 
-describe('feedback', () => {
-  it('comments under the heading, moves to Design and drops the posts', async () => {
-    await feedback(fakeCtx(), 7, 'bob', 'Make it louder');
-    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob:\n\nMake it louder', 'move 7 Design']);
-    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
-    expect(readState(`${home}/state.json`).builds).toEqual({ 8: 'bbb2222' });
+describe('routeFeedback', () => {
+  it('redesign comments with the route, moves to Design, drops the posts and the queued approval', async () => {
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign')).toBe(true);
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as redesign:\n\nMake it louder', 'move 7 Design']);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.builds).toEqual({ 8: 'bbb2222' });
+    expect(state.pendingApprovals).toEqual({});
+    expect(state.patching).toEqual({});
+  });
+
+  it('patch keeps the played build for the patch, moves to Implementation and drops the posts', async () => {
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch');
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Implementation']);
+    const state = readState(`${home}/state.json`);
+    expect(state.patching).toEqual({ 7: 'aaa1111' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+  });
+
+  it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer')).toBe(false);
+    expect(calls).toEqual(['comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 100: 7, 101: 7, 200: 8 });
+    expect(state.pendingApprovals).toEqual({ 7: 'bob' });
+  });
+
+  it('records every route in the ledger', async () => {
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch');
+    expect(readLedger(home, new Date(0))).toEqual([
+      { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+      { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+    ]);
+  });
+
+  it('refuses a patch for a card with no recorded build before it comments or records anything', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('no recorded build');
+    expect(calls).toEqual([]);
+    expect(readLedger(home, new Date(0))).toEqual([]);
+  });
+
+  it('drops a reply still waiting for Hermes once the card leaves Approval', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), unroutedReplies: { 5: { issue: 7, postId: 100, text: 'x', at: 'a' }, 6: { issue: 8, postId: 200, text: 'y', at: 'a' } } });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(readState(`${home}/state.json`).unroutedReplies).toEqual({ 6: { issue: 8, postId: 200, text: 'y', at: 'a' } });
+  });
+
+  it('throws when the card is not in Approval', async () => {
+    column = 'Design';
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('not in Approval');
+    expect(calls).toEqual([]);
   });
 });
 
@@ -185,6 +252,13 @@ describe('deny', () => {
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
     expect(state.builds).toEqual({ 8: 'bbb2222' });
+  });
+
+  it('sends each bundled issue back to Triage on its own and forgets the bundle', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), bundles: { '7': [9], '8': [10] } });
+    await deny(fakeCtx(), 7, 'bob');
+    expect(calls.slice(-3)).toEqual(['comment 9 #7 was denied, so this issue goes back to triage on its own.', 'removeLabel 9 bundled', 'move 9 Triage']);
+    expect(readState(`${home}/state.json`).bundles).toEqual({ '8': [10] });
   });
 
   it('closes the open pull request with the same comment', async () => {

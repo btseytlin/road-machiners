@@ -3,6 +3,7 @@
 A pre_gateway_dispatch hook drops every message from a user outside the committee.
 It answers /committee commands from members in any chat.
 It takes committee messages in the factory chat and writes them to the factory inbox as JSON files.
+A plain reply to an approval post goes to the inbox and to Hermes too, who routes it with a tool.
 The host tick reads the inbox. Every other member message goes to Hermes as normal chat.
 """
 
@@ -26,12 +27,16 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
-BUTTON_PATTERN = r"^factory:(approve|deny|ship):\d+$"
+BUTTON_PATTERN = r"^factory:(approve|deny|ship|waste):\d+$"
 BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
-BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued", "waste": "Change queued"}
+# The inbox kind of each button. The waste review button queues the change its review issue proposes.
+BUTTON_KINDS = {"approve": "approve", "deny": "deny", "ship": "ship", "waste": "waste-change"}
 BUTTON_STALE = "This release post is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
+# A reply to an approval post that starts with one of these picks its route itself, with no Hermes judgment.
+ROUTE_PREFIX = re.compile(r"(patch|redesign)\s*:", re.IGNORECASE)
 log = logging.getLogger(__name__)
 
 
@@ -131,12 +136,29 @@ def _request(text, reply_to_message_id, approval_posts, release=None) -> Optiona
         return _release_request(text, release)
     issue = approval_posts.get(str(reply_to_message_id)) if reply_to_message_id is not None else None
     if issue is not None:
-        if text.strip().lower() == "approve":
-            return ("approve", issue)
-        return ("feedback", issue, text)
+        return _approval_request(text, issue)
     if text.startswith(CHANGE_PREFIX):
         return ("change", text[len(CHANGE_PREFIX):].strip())
     return None
+
+
+def _approval_request(text, issue) -> tuple:
+    """`approve` and the route prefixes are commands. Any other reply goes to Hermes, who routes it."""
+    stripped = text.strip()
+    if stripped.lower() == "approve":
+        return ("approve", issue)
+    forced = ROUTE_PREFIX.match(stripped)
+    if forced:
+        return (forced.group(1).lower(), issue, stripped[forced.end():].strip())
+    return ("reply", issue, text)
+
+
+def reply_header(issue: int, post_id) -> str:
+    """Tells Hermes which approval post the member's reply answers, since its own view of the chat lacks the factory state."""
+    return (
+        f"[Factory: a committee reply to the approval post {post_id} of issue #{issue}. "
+        f"Route it with {ROUTE_TOOL}, as the section Approval replies of your instructions says.]\n\n"
+    )
 
 
 def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id, reply_to_message_id) -> dict:
@@ -144,8 +166,8 @@ def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id, repl
     kind = decision[0]
     return {
         "kind": kind,
-        "issue": decision[1] if kind in ("approve", "feedback", "ship", "remove") else None,
-        "text": decision[2] if kind in ("feedback", "remove") else decision[1] if kind in ("change", "release-task") else None,
+        "issue": decision[1] if kind in ("approve", "reply", "patch", "redesign", "ship", "remove") else None,
+        "text": decision[2] if kind in ("reply", "patch", "redesign", "remove") else decision[1] if kind in ("change", "release-task") else None,
         "by": str(user_id),
         "byName": user_name or None,
         "chat": str(chat_id),
@@ -174,7 +196,7 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
 
 
 def parse_button(data) -> Optional[tuple]:
-    """Splits callback data `factory:<approve|deny|ship>:<issue>` into (kind, issue). None for anything else."""
+    """Splits callback data `factory:<approve|deny|ship|waste>:<issue>` into (kind, issue). None for anything else."""
     if not isinstance(data, str) or not BUTTON_DATA.fullmatch(data):
         return None
     _, kind, issue = data.split(":")
@@ -184,7 +206,7 @@ def parse_button(data) -> Optional[tuple]:
 def button_command(kind: str, issue: int, user_id, user_name, chat_id, message_id) -> dict:
     """A button sits on the post it acts on, so the pressed message is also the post."""
     return {
-        "kind": kind, "issue": issue, "text": None,
+        "kind": BUTTON_KINDS[kind], "issue": issue, "text": None,
         "by": str(user_id), "byName": user_name or None,
         "chat": str(chat_id), "messageId": int(message_id), "postId": int(message_id),
     }
@@ -239,7 +261,7 @@ QUEUE_SCHEMA = {
     "description": (
         "Queue one-off work for the factory when a committee member asks for something that needs running code "
         "or reading the repo, like a simulation, a balance check, a measurement or an investigation. "
-        "A coding agent runs it in a clone of the game repo. The result comes back later as a reply to the member's message. "
+        "A coding agent runs it in a clone of the game repo, with the factory state file and job logs read only. The result comes back later as a reply to the member's message. "
         "Call it once per task."
     ),
     "parameters": {
@@ -284,6 +306,38 @@ CHANGE_DONE = (
     "Queued. Reply to the member with one short sentence, like 'Queued for a PR.' Never reply with [SILENT] to a member's message. "
     "The factory confirms it in a reply later, and posts the pull request link. Add nothing more about it."
 )
+ROUTE_TOOL = "factory_route_reply"
+ROUTES = ("answer", "patch", "redesign")
+ROUTE_SCHEMA = {
+    "name": ROUTE_TOOL,
+    "description": (
+        "Route a committee reply to an approval post. answer: the reply is a question or asks to see something, "
+        "so you answer it in the chat and the card stays in Approval. patch: a small change that keeps the plan, "
+        "like a constant, a copy fix, a look tweak or a missing view, so Sonnet fixes the build and the factory checks it again. "
+        "redesign: the reply changes the plan, so the card goes back to Design. Call it once per reply, or once more "
+        "after an answer when the member then asks for a patch or a redesign."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "post": {"type": "integer", "description": "The approval post id that the factory header of the reply names."},
+            "route": {"type": "string", "enum": list(ROUTES)},
+            "text": {
+                "type": "string",
+                "description": (
+                    "For patch and redesign, the full change request. It must stand on its own: the agent sees nothing of this chat. "
+                    "For answer, the member's question."
+                ),
+            },
+        },
+        "required": ["post", "route", "text"],
+    },
+}
+ROUTE_DONE = {
+    "answer": "Routed as an answer. Answer the member in the chat now. The card stays in Approval.",
+    "patch": "Queued as a patch. Reply to the member with one short sentence. The factory adds a status line to the post.",
+    "redesign": "Queued as a redesign. Reply to the member with one short sentence. The factory adds a status line to the post.",
+}
 SESSION_KEYS = (
     "HERMES_SESSION_CHAT_ID", "HERMES_SESSION_USER_ID", "HERMES_SESSION_USER_NAME", "HERMES_SESSION_MESSAGE_ID",
 )
@@ -314,6 +368,30 @@ def make_queue_handler(cfg: Config, session_env=_session_env, kind: str = "adhoc
         }
         write_inbox(cfg.inbox, command)
         return json.dumps({"success": True, "message": done})
+
+    return handle
+
+
+def make_route_handler(cfg: Config, session_env=_session_env):
+    """The post must still be an open approval post, so a route never acts on a card that left Approval."""
+    def handle(args: dict, **kwargs) -> str:
+        route, text, post = args.get("route"), str(args.get("text") or "").strip(), args.get("post")
+        if route not in ROUTES:
+            return _tool_error(f"The route must be one of {', '.join(ROUTES)}. Nothing was queued.")
+        if not text:
+            return _tool_error("The text is empty. Nothing was queued.")
+        chat, user, name, message = (session_env(key).strip() for key in SESSION_KEYS)
+        if not cfg.committee.is_member(user) or not message.isdigit():
+            return _tool_error("Only a committee member's message can route a reply. Nothing was queued.")
+        issue = read_approval_posts(cfg.state_dir).get(str(post))
+        if issue is None:
+            return _tool_error(f"Post {post} is no open approval post. Nothing was queued.")
+        command = {
+            "kind": "route", "issue": issue, "text": text, "route": route,
+            "by": user, "byName": name or None, "chat": chat, "messageId": int(message), "postId": int(post),
+        }
+        write_inbox(cfg.inbox, command)
+        return json.dumps({"success": True, "message": ROUTE_DONE[route]})
 
     return handle
 
@@ -355,6 +433,9 @@ def make_hook(cfg: Config):
         )
         # The tick runs every minute and gives the one answer: a status line on the post, or a reply. So nothing is said here.
         write_inbox(cfg.inbox, command)
+        # A plain reply also goes on to Hermes, who routes it. The queued command lets the factory see a reply that never got a route.
+        if decision[0] == "reply":
+            return {"action": "rewrite", "text": reply_header(decision[1], event.reply_to_message_id) + event.text}
         return {"action": "skip", "reason": f"factory-{decision[0]}"}
 
     return on_dispatch
@@ -367,3 +448,4 @@ def register(ctx) -> None:
     ctx.register_telegram_handler(make_button_factory(cfg))
     ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))
     ctx.register_tool(name=CHANGE_TOOL, toolset="factory", schema=CHANGE_SCHEMA, handler=make_queue_handler(cfg, kind="change", done=CHANGE_DONE))
+    ctx.register_tool(name=ROUTE_TOOL, toolset="factory", schema=ROUTE_SCHEMA, handler=make_route_handler(cfg))

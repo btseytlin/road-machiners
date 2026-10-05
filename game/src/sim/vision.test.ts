@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PHYSICS } from '../data/physics';
+import { hulkBoxes } from './body';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
@@ -8,6 +10,11 @@ import { TIME } from '../data/time';
 import { sunAt } from './sun';
 import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, practiceContacts, refreshVision, sightRadius, visibleTiles } from './vision';
 import { TEST_MAP } from '../test/map';
+import { START_KITS } from '../data/start';
+import { DECKS, deckAt } from './bridge';
+import type { World } from './types';
+import type { Vec } from './vec';
+import { newWorld } from './world';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -68,6 +75,22 @@ describe('vision', () => {
 
     expect(canVehicleSee(w, npc, { x: 36.5, y: 30 })).toBe(true);
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
+  // A hulk hides what lies past it only where its chassis boxes reach eye height, so a tall tractor cab hides and a low buggy hulk is seen over.
+  it('is blocked by a kill wreck hulk only where its chassis reaches eye height', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const eye = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile;
+    const line = (chassisId: string) => {
+      w.obstacles = [{ id: 'wreck-npc7', pos: { x: 33, y: 30 }, r: 0.9, kind: 'wreck', hulk: { chassisId, yaw: Math.PI / 2 } }];
+      return hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 });
+    };
+    const reachesEye = (chassisId: string) => hulkBoxes(chassisId).some((b) => b.z0 <= eye && b.z1 >= eye && b.x0 <= 0 && b.x1 >= 0);
+
+    expect(reachesEye('tractor')).toBe(true);
+    expect(reachesEye('buggy')).toBe(false);
+    expect(line('tractor')).toBe(false);
+    expect(line('buggy')).toBe(true);
   });
 
   it('sees over a junk pile lower than the eye', () => {
@@ -194,9 +217,9 @@ describe('contact practice', () => {
 
   it('rebuilds the view without paying, so a load awards nothing', () => {
     const { w, buggy } = heardBuggy();
-    const xp = structuredClone(w.player.skills);
+    const xp = w.player.xp;
     expect(refreshVision(w).map((c) => c.vehicleId)).toEqual([buggy.id]);
-    expect([practiceOf(w, 'contact'), w.player.skills]).toEqual([[], xp]);
+    expect([practiceOf(w, 'contact'), w.player.xp]).toEqual([[], xp]);
   });
 
   it('pays nothing when an NPC hears a truck', () => {
@@ -208,18 +231,18 @@ describe('contact practice', () => {
 });
 
 describe('perception sight', () => {
-  it('reaches farther for the player at level 5', () => {
+  it('reaches farther for the player at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const me = w.vehicles[0];
     const base = sightRadius(w, me);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, me)).toBeCloseTo(base * (1 + 5 * SKILL_EFFECTS.perception.sight));
   });
 
-  it('shows the player more tiles at level 5', () => {
+  it('shows the player more tiles at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const base = visibleTiles(w, { x: 60, y: 60 }).size;
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(visibleTiles(w, { x: 60, y: 60 }).size).toBeGreaterThan(base);
   });
 
@@ -227,7 +250,7 @@ describe('perception sight', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     const base = sightRadius(w, npc);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, npc)).toBe(base);
   });
 });
@@ -319,5 +342,53 @@ describe('a dust screen', () => {
   it('leaves the line of fire open', () => {
     const { w, npc, me } = screenWorld({ x: 26, y: 30 }, true);
     expect(hasLineOfFire(w, npc.pos, me.pos)).toBe(true);
+  });
+});
+
+// UK3: sight from the Fallen Sun's wing, on the real map. The span stands 1.5 height units (6 m) over the furrow.
+describe('sight from the wing', () => {
+  const span = DECKS.find((d) => d.id === 'fallen-sun-wing')!;
+  // The middle of the level span, between the wing's second and third stations.
+  const [top, end] = [span.stations[1].at, span.stations[2].at];
+  const mid = { x: (top.x + end.x) / 2, y: (top.y + end.y) / 2 };
+  const across = { x: -span.axis.y, y: span.axis.x };
+  const at = (p: Vec, along: number, side: number): Vec => ({ x: p.x + span.axis.x * along + across.x * side, y: p.y + span.axis.y * along + across.y * side });
+
+  function wingWorld(): World {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    // The player watches from near the wing, so the meetings play by the full rules.
+    w.vehicles[0].pos = at(mid, 0, -5);
+    return w;
+  }
+  const viewer = (w: World, pos: Vec) => addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], pos);
+
+  // The truck on the ground stands on the furrow's west bank, out of the trough, where only the plate hides the target.
+  it('sees a truck 15 tiles out on the furrow bank over a hull plate that hides it from the ground', () => {
+    const w = wingWorld();
+    const target = at(mid, 0, 15);
+    const onSpan = viewer(w, mid);
+    const onGround = viewer(w, at(mid, 0, 8));
+    expect(deckAt(onSpan.pos.x, onSpan.pos.y)?.deck.id).toBe(span.id);
+    expect(deckAt(onGround.pos.x, onGround.pos.y)).toBeNull();
+    expect(canVehicleSee(w, onGround, target)).toBe(true);
+
+    w.obstacles.push({ id: 'plate', pos: at(mid, 0, 11), r: 1.3, kind: 'landmark', look: 'hullChunk', yaw: 0 });
+
+    expect(canVehicleSee(w, onGround, target)).toBe(false);
+    expect(canVehicleSee(w, onSpan, target)).toBe(true);
+  });
+
+  // The two hull drums under the span hold it up. Their boxes inside the deck outline lie under the deck line.
+  it('sees and fires along the span over the piers under it', () => {
+    const w = wingWorld();
+    const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(o.pos.x, o.pos.y)?.deck.id === span.id);
+    expect(piers).toHaveLength(2);
+    const from = at(top, 1, 0);
+    const to = at(from, 15, 0);
+    expect(deckAt(to.x, to.y)?.deck.id).toBe(span.id);
+
+    expect(canVehicleSee(w, viewer(w, from), to)).toBe(true);
+    expect(hasLineOfFire(w, from, to)).toBe(true);
   });
 });

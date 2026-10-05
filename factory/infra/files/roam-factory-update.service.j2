@@ -7,7 +7,8 @@ Wants=network-online.target
 Type=oneshot
 User={{ service_user }}
 UMask=0022
-ExecStart={{ script }}
+ExecStart={{ script }} {{ factory_root }}
+ExecStartPost=+{{ factory_root }}/factory-dashboard-restart.sh {{ factory_root }}
 StandardOutput=append:{{ home_dir }}/logs/update.log
 StandardError=append:{{ home_dir }}/logs/update.log
 # An image build is the longest step.

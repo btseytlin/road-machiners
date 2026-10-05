@@ -31,7 +31,8 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 
 - `factory tick` is the one entry point. A systemd timer runs it every `FACTORY_TICK_MINUTES` on the server. On the Mac a loop script runs it.
 - Hermes runs in Docker, like `Steelman/infrobot`, and owns Telegram chat. It cannot start agent containers, since that needs the Docker socket, which is root on the host. So the host timer runs the tick, not a Hermes cron job.
-- A tick checks the running job first. A job past `FACTORY_STAGE_TIMEOUT_MINUTES` is killed and reported as failed. A running job ends the tick.
+- A tick checks the running job first. A job past the time limit of its queue, like `FACTORY_DESIGN_TIMEOUT_MINUTES`, is killed and reported as failed. A running job ends the tick.
+- A factory update builds each commit in its own release folder and swaps a link, so running jobs finish on their code and the update never waits for them. A job whose process dies resumes once with its agents' sessions. See `deploy-job-continuity.md`.
 - A tick then runs intake, then starts at most one job. Release is due every `FACTORY_RELEASE_DAYS`, and maintenance every `FACTORY_MAINTENANCE_HOURS`. Due periodic jobs start first. Otherwise the card furthest along starts: testing, then implementation, then design.
 - A job runs as a detached `factory run <stage> <issue>` process with a pid file and a log in `$FACTORY_HOME/logs/`. The tick stays short, so the Hermes script timeout never matters.
 - The Hermes plugin writes each committee command as a JSON file into `$FACTORY_HOME/inbox/`. The tick drains the inbox first and answers in the chat through the Bot API.
@@ -66,7 +67,7 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 
 1. Design runs Opus 5.5 with `factory/prompts/design.md`. Issue text and comments go in as a file marked untrusted. The agent runs up:udesign and up:uplan in hands-off mode on `docs/tasks/issue-N.md`. It may write `.factory/wont-do.md` instead. The host checks that the task file has a Plan, pushes the branch and moves the card to Implementation. On won't-do it comments the reason, labels the issue and moves the card to Done.
 2. Implementation runs Sonnet 5.5 with `factory/prompts/implement.md`. The agent runs up:uexecute. The host checks for new commits, pushes and moves the card to Testing.
-3. Testing runs Sonnet 5.5 with `factory/prompts/test.md`. The agent runs up:uverify and up:ureview. It writes `.factory/approval.json` with a short description and how to try it, and `.factory/screenshot.png` of the core feature. Then the host runs `npm test`, `npm run typecheck` and the CPU playtest in a fresh container. Agent claims do not count as passing.
+3. Testing runs Sonnet 5.5 with `factory/prompts/test.md`. The agent runs up:uverify. A blocking review follows, as the README describes. It writes `.factory/approval.json` with a short description and how to try it, and `.factory/screenshot.png` of the core feature. Then the host runs `npm test`, `npm run typecheck` and the CPU playtest in a fresh container. Agent claims do not count as passing.
 4. Deploy builds the branch in a container with `SAVE_SCOPE` set to the short commit hash. The host copies `dist/` to `$FACTORY_WEB_ROOT/<hash>/`.
 5. Approval posts the screenshot, play link, issue link, description and how to try it to `FACTORY_COMMITTEE_CHAT`. The card moves to Approval, and state keeps the post id.
 6. An approve reply to that post from a committee member merges the branch into `dev` with a merge commit named after the issue. The host pushes `dev`, rebuilds it with `SAVE_SCOPE=dev` into `/dev`, closes the issue and moves the card to Done.

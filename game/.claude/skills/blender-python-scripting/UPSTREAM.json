@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/ra100/blender-claude-plugin",
+  "revision": "78e9151fdc9e01ce37f1d16a9b677c3047411885",
+  "files": [
+    {
+      "repo": "ra100/blender-claude-plugin",
+      "revision": "78e9151fdc9e01ce37f1d16a9b677c3047411885",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "cb0e12730db860a6bdbd092a9a9a67417bee753de9fdd905175e0d60603444a1"
+    },
+    {
+      "repo": "ra100/blender-claude-plugin",
+      "revision": "78e9151fdc9e01ce37f1d16a9b677c3047411885",
+      "source": "skills/blender-python-scripting/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "a76bfac8451d84a4e0a12923d850458786b6fe507b1b170fbdfb2b791b860cbb"
+    },
+    {
+      "repo": "ra100/blender-claude-plugin",
+      "revision": "78e9151fdc9e01ce37f1d16a9b677c3047411885",
+      "source": "skills/blender-python-scripting/references/data_model_reference.md",
+      "local": "references/data_model_reference.md",
+      "sha256": "038a7abd7c32ce2f635fb39a2ab881c9a772e3eeebdbdb0f5cd5128f21e88425"
+    },
+    {
+      "repo": "ra100/blender-claude-plugin",
+      "revision": "78e9151fdc9e01ce37f1d16a9b677c3047411885",
+      "source": "skills/blender-python-scripting/references/python_api.md",
+      "local": "references/python_api.md",
+      "sha256": "6465fecd0301dc6710ad832cabaa88cb5abef7afc9f7ea0cb25e0cbdf144d8d8"
+    }
+  ]
+}

@@ -3,7 +3,6 @@
 
 import { playerVehicle } from '../sim/damage';
 import { mountedItems } from '../sim/grid';
-import { levelOf } from '../sim/progress';
 import { clockOf } from '../sim/sun';
 import type { GameEvent, GridItem, Vehicle, World } from '../sim/types';
 import { partValue } from '../sim/wear';
@@ -104,7 +103,8 @@ function snapshot(world: World): Body {
   return {
     kind: 'day',
     money: p.money,
-    skills: Object.fromEntries(Object.entries(p.skills).map(([skill, xp]) => [skill, levelOf(xp)])),
+    xp: p.xp,
+    ranks: p.ranks,
     xpBySource: p.xpBySource,
     perks: p.perks,
     chassis: truck.chassisId,

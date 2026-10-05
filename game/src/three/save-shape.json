@@ -1,8 +1,9 @@
 {
- "format": "2.11",
+ "format": "2.13",
  "shape": {
   "broken": [],
   "dustClouds": [],
+  "events": [],
   "mapHash": "string",
   "marketRng": {
    "rngState": "number"
@@ -27,6 +28,8 @@
    "autoRepair": "boolean",
    "beacon": "boolean",
    "call": "null",
+   "clouds": [],
+   "contacts": [],
    "contracts": [],
    "costBasis": {
     "scrap": "number"
@@ -37,6 +40,7 @@
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
+   "headlights": "boolean",
    "health": "number",
    "hostilesSeen": [],
    "knockoutTurns": "number",
@@ -45,22 +49,26 @@
    "money": "number",
    "overdrive": "boolean",
    "perks": [],
-   "repeats": {},
-   "rumored": [],
-   "scavenged": [],
-   "skills": {
+   "ranks": {
     "driving": "number",
     "machining": "number",
     "perception": "number",
     "social": "number",
     "toughness": "number"
    },
+   "repeats": {},
+   "rumored": [],
+   "scavenged": [],
    "state": "string",
    "storage": [],
    "supplies": "number",
    "talked": {},
    "townPatched": "boolean",
    "vehicleId": "string",
+   "visible": [
+    "number"
+   ],
+   "xp": "number",
    "xpBySource": {
     "aid": "number",
     "call": "number",
@@ -91,6 +99,7 @@
     "toughness": "number"
    }
   },
+  "removed": [],
   "rngState": "number",
   "salvage": [
    {
@@ -776,6 +785,7 @@
     },
     "resources": "null",
     "speed": "number",
+    "trail": [],
     "weaponOrders": {}
    },
    {
@@ -789,6 +799,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
@@ -857,6 +868,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "trail": [],
     "weaponOrders": {}
    },
    {
@@ -881,6 +893,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
@@ -949,6 +962,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "trail": [],
     "weaponOrders": {}
    }
   ],

@@ -1,0 +1,177 @@
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { ghClient } from '../github';
+import { must } from '../exec';
+import { readState } from '../state';
+import { featureMerges, type Feature } from '../stages/release-common';
+import { DashboardHistory } from './history';
+import { ADHOC_LABEL, QUEUE_OF, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
+import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
+import type { DashboardConfig } from './config';
+import type { HostSampler, HostLoad } from './host';
+
+const runFile = promisify(execFile);
+export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'stale' | 'unavailable' };
+export type Operations = ReturnType<typeof buildOperations>;
+export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
+export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
+export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
+export type Snapshot = {
+  generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string;
+  operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
+};
+export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
+type ComparePage = { total_commits: number; commits: Commit[] };
+type PublicIssue = { number: number; title: string; labels: { name: string }[]; pull_request?: unknown };
+
+function createSource<T>(): Source<T> { return { value: null, at: null, status: 'unavailable' }; }
+function recordFailure<T>(source: Source<T>, name: string, error: unknown): Source<T> {
+  console.error(`Dashboard ${name} unavailable:`, error);
+  return { ...source, status: source.value === null ? 'unavailable' : 'stale' };
+}
+function recordSuccess<T>(value: T): Source<T> { return { value, at: new Date().toISOString(), status: 'ok' }; }
+function expireSource<T>(source: Source<T>, budgetMs: number): Source<T> {
+  if (source.at === null || source.status !== 'ok') return source;
+  return Date.now() - Date.parse(source.at) > budgetMs ? { ...source, status: 'stale' } : source;
+}
+function getPublicIssue(stage: string, issue: number | null): number | null {
+  return ['change', 'adhoc'].includes(stage) ? null : issue;
+}
+export function getReleaseKey(state: FactoryState): string {
+  return JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: state.release?.removed ?? [] });
+}
+function getFactoryStatus(state: FactoryState, paused: boolean): string {
+  if (paused) return 'paused';
+  if (state.lastTickError !== null) return 'blocked';
+  if (state.jobs.length) return 'working';
+  if (state.failures.length) return 'blocked';
+  return 'idle';
+}
+export function buildOperations(state: FactoryState, paused: boolean, config: Pick<DashboardConfig, 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers' | 'publicUrl'>) {
+  const jobs = state.jobs.map((job) => ({ stage: job.stage, issue: getPublicIssue(job.stage, job.issue), startedAt: job.startedAt, queue: QUEUE_OF[job.stage] }));
+  const count = (queue: Queue, total: number) => ({ busy: jobs.filter((job) => job.queue === queue).length, total });
+  const candidateUrl = state.release?.postId != null ? `${config.publicUrl}/rc/` : null;
+  const release = state.release === null ? null : { issue: state.release.issue, day: state.release.day };
+  return { status: getFactoryStatus(state, paused), jobs, queues: { branch: count('branch', 1), triage: count('triage', config.triageWorkers), design: count('design', config.designWorkers), implement: count('implement', config.implementWorkers), verify: count('verify', config.verifyWorkers), test: count('test', config.testWorkers) }, release, releaseKey: getReleaseKey(state), candidateUrl };
+}
+export function selectReleaseFeatures(commits: Commit[], head: string, removed: number[]): Feature[] {
+  const index = new Map(commits.map((commit) => [commit.sha, commit]));
+  const subjects: string[] = [];
+  const seen = new Set<string>();
+  let commit = index.get(head);
+  while (commit) {
+    if (seen.has(commit.sha)) throw new Error('Cycle in commit history');
+    seen.add(commit.sha);
+    if (commit.parents.length > 1) subjects.push(commit.commit.message.split('\n')[0]);
+    commit = index.get(commit.parents[0]?.sha ?? '');
+  }
+  return featureMerges(subjects).filter((feature) => !removed.includes(feature.issue));
+}
+
+export class PublicGitHub {
+  private readonly github: GitHub;
+  constructor(private readonly config: DashboardConfig, private readonly run: Run) { this.github = ghClient(run, config); }
+  private async query(args: string[]): Promise<string> { return must(await this.run('gh', args), 'Dashboard GitHub read'); }
+  private async readIssues(): Promise<PublicIssue[]> {
+    const output = await this.query(['api', `repos/${this.config.repo}/issues?state=open&per_page=100`, '--paginate', '--jq', '.[] | {number,title,labels,pull_request}']);
+    return output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as PublicIssue);
+  }
+  private async readHead(branch: string): Promise<string> {
+    const head = (await this.query(['api', `repos/${this.config.repo}/commits/${encodeURIComponent(branch)}`, '--jq', '.sha'])).trim();
+    if (!/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid GitHub head');
+    return head;
+  }
+  private async readFeatures(state: FactoryState): Promise<Feature[]> {
+    const branch = state.release?.branch ?? 'dev';
+    const [head, base] = await Promise.all([this.readHead(branch), this.readHead('main')]);
+    const commits = await this.readComparison(base, head);
+    return selectReleaseFeatures(commits, head, state.release?.removed ?? []);
+  }
+  private async readComparison(base: string, head: string): Promise<Commit[]> {
+    const pages = JSON.parse(await this.query(['api', `repos/${this.config.repo}/compare/${base}...${head}?per_page=100`, '--paginate', '--slurp'])) as ComparePage[];
+    const commits = pages.flatMap((page) => page.commits);
+    if (!pages.length || commits.length !== pages[0].total_commits) throw new Error('Incomplete GitHub comparison');
+    return commits;
+  }
+  async read(state: FactoryState): Promise<GithubSnapshot> {
+    const visibility = (await this.query(['api', `repos/${this.config.repo}`, '--jq', '.visibility'])).trim();
+    if (visibility !== 'public') throw new Error('Dashboard requires a public repository');
+    const [cards, issues, features] = await Promise.all([this.github.cards(), this.readIssues(), this.readFeatures(state)]);
+    return { cards: selectPublicCards(cards, issues), features, releaseKey: getReleaseKey(state), provisional: state.release === null };
+  }
+}
+
+function selectPublicCards(cards: Card[], issues: PublicIssue[]): PublicCard[] {
+  const byNumber = new Map(issues.filter((issue) => !issue.pull_request).map((issue) => [issue.number, issue]));
+  const publicCards: PublicCard[] = [];
+  for (const card of cards) {
+    const issue = byNumber.get(card.issue);
+    if (!issue || card.column === 'Done' || card.labels.includes(ADHOC_LABEL)) continue;
+    if (issue.labels.some((label) => label.name === ADHOC_LABEL)) continue;
+    publicCards.push({ issue: card.issue, title: issue.title, column: card.column, blocked: card.labels.includes(STUCK_LABEL), releaseTask: card.labels.includes(RELEASE_TASK_LABEL) });
+  }
+  return publicCards;
+}
+
+export function createGithubRun(timeoutMs: number, env: NodeJS.ProcessEnv): Run {
+  return async (command, args): Promise<RunResult> => {
+    if (command !== 'gh') throw new Error('Dashboard only runs GitHub reads');
+    try {
+      const { stdout, stderr } = await runFile(command, args, { timeout: timeoutMs, env });
+      return { code: 0, stdout, stderr };
+    } catch (error) {
+      const failed = error as { code: unknown; stdout: unknown; stderr: unknown };
+      if (typeof failed.code !== 'number' || typeof failed.stdout !== 'string' || typeof failed.stderr !== 'string') throw error;
+      return { code: failed.code, stdout: failed.stdout, stderr: failed.stderr };
+    }
+  };
+}
+
+export class SnapshotCollector {
+  private state: FactoryState | null = null;
+  private operations = createSource<Operations>();
+  private github = createSource<GithubSnapshot>();
+  private analytics = createSource<Analytics>();
+  private host = createSource<HostLoad>();
+  private readonly history: DashboardHistory;
+  constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler) {
+    this.history = new DashboardHistory(config.home);
+  }
+  private refreshState(): void {
+    try {
+      const path = join(this.config.home, 'state', 'state.json');
+      if (!existsSync(path)) throw new Error('Factory state missing');
+      this.state = readState(path);
+      this.operations = recordSuccess(buildOperations(this.state, existsSync(join(this.config.home, 'paused')), this.config));
+    } catch (error) { this.operations = recordFailure(this.operations, 'state', error); }
+  }
+  private async refreshAnalytics(): Promise<void> {
+    try {
+      const now = new Date();
+      await this.history.refresh(now);
+      const ranges = [1, 7, 30].map((days) => this.history.summarize(now, days));
+      this.analytics = recordSuccess({ ranges, posts: this.history.readPosts(now) });
+    } catch (error) { this.analytics = recordFailure(this.analytics, 'analytics', error); }
+  }
+  async refreshLocal(): Promise<void> {
+    this.refreshState();
+    await this.refreshAnalytics();
+    try { this.host = recordSuccess(await this.hostSampler.sample()); }
+    catch (error) { this.host = recordFailure(this.host, 'host', error); }
+  }
+  async refreshGithub(): Promise<void> {
+    if (this.state === null) return;
+    try { this.github = recordSuccess(await this.publicGithub.read(this.state)); }
+    catch (error) { this.github = recordFailure(this.github, 'GitHub', error); }
+  }
+  getSnapshot(): Snapshot {
+    const localBudget = this.config.refreshMs + this.config.commandTimeoutMs;
+    return {
+      generatedAt: new Date().toISOString(), repoUrl: `https://github.com/${this.config.repo}`, playUrl: this.config.playUrl, channelUrl: this.config.channelUrl,
+      operations: expireSource(this.operations, localBudget), analytics: expireSource(this.analytics, localBudget), host: expireSource(this.host, localBudget),
+      github: expireSource(this.github, this.config.githubRefreshMs + this.config.commandTimeoutMs),
+    };
+  }
+}

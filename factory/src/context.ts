@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { loadConfig } from './config';
 import { dockerContainer } from './container';
 import { realRun } from './exec';
-import { JOB_ID_ENV } from './jobs';
+import { JOB_CPUS_ENV, JOB_ID_ENV } from './jobs';
 import { ghClient } from './github';
 import { hostRepo } from './repo';
 import { botClient } from './telegram';
@@ -19,7 +19,7 @@ export function realContext(env: Record<string, string | undefined>): Ctx {
     run: realRun,
     github: ghClient(realRun, cfg),
     telegram: botClient(cfg.telegramToken, fetch),
-    container: dockerContainer(realRun, cfg, env[JOB_ID_ENV] ?? null),
+    container: dockerContainer(realRun, cfg, env[JOB_ID_ENV] ?? null, env[JOB_CPUS_ENV] ?? null),
     repo: hostRepo(realRun, cfg),
     statePath: join(stateDir, 'state.json'),
     now: () => new Date(),

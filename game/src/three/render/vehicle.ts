@@ -14,10 +14,11 @@ import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/f
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
-import type { GridItem, Vehicle } from '../../sim/types';
+import type { GridItem, Vehicle, World } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
+import { onAir, radioSpeakers } from '../../sim/dialogue';
 import { TruckMotion, WHIPS } from './truckMotion';
 
 const T = PHYSICS.truck;
@@ -28,6 +29,7 @@ type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 // Material name that takes the faction color.
 const PAINT = 'paint';
+const RADIO = 'radio_light'; // the antenna bulb material, lit while the truck is on the radio
 const LAMP = 'light'; // the headlight face material in the nose and base models
 const GLASS = 'glass'; // the cab window material in the base models, tinted by the daylight
 const TRIM = 'trim'; // base material that takes the faction cab color
@@ -62,6 +64,8 @@ type Axle = { obj: THREE.Object3D; a: number; b: number; inset: number };
 const SHOCK_R = 0.2; // coil radius of the coilover model at a 1 m wheel radius
 const UP = new THREE.Vector3(0, 1, 0);
 const ANTENNA_INSET = 0.12; // meters from the body side and the cab's back edge
+const RADIO_TIP = 1.6; // meters up the antenna to the bulb
+const RADIO_HALO = 0.6; // meters across the lit bulb's glow
 const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
 // A turning weapon head, its barrel tip in head space, and where its gun can fire in degrees off the truck heading.
@@ -112,6 +116,9 @@ export class VehicleView {
   private anchors = new Map<string, Anchor>(); // key: part id
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
+  private radioMat = new THREE.MeshBasicMaterial({ color: PAL.radioLight.off });
+  private halo: THREE.Sprite | null = null; // the red glow around a lit antenna bulb, set by buildLooseParts
+  private radioOn = false;
   private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
   private readonly glassGlow = new THREE.Color(0); // kept across rebuilds, which replace the glass material
   private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
@@ -163,12 +170,19 @@ export class VehicleView {
     this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
   }
 
+  // lit: the antenna bulb glows red with a halo while the truck talks on the radio.
+  radio(lit: boolean): void {
+    this.radioOn = lit;
+    this.radioMat.color.setHex(radioColor(lit));
+    if (this.halo) this.halo.visible = lit;
+  }
+
   // dark: the player sees only the headlights, so the truck draws as a black shape around its lit lamps.
   outline(dark: boolean): void {
     if (dark === this.dark) return;
     this.dark = dark;
     this.root.traverse((o) => {
-      if (!(o instanceof THREE.Mesh) || o.material === this.silhouetteMat || o.material === this.lampMat || o.userData.outline) return;
+      if (!(o instanceof THREE.Mesh) || this.keepsLook(o)) return;
       if (dark) {
         o.userData.litMat = o.material;
         o.material = this.darkMat;
@@ -177,6 +191,12 @@ export class VehicleView {
         delete o.userData.litMat;
       }
     });
+  }
+
+  // The silhouette twins, outline meshes and lit lamps keep their look in the dark.
+  private keepsLook(o: THREE.Mesh): boolean {
+    const m = o.material;
+    return m === this.silhouetteMat || m === this.lampMat || m === this.radioMat || o.userData.outline;
   }
 
   // glow: the color cab windows add over their lit color.
@@ -227,6 +247,8 @@ export class VehicleView {
     // disposeChildren disposed the lamp material, so a new one keeps the lamp state.
     const on = this.lampMat.color.getHex() === PAL.lamp.on;
     this.lampMat = new THREE.MeshBasicMaterial({ color: on ? PAL.lamp.on : PAL.lamp.off });
+    this.radioMat = new THREE.MeshBasicMaterial({ color: radioColor(this.radioOn) });
+    this.halo = null;
     this.glassMat = new THREE.MeshLambertMaterial({ flatShading: true, emissive: this.glassGlow });
 
     const still = new THREE.Group();
@@ -324,20 +346,18 @@ export class VehicleView {
     }
   }
 
-  // Headlight faces share the lamp material, so lamps() switches them all. Cab windows share the glass material, so windows() tints them all.
+  // Headlight faces share the lamp material, so lamps() switches them all. The antenna bulb shares the radio material.
+  // Cab windows share the glass material, so windows() tints them all.
   private useLamp(obj: THREE.Object3D): void {
+    const shared: Record<string, THREE.Material> = { [LAMP]: this.lampMat, [RADIO]: this.radioMat, [GLASS]: this.glassMat };
     obj.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
-      if (o.material.name === LAMP) {
-        o.material.dispose();
-        o.material = this.lampMat;
-        o.userData.lamp = true;
-      } else if (o.material.name === GLASS) {
-        this.glassMat.color.copy(o.material.color);
-        o.material.dispose();
-        o.material = this.glassMat;
-        o.userData.lamp = true;
-      }
+      const mat = shared[o.material.name];
+      if (!mat) return;
+      if (mat === this.glassMat) this.glassMat.color.copy(o.material.color);
+      o.material.dispose();
+      o.material = mat;
+      o.userData.lamp = true;
     });
   }
 
@@ -514,7 +534,11 @@ export class VehicleView {
     if (!cab) throw new Error(`${v.id} has no cab`);
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const rear = cellRect(v.chassisId, itemCells(cab).filter((c) => c.y === row));
-    const antenna = mergeStatic(wrapped(model('antenna')));
+    const tip = wrapped(model('antenna'));
+    this.useLamp(tip);
+    const antenna = mergeStatic(tip);
+    this.halo = radioHalo(this.radioOn);
+    antenna.add(this.halo);
     antenna.position.set(rear.x0 + ANTENNA_INSET, surfaceAt(v.chassisId, rear), -body.half.z + ANTENNA_INSET);
     this.body.add(antenna);
     this.motion.addWhip(antenna, WHIPS.antenna);
@@ -774,8 +798,8 @@ function tint(obj: THREE.Object3D, paint: number, look: Look): void {
 }
 
 // Moves each vertex by an offset seeded by the part id and its position in the model's own space, so it ignores how the
-// model is placed. Corners that share a position move together, so faces stay closed.
-function jag(obj: THREE.Object3D, partId: string, step: number): void {
+// model is placed. Corners that share a position move together, so faces stay closed. The hulks in obstacles.ts share it.
+export function jag(obj: THREE.Object3D, partId: string, step: number): void {
   obj.updateMatrixWorld(true);
   const toModel = obj.matrixWorld.clone().invert();
   const box = new THREE.Box3();
@@ -793,10 +817,11 @@ function jag(obj: THREE.Object3D, partId: string, step: number): void {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const toMesh = toModel.clone().multiply(o.matrixWorld).invert();
     const p = new THREE.Vector3();
+    const offset = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(toModel);
       const d = jagOffset(partId, p.x, p.y, p.z, step, thinnest);
-      p.add(new THREE.Vector3(d.x, d.y, d.z)).applyMatrix4(toMesh);
+      p.add(offset.set(d.x, d.y, d.z)).applyMatrix4(toMesh);
       pos.setXYZ(i, p.x, p.y, p.z);
     }
     pos.needsUpdate = true;
@@ -875,10 +900,40 @@ function mergeStatic(group: THREE.Group): THREE.Group {
   return out;
 }
 
+function radioColor(lit: boolean): number {
+  return lit ? PAL.radioLight.on : PAL.radioLight.off;
+}
+
+// A soft red glow at the antenna tip, so a bulb a few centimeters wide still shows at game zoom.
+function radioHalo(lit: boolean): THREE.Sprite {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap(), color: PAL.radioLight.on, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+  sprite.scale.setScalar(RADIO_HALO);
+  sprite.raycast = () => {}; // a glow is not part of the truck, so clicks pass through it
+  sprite.position.set(0, RADIO_TIP, 0);
+  sprite.visible = lit;
+  return sprite;
+}
+
+// One soft round falloff shared by every halo, so a rebuild builds no texture.
+let haloTexture: THREE.DataTexture | null = null;
+function haloMap(): THREE.DataTexture {
+  if (haloTexture) return haloTexture;
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const d = Math.hypot((i % size) - size / 2 + 0.5, Math.floor(i / size) - size / 2 + 0.5) / (size / 2);
+    data.set([255, 255, 255, Math.round(255 * Math.max(0, 1 - d) ** 2)], i * 4);
+  }
+  haloTexture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  haloTexture.needsUpdate = true;
+  return haloTexture;
+}
+
 function disposeChildren(group: THREE.Group): void {
   for (const child of [...group.children]) {
     group.remove(child);
     child.traverse((o) => {
+      if (o instanceof THREE.Sprite) o.material.dispose(); // the shared halo map stays
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -893,4 +948,36 @@ function disposeChildren(group: THREE.Group): void {
 // Every wheel part, whatever its size, hangs on a wheel mount.
 function isWheel(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'wheel';
+}
+
+// Wall-clock timing of the antenna radio light, so a call that freezes turns still blinks.
+export const RADIO_LIGHT = {
+  periodMs: 700, // one on and off cycle
+  spokeMs: 3000, // how long a truck keeps blinking after it talked in a turn
+};
+
+// Who blinks: the trucks on air now, and trucks that talked in a recently seen world.
+export class RadioLights {
+  private readonly until = new Map<string, number>();
+  private noted: World | null = null;
+  private air: { world: World; ids: Set<string> } | null = null; // onAir of the last world asked, once per world
+
+  note(world: World, now: number): void {
+    for (const [id, end] of this.until) if (end <= now) this.until.delete(id);
+    if (world === this.noted) return;
+    this.noted = world;
+    for (const id of radioSpeakers(world.events, world.player.vehicleId)) this.until.set(id, now + RADIO_LIGHT.spokeMs);
+  }
+
+  lit(world: World, id: string, now: number): boolean {
+    const end = this.until.get(id);
+    if (!this.onAir(world).has(id) && (end === undefined || end <= now)) return false;
+    const phase = (now / RADIO_LIGHT.periodMs + hashStr(id)) % 1;
+    return phase < 0.5;
+  }
+
+  private onAir(world: World): Set<string> {
+    if (this.air?.world !== world) this.air = { world, ids: new Set(onAir(world)) };
+    return this.air.ids;
+  }
 }

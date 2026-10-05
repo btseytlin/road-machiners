@@ -1,26 +1,37 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { must } from './exec';
+import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
+import { appendUsage, usageFromOutput } from './ledger';
 import { withLock } from './lock';
-import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type Container, type FactoryConfig, type Run } from './types';
+import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
 
 const FACTORY_LABEL = 'factory=1';
 
 // Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
-function baseArgs(jobId: string | null): string[] {
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...(jobId === null ? [] : ['--label', jobLabel(jobId)])];
+// A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
+// TEST_TIMEOUTS=off takes the time limits off the game's tests and playtest. On this shared server they measure load, not hangs, and the job's own time limit stops a hung run.
+// With the GPU on, every container gets the card. The graphics capability gives Chromium the NVIDIA Vulkan and GL drivers for WebGL.
+function baseArgs(jobId: string | null, cpus: string | null, gpu: boolean): string[] {
+  const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
+  const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
+  const card = gpu ? ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=all'] : [];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...card, '-e', 'TEST_TIMEOUTS=off'];
 }
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
 
 // The npm cache is shared across runs, so `npm ci` reuses downloads. npm checks every package against the lockfile's integrity hash, so a bad cache entry fails the install instead of slipping in.
 const NPM_CACHE = '/home/pwuser/.npm';
+const SESSIONS_MOUNT = '/home/pwuser/.claude/projects';
 
-function mountArgs(cfg: FactoryConfig, clone: string, dir: string): string[] {
+function mountArgs(cfg: FactoryConfig, clone: string, dir: string, mediaDir?: string): string[] {
   const cache = `${cfg.home}/npm-cache`;
   mkdirSync(cache, { recursive: true });
-  return ['-v', `${clone}:/work`, '-v', `${cache}:${NPM_CACHE}`, '-w', `/work/${dir}`];
+  // The reference images mount read only inside the clone's mount. The clone's exclude file keeps them out of its commits.
+  const media = mediaDir === undefined ? [] : ['-v', `${mediaDir}:${MEDIA_MOUNT}:ro`];
+  return ['-v', `${clone}:/work`, '-v', `${cache}:${NPM_CACHE}`, ...media, '-w', `/work/${dir}`];
 }
 
 function envArgs(env: Record<string, string>): string[] {
@@ -69,23 +80,50 @@ export function outputsNote(dir: string): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
 }
 
-// Agents get the work clone, the npm cache, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
+// Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
+function sessionMount(session: AgentSession | undefined): string[] {
+  return session === undefined ? [] : ['-v', `${session.dir}:${SESSIONS_MOUNT}`];
+}
+
+function sessionArgs(session: AgentSession | undefined): string[] {
+  return session === undefined ? [] : [session.resume ? '--resume' : '--session-id', session.id];
+}
+
+function effortArgs(effort: string | undefined): string[] {
+  return effort === undefined ? [] : ['--effort', effort];
+}
+
+// A finished run must report its cost. A failed run may have died before its result event, and then it records nothing.
+function recordUsage(home: string, jobId: string, result: RunResult, model: string, resumed: boolean): void {
+  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
+  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
+}
+
+// Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
-export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
+export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
-      const env = { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations) };
+      // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
+      // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
+      const env = {
+        CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+      };
+      const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
+        ...baseArgs(jobId, cpus, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
-      const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
+      const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
+      const result = await run('docker', args, { env, input, logPath: log });
+      if (jobId !== null) recordUsage(cfg.home, jobId, result, model, session?.resume ?? false);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
+      const args = [...baseArgs(jobId, cpus, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
       const result = await run('docker', args, { logPath: log });
       must(result, `shell in ${clone}`);
     },

@@ -249,9 +249,9 @@ describe('game save', () => {
     const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
     expect(loaded.player.contacts).toEqual(world.player.contacts);
     expect(loaded.player.clouds).toEqual(world.player.clouds);
-    expect([loaded.player.skills, loaded.player.repeats]).toEqual([world.player.skills, world.player.repeats]);
+    expect([loaded.player.xp, loaded.player.repeats]).toEqual([world.player.xp, world.player.repeats]);
     practiceContacts(loaded, refreshVision(loaded));
-    expect(loaded.player.skills).toEqual(world.player.skills);
+    expect(loaded.player.xp).toEqual(world.player.xp);
   });
 
   it('rejects a save whose broken props do not match the map', () => {

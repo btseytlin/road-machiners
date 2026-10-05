@@ -6,6 +6,7 @@ import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
+import { pooledSkills_9_10 } from './save-migrations';
 import { savedRunId, storedSave, writeSave } from './save';
 import type { SaveSlots } from './save-db';
 
@@ -78,7 +79,7 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
 }
 
 const NO_CARRIED: Carried = {
-  seed: null, money: null, skills: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
+  seed: null, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
   autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
 };
 
@@ -90,7 +91,7 @@ export function readCarried(raw: unknown): Carried {
   return {
     seed: isGridInt(world.seed) ? world.seed : null,
     money: countOf(player.money),
-    skills: countsOf(player.skills),
+    ...pooledOf(player),
     xpBySource: countsOf(player.xpBySource),
     perks: listOf(player.perks).flatMap((id) => idOf(id) ?? []),
     discovered: listOf(player.discovered).flatMap((id) => idOf(id) ?? []),
@@ -103,6 +104,13 @@ export function readCarried(raw: unknown): Carried {
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
   };
+}
+
+// The XP pool and skill ranks. A save from before format 2.10 holds XP per skill, which reads as the 2.9 to 2.10 step
+// reads it.
+function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
+  if (objectOf(player.ranks)) return { xp: countOf(player.xp), ranks: countsOf(player.ranks) };
+  return pooledSkills_9_10(countsOf(player.skills));
 }
 
 // Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
