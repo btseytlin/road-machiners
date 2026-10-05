@@ -98,15 +98,15 @@ describe('ground impacts', () => {
     // Coming off a crest: the truck moves at 20 m/s down the slope, so its downward speed alone is past a hard landing.
     const angle = Math.atan(0.45);
     expect(total(slide(0.45, 0.6, { x: Math.cos(angle) * 20, y: -Math.sin(angle) * 20 }).lost)).toBe(0);
-  });
+  }, 90_000); // shaped ground builds a new heightfield, which takes over 30s when the whole suite shares the cores
 
   it('a truck whose wheels meet a rising slope while it drives level takes no damage', () => {
     // Off a small hop onto the face of the next bump: 20 m/s against the slope, though the truck hardly falls.
     expect(total(slide(-0.45, 0.6, { x: 20, y: 0 }).lost)).toBe(0);
-  });
+  }, 90_000);
 
   it('a truck dropped 3 m onto a slope still hurts its wheels', () => {
     const { lost, wheels } = slide(0.45, 3, { x: 0, y: 0 });
     for (const id of wheels) expect(lost.get(id)).toBeGreaterThan(0);
-  });
+  }, 90_000);
 });
