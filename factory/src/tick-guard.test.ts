@@ -10,7 +10,7 @@ const statePath = join(ROOT, 'state.json');
 
 function fakeCtx(posts: string[]): Ctx {
   return {
-    cfg: { committeeChat: 'c' }, statePath,
+    cfg: { committeeChat: 'c', home: ROOT }, statePath, now: () => new Date(),
     telegram: { sendMessage: async (_c: string, text: string) => { posts.push(text); return 1; } },
   } as unknown as Ctx;
 }

@@ -11,6 +11,7 @@ import { buildDrive, freeDrive, initPhysics, type Drive, type TurnResult } from 
 import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -52,14 +53,14 @@ it('a truck stays under 20 degrees of tilt at both canyon road crossings', () =>
     expect(result.remaining).toBeLessThan(3);
     expect(result.maxTilt).toBeLessThan(20);
   }
-}, 60_000);
+}, budget(60_000));
 
 it('a truck crosses Canyon Bridge on the deck, above the canyon', () => {
   const result = driveRoute({ x: 486, y: 379 }, { x: 509, y: 356 });
   expect(result.remaining).toBeLessThan(3);
   expect(result.minDeckRise).toBeGreaterThan(0);
   expect(result.minDeckRise).toBeLessThan(2);
-}, 60_000);
+}, budget(60_000));
 
 it('the Bowl crater exit leans the truck without rolling it onto its side', () => {
   const start = newWorld(1337, START_KITS.standard, TEST_MAP).vehicles[0].pos;
@@ -67,7 +68,7 @@ it('the Bowl crater exit leans the truck without rolling it onto its side', () =
   expect(result.remaining).toBeLessThan(3);
   // 45 degrees is halfway to a sideways rollover; the crater is rougher than a road crossing.
   expect(result.maxTilt).toBeLessThan(45);
-}, 60_000);
+}, budget(60_000));
 
 it('the terrain collider is a heightfield whose surface matches the corner grid', () => {
   const S = PHYSICS.metersPerTile;

@@ -1,6 +1,7 @@
-// Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
+// Boots the game in headless Chromium on the GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
+// The GPU is Metal on a Mac and Vulkan on Linux, like the factory's NVIDIA host. A run that falls back to software drawing fails.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 // Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
 import { mkdirSync } from 'node:fs';
@@ -17,16 +18,44 @@ const turns = Number(arg('turns', cpu ? '4' : '12'));
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 // A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
 // Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
-const TURN_LIMIT_MS = cpu ? 60000 : 10000;
+// The factory sets TEST_TIMEOUTS=off on its shared server, where a time limit measures the load, not a hang. There no step has a limit,
+// since Playwright reads 0 as none, and the factory's job time limit stops a hung run. src/test/timeouts.ts does the same for the tests.
+const timeoutsOff = process.env.TEST_TIMEOUTS === 'off';
+const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
+const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
+
+const GPU_ARGS = {
+  darwin: ['--use-angle=metal'],
+  linux: ['--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface'],
+};
+const SOFTWARE_RENDERERS = /SwiftShader|llvmpipe/;
+
+function launchArgs() {
+  if (cpu) return [];
+  const angle = GPU_ARGS[process.platform];
+  if (!angle) throw new Error(`No GPU flags for ${process.platform}. Run with --cpu.`);
+  return [...angle, '--enable-gpu', '--ignore-gpu-blocklist'];
+}
 
 mkdirSync('.playtest', { recursive: true });
-const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: launchArgs() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+if (timeoutsOff) page.setDefaultTimeout(0);
+const renderer = await page.evaluate(() => {
+  const gl = document.createElement('canvas').getContext('webgl2');
+  return gl ? gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : 'no WebGL2';
+});
+console.log(`renderer ${renderer}`);
+if (!cpu && SOFTWARE_RENDERERS.test(renderer)) {
+  await browser.close();
+  console.error(`FAIL\nThe GPU playtest got the software renderer ${renderer}. Run with --cpu on a machine without a GPU.`);
+  process.exit(1);
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
-await page.waitForFunction(() => window.__ROAM__, null, { timeout: 30000 });
+await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: '.playtest/start.png' });
 

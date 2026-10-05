@@ -1,11 +1,3 @@
-{
-	email {$ACME_EMAIL}
-	servers {
-		# HTTP/3 needs UDP 443, which the firewall does not open.
-		protocols h1 h2
-	}
-}
-
 (security_headers) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -16,11 +8,16 @@
 	}
 }
 
+# The Cloudflare Tunnel is the only way in. Cloudflare serves HTTPS to players and passes plain HTTP to Caddy, so Caddy gets no certificates.
+
 # The web root holds /dev/ and one folder per build hash. Folder requests serve index.html.
 # The bare domain sends players to the released game on itch.io. The builds stay under their paths.
-{$DOMAIN} {
+http://{$DOMAIN} {
 	import security_headers
 	redir / {$ITCH_URL} temporary
+	handle /factory* {
+		reverse_proxy unix//opt/factory/dashboard/http.sock
+	}
 	root * /srv/www
 	file_server {
 		index index.html
@@ -28,7 +25,7 @@
 }
 
 # www sends every request to the bare domain, keeping the path.
-www.{$DOMAIN} {
+http://www.{$DOMAIN} {
 	import security_headers
 	redir https://{$DOMAIN}{uri} permanent
 }

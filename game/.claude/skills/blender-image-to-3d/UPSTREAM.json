@@ -1,0 +1,118 @@
+{
+  "repository": "https://github.com/majidmanzarpour/blender-game-skills",
+  "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+  "files": [
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "306512561953da83863404efe11ba8845c6a7cf47a8744321c7cbd67f9944304"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "d96993e47584b51cf1887856de043b58316502d8e59003e6e49563dc8c73250c"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/assets/build_template.py",
+      "local": "assets/build_template.py",
+      "sha256": "32720898ce7e5054a55eb2f6b96f69208abc0aae853f2bbd4979359dbffb69cf"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/evals/evals.json",
+      "local": "evals/evals.json",
+      "sha256": "dbb8a693858cd7af82250b512a200c52c6fd30a1746062494e1b295640db9aac"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/references/blender-5-notes.md",
+      "local": "references/blender-5-notes.md",
+      "sha256": "59605d3bf6d7fe786b84b28f4f85663eb2ee3bd628d8110d74e40e868bc2b065"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/references/categories.md",
+      "local": "references/categories.md",
+      "sha256": "54365b47b9ae2f58bd7181c1c0f45dc82d0d602f27e964d599b5ca4715b9ea18"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/references/delivery-and-acceptance.md",
+      "local": "references/delivery-and-acceptance.md",
+      "sha256": "4cd269a2959fa85c7fe6eb9692cf404f40b9f75a1382c7820bf1de13a048b633"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/references/rigging-animation.md",
+      "local": "references/rigging-animation.md",
+      "sha256": "6c05a72bbba4eb140a8692a45831047c9c7c20e01d26849d8b0782bdac162b08"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/bake_maps.py",
+      "local": "scripts/bake_maps.py",
+      "sha256": "df1e7e656fb237887eb88e55a84e88be96346fef58dd8b629b206479f7ca7110"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/compose_review.py",
+      "local": "scripts/compose_review.py",
+      "sha256": "baecad27a2b3c4df115effae121254b24951113347ec2e8159154f418a90b379"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/export_delivery.py",
+      "local": "scripts/export_delivery.py",
+      "sha256": "1f317eaa2ebddda6a8d632fa6e7f5f3f12942c7bbd9f1041aaf353186d79083b"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/init_master.py",
+      "local": "scripts/init_master.py",
+      "sha256": "cd4ef8f086567babd6403d9a0e61004685ec8d3572fd6c86cd62121c2539e43e"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/review_render.py",
+      "local": "scripts/review_render.py",
+      "sha256": "afb1d9633fef198e2bf3059c759893bc6ac5c84db58f7930a4948e6579473301"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/roundtrip.py",
+      "local": "scripts/roundtrip.py",
+      "sha256": "64b3e969e70e3eda6975390ce3a20f40c048641acc0a502b145b0f802f6d34f6"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/validate.py",
+      "local": "scripts/validate.py",
+      "sha256": "f68ce7332eddaca02ae4813a715f3db6e1bf2b3ac5a5721b3cb9ceef70a691c3"
+    },
+    {
+      "repo": "majidmanzarpour/blender-game-skills",
+      "revision": "f0ef29385a03de139957e6f700b801cdc00b7e29",
+      "source": "skills/blender-image-to-3d/scripts/world_gate.py",
+      "local": "scripts/world_gate.py",
+      "sha256": "d7c4d50df6f49d59f496d8c84a5aec38586105cb1ee5dc41cfb2d54c3b932693"
+    }
+  ]
+}
