@@ -6,13 +6,13 @@ import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
-import { isDriveObstacle, obstacleReach } from "./mapgen";
+import { blockingBoxes, boxDistance, isDriveObstacle, obstacleReach } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates, type Site } from "./sites";
 import { startEscort } from "./tow";
-import type { Vehicle, World } from "./types";
+import type { Obstacle, Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
 // Escort templates never spawn on their own timer. They come with their leader.
@@ -157,6 +157,7 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       goal: null,
       home: { ...pos },
       stepIndex: 0,
+      memories: [],
     },
   });
   world.vehicles.push(v);
@@ -185,7 +186,8 @@ export function npcName(v: Vehicle): string {
   return `${template.profession} ${v.brain.driver}`;
 }
 
-const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
+// Territories have no gates to spawn at.
+const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp" && l.kind !== "territory")];
 
 // A random site among the template's spawn sites.
 function siteFor(world: World, tpl: NpcTemplate): Site {
@@ -221,6 +223,12 @@ function gateSpot(world: World, site: Site, given: Vec | null, radius: number): 
   return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
 }
 
+// Whether a circle at pos touches the obstacle: a site's edge circle, or a prop's boxes that start below truck roofs.
+function hitsObstacle(world: World, o: Obstacle, pos: Vec, radius: number): boolean {
+  if (o.kind === "site" || o.kind === "water") return true;
+  return blockingBoxes(o, world.terrain).some((b) => boxDistance(b, pos) < radius);
+}
+
 // Whether a vehicle of radius fits at pos, on the map and clear of obstacles and other vehicles.
 // ignoreId names a vehicle left out of the check, like the one being moved.
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
@@ -235,7 +243,7 @@ export function isFree(world: World, pos: Vec, radius: number, ignoreId: string 
   if (
     world.obstacles
       .filter(isDriveObstacle)
-      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin)
+      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin && hitsObstacle(world, o, pos, radius + margin))
   )
     return false;
   return world.vehicles.every(

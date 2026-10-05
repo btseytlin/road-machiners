@@ -15,10 +15,9 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, townAt } from './sites';
+import { locationAt, siteGap, townAt, type Site } from './sites';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
-import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
@@ -27,7 +26,7 @@ export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
       world.player.discovered.includes(s.id) ||
-      !seesArea(world, s.pos, s.radius)
+      !seesArea(world, s)
     )
       continue;
     discoverSite(world, s);
@@ -56,10 +55,8 @@ export function useOasis(world: World): World {
   });
 }
 
-function seesArea(world: World, center: Vec, radius: number): boolean {
-  return world.player.visible.some(
-    (idx) => dist(tileCenter(world, idx), center) <= radius,
-  );
+function seesArea(world: World, site: Site): boolean {
+  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= 0);
 }
 
 // The stock with loot left that the parked player truck can reach, or null.

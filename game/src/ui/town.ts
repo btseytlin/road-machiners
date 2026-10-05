@@ -44,7 +44,7 @@ import { spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary, contractWindow } from "./format";
 import { InventoryView, truckChips } from "./inventory";
@@ -113,7 +113,7 @@ export class TownScreen {
     const truck = el(
       "div",
       { class: "town-truck" },
-      ...(def.kind === "garage" ? [this.repairBar(w)] : []),
+      this.repairBar(w),
       this.inventory.render(),
     );
     this.root.replaceChildren(
@@ -203,7 +203,7 @@ export class TownScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         hint ? el("span", { class: `tag ${hint.cls}` }, hint.text) : null,
       ),
@@ -313,7 +313,7 @@ export class TownScreen {
     );
   }
 
-  // Garage repairs beside the truck: the built-in parts alone, or every part.
+  // Shop repairs beside the truck: the built-in parts alone, or every part.
   private repairBar(w: World): HTMLElement {
     const broken = mountedParts(playerVehicle(w)).filter((p) => p.hp === 0).length;
     const basics = basicsRepairCost(w);
@@ -338,7 +338,7 @@ export class TownScreen {
       return el(
         "div",
         { class: `card truck-card${own ? " own" : ""}` },
-        chassisMap(id),
+        el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
           { class: "truck-body" },
@@ -623,7 +623,7 @@ export class TruckTradeScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         el("span", { class: "dim" }, theirs ? `×${theirs} on offer` : "none on offer"),
       ),

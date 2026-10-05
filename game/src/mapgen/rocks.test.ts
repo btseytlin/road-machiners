@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
+import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
-import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../sim/terrain';
+import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp, type Terrain } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
 import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
+import { BUILT_TRACK } from './newworld';
+import { tileOf, tilesWithin } from './oldworld';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
@@ -12,12 +17,12 @@ const SITES = [...REGION.towns, ...REGION.locations];
 
 // Every rock and crag off roads, sites, the bridge deck and the map margin, and apart from every other one.
 function expectClear(rocks: BakedProp[]): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   for (const rock of rocks) {
     const { x, y } = rock.pos;
     expect(Math.min(x, y, SIZE - x, SIZE - y)).toBeGreaterThanOrEqual(O.edgeMargin);
     expect(ROAD_INDEX.nearestWithin(x, y, Infinity)).toBeGreaterThanOrEqual(REGION.roadWidth / 2 + O.roadClearance + rock.r);
-    for (const site of SITES) expect(dist(rock.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + rock.r);
+    for (const site of SITES) expect(siteGap(site, rock.pos)).toBeGreaterThan(O.siteClearance + rock.r);
     expect(segmentDist(rock.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + rock.r);
   }
   for (let a = 0; a < rocks.length; a++) for (let b = a + 1; b < rocks.length; b++) {
@@ -72,6 +77,22 @@ describe('boulders', () => {
     const d = rockLayer(1337, cliffDraft());
 
     expectClear(d.props);
+  });
+
+  it('keeps every boulder off dirt track tiles, and places every other boulder as without the track', () => {
+    // A dirt track 6 tiles wide across the cliff foot, as a territory's spur crosses open land.
+    const marked = cliffDraft();
+    for (let y = 200; y < 206; y++) for (let x = FOOT - 20; x < FOOT + 20; x++) marked.built[y * SIZE + x] = BUILT_TRACK;
+    const onTrack = (d: MapDraft, rock: BakedProp) => [tileOf(SIZE, rock.pos), ...tilesWithin(SIZE, rock.pos, rock.r)].some((tile) => d.built[tile] === BUILT_TRACK);
+
+    const withTrack = rockLayer(1337, marked).props;
+    const without = rockLayer(1337, cliffDraft()).props;
+
+    expect(withTrack.filter((rock) => onTrack(marked, rock))).toEqual([]);
+    // Boulders the track turned away leave every other draw where it was.
+    const away = (rock: BakedProp) => rock.pos.y < 200 - 3 || rock.pos.y > 206 + 3;
+    expect(without.filter((rock) => !away(rock)).length).toBeGreaterThan(0);
+    expect(withTrack.filter(away)).toEqual(without.filter(away));
   });
 
   it('places the same boulders for the same seed', () => {
@@ -144,11 +165,18 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, budget(120_000)); // checks every boulder against every road and site, slow when the suite runs in parallel
+
+  it('puts no boulder on or beside a dirt track tile', () => {
+    const terrain: Terrain = map.terrain;
+    const onTrack = boulders.filter((rock) => [tileAt(terrain, rock.pos), ...tilesWithin(terrain.size, rock.pos, rock.r)].some((tile) => terrain.types[tile] === 'track'));
+
+    expect(onTrack).toEqual([]);
+  }, budget(120_000));
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
 
     expect(onCliff).toEqual([]);
-  });
+  }, budget(120_000)); // decoding and checking the baked map takes 25s alone and near 40s when the whole suite shares the cores
 });

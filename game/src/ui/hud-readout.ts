@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { baseGrid, corePart, mountedParts, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
+import { baseGrid, corePart, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -267,7 +267,7 @@ export function getHudReadout(w: World) {
     speed: String(kph(me.speed)),
     maxSpeed: String(kph(vehicleStats(w, me).maxSpeed)),
     manual: me.direct,
-    broken: mountedParts(me).filter((part) => part.hp === 0).length,
+    clock: clockLabel(w.turn),
     resources: [
       {
         label: "Money",
@@ -291,7 +291,6 @@ export function getHudReadout(w: World) {
       },
     ],
     survival: [
-      { label: "Time", value: clockLabel(w.turn), warning: false },
       { label: "Heat", value: `${celsius(heat)} °C`, warning: heat >= HOT },
       {
         label: "Engine",

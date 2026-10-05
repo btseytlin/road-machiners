@@ -3,7 +3,7 @@
 import type { Vec } from "../sim/vec";
 
 export type TownDef = { id: string; name: string; pos: Vec; radius: number };
-export type LocationDef = {
+export type SiteLocationDef = {
   id: string;
   name: string;
   kind: "oasis" | "convoy" | "landmark" | "camp";
@@ -11,6 +11,12 @@ export type LocationDef = {
   radius: number;
   edge: SiteEdge;
 };
+// Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
+// outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,
+// radius is the outline's bounding radius, so code that only needs a reach can use it. siteGap() in src/sim/sites.ts
+// decides inside and outside.
+export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
+export type LocationDef = SiteLocationDef | TerritoryDef;
 // What closes a location on its collision edge. Towns always have a town wall.
 export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
 export const MAP_SCALE = 5;
@@ -54,8 +60,154 @@ function bend(a: Vec, b: Vec): Vec[] {
   return points;
 }
 
-const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
-const FALLEN_SUN_RADIUS = 44;
+export const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
+// The Fallen Sun's edge, in tiles from its centre (tmp/issue-81/r4/layout.md): the basin floor in TERRAIN.features.basins,
+// inset 1.5 tiles from the cliff arcs so their faces stay outside, with the crash furrow's floor spliced in to the
+// south-south-west. It is not a circle: the furrow reaches 112 tiles out and the crags come within 40.
+const FALLEN_SUN_OUTLINE: Vec[] = [
+  { x: -45.0, y: 0.0 }, // the west scree
+  { x: -41.3, y: -15.0 },
+  { x: -31.0, y: -26.0 }, // the left crag wall, inset
+  { x: -20.9, y: -33.5 },
+  { x: -11.4, y: -39.9 },
+  { x: -6.3, y: -44.6 }, // the north notch, at the floor edge, so a road can leave through it
+  { x: 1.6, y: -45.0 },
+  { x: 7.2, y: -40.9 }, // the right crag wall and the north-east wall, inset
+  { x: 15.3, y: -47.1 },
+  { x: 27.8, y: -44.5 },
+  { x: 37.8, y: -37.8 },
+  { x: 45.9, y: -26.5 }, // the east road
+  { x: 50.2, y: -8.9 }, // the east hill's foot
+  { x: 50.2, y: 8.9 },
+  { x: 45.3, y: 21.1 },
+  { x: 39.8, y: 33.4 }, // the south-east road
+  { x: 25.5, y: 44.2 },
+  { x: 8.2, y: 46.3 }, // the open south
+  { x: -2.4, y: 55.3 }, // down the furrow's east side
+  { x: -8.6, y: 78.4 },
+  { x: -13.6, y: 101.9 }, // a tile out from the furrow's east side, so the east lane past the wing's foot stays inside
+  { x: -22.6, y: 115.1 }, // round the furrow's far end, 3 tiles past its floor so the tail junction behind the wing fits
+  { x: -30.8, y: 114.9 },
+  { x: -38.8, y: 110.9 },
+  { x: -38.8, y: 95.4 }, // back up the furrow's west side, a tile out so the west lane past the wing's foot stays inside
+  { x: -31.8, y: 72.2 },
+  { x: -25.6, y: 49.1 },
+  { x: -23.5, y: 40.7 }, // the furrow's west lip
+  { x: -37.7, y: 26.4 },
+  { x: -43.5, y: 11.6 }, // the west road
+];
+const ORCHARD_POS = { x: 114, y: 284 }; // region (22.8, 56.8), the crossroads in the flat basin west of the north trunk road
+// Old Orchard's old road runs straight through its centre, in radians from map +x toward +y, pointing to its north
+// end. It is set so the gameplay camera shows the road at the concept image's 25 degrees above screen right.
+// The camera looks 30 degrees down from map +x +y (src/three/render/camera.ts): screen right is map (1, -1) / sqrt 2
+// and screen up is map (-1, -1) / sqrt 2, foreshortened by sin 30 = 0.5. A screen direction (cos 25, sin 25) is
+// cos 25 = 0.906 along screen right and 2 sin 25 = 0.845 along screen up on the ground, so on the map it is
+// (0.906 - 0.845, -0.906 - 0.845) / sqrt 2: north, 2 degrees toward east.
+const ORCHARD_SCREEN_ANGLE = (25 * Math.PI) / 180;
+const ORCHARD_SIN_ELEVATION = 0.5;
+export const ORCHARD_HEADING = Math.atan2(
+  -Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+  Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+);
+
+// A point s tiles along the Old Orchard's road from the centre (toward its north end) and c tiles across it (toward
+// screen up, the map's west side), in tiles from the centre. On the map that is about x = 114 - c, y = 284 - s.
+// Positions are measured from the concept image, docs/concepts/old-orchard-issue-111.jpg, and the terrain survey.
+export function onOrchardRoad(s: number, c: number): Vec {
+  const [cos, sin] = [Math.cos(ORCHARD_HEADING), Math.sin(ORCHARD_HEADING)];
+  return { x: s * cos + c * sin, y: s * sin - c * cos };
+}
+
+// The orchard's edge follows its basin, read from the bake's terrain in the road's frame. Ridges inside it are part of
+// the land. The east side keeps more than a tile off the north trunk road's edge, so the trunk road never enters it.
+const ORCHARD_OUTLINE: Vec[] = [
+  [-35, 22], // south-west corner, where the south-west dirt road leaves toward the old asphalt road at (100, 326)
+  [-36, 2], // the south edge west of the spur, on open ground
+  [-28, -3], // the spur road crosses the edge here, just before its end at the old road's south end
+  [-28, -14], // the south edge east of the spur, over 1 tile off its shoulder
+  [-26, -24],
+  [-20, -28], // the east edge follows the north trunk road's west shoulder up the basin
+  [0, -31],
+  [20, -35.5],
+  [40, -39],
+  [50, -42],
+  [56, -40], // the north-east corner, at the foot of the far north ridge
+  [58, -12], // the north edge of the north-east ground, under that ridge
+  [59, 3],
+  [72, 6], // up the east foot of the cliff between the north-east ground and the north-west pocket
+  [72, 42], // the north-west pocket's north edge, on flat ground
+  [54, 40], // the pocket's west edge, at the foot of the west ridge
+  [46, 37],
+  [40, 34],
+  [-30, 34], // the west edge, along the foot of the ridge that closes the basin's west side
+].map(([s, c]) => onOrchardRoad(s, c));
+
+// The largest distance of an outline point from the centre.
+function boundingRadius(outline: readonly Vec[]): number {
+  return Math.max(...outline.map((p) => Math.hypot(p.x, p.y)));
+}
+
+// The old road's south end, on its line, where the spur road from the trunk road arrives.
+const ORCHARD_SOUTH = onOrchardRoad(-32, 0);
+
+// The point where a road from `from` toward `to` first crosses the outline, RIM_REACH past it, where a spur road ends.
+// The road crosses the edge a hair before its end, so floating-point error cannot leave it short of the edge.
+const RIM_REACH = 0.05;
+function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Vec {
+  const poly = outline.map((p) => ({ x: centre.x + p.x, y: centre.y + p.y }));
+  const d = { x: to.x - from.x, y: to.y - from.y };
+  const length = Math.hypot(d.x, d.y);
+  const ts = poly.flatMap((a, i) => {
+    const b = poly[(i + 1) % poly.length];
+    const e = { x: b.x - a.x, y: b.y - a.y };
+    const den = d.x * e.y - d.y * e.x;
+    if (den === 0) return [];
+    const t = ((a.x - from.x) * e.y - (a.y - from.y) * e.x) / den;
+    const u = ((a.x - from.x) * d.y - (a.y - from.y) * d.x) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [t] : [];
+  });
+  if (ts.length === 0) throw new Error("The spur road never reaches the outline");
+  const t = Math.min(...ts) + RIM_REACH / length;
+  return { x: from.x + d.x * t, y: from.y + d.y * t };
+}
+
+// A point in tiles from the Fallen Sun's centre, on the map.
+function fromFallenSun(x: number, y: number): Vec {
+  return { x: FALLEN_SUN_POS.x + x, y: FALLEN_SUN_POS.y + y };
+}
+
+// Broken Wing: a crashed ship's wing lying along the road, which runs straight east-west (map yaw 0) so the wing
+// lies on screen as in the concept art. From the west, the road passes under the hoop, the wing's torn root bent up
+// and over it (the baked ship_wing prop, TERRAIN.features.wing). It climbs the root ramp, a sand mound, onto the wing
+// deck, runs along the deck's top, and comes down the tip ramp. The site stands past the tip ramp on the +y side,
+// and a crash trench runs beside the wing on the -y side. Distances are in tiles: `along` from the deck's middle
+// toward +x, `across` toward +y. Everything at Broken Wing derives from this one constant.
+// - road: the road's center point at the deck's middle; yaw: the road's direction, radians from map +x toward +y.
+// - deckHalf: half the deck's length. The deck is TERRAIN.features.decks' broken-wing entry.
+// - mound: the two ramps, TERRAIN.features.mounds. Each has a flat top of radius `flat`, falls over `bank` and stands
+//   `height` height units over the ground. Its center lies `gap` past a deck end, so the end rests on the inner bank,
+//   where the ground already falls away under the deck.
+// - hoopAt: the hoop's place along the road, past the root ramp's foot, so the hoop and the deck never meet.
+// - siteAt, siteSide: the spur leaves the road at siteAt, and the site stands siteSide across from it.
+// - trench: a channel like the canyon, TERRAIN.features.trench, `side` across from the road, `half` long each way.
+export const BROKEN_WING = {
+  road: scalePoint({ x: 70, y: 33 }),
+  yaw: 0,
+  deckHalf: 19.5,
+  mound: { gap: 4.5, flat: 2, bank: 14, height: 1.8 },
+  hoopAt: -44,
+  siteAt: 44,
+  siteSide: 14,
+  trench: { side: -22, half: 30, width: 3, bank: 6, depth: 2 },
+};
+
+// A map point `along` the Broken Wing road from the deck's middle and `across` it toward +y, in tiles.
+export function BROKEN_WING_POINT(along: number, across: number): Vec {
+  const c = Math.cos(BROKEN_WING.yaw);
+  const s = Math.sin(BROKEN_WING.yaw);
+  return { x: BROKEN_WING.road.x + c * along - s * across, y: BROKEN_WING.road.y + s * along + c * across };
+}
+export const BROKEN_WING_SITE: Vec = BROKEN_WING_POINT(BROKEN_WING.siteAt, BROKEN_WING.siteSide);
 
 export const REGION = {
   name: "Icarus",
@@ -94,14 +246,7 @@ export const REGION = {
     { id: "nose", name: "Nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
   ] as TownDef[],
   locations: [
-    {
-      id: "orchard",
-      edge: "fence",
-      name: "Old Orchard",
-      kind: "landmark",
-      pos: scalePoint({ x: 23.2, y: 62 }),
-      radius: 16, // the ruin on the far edge reaches 14.5 tiles; the trees stop at 10
-    },
+    { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
       edge: "stone",
@@ -184,11 +329,11 @@ export const REGION = {
     },
     {
       id: "fallen-sun",
-      edge: "fence",
       name: "Fallen Sun",
-      kind: "landmark",
+      kind: "territory",
       pos: FALLEN_SUN_POS,
-      radius: FALLEN_SUN_RADIUS,
+      radius: boundingRadius(FALLEN_SUN_OUTLINE),
+      outline: FALLEN_SUN_OUTLINE,
     },
     {
       id: "salvage-yard",
@@ -196,6 +341,16 @@ export const REGION = {
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
+      radius: 6,
+    },
+    // Broken Wing: a crashed ship's wing the road runs under and along. The site stands past the tip ramp, beside
+    // the road, so the deck and the hoop stay clear. See BROKEN_WING.
+    {
+      id: "broken-wing",
+      edge: "wrecks",
+      name: "Broken Wing",
+      kind: "landmark",
+      pos: BROKEN_WING_SITE,
       radius: 6,
     },
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
@@ -256,11 +411,18 @@ export const REGION = {
       { x: 43, y: 54 },
       { x: 50, y: 49 },
       { x: 51, y: 38 },
-      { x: 62, y: 34 },
-      { x: 72, y: 38 },
-      { x: 82, y: 49 },
-      { x: 78, y: 36 },
+      { x: 60, y: 33 },
+      { x: 70, y: 33 },
+      { x: 82, y: 33 },
+    ], [5, 6]), // the stretch under the Broken Wing hoop and along its deck stays straight
+    // At the Broken Wing road's east end, roads leave north to Podfield and south to Salvage Yard.
+    scaleRoad([
+      { x: 82, y: 33 },
       { x: 77, y: 24 },
+    ]),
+    scaleRoad([
+      { x: 82, y: 33 },
+      { x: 82, y: 49 },
     ]),
     scaleRoad([
       { x: 50, y: 36 },
@@ -281,7 +443,9 @@ export const REGION = {
       { x: 88, y: 84 },
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
-    scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
+    // The orchard's spur ends at the south end of its old road, just inside the edge.
+    [scalePoint({ x: 28, y: 64 }), edgePoint(scalePoint({ x: 28, y: 64 }), { x: ORCHARD_POS.x + ORCHARD_SOUTH.x, y: ORCHARD_POS.y + ORCHARD_SOUTH.y }, ORCHARD_POS, ORCHARD_OUTLINE)],
+    [BROKEN_WING_POINT(BROKEN_WING.siteAt, 0), BROKEN_WING_SITE],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
@@ -304,22 +468,33 @@ export const REGION = {
       { x: 61, y: 79 },
       { x: 66, y: 76 },
     ]),
-    // Two dead-end approaches reach the hull rim; no road goes through the Fallen Sun.
+    // Three dead-end approaches come down the crater bank where the level concept's tracks leave the crater: from the
+    // west (bearing 166°), the east (-27°) and the south-east (37°). Each ends 4 tiles inside the outline, on the dirt
+    // road web, which takes over there (tmp/issue-81/r4/layout.md). Points are in tiles from the centre. No road goes
+    // through the Fallen Sun. The east road comes in south of the small drum, on the second reference's road out of its
+    // right edge, instead of round 3's -16°, where the bow, the hazard and the east shards walled it in. The south-east
+    // road leaves the end of the Kiln Camp track, so raiders have a short way in.
     [
       ...scaleRoad([
         { x: 43, y: 54 },
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      { x: FALLEN_SUN_POS.x - FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(-39.71, 9.9),
+    ],
+    [
+      scalePoint({ x: 82, y: 49 }),
+      fromFallenSun(95, -36),
+      fromFallenSun(75, -37),
+      fromFallenSun(58, -34),
+      fromFallenSun(43.01, -21.92),
     ],
     [
       ...scaleRoad([
-        { x: 82, y: 49 },
-        { x: 75, y: 50 },
-        { x: 74, y: 56 },
+        { x: 66, y: 76 },
+        { x: 73, y: 64 },
       ]),
-      { x: FALLEN_SUN_POS.x + FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(37.75, 28.44),
     ],
   ] as Vec[][],
   roadWidth: 6,
@@ -374,8 +549,6 @@ export const REGION = {
     guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
-    orchardRows: 11,
-    orchardSpacing: 2,
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so

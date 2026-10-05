@@ -59,6 +59,7 @@ describe('goal stack', () => {
 
   it('an interrupted scavenge goal is active again after flee and service pop', () => {
     const { w, npc } = scavengerWorld();
+    w.vehicles[0].pos = { x: 50, y: 50 }; // inside the live range, so the cover rock hides the raider
     forceOption('hostileSeen', 'flee');
     forceOption('resume', 'resume');
     const site = REGION.locations.find((l) => l.id === 'podfield')!;
@@ -69,8 +70,8 @@ describe('goal stack', () => {
     expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['scavenge', 'resupply', 'flee']);
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     expect(thinkNpc(w, npc).kind).toBe('resupply');
-    const town = REGION.towns.find((t) => t.id === topGoal(npc)!.targetId)!;
-    npc.pos = { ...sitePads(town)[0] };
+    const stop = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)!.targetId)!;
+    npc.pos = { ...sitePads(stop)[0] };
     npc.speed = 0;
     resolveNpcActivities(w);
     expect(corePart(npc, 'cab').hp).toBeGreaterThan(1);

@@ -16,12 +16,15 @@ export function towardFrom(from: V3, target: V3): Muzzle {
   return { pos: from, dir: { x: target.x - from.x, y: target.y - from.y, z: target.z - from.z } };
 }
 
+// What a round tells the sound when it leaves the muzzle and when it lands.
+export type ShotCues = { fired: (m: Muzzle) => void; landed: () => void };
+
 type Look = 'tracer' | 'shell' | 'missile' | 'grenade';
 
 export type ProjectileSpec = {
   look: Look;
-  speed: number; // m/s; a flight longer than the rest of the shot window is cut to fit it
-  stagger: number; // share of the shot window over which a burst's rounds leave the gun
+  speed: number; // m/s; a flight longer than the rest of the shot band is cut to fit it
+  gapMs: number; // ms between the rounds of one burst; a burst is squeezed to fit CONFIG.combatBurstMaxMs
   length: number; // meters, of the drawn round or streak
   width: number; // meters
   color: number;
@@ -29,31 +32,31 @@ export type ProjectileSpec = {
   wobble: number; // meters of side swing at mid flight
 };
 
-// The shot window is CONFIG.combatShotMs, so slow rounds mostly fly the whole window and fast ones a part of it.
+// The shot band is CONFIG.combatShotMs, so slow rounds mostly fly the rest of the band and fast ones a part of it.
 // Keys are weapon part def ids, plus guard for town and camp guns.
 export const PROJECTILES: Record<string, ProjectileSpec> = {
-  mg: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
-  guard: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
+  mg: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
+  guard: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
   // Buckshot leaves almost at once, as a cloud of short streaks.
-  shotgun: { look: 'tracer', speed: 160, stagger: 0.1, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0 },
-  autocannon: { look: 'tracer', speed: 140, stagger: 0.45, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0 },
-  cannon: { look: 'shell', speed: 60, stagger: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0 },
-  tankGun: { look: 'shell', speed: 60, stagger: 0, length: 0.75, width: 0.28, color: 0xffad50, flash: 1.6, wobble: 0 },
-  sniperCannon: { look: 'shell', speed: 110, stagger: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0 },
-  heavyMg: { look: 'tracer', speed: 200, stagger: 0.5, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0 },
-  gatling: { look: 'tracer', speed: 220, stagger: 0.6, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0 },
+  shotgun: { look: 'tracer', speed: 160, gapMs: 8, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0 },
+  autocannon: { look: 'tracer', speed: 140, gapMs: 140, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0 },
+  cannon: { look: 'shell', speed: 60, gapMs: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0 },
+  tankGun: { look: 'shell', speed: 60, gapMs: 0, length: 0.75, width: 0.28, color: 0xffad50, flash: 1.6, wobble: 0 },
+  sniperCannon: { look: 'shell', speed: 110, gapMs: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0 },
+  heavyMg: { look: 'tracer', speed: 200, gapMs: 90, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0 },
+  gatling: { look: 'tracer', speed: 220, gapMs: 38, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0 },
   // Rifle rounds are one fast bright streak.
-  longRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0 },
-  amRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0 },
-  battleRifle: { look: 'tracer', speed: 240, stagger: 0.35, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0 },
-  flechette: { look: 'tracer', speed: 280, stagger: 0.3, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0 },
+  longRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0 },
+  amRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0 },
+  battleRifle: { look: 'tracer', speed: 240, gapMs: 110, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0 },
+  flechette: { look: 'tracer', speed: 280, gapMs: 70, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0 },
   // Burning fuel crawls out in short fat orange gouts.
-  flamer: { look: 'tracer', speed: 30, stagger: 0.4, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3 },
-  pneumobolter: { look: 'shell', speed: 90, stagger: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0 },
-  slugCannon: { look: 'shell', speed: 100, stagger: 0.3, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
-  recoilless: { look: 'shell', speed: 60, stagger: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0 },
-  grenadeLauncher: { look: 'grenade', speed: 45, stagger: 0.5, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0 },
-  rocketRack: { look: 'missile', speed: 40, stagger: 0.5, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
+  flamer: { look: 'tracer', speed: 30, gapMs: 50, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3 },
+  pneumobolter: { look: 'shell', speed: 90, gapMs: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0 },
+  slugCannon: { look: 'shell', speed: 100, gapMs: 150, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
+  recoilless: { look: 'shell', speed: 60, gapMs: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0 },
+  grenadeLauncher: { look: 'grenade', speed: 45, gapMs: 160, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0 },
+  rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
 };
 
 // The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode. Guard guns fire bullets.
@@ -98,12 +101,19 @@ export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf:
   });
 }
 
+// When a volley leaves and how long its band is. startMs is the volley's own start; burstMaxMs caps one burst's length.
+export type VolleyTiming = { startMs: number; windowMs: number; burstMaxMs: number };
+
 // Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
-export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], windowMs: number, groundY: (p: V3) => number): RoundPlan[] {
+// Rounds leave gapMs apart from startMs, and every one lands within the window.
+export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number): RoundPlan[] {
+  const { startMs, windowMs, burstMaxMs } = timing;
+  const gap = rounds.length > 1 ? Math.min(spec.gapMs, burstMaxMs / (rounds.length - 1)) : 0;
+  if (startMs + Math.max(0, rounds.length - 1) * gap >= windowMs) throw new Error(`A volley starting at ${startMs} ms leaves no time to fire ${rounds.length} rounds in ${windowMs} ms`);
   return rounds.map((r, k) => {
     const struck = r.struck;
     const land = struck ? hitPoint(a, r.b, r.offset) : missPoint(a, r.b, r.offset, groundY);
-    const delayMs = rounds.length > 1 ? (k / (rounds.length - 1)) * spec.stagger * windowMs : 0;
+    const delayMs = startMs + k * gap;
     const meters = Math.hypot(land.x - a.x, land.y - a.y, land.z - a.z);
     return { land, struck, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };
   });

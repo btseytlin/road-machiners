@@ -28,6 +28,7 @@ import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, strip
 import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
+import { shopAt } from "../sim/market";
 import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
@@ -42,20 +43,18 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid, toneStyle } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
   clearFan,
   fanSvg,
   weaponDefOf,
-  getItemIcon,
   gridEl,
   itemBox,
   itemLabel,
   itemName,
   itemState,
-  KIND_CLASS,
   lootGoodItem,
   lootPartItem,
   partTitle,
@@ -235,7 +234,7 @@ export class InventoryView {
     const me = playerVehicle(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
     const inspect = () => this.showItem(w, it, mounted);
@@ -394,7 +393,7 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
@@ -414,7 +413,7 @@ export class InventoryView {
     if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
-      townAt(w) ? this.repairButton(w, item.part) : null,
+      shopAt(w) ? this.repairButton(w, item.part) : null,
       !mounted && partDef(item.part.defId).kind !== "core"
         ? this.stripButton(w, playerVehicle(w), item.part)
         : null,
@@ -429,7 +428,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
-    if (!fieldPatchable(part)) return townOnlyPatch(part);
+    if (!fieldPatchable(part)) return shopOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(w, me, plan);
@@ -531,9 +530,10 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -560,9 +560,10 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -583,8 +584,8 @@ export class InventoryView {
       const item = lootGoodItem(good);
       const chip = el(
         "div",
-        { class: "inv-chip k-good" },
-        createIcon(getItemIcon(item)),
+        { class: "inv-chip", style: toneStyle(good) },
+        itemIconEl(item),
         `${GOODS[good].name} x${count}`,
       );
       this.markSelected(chip, item);
@@ -663,7 +664,7 @@ export class InventoryView {
 
   private truckItemEl(w: World, target: Vehicle, it: GridItem, grid: HTMLElement, removing: boolean): HTMLElement {
     const mounted = it.kind === "part" && isMounted(target.chassisId, it);
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
     node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
@@ -681,7 +682,7 @@ export class InventoryView {
 
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
     );
   }
@@ -1005,18 +1006,20 @@ function fieldPatchable(part: PartInstance): boolean {
   return def.kind !== "armor" || def.fieldRepair !== "none";
 }
 
-// Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
-function townOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+// Armor that only a shop repairs shows a disabled Patch button while damaged, so the player learns why.
+function shopOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
 }
 
 // A part's condition and stats. A spare shows the change against the mounted part of its kind.
 function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
+  const row = conditionRow(part);
   return [
+    ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }

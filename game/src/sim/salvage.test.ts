@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
+import { TERRITORIES } from '../data/territory';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
@@ -13,7 +14,7 @@ import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
 import {
   breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
-  lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvageUnits, siteLootTable,
+  isSiteStock, lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvageUnits, siteLootTable,
 } from './salvage';
 import { knockOutNpc } from './defeat';
 import { SHOPS } from '../data/market';
@@ -21,11 +22,13 @@ import type { NpcActivity, Obstacle, RefitPickup, SalvageStock, Vehicle, World }
 import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
-import { grayRadius } from './vision';
-import { sitePads } from './sites';
+import { canVehicleSee, grayRadius } from './vision';
+import { siteGap, sitePads } from './sites';
+import { isLootSpot, spotTable, territoryAt, territoryOfStock } from './territory';
 import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 describe('player piles', () => {
   it('goods the player dumps and takes back keep their cost basis', () => {
@@ -248,7 +251,9 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
   });
 
   it('fills a landmark site with loot at world creation', () => {
-    const landmark = REGION.locations.find((site) => site.kind === 'landmark')!;
+    // A landmark with a shop trades instead, so the site is the first that rolls from the landmark table.
+    const landmark = REGION.locations.find((site) => siteLootTable(site) === SALVAGE.landmark)!;
+    expect(landmark.kind).toBe('landmark');
     const w = emptyWorld();
     const stock = w.salvage.find((s) => s.id === landmark.id)!;
     expect(hasSalvage(stock)).toBe(true);
@@ -324,7 +329,7 @@ describe('road wreck salvage', () => {
       expect(stock).toBeDefined();
       expect(hasSalvage(stock!)).toBe(true);
     }
-  }, 30_000);
+  }, budget(30_000));
 });
 
 describe('loot piles', () => {
@@ -575,6 +580,18 @@ describe('breakable props', () => {
     expect(w.obstacles).toEqual([]);
   });
 
+  it('hides a truck behind a standing dead tree until a truck breaks it', () => {
+    const w = emptyWorld(near);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 20, y: 30 });
+    const target = { x: 26, y: 30 };
+    w.obstacles = [{ id: 'deadTree-3', pos: { x: 23, y: 30 }, r: 0.35, kind: 'landmark', look: 'deadTree', yaw: 0 }];
+    expect(canVehicleSee(w, npc, target)).toBe(false);
+
+    breakProp(w, 'deadTree-3', npc.id);
+
+    expect(canVehicleSee(w, npc, target)).toBe(true);
+  });
+
   it('waits while a truck stands on its spot', () => {
     const w = worldWithFence(far);
     breakProp(w, 'fence-7', w.vehicles[0].id);
@@ -711,4 +728,88 @@ describe('who loots a target', () => {
     expect(lootClaimedBy(w, first)).toBe(stock.id);
     expect(lootClaimedBy(w, second)).toBeNull();
   });
+});
+
+describe('territory loot spots', () => {
+  async function realWorld(): Promise<World> {
+    const { newWorld } = await import('./world');
+    const { startKit } = await import('../data/start');
+    return newWorld(1337, startKit('standard'), TEST_MAP);
+  }
+  const spotsOf = (w: World) => w.obstacles.filter(isLootSpot);
+
+  it('gives each spot exactly one stock with its id, and no stock without a spot', async () => {
+    const w = await realWorld();
+    const spots = spotsOf(w);
+    expect(spots.length).toBeGreaterThan(0);
+    for (const o of spots) expect(w.salvage.filter((s) => s.id === o.id), o.id).toHaveLength(1);
+    const ids = new Set(w.obstacles.map((o) => o.id));
+    for (const s of w.salvage.filter((entry) => territoryOfStock(entry))) expect(ids.has(s.id), s.id).toBe(true);
+    expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
+  }, budget(30_000));
+
+  it('gives every orchard spot its own stock from the table of its look, and the orchard no stock of its own', async () => {
+    const w = await realWorld();
+    const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+    const spots = spotsOf(w).filter((o) => siteGap(orchard, o.pos) < 0);
+    const farm = TERRITORIES.orchard.farm!;
+    expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
+    for (const o of spots) {
+      const stocks = w.salvage.filter((s) => s.id === o.id);
+      expect(stocks, o.id).toHaveLength(1);
+      expect(territoryOfStock(stocks[0])?.id, o.id).toBe('orchard');
+      const table = spotTable(o);
+      expect(stocks[0].goods.parts ?? 0, o.id).toBeGreaterThanOrEqual(table.parts[0]);
+      expect(stocks[0].goods.parts ?? 0, o.id).toBeLessThanOrEqual(table.parts[1]);
+    }
+    expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
+  }, budget(30_000));
+
+  it('rolls caches from the landmark table and field spots from the hull scrap table', async () => {
+    const w = await realWorld();
+    for (const o of spotsOf(w).filter((spot) => territoryAt(spot.pos)?.id === 'fallen-sun')) {
+      const table = spotTable(o);
+      const stock = stockOf(w, o.id);
+      expect(table).toBe(o.kind === 'landmark' && o.look === 'hullCache' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
+      expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
+      expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
+      expect(stock.radius).toBeCloseTo(propReach(o), 6);
+    }
+  }, budget(30_000));
+
+  it('refills an emptied spot over days and never past its table', async () => {
+    const w = await realWorld();
+    // Every cache at once, since one cache may draw a lucky full day: a day refills a share, not the table highs.
+    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache');
+    const stocks = caches.map((o) => stockOf(w, o.id));
+    for (const stock of stocks) emptyStock(stock);
+    runDays(w, 1);
+    const scrap = () => stocks.reduce((n, stock) => n + (stock.goods.scrap ?? 0), 0);
+    expect(scrap()).toBeLessThan(stocks.length * SALVAGE.landmark.goods.scrap[1]);
+    runDays(w, 365);
+    for (const [k, stock] of stocks.entries()) {
+      expect(stock.goods.scrap, caches[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
+      expect(stock.goods.parts, caches[k].id).toBe(SALVAGE.landmark.parts[1]);
+      expect(stock.fuel, caches[k].id).toBe(SALVAGE.landmark.fuel[1]);
+      expect(stockOf(w, caches[k].id).parts.length, caches[k].id).toBeLessThanOrEqual(1);
+    }
+  }, budget(30_000));
+
+  it('lets a parked player beside a spot search it, and not a moving one', async () => {
+    const w = await realWorld();
+    const o = spotsOf(w)[0];
+    const me = w.vehicles[0];
+    me.pos = { x: o.pos.x + propReach(o) + 1, y: o.pos.y };
+    me.speed = 0;
+    expect(canScavenge(w, o.id)).toBe(true);
+    me.speed = RULES.parkedSpeed + 1;
+    expect(canScavenge(w, o.id)).toBe(false);
+  }, budget(30_000));
+
+  it('leaves road wreck and site stock alone', async () => {
+    const w = await realWorld();
+    expect(w.salvage.filter((s) => isSiteStock(s)).length).toBeGreaterThan(0);
+    for (const o of spotsOf(w)) expect(isSiteStock(stockOf(w, o.id))).toBe(false);
+  }, budget(30_000));
 });

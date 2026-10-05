@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS, chassisModifier } from './chassis';
 import { PARTS, partModifier, type PartDef, type Unpriced } from './parts';
+import { EFFORT } from './market';
+import { TIME } from './time';
+import { TOW } from './tow';
 
 function bumped(def: Unpriced<PartDef>, field: string): Unpriced<PartDef> {
   const copy = structuredClone(def) as Record<string, unknown>;
@@ -53,5 +56,18 @@ describe('item prices', () => {
         if (a.tier === b.tier && deck(a.id) > deck(b.id)) expect(a.value, `${a.id} over ${b.id}`).toBeGreaterThan(b.value);
       }
     }
+  });
+});
+
+describe('tow fees', () => {
+  it('price the tower time at the tier-1 wage', () => {
+    const turn = EFFORT.wage[1] * TOW.wages;
+    expect(TOW.base).toBeCloseTo(TOW.approachTurns * turn);
+    expect(TOW.perTile).toBeCloseTo(TOW.turnsPerTile * turn);
+    expect(TOW.maxFee).toBeCloseTo(TOW.capTurns * turn);
+  });
+
+  it('never cost more than a day of tier-1 earnings', () => {
+    expect(TOW.maxFee).toBeLessThanOrEqual(EFFORT.wage[1] * TIME.turnsPerDay);
   });
 });

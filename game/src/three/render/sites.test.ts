@@ -46,7 +46,7 @@ describe('landmark scale', () => {
   });
 
   it('closes every site with an edge and shut doors at each gate', () => {
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       expect(group.userData.wallSections, site.id).toBeGreaterThan(5);
       expect(group.userData.gates, site.id).toBe(siteGates(site).length);
@@ -55,7 +55,7 @@ describe('landmark scale', () => {
   });
 
   it('draws each edge on the collision edge, at most 1.5 tiles thick', () => {
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       const reach = group.userData.edgeReach as [number, number];
       expect(reach[0], site.id).toBeGreaterThan(site.radius - 1.5);
@@ -68,7 +68,7 @@ describe('landmark scale', () => {
     const reach = 1; // tiles above the ground a truck body reaches
     const v = new Vector3();
     const m = new Matrix4();
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       let worst = 0;
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
         if (!(o instanceof Mesh) || outsideEdge(o)) return;
@@ -87,12 +87,5 @@ describe('landmark scale', () => {
       });
       expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
     }
-  });
-
-  it('gives the orchard a field-sized footprint and the ship a larger hull', () => {
-    const orchard = measureSite('orchard');
-    expect(orchard.x).toBeGreaterThan(80);
-    expect(orchard.z).toBeGreaterThan(80);
-    expect(measureSite('fallen-sun').x).toBeGreaterThan(250);
   });
 });

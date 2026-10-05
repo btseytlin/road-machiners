@@ -4,18 +4,23 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig, readEnvFiles } from './config';
 
 const FULL = {
+  FACTORY_OBSERVATION_HEARTBEAT_MS: '10000', FACTORY_OBSERVATION_MAX_EVENT_BYTES: '1048576',
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
-  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
+  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', FACTORY_GPU: 'on', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
-  FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
+  FACTORY_TRIAGE_TIMEOUT_MINUTES: '30', FACTORY_DESIGN_TIMEOUT_MINUTES: '135', FACTORY_IMPLEMENT_TIMEOUT_MINUTES: '330', FACTORY_VERIFY_TIMEOUT_MINUTES: '240',
+  FACTORY_TEST_TIMEOUT_MINUTES: '90', FACTORY_BRANCH_TIMEOUT_MINUTES: '60',FACTORY_REPLY_ROUTE_MINUTES: '15', FACTORY_RELEASE_DAYS: '7', FACTORY_WASTE_REVIEW_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
-  FACTORY_AGENT_WORKERS: '3', FACTORY_TEST_WORKERS: '1',
+  FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_VERIFY_WORKERS: '1', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low',
+  FACTORY_MIN_FREE_GB: '5', FACTORY_MIN_AVAILABLE_GB: '1', FACTORY_LOG_DAYS: '14', FACTORY_CPU_LIGHT: '0.25', FACTORY_CPU_IMPLEMENT: '0.25', FACTORY_CPU_TEST: '0.5',
 };
 
 describe('loadConfig', () => {
   it('parses numbers and bootstrap member', () => {
     const cfg = loadConfig(FULL);
+    expect(cfg.observationHeartbeatMs).toBe(10000);
+    expect(cfg.observationMaxEventBytes).toBe(1048576);
     expect(cfg.minVotes).toBe(5);
     expect(cfg.committeeBootstrapGithub).toBe('boss');
     expect(cfg.committeeBootstrapTelegram).toBe('1');
@@ -23,7 +28,9 @@ describe('loadConfig', () => {
     expect(cfg.maxJobsPerDay).toBe(10);
     expect(cfg.itchTarget).toBe('u/g');
     expect(cfg.sfxMaxGenerations).toBe(6);
-    expect([cfg.agentWorkers, cfg.testWorkers]).toEqual([3, 1]);
+    expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.verifyWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1, 1]);
+    expect(cfg.triageEffort).toBe('low');
+    expect([cfg.minFreeGb, cfg.minAvailableGb, cfg.logDays]).toEqual([5, 1, 14]);
   });
 
   it('names every missing key', () => {
@@ -44,6 +51,19 @@ describe('loadConfig', () => {
 
   it('rejects a bad number', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_MIN_VOTES: 'many' })).toThrow('FACTORY_MIN_VOTES');
+  });
+
+  it('reads the GPU switch as on or off and rejects anything else', () => {
+    expect(loadConfig(FULL).gpu).toBe(true);
+    expect(loadConfig({ ...FULL, FACTORY_GPU: 'off' }).gpu).toBe(false);
+    expect(() => loadConfig({ ...FULL, FACTORY_GPU: 'yes' })).toThrow('FACTORY_GPU must be on or off');
+    expect(() => loadConfig({ ...FULL, FACTORY_GPU: '' })).toThrow('missing FACTORY_GPU');
+  });
+
+  it('reads the CPU shares and rejects shares that add up to more than the server', () => {
+    const cfg = loadConfig(FULL);
+    expect([cfg.cpuLight, cfg.cpuImplement, cfg.cpuTest]).toEqual([0.25, 0.25, 0.5]);
+    expect(() => loadConfig({ ...FULL, FACTORY_CPU_TEST: '0.7' })).toThrow('add up to 1.2');
   });
 });
 
@@ -67,7 +87,7 @@ describe('readEnvFiles', () => {
     const settings = readEnvFiles('settings.env', '.env.example');
     const tracked = Object.keys(readEnvFiles('settings.env', files('', '')[1]));
     expect(tracked.filter((key) => SECRET.test(key))).toEqual([]);
-    const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || '1']));
+    const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || (key === 'FACTORY_GPU' ? 'on' : '1')]));
     expect(() => loadConfig(filled)).not.toThrow();
   });
 });

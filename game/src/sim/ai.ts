@@ -350,11 +350,13 @@ function others(world: World, v: Vehicle): Vehicle[] {
 // Moving vehicles close ahead whose path meets v's. leadTurns adds turns of closing at both current speeds to the
 // braking reach.
 function conflicts(world: World, v: Vehicle, leadTurns: 0 | 1): Vehicle[] {
-  return others(world, v).filter((x) => {
-    if (x.speed < RULES.parkedSpeed) return false;
-    const gap = gapAhead(world, v, x);
-    return gap !== null && gap < brakingReach(world, v, x) + leadTurns * (v.speed + x.speed) && pathsMeet(world, v, x);
-  });
+  return others(world, v).filter((x) => x.speed >= RULES.parkedSpeed && closesOn(world, v, x, leadTurns));
+}
+
+// Whether x lies close ahead of v and their paths meet, x moving or not.
+function closesOn(world: World, v: Vehicle, x: Vehicle, leadTurns: 0 | 1): boolean {
+  const gap = gapAhead(world, v, x);
+  return gap !== null && gap < brakingReach(world, v, x) + leadTurns * (v.speed + x.speed) && pathsMeet(world, v, x);
 }
 
 // A parked NPC close ahead that v faces off with. Other parked vehicles are routed around.
@@ -366,13 +368,12 @@ function facesParked(world: World, v: Vehicle): boolean {
   });
 }
 
-// Two moving NPCs that each have the other in their conflicts would each plan around the other's straight path
-// and swerve into each other, so the lower id waits and the higher goes around, as in a face off.
+// Two NPCs closing on each other would each plan around the other and swerve into each other, so the lower id
+// waits and the higher goes around, as in a face off. That holds when v is at rest too: x routes around it as a
+// parked truck, so v setting off would swerve into x's way.
 function facesOncoming(world: World, v: Vehicle): boolean {
   if (!givesWay(v)) return false;
-  return conflicts(world, v, 0).some(
-    (x) => v.id < x.id && givesWay(x) && conflicts(world, x, 0).some((y) => y.id === v.id),
-  );
+  return conflicts(world, v, 0).some((x) => v.id < x.id && givesWay(x) && closesOn(world, x, v, 0));
 }
 
 // Seconds v looks ahead: the turn until the next check plus v's stopping time. v may speed up this turn, as in
@@ -385,7 +386,9 @@ function horizon(world: World, v: Vehicle): { vs: number; t: number } {
 
 // Circles along the line x covers on its heading within v's horizon. They are spaced one radius apart, so
 // together they close the strip. A circle is left out when v cannot get there before x does, so a truck driving
-// away at v's pace blocks only where it is now. x may speed up this turn, as in brakingReach.
+// away at v's pace blocks only where it is now. x may speed up this turn, as in brakingReach. A truck driving away
+// from v, as one v merges behind or overtakes, does not leave a point until its body has passed it, so its circles
+// stay until its centre is both radii beyond them.
 function sweptPath(world: World, v: Vehicle, x: Vehicle): Blocker[] {
   const sx = vehicleStats(world, x);
   const r = sx.radius;
@@ -394,11 +397,12 @@ function sweptPath(world: World, v: Vehicle, x: Vehicle): Blocker[] {
   const xs = Math.min(sx.maxSpeed, x.speed + sx.accel);
   const reach = xs * t;
   const steps = Math.ceil(reach / r);
+  const tail = Math.cos(angleDiff(x.heading, bearing(v.pos, x.pos))) > 0 ? radii : 0;
   const circles: Blocker[] = [];
   for (let i = 0; i <= steps; i++) {
     const d = (reach * i) / steps;
     const pos = { x: x.pos.x + Math.cos(x.heading) * d, y: x.pos.y + Math.sin(x.heading) * d };
-    if (i === 0 || dist(v.pos, pos) - radii <= (vs * d) / xs) circles.push({ pos, r });
+    if (i === 0 || dist(v.pos, pos) - radii <= (vs * (d + tail)) / xs) circles.push({ pos, r });
   }
   return circles;
 }

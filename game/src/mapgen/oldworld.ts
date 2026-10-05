@@ -17,11 +17,12 @@ import {
   type SettlementRules,
   type TankRules,
 } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { deckAt } from '../sim/bridge';
+import { clearOfSites, onDeck } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
 import { angleDiff, bearing, clamp, DEG, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
 
@@ -38,6 +39,7 @@ export type OldRoad = { line: RoadLine; width: number; bridges: [Vec, Vec][] };
 
 export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   const W = OLD_WORLD;
+  shipWing(d);
   const towns = settlements(seed, d, W.settlements);
   overlooks(seed, d, W.overlooks);
   bendBuildings(seed, d, W.bends);
@@ -95,6 +97,13 @@ const TURN = Math.PI * 2;
 
 type Scored = { pos: Vec; score: number };
 
+// The hoop over the road at Broken Wing, the wing's torn root bent up and over. It goes down first and straight into
+// the draft, since place() would reject a prop on a road. Every later rule keeps away through the prop's circle.
+export function shipWing(d: MapDraft): void {
+  const W = TERRAIN.features.wing;
+  d.props.push(prop('shipWing', W.pos, W.r, W.yaw));
+}
+
 export function prop(kind: PropKind, pos: Vec, r: number, yaw: number, group = 0, step = 0): BakedProp {
   return { kind, pos, r, yaw, group, step };
 }
@@ -104,12 +113,12 @@ export function ruleRng(seed: number, offset: number): Rng {
 }
 
 // Inside the map margin, roadGap tiles past every road edge, clear of sites with their pads, and off the
-// Canyon Bridge deck and its ramps.
+// decks and their ramps.
 export function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
-  return clearOfSites(pos, r) && !onBridge(pos, HALF + r);
+  return clearOfSites(pos, r) && !onDeck(pos, HALF + r);
 }
 
 // Adds the prop where it stands on clear ground, off cliffs and apart from every prop already placed.
@@ -123,9 +132,9 @@ export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
   return true;
 }
 
-// Ground today's world built on: roads, the bridge deck, and sites with their pads.
+// Ground today's world built on: roads, the decks, and sites with their pads.
 export function builtGround(c: Vec): boolean {
-  if (deckAlong(c.x, c.y) !== null) return true;
+  if (deckAt(c.x, c.y) !== null) return true;
   return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
 }
 
@@ -206,7 +215,8 @@ export function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
 // closest to a site or junction score highest, with seeded noise. Each keeps a cluster of houses, most of
 // them ruined, and a farm keeps a silo or a water tower.
 
-type Anchor = { pos: Vec; radius: number };
+// Tiles from a point to a site's edge or a junction.
+type Anchor = (pos: Vec) => number;
 
 export function settlements(seed: number, d: MapDraft, rules: SettlementRules): OldSettlement[] {
   const rng = ruleRng(seed, rules.seedOffset);
@@ -228,7 +238,7 @@ function settlementSpots(seed: number, d: MapDraft, rules: SettlementRules): Sco
 
 function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anchors: Anchor[], pos: Vec): number | null {
   const [near, far] = rules.anchorGap;
-  const gap = Math.min(...anchors.map((a) => dist(pos, a.pos) - a.radius));
+  const gap = Math.min(...anchors.map((a) => a(pos)));
   if (gap < near || gap > far) return null;
   if (!clearGround(d.size, pos, rules.radius, rules.roadGap) || !flatAndDry(d, pos, rules)) return null;
   const closeness = 1 - (gap - near) / (far - near);
@@ -237,7 +247,7 @@ function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anch
 
 // Today's sites, and the road junctions.
 function siteAnchors(): Anchor[] {
-  return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...roadJunctions().map((pos) => ({ pos, radius: 0 }))];
+  return [...SITES.map((s): Anchor => (pos) => siteGap(s, pos)), ...roadJunctions().map((j): Anchor => (pos) => dist(pos, j))];
 }
 
 // The road ends that meet another road, once per road that ends there.
@@ -479,7 +489,7 @@ class RouteGrid {
       const p = this.posOf(node);
       this.heights[node] = d.heights[p.y * (d.size + 1) + p.x];
       this.cut[node] = isCutTile(d, tileOf(d.size, p)) ? 1 : 0;
-      this.closed[node] = SITES.some((s) => dist(p, s.pos) < s.radius) ? 1 : 0;
+      this.closed[node] = SITES.some((s) => siteGap(s, p) < 0) ? 1 : 0;
     }
   }
 

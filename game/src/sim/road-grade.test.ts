@@ -3,8 +3,8 @@ import { REGION } from '../data/region';
 import { MAPGEN, TERRAIN } from '../data/terrain';
 import { elevationAt } from './elevation';
 import { ROAD_INDEX } from './road-index';
-import { BRIDGE_LENGTH, bridgeCut } from './bridge';
-import { deckEnds, heightFromElevation } from './terrain';
+import { bridgeCut, deckById } from './bridge';
+import { deckSegments, heightFromElevation } from './terrain';
 import { gradeRoads } from './road-grade';
 import { TEST_MAP } from '../test/map';
 import { dist, type Vec } from './vec';
@@ -51,8 +51,9 @@ describe('road grades', () => {
   });
 
   it('keeps the Canyon Bridge deck of the baked map within the road grade', () => {
-    const [from, to] = deckEnds(TEST_MAP.terrain);
-    expect(Math.abs(to - from) / BRIDGE_LENGTH).toBeLessThanOrEqual(TERRAIN.roadGrade + STORED_STEP);
+    const deck = deckById('canyon-bridge');
+    const [{ h0, h1, length }] = deckSegments(TEST_MAP.terrain, deck);
+    expect(Math.abs(h1 - h0) / length).toBeLessThanOrEqual(TERRAIN.roadGrade + STORED_STEP);
   });
 
   it('leaves ground beyond the road margin untouched', () => {

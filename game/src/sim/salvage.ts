@@ -24,25 +24,27 @@ import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, 
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite, townAt } from './sites';
+import { isLootSpot, spotTable } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
 
-// Landmark and convoy sites, and the wrecks placed on roads, get stock at world creation,
-// drawn from their loot table. A road wreck's stock shares its obstacle id.
+// Landmark and convoy sites, the loot spots of territories and the wrecks placed on roads get stock at world
+// creation, drawn from their loot table. A spot's or road wreck's stock shares its obstacle id.
 export function initializeSalvage(world: World): void {
   const sites = REGION.locations.flatMap((site) => {
     const table = siteLootTable(site);
     return table ? [rollStock(world, table, site.id, site.pos, site.radius)] : [];
   });
+  const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
   const wrecks = world.obstacles.filter(isRoadWreck).map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
-  world.salvage = [...sites, ...wrecks];
+  world.salvage = [...sites, ...spots, ...wrecks];
 }
 
 // The loot table of a site that holds salvage, or null. A site with a shop trades instead.
 export function siteLootTable(site: LocationDef): LootTable | null {
-  if (site.id in SHOPS) return null;
+  if (site.kind === 'territory' || site.id in SHOPS) return null;
   if (site.kind === 'convoy') return SALVAGE.convoy;
   return site.kind === 'landmark' ? SALVAGE.landmark : null;
 }
@@ -341,6 +343,8 @@ export function renewSalvage(world: World): void {
     const table = siteLootTable(site);
     if (table) restockSite(world, siteStock(world, site.id), table);
   }
+  // A spot never moves or goes: it refills like a site.
+  for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, siteStock(world, o.id), spotTable(o));
   turnOverRoadWrecks(world);
   regrowBroken(world);
 }

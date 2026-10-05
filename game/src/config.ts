@@ -8,7 +8,9 @@ export const CONFIG = {
   startKit: 'standard',
   // A fixed world seed replays the same game. Null rolls a new seed for each new game.
   seed: null as number | null,
-  combatShotMs: 450,
+  combatShotMs: 1000, // the band after movement in which every volley leaves and lands
+  combatFireSpreadMs: 300, // latest start of a volley in the band
+  combatBurstMaxMs: 450, // longest a burst of rounds spans
   combatReadMs: 1100,
   saveTurns: 20,
   saveSlots: 3, // manual save slots

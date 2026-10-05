@@ -8,8 +8,9 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
+import { partDef } from '../data/parts';
 import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
-import { endTurn } from './world';
+import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
@@ -19,14 +20,18 @@ import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
+import { territoryEntries, territoryOfStock, territoryPieces, territorySpots } from './territory';
+import { START_KITS } from '../data/start';
+import { TEST_MAP } from '../test/map';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
-import { dist } from './vec';
+import { dist, polylineDist, type Vec } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
 import { inCombat } from './combat';
 import { refreshVision } from './vision';
+import { recall } from './memory';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -42,11 +47,11 @@ function createTrader() {
   return { w, npc };
 }
 
-// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or the fuel stall,
+// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or a service stall,
 // with no misjudgment.
 function reserveOfTrader(): number {
   const { w, npc } = createTrader();
-  const pumps = [...TRAITS.trader.towns, 'pump-station'].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
+  const pumps = [...TRAITS.trader.towns, ...Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id)].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
   const pump = Math.min(...pumps.map((site) => dist(npc.pos, site.pos)));
   return pump * vehicleStats(w, npc).fuelPerTile * heatAt(w, npc.pos) * NPC_UPKEEP.fuelReserve * TRAITS.trader.fuelMargin;
 }
@@ -123,12 +128,40 @@ describe('NPC activities', () => {
     ]);
   });
 
-  it.each(['sell', 'resupply'] as const)('remembers the town where it finished %s', (kind) => {
+  it.each(['sell', 'resupply'] as const)('remembers the prices of the town where it finished %s', (kind) => {
     const { w, npc } = createScavenger();
+    const town = REGION.towns[1].id;
     npc.pos = { ...sitePads(REGION.towns[1])[0] };
-    npc.brain!.goals = [{ kind, targetId: REGION.towns[1].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind, targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
     resolveNpcActivities(w);
-    expect(npc.brain!.lastTown).toBe(REGION.towns[1].id);
+    expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: w.shops[town].pressure } }]);
+  });
+
+  it('remembers the prices of a stall where it resupplied', () => {
+    const { w, npc } = createScavenger();
+    const granary = REGION.locations.find((l) => l.id === 'granary')!;
+    npc.pos = { ...sitePads(granary)[0] };
+    npc.brain!.goals = [{ kind: 'resupply', targetId: granary.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    resolveNpcActivities(w);
+    expect(recall(npc, 'prices').map((m) => m.fact.shop)).toEqual(['granary']);
+  });
+
+  it('replaces its memory of a town on a second visit', () => {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[1].id;
+    const visit = () => {
+      npc.pos = { ...sitePads(REGION.towns[1])[0] };
+      npc.brain!.goals = [{ kind: 'resupply', targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+      resolveNpcActivities(w);
+    };
+    visit();
+    const first = recall(npc, 'prices')[0].fact.pressure;
+    w.turn += 5;
+    const good = Object.keys(w.shops[town].pressure)[0];
+    w.shops[town].pressure[good] = 0.3;
+    visit();
+    expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: expect.objectContaining({ [good]: 0.3 }) } }]);
+    expect(first[good]).not.toBe(0.3);
   });
 
   it('leaves the goal of a knocked-out NPC with a working cab untouched', () => {
@@ -140,7 +173,7 @@ describe('NPC activities', () => {
     expect(npc.brain!.goals).toHaveLength(1);
   });
 
-  it('does not remember a site that is not a town', () => {
+  it('remembers no prices at a site without a shop', () => {
     const { w, npc } = createScavenger();
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     npc.pos = { ...sitePads(oasis)[0] };
@@ -148,7 +181,7 @@ describe('NPC activities', () => {
     w.events = [];
     resolveNpcActivities(w);
     expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
-    expect(npc.brain!.lastTown).toBeUndefined();
+    expect(npc.brain!.memories).toEqual([]);
   });
 
   it('records failure when a salvage target disappears', () => {
@@ -291,7 +324,137 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('scavenge');
-    expect(TRAITS.scavenger.salvageSites).toContain(topGoal(npc)?.targetId);
+    const target = topGoal(npc)?.targetId;
+    // A territory is searched at one of its loot spots.
+    const spotOf = w.salvage.find((stock) => stock.id === target && territoryOfStock(stock));
+    expect(spotOf ? 'fallen-sun' : target).toSatisfy((id: string) => TRAITS.scavenger.salvageSites.includes(id));
+  });
+
+  describe('in a territory', () => {
+    // A scavenger that knows only the Fallen Sun, with the player far away.
+    function fallenSunScavenger(at: { x: number; y: number }) {
+      const { w, npc } = createScavenger();
+      npc.pos = { ...at };
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      const traits = TRAITS.scavenger as { salvageSites: string[] };
+      const saved = traits.salvageSites;
+      traits.salvageSites = ['fallen-sun'];
+      return { w, npc, restore: () => void (traits.salvageSites = saved) };
+    }
+    const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    const entry = () => territoryEntries(sun as never)[0];
+
+    it('targets one of its loot spots, and keeps the goal while the spot is out of sight', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const goal = topGoal(npc)!;
+        expect(goal.kind).toBe('scavenge');
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === goal.targetId)!;
+        expect(spot).toBeDefined();
+        expect(goal.destination).toEqual(spot.pos);
+        planNpcOrders(w);
+        expect(topGoal(npc)).toBe(goal);
+      } finally {
+        restore();
+      }
+    });
+
+    it('parks beside the spot, searches it and takes its loot', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === topGoal(npc)!.targetId)!;
+        npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+        let next = w;
+        let took = false;
+        for (let turn = 0; turn < 80 && !took; turn++) {
+          next = endTurn(next, testDrive);
+          const me = next.vehicles.find((v) => v.id === npc.id)!;
+          took = (goodsCount(me).scrap ?? 0) > 0;
+        }
+        expect(took).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
+    it('drives into the cage by its open end to a cache inside, searches it and takes its loot', () => {
+      // The real map, and the scavenger on the floor 3 tiles past the cage's south end, on its axis.
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      const cage = territoryPieces(sun as never).find((p) => p.look === 'shipCage')!;
+      const along = { x: Math.cos(cage.yaw), y: Math.sin(cage.yaw) };
+      const back = { x: cage.pos.x - along.x * (cage.r + 3), y: cage.pos.y - along.y * (cage.r + 3) };
+      const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], back);
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      // The cache in the cage's north half, so the driver passes the whole south half inside the tube.
+      const alongOf = (p: Vec) => (p.x - cage.pos.x) * along.x + (p.y - cage.pos.y) * along.y;
+      const offAxis = (p: Vec) => Math.abs((p.x - cage.pos.x) * along.y - (p.y - cage.pos.y) * along.x);
+      const cache = w.salvage.find((s) => s.id.startsWith('hullCache-') && dist(s.pos, cage.pos) < cage.r && alongOf(s.pos) > 0)!;
+      expect(cache).toBeDefined();
+      npc.brain.goals = [{ kind: 'scavenge', targetId: cache.id, destination: { ...cache.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
+      // The other cache on the way would pull the driver off this one.
+      forceOption('salvageSeen', 'keep');
+      const scrapIn = (world: World) => world.salvage.find((s) => s.id === cache.id)!.goods.scrap ?? 0;
+      const before = scrapIn(w);
+
+      let next = w;
+      const path: Vec[] = [{ ...npc.pos }];
+      let took: Vehicle | null = null;
+      for (let turn = 0; turn < 40 && !took; turn++) {
+        next = endTurn(next, moveFar);
+        const me = next.vehicles.find((v) => v.id === npc.id)!;
+        path.push(...me.trail.map((p) => ({ x: p.x, y: p.y })));
+        if ((goodsCount(me).scrap ?? 0) > 0) took = me;
+      }
+
+      expect(took).not.toBeNull();
+      expect(scrapIn(next)).toBeLessThan(before);
+      // It entered by the south end and stayed between the walls past the cage's middle.
+      const inTube = path.filter((p) => alongOf(p) > -cage.r * 0.8 && alongOf(p) < 0);
+      expect(inTube.length).toBeGreaterThan(0);
+      for (const p of inTube) expect(offAxis(p)).toBeLessThan(3.5);
+      expect(offAxis(took!.pos)).toBeLessThan(3.5);
+    });
+
+    it('drives from the west road down into the crash furrow to a spot there, searches it and takes its loot', () => {
+      // The real map, and the scavenger at the west road's end, the entry nearest the furrow.
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      const furrow = TERRAIN.features.furrow;
+      const start = territoryEntries(sun as never)[0];
+      const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], start);
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      // The furrow spot farthest from the entry.
+      const inFurrow = territorySpots(w, 'fallen-sun').filter((s) => polylineDist(s.pos, furrow.path) < furrow.width);
+      expect(inFurrow.length).toBeGreaterThan(0);
+      const spot = inFurrow.reduce((a, b) => (dist(b.pos, start) > dist(a.pos, start) ? b : a));
+      npc.brain.goals = [{ kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
+      // A spot seen on the way would pull the driver off this one.
+      forceOption('salvageSeen', 'keep');
+      const scrapIn = (world: World) => world.salvage.find((s) => s.id === spot.id)!.goods.scrap ?? 0;
+      const before = scrapIn(w);
+
+      let next = w;
+      let took = false;
+      for (let turn = 0; turn < 40 && !took; turn++) {
+        next = endTurn(next, moveFar);
+        took = (goodsCount(next.vehicles.find((v) => v.id === npc.id)!).scrap ?? 0) > 0;
+      }
+
+      expect(took).toBe(true);
+      expect(scrapIn(next)).toBeLessThan(before);
+      expect(next.events.filter((e) => e.t === 'stall')).toEqual([]);
+    }, 60_000);
+
+    it('ends a trip to a territory at its road end, not at its centre', () => {
+      const { w, npc } = createScavenger();
+      const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'make a trip to another site' };
+      expect(getActivityDestination(w, npc, goal)).toEqual(entry());
+    });
   });
 
   it('interrupts work for low fuel', () => {
@@ -300,6 +463,19 @@ describe('NPC activities', () => {
     getResources(w, npc).fuel = 0;
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('resupply');
+  });
+
+  it('sends a driver with no engine to a town for service, since a stall cannot refit it', () => {
+    const { w, npc } = createTrader();
+    const stall = Object.values(SHOPS).find((s) => s.kind === 'stall');
+    const site = REGION.locations.find((l) => l.id === stall?.id);
+    if (!site) throw new Error('The map has no service stall');
+    npc.items = npc.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
+    npc.pos = { ...site.pos };
+
+    planNpcOrders(w);
+
+    expect(REGION.towns.map((t) => t.id)).toContain(topGoal(npc)?.targetId);
   });
 
   it('heads for fuel once the tank holds less than its reserve for the straight way to a pump', () => {

@@ -17,7 +17,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
@@ -33,8 +33,9 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
-import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
-import { boundTo, givesWord, stateOf, statesHeld } from './states';
+import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
+import { territoryAt, territoryGrounds } from './territory';
+import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
@@ -283,22 +284,28 @@ export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | nul
   return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
 }
 
+// Whether the vehicle is where a site's services work: on a pad, or inside a territory, which has none.
+function stands(vehicle: Vehicle, site: Site): boolean {
+  return isTerritory(site) ? territoryAt(vehicle.pos)?.id === site.id : canUseSite(vehicle.pos, site);
+}
+
 // Known salvage sites other than the one the NPC stands at.
 export function salvageSitesAway(vehicle: Vehicle) {
-  return npcProfile(vehicle).salvageSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
+  return npcProfile(vehicle).salvageSites.map(getKnownSite).filter((site) => !stands(vehicle, site));
 }
 
 let grounds: readonly Vec[] | null = null;
 
 // Where raiders look for prey and vultures prowl for wrecks: points every HUNT.roadSpacing tiles along the roads, kept
-// only far from every site, and the pads of every location with salvage. Built once from the region.
+// only far from every site, the pads of every location with salvage and the grounds inside each territory. Built once from the region.
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
-  const lonely = (p: Vec) => sites.every((site) => dist(p, site.pos) - site.radius >= HUNT.siteDistance);
+  const lonely = (p: Vec) => sites.every((site) => siteGap(site, p) >= HUNT.siteDistance);
   const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
   const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
-  grounds = [...roadPoints, ...lootPads];
+  const inTerritories = REGION.locations.filter(isTerritory).flatMap(territoryGrounds);
+  grounds = [...roadPoints, ...lootPads, ...inTerritories];
   return grounds;
 }
 
@@ -385,7 +392,7 @@ export function patrolPoints(site: Site): readonly Vec[] {
 
 // Known trip destinations other than the one the driver stands at.
 export function travelSitesAway(vehicle: Vehicle) {
-  return npcProfile(vehicle).travelSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
+  return npcProfile(vehicle).travelSites.map(getKnownSite).filter((site) => !stands(vehicle, site));
 }
 
 // The goods a source site gives for free.
@@ -446,14 +453,24 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
 }
 
+// A stranded driver holds off a robbery against a target that is not fighting it.
+function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canFight(world, vehicle, decision, subject) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
+function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canDrive(world, vehicle) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
 // Driving off and closing in on a contact need fuel.
 function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
 // A robbery is a fight, so it also needs a working gun. The driver's traits must allow it too.
+// A stranded truck can neither chase prey nor carry the loot off.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (!traitsAllowRobbing(vehicle)) return false;
+  if (isStranded(world, vehicle) || !traitsAllowRobbing(vehicle)) return false;
   return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
@@ -531,10 +548,10 @@ type OptionName = DecisionOptions[DecisionId];
 
 const AVAILABLE: Record<OptionName, Availability> = {
   keep: always,
-  fight: canFight,
+  fight: canFightSubject,
   fightBack: canFight,
   flee: canDrive,
-  investigate: canDrive,
+  investigate: canInvestigate,
   rob: canRobSubject,
   ram: canRamSubject,
   tow: canTow,
@@ -715,17 +732,22 @@ function refuseFactor(world: World, vehicle: Vehicle, _decision: DecisionId, sub
 function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
   if (subject === null) return false;
   const target = vehicleById(world, subject);
-  return robbingFeud(world, vehicle, target) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
+  return robbing(world, vehicle.id, target.id) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
 }
 
 // Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
 export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  return traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+  return !isStranded(world, vehicle) && traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
 }
 
-function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  const feud = stateOf(world, 'feud', vehicle.id, target.id);
-  return feud?.data.kind === 'feud' && feud.data.robbery;
+// The driver's hostility toward the target is only for its cargo.
+export function robbedFor(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return robbing(world, vehicle.id, target.id) || huntsForLoot(world, vehicle, target);
+}
+
+// A stranded driver cannot carry out a robbery, unless the target is fighting it. The one stranded robbery rule.
+export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
 // A driver hands its cargo to a threat.
@@ -939,5 +961,17 @@ export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, dec
 function checkWeights(vehicle: Vehicle, decision: DecisionId, weights: Partial<Record<OptionName, number>>): void {
   for (const [option, weight] of Object.entries(weights) as [OptionName, number][]) {
     if (!Number.isFinite(weight) || weight < 0) throw new Error(`${vehicle.id} has weight ${weight} for ${option} at ${decision}`);
+  }
+}
+
+// A stranded driver ends each robbery feud whose target is not fighting it and backs off that target, as a robbery
+// that went quiet does.
+export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
+  if (!isStranded(world, vehicle)) return;
+  for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other || !holdsOffRobbery(world, vehicle, other)) continue;
+    endState(world, s, 'broken');
+    addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
   }
 }

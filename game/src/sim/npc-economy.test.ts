@@ -73,20 +73,38 @@ describe('NPC transactions', () => {
     expect(npc.resources!.supplies).toBe(0);
   });
 
-  it('fuels at a fuel stall without buying supplies or repairs', () => {
+  it('serves like a town garage at a stall', () => {
     const w = emptyWorld();
-    const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
-    const npc = addVehicle(w, 'scavengers', 'scout', [], sitePads(pump)[0]);
-    const cab = corePart(npc, 'cab');
-    cab.hp -= 2;
+    const granary = REGION.locations.find((l) => l.id === 'granary')!;
+    const make = (pad: { x: number; y: number }) => {
+      const npc = addVehicle(w, 'scavengers', 'scout', [], pad);
+      corePart(npc, 'cab').hp -= 2;
+      npc.resources!.fuel = 0;
+      npc.resources!.supplies = 0;
+      npc.resources!.money = 10_000;
+      return npc;
+    };
+    const atStall = make(sitePads(granary)[0]);
+    const atTown = make(sitePads(REGION.towns[0])[0]);
+    economy.serviceAtStall(w, atStall, 'granary', 0);
+    economy.serviceVehicle(w, atTown, 'bowl', 0);
+    expect(atStall.resources).toEqual(atTown.resources);
+    expect(atStall.resources!.fuel).toBe(chassisDef(atStall.chassisId).fuelCap);
+    const cab = corePart(atStall, 'cab');
+    expect(cab.hp).toBe(partDef(cab.defId).hp);
+    expect(cab.hp).toBe(corePart(atTown, 'cab').hp);
+  });
+
+  it('never serves a raider at a stall', () => {
+    const w = emptyWorld();
+    const yard = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const npc = addVehicle(w, 'raiders', 'scout', [], sitePads(yard)[0]);
+    corePart(npc, 'cab').hp -= 2;
     npc.resources!.fuel = 0;
-    npc.resources!.supplies = 0;
     npc.resources!.money = 10_000;
-    economy.serviceAtStall(w, npc, 'pump-station', 0);
-    expect(npc.resources!.fuel).toBe(chassisDef(npc.chassisId).fuelCap);
-    expect(npc.resources!.supplies).toBe(0);
-    expect(cab.hp).toBe(partDef(cab.defId).hp - 2);
-    expect(npc.resources!.money).toBe(10_000 - chassisDef(npc.chassisId).fuelCap * ECONOMY.supplyPrice.fuel);
+    const before = structuredClone(npc);
+    expect(() => economy.serviceAtStall(w, npc, 'salvage-yard', 0)).toThrow('Only non-raiders');
+    expect(npc).toEqual(before);
   });
 
   it('refuses stall service at a town garage', () => {

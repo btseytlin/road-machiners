@@ -17,7 +17,7 @@ import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
-import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan } from './projectiles';
+import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
 // top speed of 31 m/s on hardpan a truck throws 31 x DUST.perMeter x 3 wheel shares, about
@@ -254,6 +254,7 @@ class MuzzleFlashes {
 // Wheel dust: a narrow, dense jet from the tire that slows, widens and fades into a trailing cloud.
 // perMeter: puffs per meter driven from one rear wheel on ground with dust 1; front wheels throw half.
 // Puffs close together per meter read as one stream at any speed.
+const AMMO_BLAST_RADIUS = 0.8; // meters, a small pop of a broken weapon's ammo
 const DUST = { perMeter: 2.5, life: 1.1, color: 0xd8c098 };
 
 export class Fx3D {
@@ -297,12 +298,17 @@ export class Fx3D {
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
   // where it lands. Any other lands with sparks when it struck something, else with dust.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number): void {
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
+      cues.fired(m);
     };
-    const onLand = () => (blastRadius > 0 ? this.blast(plan.land, blastRadius) : this.impact(plan, spec.look === 'shell'));
+    const onLand = () => {
+      if (blastRadius > 0) this.blast(plan.land, blastRadius);
+      else this.impact(plan, spec.look === 'shell');
+      cues.landed();
+    };
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
@@ -319,6 +325,34 @@ export class Fx3D {
     this.puff(p, 0xffa040, Math.round(14 + 8 * radius), { speed: 2 + 2 * radius, life: 0.55, scale: 0.4 + 0.15 * radius, grow: 0.5, additive: true });
     this.puff(p, DUST.color, Math.round(8 + 6 * radius), { speed: 3 + 1.2 * radius, life: 1.2, scale: 0.5 + 0.15 * radius, grow: 2 });
     this.puff(p, 0x3a3028, Math.round(6 + 4 * radius), { speed: 0.8 + 0.5 * radius, life: 2 + 0.3 * radius, scale: 0.7 + 0.3 * radius, grow: 2.6 });
+  }
+
+  // A broken weapon's ammo going off.
+  ammoBlast(p: V3): void {
+    this.blast(p, AMMO_BLAST_RADIUS);
+  }
+
+  // A broken wheel letting go of its air: a fast pale cloud that drag stops near the ground.
+  airBurst(p: V3): void {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 4 + Math.random() * 3;
+      const vel = { x: Math.cos(a) * s, y: 0.2 + Math.random() * 0.6, z: Math.sin(a) * s };
+      this.puffs.spawn(p, { vel, life: 0.5 + Math.random() * 0.2, fromScale: 0.2, toScale: 0.9 + Math.random() * 0.4, color: 0xe4e6e8, opacity: 0.6, drag: 3, gravity: 0 });
+    }
+  }
+
+  // A broken fuel tank or jerrycans catching fire: rising flame puffs for about a second, then dark smoke.
+  fireBurst(p: V3): void {
+    const side = () => (Math.random() - 0.5) * 1.6;
+    for (let i = 0; i < 10; i++) {
+      const vel = { x: side(), y: 2.5 + Math.random() * 1.5, z: side() };
+      this.glows.spawn(p, { vel, life: 0.8 + Math.random() * 0.3, fromScale: 0.5, toScale: 1.1, color: i % 3 === 0 ? 0xffc060 : 0xff8a30, opacity: 1, drag: 1.2, gravity: -0.5 });
+    }
+    for (let i = 0; i < 5; i++) {
+      const vel = { x: side() * 0.6, y: 1.5 + Math.random() * 1.0, z: side() * 0.6 };
+      this.puffs.spawn(p, { vel, life: 1.6 + Math.random() * 0.6, fromScale: 0.5, toScale: 1.8, color: 0x2a2622, opacity: 0.7, drag: 0.8, gravity: -0.3 });
+    }
   }
 
   // Gray smoke left behind a flying missile.

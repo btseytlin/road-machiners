@@ -1,10 +1,13 @@
-// Road look for the ground shader. The mask marks where roads lie on the map. The detail is a small
-// tiling image of packed dirt with gravel, cracked patches and potholes, drawn in pixels a third the size
-// of the ground paint pixels. The tone is slow noise that varies the road and wanders its edge, with a
-// period far from the detail's, so the detail never repeats in the same light.
+// Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
+// the map. The detail is a small tiling image of packed dirt with gravel, cracked patches and potholes, drawn in
+// pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
+// edge, with a period far from the detail's, so the detail never repeats in the same light.
 
-import { REGION } from "../data/region";
-import { bridgeCut, deckAlong } from "../sim/bridge";
+import { REGION, type TerritoryDef } from "../data/region";
+import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
+import { bridgeCut, deckAt } from "../sim/bridge";
+import { isTerritory, siteGap } from "../sim/sites";
+import { territoryRoads } from "../sim/territory";
 import { dist, type Vec } from "../sim/vec";
 import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
@@ -14,51 +17,115 @@ export const ROAD_DETAIL_SIDE = 256; // detail pixels per side of the tiling ima
 export const ROAD_TONE_SIDE = 64; // tone pixels per side of its tiling image
 export const ROAD_TONE_PIXELS = 12; // detail pixels per tone pixel
 const SITES = [...REGION.towns, ...REGION.locations];
+// Each territory with a wreck, paired with its wreck's rules.
+const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
+  const wreck = TERRITORIES[territory.id].wreck;
+  return wreck === null ? [] : [{ territory, wreck }];
+});
 const WIDTH = REGION.roadWidth * 0.9; // tiles across the painted road, before its edge wanders
 const BLUR = 2.4; // tiles of mask blur, so the tone can move the edge
+// Tiles of blur on each dirt road stroke. Dirt roads are narrower than BLUR, which would spread one into a wide soft
+// band that never reaches half strength, so their strokes take their own blur after the region roads' one.
+const DIRT_BLUR = 0.8;
 const STEP = 0.5; // tiles between points of a road line
+const CRACK_MIX = 0.3; // mix toward the crack color on crack lines, faint since packed dirt barely cracks
 const CRACK_CELL = 16; // detail pixels between crack polygon centers
 const POTHOLES = 4; // potholes in one detail image
 const STONE_SHARE = 0.012; // share of detail pixels that are loose stones
 
 export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
-// Strokes every road white on black. Roads stop at site edges, where pads take over, and at Canyon
-// Bridge, whose deck is its own model.
+// The mask's channels: red for region roads, green for the dirt roads of every wreck territory. Each channel is the
+// stroked road on black, so the shader can tell a region road from a dirt road where they meet.
+export const REGION_ROAD_STYLE = "#f00";
+export const DIRT_ROAD_STYLE = "#0f0";
+
+// Strokes every road on black and blurs it. Region roads stop at site edges, where pads take over, and at Canyon
+// Bridge, whose deck is its own model. Dirt roads run inside their territory and stop at decks too. The lighten mode
+// keeps the larger value of each channel, so the two channels never paint over each other.
 export function paintRoadMask(c: PaintCanvas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = WIDTH * c.res;
-  ctx.lineCap = "butt";
   ctx.lineJoin = "round";
-  ctx.beginPath();
-  for (const road of REGION.roads)
-    for (const run of drawnRuns(evenPoints(road)))
-      run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
-  ctx.stroke();
-  // One blur over the finished mask. The copy mode replaces the canvas with its own blurred image.
+  ctx.strokeStyle = REGION_ROAD_STYLE;
+  strokeRuns(c, REGION.roads.flatMap((road) => runsWhere(evenPoints(road), drawn)), WIDTH);
+  // One blur over the region roads. The copy mode replaces the canvas with its own blurred image.
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
+  // The dirt roads, each stroke blurred as it is drawn.
+  ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = DIRT_ROAD_STYLE;
+  for (const { territory, wreck } of WRECKS) {
+    const { roads, spurs } = territoryRoads(territory);
+    const fade = wreck.spurFade;
+    for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9);
+    for (const spur of spurs) strokeSpur(c, spur, fade);
+  }
   ctx.filter = "none";
   ctx.globalCompositeOperation = "source-over";
 }
 
-// Stretches of points off sites and off the bridge.
-function drawnRuns(points: Vec[]): Vec[][] {
+// Strokes the runs as one path at full strength, `width` tiles across.
+function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
+  const ctx = c.ctx;
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = width * c.res;
+  ctx.lineCap = "butt";
+  ctx.beginPath();
+  for (const run of runs) run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  ctx.stroke();
+}
+
+// A spur at full strength up to its last `fade` tiles, then step by step narrower and fainter, to nothing at its end.
+// Each fading step takes the width and strength at its far end, so the last step lays no paint.
+function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
+  const points = evenPoints(spur.points);
+  const left = tilesToEnd(points);
+  const width = spur.width * 0.9;
+  strokeRuns(c, runsWhere(points.filter((_, i) => left[i] >= fade), offDeck), width);
+  const ctx = c.ctx;
+  ctx.lineCap = "round";
+  for (let i = 1; i < points.length; i++) {
+    const k = left[i] / fade;
+    if (k >= 1 || k <= 0 || !offDeck(points[i - 1]) || !offDeck(points[i])) continue;
+    ctx.globalAlpha = k;
+    ctx.lineWidth = width * k * c.res;
+    ctx.beginPath();
+    ctx.moveTo(c.toPx(points[i - 1].x), c.toPx(points[i - 1].y));
+    ctx.lineTo(c.toPx(points[i].x), c.toPx(points[i].y));
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Tiles along the line from each point to its last point.
+function tilesToEnd(points: readonly Vec[]): number[] {
+  const out = new Array<number>(points.length).fill(0);
+  for (let i = points.length - 2; i >= 0; i--) out[i] = out[i + 1] + dist(points[i], points[i + 1]);
+  return out;
+}
+
+// Stretches of points that pass `keep`.
+function runsWhere(points: Vec[], keep: (p: Vec) => boolean): Vec[][] {
   const runs: Vec[][] = [[]];
   for (const p of points) {
-    if (drawn(p)) runs[runs.length - 1].push(p);
+    if (keep(p)) runs[runs.length - 1].push(p);
     else runs.push([]);
   }
   return runs.filter((run) => run.length > 1);
 }
 
+function offDeck(p: Vec): boolean {
+  return deckAt(p.x, p.y) === null;
+}
+
+// Region roads show off sites and off the decks.
 function drawn(p: Vec): boolean {
-  if (deckAlong(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => dist(site.pos, p) < site.radius);
+  if (!offDeck(p) || bridgeCut(p.x, p.y) > 0) return false;
+  return !SITES.some((site) => siteGap(site, p) < 0);
 }
 
 // Points every STEP tiles along a road from its start, and its end.
@@ -100,7 +167,7 @@ function detailColor(x: number, y: number, cracks: Vec[], holes: Pothole[]): num
   const mottle = 0.94 + 0.08 * loopNoise(x / 16, y / 16, ROAD_DETAIL_SIDE / 16) + 0.04 * loopNoise(x / 8, y / 8, ROAD_DETAIL_SIDE / 8);
   let color = shade(PAL.road, mottle * (0.975 + 0.05 * hash2(x, y)));
   if (loopNoise(x / 32, y / 32, ROAD_DETAIL_SIDE / 32) > 0.64) color = mix(color, PAL.sand[3], 0.15);
-  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, 0.55);
+  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, CRACK_MIX);
   color = potholeColor(x, y, holes) ?? color;
   return stoneColor(x, y) ?? color;
 }

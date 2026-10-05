@@ -8,7 +8,7 @@ Every price derives from an item's value. A shop sells at value plus a spread of
 
 ## Effort model
 
-A value should match the effort it takes to earn. `EFFORT.wage` is the money per turn at each tier and `EFFORT.bands` is the effort range in turns for each tier and item kind. The `npm run econ` command measures wages with bots.
+A value should match the effort it takes to earn. `EFFORT.wage` is the money per turn at each tier and `EFFORT.bands` is the effort range in turns for each tier and item kind. The `npm run progression:record` and `progression:report` commands measure wages with bots.
 
 ## Goods pressure and drift
 
@@ -23,9 +23,9 @@ A shop holds a finite, random stock of parts and restocks every so many turns. O
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | bowl | garage | scrap, grain, textiles, meds, electronics, parts | salt, tools, batteries, fuelDrums, water | scrap, salt, meds, grain, textiles, tools, batteries, electronics, parts, fuelDrums, water | fuel, supplies | 8 to 12 | 400 | 0.005 | 0.0075 | 3 |
 | nose | garage | salt, tools, batteries | scrap, grain, textiles, meds, electronics, parts, fuelDrums, water | scrap, salt, meds, grain, textiles, tools, batteries, electronics, parts, fuelDrums, water | fuel, supplies | 8 to 12 | 400 | 0.005 | 0.0075 | 3 |
-| salvage-yard | stall | scrap, parts | tools | scrap, parts, tools |  | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
-| granary | stall | grain | salt, textiles | grain, salt, textiles |  | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
-| pump-station | stall | batteries | scrap, parts | batteries, scrap, parts | fuel | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| salvage-yard | stall | scrap, parts | tools | scrap, parts, tools | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| granary | stall | grain | salt, textiles | grain, salt, textiles | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| pump-station | stall | batteries | scrap, parts | batteries, scrap, parts | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 <!-- /wiki:shops -->
 
 ## Repair and wear

@@ -40,3 +40,20 @@ export function polylineDist(p: Vec, line: Vec[]): number {
   for (let i = 0; i + 1 < line.length; i++) best = Math.min(best, segmentDist(p, line[i], line[i + 1]));
   return best;
 }
+
+// Whether p lies inside a simple polygon, by the even-odd rule. Points exactly on an edge may fall either way.
+export function pointInPolygon(p: Vec, poly: readonly Vec[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [a, b] = [poly[i], poly[j]];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+// Distance from p to the nearest edge of a closed polygon, from inside or outside.
+export function polygonEdgeDist(p: Vec, poly: readonly Vec[]): number {
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) best = Math.min(best, segmentDist(p, poly[j], poly[i]));
+  return best;
+}

@@ -178,7 +178,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 3 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 1 },
-      { value: "jeep", weight: 3 },
+      { value: "jeep", weight: 3 }, { value: "niva", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -281,7 +281,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "tractor", weight: 1 },
       { value: "scout", weight: 2 },
-      { value: "bus", weight: 2 },
+      { value: "bus", weight: 2 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 4 },
@@ -337,7 +337,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 2 },
       { value: "buggy", weight: 2 },
       { value: "hauler", weight: 1 },
-      { value: "jeep", weight: 2 },
+      { value: "jeep", weight: 2 }, { value: "niva", weight: 2 }, { value: "bukhanka", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -473,7 +473,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "buggy", weight: 2 },
       { value: "courier", weight: 1 },
       { value: "convertible", weight: 1 },
-      { value: "jeep", weight: 1 },
+      { value: "jeep", weight: 1 }, { value: "niva", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -521,7 +521,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "jeep", weight: 2 },
       { value: "hauler", weight: 2 },
-      { value: "longbed", weight: 1 },
+      { value: "longbed", weight: 1 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -653,7 +653,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "wagon", weight: 4 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 2 },
-      { value: "carrier", weight: 1 },
+      { value: "carrier", weight: 1 }, { value: "lincoln", weight: 2 },
     ],
     engine: [
       { value: "tunedEngine", weight: 3 },
@@ -1049,7 +1049,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
-  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that truck, or until the
+  // truck drives again.
   towPromise: null,
   // A grudge against the player fades after 10 days, unless the driver settles it first.
   revenge: 2000,
@@ -1094,7 +1095,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight. Scavengers are helpers who give aid: about one in five gives fuel
   // or supplies when asked, and about one in 35 offers it unprompted to a poor, low player.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -1173,7 +1174,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // one free merc in six it sees. About one roamer in five gives fuel or supplies when asked, and about one in 35
   // offers it unprompted to a poor, low player.
   roamer: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Vultures prowl lonely roads and hunting grounds: an idle vulture prowls four times in five and scavenges a site
@@ -1181,7 +1182,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // stops for 20 in 21 wrecks, piles and knocked-out trucks it passes, and rarely tows. Retaliate 0.5 against forgive
   // 4 makes it a bit touchier than most.
   vulture: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { prowl: { add: 10 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 20 } }, crashed: { retaliate: { add: 0.5 } } },
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
@@ -1225,4 +1226,4 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
 };
 
-export { FIRST_NAMES, HUNT, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES } from './npc-behavior';
+export { FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';

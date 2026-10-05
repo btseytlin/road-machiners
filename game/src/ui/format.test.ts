@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
 import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
-import { partDef } from "../data/parts";
+import { partDef, PARTS } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
+import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -27,6 +27,41 @@ describe("wearLabel", () => {
 
   it("reads a part past the last wear step as junk", () => {
     expect(wearLabel(part(CONDITION.maxWear + 1))).toBe("junk");
+  });
+});
+
+describe("conditionTier", () => {
+  it("gives one tier per wear step and junk past the last", () => {
+    expect(conditionTier(part(0))).toBe("pristine");
+    expect(conditionTier(part(1))).toBe("w1");
+    expect(conditionTier(part(CONDITION.maxWear))).toBe(`w${CONDITION.maxWear}`);
+    expect(conditionTier(part(CONDITION.maxWear + 1))).toBe("junk");
+  });
+});
+
+describe("showsCondition", () => {
+  it("is false for built-in core parts and true for every other part", () => {
+    for (const def of Object.values(PARTS)) {
+      expect(showsCondition({ ...part(0), defId: def.id })).toBe(def.kind !== "core");
+    }
+    expect(showsCondition({ ...part(0), defId: "cab" })).toBe(false);
+  });
+});
+
+describe("conditionStatus", () => {
+  it("shows HP for a working part", () => {
+    const s = conditionStatus(part(1));
+    expect(s.tone).toBe("dim");
+    expect(s.text).toMatch(/HP$/);
+  });
+
+  it("reads a broken rebuildable part as broken, never junk", () => {
+    expect(conditionStatus({ ...part(2), hp: 0 })).toEqual({ text: "broken", tone: "bad" });
+    expect(conditionStatus({ ...part(CONDITION.maxWear), hp: 0 }).text).toBe("broken");
+  });
+
+  it("reads junk as scrap only", () => {
+    expect(conditionStatus({ ...part(CONDITION.maxWear + 1), hp: 0 })).toEqual({ text: "scrap only", tone: "dim" });
   });
 });
 

@@ -56,6 +56,33 @@ export const SALVAGE = {
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
+  // Outer loot spots of a territory: a road wreck's size, with a little more to find.
+  hullScrap: {
+    goods: { scrap: [1, 2] },
+    parts: [0, 1],
+    sparePartChance: 0.1,
+    spareParts: ['mg', 'cage', 'plates', 'flatFour'],
+    fuel: [0, 4],
+    supplies: [0, 1],
+  } as LootTable,
+  // Barns of a farm territory: food and cloth left in the lofts, a little scrap and fuel from the machinery.
+  farmStores: {
+    goods: { grain: [0, 1], textiles: [0, 1], scrap: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.05,
+    spareParts: ['flatFour', 'rack'],
+    fuel: [0, 4],
+    supplies: [0, 2],
+  } as LootTable,
+  // Army caches and bunkers: parts, meds and scrap at road-wreck scale, with the best chance at a weapon or armor.
+  armyStores: {
+    goods: { scrap: [0, 1], meds: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.15,
+    spareParts: ['mg', 'plates', 'cage'],
+    fuel: [0, 2],
+    supplies: [0, 2],
+  } as LootTable,
   convoy: {
     goods: { scrap: [1, 3], meds: [0, 1] },
     parts: [1, 2],

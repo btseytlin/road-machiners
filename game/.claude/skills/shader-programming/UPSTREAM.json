@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/gamedev-skills/awesome-gamedev-agent-skills",
+  "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+  "files": [
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/shader-programming/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "e89558b15691c891e12cece81d4bafd4d61159bd4de2ae580ac109aecadca7ad"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/shader-programming/references/effects.md",
+      "local": "references/effects.md",
+      "sha256": "bf0665485e8b12d42d4bd6cfe5d1ebd93fbcef315b703e4657f0d40a23224975"
+    }
+  ]
+}

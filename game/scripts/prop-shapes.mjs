@@ -3,26 +3,49 @@
 // The shape test fails while a stored hash differs from its .glb.
 
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { fnv1a, formatShapes, loadTriangles, shapeOf } from './shape-lib.mjs';
+import { capBoxes, fnv1a, formatShapes, loadTriangles, mergeCells, rasterize, roundBox, shapeOf } from './shape-lib.mjs';
 
 // Every model a static prop view draws: landmark looks, buildings, wrecks, rocks and junk piles.
 // Site decor keeps its circle, so its models are not here.
 const PROP_MODELS = [
+  'army_truck',
+  'barn',
+  'barrier',
   'billboard',
   'bridge_broken',
   'building',
+  'bunker',
   'crag',
   'crates',
+  'dead_tree',
+  'drums',
+  'farmhouse',
   'fence',
   'gas_station',
+  'guard_post',
+  'hull_chunk',
+  'hull_drum',
+  'hull_gantry',
+  'hull_shard',
+  'hull_shell',
+  'hull_tower',
   'junk',
   'power_pole',
+  'quonset',
+  'reactor',
+  'rim_rock',
   'rock',
+  'sandbags',
   'ruin_house',
   'shack',
+  'ship_bow',
+  'ship_cage',
+  'ship_hub',
   'silo',
   'tank_hulk',
+  'ship_wing',
   'water_tower',
+  'woodpile',
   'wreck',
 ];
 
@@ -38,10 +61,27 @@ const CFG = {
   rayShift: { x: 0.0137, y: 0.0291 },
 };
 
+// Models whose boxes must keep the line at truck clearance: a box that starts at or above it blocks neither driving
+// nor nav, so a dead tree's crown must not merge down into its trunk. CLEARANCE is PHYSICS.truckClearance in
+// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the dead tree's low boxes against it.
+const SPLIT_AT_CLEARANCE = new Set(['dead_tree']);
+const CLEARANCE = 2.8; // m
+const LOW_BOXES = 8; // of CFG.maxBoxes, for the boxes that start below clearance
+
+// Boxes below and above clearance merge apart, so each low box keeps the footprint of what stands below clearance.
+function splitShapeOf(triangles) {
+  const boxes = mergeCells(rasterize(triangles, CFG), CFG);
+  const low = boxes.filter((b) => b.z0 < CLEARANCE);
+  const high = boxes.filter((b) => b.z0 >= CLEARANCE);
+  const lowCap = Math.min(low.length, LOW_BOXES);
+  return [...capBoxes(low, { ...CFG, maxBoxes: lowCap }), ...capBoxes(high, { ...CFG, maxBoxes: CFG.maxBoxes - lowCap })].map(roundBox);
+}
+
 const shapes = {};
 for (const name of PROP_MODELS) {
   const bytes = readFileSync(`public/models/${name}.glb`);
-  const boxes = shapeOf(await loadTriangles(bytes), CFG);
+  const triangles = await loadTriangles(bytes);
+  const boxes = SPLIT_AT_CLEARANCE.has(name) ? splitShapeOf(triangles) : shapeOf(triangles, CFG);
   shapes[name] = { hash: fnv1a(bytes), boxes };
   console.log(`${name}: ${boxes.length} boxes`);
 }

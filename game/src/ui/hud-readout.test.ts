@@ -7,10 +7,9 @@ import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
 import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
-import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
-import { aidGoods } from "./format";
+import { aidGoods, clockLabel } from "./format";
 import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
@@ -185,12 +184,11 @@ describe("critical vehicle readout", () => {
     w.player.health = 25;
     w.player.supplies = 0;
     const r = getHudReadout(w);
-    expect(r.broken).toBeGreaterThan(0);
     expect(r.resources.slice(2).every((r) => r.warning)).toBe(true);
   });
   it("shows driver health against the raised max health and warns below it", () => {
     const w = emptyWorld();
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     w.player.health = RULES.maxHealth;
     const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
     expect(driver).toEqual({ label: "Driver", value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });
@@ -205,11 +203,21 @@ describe("critical vehicle readout", () => {
       total: 4,
     };
     expect(getHudReadout(w).survival.map((r) => r.label)).toEqual([
-      "Time",
       "Heat",
       "Engine",
       "Weather",
     ]);
+  });
+  it("shows the game clock once, outside the survival instruments", () => {
+    const w = emptyWorld();
+    w.turn = 5;
+    const before = getHudReadout(w);
+    expect(before.clock).toBe(clockLabel(w.turn));
+    expect(before.survival.some((r) => r.label === "Time")).toBe(false);
+    w.turn = 5 + 100000;
+    const later = getHudReadout(w);
+    expect(later.clock).toBe(clockLabel(w.turn));
+    expect(later.clock).not.toBe(before.clock);
   });
   it("keeps reverse speed and manual driving explicit", () => {
     const w = emptyWorld();

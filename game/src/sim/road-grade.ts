@@ -10,6 +10,7 @@ import { TERRAIN } from '../data/terrain';
 import { bridgeCut } from './bridge';
 import { flattenFalloff } from './elevation';
 import { ROAD_INDEX } from './road-index';
+import { siteGap } from './sites';
 import type { Terrain } from './terrain';
 
 const SITES = [...REGION.towns, ...REGION.locations];
@@ -68,7 +69,7 @@ function corners(size: number): Corners {
 
 // Under Canyon Bridge the ground is the canyon, so it is margin there.
 function isSurface(x: number, y: number, roadDist: number): boolean {
-  if (SITES.some((s) => Math.hypot(s.pos.x - x, s.pos.y - y) < s.radius)) return true;
+  if (SITES.some((s) => siteGap(s, { x, y }) < 0)) return true;
   return roadDist <= SURFACE && bridgeCut(x, y) === 0;
 }
 

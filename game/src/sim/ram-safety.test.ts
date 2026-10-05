@@ -1,3 +1,4 @@
+import { addState } from './states';
 import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { ramValue } from './crash-contact';
@@ -175,6 +176,8 @@ describe('crippled drivers', () => {
 
   it('rarely closes in on a heard contact when crippled, and heads for repairs', () => {
     const { world, raider, me } = createListener();
+    // A plain feud, so the contact is more than loot: a stranded driver does not hunt loot.
+    addState(world, 'feud', raider.id, me, { kind: 'feud', robbery: false });
     const intact = optionWeights(world, raider, 'contactHeard', me, null).investigate!;
     mountedParts(raider, 'engine')[0].hp = 0;
     expect(optionWeights(world, raider, 'contactHeard', me, null).investigate).toBeCloseTo(intact * NPC_BEHAVIOR.crippledInvestigate);

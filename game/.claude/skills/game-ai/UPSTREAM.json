@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/gamedev-skills/awesome-gamedev-agent-skills",
+  "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+  "files": [
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "6f82dcfeb95a1c0a0452180a3b16f21bf82111780018fed59d95a052b5b75f6c"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/game-ai/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "ef23a6440743b3583d1072c92f6b0b45f3d11df33b3b77db53bce8b82c2f8940"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/game-ai/references/behavior-trees.md",
+      "local": "references/behavior-trees.md",
+      "sha256": "2b69a6ae71a1034c049889fb4b0ccbc8697db9ad9f177f07c1053379cb0ef1fc"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/game-ai/references/pathfinding.md",
+      "local": "references/pathfinding.md",
+      "sha256": "3f1ce44462b4d1789245758b72d0b20e8053df458df1f743455dcd5d7319bba3"
+    }
+  ]
+}

@@ -381,13 +381,13 @@ describe('contract boards and delivery', () => {
     expect(next.player.costBasis.salt).toBeCloseTo(goodValue('salt'));
   });
 
-  it('pays the contract XP to social, targeting the posting shop', () => {
+  it('pays the contract XP to the pool, targeting the posting shop', () => {
     let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
-    const social = w.player.skills.social;
+    const pool = w.player.xp;
     w = deliverContract(w, 'ct-haul');
     expect(practiceOf(w, 'contract')).toMatchObject([{ amount: 30, difficulty: null, target: 'bowl', xp: 30 }]);
-    expect(w.player.skills.social).toBeCloseTo(social + 30);
+    expect(w.player.xp).toBeCloseTo(pool + 30);
   });
 
   it('refuses a haul delivery away from its destination', () => {

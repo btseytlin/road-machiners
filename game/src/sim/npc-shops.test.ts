@@ -24,14 +24,34 @@ describe('NPCs use stalls as well as towns', () => {
     expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply', targetId: 'pump-station' });
   });
 
-  it('drives to a town when it also needs repairs, since stalls do not repair', () => {
+  it('repairs at the nearest service stop, a stall included', () => {
     const { w, npc } = traderAt('pump-station');
     npc.resources!.fuel = 0;
-    const cab = corePart(npc, 'cab');
-    cab.hp = 1;
+    corePart(npc, 'cab').hp = 1;
+    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply', targetId: 'pump-station' });
+  });
+
+  // A stall repairs parts but fits no engine, so a truck with none would finish its service there and pick the stall again.
+  it('sends a truck with no engine past a stall to a town that refits it', () => {
+    const w = emptyWorld({ x: 5, y: 5 });
+    const npc = addVehicle(w, 'traders', 'hauler', [], sitePads(site('salvage-yard'))[0]);
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.resources!.money = 5_000;
     const activity = thinkNpc(w, npc);
+
     expect(activity.kind).toBe('resupply');
     expect(REGION.towns.map((t) => t.id)).toContain(activity.targetId);
+  });
+
+  it('sends a damaged raider to a camp', () => {
+    const w = emptyWorld({ x: 5, y: 5 });
+    const npc = addVehicle(w, 'raiders', 'hauler', [], sitePads(site('pump-station'))[0]);
+    npc.brain = npcBrain('raider', npc.pos, ['raider']);
+    npc.resources!.money = 5_000;
+    corePart(npc, 'cab').hp = 1;
+    const activity = thinkNpc(w, npc);
+    expect(activity.kind).toBe('resupply');
+    expect(REGION.locations.find((l) => l.id === activity.targetId)?.kind).toBe('camp');
   });
 
   it('offers trade runs through stalls from many sources', () => {

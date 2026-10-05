@@ -8,7 +8,8 @@ import { maxHp } from './wear';
 import { addGoods } from './inventory';
 import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { siteGates, sitePads } from './sites';
+import { isTerritory, siteGap, siteGates, sitePads } from './sites';
+import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
@@ -308,7 +309,7 @@ describe('fight back', () => {
 
 describe('decision points', () => {
   it('the same hostile in sight fires one roll', () => {
-    const w = emptyWorld({ x: 80, y: 80 });
+    const w = emptyWorld({ x: 50, y: 50 }); // inside the live range, so the cover rock hides the raider
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const key = `hostileSeen:${raider.id}`;
@@ -490,7 +491,8 @@ describe('hunting grounds', () => {
   });
 
   const grounds = huntingGrounds();
-  const lootPads = REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l));
+  const territories = REGION.locations.filter(isTerritory);
+  const lootPads = [...REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l)), ...territories.flatMap(territoryGrounds)];
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
   const onRoad = (p: Vec) => !isPad(p) && REGION.roads.some((road) => polylineDist(p, road) < 0.01);
 
@@ -500,9 +502,20 @@ describe('hunting grounds', () => {
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
   });
 
+  it('wait at every road into the Fallen Sun', () => {
+    const entries = territoryEntries(territories.find((t) => t.id === 'fallen-sun')!);
+    expect(entries).toHaveLength(3);
+    for (const p of entries) expect(grounds).toContainEqual(p);
+  });
+
+  it('reach into each territory, outside every hazard', () => {
+    for (const t of territories) for (const p of territoryGrounds(t)) expect(grounds).toContainEqual(p);
+    for (const p of grounds) for (const z of hazardZones()) expect(dist(p, z.pos)).toBeGreaterThan(z.radius);
+  });
+
   it('keeps road grounds far from every site, and none at a town or camp', () => {
     const sites = [...REGION.towns, ...REGION.locations];
-    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
+    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(siteGap(site, p)).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
   });

@@ -22,7 +22,7 @@ Four buses feed the master: `ui`, `sfx`, `ambient` and `music`. Each has a playe
 - Calm music plays out of combat. After each fight it comes back as a new random track.
 - Between turns, once no turn has played for `MIX.music.pauseDelayMs`, the music bus is muffled a little. The delay keeps the gaps between automatic turns clear.
 
-Volume sliders are stored in local storage. A slider the player never moved follows `MIX.busVolume`, so a new default reaches everyone who kept the old one.
+The volume knobs and the mute switch sit on the radio panel above the log. Their settings are stored in local storage. A knob the player never turned follows `MIX.busVolume`, so a new default reaches everyone who kept the old one.
 
 ## Combat score
 
@@ -45,7 +45,7 @@ How it plays:
 
 Randomness only changes how a sound plays: which take, which rhythm variant, a rare fill, a few milliseconds of timing and a little level. It never changes when the structure moves.
 
-Volley accents are timed from the volley's own plan, when the first round lands. Crash accents are known at turn start, so their peak lands on the impact at the end of movement.
+Volley accents are timed from the volley's own plan, when the first round lands. Crash accents are known at turn start, so their peak lands on the physics step of the crash. Crash sparks and sound play when playback reaches that step. A collision with no physics step, like a far truck breaking a fence, plays when movement ends.
 
 To hear a fight without looking for one, open the console with the backquote key and type `battle`. It spawns a random hostile raider near the truck. The score starts once the raider closes in or fires. `__ROAM__.sound.log` in dev lists recent cues and what the score did with each accent, like `accent-hit skipped heat1.2`.
 

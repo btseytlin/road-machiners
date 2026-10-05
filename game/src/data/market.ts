@@ -15,9 +15,8 @@ export type Tier = 1 | 2 | 3;
 export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
 
 export const EFFORT = {
-  // Net money per turn at each tier. Tier 1 is the salvage bot's wage from `npm run econ` over seeds
-  // 1, 2 and 3 for 30 days. It was the only bot that earned money, so it stands in for the player.
-  // No bot reached tier 2 or 3 gear, so those keep the old guessed ratio to tier 1.
+  // Net money per turn at each tier. Tier 1 is the salvage wage of the deleted econ harness. Tiers 2 and 3 are a
+  // guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the measure that replaces them.
   wage: {
     1: 0.37,
     2: 1,
@@ -202,7 +201,7 @@ export type ShopDef = {
   pressurePerUnit: number; // fraction of base price a single unit traded moves the price
   driftPerTurn: number; // fraction of standing pressure removed each turn
   contractSlots: number; // contracts this shop can post at once; used from PH4
-  supplies: ('fuel' | 'supplies')[]; // which of fuel and food this shop sells
+  supplies: ('fuel' | 'supplies')[]; // which of fuel and food the player buys here; repairs and NPC service do not read it
 };
 
 // Fraction pressure is clamped to either side of base price. A good can never trade for more than
@@ -269,7 +268,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   // The Granary: a farm stop. Sells its own grain cheap, and buys in salt and textiles for the
   // caravans that pass through, so those cost more here.
@@ -289,7 +288,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   // Pump Station: sells the batteries it charges cheap, and pays well for scrap and parts to keep
   // its pumps and generators running.
@@ -309,7 +308,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: ['fuel'],
+    supplies: ['fuel', 'supplies'],
   },
 };
 
@@ -318,38 +317,6 @@ export function shopDef(id: string): ShopDef {
   if (!def) throw new Error(`Unknown shop ${id}`);
   return def;
 }
-
-// Assumption numbers for the Node economy harness (src/econ/harness.ts). Travel and fights are
-// abstract there, so these numbers stand in for a real drive and a real fight. A user playtest
-// checks how close they sit to the real game (AS4).
-export const HARNESS = {
-  // Share of a chassis' listed top speed a bot holds on the road, once slopes, stops and corners are
-  // averaged in. Chassis top speeds run well above what a real drive sustains for a whole trip.
-  cruiseShare: 0.55,
-
-  // Road distance over straight-line distance for the harness's own trip-length estimate. Reuses
-  // EFFORT.routeFactor (below), which the same design already grounds in REGION.navigation.
-
-  // Raider encounters per tile driven outside a site's reach. Set so a Bowl to Nose crossing (about
-  // 680 road tiles) meets a raider close to once in three crossings.
-  encounterRate: 0.0005,
-
-  // Odds a bot with at least one working weapon wins an encounter. Raiders roam in ones and twos, so
-  // a defended truck should win more often than not.
-  fightWinOdds: 0.6,
-  // Odds an unarmed or fully disarmed bot wins one anyway, by running or by luck.
-  fightWinOddsUnarmed: 0.15,
-
-  // Share of a hit part's max HP lost per fight, win or lose. About one field repair's worth, so a
-  // bot fights several times before a part breaks.
-  fightDamageShare: 0.3,
-  // Turns a fight takes off the clock, win or lose: maneuvering, shooting and the aftermath.
-  fightTurns: 20,
-
-  // Loot units a bot searches out of a salvage stock per turn spent searching it.
-  searchRate: 2,
-};
-
 
 // Every shop, which is the two towns and the stalls: where a driver with no camps sells.
 export const TOWN_MARKETS = Object.keys(SHOPS);

@@ -21,6 +21,7 @@ import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
+import { budget } from '../test/budget';
 
 // A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
@@ -54,7 +55,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  }, 180_000); // 40 full spawns, each trying every engine and gun pair of every template
+  }, budget(180_000)); // 40 full spawns, each trying every engine and gun pair of every template
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
@@ -97,7 +98,7 @@ describe('NPC equipment generation', () => {
       expect(heavy).toBeLessThanOrEqual(loaded);
       expect(light).toBeLessThan(loaded);
       expect(loaded).toBeGreaterThan(NPCS.gunwagon.loadout.minGuns);
-    }, 120_000);
+    }, budget(120_000));
 
     it('stops extra guns before they slow a loaded truck past the limit', () => {
       for (let seed = 1; seed <= 12; seed++) {
@@ -107,7 +108,7 @@ describe('NPC equipment generation', () => {
         const engine = mountedItems(v, 'engine')[0];
         expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
       }
-    }, 120_000);
+    }, budget(120_000));
   });
 
   it.each(Object.values(NPCS))('keeps $id above the speed floor at every gear level', (template) => {
@@ -121,7 +122,7 @@ describe('NPC equipment generation', () => {
         expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
       }
     }
-  }, 120_000);
+  }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
     const world = { ...fixture, rngState: 3 };

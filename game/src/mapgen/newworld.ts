@@ -46,6 +46,12 @@ import {
 export const BUILT_SCRUB = 3;
 export const BUILT_DIRTY_WATER = 4;
 export const BUILT_TOXIC = 5;
+// The territory layer's mark for a farm's dirt tracks. It comes after the new world's codes.
+export const BUILT_TRACK = 6;
+// The territory layer's mark for a farm's irrigation canals.
+export const BUILT_CANAL = 7;
+// The territory layer's mark for a farm's concrete pads.
+export const BUILT_PAD = 8;
 
 // A squatter camp: its center and the radius of its fence ring.
 export type Camp = { pos: Vec; radius: number };

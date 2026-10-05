@@ -1,7 +1,9 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import { MAP_SCALE, REGION, scalePoint } from "./region";
+import { PHYSICS } from "./physics";
+import { BROKEN_WING, BROKEN_WING_POINT, FALLEN_SUN_POS, MAP_SCALE, REGION, scalePoint } from "./region";
+import { FALLEN_SUN_DECKS } from "./territory";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -17,7 +19,10 @@ export type TerrainTypeId =
   | "ash"
   | "field"
   | "dirtyWater"
-  | "toxic";
+  | "toxic"
+  | "track"
+  | "canal"
+  | "concrete";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -28,6 +33,7 @@ export type TerrainType = {
   color: number;
 };
 
+// The order is the map file's type codes (TYPE_IDS in src/sim/terrain.ts): a reorder or removal bumps its VERSION.
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
   hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
@@ -44,10 +50,140 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
   // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
   // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
-  // Last, so earlier type codes keep their values.
   dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
   toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
+  // Dirt tracks: hardpan packed pale by wheels, the farm tracks of the Old Orchard. It drives like hardpan and only
+  // looks paler than both hardpan and sand, so the tracks read from the camera.
+  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458 },
+  // Irrigation canals: shallow water in a concrete channel, the Old Orchard's canals. A truck in one drags and wears
+  // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools.
+  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a },
+  // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
+  // their pale grey shows the slab apart from the dark road, as in the concept.
+  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
 };
+
+// A deck station: a map point on the deck's axis and the deck line's rise there, in height units over the ground.
+export type DeckStation = { at: Vec; rise: number };
+
+// A straight deck, one drivable surface. line runs from its from end to its to end through stations on the straight
+// line between them, in order: the deck line stands each station's rise over the ground there and runs straight between
+// neighbouring stations, so one deck can climb, run level and come down. width is tiles between its two rails. cut,
+// when set, removes the road's flattening in the gap under the deck: abutment is tiles of causeway left under each
+// deck end, and ramp tiles over which the cut ground falls away. skirt makes the physics rails reach down past the
+// lowest ground beside the deck, so trucks on open ground cannot drive in under it. An end raised over the ground is a
+// lip a truck drives off and flies from. A deck with a raised station is skirted, and no deck touches another: a
+// surface is never split into decks (buildDecks() in src/sim/bridge.ts throws).
+export type DeckSpec = {
+  id: string;
+  line: DeckStation[];
+  width: number;
+  cut: { abutment: number; ramp: number } | null;
+  skirt: boolean;
+};
+
+// Canyon Bridge: the road's causeway is cut away under the deck, so the canyon runs below it.
+const CANYON_BRIDGE: DeckSpec = {
+  id: "canyon-bridge",
+  line: [
+    { at: scalePoint({ x: 97.9, y: 75.1 }), rise: 0 },
+    { at: scalePoint({ x: 101.5, y: 71.5 }), rise: 0 },
+  ],
+  width: 8, // the widest truck keeps its clearance from both rails
+  cut: { abutment: 1, ramp: 1.5 },
+  skirt: false,
+};
+
+// The Broken Wing deck: the wing's top, with the road on it. The road's flattening stays under it, so the graded
+// road dips between the two ramps and the ground cannot rise through the deck. Its skirt is the wing's lattice
+// and pylons, so trucks on the ground beside it cannot drive in under it.
+const WING_DECK: DeckSpec = {
+  id: "broken-wing",
+  line: [
+    { at: BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0), rise: 0 },
+    { at: BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0), rise: 0 },
+  ],
+  width: REGION.roadWidth, // as wide as the road, from the concept art: about 4 truck lengths
+  cut: null,
+  skirt: true,
+};
+
+// A raised bowl: a crater with its depth turned to height, cut by the same rule. Roads do not flatten it, and road
+// grading turns it into a ramp at the road grade. radius is the flat top's, bank the tiles it falls over, and height
+// is in height units, after heightFromElevation() in src/sim/terrain.ts, so a mound is as tall on any ground.
+export type Mound = { center: Vec; radius: number; bank: number; height: number };
+
+// Broken Wing's two ramps, one past each deck end.
+const WING_MOUNDS: Mound[] = [-1, 1].map((end) => ({
+  center: BROKEN_WING_POINT(end * (BROKEN_WING.deckHalf + BROKEN_WING.mound.gap), 0),
+  radius: BROKEN_WING.mound.flat,
+  bank: BROKEN_WING.mound.bank,
+  height: BROKEN_WING.mound.height,
+}));
+
+const TRENCH = BROKEN_WING.trench;
+
+// An irregular crater that owns its floor: inside the floor polygon the land is one level, the land at center less
+// depth (elevation units; a negative depth lifts the floor over the land there), plus its swells. Across a bank the
+// land fades back from that level to its own. floor points are tiles from center. bank (tiles) and rim (height units the lip stands over the land outside) are per
+// floor vertex, and blend along each edge between its two vertices. The lip rises with the bank to the rim at the
+// bank's top, then falls back to the land over as many tiles again. floorRelief adds swells of up to amplitude height
+// units across the floor, fading out over the bank, at frequency cycles per tile. See basin() in src/sim/elevation.ts.
+export type Basin = {
+  center: Vec;
+  floor: Vec[];
+  bank: number[];
+  rim: number[];
+  depth: number;
+  floorRelief: { frequency: number; amplitude: number };
+};
+
+// The Fallen Sun's basin, traced around the level concept's crater frame and the second reference's crags, gap and east
+// hill (tmp/issue-81/r4/layout.md). The floor lies at about -0.2 height units, 2 over the land at the centre, so the
+// three approach roads come down to it at their road grade and it lies above GEOLOGY.sandStart.below: a floor under
+// that line starts with blown sand, which the wind piles into dune ridges across every dirt road. The land behind the
+// crags stands near the floor's level, so a cliff arc's face is mostly its rim: 1.5 x 5 / 3.5 = 2.1 per tile at the
+// steepest, far over drive.maxSlope.
+const FALLEN_SUN_BASIN: Basin = {
+  center: FALLEN_SUN_POS,
+  floor: [
+    { x: -45.0, y: 0.0 }, // v0 180 deg: the west scree, the concept's red-brown hills (upper left)
+    { x: -41.3, y: -15.0 }, // v1 -160: the scree hills, WNW
+    { x: -32.2, y: -27.0 }, // v2 -140: the second reference's left crag wall starts, a cliff
+    { x: -21.7, y: -34.8 }, // v3 -122: left crag wall
+    { x: -11.9, y: -41.3 }, // v4 -106: left crag wall's east end; the NE drum sinks at its foot
+    { x: -6.3, y: -44.6 }, // v5 -98: the north notch, the reference's gap between its crags, west side
+    { x: 1.6, y: -45.0 }, // v6 -88: the north notch, east side
+    { x: 7.5, y: -42.3 }, // v7 -80: the right crag wall
+    { x: 15.8, y: -48.5 }, // v8 -72: right crag's south foot, 6 tiles past the bow nose
+    { x: 28.6, y: -45.8 }, // v9 -58: the north-east wall behind the bow nose
+    { x: 38.9, y: -38.9 }, // v10 -45: the north-east wall behind the small drum
+    { x: 45.9, y: -26.5 }, // v11 -30: the east road comes in
+    { x: 50.2, y: -8.9 }, // v12 -10: the east hill, the second reference's bottom-right hill
+    { x: 50.2, y: 8.9 }, // v13 10: the east hill
+    { x: 45.3, y: 21.1 }, // v14 25: ESE, where the hill falls away
+    { x: 39.8, y: 33.4 }, // v15 40: the south-east road
+    { x: 25.5, y: 44.2 }, // v16 60: the concept's open south-east bottom
+    { x: 8.2, y: 46.3 }, // v17 80: the open south
+    { x: -8.3, y: 47.3 }, // v18 100: the furrow's mouth
+    { x: -23.5, y: 40.7 }, // v19 120: the furrow's mouth, west lip
+    { x: -37.7, y: 26.4 }, // v20 145: south-west
+    { x: -43.5, y: 11.6 }, // v21 165: where the west road comes in, scree
+  ],
+  // The cliff arc v2..v4 and v7..v10 is steep, with the notch's long drivable bank between. The east hill's own inner
+  // face stays under maxSlope. The east road's bank at v11 is 52 tiles and the south-east road's at v15 is 40, so each
+  // road comes down from its own land to the floor at its road grade. The open south banks keep a dirt road under 0.2.
+  bank: [12, 10, 4, 3.5, 3.5, 30, 30, 3.5, 3.5, 4, 4, 52, 16, 16, 30, 40, 36, 28, 26, 26, 22, 30],
+  rim: [1.0, 1.5, 5.0, 5.5, 5.5, 0, 0, 5.5, 5.5, 5.0, 4.5, 0, 2.0, 2.0, 0.5, 0, 0, 0, 0, 0, 0.5, 0],
+  depth: -1.06, // lifts the floor from the land's -2.2 at the centre to -0.2
+  // Swells about 16 tiles apart, kept low so a road over them stays under a grade of 0.2.
+  floorRelief: { frequency: 1 / 16, amplitude: 0.45 },
+};
+
+// A point in tiles from the Fallen Sun's centre, on the map.
+function fromFallenSun(p: Vec): Vec {
+  return { x: FALLEN_SUN_POS.x + p.x, y: FALLEN_SUN_POS.y + p.y };
+}
 
 export const TERRAIN = {
   // Elevation noise: a fractal sum of value-noise octaves. freq is cycles per tile.
@@ -84,14 +220,31 @@ export const TERRAIN = {
       bank: 18,
       depth: 2.9,
     },
-    // Canyon Bridge: a straight deck between two road points. The road's causeway is cut away under
-    // the deck, so the canyon runs below it.
-    bridge: {
-      from: scalePoint({ x: 97.9, y: 75.1 }),
-      to: scalePoint({ x: 101.5, y: 71.5 }),
-      width: 8, // tiles between the rails; the widest truck keeps its clearance from both
-      abutment: 1, // tiles of causeway left under each deck end
-      ramp: 1.5, // tiles over which the cut ground falls to the canyon
+    // Broken Wing's crash trench, a channel beside the wing, past the reach of the road's flattening.
+    trench: {
+      path: [BROKEN_WING_POINT(-TRENCH.half, TRENCH.side), BROKEN_WING_POINT(TRENCH.half, TRENCH.side)] as Vec[],
+      width: TRENCH.width,
+      bank: TRENCH.bank,
+      depth: TRENCH.depth,
+    },
+    // The Fallen Sun's crash furrow (inferred: no reference shows it): gouged from the basin's open south rim toward the
+    // south-south-west, 44 tiles long, where the ship came in. It starts 58 tiles out, so its round head stays outside
+    // the floor and the south bank dips into it. 12 tiles each side hold the wing and a lane with a flap beside it.
+    furrow: {
+      path: [{ x: -15.0, y: 56.0 }, { x: -20.7, y: 77.3 }, { x: -26.4, y: 98.5 }].map(fromFallenSun),
+      width: 12,
+      bank: 12,
+      depth: 0.5,
+    },
+    // Straight decks: the road decks, each between two road points, then the Fallen Sun's. See src/sim/bridge.ts.
+    decks: [CANYON_BRIDGE, WING_DECK, ...FALLEN_SUN_DECKS] as readonly DeckSpec[],
+    // Broken Wing's hoop: the wing's torn root bent up over the road, a baked prop at its built size. Its feet stand
+    // beside the road and its boxes over the road start high, so trucks pass under it. pos and yaw come from
+    // BROKEN_WING, and r is the model's bake circle in tiles: 26.5 m.
+    wing: {
+      pos: BROKEN_WING_POINT(BROKEN_WING.hoopAt, 0),
+      r: 26.5 / PHYSICS.metersPerTile,
+      yaw: BROKEN_WING.yaw,
     },
     dryRiver: {
       path: [
@@ -113,13 +266,9 @@ export const TERRAIN = {
         bank: 24,
         depth: 1.4,
       },
-      {
-        center: scalePoint({ x: 64, y: 54 }),
-        radius: 50,
-        bank: 20,
-        depth: 1.8,
-      },
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
+    basins: [FALLEN_SUN_BASIN] as Basin[],
+    mounds: WING_MOUNDS,
   },
   reliefPx: 45, // screen pixels per height unit
   // Tile types. Roads and sites first, then old-world and new-world marks, then steep ground and the
@@ -554,7 +703,9 @@ export const MAPGEN = {
   closeUpPxPerTile: 8,
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
-    { name: 'bridge', center: { x: (TERRAIN.features.bridge.from.x + TERRAIN.features.bridge.to.x) / 2, y: (TERRAIN.features.bridge.from.y + TERRAIN.features.bridge.to.y) / 2 }, side: 60 },
+    { name: 'bridge', center: { x: (CANYON_BRIDGE.line[0].at.x + CANYON_BRIDGE.line[1].at.x) / 2, y: (CANYON_BRIDGE.line[0].at.y + CANYON_BRIDGE.line[1].at.y) / 2 }, side: 60 },
+    // The whole Broken Wing stretch: hoop, ramps, deck, trench and site.
+    { name: 'wing', center: BROKEN_WING_POINT(0, -2), side: 120 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
     // The canyon floor, where blown sand gathers most.
     { name: 'canyon', center: { x: 470, y: 240 }, side: 100 },

@@ -207,6 +207,13 @@ export function releaseNpc(world: World, npc: Vehicle): void {
   endState(world, tow, 'broken');
 }
 
+// A tow promise covers one breakdown. It breaks once the client drives again, so its next breakdown gets terms for
+// where it stands then, not the old fee.
+export function checkTowPromise(world: World, s: NpcState): StateEnding | null {
+  const client = world.vehicles.find((v) => v.id === s.other);
+  return client && !isStranded(world, client) ? 'broken' : null;
+}
+
 // The player's tow ends at the NPC's destination, and breaks when the two turn hostile.
 export function checkPlayerTow(world: World, s: NpcState): StateEnding | null {
   const me = world.vehicles.find((v) => v.id === s.holder);
@@ -303,10 +310,16 @@ function towerTerms(world: World, tower: Vehicle, client: Vehicle): { site: stri
   return { site: site.id, fee: towFee(world, tower, client, site) };
 }
 
+// A tower that left this client for danger a few turns ago still waits.
+function leftForDanger(world: World, tower: Vehicle, client: Vehicle): boolean {
+  const promise = stateOf(world, 'towPromise', tower.id, client.id);
+  return promise !== null && world.turn - promise.born < TOW.dangerWait;
+}
+
 // The tower can hitch or offer now. When another driver got there first this turn, this one's tow goal pops next
 // turn. A player in combat gets the offer once the fight ends, and the tower waits beside the truck.
 function readyToTow(world: World, tower: Vehicle, client: Vehicle): boolean {
-  if (towOf(world, client.id) || !inTowReach(tower, client)) return false;
+  if (towOf(world, client.id) || !inTowReach(tower, client) || leftForDanger(world, tower, client)) return false;
   return !isPlayer(world, client) || !inCombat(world, client);
 }
 
@@ -338,14 +351,14 @@ function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   world.events.push({ t: 'towHitched', by: tower.id, client: client.id, site });
 }
 
-// The fee follows the route the tower would drive from the client to the site's nearest pad. The player's social
-// skill talks it down when the player is on either end of the rope.
+// The fee follows the route the tower would drive from the client to the site's nearest pad, up to TOW.maxFee. The
+// player's social skill talks it down, also on a capped fee, when the player is on either end of the rope.
 function towFee(world: World, tower: Vehicle, client: Vehicle, site: Site): number {
   const pad = nearestPad(site, client.pos);
   const length = routeLength(client.pos, route(world, client.pos, pad, vehicleStats(world, tower).radius, [], tower));
   const involved = isPlayer(world, tower) || isPlayer(world, client);
   const cut = involved ? 1 - skillEffect(world, playerVehicle(world), 'social', 'towFee') : 1;
-  return Math.round((TOW.base + TOW.perTile * length) * cut);
+  return Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length) * cut);
 }
 
 // The player turned the tower down, so the tower rarely offers again.
