@@ -2062,11 +2062,13 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
-/* The truck's portrait beside its grid, as tall as the grid, so nose and tail line up. */
+/* The truck's portrait beside its grid. */
 .truck-pics {
   --map-cell: 10px;
   --map-gap: 1px;
   --map-pad: 3px;
+  --portrait-w: 128px;
+  --portrait-h: 80px;
   display: flex;
   gap: 6px;
   align-self: flex-start;
@@ -2074,10 +2076,9 @@ canvas.view {
 .chassis-portrait {
   display: block;
   flex: none;
-  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. The width follows the drawing's
-     aspect-ratio, which chassisPortrait() sets inline. */
-  height: calc(var(--rows) * (var(--map-cell) + var(--map-gap)) - var(--map-gap) + 2 * var(--map-pad));
-  width: auto;
+  /* One box for every truck, so the garage lines them up. The drawing fits inside it, centered. */
+  width: var(--portrait-w);
+  height: var(--portrait-h);
 }
 .chassis-portrait svg {
   display: block;
@@ -2093,7 +2094,7 @@ canvas.view {
   background: #1a2125;
 }
 .chassis-map i {
-  width: var(--map-cell); /* .chassis-portrait height follows this size */
+  width: var(--map-cell);
   height: var(--map-cell);
 }
 .chassis-map .hole {

@@ -386,7 +386,7 @@ export function iconCatalog(
   picks: Record<string, WeaponLook>,
 ): IconEntry[] {
   const drafts: IconDraft[] = [
-    ...Object.values(parts).filter((def) => !BODY_PARTS.has(def.id)).map((def) => partDraft(def, picks)),
+    ...Object.values(parts).map((def) => partDraft(def, picks)),
     ...Object.values(goods).map(goodDraft),
     ...Object.values(chassis).map(chassisDraft),
   ];
@@ -397,9 +397,19 @@ export function iconCatalog(
 // An entry before its rank, with the HP that ranks it among entries drawn alike.
 type IconDraft = { entry: Omit<IconEntry, 'rank'>; hp: number };
 
+// Cabs have no model on the truck, where the base draws them. These models stand in for them in icons only.
+const CAB_ICON_MODELS: Record<string, ModelName> = { cab: 'cab_seat', cabPickup: 'cab_pickup', cabHardtop: 'cab_hardtop' };
+
+function iconModel(defId: string): ModelName {
+  if (!BODY_PARTS.has(defId)) return partModel(defId);
+  const name = CAB_ICON_MODELS[defId];
+  if (!name) throw new Error(`No icon model for cab ${defId}. Add it to CAB_ICON_MODELS.`);
+  return name;
+}
+
 function partDraft(def: PartDef, picks: Record<string, WeaponLook>): IconDraft {
   const base = { id: def.id, section: PART_SECTION[def.kind], label: def.name, footprint: { w: def.w, h: def.h } };
-  if (def.kind !== 'weapon') return { entry: { ...base, models: [partModel(def.id)], weapon: null }, hp: def.hp };
+  if (def.kind !== 'weapon') return { entry: { ...base, models: [iconModel(def.id)], weapon: null }, hp: def.hp };
   const weapon = picks[def.id] ?? weaponLook(`icon:${def.id}`, def.id);
   return { entry: { ...base, models: weaponModels(weapon), weapon }, hp: def.hp };
 }
@@ -408,9 +418,15 @@ function goodDraft(def: GoodDef): IconDraft {
   return { entry: { id: def.id, section: 'good', label: def.name, models: [partModel(def.id)], footprint: { w: 1, h: 1 }, weapon: null }, hp: 0 };
 }
 
+// The models a garage portrait draws besides the base: the game's bare truck with its suspension and loose parts.
+const PORTRAIT_MODELS: readonly ModelName[] = ['coilover', 'axle', 'antenna', 'tow_chain'];
+
+// A chassis portrait draws the bare truck, so its models are the base, the built-in parts' and PORTRAIT_MODELS.
 function chassisDraft(def: ChassisDef): IconDraft {
   const footprint = { w: def.layout[0].length, h: def.layout.length };
-  return { entry: { id: def.id, section: 'chassis', label: def.name, models: [baseModel(def.id)], footprint, weapon: null }, hp: 0 };
+  const cores = def.core.filter((c) => !BODY_PARTS.has(c.defId)).map((c) => partModel(c.defId));
+  const models = [...new Set([baseModel(def.id), ...cores, ...PORTRAIT_MODELS])];
+  return { entry: { id: def.id, section: 'chassis', label: def.name, models, footprint, weapon: null }, hp: 0 };
 }
 
 function checkUniqueIds(drafts: readonly IconDraft[]): void {

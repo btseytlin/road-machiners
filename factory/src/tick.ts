@@ -33,7 +33,9 @@ function isDue(last: string | null, now: Date, everyMs: number): boolean {
 
 // A removal runs before a ship, so a Ship pressed after a Remove finds the release without a current post and refuses.
 function queued(state: FactoryState): JobPick | null {
-  const approval = Object.keys(state.pendingApprovals).map(Number).sort((a, b) => a - b)[0];
+  const approval = Object.keys(state.pendingApprovals)
+    .map(Number)
+    .sort((a, b) => a - b)[0];
   if (approval !== undefined) return { stage: 'approve', issue: approval };
   const removal = state.pendingRemovals[0];
   if (removal) return { stage: 'remove', issue: removal.issue };
@@ -54,7 +56,12 @@ function openCards(cards: Card[]): Card[] {
 
 // Furthest along first, lowest issue first.
 function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
-  return CARD_ORDER.flatMap((column) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: cardStage(state, card), issue: card.issue })));
+  return CARD_ORDER.flatMap((column) =>
+    cards
+      .filter((card) => card.column === column)
+      .sort((a, b) => a.issue - b.issue)
+      .map((card) => ({ stage: cardStage(state, card), issue: card.issue })),
+  );
 }
 
 // The card job of a column in CARD_ORDER.
@@ -70,8 +77,14 @@ function testingStage(state: FactoryState, issue: number): JobStage {
   return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
 }
 
-const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
-const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(label);
+const has =
+  (label: string) =>
+  (card: Card): boolean =>
+    card.labels.includes(label);
+const lacks =
+  (label: string) =>
+  (card: Card): boolean =>
+    !card.labels.includes(label);
 
 // Card jobs in order: hotfixes, ad hoc tasks, factory changes, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
@@ -79,7 +92,10 @@ function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   const open = openCards(cards).filter(lacks(RELEASE_LABEL));
   const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
-  const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
+  const adhoc = rest
+    .filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card))
+    .sort((a, b) => a.issue - b.issue)
+    .map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
   const work = rest.filter(lacks(ADHOC_LABEL));
   const normal = [...adhoc, ...changeJobs(state), ...byProgress(state, work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(state, work.filter(lacks(RELEASE_TASK_LABEL)))];
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
@@ -137,7 +153,14 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
 }
 
 function limits(cfg: Due): Record<Queue, number> {
-  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, verify: cfg.verifyWorkers, test: cfg.testWorkers };
+  return {
+    branch: 1,
+    triage: cfg.triageWorkers,
+    design: cfg.designWorkers,
+    implement: cfg.implementWorkers,
+    verify: cfg.verifyWorkers,
+    test: cfg.testWorkers,
+  };
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
@@ -196,10 +219,19 @@ export type TickDeps = {
   spawn: (args: string[], cwd: string, log: string, id: string, cpus: string) => number;
   cores: () => number;
 };
-export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, removeContainers: removeJobContainers, spawn: spawnJob, cores: availableParallelism };
+export const REAL_DEPS: TickDeps = {
+  isAlive,
+  kill: killJob,
+  removeContainers: removeJobContainers,
+  spawn: spawnJob,
+  cores: availableParallelism,
+};
 
 function dropJob(ctx: Ctx, id: string): void {
-  updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
+  updateState(ctx.statePath, (state) => ({
+    ...state,
+    jobs: state.jobs.filter((job) => job.id !== id),
+  }));
 }
 
 function minutesSince(ctx: Ctx, iso: string): number {
@@ -229,8 +261,12 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
-    triage: cfg.triageTimeoutMinutes, design: cfg.designTimeoutMinutes, implement: cfg.implementTimeoutMinutes,
-    verify: cfg.verifyTimeoutMinutes, test: cfg.testTimeoutMinutes, branch: cfg.branchTimeoutMinutes,
+    triage: cfg.triageTimeoutMinutes,
+    design: cfg.designTimeoutMinutes,
+    implement: cfg.implementTimeoutMinutes,
+    verify: cfg.verifyTimeoutMinutes,
+    test: cfg.testTimeoutMinutes,
+    branch: cfg.branchTimeoutMinutes,
   };
   return minutes[queue];
 }
@@ -248,7 +284,10 @@ function canResume(ctx: Ctx, job: Job): job is Job & { issue: number } {
 // A failed job ends here, so nothing of its resume stays for the next job on the issue. The job's own end does this for a job that finishes.
 function forgetResume(ctx: Ctx, job: Job): void {
   if (!resumable(job)) return;
-  updateState(ctx.statePath, (state) => ({ ...state, interrupted: state.interrupted.filter((issue) => issue !== job.issue) }));
+  updateState(ctx.statePath, (state) => ({
+    ...state,
+    interrupted: state.interrupted.filter((issue) => issue !== job.issue),
+  }));
   clearSessions(ctx.cfg.home, job.issue);
 }
 
@@ -263,7 +302,12 @@ async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps)
     const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
     const jobStarts = state.jobStarts.filter((_, index) => index !== start);
     const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
-    return { ...state, jobs: state.jobs.filter((other) => other.id !== job.id), jobStarts, interrupted };
+    return {
+      ...state,
+      jobs: state.jobs.filter((other) => other.id !== job.id),
+      jobStarts,
+      interrupted,
+    };
   });
   ctx.log('tick', job.issue, `${job.stage} process died, it resumes once on the next start`);
 }
@@ -295,7 +339,10 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> 
     }
     await ctx.github.removeLabel(card.issue, NEEDS_INFO_LABEL);
     ctx.log('tick', card.issue, `answered, removed ${NEEDS_INFO_LABEL}`);
-    released.push({ ...card, labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL) });
+    released.push({
+      ...card,
+      labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL),
+    });
   }
   return released;
 }
@@ -306,7 +353,10 @@ function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
-  const keep = cards.filter((card) => card.column === 'Approval').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
+  const keep = cards
+    .filter((card) => card.column === 'Approval')
+    .map((card) => state.builds[String(card.issue)])
+    .filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
@@ -342,7 +392,10 @@ async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise
 async function expireReplies(ctx: Ctx): Promise<void> {
   const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
   for (const [messageId, reply] of late) {
-    updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
+    updateState(ctx.statePath, (state) => ({
+      ...state,
+      unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)),
+    }));
     await reportFailure(ctx, 'feedback', reply.issue, `The reply ${messageId} to the approval post ${reply.postId} got no route within ${ctx.cfg.replyRouteMinutes} minutes: ${reply.text}`, null);
   }
 }
@@ -350,7 +403,11 @@ async function expireReplies(ctx: Ctx): Promise<void> {
 // Late approval replies become failures, and the first tick that sees no waste review starts its period.
 async function settleRouting(ctx: Ctx): Promise<void> {
   await expireReplies(ctx);
-  if (readState(ctx.statePath).lastWasteReview === null) updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: ctx.now().toISOString() }));
+  if (readState(ctx.statePath).lastWasteReview === null)
+    updateState(ctx.statePath, (state) => ({
+      ...state,
+      lastWasteReview: ctx.now().toISOString(),
+    }));
 }
 
 // One tick: check the running jobs, run intake, clean old builds, clones and logs, then start every job that fits while the disk has room. `deps` defaults to the real process control.

@@ -5,11 +5,11 @@
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
-import { baseGrid, cellCount, mountedParts, plateSide, type Cell, type SideLetter } from "../sim/grid";
+import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
-import { BODY_PARTS, itemTone } from "../render/partLooks";
+import { itemTone } from "../render/partLooks";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
 import { el } from "./dom";
@@ -188,54 +188,27 @@ function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCe
   return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows, box: { x, y, w, h } };
 }
 
-// How an item lies in its grid box: rot, and for armor the side the truck lays it on, from plateSide().
-export type GridLie = { rot: 0 | 1; side: SideLetter | null };
-// Quarter turns counter-clockwise.
-export type Turn = 0 | 1 | 2 | 3;
-
-// Armor is drawn as a front plate, outer face up. The truck view yaws it to its side (SIDE_YAW in
-// src/three/render/vehicle.ts), so its icon turns to face the same way.
-const SIDE_TURN: Record<SideLetter, Turn> = { F: 0, L: 1, B: 2, R: 3 };
-
-// How an item's icon fills its grid box: cropped to its drawing, and turned by quarter turns counter-clockwise. A
-// top-down part laid sideways (rot 1) turns a quarter with its box, nose to the truck's left. Weapons turn too, for a
-// clear icon, though the truck view keeps a gun's head to the nose. Armor turns to the side it covers, whatever its rot.
-// Goods are drawn diagonal and never turn.
-export function gridIconFrame(cell: IconCell, lie: GridLie): { crop: Box; turn: Turn } {
-  return { crop: cell.box, turn: gridTurn(cell, lie) };
-}
-
-function gridTurn(cell: IconCell, lie: GridLie): Turn {
-  if (cell.view !== "top") return 0;
-  return lie.side ? SIDE_TURN[lie.side] : lie.rot;
-}
-
 const SVG_NS = "http://www.w3.org/2000/svg";
+// Items are vector blueprints, so they stay sharp at any slot size. Chassis portraits are toon renders.
+const SHEET_FILES: Record<Sheet, string> = { items: "items.svg", chassis: "chassis.png" };
 
 // The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
-// crop: the share of the cell to show. turn: quarter turns counter-clockwise.
-function sheetIcon(cell: IconCell, cls: string, crop: Box, turn: Turn = 0): HTMLElement {
+// crop: the share of the cell to show.
+function sheetIcon(cell: IconCell, cls: string, crop: Box): HTMLElement {
   const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", turn % 2 ? `0 0 ${crop.h} ${crop.w}` : `0 0 ${crop.w} ${crop.h}`);
+  svg.setAttribute("viewBox", `0 0 ${crop.w} ${crop.h}`);
   svg.setAttribute("focusable", "false");
   const clip = document.createElementNS(SVG_NS, "svg");
   clip.setAttribute("viewBox", `${cell.col + crop.x} ${cell.row + crop.y} ${crop.w} ${crop.h}`);
   for (const [k, v] of [["width", crop.w], ["height", crop.h]] as const) clip.setAttribute(k, String(v));
   const image = document.createElementNS(SVG_NS, "image");
-  image.setAttribute("href", `${import.meta.env.BASE_URL}icons/${cell.sheet}.png`);
+  image.setAttribute("href", `${import.meta.env.BASE_URL}icons/${SHEET_FILES[cell.sheet]}`);
   image.setAttribute("width", String(cell.cols));
   image.setAttribute("height", String(cell.rows));
   image.setAttribute("preserveAspectRatio", "none");
   clip.append(image);
-  if (turn) {
-    // The cell's top edge, the nose, lands on the left, the bottom or the right.
-    const shift = [`0 ${crop.w}`, `${crop.w} ${crop.h}`, `${crop.h} 0`][turn - 1];
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("transform", `translate(${shift}) rotate(${-90 * turn})`);
-    group.append(clip);
-    svg.append(group);
-  } else svg.append(clip);
+  svg.append(clip);
   icon.append(svg);
   return icon;
 }
@@ -253,33 +226,25 @@ export function toneStyle(id: string): string {
   return `--tone:#${ITEM_TONES[itemTone(id)].toString(16).padStart(6, "0")}`;
 }
 
-// Cabs have no model of their own, are built in and never trade, so they keep the cab glyph.
 export function partIconEl(part: PartInstance): HTMLElement {
-  return BODY_PARTS.has(part.defId) ? createIcon("cab") : createItemIcon(part.defId);
+  return createItemIcon(part.defId);
 }
 
 export function itemIconEl(item: GridItem): HTMLElement {
   return item.kind === "good" ? createItemIcon(item.good) : partIconEl(item.part);
 }
 
-// An item's icon in its inventory grid box on a truck of chassisId, fit to the box and turned with the item. See
-// gridIconFrame.
-export function gridItemIcon(item: GridItem, chassisId: string): HTMLElement {
-  if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
+// An item's icon in its inventory grid box, upright and fit to the box whatever the item's rotation.
+export function gridItemIcon(item: GridItem): HTMLElement {
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
-  const kind = item.kind === "part" ? partDef(item.part.defId).kind : null;
-  const side = kind === "armor" ? plateSide(chassisId, item) : null;
-  const frame = gridIconFrame(cell, { rot: item.rot, side });
-  return sheetIcon(cell, "icon item-icon", frame.crop, frame.turn);
+  return sheetIcon(cell, "icon item-icon", cell.box);
 }
 
-// A truck seen as the shop shows it, beside its grid, cropped to its drawing. The stylesheet gives it the grid's
-// height, and its width follows the drawing's aspect.
+// A truck seen as the shop shows it, beside its grid, cropped to its drawing. The stylesheet gives every truck one box,
+// and the drawing fits inside it.
 export function chassisPortrait(chassisId: string): HTMLElement {
   const cell = chassisPortraitCell(chassisId);
-  const portrait = sheetIcon(cell, "chassis-portrait", cell.box);
-  portrait.style.aspectRatio = `${cell.box.w} / ${cell.box.h}`;
-  return portrait;
+  return sheetIcon(cell, "chassis-portrait", cell.box);
 }
 
 // One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.

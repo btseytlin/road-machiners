@@ -1,35 +1,37 @@
 // Draws one item or chassis icon from the game's own models, for npm run icons.
-// The style follows the category. An item icon is line art: a thick LINE_STYLE line on the silhouette's edge, at most
-// MAX_INNER long interior lines from the creases of a normal and depth pass, and a see-through dark fill, so the item's
-// tone shows through. A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one
-// key light, with a dark outline and darkened creases. Defs drawn by the same models are told apart by 45° stripes.
+// The style follows the category. An item icon is a vector blueprint from blueprint.ts, in shades of its category tone.
+// A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
+// dark outline and darkened creases. Chassis drawn by the same model are told apart by 45° stripes.
 // Body space as in vehicle.ts: +x is the nose, +z the truck's right, +y up.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
-import { FACTION_COLORS, LINE_STYLE, PAL } from '../../render/palette';
-import { renderKey, type IconEntry } from '../../render/partLooks';
+import { FACTION_COLORS, ITEM_TONES, PAL } from '../../render/palette';
+import { itemTone, renderKey, type IconEntry } from '../../render/partLooks';
 import { model, socket, type ModelName } from '../render/models';
+import { wheelMounts } from '../../phys/body';
+import { bareVehicle } from '../../sim/factory';
+import { bodyOf } from '../../sim/body';
+import { VehicleView } from '../render/vehicle';
 import { weaponHead } from '../render/weaponHead';
-import {
-  boundsOf, clip, edgeBand, emptyMask, keepLongest, lineLike, maskOfPieces, pieces, simplify, solidMask, stripes, thicken, type Mask, type Pixels, type Rgba,
-} from './lines';
+import { blueprintOf, blueprintSvg, GLASS_MATERIAL, paintBlueprint, type BlueprintColors } from './blueprint';
+import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 7;
+export const ICON_STYLE_VERSION = 9;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
 export type IconView = 'top' | 'diagonal';
-export const DIAGONAL_YAW_DEG = 20;
-export const DIAGONAL_PITCH_DEG = 20;
+export const DIAGONAL_YAW_DEG = 35;
+export const DIAGONAL_PITCH_DEG = 30;
 
-// The view the game shows per category: equipment top-down like the truck grid, cargo goods and the shop's truck
-// portraits diagonal. Flip one and rerun npm run icons.
+// The view the game shows per category. Every icon is diagonal, since a part seen straight down reads as flat boxes.
+// Flip one and rerun npm run icons.
 export type IconCategory = 'part' | 'good' | 'chassis';
-export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'top', good: 'diagonal', chassis: 'diagonal' };
+export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'diagonal', good: 'diagonal', chassis: 'diagonal' };
 
-// The one owner of how each category is drawn, in either view: items as line art, chassis portraits as toon.
+// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon.
 export type IconStyle = 'line' | 'toon';
 export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'line', chassis: 'toon' };
 
@@ -50,40 +52,23 @@ function iconCategory(entry: IconEntry): IconCategory {
 
 const CELL = PHYSICS.cell;
 const SUPERSAMPLE = 4; // drawn at this multiple of the cell, then scaled down
-// Share of the cell left empty on each side, room for the outline. The manifest carries it and LINE_CELLS.
-export const MARGIN = 0.1;
-// Line art width as a share of one inventory grid row (CELL.along), so every item draws the same weight in the grid,
-// about 1.9 px at 42 px cells, whatever its footprint. A smaller slot shows it thinner.
-export const LINE_CELLS = 0.045;
-// Interior lines: a crease piece is kept when the diagonal of its bounds is at least MIN_INNER of the drawing's longer
-// side, and only the MAX_INNER longest are kept. Shorter creases are detail that blurs at 42 px.
-export const MIN_INNER = 0.25;
-export const MAX_INNER = 3;
-// A crease piece with more pixels per pixel of its length than this is a web of detail, not a line. Goods, drawn
-// diagonal, read by their faces' edges, which meet in webs.
-const MAX_WIND: Record<IconView, number> = { top: 5, diagonal: 12 };
-// The silhouette drops detail narrower than SIMPLIFY line widths, except thin parts at least MIN_THIN of the drawing's
-// longer side long, like barrels and rails.
-const SIMPLIFY = 2;
-const MIN_THIN = 0.05;
-const SPECK = 3;
-const MIN_HOLE = 0.12; // holes and islands shorter than this share of the longer side fill or drop
+// Share of the cell left empty on each side, room for the outline. The manifest carries it.
+export const MARGIN = 0.06;
+// Blueprint line widths as a share of one inventory grid row (CELL.along), so every item draws the same weight in the
+// grid whatever its footprint: about 1.7 px for the outer contour and 0.9 px inside at 42 px cells.
+const OUTER_CELLS = 0.04;
+const INNER_CELLS = 0.022;
+// Armor is built as a front plate with its outer face at +x. It turns this far about y, so the face looks at the camera.
+const ARMOR_YAW = -Math.PI / 2;
 const TOON_OUTLINE_PX = 4; // toon silhouette outline width at cell size
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 // The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
-const CREASE: Record<IconStyle, { normal: number; depth: number }> = { toon: { normal: 0.3, depth: 4 }, line: { normal: 0.45, depth: 6 } };
+const CREASE = { normal: 0.3, depth: 4 };
 const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
 const INK = PAL.outline;
-const STRIPE_WIDTH = 1; // rank stripes as lines of the style's width
-// The only colors a line cell holds before its downscale, besides transparent.
-export const LINE_COLORS: readonly Rgba[] = [
-  [...rgbOf(LINE_STYLE.line), 255],
-  [...rgbOf(LINE_STYLE.fill), LINE_STYLE.fillAlpha],
-];
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
 const PAINT = 'paint';
 const TRIM = 'trim';
-const GLASS = 'glass';
 
 type Vec2 = { x: number; y: number };
 
@@ -104,36 +89,36 @@ function renderer(): { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } 
   return shared;
 }
 
-// The icon at size x size pixels, with a transparent background, the full-size drawing before the downscale, and for a
-// line icon the number of interior line pieces it kept.
-export function renderIcon(entry: IconEntry, view: IconView, size: number): { icon: HTMLCanvasElement; drawn: Pixels; inner: number } {
+// The icon at size x size pixels with a transparent background, and for an item its blueprint as one SVG group in
+// size x size units.
+export function renderIcon(entry: IconEntry, view: IconView, size: number): { icon: HTMLCanvasElement; svg: string | null } {
   const big = size * SUPERSAMPLE;
-  const style = iconStyle(entry);
-  const { scene, camera, mount } = stage(entry, view);
-  const head = mount ? headOnly(scene, camera, big, mount) : null;
+  const { scene, camera } = stage(entry, view);
+  if (iconStyle(entry) === 'line') {
+    const perMeter = CELL.along * (big / (camera.right - camera.left));
+    const pen = { outer: OUTER_CELLS * perMeter, inner: INNER_CELLS * perMeter };
+    const bp = blueprintOf(scene, camera, big, pen, (m) => draw(scene, camera, big, m));
+    const colors = blueprintColors(entry);
+    const icon = document.createElement('canvas');
+    icon.width = size;
+    icon.height = size;
+    paintBlueprint(context(icon), bp, colors);
+    return { icon, svg: `<g transform="scale(${size / big})">${blueprintSvg(bp, colors, `clip-${entry.id}`)}</g>` };
+  }
   const color = draw(scene, camera, big, null);
   const normal = draw(scene, camera, big, new THREE.MeshNormalMaterial({ flatShading: true }));
   const depth = draw(scene, camera, big, new THREE.MeshDepthMaterial());
-  const creases = creaseMask(color, normal, depth, CREASE[style]);
-  if (style === 'toon') {
-    toonInk(color, creases, TOON_OUTLINE_PX * SUPERSAMPLE);
-    const solid = solidMask(color);
-    if (entry.rank > 1) paint(color, stripes(solid, boundsOf(solid), entry.rank - 1, TOON_OUTLINE_PX * SUPERSAMPLE), [...rgbOf(INK), 255]);
-    return { icon: shrink(color, size), drawn: color, inner: 0 };
-  }
-  // Pixels per meter, through the camera, so the line width follows the grid cell.
-  const width = LINE_CELLS * CELL.along * (big / (camera.right - camera.left));
-  const inner = lineArt(color, creases, { width, wind: MAX_WIND[view] }, entry.rank, head);
-  return { icon: shrink(color, size), drawn: color, inner };
+  toonInk(color, creaseMask(color, normal, depth), TOON_OUTLINE_PX * SUPERSAMPLE);
+  const solid = solidMask(color);
+  if (entry.rank > 1) paint(color, stripes(solid, boundsOf(solid), entry.rank - 1, TOON_OUTLINE_PX * SUPERSAMPLE), [...rgbOf(INK), 255]);
+  return { icon: shrink(color, size), svg: null };
 }
 
-// A weapon head's silhouette, drawn with its mount hidden. Its outline is the weapon's one interior shape that always
-// draws, since the head's creases are a web of detail.
-function headOnly(scene: THREE.Scene, camera: THREE.Camera, size: number, mount: THREE.Object3D): Mask {
-  mount.visible = false;
-  const head = solidMask(draw(scene, camera, size, null));
-  mount.visible = true;
-  return head;
+// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue.
+export function blueprintColors(entry: IconEntry): BlueprintColors {
+  const tone = new THREE.Color(ITEM_TONES[itemTone(entry.id)]);
+  const mix = (to: number, t: number): string => `#${tone.clone().lerp(new THREE.Color(to), t).getHexString()}`;
+  return { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
 }
 
 // Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
@@ -149,12 +134,11 @@ export function barrelReads(entry: IconEntry, view: IconView, size: number): Bar
   return { ...at, pixelTip: farthestAlong(color, at.head, at.tip) };
 }
 
-// mount: a weapon's mount, null for every other entry.
-type Stage = { scene: THREE.Scene; camera: THREE.OrthographicCamera; head: THREE.Vector3; tip: THREE.Vector3; mount: THREE.Object3D | null };
+type Stage = { scene: THREE.Scene; camera: THREE.OrthographicCamera; head: THREE.Vector3; tip: THREE.Vector3 };
 
 function stage(entry: IconEntry, view: IconView): Stage {
   const scene = new THREE.Scene();
-  const { root, head, tip, mount } = build(entry);
+  const { root, head, tip } = build(entry);
   toon(root, iconStyle(entry));
   scene.add(root);
   const camera = frame(root, view);
@@ -163,16 +147,22 @@ function stage(entry: IconEntry, view: IconView): Stage {
   key.position.copy(camera.position).add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).multiplyScalar(40));
   key.position.add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(-25));
   scene.add(key, new THREE.AmbientLight(0xffffff, 1.1));
-  return { scene, camera, head, tip, mount };
+  return { scene, camera, head, tip };
 }
 
 // A weapon is its mount stretched to fill the def's footprint, with the head at its authored size on the mount's head
-// socket, aimed forward. The stretch shows the footprint, so weapons of one look but different sizes differ.
+// socket, aimed forward. The stretch shows the footprint, so weapons of one look but different sizes differ. A chassis
+// is the game's own view of its bare truck, at rest.
 function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THREE.Group } {
   const root = new THREE.Group();
+  if (entry.section === 'chassis') {
+    root.add(bareTruck(entry.id));
+    return { root, head: new THREE.Vector3(), tip: new THREE.Vector3() };
+  }
   if (!entry.weapon) {
     for (const name of entry.models) root.add(model(name));
-    return { root, head: new THREE.Vector3(), tip: new THREE.Vector3(), mount: null };
+    if (entry.section === 'armor') root.rotation.y = ARMOR_YAW;
+    return { root, head: new THREE.Vector3(), tip: new THREE.Vector3() };
   }
   const look = entry.weapon;
   const mount = model(look.mount);
@@ -185,19 +175,35 @@ function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THRE
   const at = socket(look.mount, 'head').applyMatrix4(mount.matrix);
   built.head.position.copy(at);
   root.add(built.head);
-  return { root, head: at.clone(), tip: built.tip.add(at), mount };
+  return { root, head: at.clone(), tip: built.tip.add(at) };
+}
+
+// The truck view of a chassis with only its built-in parts, wheels at their rest height.
+function bareTruck(chassisId: string): THREE.Object3D {
+  const v = bareVehicle({ nextId: 0 }, { name: chassisId, faction: 'player', chassisId, pos: { x: 0, y: 0 }, heading: 0, brain: null });
+  const view = new VehicleView(v, false);
+  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest }));
+  view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels }, 0);
+  return view.root;
 }
 
 // Swaps every material for the style's. Toon keeps the material's color on the light ramp, with faction paint as its
-// color. Line art reads only the silhouette, so it draws unlit.
+// color. A blueprint reads only the shape and its normals, so it draws unlit.
 function toon(root: THREE.Object3D, style: IconStyle): void {
   const { ramp } = renderer();
   const paint = FACTION_COLORS.player;
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const old = o.material as THREE.MeshLambertMaterial;
-    const color = { [PAINT]: paint.top, [TRIM]: paint.cab, [GLASS]: GLASS_COLOR }[old.name] ?? old.color.getHex();
+    // The truck view's hidden see-through silhouette and its outline hulls stay hidden: the toon style draws its own ink.
+    if (!old.visible || o.userData.outline) {
+      o.visible = false;
+      return;
+    }
+    const color = { [PAINT]: paint.top, [TRIM]: paint.cab, [GLASS_MATERIAL]: GLASS_COLOR }[old.name] ?? old.color.getHex();
     o.material = style === 'toon' ? new THREE.MeshToonMaterial({ color, gradientMap: ramp }) : new THREE.MeshBasicMaterial({ color });
+    // A blueprint finds the glass by its material name.
+    o.material.name = old.name;
     old.dispose();
   });
 }
@@ -256,14 +262,14 @@ function draw(scene: THREE.Scene, camera: THREE.Camera, size: number, override: 
   return { w: size, h: size, data: ctx.getImageData(0, 0, size, size).data };
 }
 
-// Where the normal or depth pass jumps between solid neighbors, by the style's thresholds.
-function creaseMask(color: Pixels, normal: Pixels, depth: Pixels, at: { normal: number; depth: number }): Mask {
+// Where the normal or depth pass jumps between solid neighbors, by CREASE.
+function creaseMask(color: Pixels, normal: Pixels, depth: Pixels): Mask {
   const solid = solidMask(color);
   const { w, h } = color;
   const out = { w, h, bits: new Uint8Array(w * h) };
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (solid.bits[y * w + x] && (jumps(normal, depth, at, x, y, x + 1, y) || jumps(normal, depth, at, x, y, x, y + 1))) out.bits[y * w + x] = 1;
+      if (solid.bits[y * w + x] && (jumps(normal, depth, x, y, x + 1, y) || jumps(normal, depth, x, y, x, y + 1))) out.bits[y * w + x] = 1;
     }
   }
   return out;
@@ -286,47 +292,6 @@ function toonPixel(data: Uint8ClampedArray, at: number, crease: boolean, ink: re
   else if (data[at + 3] > 0) data[at + 3] = 255;
 }
 
-// Line art's width in drawing pixels, and how webbed a crease may be and still draw.
-type Pen = { width: number; wind: number };
-
-// Redraws the drawing as line art in LINE_COLORS: the simplified silhouette's edge band, a weapon head's outline, the
-// longest line-like creases at least MIN_INNER of the drawing long up to MAX_INNER interior lines, and a stripe per rank
-// above 1, all width wide, over the fill. Returns how many interior lines it drew.
-function lineArt(color: Pixels, creases: Mask, pen: Pen, rank: number, head: Mask | null): number {
-  const { drawn, lines, inner } = lineMasks(solidMask(color), creases, pen, rank, head);
-  const [line, fill] = LINE_COLORS;
-  const clear: Rgba = [0, 0, 0, 0];
-  for (let i = 0; i < drawn.bits.length; i++) color.data.set(lines.bits[i] ? line : drawn.bits[i] ? fill : clear, i * 4);
-  return inner;
-}
-
-// Where line art draws its lines, and where it draws at all, from the raw silhouette and its creases.
-function lineMasks(raw: Mask, creases: Mask, { width, wind }: Pen, rank: number, head: Mask | null): { drawn: Mask; lines: Mask; inner: number } {
-  const { w, h } = raw;
-  const half = width / 2;
-  const rawBox = boundsOf(raw);
-  const longest = Math.max(rawBox.x1 - rawBox.x0, rawBox.y1 - rawBox.y0);
-  const simple = (m: Mask): Mask => simplify(m, SIMPLIFY * width, MIN_THIN * longest, MIN_HOLE * longest);
-  const solid = simple(raw);
-  const band = edgeBand(solid, half);
-  const headBand = head ? edgeBand(simple(head), half) : emptyMask(w, h);
-  const open = { w, h, bits: creases.bits.map((b, i) => b & (band.bits[i] ^ 1) & (headBand.bits[i] ^ 1)) };
-  const room = MAX_INNER - (head ? 1 : 0);
-  const kept = keepLongest(pieces(open).filter((p) => lineLike(p, wind)), MIN_INNER * longest, room);
-  const inner = clip(thicken(maskOfPieces(w, h, kept), half), solid);
-  const marks = rank > 1 ? stripes(solid, boundsOf(solid), rank - 1, width * STRIPE_WIDTH) : emptyMask(w, h);
-  const drawn = { w, h, bits: band.bits.map((b, i) => b | solid.bits[i]) };
-  const lines = { w, h, bits: band.bits.map((b, i) => b | inner.bits[i] | marks.bits[i] | (headBand.bits[i] & drawn.bits[i])) };
-  joinSpecks(drawn, lines, SPECK * width);
-  return { drawn, lines, inner: MAX_INNER - room + kept.length };
-}
-
-// Specks of fill pinched between lines, shorter than maxLen, join the lines.
-function joinSpecks(drawn: Mask, lines: Mask, maxLen: number): void {
-  const fillOnly = { w: drawn.w, h: drawn.h, bits: drawn.bits.map((b, i) => b & (lines.bits[i] ^ 1)) };
-  for (const p of pieces(fillOnly).filter((q) => q.length < maxLen)) for (const i of p.pixels) lines.bits[i] = 1;
-}
-
 function paint(color: Pixels, mask: Mask, rgba: Rgba): void {
   for (let i = 0; i < mask.bits.length; i++) if (mask.bits[i]) color.data.set(rgba, i * 4);
 }
@@ -335,14 +300,14 @@ function rgbOf(color: number): [number, number, number] {
   return [(color >> 16) & 255, (color >> 8) & 255, color & 255];
 }
 
-function jumps(normal: Pixels, depth: Pixels, at: { normal: number; depth: number }, x0: number, y0: number, x1: number, y1: number): boolean {
+function jumps(normal: Pixels, depth: Pixels, x0: number, y0: number, x1: number, y1: number): boolean {
   if (x1 >= normal.w || y1 >= normal.h) return false;
   const a = (y0 * normal.w + x0) * 4;
   const b = (y1 * normal.w + x1) * 4;
   if (normal.data[b + 3] === 0) return false;
   let d = 0;
   for (let c = 0; c < 3; c++) d += ((normal.data[a + c] - normal.data[b + c]) / 255) ** 2;
-  return Math.sqrt(d) > at.normal || Math.abs(depth.data[a] - depth.data[b]) > at.depth;
+  return Math.sqrt(d) > CREASE.normal || Math.abs(depth.data[a] - depth.data[b]) > CREASE.depth;
 }
 
 function shrink(src: Pixels, size: number): HTMLCanvasElement {

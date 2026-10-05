@@ -62,7 +62,7 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
   const node = el(
     "div",
     { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    gridItemIcon(it, chassisId),
+    gridItemIcon(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));

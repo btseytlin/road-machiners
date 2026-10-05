@@ -38,7 +38,7 @@ import {
   truckSupplyPrice,
   type Supply,
 } from "../sim/economy";
-import { baseGrid, freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
+import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { moneyLabel } from "./hud-readout";
 import { spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
@@ -338,7 +338,7 @@ export class TownScreen {
       return el(
         "div",
         { class: `card truck-card${own ? " own" : ""}` },
-        el("div", { class: "truck-pics", style: `--rows:${baseGrid(id).h}` }, chassisPortrait(id), chassisMap(id)),
+        el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
           { class: "truck-body" },
