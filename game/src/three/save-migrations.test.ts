@@ -19,6 +19,8 @@ import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
+import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -293,6 +295,32 @@ describe('save migration 11 to 12', () => {
 });
 
 describe('save migration 12 to 13', () => {
+  it('gives the player the headlight switch off and keeps every other field', () => {
+    const next = MIGRATIONS[12](FORMAT_2_12);
+
+    expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  const before = structuredClone(FORMAT_2_13);
+  const next = MIGRATIONS[13](FORMAT_2_13) as { states: { data: { partIds?: string[] } }[] };
+
+  it('gives a patch the ids of its client parts at 0 HP, in item order', () => {
+    expect(next.states[0].data.partIds).toEqual(['p1', 'p2']);
+  });
+
+  it('gives a patch whose client is gone an empty list', () => {
+    expect(next.states[1].data.partIds).toEqual([]);
+  });
+
+  it('leaves other states alone and does not mutate its input', () => {
+    expect(next.states[2]).toEqual(FORMAT_2_13.states[2]);
+    expect(FORMAT_2_13).toEqual(before);
+  });
+});
+
+describe('save migration 14 to 15', () => {
   type Loot = { goods: Partial<Record<string, number>>; parts: unknown[]; fuel?: number; supplies?: number };
   type Stock = Loot & { id: string; hidden: Loot };
   type Saved = {
@@ -305,19 +333,19 @@ describe('save migration 12 to 13', () => {
     searchRng: { rngState: number };
     salvage: Stock[];
   };
-  const next = MIGRATIONS[12](FORMAT_2_12) as Saved;
+  const next = MIGRATIONS[14](FORMAT_2_14) as Saved;
   const stock = (id: string) => next.salvage.find((s) => s.id === id)!;
-  const before = (id: string) => FORMAT_2_12.salvage.find((s) => s.id === id)!;
+  const before = (id: string) => FORMAT_2_14.salvage.find((s) => s.id === id)!;
   const NO_HIDDEN = { goods: {}, parts: [], fuel: 0, supplies: 0 };
 
   it('gives every vehicle and removed vehicle empty utility orders, keeping its other fields', () => {
-    expect(next.vehicles).toEqual(FORMAT_2_12.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
-    expect(next.removed).toEqual(FORMAT_2_12.removed.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.vehicles).toEqual(FORMAT_2_14.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.removed).toEqual(FORMAT_2_14.removed.map((v) => ({ ...v, utilityOrders: {} })));
   });
 
   it('starts empty smoke, fields, flares and lines, and the search stream a new game of the same seed has', () => {
     expect([next.smoke, next.fields, next.flares, next.lines]).toEqual([[], [], [], []]);
-    expect(next.searchRng).toEqual(searchStream(FORMAT_2_12.seed));
+    expect(next.searchRng).toEqual(searchStream(FORMAT_2_14.seed));
   });
 
   it.each(['burnt-convoy', 'barn-759', 'wreck12'])('hides all the loot of the unsearched rolled stock %s', (id) => {
@@ -346,11 +374,11 @@ describe('save migration 12 to 13', () => {
   });
 });
 
-describe('save migration 13 to 14', () => {
-  const next = MIGRATIONS[13](FORMAT_2_13) as typeof FORMAT_2_13;
+describe('save migration 15 to 16', () => {
+  const next = MIGRATIONS[15](FORMAT_2_15) as typeof FORMAT_2_15;
 
   it('keeps the world as it was, with each utility charge and order', () => {
-    expect(next).toEqual(FORMAT_2_13);
+    expect(next).toEqual(FORMAT_2_15);
     expect(next.vehicles[0].items[0].part.charge).toEqual({ reload: 3 });
     expect(next.vehicles[0].utilityOrders).toEqual({ p11: { kind: 'self' } });
   });

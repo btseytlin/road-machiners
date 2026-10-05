@@ -74,7 +74,7 @@ describe('foe hp left', () => {
     expect(r.outcome).toBe('won');
     expect(r.theirHpLeft).toBeGreaterThan(0);
     expect(r.theirHpLeft).toBeLessThan(1);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('is null for a fight that is not won', () => {
     expect(runFight({ ...FIGHT, maxTurns: 1 }).theirHpLeft).toBeNull();

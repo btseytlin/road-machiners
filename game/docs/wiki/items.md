@@ -22,6 +22,9 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 | convertible | Convertible | 2 | 2992 | 9.4 | 2.5 | 3 | 750 | 4440 | 0.6 | 45 | 0.26 | 7 x 9 | cabHardtop, transmission, tankLong, wheel, wheel, wheel, wheel |
 | bus | Bus | 2 | 3800 | 5.5 | 0.9 | 2 | 3000 | 8810 | 0.9 | 110 | 0.45 | 8 x 12 | cabPickup, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
 | loader | Wheel loader | 3 | 5088 | 3.6 | 1.6 | 2.5 | 4200 | 9060 | 0.9 | 130 | 0.65 | 9 x 9 | cabPickup, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
+| niva | Niva | 2 | 3148 | 7.6 | 2.2 | 3 | 520 | 4210 | 0.55 | 42 | 0.21 | 6 x 10 | cab, transmissionMid, tank, wheelMid, wheelMid, wheelMid, wheelMid |
+| bukhanka | Bukhanka | 2 | 3450 | 6 | 1.4 | 2.5 | 1250 | 5360 | 0.65 | 78 | 0.3 | 7 x 10 | cabPickup, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
+| lincoln | Lincoln | 3 | 4288 | 8.6 | 2 | 2.2 | 900 | 5540 | 0.85 | 85 | 0.36 | 7 x 11 | cabHardtop, transmission, tankLong, wheel, wheel, wheel, wheel |
 <!-- /wiki:chassis -->
 
 ## Weapons

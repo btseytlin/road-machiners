@@ -61,7 +61,7 @@ A chance is 0 only when an option is physically impossible or a trait forbids it
 
 Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags and brave drivers are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
-A robbery is an attack. The winner loots the knocked-out truck or the wreck the loser left. A robber whose target escapes backs off that target for a while.
+A robbery is an attack. The winner loots the knocked-out truck or the wreck the loser left. A raider, or a driver that robs, that helps knock out any other NPC driver goes to strip its truck too, unless it is hurt or stranded. A robber whose target escapes backs off that target for a while.
 
 In a fight, each chance to ram the target is a decision. The driver weighs the ram against its guns by expected damage. The ram counts the damage it forecasts on the target minus the damage it costs the driver, weighted by part: the cab, wheels, engine and guns count most, and armor and ram bars least. It also counts the chance the ram connects, which falls with distance and with a target that moves across the line. A ram that costs the driver more than it deals is rare, and traders almost never ram. A fighter with a ram bar picks fight spots that line its nose up at the target. Trucks of similar weight ram when the forecast pays.
 
@@ -78,7 +78,8 @@ States are timed relations between two trucks. Each ends as expired, fulfilled o
 - A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
 - A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses, unhitches or drives away from an offer, or when the tower meets danger or the trucks turn hostile.
 - A tower the player turned down rarely offers again.
-- A tower that dropped a tow for danger comes back with the same deal.
+- A tower that dropped a tow for danger comes back with the same deal, until the truck drives again. It waits ten turns beside the truck before it hitches or offers again, so a hostile at the edge of sight does not make it hitch and drop on every turn.
+- A driver with no working engine is serviced in a town, never at a stall, since a stall cannot refit it.
 - Only one driver answers a stranded player at a time. Near a town gate, fewer drivers offer a tow.
 
 ## Escorts

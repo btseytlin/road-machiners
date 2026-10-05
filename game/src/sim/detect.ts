@@ -22,6 +22,7 @@ import { dist, type Vec } from './vec';
 import { flareSightings, litAt, type FlareSighting } from './hazards';
 import { isShutDown } from './utility';
 import { weatherAt } from './weather';
+import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
@@ -283,8 +284,14 @@ export function cloudsSeenBy(world: World, observer: Vehicle): DustCloud[] {
     if (c.source === observer.id) return false;
     const d = dist(observer.pos, c.pos);
     if (d <= sight(c.pos) && canVehicleSee(world, observer, c.pos)) return true;
-    return c.age >= DETECT.dust.riseTurns && d <= c.range && dustVisible(world, observer.pos, c.pos, c.age);
+    return seesRisenCloud(world, observer, c, d);
   });
+}
+
+// A risen cloud within its range shows over hills. Far from the player the cheap rules skip the hill check and show none.
+function seesRisenCloud(world: World, observer: Vehicle, c: DustCloud, d: number): boolean {
+  if (c.age < DETECT.dust.riseTurns || d > c.range || isCheapMeeting(world, observer.pos, c.pos)) return false;
+  return dustVisible(world, observer.pos, c.pos, c.age);
 }
 
 function newestCloud(clouds: DustCloud[], vehicleId: string): DustCloud | null {

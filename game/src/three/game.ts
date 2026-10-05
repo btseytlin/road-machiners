@@ -41,6 +41,7 @@ import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
+import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
@@ -56,14 +57,13 @@ import { PathView } from "./render/path";
 import { previewPlan, throttleColor } from "./plan-preview";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
-import { addHullDecks } from "./render/hull-decks";
+import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
-import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
-import { sunAt } from "../sim/sun";
+import { daylightAt, lightScene, NightLights, nightLightsWanted, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
@@ -193,6 +193,7 @@ export class Game {
     overlay: HTMLElement,
     player: SoundPlayer,
     private toggleMute: () => void,
+    radio: RadioPanel,
   ) {
     this.world = world;
     this.drive = buildDrive(this.world);
@@ -218,9 +219,10 @@ export class Game {
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
-    this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit)];
+    this.scopes = [groundScope, propScope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
+    addShipDecks(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles, this.world.salvage, this.world.broken);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
@@ -251,7 +253,7 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
-    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
+    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), commit: (next) => { this.world = next; this.refreshUi(); }, refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
     this.context = new TruckContext({
       world: () => this.world,
       playing: () => this.anim !== null,
@@ -283,6 +285,8 @@ export class Game {
       toggleManual: () => this.runKey("KeyR"),
       toggleAutoRepair: () => this.runKey("KeyP"),
       toggleOverdrive: () => this.runKey("KeyO"),
+      toggleHeadlights: () => this.runKey("KeyL"),
+      headlightsOn: () => this.world.player.headlights,
       douseEngine: () => this.runKey("KeyG"),
       unhitch: () =>
         this.rescueCommand((w) =>
@@ -299,7 +303,7 @@ export class Game {
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && !this.utilityAim.aimPart(vehicleById(this.world, vehicleId), partId) && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
-    });
+    }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
@@ -517,6 +521,7 @@ export class Game {
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
     KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },
     KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
+    KeyL: { run: () => this.controls.toggleHeadlights(), noModal: true },
     KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
     KeyC: { run: () => this.toggleScreen(this.character), idle: true },
     KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
@@ -941,9 +946,8 @@ export class Game {
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     const lit = this.world.vehicles
       .filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos))
-      .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: lampsOn(v.id, this.lightTurn()) }));
-    // At dawn lamps switch off one by one, so the night lights stay until the last one is off.
-    this.nightLights.update(!sunAt(this.world.turn) || lit.some((v) => v.on), truck, lit);
+      .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: vehicleLampsOn(this.world, v, this.lightTurn()), player: v.id === this.world.player.vehicleId }));
+    this.nightLights.update(nightLightsWanted(this.world.turn, lit), truck, lit);
     const at = playerVehicle(this.world).pos;
     const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
     this.stormTint.style.display = stormy ? "" : "none";
@@ -1035,7 +1039,7 @@ export class Game {
         this.scene.add(view.root);
       }
       view.update(display, seen);
-      view.lamps(lampsOn(v.id, this.lightTurn()));
+      view.lamps(vehicleLampsOn(this.world, v, this.lightTurn()));
       view.radio(this.radioLights.lit(this.world, v.id, now));
       view.outline(look === "dark");
       view.windows(glass);
@@ -1054,7 +1058,7 @@ export class Game {
   // Out of sight at night, a truck in gray vision shows its lit lamps on a black shape.
   private lookOf(v: Vehicle, f: VehicleFrame, seen: boolean): "full" | "dark" | null {
     if (seen || this.lingers(v)) return "full";
-    return lampsOn(v.id, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
+    return vehicleLampsOn(this.world, v, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
   }
 
   // A turret points at its own ordered target, else at the first ordered target. While a turn plays,

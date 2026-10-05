@@ -43,6 +43,20 @@ function play(w: World, n: number): { w: World; d: Drive } {
   return { w, d };
 }
 
+// play() with a macrotask turn after each turn, for runs long enough under load to starve the worker's
+// status messages to the runner past vitest's 60 s RPC timeout.
+async function playYielding(w: World, n: number): Promise<{ w: World; d: Drive }> {
+  let d = buildDrive(w);
+  for (let i = 0; i < n; i++) {
+    let next: Drive | null = null;
+    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+    freeDrive(d);
+    d = next!;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  return { w, d };
+}
+
 describe('impact geometry', () => {
   it('captures rear-end contacts and relative closing speed before the turn ends', () => {
     const world = emptyWorld({ x: 35, y: 30 });
@@ -139,7 +153,9 @@ describe('physics turns', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const toNose = bearing(bowl.pos, nose.pos);
-    const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
+    // Four tenths of the way from the Bowl, on open ground. The halfway point is the head of the Fallen Sun's crash
+    // furrow, where a flap's foot would box in the east trader.
+    const mid = { x: bowl.pos.x + (nose.pos.x - bowl.pos.x) * 0.4, y: bowl.pos.y + (nose.pos.y - bowl.pos.y) * 0.4 };
     const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
     // The player watches from the side, so both traders drive in physics.
     const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
@@ -209,20 +225,20 @@ describe('physics turns', () => {
     let roadSkill0: World;
     let mudSkill5: World;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       const w = emptyWorld();
       editableTerrain(w).types.fill('mud');
-      const mud = play(setMoveOrder(w, order), 3);
+      const mud = await playYielding(setMoveOrder(w, order), 3);
       mudSkill0 = mud.w;
       freeDrive(mud.d);
-      const road = play(ordered(order), 3);
+      const road = await playYielding(ordered(order), 3);
       roadSkill0 = road.w;
       freeDrive(road.d);
       w.player.ranks.driving = 5;
-      const skilled = play(setMoveOrder(w, order), 3);
+      const skilled = await playYielding(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, budget(30_000)); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, budget(120_000)); // three physics runs share this hook; they took over 30 s when the whole suite shared a loaded machine
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -590,7 +606,7 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
-  it('a fully loaded hauler still climbs a hill', () => {
+  it('a fully loaded hauler still climbs a hill', async () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
@@ -600,13 +616,13 @@ describe('physics turns', () => {
     addGoods(w0, me(w0), 'scrap', 999);
     expect(loadFactor(me(w0))).toBeLessThan(1);
     w0.player.fuel = 999;
-    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
+    const { w } = await playYielding(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
     // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, budget(90_000)); // physics turns up a hill, slow when the suite runs in parallel
+  }, budget(240_000)); // six physics turns, like the limping courier below
 
-  it('a limping courier crawls up a bank as steep as any chassis limps up', () => {
+  it('a limping courier crawls up a bank as steep as any chassis limps up', async () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
@@ -614,12 +630,12 @@ describe('physics turns', () => {
     const courier = makeVehicle(w0, { name: 'courier', faction: 'player', chassisId: 'courier', parts: [{ defId: 'stockEngine', wear: 0 }], spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w0.vehicles[0] = { ...courier, id: me(w0).id };
     mountedParts(me(w0), 'engine')[0].hp = 0;
-    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
+    const { w } = await playYielding(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, budget(90_000)); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
+  }, budget(240_000)); // twelve physics turns take 5s alone, over 40s alone on a loaded machine, and several times that when the whole suite shares it
 
-  it('a click in the hold zone keeps its speed up a hill', () => {
+  it('a click in the hold zone keeps its speed up a hill', async () => {
     let w = emptyWorld({ x: 29, y: 30 });
     const t = editableTerrain(w);
     const n = t.size;
@@ -634,10 +650,11 @@ describe('physics turns', () => {
       freeDrive(d);
       d = next!;
       speeds.push(me(w).speed);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  }, budget(90_000)); // eight physics turns on a reshaped hill, slow when the suite runs in parallel
+  }, budget(240_000)); // eight physics turns, like the limping courier above
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();

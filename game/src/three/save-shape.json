@@ -1,5 +1,5 @@
 {
- "format": "2.14",
+ "format": "2.16",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -43,6 +43,7 @@
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
+   "headlights": "boolean",
    "health": "number",
    "hostilesSeen": [],
    "knockoutTurns": "number",
@@ -1257,22 +1258,6 @@
       "good": "string",
       "id": "string",
       "kind": "string",
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "charge": {
-        "reload": "number"
-       },
-       "defId": "string",
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
       "rot": "number",
       "x": "number",
       "y": "number"

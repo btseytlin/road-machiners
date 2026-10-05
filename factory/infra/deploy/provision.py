@@ -1,12 +1,14 @@
 """Base host provisioning for the game factory. Idempotent. Re-run it safely after changes.
 
-Packages, Docker, Node 24, gh, butler, the firewall, the factory user and the /opt/factory dirs.
+Packages, Docker, Node 24, gh, butler, the firewall, the laptop power settings, the NVIDIA driver and container toolkit, the factory user and the /opt/factory dirs.
 """
 
 # pyright: reportMissingImports=false
+from io import StringIO
+
 from pyinfra.operations import apt, files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, WWW_DIR
+from factory_infra import FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_DIR, WWW_DIR
 
 FILES = INFRA_DIR / "files"
 
@@ -85,16 +87,86 @@ server.shell(
     _sudo=True,
 )
 
+# The Cloudflare Tunnel dials out, so ssh is the only inbound port.
 server.shell(
-    name="UFW: allow ssh/http/https only",
+    name="UFW: allow ssh only",
     commands=[
         "timeout 60 ufw --force default deny incoming",
         "timeout 60 ufw --force default allow outgoing",
         "timeout 60 ufw allow 22/tcp",
-        "timeout 60 ufw allow 80/tcp",
-        "timeout 60 ufw allow 443/tcp",
         "timeout 60 ufw --force enable",
     ],
+    _sudo=True,
+)
+
+# The host is a laptop. A closed lid or an idle timer must not suspend it. logind reads the lid setting at the next boot, which the driver step below forces.
+files.put(
+    name="logind ignores the lid",
+    src=StringIO("[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\n"),
+    dest="/etc/systemd/logind.conf.d/factory-lid.conf",
+    mode="644",
+    _sudo=True,
+)
+server.shell(
+    name="Mask sleep targets",
+    commands=["timeout 60 systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target"],
+    _sudo=True,
+)
+
+# ubuntu-drivers picks the driver Ubuntu recommends for the installed card. The full driver, not the headless one, since the playtest needs its GL libraries.
+# The driver loads only after a reboot, and only with Secure Boot off. The check stops provision until both hold.
+server.shell(
+    name="NVIDIA driver (skipped if present)",
+    commands=["command -v nvidia-smi >/dev/null || (apt-get install -y ubuntu-drivers-common && timeout 1200 ubuntu-drivers install)"],
+    _sudo=True,
+)
+server.shell(
+    name="NVIDIA driver loaded",
+    commands=["timeout 60 nvidia-smi -L || { echo 'The NVIDIA driver is not loaded. Turn Secure Boot off, reboot the host, then run provision again.' >&2; exit 1; }"],
+    _sudo=True,
+)
+# A driver update replaces the libraries but keeps the old module loaded, and every GPU container fails until a reboot. A kernel update can pull a new driver module with it.
+# So unattended upgrades skip both. Update them by hand with a reboot right after.
+files.put(
+    name="Unattended upgrades skip the NVIDIA driver and the kernel",
+    src=StringIO('Unattended-Upgrade::Package-Blacklist {\n    ".*nvidia.*";\n    "linux-.*";\n};\n'),
+    dest="/etc/apt/apt.conf.d/51factory-hold-driver",
+    mode="644",
+    _sudo=True,
+)
+# The toolkit lets `docker run --gpus` hand the card to a container.
+server.shell(
+    name="NVIDIA container toolkit (skipped if present)",
+    commands=[
+        "command -v nvidia-ctk >/dev/null || (timeout 600 sh -c '"
+        "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg && "
+        "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | "
+        "sed \"s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g\" "
+        "> /etc/apt/sources.list.d/nvidia-container-toolkit.list && "
+        "apt-get update && apt-get install -y nvidia-container-toolkit && systemctl restart docker')"
+    ],
+    _sudo=True,
+)
+# The toolkit's device list names the persistence daemon's socket. Ubuntu stops the daemon when no unit needs it, and then every GPU container fails to start.
+nvidia_persistence = files.put(
+    name="nvidia-persistenced always runs",
+    src=StringIO("[Unit]\nStopWhenUnneeded=false\n\n[Install]\nWantedBy=multi-user.target\n"),
+    dest="/etc/systemd/system/nvidia-persistenced.service.d/factory.conf",
+    mode="644",
+    create_remote_dir=True,
+    _sudo=True,
+)
+systemd.service(
+    name="nvidia-persistenced running + enabled",
+    service="nvidia-persistenced",
+    running=True,
+    enabled=True,
+    daemon_reload=nvidia_persistence.did_change,
+    _sudo=True,
+)
+server.shell(
+    name="A container sees the GPU",
+    commands=["timeout 600 docker run --rm --gpus all ubuntu:24.04 nvidia-smi -L"],
     _sudo=True,
 )
 
@@ -120,8 +192,15 @@ server.user(
     _sudo=True,
 )
 
+# The factory user owns the clone. Git refuses it for root without this entry, and that breaks admin commands run over ssh as root.
+server.shell(
+    name="git trusts the factory clone for every user",
+    commands=[f"git config --system --get-all safe.directory | grep -qxF {REPO_DIR} || git config --system --add safe.directory {REPO_DIR}"],
+    _sudo=True,
+)
+
 files.directory(name=f"dir {FACTORY_ROOT}", path=FACTORY_ROOT, mode="755", present=True, _sudo=True)
-for path in [CODE_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
+for path in [REPO_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
     files.directory(name=f"dir {path}", path=path, user=FACTORY_USER, group=FACTORY_USER, mode="755", present=True, _sudo=True)
 
 # Hermes runs as the factory user, so the factory user owns its state and every folder it writes.

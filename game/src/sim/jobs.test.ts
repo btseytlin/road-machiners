@@ -200,7 +200,7 @@ describe('auto patch and promised parts', () => {
     addGoods(w, me, 'parts', held);
     const other = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 5, y: 0 }, 0);
     const [holder, client] = playerIsPatcher ? [me, other] : [other, me];
-    const data = { kind: 'patch' as const, deal, parts: 2, price: 10, work: 4, workLeft: 4 };
+    const data = { kind: 'patch' as const, deal, parts: 2, partIds: [], price: 10, work: 4, workLeft: 4 };
     return { w, me, add: () => addState(w, 'patch', holder.id, client.id, data) };
   }
 
@@ -242,6 +242,17 @@ describe('auto patch and promised parts', () => {
     add();
     startAutoRepair(w);
     expect(me.job).not.toBeNull();
+  });
+
+  it('spends only the parts above what a haul contract carries', () => {
+    const { w, me } = setup(4, 'paid', true);
+    w.player.autoRepair = true;
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'parts', units: 3, to: 'nose', reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+    for (let i = 0; i < 100; i++) {
+      startAutoRepair(w);
+      advanceJobs(w);
+    }
+    expect(goodsCount(me).parts).toBe(3);
   });
 });
 

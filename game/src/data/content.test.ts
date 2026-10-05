@@ -53,8 +53,8 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   ],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
-const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
-const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
+const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader", "niva", "bukhanka", "lincoln"];
+const rearEngineChassis = ["jeep", "convertible", "bus", "loader", "bukhanka"];
 
 describe("equipment variety", () => {
   it("gives every weapon a magazine and a reload time", () => {
@@ -133,8 +133,8 @@ describe("equipment variety", () => {
   );
 
   it("adds buyable chassis with valid built-in parts and physics bodies", () => {
-    expect(Object.keys(CHASSIS)).toHaveLength(13);
-    expect(PLAYER_CHASSIS).toHaveLength(13);
+    expect(Object.keys(CHASSIS)).toHaveLength(16);
+    expect(PLAYER_CHASSIS).toHaveLength(16);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);

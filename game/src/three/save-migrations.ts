@@ -233,12 +233,28 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
+// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
+// 0 HP. Settling keeps only those that are still patchable and below the target.
+function withPatchParts_13_14(world: SavedJson): SavedJson {
+  const vehicles = world.vehicles as SavedJson[];
+  const brokenIds = (id: string): string[] => {
+    const client = vehicles.find((v) => v.id === id);
+    const items = client ? (client.items as SavedJson[]) : [];
+    return items.flatMap((item) => (item.kind === 'part' && (item.part as SavedJson).hp === 0 ? [(item.part as SavedJson).id as string] : []));
+  };
+  const recording = (s: SavedJson): SavedJson => {
+    const data = s.data as SavedJson;
+    return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
+  };
+  return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
 // Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
 // and every stock gets hidden loot. The stream comes from the world seed like a new game's.
-const SEARCH_SALT_12_13 = 0x73656172;
-const NO_HIDDEN_12_13 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+const SEARCH_SALT_14_15 = 0x73656172;
+const NO_HIDDEN_14_15 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
 
-function withUtilities_12_13(world: SavedJson): SavedJson {
+function withUtilities_14_15(world: SavedJson): SavedJson {
   const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
   return {
     ...world,
@@ -248,27 +264,27 @@ function withUtilities_12_13(world: SavedJson): SavedJson {
     fields: [],
     flares: [],
     lines: [],
-    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_12_13 },
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_14_15 },
   };
 }
 
 // Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
 // ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
 // in the open.
-const LOOT_SITES_12_13 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
-const LOOT_SPOT_12_13 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
-const ROAD_WRECK_12_13 = /^wreck\d+$/;
+const LOOT_SITES_14_15 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_14_15 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_14_15 = /^wreck\d+$/;
 
-function isRolledStock_12_13(stock: SavedJson): boolean {
+function isRolledStock_14_15(stock: SavedJson): boolean {
   const id = stock.id as string;
-  return !stock.pile && (LOOT_SITES_12_13.has(id) || LOOT_SPOT_12_13.test(id) || ROAD_WRECK_12_13.test(id));
+  return !stock.pile && (LOOT_SITES_14_15.has(id) || LOOT_SPOT_14_15.test(id) || ROAD_WRECK_14_15.test(id));
 }
 
 // A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
-function withHiddenStock_12_13(world: SavedJson): SavedJson {
+function withHiddenStock_14_15(world: SavedJson): SavedJson {
   const searched = new Set((world.player as SavedJson).scavenged as string[]);
   const hide = (stock: SavedJson): SavedJson => {
-    if (searched.has(stock.id as string) || !isRolledStock_12_13(stock)) return { ...stock, hidden: NO_HIDDEN_12_13() };
+    if (searched.has(stock.id as string) || !isRolledStock_14_15(stock)) return { ...stock, hidden: NO_HIDDEN_14_15() };
     const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
     return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
   };
@@ -338,9 +354,13 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
-  // 12 to 13: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
-  (world) => withHiddenStock_12_13(withUtilities_12_13(world)),
-  // 13 to 14: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: a patch records the parts it lifts.
+  withPatchParts_13_14,
+  // 14 to 15: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
+  (world) => withHiddenStock_14_15(withUtilities_14_15(world)),
+  // 15 to 16: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
   // types are the same, so a save keeps its world as it was.
   (world) => world,
 ];

@@ -17,9 +17,8 @@ const moveAllFar = (w: World) => {
   for (const v of w.vehicles) advanceFar(w, v);
 };
 
-// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one gets fuel and drives
-// again. What a driver does after that is its own: a broke driver with loot sells it first, and a long sale trip may
-// drain its tank again, so the run checks that each one recovered, not its tank at the end.
+// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one gets fuel again.
+// What a driver does with that fuel afterwards, like a long trip to sell loot, is its own goals' business.
 describe('a fuelless majority of NPCs', () => {
   it('all recover scrap fuel at their serving sites with no stall', () => {
     let w = emptyWorld({ x: 5, y: 5 });
@@ -47,14 +46,14 @@ describe('a fuelless majority of NPCs', () => {
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
     const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    const recovered = new Set<string>();
+    const refueled = new Set<string>();
     for (let turn = 0; turn < bound; turn++) {
       w = endTurn(w, moveAllFar);
       stalls.push(...w.events.filter((e) => e.t === 'stall'));
-      for (const v of broke) if (getResources(w, w.vehicles.find((x) => x.id === v.id)!).fuel > 0) recovered.add(v.id);
+      for (const v of w.vehicles) if (getResources(w, v).fuel > 0) refueled.add(v.id);
     }
 
     expect(stalls).toEqual([]);
-    expect([...recovered].sort()).toEqual(broke.map((v) => v.id).sort());
+    expect(broke.filter((v) => !refueled.has(v.id)).map((v) => v.id)).toEqual([]);
   });
 });

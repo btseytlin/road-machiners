@@ -374,9 +374,9 @@ body {
 
 /* The panel stops short of the log above the end turn button; a row that does not fit wraps under the guns. */
 #ui .weapons {
-  left: 412px;
+  left: 457px;
   bottom: 14px;
-  max-width: calc(100vw - 718px);
+  max-width: calc(100vw - 763px);
   box-sizing: border-box;
   padding: 6px 8px 8px;
 }
@@ -640,16 +640,150 @@ canvas.view.aim-truck {
   border-left: 2px solid #777e81;
   font-size: 12px;
 }
-#ui .contracts {
+/* The one owner of the stack above the log: the contracts at the old contracts spot, the radio in the space above.
+   Panels in it carry no position numbers of their own. */
+#ui .right-dock {
+  position: absolute;
   right: 16px;
   bottom: 246px;
   width: 282px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#ui .right-dock > .panel {
+  position: static;
+}
+#ui .right-dock > .radio {
+  order: 0;
+}
+#ui .right-dock > .contracts {
+  order: 1;
+}
+#ui .contracts {
   box-sizing: border-box;
   padding: 8px 10px;
   background: #202529e8;
   border: 0;
   border-left: 2px solid #777e81;
   font-size: 12px;
+}
+/* Waste Of Time Radio: a pager screen over a faceplate of volume knobs, at the top of the right dock. */
+#ui .radio {
+  --radio-line: 14px;
+  --radio-lines: 3;
+  --knob-size: 28px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #30363a;
+  border: 0;
+  border-left: 2px solid #777e81;
+  box-shadow: inset 0 1px 0 #ffffff1a;
+}
+.radio-screen {
+  padding: 2px 6px 4px;
+  background: #8e9a80;
+  border: 2px solid #15191b;
+  border-radius: 3px;
+  box-shadow: inset 0 2px 4px #0000006b;
+  color: #1d2318;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.radio-band {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid #1d231840;
+  margin-bottom: 2px;
+}
+.radio-lcd {
+  position: relative;
+  height: calc(var(--radio-line) * var(--radio-lines));
+  overflow: hidden;
+  font-size: 12px;
+  line-height: var(--radio-line);
+}
+.radio-ghost {
+  position: absolute;
+  inset: 0;
+  color: #1d231812;
+  word-break: break-all;
+  user-select: none;
+}
+.radio-text {
+  position: relative;
+}
+.radio-text.streaming::after {
+  content: "\2588";
+  animation: radio-cursor 0.5s steps(1) infinite;
+}
+@keyframes radio-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+.radio-faceplate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.knob-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font: 9px var(--font-mono);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.knob {
+  width: var(--knob-size);
+  height: var(--knob-size);
+  border-radius: 50%;
+  cursor: ns-resize;
+  touch-action: none;
+  background: #1c1f21;
+  border: 2px dotted #3a4043;
+  box-sizing: border-box;
+  box-shadow: 0 2px 3px #000000a0;
+}
+.knob:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.knob-dial {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #4a5155;
+  box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #0000004d;
+  transform: scale(0.82) rotate(var(--knob-angle, 0deg));
+}
+.knob-notch {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 2px;
+  width: 2px;
+  height: 35%;
+  border-radius: 1px;
+  background: var(--ink);
+}
+/* The mute switch is the metal toggle, shrunk to the knobs' height. */
+#ui .radio-faceplate button.switch {
+  gap: 0;
+  padding: 1px 8px;
+}
+.radio-faceplate .switch-lever {
+  transform: scale(0.6);
+  margin: -5px 0;
 }
 .contracts h3 {
   font-size: 12px !important;
@@ -788,11 +922,16 @@ canvas.view.aim-truck {
   top: 64px;
   width: var(--inspection-width);
   min-height: var(--inspection-height);
+  /* Stops above the log. */
   max-height: calc(100dvh - 64px - 234px - 8px);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
   font-size: 12px;
+}
+/* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
+#ui .radio.away {
+  visibility: hidden;
 }
 .info .bar {
   height: 4px;
@@ -978,7 +1117,8 @@ canvas.view.aim-truck {
   > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .top-left {
+#ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .instruments,
@@ -1221,8 +1361,10 @@ canvas.view.aim-truck {
 .inv-item .icon {
   width: 100%;
   height: 100%;
-  max-width: 62px;
-  max-height: 62px;
+}
+/* Clear of the condition bar. */
+.inv-item:has(.inv-hp) {
+  padding-bottom: 6px;
 }
 .inv-item-name {
   position: absolute;
@@ -1282,36 +1424,21 @@ canvas.view.aim-truck {
 .inv-hp.broken {
   background: #f0a080;
 }
-.k-weapon {
-  background: #675347;
+/* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
+   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles. */
+.inv-item,
+.inv-chip,
+.item-icon {
+  background: var(--tone);
 }
-.k-engine {
-  background: #515f66;
+.item-icon {
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 2px;
 }
-.k-armor {
-  background: #59676e;
-}
-.k-cargo {
-  background: #655a4c;
-}
-/* Utilities: muted mustard, darker and greener than the gold selection outline, so a selection still reads on top. */
-.k-utility {
-  background: #7a6a2c;
-}
-.k-core {
-  background: #404f57;
-}
-.k-good {
-  background: #736352;
-}
-.g-scrap {
-  background: #666f73;
-}
-.g-salt {
-  background: #938e82;
-}
-.g-meds {
-  background: #556d66;
+.inv-item .item-icon {
+  padding: 0;
+  border-radius: 0;
 }
 .inv-side {
   display: flex;
@@ -1357,6 +1484,7 @@ canvas.view.aim-truck {
   font-size: 11px;
 }
 .inv-chip > .icon {
+  flex: none;
   width: 22px;
   height: 22px;
 }
@@ -1428,9 +1556,10 @@ canvas.view.aim-truck {
 @media (max-width: 1100px) {
   /* Room between the instruments and the narrower log. */
   #ui .weapons {
-    max-width: calc(100vw - 682px);
+    max-width: calc(100vw - 727px);
   }
-  #ui .log {
+  #ui .log,
+  #ui .right-dock {
     width: 246px;
   }
 }
@@ -1459,6 +1588,26 @@ canvas.view.aim-truck {
   }
   .log-lines {
     max-height: 48px;
+  }
+  #ui .radio {
+    --radio-line: 12px;
+    --radio-lines: 4;
+    --knob-size: 22px;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .radio-lcd {
+    font-size: 10px;
+  }
+  /* Small enough that the four knob labels keep apart on the narrow radio. */
+  .knob-cell {
+    font-size: 7px;
+  }
+  /* 8px above the narrow log, whose top is 176 + 80 from the bottom. */
+  #ui .right-dock {
+    bottom: 264px;
+    right: 14px;
+    width: 200px;
   }
   #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
     width: calc(100vw - 28px);
@@ -1567,23 +1716,10 @@ canvas.view {
   padding: 0;
   border: 0;
 }
-.sound {
-  font-size: 12px;
-}
 .game-menu {
   display: flex;
   gap: 6px;
   font-size: 12px;
-}
-.sound .row {
-  display: flex;
-  gap: 6px;
-}
-.sound .sound-sliders label {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
 }
 
 #ui .dialogue {
@@ -1656,18 +1792,8 @@ canvas.view {
 .card:hover {
   border-color: #8e8a73;
 }
-.card.k-weapon,
-.card.k-scanner {
-  border-left-color: #a07a5e;
-}
-.card.k-engine {
-  border-left-color: #6f8a96;
-}
-.card.k-armor {
-  border-left-color: #8d9ca3;
-}
-.card.k-cargo {
-  border-left-color: #a08c68;
+.card.toned {
+  border-left-color: var(--tone);
 }
 .card.k-utility {
   border-left-color: #b39a3a;
@@ -2022,17 +2148,39 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
+/* The truck's portrait beside its grid, as tall as the grid, so nose and tail line up. */
+.truck-pics {
+  --map-cell: 10px;
+  --map-gap: 1px;
+  --map-pad: 3px;
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. The width follows the drawing's
+     aspect-ratio, which chassisPortrait() sets inline. */
+  height: calc(var(--rows) * (var(--map-cell) + var(--map-gap)) - var(--map-gap) + 2 * var(--map-pad));
+  width: auto;
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .chassis-map {
   display: grid;
-  gap: 1px;
+  gap: var(--map-gap);
   align-self: flex-start;
   width: max-content;
-  padding: 3px;
+  padding: var(--map-pad);
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px;
-  height: 10px;
+  width: var(--map-cell); /* .chassis-portrait height follows this size */
+  height: var(--map-cell);
 }
 .chassis-map .hole {
   background: none;

@@ -190,7 +190,7 @@ describe('engine heat on the road', () => {
       return w.player.engineHeat < 1;
     });
     expect(cool.map((e) => e.id)).toEqual([]);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 });
 
 describe('engine overdrive', () => {

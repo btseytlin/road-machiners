@@ -1,5 +1,6 @@
 // Fog of war: which tiles the player vehicle can see, blocked by props and hills. A prop blocks sight with the boxes of its
-// shape that span eye height, so low fences and junk leave it open. Water does not block sight.
+// shape that the line from the viewer's eye to the target's top passes through, so low fences and junk leave it open
+// and a viewer up on a deck sees over them. Boxes out of reach under a deck block nothing. Water does not block sight.
 // The player's current view is world state: player targeting, fire, discovery and the render all read it.
 // NPCs query the same occlusion rules from their own positions.
 
@@ -8,7 +9,9 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
-import { boxDistance, propBoxes, propReach, segmentCrossesBox } from './mapgen';
+import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './mapgen';
+import { isCheapMeeting, isHeadless } from './fidelity';
+import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
@@ -18,18 +21,10 @@ import { litAt, litFlares } from './hazards';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
-const EYE = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile; // meters above the ground
-
-function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind);
-}
-
-// The sight-blocking props that can touch the line a-b. Every point of the line lies within dist(a, b) of a, so a prop
-// farther than that plus its reach cannot hide anything.
+// The sight-blocking props whose reach touches the line a-b. A prop farther from the line than its reach cannot hide
+// anything.
 function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
-  const d = dist(a, b);
-  return world.obstacles.filter((o) => blocksSight(o) && dist(a, o.pos) < d + propReach(o));
+  return propsAlong(world, 'sight', a, b, 0);
 }
 
 // A dust screen: a circle that blocks sight lines through it.
@@ -84,8 +79,7 @@ type Disk = { pos: Vec; r: number };
 // Calls `seen` for each tile inside the disk and within reach of `from` that passes `test` and lies in plain view.
 function forTilesIn(world: World, from: Vec, reach: number, disk: Disk, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
-  // Every sight line lies within reach of the viewer, so props beyond reach plus their own cannot touch it.
-  const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < reach + propReach(o));
+  const inView = plainViewFrom(world, from, reach);
   const lo = { x: Math.max(0, Math.floor(disk.pos.x - disk.r)), y: Math.max(0, Math.floor(disk.pos.y - disk.r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(disk.pos.x + disk.r)), y: Math.min(size - 1, Math.ceil(disk.pos.y + disk.r)) };
   for (let x = lo.x; x <= hi.x; x++) {
@@ -93,7 +87,7 @@ function forTilesIn(world: World, from: Vec, reach: number, disk: Disk, test: (i
       const idx = y * size + x;
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (!test(idx) || !inDisks(tile, { pos: from, r: reach }, disk)) continue;
-      if (inPlainView(world, from, tile, props, [])) seen(idx);
+      if (inView(tile)) seen(idx);
     }
   }
 }
@@ -102,11 +96,20 @@ function inDisks(p: Vec, a: Disk, b: Disk): boolean {
   return dist(a.pos, p) <= a.r && dist(b.pos, p) <= b.r;
 }
 
+// Whether a tile within reach of `from` lies in plain view. The recorder's player sees the whole radius.
+function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boolean {
+  if (isHeadless()) return () => true;
+  // Every sight line lies within reach of the viewer, so props beyond r plus their reach cannot touch it.
+  const props = propsAround(world, 'sight', from, r);
+  return (tile) => inPlainView(world, from, tile, props, []);
+}
+
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= sightRadius(world, observer, observer.pos, litAt(world, target)) &&
-    inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
+  if (dist(observer.pos, target) > sightRadius(world, observer, observer.pos, litAt(world, target))) return false;
+  // Out of the player's live range, sight is the radius alone.
+  return isCheapMeeting(world, observer.pos, target) || inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }
 
 // Dust screen clouds block sight like rocks, for NPCs only. The player's view never counts them.
@@ -116,37 +119,67 @@ function dustScreens(world: World): Screen[] {
 
 // Within the close radius, rocks and hills do not hide anything.
 function inPlainView(world: World, a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
-  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, props, screens) && clearOverTerrain(world.terrain, a, b));
+  if (dist(a, b) <= TERRAIN.vision.closeRadius) return true;
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, props, screens) && clearOverTerrain(world.terrain, line);
 }
 
 // A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(a, b, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, a, b);
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, line);
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.
-function hasLineOfSight(a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+  const { a, b } = line;
   const targetDist = dist(a, b);
-  return props.every((o) => !propHides(o, a, b)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
+  return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
 }
 
-// A prop hides b from a where the line crosses a box that spans eye height above the prop's ground. A box that
-// holds b does not hide it, so the viewer sees the prop's own face.
-function propHides(o: Obstacle, a: Vec, b: Vec): boolean {
-  if (segmentDist(o.pos, a, b) >= propReach(o)) return false;
-  return propBoxes(o).some((box) => box.z0 <= EYE && box.z1 >= EYE && segmentCrossesBox(box, a, b) && boxDistance(box, b) > 0);
+// The line from the viewer's eye to the target's top, in height units over each end's height: a deck where the end
+// stands on one, else the ground. Props and hills both test against it.
+type SightLine = { a: Vec; b: Vec; from: number; to: number };
+
+function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
+  const eye = TERRAIN.vision.eyeHeight;
+  return { a, b, from: heightAt(terrain, a.x, a.y) + eye, to: heightAt(terrain, b.x, b.y) + eye };
+}
+
+// A prop hides the target where the line passes through one of its boxes: over the box's footprint and within its
+// height. A box that holds the target does not hide it, so the viewer sees the prop's own face.
+function propHides(terrain: Terrain, o: Obstacle, line: SightLine): boolean {
+  if (segmentDist(o.pos, line.a, line.b) >= propReach(o)) return false;
+  const { base, boxes } = reachableBoxes(o, terrain);
+  return boxes.some((box) => {
+    const lo = base + box.z0 / PHYSICS.metersPerTile;
+    const hi = base + box.z1 / PHYSICS.metersPerTile;
+    return stretchCrossesBox(box, line.a, line.b, enterHeights(line, lo, hi), leaveHeights(line, lo, hi)) && boxDistance(box, line.b) > 0;
+  });
+}
+
+// The fraction of the line where its height comes to lie from lo to hi, and where it leaves that band. A line that
+// never lies in the band enters after it leaves.
+function enterHeights(line: SightLine, lo: number, hi: number): number {
+  const rise = line.to - line.from;
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 0 : 1;
+  return Math.max(0, Math.min((lo - line.from) / rise, (hi - line.from) / rise));
+}
+
+function leaveHeights(line: SightLine, lo: number, hi: number): number {
+  const rise = line.to - line.from;
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 1 : 0;
+  return Math.min(1, Math.max((lo - line.from) / rise, (hi - line.from) / rise));
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.
-function clearOverTerrain(terrain: Terrain, a: Vec, b: Vec): boolean {
-  const V = TERRAIN.vision;
-  const eyeA = heightAt(terrain, a.x, a.y) + V.eyeHeight;
-  const eyeB = heightAt(terrain, b.x, b.y) + V.eyeHeight;
-  const n = Math.ceil(dist(a, b) * V.samplesPerTile);
+function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+  const { a, b, from, to } = line;
+  const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {
     const t = i / n;
     const ground = heightAt(terrain, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-    if (ground > eyeA + (eyeB - eyeA) * t) return false;
+    if (ground > from + (to - from) * t) return false;
   }
   return true;
 }

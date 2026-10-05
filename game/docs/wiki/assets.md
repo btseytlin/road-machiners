@@ -22,6 +22,9 @@ Each chassis has one base model. Parts and goods have their own. A part with no 
 | chassis | convertible | base_convertible |
 | chassis | bus | base_bus |
 | chassis | loader | base_loader |
+| chassis | niva | base_niva |
+| chassis | bukhanka | base_bukhanka |
+| chassis | lincoln | base_lincoln |
 | part | transmission | transmission |
 | part | transmissionMid | transmission |
 | part | transmissionHeavy | transmission |

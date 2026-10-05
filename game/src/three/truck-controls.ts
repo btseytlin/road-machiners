@@ -1,4 +1,4 @@
-// The player's truck switches (manual driving, auto patch, overdrive, dousing the engine) and the E-key context action.
+// The player's truck switches (manual driving, auto patch, overdrive, headlights, dousing the engine) and the E-key context action.
 
 import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
@@ -7,13 +7,14 @@ import { isBusy } from "../sim/jobs";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
-import { playerCanAct, setAutoRepair, setDirect, setOverdrive } from "../sim/world";
+import { playerCanAct, setAutoRepair, setDirect, setHeadlights, setOverdrive } from "../sim/world";
 import { combatBlocked, type ContextAction, type ContextTarget } from "../ui/hud";
 import { ContextPicker, getContextActions } from "../ui/hud-readout";
 
 export type ControlsHost = {
   world: () => World;
   apply: (next: World) => void;
+  commit: (next: World) => void; // sets the world without pausing travel, for switches no turn reads
   refreshPlan: () => void;
   doused: () => void; // plays the steam cloud and logs the douse
   revved: () => void; // plays the engine rev when overdrive comes on
@@ -43,6 +44,12 @@ export class TruckControls {
     this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
     if (on) this.host.revved();
+  }
+
+  // The lamps change no rule, so they switch at any time, even while a turn plays or the truck travels on its own.
+  toggleHeadlights(): void {
+    const w = this.host.world();
+    this.host.commit(setHeadlights(w, !w.player.headlights));
   }
 
   douseEngine(): void {

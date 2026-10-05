@@ -178,7 +178,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 3 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 1 },
-      { value: "jeep", weight: 3 },
+      { value: "jeep", weight: 3 }, { value: "niva", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -281,7 +281,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "tractor", weight: 1 },
       { value: "scout", weight: 2 },
-      { value: "bus", weight: 2 },
+      { value: "bus", weight: 2 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 4 },
@@ -337,7 +337,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 2 },
       { value: "buggy", weight: 2 },
       { value: "hauler", weight: 1 },
-      { value: "jeep", weight: 2 },
+      { value: "jeep", weight: 2 }, { value: "niva", weight: 2 }, { value: "bukhanka", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -473,7 +473,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "buggy", weight: 2 },
       { value: "courier", weight: 1 },
       { value: "convertible", weight: 1 },
-      { value: "jeep", weight: 1 },
+      { value: "jeep", weight: 1 }, { value: "niva", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -521,7 +521,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "jeep", weight: 2 },
       { value: "hauler", weight: 2 },
-      { value: "longbed", weight: 1 },
+      { value: "longbed", weight: 1 }, { value: "bukhanka", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -653,7 +653,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "wagon", weight: 4 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 2 },
-      { value: "carrier", weight: 1 },
+      { value: "carrier", weight: 1 }, { value: "lincoln", weight: 2 },
     ],
     engine: [
       { value: "tunedEngine", weight: 3 },
@@ -1049,7 +1049,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
-  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that truck, or until the
+  // truck drives again.
   towPromise: null,
   // A grudge against the player fades after 10 days, unless the driver settles it first.
   revenge: 2000,

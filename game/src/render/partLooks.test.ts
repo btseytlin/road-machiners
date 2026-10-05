@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GOOD_IDS } from '../data/goods';
-import { PARTS } from '../data/parts';
+import { PARTS, type PartKind } from '../data/parts';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
 import {
-  BODY_PARTS, JAG_MAX, JAG_THIN, PART_MODELS, WEAPON_POOLS, WEAR_LOOK_STEPS, WORN_GRAY, baseModel, breakSignature, grayShare, grayed, jagOffset, partModel,
-  weaponLook, wearLookStep,
+  BODY_PARTS, itemTone, JAG_MAX, JAG_THIN, PART_MODELS, WEAPON_POOLS, WEAR_LOOK_STEPS, WORN_GRAY, baseModel, breakSignature, grayShare, grayed, jagOffset, partModel,
+  weaponLook, wearLookStep, type ItemTone,
 } from './partLooks';
 
 const weaponIds = Object.values(PARTS).filter((d) => d.kind === 'weapon').map((d) => d.id);
@@ -166,5 +166,34 @@ describe('breakSignature', () => {
       else expect(sig).toBeNull();
     }
     expect(breakSignature(PARTS.jerrycans)).toBe('fire');
+  });
+});
+
+const KIND_TONES: Record<PartKind, ItemTone> = {
+  weapon: 'weapon',
+  armor: 'armor',
+  cargo: 'cargo',
+  engine: 'other',
+  core: 'other',
+  scanner: 'other',
+  store: 'other',
+  utility: 'other',
+};
+
+describe('item tones', () => {
+  it.each(Object.values(PARTS).map((d) => [d.id, d.kind] as const))('give part %s (%s) its kind tone', (id, kind) => {
+    expect(itemTone(id)).toBe(KIND_TONES[kind]);
+  });
+
+  it('give every good the cargo tone', () => {
+    expect(GOOD_IDS.map(itemTone)).toEqual(GOOD_IDS.map(() => 'cargo'));
+  });
+
+  it('give built-in body parts the other tone', () => {
+    expect([...BODY_PARTS].map(itemTone)).toEqual([...BODY_PARTS].map(() => 'other'));
+  });
+
+  it('fail on an id that is neither a part nor a good', () => {
+    expect(() => itemTone('noSuchThing')).toThrow(/noSuchThing/);
   });
 });

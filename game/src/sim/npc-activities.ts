@@ -467,7 +467,7 @@ function patchInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string
 // The goal a patch deal gives an NPC party: the patcher drives to the client, and the client waits parked.
 export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: boolean): void {
   const goal = patcher
-    ? createActivity('patch', other.id, { ...other.pos }, 'patch a stranded truck')
+    ? createActivity('patch', other.id, { ...other.pos }, 'patch a truck')
     : createActivity('patch', other.id, null, 'wait for a patch');
   pushGoal(world, npc, goal);
 }
@@ -1024,7 +1024,7 @@ export function noteHurt(world: World): void {
 // ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
 
 // Runs each turn. A driver with no progress for NPC_BEHAVIOR.stallTurns turns gives up its top goal, or with no goal
-// drives off to explore. Each give-up logs a stall event, and the stuck soak test fails on any.
+// drives off to explore. Each give-up logs a stall event, and the progression recorder fails on any.
 export function watchStalls(world: World): void {
   for (const v of world.vehicles) {
     if (!v.brain) continue;

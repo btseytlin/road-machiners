@@ -38,13 +38,13 @@ import {
   truckSupplyPrice,
   type Supply,
 } from "../sim/economy";
-import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
+import { baseGrid, freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { moneyLabel } from "./hud-readout";
 import { spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary, contractWindow } from "./format";
 import { InventoryView, truckChips } from "./inventory";
@@ -203,7 +203,7 @@ export class TownScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         hint ? el("span", { class: `tag ${hint.cls}` }, hint.text) : null,
       ),
@@ -338,7 +338,7 @@ export class TownScreen {
       return el(
         "div",
         { class: `card truck-card${own ? " own" : ""}` },
-        chassisMap(id),
+        el("div", { class: "truck-pics", style: `--rows:${baseGrid(id).h}` }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
           { class: "truck-body" },
@@ -625,7 +625,7 @@ export class TruckTradeScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         el("span", { class: "dim" }, theirs ? `×${theirs} on offer` : "none on offer"),
       ),

@@ -8,7 +8,7 @@ Every price derives from an item's value. A shop sells at value plus a spread of
 
 ## Effort model
 
-A value should match the effort it takes to earn. `EFFORT.wage` is the money per turn at each tier and `EFFORT.bands` is the effort range in turns for each tier and item kind. The `npm run econ` command measures wages with bots.
+A value should match the effort it takes to earn. `EFFORT.wage` is the money per turn at each tier and `EFFORT.bands` is the effort range in turns for each tier and item kind. The `npm run progression:record` and `progression:report` commands measure wages with bots.
 
 ## Goods pressure and drift
 
