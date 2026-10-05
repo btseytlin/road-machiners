@@ -33,12 +33,13 @@ export const PAL = {
   utility: 0xb39a3a, // mustard hints on utility models, the border of a utility card in the inventory
   arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
-  smoke: 0x1e1b19, // black smoke clouds from smoke utilities and their ground edge
-  caltrops: { spike: 0x8a8a84, edge: 0xc8642a }, // steel spikes, and a rusty orange ring at the field's edge
-  oil: { sheen: 0x14110c, gloss: 0x6a6488, edge: 0x3a3a44 }, // a dark see-through oil slick with a violet sheen band and a blue-grey edge
+  smoke: 0x100e0d, // dense black smoke clouds from smoke utilities
+  caltrops: { spike: 0x9a9a94 }, // steel spikes
+  oil: { slick: 0x0c0b0a }, // a glossy black oil slick; its rainbow sheen is drawn in its texture
   rope: 0xc9b98a, // a harpoon line, pale hemp so it reads against trucks and dark ground
-  pulse: { ring: 0x9fd8ff, spark: 0xd8f0ff }, // an emitter pulse's ring and the sparks on a shut-down truck, electric blue
-  flare: { glow: 0xff4a3a, light: 0xff3a2a, edge: 0xd8402e, marker: 0xff6a50 }, // a burning flare, its light, the ring at its edge and the contact blip it gives
+  pulse: { flash: 0xc8ecff, arc: 0x9fd8ff, spark: 0xd8f0ff }, // an emitter pulse's flash and arcs and the sparks on a shut-down truck, electric blue-white
+  flare: { glow: 0xff4a3a, light: 0xff3a2a, marker: 0xff6a50, head: 0xfff0d0, trail: 0xb8b0a8 }, // a burning flare, its light, the contact blip it gives, and its hot head and pale smoke trail in flight
+  shell: { head: 0x2a2622, trail: 0x8a8580 }, // a smoke mortar's round in flight and its gray trail
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls

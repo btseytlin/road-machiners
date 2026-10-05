@@ -421,6 +421,10 @@ body {
 #ui .utility-slot .weapon-pick {
   overflow: hidden;
 }
+/* Room on the right for the state badge, so a long name wraps short of it. */
+.utility-slot .weapon-name {
+  padding-right: 12px;
+}
 #ui .utility-slot[data-state="ready"] .weapon-pick {
   box-shadow: inset 0 0 0 2px #d4b04a;
 }

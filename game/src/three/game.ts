@@ -67,7 +67,7 @@ import { sunAt } from "../sim/sun";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
-import { HazardViews } from "./render/hazards";
+import { HazardViews, type TurnClock } from "./render/hazards";
 import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
 import { BeaconPulseView } from "./render/beaconPulse";
@@ -982,6 +982,12 @@ export class Game {
     return this.world.turn - 1 + Math.min(1, a.elapsed / MOVE_MS);
   }
 
+  // Where the turn's playback stands, for hazards made this turn to show when they happen. Null between turns.
+  private turnClock(): TurnClock | null {
+    const a = this.anim;
+    return a ? { before: a.before, progress: Math.min(1, a.elapsed / MOVE_MS), moved: a.moved } : null;
+  }
+
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.
   private animStep(now: number, speed: number): number | null {
     const a = this.anim;
@@ -1100,7 +1106,7 @@ export class Game {
     this.utilityAim.cursor(this.renderer.domElement, this.pickRing.visible);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
-    this.hazards.update(this.world, this.world.terrain, this.views, performance.now());
+    this.hazards.update(this.world, this.world.terrain, this.views, performance.now(), this.turnClock());
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     const listener = meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos;
