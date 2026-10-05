@@ -69,7 +69,8 @@ describe('combat harness', () => {
 
 describe('foe hp left', () => {
   it('reports a share between 0 and 1 for a won fight', () => {
-    const r = runFight({ ...FIGHT, policy: 'charge', seed: 32, maxTurns: 60 });
+    // A standing fight the player wins; a charge into a buggy now mostly meets its caltrops or oil.
+    const r = runFight({ ...FIGHT, policy: 'stand', seed: 8, maxTurns: 60 });
     expect(r.outcome).toBe('won');
     expect(r.theirHpLeft).toBeGreaterThan(0);
     expect(r.theirHpLeft).toBeLessThan(1);
