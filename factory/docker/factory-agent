@@ -21,4 +21,4 @@ for dir in "$src"/*/; do
   fi
 done
 
-exec claude "$@"
+exec claude --append-system-prompt 'When your purpose changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not include notes, commands, prompts, or private task text. Report only when the milestone changes, without extra narration.' "$@"

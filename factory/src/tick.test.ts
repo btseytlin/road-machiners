@@ -38,7 +38,13 @@ describe('chooseJobs daily cap', () => {
   it('runs a queued incident job at the cap, after the other branch jobs', () => {
     const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
     expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
-    expect(chooseJobs({ ...queuedIncident, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }, [], NOW, CFG)).toEqual([{ stage: 'change', issue: 2 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [] } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }]);
+  });
+
+  it('runs factory changes in the implement queue after ad hoc tasks and before cards', () => {
+    const s = state({ pendingChanges: [{ id: 2, text: 't', by: 'u' }, { id: 3, text: 't', by: 'u' }] });
+    const cards = [card(4, 'Implementation'), card(6, 'Implementation', ['adhoc'])];
+    expect(chooseJobs(s, cards, NOW, CFG)).toEqual([{ stage: 'adhoc', issue: 6 }, { stage: 'change', issue: 2 }, { stage: 'change', issue: 3 }]);
   });
 
   it('ignores starts older than 24 hours', () => {
@@ -122,7 +128,7 @@ describe('chooseJobs', () => {
   });
 
   it('fills each queue up to its limit beside running jobs, never twice on one issue', () => {
-    const s = state({ jobs: [running('design', 1), running('verify', 7), running('approve', 9)], pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
+    const s = state({ jobs: [running('design', 1), running('verify', 7), running('approve', 9)], pendingIncidents: [3] });
     const cards = [card(1, 'Design'), card(2, 'Design'), card(8, 'Testing'), card(4, 'Triage'), card(5, 'Triage')];
     expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
     const idle = state({ jobs: [running('design', 1)] });
@@ -134,14 +140,14 @@ describe('chooseJobs', () => {
     expect(chooseJobs(state({ jobStarts: starts(2) }), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 1 }, { stage: 'design', issue: 2 }]);
   });
 
-  it('runs the lowest pending approval before a change', () => {
+  it('runs the lowest pending approval, and a change beside it', () => {
     const s = state({ pendingApprovals: { '9': 'u', '4': 'u' }, pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
-    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }]);
+    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }, { stage: 'change', issue: 3 }]);
   });
 
-  it('runs a pending change before periodic jobs', () => {
+  it('runs a pending change beside a due release cut', () => {
     const s = state({ pendingChanges: [{ id: 3, text: 't', by: 'u' }], lastRelease: null });
-    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'change', issue: 3 }]);
+    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'release', issue: null }, { stage: 'change', issue: 3 }]);
   });
 
   it('runs release when never released or older than the interval', () => {
@@ -222,7 +228,7 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath).failures[0].error).toBe('timed out after 30 minutes');
     expect(h.sent).toEqual([]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
-    expect(readLedger(h.ctx.cfg.home, new Date(0))).toEqual([{ kind: 'job', id: 'design-job', stage: 'design', issue: 5, startedAt: '2026-01-10T11:00:00Z', endedAt: NOW.toISOString(), outcome: 'timeout', agents: [] }]);
+    expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toEqual([{ kind: 'job', retryOf: null, id: 'design-job', stage: 'design', issue: 5, startedAt: '2026-01-10T11:00:00Z', endedAt: NOW.toISOString(), outcome: 'timeout', agents: [] }]);
   });
 
   it('times a job by the limit of its own queue', async () => {
@@ -263,13 +269,14 @@ describe('tick', () => {
     expect(['issue-5', 'check-issue-5', 'issue-9'].map((name) => existsSync(join(h.ctx.cfg.home, 'work', name)))).toEqual([true, true, false]);
   });
 
-  it('reports a dead job that stayed in state, without an issue for a change', async () => {
+  it('reports a change job that died a second time, without an issue', async () => {
     const h = harness(job('2026-01-10T11:50:00Z', 'change', 3), false);
+    writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:50:00Z', 'change', 3)], interrupted: [3] }));
     await tick(h.ctx, '/code', h.deps);
     expect(h.labels).toEqual([]);
     expect(readState(h.ctx.statePath).failures).toMatchObject([{ stage: 'change', issue: null, error: 'job process died without finishing' }]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
-    expect(readLedger(h.ctx.cfg.home, new Date(0))).toMatchObject([{ id: 'change-job', outcome: 'died' }]);
+    expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'change-job', outcome: 'died' }]);
   });
 
   it('starts the chosen jobs and records each with its id', async () => {
@@ -452,7 +459,7 @@ describe('tick', () => {
       expect(after.failures).toEqual([]);
       expect(h.labels).toEqual([]);
       expect(after.jobs.map((j) => j.pid)).toEqual([77]);
-      expect(readLedger(h.ctx.cfg.home, new Date(0))).toMatchObject([{ id: 'design-job', outcome: 'died' }]);
+      expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'design-job', outcome: 'died' }]);
     });
 
     it('resumes a test job too', async () => {
@@ -511,13 +518,13 @@ describe('tick', () => {
       expect(existsSync(sessions(h))).toBe(false);
     });
 
-    it('fails a dead branch job, and touches no mark or sessions of the issue that shares its number', async () => {
-      const h = harness(job(IN_TIME, 'change', 5), false);
-      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'change', 5)], interrupted: [5] }));
+    it('fails a dead branch job, and touches no mark or sessions of its issue', async () => {
+      const h = harness(job(IN_TIME, 'approve', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'approve', 5)], interrupted: [5] }));
       mkdirSync(sessions(h), { recursive: true });
       await tick(h.ctx, '/code', h.deps);
       expect(h.killed).toEqual([]);
-      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [{ stage: 'change' }], jobs: [] });
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [{ stage: 'approve' }], jobs: [] });
       expect(existsSync(sessions(h))).toBe(true);
     });
   });

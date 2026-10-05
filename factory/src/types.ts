@@ -8,6 +8,8 @@ export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
 
 export type FactoryConfig = {
+  observationHeartbeatMs: number;
+  observationMaxEventBytes: number;
   repo: string; // "owner/name" on GitHub
   projectOwner: string;
   projectNumber: number;
@@ -54,7 +56,7 @@ export type FactoryConfig = {
   cpuTest: number; // share of the server's CPUs for testing
 };
 
-export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
+export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
 // Runs a program without a shell. Tests pass a fake that records calls.
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;
@@ -93,9 +95,11 @@ export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify']
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
   triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
+  change: 'implement',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';
@@ -297,6 +301,6 @@ export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
 // Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
-export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation and every testing pass run on the design (Opus) model
+export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
 export const OPEN_NETWORK_LABEL = 'open-network';

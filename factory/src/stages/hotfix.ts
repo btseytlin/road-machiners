@@ -15,7 +15,7 @@ export async function shipHotfix(ctx: Ctx, issue: number, title: string, by: str
   const day = ctx.now().toISOString().slice(0, 10);
   const changelog = `ROAM hotfix ${day}\n\nFixed: #${issue} ${title}`;
   const postId = await ctx.telegram.sendMessage(ctx.cfg.publicChannel, changelog);
-  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, text: changelog, at: ctx.now().toISOString() });
+  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, channel: ctx.cfg.publicChannel, text: changelog, at: ctx.now().toISOString() });
   await ctx.github.createRelease(`hotfix-${day}-issue-${issue}`, HOTFIX_BASE, `ROAM hotfix ${day}`, changelog);
   const shipped = `Approved by ${by} in the committee chat and shipped as a hotfix. It is on main and itch.io.`;
   await ctx.github.comment(issue, shipped);
