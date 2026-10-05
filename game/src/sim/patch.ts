@@ -1,5 +1,6 @@
 // Roadside patches between two trucks. A patch lifts the broken engine, transmission and tank that strand a truck, or
-// the badly worn ones of a truck that still drives, to PATCH.share of their max HP, with the repair math of src/sim/repair.ts and the patcher's Machining. The terms are
+// the badly worn ones of a truck that still drives, to PATCH.share of their max HP, with the repair math of
+// src/sim/repair.ts and the patcher's Machining. The agreement fixes which parts it covers. The terms are
 // the NPC's `patchDeal` decision, so traits and states shape them. A deal is a `patch` state held by the patcher
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
 
@@ -208,7 +209,8 @@ function canStillPay(world: World, data: Extract<StateData, { kind: 'patch' }>, 
 // The agreed parts that are still patchable and below the target go up to it. Nothing else changes.
 function liftAgreedParts(data: Extract<StateData, { kind: 'patch' }>, client: Vehicle): void {
   for (const part of patchable(client)) {
-    if (data.partIds.includes(part.id) && part.hp < patchTarget(part)) restorePart(part, patchTarget(part));
+    const target = patchTarget(part);
+    if (data.partIds.includes(part.id) && part.hp < target) restorePart(part, target);
   }
 }
 
