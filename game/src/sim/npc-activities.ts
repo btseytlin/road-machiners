@@ -466,7 +466,7 @@ function patchInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string
 // The goal a patch deal gives an NPC party: the patcher drives to the client, and the client waits parked.
 export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: boolean): void {
   const goal = patcher
-    ? createActivity('patch', other.id, { ...other.pos }, 'patch a stranded truck')
+    ? createActivity('patch', other.id, { ...other.pos }, 'patch a truck')
     : createActivity('patch', other.id, null, 'wait for a patch');
   pushGoal(world, npc, goal);
 }
