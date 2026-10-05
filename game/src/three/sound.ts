@@ -14,6 +14,9 @@ import type {
 import type { V3, VehicleFrame } from "../phys/frames";
 import { PHYSICS } from "../data/physics";
 import type { GameEvent, ShotRound } from "../sim/types";
+import { isTownGuarded } from "../sim/guards";
+import { isInTerritory, isNearOutpost } from "../sim/sites";
+import type { Vec } from "../sim/vec";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
@@ -236,24 +239,34 @@ export class SoundDirector {
   }
 }
 
+// A place with its own music, or null on the open road.
+export type MusicPlace = "town" | "outpost" | "abandoned" | null;
+
+// Town music plays inside town guard range, outpost music near outpost gates, and abandoned music inside territories.
+export function musicPlaceAt(pos: Vec): MusicPlace {
+  if (isTownGuarded(pos)) return "town";
+  if (isNearOutpost(pos, MIX.music.outpostReachTiles)) return "outpost";
+  return isInTerritory(pos) ? "abandoned" : null;
+}
+
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; inTown: boolean; atOutpost: boolean; paused: boolean };
+export type LoopState = { stormTiles: number; inCombat: boolean; place: MusicPlace; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
   townGain: number;
   outpostGain: number;
+  abandonedGain: number;
   combatGain: number;
   musicCutoffHz: number;
   paused: boolean;
 };
 
-// Which music plays: combat wins, then town, then outpost, then calm road music.
-function musicOf(s: LoopState): "calm" | "town" | "outpost" | "combat" {
+// Which music plays: combat wins, then the place's music, then calm road music.
+function musicOf(s: LoopState): "calm" | "combat" | NonNullable<MusicPlace> {
   if (s.inCombat) return "combat";
-  if (s.inTown) return "town";
-  return s.atOutpost ? "outpost" : "calm";
+  return s.place ?? "calm";
 }
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
@@ -265,6 +278,7 @@ export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
     calmGain: Number(music === "calm"),
     townGain: Number(music === "town"),
     outpostGain: Number(music === "outpost"),
+    abandonedGain: Number(music === "abandoned"),
     combatGain: Number(music === "combat"),
     musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
     paused: s.paused,
@@ -330,8 +344,8 @@ export class SoundLoops {
   private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
-  private town: LoopHandle;
-  private outpost: LoopHandle;
+  // Each place's music loop, by the LoopLevels gain that drives it.
+  private places: [LoopHandle, "townGain" | "outpostGain" | "abandonedGain"][];
   // Calm tracks play in a playlist shuffled once per session, so every track plays before any repeats.
   private playlist = shuffled(SOUNDS["music-calm"].files, Math.random);
   private track = 0;
@@ -342,8 +356,11 @@ export class SoundLoops {
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
     this.calm = player.loop("music-calm", silent, this.playlist[0]);
-    this.town = player.loop("music-town", silent);
-    this.outpost = player.loop("music-outpost", silent);
+    this.places = [
+      [player.loop("music-town", silent), "townGain"],
+      [player.loop("music-outpost", silent), "outpostGain"],
+      [player.loop("music-abandoned", silent), "abandonedGain"],
+    ];
   }
 
   drive(g: Glide, chassisId: string): void {
@@ -374,8 +391,7 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight, town or outpost as the next playlist track. Town music plays inside town
-  // guard range, and outpost music near outpost gates.
+  // Calm music comes back after a fight or a place with its own music as the next playlist track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
     this.updatePlaces(l, was);
@@ -392,8 +408,7 @@ export class SoundLoops {
 }
 
   private updatePlaces(l: LoopLevels, was: LoopLevels | null): void {
-    if (was?.townGain !== l.townGain) this.town.setGain(l.townGain, MIX.music.fadeSeconds);
-    if (was?.outpostGain !== l.outpostGain) this.outpost.setGain(l.outpostGain, MIX.music.fadeSeconds);
+    for (const [loop, key] of this.places) if (was?.[key] !== l[key]) loop.setGain(l[key], MIX.music.fadeSeconds);
   }
 
   // The radio's next button crossfades to another calm track at the current calm level.

@@ -133,6 +133,7 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | music-calm | music | true | 1 | 1 | 5 |
 | music-town | music | true | 1 | 1 | 1 |
 | music-outpost | music | true | 1 | 1 | 1 |
+| music-abandoned | music | true | 0.7 | 1 | 1 |
 | score-drums | music | true | 0.9 | 1 | 1 |
 | score-bass | music | true | 0.8 | 1 | 1 |
 | score-horns | music | true | 0.8 | 1 | 1 |

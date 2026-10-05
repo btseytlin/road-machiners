@@ -95,6 +95,11 @@ export function townNear(world: World): TownDef | null {
   return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
 }
 
+// Whether pos is inside a territory, an abandoned place of open ground.
+export function isInTerritory(pos: Vec): boolean {
+  return REGION.locations.some((site) => isTerritory(site) && siteGap(site, pos) < 0);
+}
+
 // Whether pos is within reach tiles of an outpost gate.
 export function isNearOutpost(pos: Vec, reach: number): boolean {
   return OUTPOSTS.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
