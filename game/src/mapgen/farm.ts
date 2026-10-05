@@ -2,24 +2,29 @@
 // pads, irrigation canals, buildings that are loot spots, runs of segment props, clutter round the buildings, and
 // blocks of dead trees in rows with strays between them. The skeleton is authored in the road's frame: roads, pads,
 // canals, building poses, run lines and blocks. Everything on it is jittered, broken or scattered from the territory's
-// seed, so no detail stands in a ruled line. Authored buildings, pads, road and canal points, run points and block
-// corners fail loudly off the outline or on bad ground. Trees, strays, run segments and clutter that land on bad
-// ground are dropped, but a block that keeps too few of its trees fails loudly too.
+// seed, so no detail stands in a ruled line. The roads are graded into the ground together with a levelled pad under
+// each building. Authored buildings, pads, road and canal points, run points and block corners fail loudly off the
+// outline or on bad ground. Trees, strays, run segments and clutter that land on bad ground are dropped, run segments
+// and clutter also on ground that lies off their seat past the territory's relief, but a block that keeps too few of its
+// trees fails loudly too.
 
 import { REGION, type TerritoryDef } from '../data/region';
 import type { BuildingGroup, ClutterRule, FarmRoad, FarmRules, GroveBlock, GroveRule, Pad, Run, TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
+import { flattenFalloff } from '../sim/elevation';
+import { gradePaths, type GradedPad } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randInt, randRange, type Rng } from '../sim/rng';
 import { siteGap } from '../sim/sites';
 import type { BakedProp } from '../sim/terrain';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from '../sim/vec';
-import { tileSteepness, type MapDraft } from './bake';
+import { footprintRelief, tileSteepness, type MapDraft } from './bake';
 import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_NONE, BUILT_OLD_ROAD, facing, prop, RoadLine, tileCenter, tileOf, tilesWithin } from './oldworld';
 
 const LENGTH_SLACK = 1e-6; // share of a segment a run's length may miss by rounding and still count it whole
 const LINE_SAMPLE = 0.25; // tiles between the points of a run segment tested against roads and marks
+const NEW_ROAD_SURFACE = REGION.roadWidth / 2 + 1; // tiles from a road of today's world that gradeRoads() grades as its surface
 const ROAD_END_SLACK = 1; // tiles a road's outer end may lie past the outline, so the road meets the edge
 const TRIES = 40; // draws for one clutter piece or stray tree before it is dropped
 const STRAY_FRAY = 4; // tiles past a block's edge where its stray trees stand
@@ -38,8 +43,9 @@ type Frame = { yaw: number; along: Vec; across: Vec };
 type Line = { points: Vec[]; width: number };
 
 // Lays out the farm and returns its buildings, the loot spots. Roads, pads and canals go down first, so nothing drawn
-// stands on them and blocks mark field only on bare ground. Buildings come before the runs, clutter and trees, which
-// keep a parking gap round them.
+// stands on them and blocks mark field only on bare ground. Once the buildings stand, the roads are graded with the
+// buildings' levelled pads, so everything drawn after is checked on the ground it stands on. Buildings come before the
+// runs, clutter and trees, which keep a parking gap round them.
 export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, farm: FarmRules, rng: Rng): BakedProp[] {
   const frame = frameOf(rules.spine);
   const onRoad = markRoads(d, t, farm.roads);
@@ -48,19 +54,20 @@ export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, fa
   for (const canal of canals) markLine(d, t, canal, BUILT_CANAL);
   const spots = placeBuildings(d, t, frame, farm, onRoad, rng);
   d.props.push(...spots);
+  gradeFarmRoads(d, t, farm.roads, spots);
   const marked: Touch = (pos, r) => onRoad(pos, r) || touchesMarks(d, pos, r);
-  const runs = placeRuns(d, t, farm.runs, spots, marked, rng);
+  const runs = placeRuns(d, t, farm.runs, spots, marked, rules.relief, rng);
   d.props.push(...runs);
   // Blocks mark their field first, so clutter keeps out of the groves.
   const blocks = farm.blocks.map((block) => fieldOf(d, t, frame, block));
   // Clutter keeps a tree's room off the field, so the trees at a block's edge still stand.
   const fieldClear = farm.groves.radius + REGION.obstacles.gap;
   const offField: Touch = (pos, r) => !marked(pos, r) && !touchedTiles(d.size, pos, r + fieldClear).some((tile) => d.built[tile] === BUILT_FIELD);
-  const clutter = placeClutter(d, t, spots, rules.debrisGap, farm.clutter, offField, rng);
+  const clutter = placeClutter(d, t, spots, rules.debrisGap, farm.clutter, offField, rules.relief, rng);
   d.props.push(...clutter);
   // Trees keep a parking gap round every building, and keep clear of the run segments as the lines they are.
   const keep = (pos: Vec, r: number): boolean =>
-    standsOnFarm(d, t, pos, r) && !marked(pos, r) && clearOf(spots, pos, r, rules.debrisGap) && clearOf(clutter, pos, r, 0) && runs.every((seg) => clearOfSegment(seg, pos, r));
+    standsOnFarm(d, t, prop(farm.groves.look, pos, r, 0), false, null) && !marked(pos, r) && clearOf(spots, pos, r, rules.debrisGap) && clearOf(clutter, pos, r, 0) && runs.every((seg) => clearOfSegment(seg, pos, r));
   const trees = plantBlocks(t, farm.groves, blocks, rng, keep);
   trees.push(...plantStrays(t, frame, farm.groves, farm.blocks, trees, rng, keep));
   d.props.push(...trees);
@@ -156,16 +163,75 @@ function building(d: MapDraft, t: TerritoryDef, frame: Frame, group: BuildingGro
   return prop(group.look, pos, pose.r, frame.yaw + turn);
 }
 
+// Each building stands upright at the ground under its centre, so the ground under it is levelled. Every corner a point
+// of its footprint reads its ground from, within r + a tile's diagonal, is its pad, aiming at the mean of the ungraded
+// ground under it. Each pad levels as one rigid piece. Where rings overlap, the grading meets both pads within the bank
+// grade in one pass, so a later pad never tilts an earlier one. Returns the pads, which the road grading holds.
+function levelPads(d: MapDraft, buildings: readonly BakedProp[]): GradedPad[] {
+  return buildings.map((p, n) => {
+    const corners = padCorners(d, p);
+    const height = corners.reduce((sum, k) => sum + d.heights[k], 0) / corners.length;
+    return { pos: p.pos, r: padRadius(p), height, margin: TERRAIN.levelMargin, group: n };
+  });
+}
+
+function padRadius(p: BakedProp): number {
+  return p.r + Math.SQRT2;
+}
+
+function padCorners(d: MapDraft, p: BakedProp): number[] {
+  const out: number[] = [];
+  const r = padRadius(p);
+  for (let j = Math.max(0, Math.floor(p.pos.y - r)); j <= Math.min(d.size, Math.ceil(p.pos.y + r)); j++) {
+    for (let i = Math.max(0, Math.floor(p.pos.x - r)); i <= Math.min(d.size, Math.ceil(p.pos.x + r)); i++) if (dist({ x: i, y: j }, p.pos) <= r) out.push(j * (d.size + 1) + i);
+  }
+  return out;
+}
+
+// Grades the roads into the ground in one pass, each to its own grade, so their crossings share one surface, and
+// holds the building pads as surface at their heights. A road beside a pad meets it within the grades. Grading blends
+// back to the ground within farmGradeMargin tiles past a road's edge and levelMargin past a pad's. A road's end may
+// lie ROAD_END_SLACK past the outline and a pad a tile's diagonal past it, so a corner moved farther out than they
+// reach means a road or a building lies too far out. Near a road of today's world the grading fades out, so that road
+// keeps its own. A tile round a pad that the grading turns into a cliff is a data error.
+function gradeFarmRoads(d: MapDraft, t: TerritoryDef, roads: readonly FarmRoad[], buildings: readonly BakedProp[]): void {
+  const pads = levelPads(d, buildings);
+  const before = Float32Array.from(d.heights);
+  const paths = roads.map((road) => ({ points: road.points.map((p) => shift(t, p)), width: road.width, grade: road.grade }));
+  const graded = gradePaths({ size: d.size, heights: Array.from(d.heights), types: [] }, paths, TERRAIN.farmGradeMargin, pads);
+  const reach = Math.max(ROAD_END_SLACK + Math.max(...roads.map((road) => road.width / 2)) + TERRAIN.farmGradeMargin, Math.SQRT2 + TERRAIN.levelMargin);
+  graded.forEach((h, k) => {
+    if (h === d.heights[k]) return;
+    const corner = { x: k % (d.size + 1), y: Math.floor(k / (d.size + 1)) };
+    if (siteGap(t, corner) > reach) throw new Error(`${t.id} road grading moves the ground at ${at(corner)}, outside the territory`);
+    const onPad = pads.some((pad) => dist(pad.pos, corner) <= pad.r);
+    d.heights[k] += (h - d.heights[k]) * (onPad ? 1 : 1 - newRoadHold(corner));
+  });
+  for (const p of buildings) {
+    const cliff = tilesWithin(d.size, p.pos, padRadius(p) + TERRAIN.levelMargin + 1).find((tile) => steep(d, tile) && tileSteepness(before, d.size, tile) <= TERRAIN.drive.maxSlope);
+    if (cliff !== undefined) throw new Error(`${t.id} ${p.kind} at ${at(p.pos)} levels its ground into a cliff at ${at(tileCenter(d.size, cliff))}`);
+  }
+}
+
+// Roads of today's world keep the grading the finish layer gave them: their surface, up to a tile past their edge as
+// gradeRoads() grades it, takes none of a farm's grading, which fades in over farmGradeMargin tiles past it. Returns
+// the share of the ground's own height a corner keeps. A farm road's stretch in this fade blends its graded and its own
+// ground, so it may run steeper than its grade there: the territory test allows it a junction limit of 0.15.
+export function newRoadHold(p: Vec): number {
+  const d = ROAD_INDEX.nearestWithin(p.x, p.y, NEW_ROAD_SURFACE + TERRAIN.farmGradeMargin);
+  return d === Infinity ? 0 : flattenFalloff(d - NEW_ROAD_SURFACE, TERRAIN.farmGradeMargin);
+}
+
 // Segment props, segment tiles long, along each run's polyline. A share of segments is broken off, the rest turn and
 // shift a little, and segments on bad ground, roads or marks are left out. A run's points lie inside the territory.
-function placeRuns(d: MapDraft, t: TerritoryDef, runs: readonly Run[], spots: readonly BakedProp[], marked: Touch, rng: Rng): BakedProp[] {
+function placeRuns(d: MapDraft, t: TerritoryDef, runs: readonly Run[], spots: readonly BakedProp[], marked: Touch, relief: number | null, rng: Rng): BakedProp[] {
   const placed: BakedProp[] = [];
   // A segment keeps off marks and out of every building, and never crosses another segment.
   const fits = (seg: BakedProp): boolean =>
     !lineTouches(seg, marked) && spots.every((o) => lineDist(seg, o.pos) >= o.r) && placed.every((o) => !segmentsCross(seg, o)) && !formsRow(seg, placed);
   for (const run of runs) {
     for (const seg of runSegments(t, run, rng)) {
-      if (!standsOnFarm(d, t, seg.pos, seg.r)) continue;
+      if (!standsOnFarm(d, t, seg, true, relief)) continue;
       const turned = [seg, { ...seg, yaw: seg.yaw + ROW_NUDGE }, { ...seg, yaw: seg.yaw - ROW_NUDGE }].find(fits);
       if (turned) placed.push(turned);
     }
@@ -241,14 +307,14 @@ function runSegments(t: TerritoryDef, run: Run, rng: Rng): BakedProp[] {
 // Loose pieces round the buildings of the looks each rule names: from the debris gap past a building's footprint to
 // reach tiles further out, at random turns. A piece keeps the parking gap from every building, stands off roads and
 // marks and clear of every prop. A piece with no room after TRIES draws is dropped.
-function placeClutter(d: MapDraft, t: TerritoryDef, spots: readonly BakedProp[], debrisGap: number, rules: readonly ClutterRule[], open: Touch, rng: Rng): BakedProp[] {
+function placeClutter(d: MapDraft, t: TerritoryDef, spots: readonly BakedProp[], debrisGap: number, rules: readonly ClutterRule[], open: Touch, relief: number | null, rng: Rng): BakedProp[] {
   const placed: BakedProp[] = [];
   for (const rule of rules) {
     const near = spots.filter((s) => rule.near.includes(s.kind));
     if (near.length === 0) throw new Error(`${t.id} has no building for its ${rule.look} clutter`);
     for (let i = 0; i < rule.count; i++) {
       const piece = clutterPiece(near, debrisGap, rule, rng, (p) =>
-        standsOnFarm(d, t, p.pos, p.r) && open(p.pos, p.r) && clearOf(spots, p.pos, p.r, debrisGap) && clearOf(d.props, p.pos, p.r, 0) && clearOf(placed, p.pos, p.r, 0) && !formsRow(p, [...d.props, ...placed]));
+        standsOnFarm(d, t, p, false, relief) && open(p.pos, p.r) && clearOf(spots, p.pos, p.r, debrisGap) && clearOf(d.props, p.pos, p.r, 0) && clearOf(placed, p.pos, p.r, 0) && !formsRow(p, [...d.props, ...placed]));
       if (piece) placed.push(piece);
     }
   }
@@ -360,9 +426,11 @@ function checkBlock(d: MapDraft, t: TerritoryDef, yaw: number, block: GroveBlock
   }
 }
 
-// Inside the territory, off cliffs and off every road of today's world.
-function standsOnFarm(d: MapDraft, t: TerritoryDef, pos: Vec, r: number): boolean {
-  return siteGap(t, pos) < -r && !steep(d, tileOf(d.size, pos)) && !onNewRoad(pos, r);
+// Inside the territory, off cliffs and off every road of today's world. With a relief limit, also on ground that
+// lies no farther than it off the piece's seat under its footprint, a line for a segment prop or a disc.
+function standsOnFarm(d: MapDraft, t: TerritoryDef, p: BakedProp, segment: boolean, relief: number | null): boolean {
+  if (siteGap(t, p.pos) >= -p.r || steep(d, tileOf(d.size, p.pos)) || onNewRoad(p.pos, p.r)) return false;
+  return relief === null || footprintRelief(d.heights, d.size, p, segment) <= relief;
 }
 
 function onNewRoad(pos: Vec, r: number): boolean {

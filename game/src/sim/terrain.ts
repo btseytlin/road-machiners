@@ -49,8 +49,9 @@ export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): num
   return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
 }
 
-// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
-export function groundAt(t: Terrain, x: number, y: number): number {
+// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge. It reads
+// only the size and corner heights, so the map bake can pass its draft heights.
+export function groundAt(t: { size: number; heights: ArrayLike<number> }, x: number, y: number): number {
   const cx = x < 0 ? 0 : x > t.size ? t.size : x;
   const cy = y < 0 ? 0 : y > t.size ? t.size : y;
   const i = Math.min(Math.floor(cx), t.size - 1);

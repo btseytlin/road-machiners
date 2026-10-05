@@ -13,12 +13,12 @@ import { bayPoints, DECK_BAY, deckAlongAt, deckGap, deckPlane, hullDecks, isTerr
 import { siteGap } from '../sim/sites';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
-import { tileSteepness, type MapDraft } from './bake';
+import { footprintRelief, tileSteepness, type MapDraft } from './bake';
 import { fillFarm, touchesMarks } from './farm';
 import { BUILT_HULL } from './newworld';
 import { prop, ruleRng, tileOf } from './oldworld';
 
-const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
+export const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
 // Draws for one prop before the layer gives up: the orchard's groves leave little open band. The Fallen Sun's
 // draws succeed early, so its bake does not depend on this number.
 const TRIES = 1000;
@@ -125,8 +125,9 @@ function draw(g: Ground, look: BakedProp['kind'], pick: () => Vec, radius: [numb
     const pos = pick();
     const r = randRange(g.rng, radius[0], radius[1]);
     const yaw = randRange(g.rng, 0, Math.PI * 2);
-    if (!standable(g.d, pos, r) || !ok(pos, r)) continue;
-    return prop(look, pos, r, yaw);
+    const p = prop(look, pos, r, yaw);
+    if (!standable(g.d, p, g.rules.relief) || !ok(pos, r)) continue;
+    return p;
   }
   throw new Error(`Territory ${g.t.id} has no room for a ${look}`);
 }
@@ -143,13 +144,16 @@ function bandPoint({ t, rules, rng }: Ground, band: [number, number]): Vec {
   };
 }
 
-// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs.
-function standable(d: MapDraft, pos: Vec, r: number): boolean {
+// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs. With a relief limit,
+// also on ground that lies no farther than it off the prop's seat under its footprint.
+function standable(d: MapDraft, p: BakedProp, relief: number | null): boolean {
+  const { pos, r } = p;
   if (Math.min(pos.x, pos.y, d.size - pos.x, d.size - pos.y) < REGION.obstacles.edgeMargin + r) return false;
   const reach = REGION.roadWidth / 2 + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
   if (touchesMarks(d, pos, r)) return false;
-  return tileSteepness(d.heights, d.size, tileOf(d.size, pos)) <= TERRAIN.drive.maxSlope;
+  if (tileSteepness(d.heights, d.size, tileOf(d.size, pos)) > TERRAIN.drive.maxSlope) return false;
+  return relief === null || footprintRelief(d.heights, d.size, p, false) <= relief;
 }
 
 // Whether no prop of the list stands within gap tiles of a circle at pos with radius r.

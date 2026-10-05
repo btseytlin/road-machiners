@@ -4,6 +4,7 @@
 import type { PropKind } from '../sim/terrain';
 import type { Vec } from '../sim/vec';
 import { onOrchardRoad } from './region';
+import { TERRAIN } from './terrain';
 
 export { onOrchardRoad };
 
@@ -61,8 +62,9 @@ export type FarmRules = {
   runs: Run[];
   clutter: ClutterRule[];
 };
-// A polyline of road, width in tiles. An oldRoad is cracked asphalt; a track is pale packed dirt.
-export type FarmRoad = { points: Vec[]; width: number; surface: 'oldRoad' | 'track' };
+// A polyline of road, width in tiles. An oldRoad is cracked asphalt; a track is pale packed dirt. grade is the
+// steepest height change per tile the bake grades along it.
+export type FarmRoad = { points: Vec[]; width: number; surface: 'oldRoad' | 'track'; grade: number };
 // Loot spots of one look, all rolling one table. shoulder lets a pose touch the old road. Each pose turns by up to
 // turnJitter radians and shifts by up to shift tiles each way, drawn from the territory's seed.
 export type BuildingGroup = {
@@ -108,6 +110,9 @@ export type TerritoryRules = {
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: { look: PropKind; radius: number } | null; // the prop at the centre
   hazard: Hazard | null;
+  // Most height units the ground under a drawn prop's or farm decoration's footprint may lie off its seat at its
+  // centre, so none floats on a slope, or null for no limit.
+  relief: number | null;
 };
 
 // The Fallen Sun broke its back along one line from the north-west rim to the south-east rim.
@@ -199,6 +204,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     spotGap: 6,
     debrisGap: 3,
     reactor: { look: 'reactor', radius: 3 },
+    relief: null,
     hazard: {
       radius: 8,
       // The starving rule (RULES.starveDamage 5 per turn, floor RULES.starveFloor 30) anchors both numbers: it is the
@@ -220,39 +226,45 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       roads: [
         // R1, the old highway: straight up the basin from the spur's end, then through the gap between the north
         // ridge's cliffs at c 3-4 and 9-11 (s 48-56) and out of the north edge.
-        { points: [AT(-32, 0), AT(46, 0), AT(52, 6), AT(58, 6.5), AT(72, 7.5)], width: 3, surface: 'oldRoad' },
+        { points: [AT(-32, 0), AT(46, 0), AT(52, 6), AT(58, 6.5), AT(72, 7.5)], width: 3, surface: 'oldRoad', grade: TERRAIN.roadGrade },
         // R2, the crossroad: the concept's curving main dirt road, from the farmhouse yard over the highway, round the
         // blockhouse's west and south sides and out of the east edge beside the trunk road, where trucks drive on
         // and off it.
-        { points: [AT(6, 18), AT(4, 9), AT(1, -3), AT(-6, -6), AT(-8, -11), AT(-8, -15), AT(-3, -20), AT(4, -21), AT(4, -31.9)], width: 3, surface: 'track' },
+        { points: [AT(6, 18), AT(4, 9), AT(1, -3), AT(-6, -6), AT(-8, -11), AT(-8, -15), AT(-3, -20), AT(4, -21), AT(4, -31.9)], width: 3, surface: 'track', grade: TERRAIN.roadGrade },
         // R3, the south-west road: past the motor pool and the barn, down the west side and out of the south edge
         // toward the old asphalt road at map (100, 326).
-        { points: [AT(-6, 1.5), AT(-10, 9), AT(-13, 21), AT(-22, 25), AT(-30, 22), AT(-35.4, 14)], width: 3, surface: 'track' },
-        // R4, the depot road: from the highway at s 20 along the hangars' south and east sides, through the
-        // north-east ground and out of the east edge beside the trunk road.
-        { points: [AT(20, -1.5), AT(19, -10), AT(21, -31), AT(40, -33), AT(47, -41)], width: 3, surface: 'track' },
+        { points: [AT(-6, 1.5), AT(-10, 9), AT(-13, 21), AT(-22, 25), AT(-30, 22), AT(-35.4, 14)], width: 3, surface: 'track', grade: TERRAIN.roadGrade },
+        // R4, the depot road: from the highway at s 20 along the hangars' south and east sides to the depot track, then
+        // back down out of the east edge beside the trunk road. Its last point moved from (47, -41) to (31, -37): the
+        // bank up to the trunk road there climbs at 0.27 a tile, and at (31, -37) the ground meets it level.
+        { points: [AT(20, -1.5), AT(19, -10), AT(21, -31), AT(40, -33), AT(31, -37)], width: 3, surface: 'track', grade: TERRAIN.roadGrade },
         // R5, the north field road: from the highway west through the north-west pocket, out of its west edge.
-        { points: [AT(60, 6.6), AT(61, 22), AT(59, 40.6)], width: 2.5, surface: 'track' },
+        { points: [AT(60, 6.6), AT(61, 22), AT(59, 40.6)], width: 2.5, surface: 'track', grade: TERRAIN.roadGrade },
         // Narrow tracks the farmhands and the army wore: from the farmhouse yard into the north-west groves, and
         // from the depot road to the depot hangar.
-        { points: [AT(6, 18), AT(10.75, 22), AT(10.75, 31)], width: 2, surface: 'track' },
-        { points: [AT(40, -33), AT(45.5, -33)], width: 2, surface: 'track' },
+        { points: [AT(6, 18), AT(10.75, 22), AT(10.75, 31)], width: 2, surface: 'track', grade: TERRAIN.roadGrade },
+        { points: [AT(40, -33), AT(45.5, -33)], width: 2, surface: 'track', grade: TERRAIN.roadGrade },
       ],
       buildings: [
         // The ruined two-storey farmhouse above the road at the middle, its long side and yard toward the road. The
         // farmer built it square to the road; the ruin has settled a little.
         { look: 'farmhouse', table: 'landmark', turnJitter: 0.06, shift: 0.3, poses: [pose(12, 14, 4, ACROSS)] },
         // The gabled barn far left above the road and its shed beside it, door gables to the road, and the old
-        // barn of the north-west pocket's fields.
-        { look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-12, 29.5, 3.7, ACROSS), pose(-6, 30.5, 2.2, ACROSS), pose(53.5, 35, 3.7, ALONG)] },
+        // barn of the north-west pocket's fields. The old barn moved from (53.5, 35) to (54.5, 32), off the slope
+        // under the west ridge where its levelled pad cut a cliff.
+        { look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-12, 29.5, 3.7, ACROSS), pose(-6, 30.5, 2.2, ACROSS), pose(54.5, 32, 3.7, ALONG)] },
         // The army's hangars: three side by side on packed dirt right of centre, ends to the road, and one at the
-        // north-east depot.
-        { look: 'quonset', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(26, -12, 3.2, ACROSS), pose(30, -19, 3.2, ACROSS), pose(34, -26, 3.2, ACROSS), pose(51, -33, 3.2, ALONG)] },
+        // north-east depot. Their levelled pads cut cliffs on the slopes, so the first moved from (26, -12) to
+        // (25, -13) and the depot's from (51, -33) to (51, -27), up the bank beside the depot track's end, with the
+        // grove block to its north trimmed to make room.
+        { look: 'quonset', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(25, -13, 3.2, ACROSS), pose(30, -19, 3.2, ACROSS), pose(34, -26, 3.2, ACROSS), pose(51, -27, 3.2, ALONG)] },
         // The sandbagged blockhouse below the road, commanding the crossroads.
         { look: 'bunker', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(0, -10, 3.9, ALONG)] },
         // Guard huts where roads enter: the south entry, the crossroad's and the depot road's east exits, the
-        // highway's north exit, and the motor pool's gate on the south-west road.
-        { look: 'guardPost', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-25.5, -6.5, 1.1, ALONG), pose(8, -28, 1.1, ACROSS), pose(37, -36, 1.1, ALONG), pose(67, 10.5, 1.1, ALONG), pose(-14.5, 12, 1.1, ALONG)] },
+        // highway's north exit, and the motor pool's gate on the south-west road. The depot road's hut moved from
+        // (37, -36), on the bank the road used to climb, to (30.5, -29), across the road from its new exit. The north
+        // exit's levelled pad cut a cliff, so it moved from (67, 10.5) to (68, 11.5).
+        { look: 'guardPost', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-25.5, -6.5, 1.1, ALONG), pose(8, -28, 1.1, ACROSS), pose(30.5, -29, 1.1, ALONG), pose(68, 11.5, 1.1, ALONG), pose(-14.5, 12, 1.1, ALONG)] },
         {
           look: 'armyTruck',
           table: 'roadWreck',
@@ -265,14 +277,17 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
             // The derelict jeep on the lower-left shoulder of the highway, and the army truck on the upper-right one.
             { at: AT(-20, -1.5), r: 1.1, turn: ALONG, shoulder: true },
             { at: AT(16, 1.5), r: 1.1, turn: Math.PI, shoulder: true },
-            // A truck broken down on the depot road, and one run off the south-west road.
-            { at: AT(30, -33.5), r: 1.1, turn: ALONG, shoulder: true },
-            { at: AT(-31.5, 24), r: 1.1, turn: 0.6, shoulder: true },
+            // A truck broken down on the depot road, and one run off the south-west road. The first moved from
+            // (30, -33.5) to (29, -32.5) when the road's exit came past it, and the second from (-31.5, 24) to
+            // (-28, 18.5), off the road's bank, where its levelled pad cut a cliff.
+            { at: AT(29, -32.5), r: 1.1, turn: ALONG, shoulder: true },
+            { at: AT(-28, 18.5), r: 1.1, turn: 0.6, shoulder: true },
           ],
         },
         // Crate stacks the army left where a truck could load them: dug in on the ridge shelf over the highway, by
-        // the hangars' checkpoint, by the depot road at the east edge, and beside the highway in the north gap.
-        { look: 'armyCache', table: 'armyStores', turnJitter: 0.3, shift: 0.3, poses: [pose(32, 11, 0.9, ALONG), pose(24, -5.5, 0.9, ACROSS), pose(21, -34, 0.9, ALONG), pose(43, 5.5, 0.9, ALONG)] },
+        // the hangars' checkpoint, by the depot road at the east edge, and beside the highway in the north gap. The
+        // shelf's stack moved from (32, 11) to (32.5, 7.5), down off the shelf's edge where its levelled pad cut a cliff.
+        { look: 'armyCache', table: 'armyStores', turnJitter: 0.3, shift: 0.3, poses: [pose(32.5, 7.5, 0.9, ALONG), pose(24, -5.5, 0.9, ACROSS), pose(21, -34, 0.9, ALONG), pose(43, 5.5, 0.9, ALONG)] },
       ],
       pads: [
         // The concrete motor pool under the army trucks, beside the south-west road. The hangars stand on packed dirt,
@@ -323,7 +338,8 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         block(33, 45, -4.6, -9, 'along', -0.02),
         // The north-east ground, east of the highway.
         block(44, 55, -4.6, -13.5, 'across', 0.05),
-        block(41, 56, -16.5, -26, 'along', 0.04),
+        // Its outer edge was trimmed from c -26 to c -22, so the depot hangar's parking gap leaves it its trees.
+        block(41, 56, -16.5, -22, 'along', 0.04),
         // The big block lower left, below the road.
         block(-23.5, -12.3, -6.6, -22.3, 'across', -0.02),
         // Below the crossroad's east leg, by the east edge.
@@ -348,11 +364,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { ...BARRIER, points: [AT(3.5, -2.25), AT(8.5, -2.25)] },
         { ...BARRIER, points: [AT(-30, 2.25), AT(-27, 2.25)] },
         { ...BARRIER, points: [AT(-27, -2.25), AT(-24, -2.25)] },
-        // A sandbag L at each guard hut, toward its road.
+        // A sandbag L at each guard hut, toward its road. The depot road's and the north exit's moved with their huts.
         sandbagL(-25.5, -6.5, 0, 1),
         sandbagL(8, -28, -1, 0),
-        sandbagL(37, -36, 0, 1),
-        sandbagL(67, 10.5, 0, -1),
+        sandbagL(30.5, -29, 0, -1),
+        sandbagL(68, 11.5, 0, -1),
         sandbagL(-14.5, 12, 1, 0),
       ],
       clutter: [
@@ -381,5 +397,6 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     debrisGap: 3,
     reactor: null,
     hazard: null,
+    relief: 0.1,
   },
 };

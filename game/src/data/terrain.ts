@@ -137,6 +137,10 @@ export const TERRAIN = {
   roadGrade: 0.12,
   // Steepest height change per tile of a cutting or bank beside a road: below the scree slope.
   bankGrade: 0.3,
+  // Tiles beside a territory's farm road over which its grading blends back to the ground, so ridges stay ridges.
+  farmGradeMargin: 4,
+  // Tiles round a levelled building pad over which the pad blends back to the ground.
+  levelMargin: 4,
   // Noise elevation e (about -1..1) becomes height: e * hill, plus (e - mountainFrom) * mountain above
   // mountainFrom. The steep extra term makes mountain faces too steep to drive.
   height: { hill: 2.1, mountainFrom: 0.32, mountain: 11 },
