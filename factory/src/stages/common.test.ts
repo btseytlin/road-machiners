@@ -228,7 +228,8 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('with or without a reference image');
     expect(text).toContain('Capture real in-game screenshots');
     expect(text).toContain('Read every screenshot with the Read tool');
-    expect(text).toContain('game/docs/DESIGN.md');
+    // The agent works in game/, so the path is relative to it.
+    expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('placeholder shapes');
     expect(text).toContain('behind it');
     expect(text).toContain('successive simulation points');
@@ -245,7 +246,7 @@ describe('stage prompts for reference images', () => {
     const text = fillPrompt('visual-review', { taskFile: 'f' });
     expect(text).toContain('independent of what the implementation stage claimed');
     expect(text).toContain('Read each shown image with the Read tool');
-    expect(text).toContain('game/docs/DESIGN.md');
+    expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('with no concept image');
     expect(text).toContain('`tune`');
     expect(text).toContain('`rebuild`');

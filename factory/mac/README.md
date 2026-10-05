@@ -7,7 +7,7 @@ The server setup is in `factory/infra/README.md`.
 
 Run every command from the repo root, unless a step says otherwise.
 
-1. Copy `factory/.env.example` to `factory/.env`. Fill in the factory keys. Set `FACTORY_HOME` to a folder under your home, for example `/Users/you/factory-home`. Set `FACTORY_WEB_ROOT` to a folder too. Set `FACTORY_GPU=off`, since Docker on a Mac has no GPU. The other settings, like `FACTORY_TICK_MINUTES`, are in `factory/settings.env`.
+1. Copy `factory/.env.example` to `factory/.env`. Fill in the factory keys. Set `FACTORY_HOME` to a folder under your home, for example `/Users/you/factory-home`. Set `FACTORY_WEB_ROOT` to a folder too. Set `FACTORY_GPU=off`, since Docker on a Mac has no GPU. Run `export FACTORY_UID=$(id -u)` in the shell of the compose commands below, since the Hermes compose file runs Hermes as that user. The other settings, like `FACTORY_TICK_MINUTES`, are in `factory/settings.env`.
 2. Make the folders. Run `mkdir -p "$FACTORY_HOME"/{inbox,committee,state,logs,hermes} "$FACTORY_WEB_ROOT"` with those values set.
 3. Build the agent image and the egress proxy image. Run `docker build -t "$FACTORY_IMAGE" factory/docker` and `docker build -t "$FACTORY_IMAGE-proxy" factory/docker/proxy`.
 4. Start Hermes. Run `docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env up -d --build`.
