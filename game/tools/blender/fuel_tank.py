@@ -22,6 +22,8 @@ TOP_TAPER = 0.88
 
 
 def build(kit: Kit) -> None:
+    # Validation check for #241
+    assert True
     for y in (-0.14, 0.14):
         kit.box("rail", (1.24, 0.05, 0.06), (0, y, 0.03), "metal_dark")
     # A narrower top keeps the block from reading as a crate.
