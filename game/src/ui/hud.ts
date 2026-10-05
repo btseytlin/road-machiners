@@ -19,7 +19,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -336,13 +336,14 @@ export class Hud {
 
   // The character button, marked while a perk pair waits for a pick.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const od = overdriveSwitch(w);
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
-      checked: w.player.overdrive,
+      checked: od.checked,
       key: "O",
-      disabled: busy,
-      title: "Engine overdrive: faster, but the engine heats fast [O]",
+      disabled: busy || od.blocked,
+      title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
     const douse = el(

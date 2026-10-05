@@ -4,6 +4,7 @@ import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
+import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
@@ -35,11 +36,13 @@ export class TruckControls {
     this.host.apply(setAutoRepair(w, !w.player.autoRepair));
   }
 
-  // Overdrive changes speed, so the preview must rerun.
+  // Overdrive changes speed, so the preview must rerun. A worn engine blocks switching it on.
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
-    const on = !w.player.overdrive;
+    const me = playerVehicle(w);
+    const on = !inOverdrive(w, me);
+    if (on && !canOverdrive(me)) return;
     this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
     if (on) this.host.revved();

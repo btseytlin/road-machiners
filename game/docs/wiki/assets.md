@@ -126,6 +126,7 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | horn | sfx | false | 0.8 | 4 | 2 |
 | crash | sfx | false | 0.9 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
+| engine-strain | sfx | true | 0.6 | 1 | 3 |
 | wind | ambient | true | 1 | 1 | 3 |
 | music-calm | music | true | 1 | 1 | 3 |
 | score-drums | music | true | 0.9 | 1 | 1 |
