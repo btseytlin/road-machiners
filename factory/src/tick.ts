@@ -38,15 +38,14 @@ function queued(state: FactoryState): JobPick | null {
   const removal = state.pendingRemovals[0];
   if (removal) return { stage: 'remove', issue: removal.issue };
   if (state.pendingShip !== null && state.release) return { stage: 'ship', issue: state.release.issue };
-  return queuedLast(state);
-}
-
-// Factory changes, then incident entries. Neither waits on a release step.
-function queuedLast(state: FactoryState): JobPick | null {
-  const change = state.pendingChanges[0];
-  if (change) return { stage: 'change', issue: change.id };
+  // An incident entry waits on no release step.
   const incident = state.pendingIncidents[0];
   return incident === undefined ? null : { stage: 'incident', issue: incident };
+}
+
+// Factory changes in the order they were asked. A change id is a timestamp, so it never equals an issue number.
+function changeJobs(state: FactoryState): JobPick[] {
+  return state.pendingChanges.map((change) => ({ stage: 'change' as const, issue: change.id }));
 }
 
 function openCards(cards: Card[]): Card[] {
@@ -74,7 +73,7 @@ function testingStage(state: FactoryState, issue: number): JobStage {
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
 const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(label);
 
-// Card jobs in order: hotfixes, ad hoc tasks, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
+// Card jobs in order: hotfixes, ad hoc tasks, factory changes, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
 function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   const open = openCards(cards).filter(lacks(RELEASE_LABEL));
@@ -82,7 +81,7 @@ function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   const rest = open.filter(lacks(HOTFIX_LABEL));
   const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
   const work = rest.filter(lacks(ADHOC_LABEL));
-  const normal = [...adhoc, ...byProgress(state, work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(state, work.filter(lacks(RELEASE_TASK_LABEL)))];
+  const normal = [...adhoc, ...changeJobs(state), ...byProgress(state, work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(state, work.filter(lacks(RELEASE_TASK_LABEL)))];
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
 }
 
@@ -119,7 +118,7 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
   return { stage: 'dev', issue: null };
 }
 
-// Branch jobs in order: queued approvals, removals, ships and changes, then a stale /dev/, then a due release cut, then the candidate.
+// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the candidate.
 function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null): Candidate[] {
   const picks = [queued(state), devJob(state, devHead), releaseCut(state, now, cfg), candidateJob(state, cards)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
@@ -236,7 +235,7 @@ export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
   return minutes[queue];
 }
 
-// A branch job moves branches and posts between its containers, so a restart could repeat a half done step. Its issue field may be a change id too.
+// A branch job moves branches and posts between its containers, so a restart could repeat a half done step.
 function resumable(job: Job): job is Job & { issue: number } {
   return QUEUE_OF[job.stage] !== 'branch' && job.issue !== null;
 }

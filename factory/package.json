@@ -6,6 +6,7 @@
   "scripts": {
     "factory": "vite-node src/cli.ts --",
     "dashboard": "vite-node src/dashboard/main.ts",
+    "diagrams": "node docs/diagrams/render.mjs",
     "test": "vitest run",
     "typecheck": "tsc"
   },

@@ -95,9 +95,11 @@ export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify']
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
   triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
+  change: 'implement',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';

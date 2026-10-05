@@ -3,8 +3,9 @@
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
 # ffmpeg serves the game's sound scripts. Pillow serves the compare sheets of the Blender image skill. The X and GL libraries let Blender load in background mode.
+# Graphviz renders the factory's process diagrams, which a factory change updates.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates xz-utils ffmpeg python3-pil \
+ && apt-get install -y --no-install-recommends git curl ca-certificates xz-utils ffmpeg python3-pil graphviz \
     libgl1 libegl1 libx11-6 libxext6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 \
  && apt-get clean
 
