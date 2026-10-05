@@ -362,6 +362,17 @@ function readSegmentLabel(key) {
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
 const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
+// Matches the #full-text detail popup: dark panel, gold border, readable body text. Lists every segment of the hovered bar, largest first, then the total.
+const usageTooltip = {
+  backgroundColor: '#171c1f', borderColor: '#dac7a2', borderWidth: 1, cornerRadius: 0, padding: 12, boxPadding: 6,
+  titleColor: '#dac7a2', titleFont: { family: 'Plex', size: 12 }, bodyColor: '#e0d8ca', bodyFont: { family: 'Barlow', size: 15 }, footerColor: '#e0d8ca', footerFont: { family: 'Barlow', size: 15, weight: 'bold' },
+  filter: (item) => item.raw !== null && item.raw > 0,
+  itemSort: (a, b) => b.raw - a.raw,
+  callbacks: {
+    label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}`,
+    footer: (items) => `Total: ${formatUsageValue(items.reduce((sum, item) => sum + item.raw, 0))}`,
+  },
+};
 let usageChart = null;
 function createUsageChart() {
   Chart.defaults.color = '#a5aaa7';
@@ -370,7 +381,8 @@ function createUsageChart() {
   return new Chart(getElement('usage-chart'), { type: 'bar', data: { labels: [], datasets: [] }, options: {
     animation: false, maintainAspectRatio: false,
     scales: { x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0 } }, y: { stacked: true, grid: { color: '#424d52' }, ticks: { callback: (value) => formatUsageValue(value) } } },
-    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}` } } },
+    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: usageTooltip },
+    interaction: { mode: 'index', intersect: false },
   } });
 }
 function renderUsageChart(summary) {
