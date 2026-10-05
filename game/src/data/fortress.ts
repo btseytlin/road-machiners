@@ -2,18 +2,21 @@
 // Lengths are in tiles of 4 m. The piece models are built to these sizes: walls 3 tiles high, and towers,
 // bastions and gatehouses at least 3 tiles high, so each stands over 3x the tallest truck.
 
-export type FortressShape = 'circle' | 'square' | 'star' | 'polygon';
+export type FortressShape = 'circle' | 'square' | 'star' | 'bastioned';
 export type FortressStyle = 'masonry' | 'shipMetal' | 'scrap' | 'patchwork' | 'compound' | 'ring' | 'yard';
 export type FortressKind = 'wall' | 'tower' | 'gate' | 'bastion' | 'inner';
-// A polygon outline corner: at degrees from the site's turn, r tiles from its center, and whether a tower stands on it.
-export type FortressCorner = { at: number; r: number; tower: boolean };
+// A bastioned trace. A bastion points out at each capital bearing, in degrees from the site's turn, counterclockwise.
+// The curtains are the straight lines between the inner vertices, curtain tiles from the center on each capital. A
+// bastion is an arrowhead: its salient stands on the capital at salient tiles, and its flanks run flank tiles out from
+// the curtains, gorge tiles either side of the inner vertex. A tower stands on the salient and on both shoulders.
+export type FortressBastions = { capitals: readonly number[]; curtain: number; salient: number; gorge: number; flank: number };
 // A terraced pit dug into the ground inside the curtain. margin tiles in from the curtain line stay at the rim, then
 // the ground steps down stepHeight tiles every terraceWidth tiles, up to terraces steps, to a flat floor.
 export type FortressPit = { margin: number; terraceWidth: number; stepHeight: number; terraces: number };
 // turn rotates the outline in degrees from map +x toward +y. It is tuned so every gate stays clear of the outline
 // corners: mid-side on a square and between towers on a circle. South Lock's one gate stands on a star point.
-// A polygon reads its corners in order, counterclockwise. A circle has towers unless towers is false.
-export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle; corners?: readonly FortressCorner[]; towers?: boolean; pit?: FortressPit };
+// A circle has towers unless towers is false, and one every towerEvery sections, else FORTRESS.circleTowerEvery.
+export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle; bastions?: FortressBastions; towers?: boolean; towerEvery?: number; pit?: FortressPit };
 
 // A gatehouse footprint, width along the wall and depth out of the site, and its height to the parapet.
 export type FortressGate = { width: number; depth: number; height: number };
@@ -24,23 +27,18 @@ export type FortressGate = { width: number; depth: number; height: number };
 export type FortressStyleDef = { flush: boolean; gate: FortressGate; gateFlare: number; pieces: readonly FortressKind[] };
 
 export const FORTRESS_SITES: Record<string, FortressSite> = {
-  // An irregular hexagon after the Bowl concept. Each gate is mid-side: the corners either side of it lie at equal
-  // radius and equal angle from its bearing, -64.93 and -24.11 degrees, so its side faces straight out along it.
+  // A star fort after the committee's ruling on the Bowl concept: six arrowhead bastions, with a tower on each point
+  // and each shoulder, so every curtain and face lies in a tower's line of sight. Each gate is mid-curtain: the
+  // capitals either side of it, at -85.34, -44.52 and -3.7 degrees, are equal in angle from its bearings, -64.93 and
+  // -24.11, so its curtain faces straight out along it.
   bowl: {
-    shape: 'polygon',
+    shape: 'bastioned',
     turn: 0,
     style: 'patchwork',
-    corners: [
-      { at: -85.34, r: 26.75, tower: true },
-      { at: -44.52, r: 26.75, tower: true },
-      { at: -3.7, r: 26.75, tower: true },
-      { at: 60, r: 25.5, tower: true },
-      { at: 128, r: 26.75, tower: true },
-      { at: 198, r: 25, tower: true },
-    ],
+    bastions: { capitals: [-85.34, -44.52, -3.7, 60, 128, 198], curtain: 21.5, salient: 26.75, gorge: 2.5, flank: 2.5 },
     // C1 drops from the rim through three crop terraces to a floor about half the site across, 9 m down. Four 0.6-tile
-    // steps give the three terraces and a 2.4-tile (9.6 m) floor from 10.5 tiles in.
-    pit: { margin: 1.5, terraceWidth: 3, stepHeight: 0.6, terraces: 4 },
+    // steps give the three terraces and a floor from the main enclosure's margin.
+    pit: { margin: 1.5, terraceWidth: 2.5, stepHeight: 0.6, terraces: 4 },
   },
   // Turn 9 put a tower 0.91 tiles off the side of the 24 m flush gate at -145.7 degrees. Turns 7.25 to 8.75 clear both.
   nose: { shape: 'circle', turn: 8, style: 'shipMetal' },
@@ -70,6 +68,7 @@ export const FORTRESS = {
   gunLift: 0.2, // the gate gun's muzzle stands this far over the gatehouse parapet
   innerWidth: 3, // inner gate in the curtain behind a barbican, along the wall. Its depth is wallDepth.
   circleTowerEvery: 5, // circle wall sections between towers
+  flankMin: 2, // the least distance a flanking tower stands out past the wall it covers
   starPoints: 5,
   starDepth: 0.4, // re-entrant corners lie this share of the outline radius in from the points
   // Least gap from a corner to the edge of a gatehouse, or to the ends of a barbican's inner gate and neck walls.

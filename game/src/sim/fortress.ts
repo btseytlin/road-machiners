@@ -11,7 +11,7 @@
 // and an inner gate in the curtain. At a flush style the gatehouse stands in the curtain, its outer face on the
 // curtain line where the gate's bearing meets it, and the ground between it and the road gate is a forecourt.
 
-import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
+import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressBastions, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
 import { siteGates, type Site } from './sites';
 import type { PropKind } from './terrain';
 import { bearing, DEG, dist, pointInPolygon, polygonEdgeDist, segmentDist, type Vec } from './vec';
@@ -65,6 +65,7 @@ export type FortGate = { gate: Vec; face: Vec; out: Vec; width: number; height: 
 // Each site's outline and gates are derived once from the constants, then reused by every inside test and view.
 // The key is the REGION site object, which is never cloned.
 const OUTLINES = new WeakMap<Site, Vec[]>();
+const CORES = new WeakMap<Site, Vec[]>();
 const GATES = new WeakMap<Site, FortGate[]>();
 
 export function fortressOutline(site: Site): Vec[] {
@@ -74,6 +75,18 @@ export function fortressOutline(site: Site): Vec[] {
     OUTLINES.set(site, outline);
   }
   return outline;
+}
+
+// The main enclosure: a bastioned site's inner vertices, the corners its curtains run between. Any other outline is
+// its own enclosure. The pit is dug inside it, and the bastions stand at the rim.
+export function fortressCore(site: Site): Vec[] {
+  let core = CORES.get(site);
+  if (core === undefined) {
+    const def = fortressOf(site);
+    core = def.shape === 'bastioned' ? bastionVertices(site, def).map((v) => v.inner) : fortressOutline(site);
+    CORES.set(site, core);
+  }
+  return core;
 }
 
 // Whether a point lies inside the site's curtain, at least inset tiles from every wall line. Interiors keep half a
@@ -115,9 +128,9 @@ export function fortressPieces(site: Site): FortressPiece[] {
 export function pitDepth(site: Site, p: Vec): number {
   const pit = fortressOf(site).pit;
   if (pit === undefined) throw new Error(`Site ${site.id} has no pit`);
-  const outline = fortressOutline(site);
-  if (!pointInPolygon(p, outline)) return 0;
-  const past = polygonEdgeDist(p, outline) - pit.margin;
+  const core = fortressCore(site);
+  if (!pointInPolygon(p, core)) return 0;
+  const past = polygonEdgeDist(p, core) - pit.margin;
   if (past <= 0) return 0;
   return pit.stepHeight * Math.min(pit.terraces, Math.ceil(past / pit.terraceWidth));
 }
@@ -173,7 +186,7 @@ function outlineCorners(site: Site): Corner[] {
   const turn = def.turn * DEG;
   const at = (a: number, r: number): Vec => ({ x: site.pos.x + Math.cos(turn + a) * r, y: site.pos.y + Math.sin(turn + a) * r });
   if (def.shape === 'square') return [0, 1, 2, 3].map((k) => ({ pos: at((k * Math.PI) / 2, radius), piece: 'tower' }));
-  if (def.shape === 'polygon') return polygonCorners(site, def, at);
+  if (def.shape === 'bastioned') return bastionedCorners(site, def);
   if (def.shape === 'star') {
     const count = FORTRESS.starPoints * 2;
     return Array.from({ length: count }, (_, k) => {
@@ -182,21 +195,75 @@ function outlineCorners(site: Site): Corner[] {
     });
   }
   // A circle is an N-gon of sections about one wall long, with a tower every circleTowerEvery sections.
-  const every = FORTRESS.circleTowerEvery;
+  const every = def.towerEvery ?? FORTRESS.circleTowerEvery;
   const count = every * Math.ceil((2 * Math.PI * radius) / (FORTRESS.wallLength * every));
   const towers = def.towers ?? true;
   return Array.from({ length: count }, (_, k) => ({ pos: at((k * 2 * Math.PI) / count, radius), piece: towers && k % every === 0 ? 'tower' : null }));
 }
 
-// A polygon's corners from its list. A corner tower stands square to the bearing from the center, and its footprint
-// must stay inside the site circle.
-function polygonCorners(site: Site, def: FortressSite, at: (a: number, r: number) => Vec): Corner[] {
-  if (def.corners === undefined || def.corners.length < 3) throw new Error(`Site ${site.id} has a polygon outline with under three corners`);
-  return def.corners.map((c) => {
-    const half = FORTRESS.towerSize / 2;
-    if (c.tower && Math.hypot(c.r + half, half) > site.radius) throw new Error(`Site ${site.id} has a corner tower at ${c.at} degrees outside its circle`);
-    return { pos: at(c.at * DEG, c.r), piece: c.tower ? 'tower' : null };
+type BastionVertex = { capital: number; inner: Vec };
+
+// The inner vertex of each bastion, on its capital at the curtain radius.
+function bastionVertices(site: Site, def: FortressSite): BastionVertex[] {
+  const b = def.bastions;
+  if (b === undefined || b.capitals.length < 3) throw new Error(`Site ${site.id} has a bastioned outline with under three bastions`);
+  return b.capitals.map((c) => {
+    const a = (def.turn + c) * DEG;
+    return { capital: a, inner: { x: site.pos.x + Math.cos(a) * b.curtain, y: site.pos.y + Math.sin(a) * b.curtain } };
   });
+}
+
+// A bastioned outline: five corners per bastion, in order. The left gorge, then the left shoulder tower, the salient
+// tower, the right shoulder tower and the right gorge. The gorges carry no piece, so a curtain runs from one bastion's
+// right gorge to the next one's left gorge. Each shoulder stands flank tiles out from its gorge, along the outward
+// normal of the curtain it stands on, so it flanks that curtain and the next bastion's face.
+function bastionedCorners(site: Site, def: FortressSite): Corner[] {
+  const b = def.bastions as FortressBastions;
+  const vertices = bastionVertices(site, def);
+  const n = vertices.length;
+  const half = FORTRESS.towerSize / 2;
+  const toward = (from: Vec, to: Vec, d: number): Vec => along(from, unit(from, to), d);
+  const out = (p: Vec, from: Vec, to: Vec): Vec => {
+    const u = unit(from, to);
+    return { x: p.x + u.y * b.flank, y: p.y - u.x * b.flank };
+  };
+  const corners = vertices.flatMap((v, i): Corner[] => {
+    const prev = vertices[(i + n - 1) % n].inner;
+    const next = vertices[(i + 1) % n].inner;
+    for (const [from, to] of [[prev, v.inner], [v.inner, next]]) {
+      if (dist(from, to) < 2 * b.gorge + FORTRESS.wallLength) throw new Error(`Site ${site.id} has a curtain too short for its bastion gorges`);
+    }
+    const gorgeL = toward(v.inner, prev, b.gorge);
+    const gorgeR = toward(v.inner, next, b.gorge);
+    const salient = { x: site.pos.x + Math.cos(v.capital) * b.salient, y: site.pos.y + Math.sin(v.capital) * b.salient };
+    const left = out(gorgeL, prev, v.inner);
+    const right = out(gorgeR, v.inner, next);
+    for (const t of [left, salient, right]) {
+      if (Math.hypot(dist(site.pos, t) + half, half) > site.radius) throw new Error(`Site ${site.id} has a bastion tower at ${fmt(t)} outside its circle`);
+    }
+    return [
+      { pos: gorgeL, piece: null },
+      { pos: left, piece: 'tower' },
+      { pos: salient, piece: 'tower' },
+      { pos: right, piece: 'tower' },
+      { pos: gorgeR, piece: null },
+    ];
+  });
+  const outline = corners.map((c) => c.pos);
+  const crossing = outline.findIndex((a, i) => outline.some((c, j) => j > i + 1 && !(i === 0 && j === outline.length - 1) && segmentsCross(a, outline[(i + 1) % outline.length], c, outline[(j + 1) % outline.length])));
+  if (crossing >= 0) throw new Error(`Site ${site.id} has a bastioned outline that crosses itself at ${fmt(outline[crossing])}`);
+  return corners;
+}
+
+// Whether segments ab and cd cross, short of touching at an end.
+function segmentsCross(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
+  const turn = (p: Vec, q: Vec, r: Vec): number => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return turn(a, b, c) * turn(a, b, d) < 0 && turn(c, d, a) * turn(c, d, b) < 0;
+}
+
+function unit(from: Vec, to: Vec): Vec {
+  const d = dist(from, to);
+  return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
 }
 
 // Where a gate's gatehouse stands. At a castle style it stands square to the gate's bearing with its outer face on
@@ -230,10 +297,17 @@ function layGate(site: Site, gate: Vec, corners: Corner[]): { pieces: FortressPi
     const barbican = layBarbican(site, { gate, out: fort.out, outline, tagged });
     return { pieces: [gatehouse, ...barbican.pieces], cut: barbican.cut, standsIn: null };
   }
-  for (const c of tagged) {
-    if (Math.abs(rectEdgeDistance(cut, c)) < FORTRESS.gateClearance) throw new Error(`Site ${site.id} has a corner on the edge of its gatehouse at ${fmt(gate)}`);
-  }
+  checkGateClearance(site, gate, cut, corners);
   return { pieces: [gatehouse], cut, standsIn: cut };
+}
+
+// A gatehouse keeps gateClearance from every tower. At a bastioned site the gorges count too, since a curtain's open
+// stretch ends at them.
+function checkGateClearance(site: Site, gate: Vec, cut: Rect, corners: Corner[]): void {
+  const keepClear = corners.filter((c) => c.piece !== null || fortressOf(site).shape === 'bastioned');
+  for (const c of keepClear) {
+    if (Math.abs(rectEdgeDistance(cut, c.pos)) < FORTRESS.gateClearance) throw new Error(`Site ${site.id} has a corner on the edge of its gatehouse at ${fmt(gate)}`);
+  }
 }
 
 type GateSpot = { gate: Vec; out: Vec; outline: Vec[]; tagged: Vec[] };

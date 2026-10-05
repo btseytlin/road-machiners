@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TEST_MAP } from '../test/map';
-import { FORT_MODELS, FORT_PROPS, fortressGates, fortressOutline, fortressPieces, pitDepth } from './fortress';
+import { FORT_MODELS, FORT_PROPS, fortressCore, fortressGates, fortressOutline, fortressPieces, pitDepth } from './fortress';
 import { PROP_KINDS } from './terrain';
 import type { Obstacle } from './types';
 import { isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
@@ -191,8 +191,8 @@ describe('fortress pads', () => {
 describe('Bowl pit', () => {
   const bowl = SITES.find((s) => s.id === 'bowl')!;
   const pit = FORTRESS_SITES.bowl.pit!;
-  const outline = fortressOutline(bowl);
-  const edge = (p: Vec) => Math.min(...outline.map((a, i) => segmentDist(p, a, outline[(i + 1) % outline.length])));
+  const core = fortressCore(bowl);
+  const edge = (p: Vec) => Math.min(...core.map((a, i) => segmentDist(p, a, core[(i + 1) % core.length])));
   // A point d tiles in from the middle of the first gate's side.
   const inFromGate = (d: number): Vec => {
     const g = fortressGates(bowl)[0];
@@ -218,6 +218,13 @@ describe('Bowl pit', () => {
     expect(pitDepth(bowl, bowl.pos)).toBe(floor);
     expect(pitDepth(bowl, { x: bowl.pos.x + 3, y: bowl.pos.y - 2 })).toBe(floor);
     for (let x = -30; x <= 30; x += 0.5) for (let y = -30; y <= 30; y += 0.5) expect(pitDepth(bowl, { x: bowl.pos.x + x, y: bowl.pos.y + y })).toBeLessThanOrEqual(floor);
+  });
+
+  it('digs inside the main enclosure only, so bastions and forecourts stay at the rim (IV31)', () => {
+    expect(core).toHaveLength(6);
+    expect(fortressOutline(bowl)).toHaveLength(30);
+    for (const piece of fortressPieces(bowl).filter((p) => p.kind === 'tower')) expect(pitDepth(bowl, piece.pos)).toBe(0);
+    for (const g of fortressGates(bowl)) expect(pitDepth(bowl, { x: g.face.x + g.out.x * 3, y: g.face.y + g.out.y * 3 })).toBe(0);
   });
 
   it('throws for a site with no pit', () => {

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES } from '../data/fortress';
+import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressSite } from '../data/fortress';
 import { REGION } from '../data/region';
 import { siteGates, type Site } from './sites';
 import { DEG, dist, segmentDist, type Vec } from './vec';
-import { fortressFootprint, fortressGates, fortressOutline, fortressPieces, type FortressPiece } from './fortress';
+import { fortressFootprint, fortressGates, fortressOutline, insideCurtain, fortressPieces, type FortressPiece } from './fortress';
 import BEFORE from './fortress-pieces-42b6c9fe.json';
+import BEFORE_8D from './fortress-pieces-8d024493.json';
 
 const SITES: Site[] = [...REGION.towns, ...REGION.locations];
 const FORTS = SITES.filter((s) => s.id in FORTRESS_SITES);
@@ -104,17 +105,17 @@ describe('fortress layout', () => {
     }
   });
 
-  it('puts each Bowl gate between two bends of its outline, clear of the corner towers', () => {
+  it('puts each Bowl gate mid-curtain between two bastions, clear of every gorge and tower', () => {
     const site = siteOf('bowl');
     const outline = fortressOutline(site);
     const { width } = FORTRESS_STYLES.patchwork.gate;
-    expect(outline).toHaveLength(6);
+    expect(outline).toHaveLength(30);
     for (const g of fortressGates(site)) {
       const side = outline.findIndex((a, i) => segmentDist(g.face, a, outline[(i + 1) % outline.length]) < EPS);
-      expect(side).toBeGreaterThanOrEqual(0);
-      for (const corner of [outline[side], outline[(side + 1) % 6]]) expect(dist(g.face, corner)).toBeGreaterThanOrEqual(width / 2 + FORTRESS.gateClearance);
+      expect(side % 5).toBe(4);
+      for (const corner of [outline[side], outline[(side + 1) % 30]]) expect(dist(g.face, corner)).toBeGreaterThanOrEqual(width / 2 + FORTRESS.gateClearance);
     }
-    expect(fortressPieces(site).filter((p) => p.kind === 'tower')).toHaveLength(6);
+    expect(fortressPieces(site).filter((p) => p.kind === 'tower')).toHaveLength(18);
   });
 
   it('gives Granary a ring with no towers', () => {
@@ -133,6 +134,10 @@ describe('fortress layout', () => {
   it.each(FORTS.map((s) => [s.id, s] as const))('%s lays only the pieces its style builds (IV19)', (_, site) => {
     const { pieces } = FORTRESS_STYLES[FORTRESS_SITES[site.id].style];
     for (const p of fortressPieces(site)) expect(pieces).toContain(p.kind);
+  });
+
+  it.each(Object.keys(BEFORE_8D))('lays %s exactly as at 8d024493 (IV26)', (id) => {
+    expect(fortressPieces(siteOf(id))).toEqual((BEFORE_8D as Record<string, FortressPiece[]>)[id]);
   });
 
   it.each(KEPT)('lays %s exactly as at 42b6c9fe (IV16)', (id) => {
@@ -243,35 +248,37 @@ describe('fortress layout', () => {
     }
   });
 
-  it('throws when a polygon corner lies by the side of a flush gatehouse', () => {
-    const site = siteOf('bowl');
-    const g = siteGates(site)[0];
-    const toGate = Math.atan2(g.y - site.pos.y, g.x - site.pos.x) / DEG;
-    const def = FORTRESS_SITES.bowl;
-    // The corner between the two gates moves to about half a gate width from the first gate's face.
-    const corners = def.corners!.map((c, i) => (i === 1 ? { ...c, at: toGate - def.turn + 3.4 } : c));
-    const cornered = { ...site, id: 'test-cornered', pos: { ...site.pos } };
-    FORTRESS_SITES['test-cornered'] = { ...def, corners };
+  describe('bastioned outlines', () => {
+    const bowl = (): Site => siteOf('bowl');
+    const test = (def: FortressSite, run: (site: Site) => void): void => {
+      const site = { ...bowl(), id: 'test-bastions', pos: { ...bowl().pos } };
+      FORTRESS_SITES['test-bastions'] = def;
+      try {
+        run(site);
+      } finally {
+        delete FORTRESS_SITES['test-bastions'];
+      }
+    };
+    const bastions = FORTRESS_SITES.bowl.bastions!;
 
-    try {
-      expect(() => fortressPieces(cornered)).toThrow(/corner/);
-    } finally {
-      delete FORTRESS_SITES['test-cornered'];
-    }
-  });
+    it('throws when a gate lies by a gorge', () => {
+      const g = siteGates(bowl())[0];
+      const toGate = Math.atan2(g.y - bowl().pos.y, g.x - bowl().pos.x) / DEG;
+      // The left gorge of the bastion at -44.52 degrees moves in along the curtain: widen the gorge to the gate.
+      test({ ...FORTRESS_SITES.bowl, bastions: { ...bastions, gorge: 6.5, capitals: bastions.capitals.map((c) => (c === -44.52 ? toGate + 4 : c)) } }, (site) => expect(() => fortressPieces(site)).toThrow(/corner|short/));
+    });
 
-  it('throws when a polygon corner tower leaves the circle', () => {
-    const site = siteOf('bowl');
-    const def = FORTRESS_SITES.bowl;
-    const corners = def.corners!.map((c, i) => (i === 3 ? { ...c, r: site.radius } : c));
-    const wide = { ...site, id: 'test-wide', pos: { ...site.pos } };
-    FORTRESS_SITES['test-wide'] = { ...def, corners };
+    it('throws when a bastion tower leaves the circle', () => {
+      test({ ...FORTRESS_SITES.bowl, bastions: { ...bastions, salient: bowl().radius } }, (site) => expect(() => fortressPieces(site)).toThrow(/circle/));
+    });
 
-    try {
-      expect(() => fortressPieces(wide)).toThrow(/circle/);
-    } finally {
-      delete FORTRESS_SITES['test-wide'];
-    }
+    it('throws when a curtain is too short for its gorges', () => {
+      test({ ...FORTRESS_SITES.bowl, bastions: { ...bastions, gorge: 9 } }, (site) => expect(() => fortressPieces(site)).toThrow(/short/));
+    });
+
+    it('throws when the faces of a bastion cross', () => {
+      test({ ...FORTRESS_SITES.bowl, bastions: { ...bastions, salient: 12, gorge: 4 } }, (site) => expect(() => fortressPieces(site)).toThrow(/crosses/));
+    });
   });
 
   it('throws when a style lacks a piece its outline needs (IV19)', () => {
@@ -291,5 +298,52 @@ describe('fortress layout', () => {
     const site = SITES.find((s) => !(s.id in FORTRESS_SITES))!;
 
     expect(() => fortressOutline(site)).toThrow(/fortress/);
+  });
+});
+
+// IV25. Whether every foot point of every wall and gatehouse face is seen by a tower standing at least FORTRESS.flankMin
+// out past that wall, along a straight line that stays out of the outline's interior.
+function unflanked(site: Site): Vec[] {
+  const outline = fortressOutline(site);
+  const towers = fortressPieces(site).filter((p) => p.kind === 'tower').map((p) => p.pos);
+  const inside = (p: Vec): boolean => insideCurtain(site, p, 0);
+  const missed: Vec[] = [];
+  const pieces = fortressPieces(site);
+  for (const piece of pieces.filter((p) => p.kind === 'wall' || p.kind === 'gate')) {
+    const [a, b] = fortressFootprint(site, piece);
+    const length = dist(a, b);
+    const u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+    // The footprint runs counterclockwise from its outer face, so the outer normal is to the right of a to b.
+    const n = { x: u.y, y: -u.x };
+    for (let d = 0; d <= length + EPS; d += 0.5) {
+      const foot = { x: a.x + u.x * d + n.x * 0.5, y: a.y + u.y * d + n.y * 0.5 };
+      // A joint overlaps its neighbor, so a foot point that lies in another piece is no foot.
+      if (pieces.some((o) => o !== piece && covers(site, o, foot))) continue;
+      const seen = towers.some((t) => {
+        const out = (t.x - a.x) * n.x + (t.y - a.y) * n.y;
+        if (out < FORTRESS.flankMin) return false;
+        for (let k = 0; k <= 40; k++) {
+          const q = { x: t.x + ((foot.x - t.x) * k) / 40, y: t.y + ((foot.y - t.y) * k) / 40 };
+          if (inside(q) && outlineDist(outline, q) > 0.1) return false;
+        }
+        return true;
+      });
+      if (!seen) missed.push(foot);
+    }
+  }
+  return missed;
+}
+
+function outlineDist(outline: Vec[], p: Vec): number {
+  return Math.min(...outline.map((a, i) => segmentDist(p, a, outline[(i + 1) % outline.length])));
+}
+
+describe('flanking (IV25)', () => {
+  it('has a tower that sees the foot of every Bowl wall and gatehouse', () => {
+    expect(unflanked(siteOf('bowl'))).toEqual([]);
+  });
+
+  it('fails on a convex square with a tower on each corner', () => {
+    expect(unflanked(siteOf('dustwell')).length).toBeGreaterThan(0);
   });
 });
