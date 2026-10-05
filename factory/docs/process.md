@@ -23,36 +23,49 @@ flowchart LR
 
 ## Card lifecycle
 
-A card is one GitHub issue on the Project board. Its column is the state. A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
+A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it.
+
+Black arrows are the normal path. Red dotted arrows are the loops back. Yellow steps wait for people.
 
 ```mermaid
-stateDiagram-v2
-  [*] --> Triage: voted issue
-  [*] --> Design: hotfix label
-  Triage --> Triage: unclear, asks author, needs-info
-  Triage --> Design: ready
-  Triage --> Done: wont-do, or bundled into a lead
-  Design --> Triage: questions for the author
-  Design --> Done: wont-do
-  Design --> Implementation: plan written
-  Implementation --> Testing: code committed
-  Testing --> Approval: checks pass
-  Testing --> Implementation: visual review, rebuild
-  Testing --> Design: visual review, plan wrong
-  Testing --> Design: review fails twice
-  Approval --> Testing: Approve on a preview, to harden
-  Approval --> Testing: merge conflict
-  Approval --> Done: merge after hardening, or hotfix ship
-  Approval --> Done: Deny
-  Approval --> Implementation: reply routed as patch
-  Approval --> Design: reply routed as redesign
-  Done --> Design: remove #N from the release
-  Done --> [*]: release ships
+flowchart TB
+  T[Triage] --> D[Design] --> I[Implementation] --> P[Testing<br>preview] --> A[Approval<br>committee plays] --> H[Testing<br>harden] --> G[Merge into dev] --> M[Done]
+  T -.->|unclear| W([Author answers<br>on GitHub])
+  D -.->|questions| W
+  W -.-> T
+  P -.->|rebuild| I
+  P -.->|plan wrong| D
+  A -.->|patch| I
+  A -.->|redesign| D
+  H -.->|review fails twice| D
+  G -.->|conflict| H
+  M -.->|removed from release| D
+  A:::human
+  W:::human
+  classDef human fill:#fde68a,stroke:#b45309
+  linkStyle 7,8,9,10,11,12,13,14,15,16 stroke:#dc2626,color:#dc2626
 ```
 
-A patch runs in Implementation and goes to Testing with the checks phase set, so it skips the testing agent. A patch that finds the plan must change sends the card to Design.
+- A hotfix skips Triage. It runs preview and harden before its post, and Approve ships it at once.
+- A merged issue stays open with the label `release-candidate`. It closes when its release ships.
 
-An issue merged into `dev` stays open with the label `release-candidate`. It closes when its release ships.
+### The loops
+
+- unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, and triage runs again.
+- rebuild and plan wrong: the visual review found the look wrong. The card keeps its branch.
+- patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
+- redesign: the committee reply changes the plan.
+- review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
+- conflict: `dev` moved on since testing. The approval is kept, and hardening runs again.
+- removed from release: `remove #N` on the release candidate post.
+
+### How a card ends early
+
+- Triage or Design → Done: the request is wont-do, and the issue closes.
+- Triage → Done: the issue is bundled into a lead and closes when the lead ships.
+- Approval → Done: the committee presses Deny, and the issue closes.
+
+A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
 
 ## Testing column
 
