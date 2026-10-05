@@ -13,7 +13,7 @@ import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onDeck } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
+import { BUILT_CANAL, BUILT_GLASS, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
@@ -137,6 +137,7 @@ const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_TRACK]: 'track',
   [BUILT_CANAL]: 'canal',
   [BUILT_PAD]: 'concrete',
+  [BUILT_GLASS]: 'glass',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
@@ -296,9 +297,10 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, built: Uint8Array
   return fitsGround(size, heights, built, pos, r) && !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
 }
 
-// Whether a boulder's tile is no cliff, and neither it nor any tile whose centre the boulder covers is a dirt track.
+// Whether a boulder's tile is no cliff, and neither it nor any tile whose centre the boulder covers is a dirt track or
+// fused glass, where only glass spires stand.
 function fitsGround(size: number, heights: ArrayLike<number>, built: Uint8Array, pos: Vec, r: number): boolean {
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
-  if ([tile, ...tilesWithin(size, pos, r)].some((k) => built[k] === BUILT_TRACK)) return false;
+  if ([tile, ...tilesWithin(size, pos, r)].some((k) => built[k] === BUILT_TRACK || built[k] === BUILT_GLASS)) return false;
   return tileSteepness(heights, size, tile) <= BOULDER_SLOPE_LIMIT;
 }

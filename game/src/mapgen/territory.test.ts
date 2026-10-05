@@ -4,7 +4,7 @@ import { PHYSICS } from '../data/physics';
 import { ORCHARD_HEADING, REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
 import { MAPGEN, TERRAIN } from '../data/terrain';
-import { FALLEN_SUN_DECKS, onOrchardRoad, TERRITORIES } from '../data/territory';
+import { FALLEN_SUN_DECKS, onOrchardRoad, TERRITORIES, type TerritoryRules } from '../data/territory';
 import { deckAt, deckById } from '../sim/bridge';
 import { boxDistance, onDeck, propBoxes, propPose, propReach, type PosedBox } from '../sim/mapgen';
 import { CELL, navLayer } from '../sim/nav/layer';
@@ -18,8 +18,8 @@ import { angleDiff, dist, lerp, segmentDist, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import { fillFarm } from './farm';
-import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
-import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileOf, tilesWithin } from './oldworld';
+import { BUILT_CANAL, BUILT_GLASS, BUILT_PAD, BUILT_TRACK } from './newworld';
+import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileCenter, tileOf, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
 import { budget } from '../test/budget';
 
@@ -137,7 +137,7 @@ describe('the territory layer', () => {
     expect(dist(inside.find((p) => p.kind === reactor.look)!.pos, reactorPos(t))).toBeLessThan(1e-3);
     expect(inside.filter((p) => p.kind === rules.cacheLook)).toHaveLength(9);
     expect(inside.filter((p) => p.kind === rules.spotLook)).toHaveLength(15);
-    expect(TEST_MAP.props.filter((p) => p.kind === 'rimRock')).toHaveLength(rules.rimRocks.count);
+    expect(TEST_MAP.props.filter((p) => p.kind === 'rimRock')).toHaveLength(rules.rimRocks!.count);
   });
 
   it('gives each cache and field spot one stock after world creation', () => {
@@ -600,5 +600,91 @@ describe('the orchard farm', () => {
     const moved = structuredClone(rules);
     moved.farm!.buildings[0].poses[0].at = onOrchardRoad(-30, 40);
     expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, 1))).toThrow(/outside/);
+  });
+});
+
+describe('a third territory', () => {
+  // A test-only wreck on open ground north-west of the orchard, where no region road runs. It has no basin under it,
+  // so no rim rocks, and holds a piece, a building group, a cache, a patch, a dirt road and fused glass.
+  const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 405, y: 378 }, radius: 22, outline: null };
+  function flatsRules(): TerritoryRules {
+    return {
+      seed: 2,
+      wreck: {
+        pieces: [{ look: 'hullDrum', at: { x: -9, y: -4 }, yaw: 0, r: 3 }],
+        buildings: [{ look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [{ at: { x: 7, y: -7 }, r: 2.5, turn: 0, shoulder: false }] }],
+        caches: [{ at: { x: 0, y: 9 } }],
+        cacheLook: 'hullCache',
+        cacheTable: 'landmark',
+        cacheRadius: 0.7,
+        patches: [{ at: { x: 9, y: 9 }, radius: 5, debris: [{ look: 'junk', count: 2, radius: [0.5, 0.8] }], spots: 1 }],
+        spotLook: 'shipCache',
+        spotTable: 'hullScrap',
+        spotRadius: [0.6, 0.8],
+        seatEase: 3,
+        rimRocks: null,
+        scree: null,
+        roads: [{ points: [{ x: -20, y: 3 }, { x: 20, y: 3 }], width: 2.5, surface: 'track' }],
+        spurs: [],
+        spurFade: 5,
+        decks: [],
+        landing: 0,
+      },
+      farm: null,
+      glass: { cell: 6, cover: [0.25, 0.55], clear: 1.5, spires: { look: 'hullShard', count: 4, radius: [0.8, 1.1] } },
+      spotGap: 6,
+      debrisGap: 1.5,
+      reactor: null,
+    };
+  }
+
+  // Bakes the territory layer with the test territory added to REGION and TERRITORIES, then takes it out again.
+  function withFlats(rules: TerritoryRules, draft: () => MapDraft): MapDraft {
+    REGION.locations.push(flats);
+    TERRITORIES[flats.id] = rules;
+    try {
+      return territoryLayer(7, draft());
+    } finally {
+      REGION.locations.splice(REGION.locations.indexOf(flats), 1);
+      delete TERRITORIES[flats.id];
+    }
+  }
+
+  const outside = (p: Vec): boolean => siteGap(flats, p) >= 0;
+
+  it('bakes the Fallen Sun and the orchard as without it (IV1)', () => {
+    const without = territoryLayer(7, rollingDraft());
+
+    const withIt = withFlats(flatsRules(), rollingDraft);
+
+    expect(withIt.props.filter((p) => outside(p.pos))).toEqual(without.props);
+    const tilesOutside = (d: MapDraft) => Array.from(d.built).filter((_, tile) => outside(tileCenter(d.size, tile)));
+    expect(tilesOutside(withIt)).toEqual(tilesOutside(without));
+  });
+
+  it('bakes a wreck with no basin and no rim rocks, with its piece, building, cache, field spot and glass', () => {
+    const d = withFlats(flatsRules(), rollingDraft);
+
+    const inside = d.props.filter((p) => !outside(p.pos));
+    const kinds = new Set(inside.map((p) => p.kind));
+    for (const kind of ['hullDrum', 'barn', 'hullCache', 'shipCache', 'junk', 'hullShard']) expect(kinds.has(kind as BakedProp['kind']), kind).toBe(true);
+    expect(kinds.has('rimRock')).toBe(false);
+    expect(tilesWithin(d.size, flats.pos, flats.radius).some((tile) => d.built[tile] === BUILT_GLASS)).toBe(true);
+  });
+
+  it('keeps the field spots the spot gap from the buildings', () => {
+    const rules = flatsRules();
+    const d = withFlats(rules, rollingDraft);
+
+    const [barn] = d.props.filter((p) => p.kind === 'barn' && !outside(p.pos));
+    const spots = d.props.filter((p) => p.kind === 'shipCache' && !outside(p.pos));
+    for (const s of spots) expect(dist(s.pos, barn.pos)).toBeGreaterThanOrEqual(rules.spotGap);
+  });
+
+  it('throws on a building that touches a piece (IV10)', () => {
+    const rules = flatsRules();
+    rules.wreck!.buildings[0].poses[0].at = { x: -9, y: -6 };
+
+    expect(() => withFlats(rules, rollingDraft)).toThrow(/touches a wreck piece/);
   });
 });

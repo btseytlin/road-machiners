@@ -40,6 +40,7 @@ const DESERT_WEIGHT: Record<LookType, number> = {
   track: 0,
   canal: 0,
   concrete: 0,
+  glass: 0,
 };
 
 // The ground paint under a road at mean noise, before hillshade and patches, on ground with no desert look. Road

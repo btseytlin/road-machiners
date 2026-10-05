@@ -101,8 +101,12 @@ export type WreckRules = {
   spotLook: PropKind; // the prop kind of a field spot drawn in a patch
   spotTable: SpotTable;
   spotRadius: [number, number]; // tiles, a field spot's footprint
+  // Authored loot spots of several looks, each group rolling its own table, placed as a farm's buildings are. A
+  // building must keep clear of every piece's boxes.
+  buildings: BuildingGroup[];
   seatEase: number; // tiles over which the ground levelled under a piece eases back to the crater relief
-  rimRocks: RimRocks;
+  // Rim rocks on the bank of the basin centred on the territory, or null for a wreck with no basin under it.
+  rimRocks: RimRocks | null;
   // Floor vertex indices of the territory's basin, from..to, wrapping past the last vertex. The bank of that arc is
   // painted red-brown scree.
   scree: { from: number; to: number } | null;
@@ -114,11 +118,20 @@ export type WreckRules = {
   decks: WreckDeck[];
   landing: number; // tiles of landing strip past a deck's lip, kept clear of props and other decks
 };
-// A territory is a wreck or a farm.
+// Fused glass: ground marked glass where value noise passes the cover share, and spire props drawn standing on it.
+// src/mapgen/glass.ts bakes it after the wreck or farm.
+export type GlassRules = {
+  cell: number; // tiles per cell of the noise lattice, so the size of one glass field
+  cover: [number, number]; // the share of open tiles that turn to glass at the centre and at the edge, linear between
+  clear: number; // tiles of sand kept round every piece, building and cache: the yards stay unglazed
+  spires: DebrisRule; // impassable glass, drawn wholly on glass tiles
+};
+// A territory is a wreck or a farm, either with fused glass.
 export type TerritoryRules = {
   seed: number; // offset of the territory's own draws, so adding a territory shifts no other's
   wreck: WreckRules | null;
   farm: FarmRules | null;
+  glass: GlassRules | null;
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: Reactor | null;
@@ -293,6 +306,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       // Field spots roll a scrap-heavy table at road-wreck size. With the 9 caches the Fallen Sun keeps 24 spots.
       spotTable: 'hullScrap',
       spotRadius: [0.6, 0.8],
+      buildings: [],
       seatEase: 3,
       // Rock walls along the north rim: the concept's grey crags run from (620,40) to (1000,330), bearings -111° to
       // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. They
@@ -466,6 +480,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       landing: 12,
     },
     farm: null,
+    glass: null,
     spotGap: 6,
     debrisGap: 1.5,
     // The core glows in the breach on the bow's near flank (800,278). It stands where the bow model's breach is, 10 m
@@ -651,6 +666,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'barrier', count: 8, radius: [0.5, 0.5], near: ['quonset', 'guardPost'], reach: 4 },
       ],
     },
+    glass: null,
     spotGap: 6,
     debrisGap: 3,
     reactor: null,

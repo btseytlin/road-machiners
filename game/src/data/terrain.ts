@@ -22,7 +22,8 @@ export type TerrainTypeId =
   | "toxic"
   | "track"
   | "canal"
-  | "concrete";
+  | "concrete"
+  | "glass";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -61,6 +62,10 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
   // their pale grey shows the slab apart from the dark road, as in the concept.
   concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
+  // Fused glass: sand melted flat into plates by a crashed ship's engine, at Glass Flats. Smooth plates roll nearly as
+  // fast as salt crust and wear parts like it, less than hardpan, with little loose dust. Its pale teal-grey shows
+  // the plates apart from the ochre sand and from the darker olive water.
+  glass: { id: "glass", name: "Fused glass", speed: 0.95, wear: 0.8, dust: 0.3, color: 0x8fb3ad },
 };
 
 // A deck station: a map point on the deck's axis and the deck line's rise there, in height units over the ground.
