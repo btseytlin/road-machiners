@@ -27,7 +27,8 @@
 // before it, shows when it happens. Oil and caltrops appear as their dropper's animated spot passes them (fieldShown).
 // Smoke, flares, harpoon lines and pulses start when movement has played, at the volley (volleyShown). There a flare
 // flies from its cannon on a Flight arc and ignites at the top, and a mortar shell flies to where its cloud billows.
-// Hazards from earlier turns, and everything after a load, show at once.
+// A playback that ends in its volley frame, as a turn with no gunfire does, still gets its volley: the views keep its
+// world before the turn until the next turn. Hazards from earlier turns, and everything after a load, show at once.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -59,6 +60,7 @@ export class HazardViews {
   private readonly lines = new HarpoonLinesView();
   private readonly pulses = new PulseView();
   readonly root = new THREE.Group();
+  private played: { before: World; turn: number } | null = null; // the last playback's world before it, and the turn it led to
 
   constructor() {
     this.root.add(this.smoke.root, this.fields.root, this.flares.root, this.lines.root, this.pulses.root);
@@ -66,13 +68,24 @@ export class HazardViews {
 
   // views: the vehicle views by vehicle id, which flights leave from, harpoon lines run between and sparks crackle on.
   // camera: the one drawing the scene, for the smoke's cutaway over the player's truck.
-  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, camera: THREE.Camera): void {
+  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, turnClock: TurnClock | null, camera: THREE.Camera): void {
+    const clock = this.clockOf(world, turnClock);
     this.smoke.update(world, terrain, views, nowMs, clock, cutawayOf(world, views, camera));
     this.fields.update(world, terrain, clock);
     this.flares.update(world, terrain, views, nowMs, clock);
     const fresh = new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
     this.lines.update(world, views, nowMs, { fresh, moved: clock === null || clock.moved });
     this.pulses.update(world, terrain, views, nowMs, clock);
+  }
+
+  // The playback's clock, and after it ends, a clock at its volley for the rest of its turn. A turn with no gunfire
+  // ends its playback in the frame its movement ends, so this is how the views meet that turn's volley.
+  private clockOf(world: World, clock: TurnClock | null): TurnClock | null {
+    if (clock) {
+      this.played = clock.before ? { before: clock.before, turn: world.turn } : null;
+      return clock;
+    }
+    return this.played && this.played.turn === world.turn ? { before: this.played.before, progress: 1, moved: true } : null;
   }
 }
 

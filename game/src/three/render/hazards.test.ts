@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OIL } from '../../data/utilities';
+import { PAL } from '../../render/palette';
 import { dropField, spillOil } from '../../sim/hazards';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
 import type { Vehicle, World } from '../../sim/types';
@@ -145,6 +146,29 @@ describe('HazardViews', () => {
     bands.clear();
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  // A turn with no gunfire ends its playback in the frame its movement ends, so the views never see a clock at the
+  // volley. A flare made in it must still fly from its cannon before it lights.
+  it('flies a flare made this turn when the playback ended in the volley frame', () => {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    const before = cloneWorld(world);
+    const pos = { x: me.pos.x + 12, y: me.pos.y };
+    world.flares.push({ id: 'f1', source: me.id, pos, r: 10, turnsLeft: 6 });
+    world.events = [{ t: 'utility', vehicle: me.id, part: 'p1', effect: 'flare', target: null, point: { ...pos } }];
+    const views = new HazardViews();
+    const camera = new THREE.PerspectiveCamera();
+
+    views.update(world, world.terrain, new Map(), 1000, clock(before, 0.5), camera);
+    views.update(world, world.terrain, new Map(), 1016, null, camera);
+
+    const shown: THREE.Sprite[] = [];
+    views.root.traverse((o) => {
+      if (o instanceof THREE.Sprite && o.visible && o.parent?.visible !== false) shown.push(o);
+    });
+    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.head)).toBe(true);
+    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.glow)).toBe(false);
+  });
 
   // IV23: hazard views draw no ground ring, disc or band at a hazard's radius.
   it('draws smoke, oil, caltrops, flares and pulses without a ground band', () => {
