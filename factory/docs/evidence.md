@@ -4,30 +4,24 @@ What agents hand to the committee, and what the factory checks before it posts.
 
 ## Visual evidence
 
-A testing round that ends in a post writes `.factory/screenshot.png`, the primary, and `.factory/approval.json` with `description` and `howToTry`. It may write `.factory/evidence.json`, an ordered manifest of up to 10 images with the primary first. The manifest lists the visible `features` of the change and, per image, a short description and the features it `covers`. The factory checks these rules:
+A testing round that ends in a post must write `.factory/approval.json` with `description` and `howToTry`. The prompts ask it to also write `.factory/screenshot.png`, the primary. It may write `.factory/evidence.json`, an ordered manifest of up to 10 images with the primary first. The manifest lists the visible `features` of the change and, per image, a short description and the features it `covers`.
+
+Evidence never blocks a card. With no screenshot, the approval post is a text message with the same Approve and Deny buttons, post mapping and reply routing, and a status line edits its text. It opens with "No screenshot", and the issue comment says what was missing. A manifest that breaks a rule is dropped, the one screenshot posts, and the issue comment says why. The manifest rules:
 
 - Every feature has an image. A `location` has at least one real image. A `system` has an image marked `sheet`, a labeled contact sheet of real screenshots.
 - Each file is a plain relative name inside `.factory/`, a real PNG, JPEG or WebP under 10 MB, with no link out of the folder and no duplicates.
-- `commit` is the final head of the branch. A fix round that changed code must capture again, or the stage fails.
-- With no manifest, the one screenshot posts. A manifest that breaks a rule fails the verify or patch job that wrote it.
+- `commit` is the final head of the branch. A fix round that changed code must capture again.
+- With no manifest, the one screenshot posts.
 
 Telegram gives a media group no buttons. So the approval post stays one photo with its caption and buttons, and the other images follow as a reply photo or album. Commands act on the primary only. When the album fails, the factory marks the primary superseded, drops its buttons and fails the stage with the card in Testing. The release candidate posts the same way, with an optional manifest that is logged and ignored when it breaks a rule.
 
-## Committee screenshot waiver
-
-A member can waive the screenshot of one card in Testing by sending `/waive-visual <issue> <reason>` in the committee chat. The reason is required. Only the committee command does it. A GitHub comment, and the testing agent's own `visual: false`, never waive anything. The factory refuses a user outside the committee and a card outside Testing, records the waiver in the state file `visualWaivers` with the member, the reason and the time, and comments it on the issue.
-
-A waived card runs the same stages. Verify still plays the feature and accepts `.factory/approval.json` with no screenshot, evidence manifest or visual review, and the card goes to the checks. The checks run the fresh-clone tests, typecheck, CPU playtest and build as usual. A failure follows the normal fix and retry rules and posts nothing.
-
-After a pass the factory posts the approval as a text message, since there is no photo. It has the same Approve and Deny buttons, post mapping and reply routing, and a status line edits its text. Its text opens with "SCREENSHOT WAIVED" and says the player-visible behavior has no visual evidence, and the issue comment says the same with the reason. The waiver covers that one post and is then removed. A later rebuild of the card needs its evidence again, unless a member waives again. A held card keeps its `factory-stuck` label until Hermes removes it.
-
 ## Visual review
 
-Testing does not trust the implementation's claim that the look is right. A round that ends in a post finishes with the agent reading its final images and writing `.factory/visual-review.json`. It compares them with the issue, the task file, `game/docs/DESIGN.md` and the game docs. The factory checks the file for consistency:
+Testing does not trust the implementation's claim that the look is right. A round that captured a screenshot finishes with the agent reading its final images and writing `.factory/visual-review.json`. It compares them with the issue, the task file, `game/docs/DESIGN.md` and the game docs. The factory checks the file for consistency:
 
 - `commit` is the final head. `images` has one entry per shown image with its sha256, so a recapture needs a new reading. Each entry and each feature decision carries a `correct` or `wrong` verdict and notes of at least 20 characters.
 - `visual: false` needs a reason and is refused when `evidence.json` lists features. A change nobody can see passes on its reason.
-- A missing file, a stale hash, an unreadable image or a missing decision fails the stage. Nothing posts.
+- A missing file, a stale hash, an unreadable image or a missing decision is logged and ignored. The card goes on to the checks.
 
 Each remaining mismatch has a scope.
 
