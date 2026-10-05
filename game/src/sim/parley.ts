@@ -12,7 +12,7 @@ import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
 import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
-import { decide, firepower, perceiveDanger, perceiveThreat, visibleHostiles, wantsLoot } from './npc-decisions';
+import { decide, firepower, perceiveThreat, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
 import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
@@ -100,7 +100,7 @@ function creditYield(world: World, loser: Vehicle, winner: Vehicle): void {
 
 // An NPC's answer to a plea, rolled once.
 export function answersPlea(world: World, answerer: Vehicle, pleader: Vehicle, plea: Plea): boolean {
-  const danger = perceiveDanger(world, answerer, pleader);
+  const danger = perceiveThreat(world, answerer, pleader);
   if (plea === 'truce') return decide(world, answerer, 'truceOffered', pleader.id, danger) === 'accept';
   return decide(world, answerer, 'mercyBegged', pleader.id, danger) === 'spare';
 }
@@ -185,7 +185,7 @@ export function playerPleaded(world: World, npc: Vehicle): boolean {
 // An NPC's answer to the player's demand for its cargo, rolled once.
 export function answersThreat(world: World, npc: Vehicle): ThreatAnswer {
   const me = playerVehicle(world);
-  return decide(world, npc, 'threatened', me.id, perceiveDanger(world, npc, me));
+  return decide(world, npc, 'threatened', me.id, perceiveThreat(world, npc, me));
 }
 
 // A driver that complies drops its cargo and holds a truce with the player. Otherwise it fights or runs.
@@ -207,7 +207,7 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
   const claimant = claimantOf(world, stock);
   if (!claimant || claimant.id === vehicle.id || !canVehicleSee(world, claimant, vehicle.pos)) return false;
   if (!backedOff(stock, vehicle.id)) {
-    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
+    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveThreat(world, vehicle, claimant));
     if (answer === 'fightBack') {
       defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
       defendClaim(world, claimant, vehicle);
@@ -265,7 +265,7 @@ export function lootsBesidePlayer(world: World, npc: Vehicle): boolean {
 // A looter's answer to the player's warning off its wreck, rolled once.
 export function answersWarning(world: World, npc: Vehicle): WarnAnswer {
   const me = playerVehicle(world);
-  return decide(world, npc, 'warnedOff', me.id, perceiveDanger(world, npc, me));
+  return decide(world, npc, 'warnedOff', me.id, perceiveThreat(world, npc, me));
 }
 
 // A driver that complies leaves the wreck to the player, and one that fights back fights the player like a defied

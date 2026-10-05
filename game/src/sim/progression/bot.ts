@@ -29,7 +29,7 @@ import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, site
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, downedNear, salvageHere, takeAllLoot } from '../locations';
-import { firepower, getUpkeepReserve, isWeak, groupDanger, groupThreat, withinReach } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, groupThreat, withinReach } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -699,7 +699,7 @@ function weakestFoe(world: World): Vehicle | null {
 }
 
 function dangerOf(world: World, foe: Vehicle): number {
-  return groupDanger(world, playerVehicle(world), foe);
+  return groupThreat(world, playerVehicle(world), foe);
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
@@ -761,8 +761,12 @@ function demandYield(o: Orders, foe: Vehicle): boolean {
 // Where an unseen hostile the hunter would take on is: the center of its contact circle. Nearest first. A contact
 // it would not fight, like a gunwagon that just shot at it, is never chased.
 function heardFoe(o: Orders): Vec | null {
-  const prey = o.world.vehicles.filter((v) => v.id !== o.me.id && hostileToPlayer(o.world, v) && canTakeOn(o, v, 'hunter'));
-  return nearest(o.me.pos, o.world.player.contacts.filter((c) => prey.some((v) => v.id === c.vehicleId)).map((c) => c.center));
+  const byDistance = [...o.world.player.contacts].sort((a, b) => dist(o.me.pos, a.center) - dist(o.me.pos, b.center));
+  const prey = byDistance.find((c) => {
+    const v = o.world.vehicles.find((x) => x.id === c.vehicleId);
+    return v !== undefined && v.id !== o.me.id && hostileToPlayer(o.world, v) && canTakeOn(o, v, 'hunter');
+  });
+  return prey ? prey.center : null;
 }
 
 function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null {
@@ -900,10 +904,6 @@ function knownTowns(world: World): TownDef[] {
 function byDistance<T extends Site>(world: World, sites: T[]): T[] {
   const pos = playerVehicle(world).pos;
   return [...sites].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos));
-}
-
-function nearest(from: Vec, points: readonly Vec[]): Vec | null {
-  return points.reduce<Vec | null>((best, p) => (!best || dist(from, p) < dist(from, best) ? p : best), null);
 }
 
 function nearestUndiscovered<T extends Site>(world: World, sites: readonly T[]): T | null {

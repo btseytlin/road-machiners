@@ -6,7 +6,7 @@ import { assignAutoOrders, fireWeapons } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
-import { ownDanger, perceiveDanger } from './npc-decisions';
+import { ownDanger, perceiveThreat } from './npc-decisions';
 import { siteGates } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -173,10 +173,10 @@ describe('NPC gameplay recovery', () => {
     const trader = addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
     const judged = () => {
       world.rngState = 7;
-      return perceiveDanger(world, npc, trader);
+      return perceiveThreat(world, npc, trader);
     };
     const alone = judged();
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 30, y: 42 });
+    addVehicle(world, npc.faction, 'scout', ['mg'], { x: 30, y: 42 });
     expect(judged()).toBe(alone);
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 33 });
     expect(judged()).toBeCloseTo(alone * 2);

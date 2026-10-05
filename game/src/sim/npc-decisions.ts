@@ -138,17 +138,6 @@ function localGroup(world: World, observer: Vehicle, member: Vehicle): Vehicle[]
     && dist(v.pos, member.pos) <= SPAWN.neighborHelp && canVehicleSee(world, observer, v.pos)));
 }
 
-// Another truck's local group danger, with no random roll.
-export function groupDanger(world: World, observer: Vehicle, other: Vehicle): number {
-  return localGroup(world, observer, other).reduce((sum, v) => sum + vehicleDanger(world, v), 0);
-}
-
-// Another truck's local group danger as one sighting judges it: off by a factor rolled with world RNG.
-export function perceiveDanger(world: World, observer: Vehicle, other: Vehicle): number {
-  const spread = NPC_BEHAVIOR.dangerSpread;
-  return groupDanger(world, observer, other) * randRange(world, 1 - spread, 1 + spread);
-}
-
 // The danger a driver faces in a fight with `other`: the local group of `other` and the local group of every other
 // hostile the observer sees, each truck counted once. A foe that stands next to a stronger one is not a weak foe. It
 // draws no random number, so a bot standing in for the player can ask it freely. One pass over the vehicles finds the
