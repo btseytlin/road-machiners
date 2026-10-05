@@ -21,6 +21,7 @@ export type FactoryConfig = {
   oauthToken: string; // CLAUDE_CODE_OAUTH_TOKEN
   elevenlabsKey: string; // ELEVENLABS_API_KEY, for the game's sfx:gen in agent runs
   sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
+  agentBashMaxMinutes: number; // longest timeout in minutes an agent may give one foreground Bash command
   designModel: string;
   buildModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
