@@ -10,6 +10,7 @@ import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
 import { itemTone } from "../render/partLooks";
+import { hashStr } from "../render/noise";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
 import { el } from "./dom";
@@ -191,6 +192,9 @@ function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCe
 const SVG_NS = "http://www.w3.org/2000/svg";
 // Items are vector blueprints, so they stay sharp at any slot size. Chassis portraits are toon renders.
 const SHEET_FILES: Record<Sheet, string> = { items: "items.svg", chassis: "chassis.png" };
+// The sheets' URLs carry the manifest's hash, so a browser never pairs a cached old sheet with a new manifest, which
+// would put every icon in the wrong cell.
+const SHEET_VERSION = hashStr(JSON.stringify(ICONS)).toString(36);
 
 // The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
 // crop: the share of the cell to show.
@@ -203,7 +207,7 @@ function sheetIcon(cell: IconCell, cls: string, crop: Box): HTMLElement {
   clip.setAttribute("viewBox", `${cell.col + crop.x} ${cell.row + crop.y} ${crop.w} ${crop.h}`);
   for (const [k, v] of [["width", crop.w], ["height", crop.h]] as const) clip.setAttribute(k, String(v));
   const image = document.createElementNS(SVG_NS, "image");
-  image.setAttribute("href", `${import.meta.env.BASE_URL}icons/${SHEET_FILES[cell.sheet]}`);
+  image.setAttribute("href", `${import.meta.env.BASE_URL}icons/${SHEET_FILES[cell.sheet]}?v=${SHEET_VERSION}`);
   image.setAttribute("width", String(cell.cols));
   image.setAttribute("height", String(cell.rows));
   image.setAttribute("preserveAspectRatio", "none");
