@@ -4,7 +4,8 @@ import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase, type VisualWaiver } from '../types';
+import { consumeWaiver, visualWaiverOf, waiverNotice } from '../visual-waiver';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { readApproval, setPhase, type Approval } from './verify';
@@ -55,13 +56,16 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const build = await ctx.repo.headHash(BRANCH(issue));
   // An approved card merges with no post, so only a card that will be posted needs the approval and the evidence. They are read before the checks, so a bad manifest fails fast.
   const approver = approvedAlready(ctx, issue, item.labels);
-  const shown = approver === null ? { approval: readApproval(home), evidence: readEvidence(home, build) } : null;
+  // A committee waiver of the screenshot takes the place of the evidence, and the post says so.
+  const waiver = approver === null ? visualWaiverOf(ctx, issue) : null;
+  const shown = approver === null ? { approval: readApproval(home, waiver !== null), evidence: waiver === null ? readEvidence(home, build) : null } : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
   const failure = await checkPatiently(ctx, issue, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  if (shown !== null) await post(ctx, issue, shown.approval, shown.evidence, url, base);
+  if (shown !== null) await post(ctx, issue, shown.approval, shown.evidence, url, base, waiver);
+  if (waiver !== null) consumeWaiver(ctx, issue);
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
@@ -160,17 +164,26 @@ const TRIM_MARK = '…';
 
 // The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
 // Further evidence images follow as a reply photo or album, which no command acts on.
-export async function post(ctx: Ctx, issue: number, approval: Approval, evidence: Evidence, url: string, base: string): Promise<void> {
+// A waived post has no image, so it is a text message with the same buttons, mapping and reply routing. It says up front that the screenshot was waived.
+export async function post(ctx: Ctx, issue: number, approval: Approval, evidence: Evidence | null, url: string, base: string, waiver: VisualWaiver | null = null): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
-  await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
-  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
-  await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), {
-    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption } })),
-    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id) })),
-  });
+  const waived = waiver === null ? '' : `${WAIVED_COMMENT}\n${waiverNotice(waiver)}\n\n`;
+  await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${waived}${approval.description}\n\nHow to try: ${approval.howToTry}`);
+  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, waiver);
+  const track = {
+    add: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption }, textPosts: evidence === null ? [...state.textPosts, String(id)] : state.textPosts })),
+    drop: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id), textPosts: state.textPosts.filter((name) => name !== String(id)) })),
+  };
+  if (evidence !== null) {
+    await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), track);
+    return;
+  }
+  track.add(await ctx.telegram.sendButtons(ctx.cfg.committeeChat, caption, approvalButtons(issue, base)));
 }
+
+const WAIVED_COMMENT = '⚠️ The committee waived the screenshot for this build. The player-visible behavior has no visual evidence.';
 
 function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([name]) => name !== String(key)));
@@ -190,9 +203,11 @@ export function approvalButtons(issue: number, base: string): InlineButton[][] {
   return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
 }
 
-export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string): string {
+export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, waiver: VisualWaiver | null = null): string {
   // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
-  const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
+  const hotfix = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
+  const waived = waiver === null ? '' : `⚠️ SCREENSHOT WAIVED by ${waiver.byName ?? waiver.by}. Player-visible behavior has no visual evidence, so judge it by playing.\n\n`;
+  const warning = `${hotfix}${waived}`;
   const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
   const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. Reply to this post to ask a question or ask for a change.`;

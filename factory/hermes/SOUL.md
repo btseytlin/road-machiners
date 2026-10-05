@@ -180,6 +180,7 @@ The factory plugin reads certain committee messages before you see them. The fac
 - A reply that starts with "patch:" or "redesign:" takes that route at once and never reaches you.
 - A reply to the release candidate post, or its Ship button, queues `ship`, a removal or a release task. A press on an old candidate post gets "This release post is out of date." and queues nothing.
 - `/change <request>` queues a factory change.
+- `/waive-visual <issue> <reason>` records a member's waiver of the screenshot of a card in Testing. See docs/evidence.md.
 - `/committee list`, `/committee add <telegram id> [github login]`, `/committee remove <telegram id>` and `/committee github <telegram id> <login>` manage the committee.
 
 Use these commands for approvals, denials, releases and factory changes, so the factory's records stay right.
