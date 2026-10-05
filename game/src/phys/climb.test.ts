@@ -15,6 +15,8 @@ beforeAll(async () => {
 });
 
 const RAMP_FOOT = 28; // tile x where the ramp starts to rise
+// Grade where the loaded hauler gains nothing in eight turns from rest with the climb reserve, measured on this ramp.
+const HAULER_LIMIT = 0.45;
 
 // The standard player truck, or the hauler with a full load of scrap from the hill test in drive.test.ts.
 type Build = 'scout' | 'loadedHauler';
@@ -58,6 +60,11 @@ describe('climbing', () => {
   it('a loaded hauler keeps climbing a grade it stalled on before the climb reserve', () => {
     // Before the reserve it gained 0.8 tiles here.
     expect(climbTiles('loadedHauler', 0.35)).toBeGreaterThan(3);
+  }, 90_000);
+
+  it('a climb a tenth steeper in sine than its limit still stops the loaded hauler', () => {
+    const sine = 1.1 * Math.sin(Math.atan(HAULER_LIMIT));
+    expect(climbTiles('loadedHauler', Math.tan(Math.asin(sine)))).toBeLessThan(1);
   }, 90_000);
 
   it('flat ground acceleration from rest is unchanged', () => {

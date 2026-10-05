@@ -611,19 +611,52 @@ function turnWheels(c: Car, steerTo: number): void {
 // so a truck holds its speed on a slope. Without engine push the truck brakes.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
-  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
+  const cap = climbForce(c, target);
+  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target, cap), -1, 1);
   const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
   const brake = brakeOf(plan, u, target, pushing);
-  const force = pushing ? u * plan.engineForce : 0;
+  const force = pushing ? u * cap : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
-function slopeThrottle(c: Car, target: number): number {
+// Throttle share that holds the truck against gravity along its nose, at cap force per driven wheel. A truck holding still brakes instead.
+function slopeThrottle(c: Car, target: number, cap: number): number {
   if (target === 0) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
-  return pull / (2 * c.plan.engineForce);
+  return pull / (2 * cap);
+}
+
+// Full-throttle force of each driven wheel: the plan's engine force, plus a reserve against a climb in the direction
+// the engine pushes. The reserve is at most climbReserve of the engine force and never more than gravity's pull along
+// the ground the wheels stand on, so flat ground, downhill and the air get none.
+function climbForce(c: Car, target: number): number {
+  const pull = (T.gravityScale * PHYSICS.gravity * c.s.mass * climbSine(c, Math.sign(target))) / 2;
+  return c.plan.engineForce + Math.min(T.climbReserve * c.plan.engineForce, Math.max(0, pull));
+}
+
+// Sine of the grade under the wheels along the nose, or along the tail for a sign of -1: positive uphill. The ground
+// is the mean contact normal of the wheels touching it, as of the last vehicle update. 0 when no wheel touches.
+function climbSine(c: Car, sign: number): number {
+  const n = { x: 0, y: 0, z: 0 };
+  let touching = 0;
+  for (let i = 0; i < c.ctl.numWheels(); i++) {
+    if (!c.ctl.wheelIsInContact(i)) continue;
+    const normal = c.ctl.wheelContactNormal(i);
+    if (!normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact normal`);
+    n.x += normal.x;
+    n.y += normal.y;
+    n.z += normal.z;
+    touching++;
+  }
+  const length = Math.hypot(n.x, n.y, n.z);
+  if (touching === 0 || length === 0) return 0;
+  const heading = headingOf(c.body.rotation());
+  const way = { x: Math.cos(heading) * sign, z: Math.sin(heading) * sign };
+  // The travel direction laid onto the ground plane; its vertical share is the grade's sine.
+  const into = (way.x * n.x + way.z * n.z) / (length * length);
+  const along = { x: way.x - into * n.x, y: -into * n.y, z: way.z - into * n.z };
+  return along.y / Math.hypot(along.x, along.y, along.z);
 }
 
 // No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
