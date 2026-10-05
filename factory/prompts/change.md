@@ -3,7 +3,7 @@ You work alone in a clone of the repo on its own branch. The clone is your isola
 
 Read ../CLAUDE.md and CLAUDE.md first.
 Follow them.
-Read docs/process.md before you design. It is the spec of how the factory works, and a change to the process updates it.
+Read docs/process.md and the `.dot` diagrams in docs/diagrams/ before you design. They are the spec of how the factory works. A change to the process updates its diagram and doc in the same commit. Run `npm run diagrams` after you edit a `.dot` file.
 Run `npm ci` here, then `cd .. && npm ci && npm run hooks:install`.
 The quality hook checks every commit.
 Do not bypass it.

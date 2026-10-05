@@ -2,7 +2,7 @@
 
 The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it.
 
-Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec. A change to the process updates its diagram and the matching doc in the same commit. [README](README.md) lists the other docs.
+Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec. Its diagrams are Graphviz files in `docs/diagrams/`. Read the `.dot` source, not the `.svg`. A change to the process updates its diagram and the matching doc in the same commit. Run `npm run diagrams` after a `.dot` edit, which needs Graphviz installed. [README](README.md) lists the other docs.
 
 ## Commands
 
@@ -10,6 +10,7 @@ Run these from `factory/`. Run `npm ci` first.
 
 - `npm test` runs the CLI tests.
 - `npm run typecheck` runs tsc.
+- `npm run diagrams` renders the process diagrams.
 - `npm run factory -- tick` runs one tick. The server runs it on a timer.
 - `uv run --with pytest --with pyyaml pytest hermes` runs the Hermes plugin tests.
 - `cd infra && uv run pytest` runs the infra helper tests.
