@@ -50,7 +50,7 @@ async function pass(ctx: Ctx, issue: number, reason: string, hotfix: boolean, ro
   await ctx.github.move(issue, 'Design');
 }
 
-// Triage picks models by task complexity: trivial gets Sonnet at design (label design-sonnet), hard gets Opus at implementation (label implementation-opus), anything between keeps the default.
+// Triage picks models by task complexity: trivial and intermediate get Sonnet at design (label design-sonnet), hard keeps Opus at design and gets Opus at implementation (label implementation-opus).
 // It decides once. Labels already on the issue are the committee's and stay as they are, and an earlier routing comment means a label removed since was removed on purpose.
 // The comment is the audit trail and the marker of that decision.
 async function routeModels(ctx: Ctx, issue: number, { complexity, why }: Routing): Promise<string> {
@@ -60,14 +60,12 @@ async function routeModels(ctx: Ctx, issue: number, { complexity, why }: Routing
   if (set.length > 0) return `${ROUTING_MARK} left as set on the issue (${set.join(', ')}). ${rated}`;
   if (comments.some((comment) => comment.body.includes(ROUTING_MARK))) return `${ROUTING_MARK} kept as the committee left the labels. ${rated}`;
   const label = routingLabel(complexity);
-  if (label === null) return `${ROUTING_MARK} ${complexity}, default models (Opus design, Sonnet implementation and testing). ${why}`;
   await ctx.github.addLabel(issue, label);
   return `${ROUTING_MARK} ${complexity}, label ${label}. ${why}`;
 }
 
-function routingLabel(complexity: Complexity): string | null {
-  if (complexity === 'trivial') return DESIGN_SONNET_LABEL;
-  return complexity === 'hard' ? IMPLEMENTATION_OPUS_LABEL : null;
+function routingLabel(complexity: Complexity): string {
+  return complexity === 'hard' ? IMPLEMENTATION_OPUS_LABEL : DESIGN_SONNET_LABEL;
 }
 
 // The other Triage cards the agent may bundle, as untrusted text, so it can judge which touch the same work.
