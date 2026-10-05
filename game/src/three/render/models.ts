@@ -81,6 +81,12 @@ const NAMES = [
   'guard_post',
   'army_truck',
   'barrier',
+  'engine_nozzle',
+  'engine_frame',
+  'ruin_compound',
+  'watchtower',
+  'glass_spire',
+  'scrap_wall',
 
   'bumper_front',
   'bumper_rear',

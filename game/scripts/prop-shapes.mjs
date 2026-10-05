@@ -19,9 +19,12 @@ const PROP_MODELS = [
   'crates',
   'dead_tree',
   'drums',
+  'engine_frame',
+  'engine_nozzle',
   'farmhouse',
   'fence',
   'gas_station',
+  'glass_spire',
   'guard_post',
   'hull_chunk',
   'hull_drum',
@@ -36,7 +39,9 @@ const PROP_MODELS = [
   'rim_rock',
   'rock',
   'sandbags',
+  'ruin_compound',
   'ruin_house',
+  'scrap_wall',
   'shack',
   'ship_bow',
   'ship_cage',
@@ -44,6 +49,7 @@ const PROP_MODELS = [
   'silo',
   'tank_hulk',
   'ship_wing',
+  'watchtower',
   'water_tower',
   'woodpile',
   'wreck',
@@ -62,9 +68,10 @@ const CFG = {
 };
 
 // Models whose boxes must keep the line at truck clearance: a box that starts at or above it blocks neither driving
-// nor nav, so a dead tree's crown must not merge down into its trunk. CLEARANCE is PHYSICS.truckClearance in
-// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the dead tree's low boxes against it.
-const SPLIT_AT_CLEARANCE = new Set(['dead_tree']);
+// nor nav, so a dead tree's crown must not merge down into its trunk, and the Glass Flats engine nozzle's roof and
+// engine frame's arches must not merge down into their walls and feet. CLEARANCE is PHYSICS.truckClearance in
+// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the low boxes of all three against it.
+const SPLIT_AT_CLEARANCE = new Set(['dead_tree', 'engine_frame', 'engine_nozzle']);
 const CLEARANCE = 2.8; // m
 const LOW_BOXES = 8; // of CFG.maxBoxes, for the boxes that start below clearance
 
