@@ -31,6 +31,7 @@ const KEYS = {
   designModel: 'FACTORY_DESIGN_MODEL',
   buildModel: 'FACTORY_BUILD_MODEL',
   triageEffort: 'FACTORY_TRIAGE_EFFORT',
+  designEffort: 'FACTORY_DESIGN_EFFORT',
   tokenPrices: 'FACTORY_MODEL_PRICES',
   minVotes: 'FACTORY_MIN_VOTES',
   minAgeHours: 'FACTORY_MIN_AGE_HOURS',
