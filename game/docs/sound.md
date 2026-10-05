@@ -59,6 +59,8 @@ To hear a fight without looking for one, open the console with the backquote key
 
 A cue with several prompts is a family of different sounds, one prompt per variant, and skips tone matching.
 
+Every music loop also gets the palette finish at import, so tracks from different generations sound like one set. Its tone moves part of the way toward one target curve, taken from the town and outpost tracks. Its stereo width goes to one level. All loops share the same glue compression, one short room and one soft top end. The settings are at the end of `scripts/sfx-lib.mjs`. The finish changes timing by a few milliseconds, so measure the phase of a combat base again after it.
+
 ## Generating with ElevenLabs
 
 `npm run sfx:gen -- <cue> <count>` generates variants and imports them. It costs credits, so ask before running it. `SFX_MAX_GENERATIONS` in `.env` caps one run.

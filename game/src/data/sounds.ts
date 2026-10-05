@@ -88,7 +88,7 @@ const DEFS = {
   // The outpost take, music-outpost-1791233198633.mp3, gets the same Demucs split and ffmpeg mix as the town take.
   "music-outpost": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dark, menacing wasteland outpost groove with a steady pulse, 92 bpm, instrumental. Brooding minor key, like a spaghetti western standoff: baritone sax and trumpet play a grim Ethiopian jazz melody up front, over a tight dry drum kit and quiet junk percussion of clanking scrap metal and steel pipes. A deep driving bass riff, and a gritty overdriven guitar kept low in the mix, playing short muted stabs, never blasting. Hard and watchful, still moving, never happy or bright. Raw 1970s band playing live in a dry room, tape, no synths, no organ, seamless loop."], seconds: 90 },
   // Music for abandoned territories. The take, music-abandoned-1791234140171.mp3, is run through ffmpeg
-  // "asetrate=44100*0.95,aresample=44100,acompressor=threshold=-24dB:ratio=4:attack=2:release=300:makeup=2,lowpass=f=3500,treble=g=-4:f=2500,aecho=0.8:0.6:120|260:0.25|0.15"
+  // "atempo=0.95,acompressor=threshold=-24dB:ratio=4:attack=2:release=300:makeup=2,lowpass=f=3500,treble=g=-4:f=2500,aecho=0.8:0.6:120|260:0.25|0.15"
   // and cut from 20 s before import, to sit far back and calm. Its volume is lower than the other music, so it stays quiet.
   "music-abandoned": { bus: "music", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow, sinister instrumental for exploring abandoned machine ruins, 60 bpm, A minor. Haunted and menacing, something is watching, not sad, not cheerful. A distant baritone sax plays a grim minor-key Ethiopian jazz phrase, then long rests of near silence. A muffled muted trumpet answers it now and then. A slow, sparse pattern of junk metal percussion: hollow knocks on steel pipes, a ringing oil drum hit, a dragged chain. A muffled, slightly detuned baritone guitar plucks a few low notes. Wind creaks through rusted metal, short bursts of radio static. The phrases grow a little louder, then fall back quiet. Raw 1970s live recording in a big empty hangar, tape. No drone, no pads, no sustained bass, no drum kit, no synths, seamless loop."], seconds: 90 },
   // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
@@ -172,8 +172,8 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 
 // First-beat offset of each beat loop file, from scripts/sfx-phase.py. Layers start at these offsets, so their beats meet.
 const SCORE_PHASES: Record<string, number> = {
-  "score-drums-1.ogg": 0.014,
-  "score-bass-1.ogg": 0.232,
+  "score-drums-1.ogg": 0.006,
+  "score-bass-1.ogg": 0.22,
   "score-horns-1.ogg": 0.176,
   "score-trombone-1.ogg": 0.172,
 };
