@@ -99,8 +99,6 @@ def read_approval_posts(state_dir: str) -> dict:
 
 
 CHANGE_PREFIX = "/change "
-# `/waive-visual <issue> <reason>` records the committee's waiver of the screenshot of one card. The reason is required.
-WAIVE_VISUAL = re.compile(r"/waive-visual\s+#?(\d+)\s+(\S.*)", re.IGNORECASE | re.DOTALL)
 
 
 def route(text, reply_to_message_id, chat_id, approval_posts, cfg, release=None) -> Optional[tuple]:
@@ -136,9 +134,6 @@ def _release_request(text, release) -> tuple:
 
 
 def _request(text, reply_to_message_id, approval_posts, release=None) -> Optional[tuple]:
-    waive = WAIVE_VISUAL.fullmatch(text.strip())
-    if waive:
-        return ("waive-visual", int(waive.group(1)), waive.group(2).strip())
     if release is not None and release.post_id is not None and str(reply_to_message_id) == str(release.post_id):
         return _release_request(text, release)
     issue = approval_posts.get(str(reply_to_message_id)) if reply_to_message_id is not None else None
@@ -169,17 +164,17 @@ def reply_header(issue: int, post_id) -> str:
 
 
 def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id, reply_to_message_id) -> dict:
-    """`postId` is the post a reply answers, so the factory can add a status line to it. /change and /waive-visual answer no post."""
+    """`postId` is the post a reply answers, so the factory can add a status line to it. /change answers no post."""
     kind = decision[0]
     return {
         "kind": kind,
-        "issue": decision[1] if kind in ("approve", "reply", "patch", "redesign", "ship", "remove", "waive-visual") else None,
-        "text": decision[2] if kind in ("reply", "patch", "redesign", "remove", "waive-visual") else decision[1] if kind in ("change", "release-task") else None,
+        "issue": decision[1] if kind in ("approve", "reply", "patch", "redesign", "ship", "remove") else None,
+        "text": decision[2] if kind in ("reply", "patch", "redesign", "remove") else decision[1] if kind in ("change", "release-task") else None,
         "by": str(user_id),
         "byName": user_name or None,
         "chat": str(chat_id),
         "messageId": int(message_id),
-        "postId": None if kind in ("change", "waive-visual") else int(reply_to_message_id),
+        "postId": None if kind == "change" else int(reply_to_message_id),
     }
 
 
