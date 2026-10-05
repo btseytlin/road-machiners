@@ -17,6 +17,7 @@ export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
   if (!site) throw new Error(`Stall ${id} has no location`);
   return site;
 });
+const TERRITORIES: readonly LocationDef[] = REGION.locations.filter(isTerritory);
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
@@ -95,9 +96,10 @@ export function townNear(world: World): TownDef | null {
   return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
 }
 
-// Whether pos is inside a territory, an abandoned place of open ground.
+// Whether pos is inside a territory, an abandoned place of open ground. The music asks every frame, so a point past
+// a territory's radius is rejected before any outline work.
 export function isInTerritory(pos: Vec): boolean {
-  return REGION.locations.some((site) => isTerritory(site) && siteGap(site, pos) < 0);
+  return TERRITORIES.some((site) => dist(pos, site.pos) <= site.radius && siteGap(site, pos) < 0);
 }
 
 // Whether pos is within reach tiles of an outpost gate.
