@@ -122,32 +122,47 @@ function renderWorkers() {
   renderTable('worker', operations?.jobs ?? [], createWorkerRow, operations ? 'No running jobs' : 'State unavailable', 4);
   renderCapacity(operations);
 }
-function readQueueReason(queue) {
-  if (readOperations()?.status === 'paused') return 'Starts paused';
-  return readScheduledQueueReason(queue);
-}
-function readScheduledQueueReason(queue) {
-  const scheduler = readLive()?.scheduler;
-  if (!scheduler || scheduler.freshness !== 'ok') return 'Reason unavailable';
-  if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
-  const waiting = readQueueWaits(queue);
-  if (!waiting.length) return 'No eligible work';
-  return waiting.map((item) => `${item.issue === null ? stages[item.stage] : `#${item.issue}`} ${item.reasons.map((reason) => reasons[reason]).join(', ') || 'Selected at last check'}`).join(', ');
-}
-function readQueueWaits(queue) {
+function readQueueWaits() {
   const decisions = readLive()?.scheduler?.decisions ?? [];
-  return decisions.filter((item) => item.queue === queue && item.reasons.length > 0 && !item.reasons.includes('issue-running'));
+  return decisions.filter((item) => item.reasons.length > 0 && !item.reasons.includes('issue-running'));
+}
+function readWaitingStatus(operations) {
+  if (!operations) return 'State unavailable';
+  if (operations.status === 'paused') return 'Starts paused';
+  return readSchedulerAvailability(readLive()?.scheduler);
+}
+function readSchedulerAvailability(scheduler) {
+  if (!scheduler) return 'Scheduler unavailable';
+  if (scheduler.freshness !== 'ok') return 'Scheduler stale';
+  if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
+  return null;
+}
+function renderFreeSlots(operations) {
+  if (!operations) {
+    setText('free-count', '');
+    return replaceContents('free-slots', [createNode('span', 'Capacity unavailable')]);
+  }
+  const queues = Object.entries(operations.queues);
+  const total = queues.reduce((sum, [, queue]) => sum + queue.total, 0);
+  const free = queues.reduce((sum, [, queue]) => sum + queue.total - queue.busy, 0);
+  setText('free-count', `${snapshot.operations.status === 'ok' ? '' : 'Last known: '}${free} / ${total}`);
+  const available = queues.filter(([, queue]) => queue.busy < queue.total).map(([name, queue]) => createNode('span', `${queueNames[name]}: ${queue.total - queue.busy} free`));
+  replaceContents('free-slots', available.length ? available : [createNode('span', 'All slots occupied')]);
+}
+function createWaitingRow(item) {
+  const row = createNode('div', '', 'capacity-row');
+  row.append(createNode('span', item.issue === null ? stages[item.stage] : `#${item.issue} ${stages[item.stage]}`), createNode('span', item.reasons.map((reason) => reasons[reason]).join(', ')));
+  return row;
 }
 function renderCapacity(operations) {
-  const rows = operations ? Object.entries(operations.queues).filter(([name, queue]) => queue.total > queue.busy || readQueueWaits(name).length > 0) : [];
+  renderFreeSlots(operations);
+  const status = readWaitingStatus(operations);
+  setText('capacity-status', status ?? '');
+  const waiting = status === null ? readQueueWaits() : [];
   const capacity = Math.max(1, Math.floor(getElement('capacity-rows').clientHeight / 24));
-  const visible = selectPage('capacity', rows, capacity);
-  replaceContents('capacity-rows', visible.map(([name, queue]) => {
-    const row = createNode('div', '', 'capacity-row');
-    row.append(createNode('span', `${queueNames[name]}: ${Math.max(0, queue.total - queue.busy)} free`), createNode('span', readQueueReason(name)));
-    return row;
-  }));
-  if (!rows.length) replaceContents('capacity-rows', [createNode('p', operations ? 'All slots occupied' : 'State unavailable', 'empty')]);
+  const visible = selectPage('capacity', waiting, capacity);
+  const empty = status === null ? 'No recorded waiting cards' : status === 'Starts paused' ? status : 'Reasons unavailable';
+  replaceContents('capacity-rows', visible.length ? visible.map(createWaitingRow) : [createNode('p', empty, 'empty')]);
 }
 function renderFunnel() {
   const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
@@ -177,6 +192,7 @@ function renderRelease() {
   renderReleaseItems(release);
   setText('release-gate', formatReleaseGate(readLive()?.scheduler?.release));
   renderReleaseLinks(release);
+  if (getElement('release-dialog').open) renderReleaseDialog(release);
 }
 function createReleaseItem(feature) {
   const item = createNode('li');
@@ -189,6 +205,23 @@ function renderReleaseItems(release) {
   const visible = selectPage('release', features, 3);
   const empty = release ? 'No changes on dev' : 'Contents unavailable';
   replaceContents('release-items', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
+}
+function readDialogCapacity(id) {
+  const list = getElement(id);
+  const row = parseFloat(getComputedStyle(list).getPropertyValue('--dialog-row-height'));
+  if (!Number.isFinite(row) || row <= 0) throw new Error('Invalid dialog row height');
+  return Math.max(1, Math.floor(list.clientHeight / row));
+}
+function renderReleaseDialog(release) {
+  const features = release?.features ?? [];
+  setText('release-dialog-count', release ? `${features.length} changes` : '');
+  setText('release-dialog-gate', formatReleaseGate(readLive()?.scheduler?.release));
+  renderReleaseDialogItems(features, release !== null);
+}
+function renderReleaseDialogItems(features, available) {
+  const visible = selectPage('release-dialog', features, readDialogCapacity('release-dialog-rows'));
+  const empty = available ? 'No changes on dev' : 'Contents unavailable';
+  replaceContents('release-dialog-rows', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
 function renderReleaseLinks(release) {
   const operations = readOperations();
@@ -237,7 +270,9 @@ function renderServer() {
   const host = snapshot.host.value;
   setText('server-age', `Sampled ${formatAge(snapshot.host.at)} ago`);
   replaceContents('server-totals', createServerTotals(host));
-  renderTable('server', host?.containers?.value ?? [], createResourceRow, 'Container readings unavailable', 3);
+  const containers = host?.containers?.value;
+  const rows = containers ? [...containers].sort((a, b) => b.cpu - a.cpu) : [];
+  renderTable('server', rows, createResourceRow, containers ? 'No measured containers' : 'Container readings unavailable', 3);
   setText('server-note', readStorageNote(host));
 }
 function createServerTotals(host) {
@@ -254,12 +289,31 @@ function createEvent(event) {
   node.title = event.at;
   return node;
 }
+function readEvents() { return snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? null; }
+function createDialogEvent(event) {
+  const row = createNode('div', '', 'event-row');
+  const time = createNode('time', `${event.at.slice(0, 16).replace('T', ' ')} UTC`);
+  time.dateTime = event.at;
+  row.append(time, createNode('span', `${stages[event.stage]} ${event.outcome}`));
+  if (event.issue !== null) {
+    const link = createLink(`#${event.issue}`, getIssueUrl(event.issue));
+    link.dataset.key = `${event.at}-${event.stage}-${event.issue}`;
+    row.append(link);
+  }
+  return row;
+}
+function renderEventDialog(events) {
+  setText('event-dialog-count', events ? `${events.length} events` : '');
+  const visible = selectPage('event-dialog', events ?? [], readDialogCapacity('event-dialog-rows'));
+  replaceContents('event-dialog-rows', visible.length ? visible.map(createDialogEvent) : [createNode('p', events ? 'No recorded events' : 'Events unavailable', 'empty')]);
+}
 function renderEvents() {
-  const events = snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? [];
+  const events = readEvents();
   const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--event-width'));
   const capacity = Math.max(1, Math.floor(getElement('event-log').clientWidth / width));
-  const visible = selectPage('event', events, capacity);
-  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', 'No recorded events', 'muted')]);
+  const visible = selectPage('event', events ?? [], capacity);
+  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events ? 'No recorded events' : 'Events unavailable', 'muted')]);
+  if (getElement('event-dialog').open) renderEventDialog(events);
 }
 function renderCounters(summary) {
   if (!summary) return clearCounters();
@@ -449,6 +503,13 @@ function navigateTabs(event, tab) {
   next.focus();
 }
 for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
+for (const button of document.querySelectorAll('[data-dialog]')) button.addEventListener('click', () => {
+  const dialog = getElement(button.dataset.dialog);
+  dialog.showModal();
+  if (dialog.id === 'release-dialog') renderReleaseDialog(getRelease());
+  else renderEventDialog(readEvents());
+});
+for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
 function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
 for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
 for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
@@ -457,7 +518,10 @@ document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') { detailOwner?.focus({ preventScroll: true }); hideDetail(); }
+  if (event.key === 'Escape') {
+    if (document.querySelector('dialog[open]')) { hideDetail(); return; }
+    detailOwner?.focus({ preventScroll: true }); hideDetail();
+  }
   if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
 });
 window.addEventListener('resize', () => { hideDetail(); requestRender(); });

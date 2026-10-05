@@ -95,6 +95,51 @@ async function checkReleaseAndManager(page) {
   assert.equal(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), 'Activity stale');
   await sendSnapshot(page, fixture);
 }
+async function checkExpandedViews(page) {
+  await page.locator('#overview-tab').click();
+  const releaseButton = page.getByRole('button', { name: 'Expand next release' });
+  await releaseButton.click();
+  const release = page.getByRole('dialog', { name: 'Next release' });
+  assert.equal(await release.isVisible(), true);
+  assert.match(await release.textContent(), /34 changes/);
+  assert.ok((await release.locator('a').count()) < 34);
+  assert.equal(await release.locator('#release-dialog-rows').evaluate((node) => node.scrollWidth > node.clientWidth), false);
+  await page.screenshot({ path: `${evidence}/release-dialog-${page.viewportSize().width}.png` });
+  await release.getByRole('button', { name: 'Next release dialog' }).click();
+  await sendSnapshot(page, fixture);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'release-dialog-Next');
+  await page.keyboard.press('Escape');
+  assert.equal(await release.isVisible(), false);
+  assert.equal(await releaseButton.evaluate((node) => node === document.activeElement), true);
+  const eventsButton = page.getByRole('button', { name: 'Expand event log' });
+  await eventsButton.click();
+  const events = page.getByRole('dialog', { name: 'Event log' });
+  assert.equal(await events.isVisible(), true);
+  assert.match(await events.locator('time').first().textContent(), /^\d{4}-\d\d-\d\d \d\d:\d\d UTC$/);
+  assert.ok((await events.locator('.event-row').count()) < 45);
+  await page.screenshot({ path: `${evidence}/event-dialog-${page.viewportSize().width}.png` });
+  await events.getByRole('button', { name: 'Next event dialog' }).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await events.isVisible(), false);
+  assert.equal(await eventsButton.evaluate((node) => node === document.activeElement), true);
+}
+async function checkCapacityAndCpu(page) {
+  await page.locator('#overview-tab').click();
+  assert.match(await page.locator('#free-slots').textContent(), /Branch.*5/);
+  assert.match(await page.locator('#capacity-rows').textContent(), /#42.*Needs author reply/);
+  const usage = structuredClone(fixture);
+  usage.host.value.containers.value[0].cpu = 1;
+  usage.host.value.containers.value[1].cpu = 8;
+  usage.host.value.containers.value[2].cpu = 3;
+  await sendSnapshot(page, usage);
+  assert.equal(await page.locator('#server-rows tr').first().locator('td').first().textContent(), '#2');
+  const stale = structuredClone(usage);
+  stale.live.value.scheduler.freshness = 'stale';
+  await sendSnapshot(page, stale);
+  assert.match(await page.locator('#capacity-status').textContent(), /Scheduler stale/);
+  assert.match(await page.locator('#capacity-rows').textContent(), /Reasons unavailable/);
+  await sendSnapshot(page, fixture);
+}
 async function checkCounters(page) {
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
@@ -183,6 +228,9 @@ async function checkNarrow(page) {
   assert.equal(await page.getByRole('button', { name: 'Next release', exact: true }).isVisible(), true);
   assert.equal(await page.locator('#server-rows tr').count() > 0, true);
   await page.screenshot({ path: `${evidence}/overview-narrow.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Expand event log' }).click();
+  assert.equal(await page.getByRole('dialog', { name: 'Event log' }).evaluate((node) => node.getBoundingClientRect().right > innerWidth), false);
+  await page.keyboard.press('Escape');
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -198,10 +246,16 @@ async function checkUntrustedAndMissingData(page) {
   assert.equal(await page.locator('#worker-rows img').count(), 0);
   assert.ok((await page.locator('#worker-rows').textContent()).includes('<img'));
   assert.ok(!(await page.locator('body').textContent()).includes('PRIVATE CHAT MUST NOT RENDER'));
+  malicious.github.value.features[0].title = '<img src=x onerror="window.injected=true">';
+  await sendSnapshot(page, malicious);
+  await page.getByRole('button', { name: 'Expand next release' }).click();
+  assert.equal(await page.getByRole('dialog', { name: 'Next release' }).locator('img').count(), 0);
+  await page.keyboard.press('Escape');
   const missing = structuredClone(fixture);
   for (const name of ['operations', 'github', 'live', 'host', 'analytics']) missing[name] = { status: 'unavailable', value: null, at: null };
   await sendSnapshot(page, missing);
   assert.ok((await page.locator('#worker-rows').textContent()).includes('unavailable'));
+  assert.match(await page.locator('#event-log').textContent(), /Events unavailable/);
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
@@ -242,6 +296,8 @@ try {
     await sendSnapshot(page, fixture);
     await checkLayout(page, size);
     await checkReleaseAndManager(page);
+    await checkExpandedViews(page);
+    await checkCapacityAndCpu(page);
     await checkCounters(page);
     await checkPagination(page);
     await checkPause(page);
