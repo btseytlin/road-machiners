@@ -29,7 +29,8 @@ function formatAge(at) {
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000));
   return seconds < 60 ? `${seconds}s` : formatDuration(seconds * 1000);
 }
-function countTokens(tokens) { return tokens == null ? null : tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite; }
+function countInputTokens(tokens) { return tokens == null ? null : tokens.input + tokens.cacheRead + tokens.cacheWrite; }
+function countTokens(tokens) { return tokens == null ? null : countInputTokens(tokens) + tokens.output; }
 function createLink(text, href) {
   const url = new URL(href);
   if (url.protocol !== 'https:') throw new Error('Invalid public link');
@@ -58,7 +59,7 @@ function requestRender() {
 }
 function createPageButton(label, key, disabled, change) {
   const button = createNode('button', label === 'Previous' ? '←' : '→');
-  button.setAttribute('aria-label', `${label} ${key}`);
+  button.setAttribute('aria-label', `${label} ${key.replaceAll('-', ' ')}`);
   button.dataset.key = `${key}-${label}`;
   button.disabled = disabled;
   button.addEventListener('click', () => { pages.set(key, (pages.get(key) ?? 0) + change); requestRender(); });
@@ -258,15 +259,20 @@ function renderEvents() {
 }
 function renderCounters(summary) {
   if (!summary) return clearCounters();
-  setCounter('usage-tokens', formatNumber(countTokens(summary.tokens)), countTokens(summary.tokens));
+  renderTokenCounters(summary.tokens);
   setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC · ${summary.missingUsage} runs lack token counts · ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
+function renderTokenCounters(tokens) {
+  setCounter('usage-tokens', formatNumber(countTokens(tokens)), countTokens(tokens));
+  setCounter('usage-input', formatNumber(countInputTokens(tokens)), countInputTokens(tokens));
+  setCounter('usage-output', formatNumber(tokens?.output), tokens?.output);
+}
 function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
 function clearCounters() {
-  for (const id of ['usage-tokens', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
+  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
 function readDailyValue(day) { return metric === 'tokens' ? countTokens(day.tokens) : day.cost; }
@@ -327,14 +333,38 @@ function renderStageChart(summary) {
   replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
-function createModelRow(item) { const row = createNode('tr'); row.append(createNode('td', item.model), ...['input', 'output', 'cacheRead', 'cacheWrite'].map((key) => createNode('td', formatNumber(item[key]), 'numeric')), createNode('td', formatCost(item.cost), 'numeric')); return row; }
+function readStageModelLabel(stage) { return stage === null ? 'Total' : stage === 'verify' ? 'Verify + review' : stages[stage]; }
+function createStageModelRow(stage, models, summary) {
+  const row = createNode('tr');
+  row.append(createNode('td', readStageModelLabel(stage)));
+  for (const model of models) {
+    const usage = stage === null ? summary.models.find((item) => item.model === model) : summary.stageModels.find((item) => item.stage === stage && item.model === model);
+    const cell = createNode('td', usage ? `${formatNumber(countInputTokens(usage))} / ${formatNumber(usage.output)}` : '—', 'numeric');
+    if (usage) cell.dataset.exact = `${readStageModelLabel(stage)} · ${model}: ${usage.input} uncached input, ${usage.cacheRead} cache read, ${usage.cacheWrite} cache write, ${usage.output} output, ${formatCost(usage.cost)} estimated cost`;
+    row.append(cell);
+  }
+  return row;
+}
+function readStageModelNames(rows) {
+  const totals = new Map();
+  for (const row of rows) totals.set(row.stage, (totals.get(row.stage) ?? 0) + countTokens(row));
+  return [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a));
+}
+function renderStageModels(summary) {
+  // Two model columns fit beside stage names at the narrowest desktop width.
+  const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
+  const visible = selectPage('model-column', models, 2);
+  replaceContents('stage-model-header', [createNode('th', 'Stage'), ...visible.map((model) => createNode('th', model))]);
+  const rows = models.length ? [null, ...readStageModelNames(summary.stageModels)] : [];
+  renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length + 1);
+}
 function renderAnalytics() {
   const summary = readSummary();
   renderCounters(summary);
   renderDailyChart(summary);
   renderStageChart(summary);
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
-  renderTable('model', summary?.models ?? [], createModelRow, 'No reported models', 6);
+  renderStageModels(summary);
 }
 function readPauseNotice() {
   const operations = readOperations();

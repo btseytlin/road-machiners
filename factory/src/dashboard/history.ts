@@ -10,7 +10,7 @@ type Counts = { input: number; output: number; cacheRead: number; cacheWrite: nu
 type Summary = {
   days: number; since: string | null; completed: number; failed: number; timeouts: number; workerMs: number;
   cost: number | null; tokens: Counts | null; missingUsage: number; collectionFaults: number;
-  models: ModelUsage[]; stages: { stage: string; workerMs: number; cost: number | null }[];
+  models: ModelUsage[]; stageModels: (ModelUsage & { stage: JobStage })[]; stages: { stage: string; workerMs: number; cost: number | null }[];
   issues: { issue: number; workerMs: number; cost: number | null }[];
   daily: { day: string; cost: number; tokens: Counts | null }[];
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
@@ -20,7 +20,7 @@ type Summary = {
 type StageRow = Summary['stages'][number];
 type IssueRow = Summary['issues'][number];
 type DailyRow = Summary['daily'][number];
-type Totals = { stages: Map<string, StageRow>; issues: Map<number, IssueRow>; models: Map<string, ModelUsage>; daily: Map<string, DailyRow> };
+type Totals = { stages: Map<string, StageRow>; issues: Map<number, IssueRow>; models: Map<string, ModelUsage>; stageModels: Map<string, ModelUsage & { stage: JobStage }>; daily: Map<string, DailyRow> };
 const createCounts = (): Counts => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
 function addCounts(target: Counts, value: Counts): void {
   target.input += value.input;
@@ -32,7 +32,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stages: [], issues: [], daily: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], daily: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -46,12 +46,22 @@ function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage,
   daily.cost += agent.costUsd;
   totals.daily.set(day, daily);
   if (!agent.modelUsage?.length) { summary.missingUsage++; return; }
-  addMeasuredUsage(summary, totals, daily, agent.modelUsage);
+  addMeasuredUsage(summary, totals, daily, job.stage, agent.modelUsage);
 }
-function addMeasuredUsage(summary: Summary, totals: Totals, daily: DailyRow, measurements: ModelUsage[]): void {
+function addMeasuredUsage(summary: Summary, totals: Totals, daily: DailyRow, stage: JobStage, measurements: ModelUsage[]): void {
   summary.tokens ??= createCounts();
   daily.tokens ??= createCounts();
-  for (const usage of measurements) addModel(summary.tokens, totals.models, daily.tokens, usage);
+  for (const usage of measurements) {
+    addModel(summary.tokens, totals.models, daily.tokens, usage);
+    addStageModel(totals.stageModels, stage, usage);
+  }
+}
+function addStageModel(rows: Totals['stageModels'], stage: JobStage, usage: ModelUsage): void {
+  const key = JSON.stringify([stage, usage.model]);
+  const row = rows.get(key) ?? { stage, model: usage.model, cost: 0, ...createCounts() };
+  addCounts(row, usage);
+  row.cost += usage.cost;
+  rows.set(key, row);
 }
 function addModel(tokens: Counts, models: Map<string, ModelUsage>, daily: Counts, usage: ModelUsage): void {
   addCounts(tokens, usage);
@@ -198,7 +208,7 @@ export class DashboardHistory {
   }
   summarize(now: Date, days: number): Summary {
     const summary = createSummary(days, this.first);
-    const totals: Totals = { stages: new Map(), issues: new Map(), models: new Map(), daily: new Map() };
+    const totals: Totals = { stages: new Map(), issues: new Map(), models: new Map(), stageModels: new Map(), daily: new Map() };
     const jobs = reconcileJobs(this.records);
     for (const job of jobs) {
       if (Date.parse(job.endedAt) < now.getTime() - days * DAY_MS) continue;
@@ -209,6 +219,7 @@ export class DashboardHistory {
     summary.stages = [...totals.stages.values()];
     summary.issues = [...totals.issues.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
     summary.models = [...totals.models.values()];
+    summary.stageModels = [...totals.stageModels.values()];
     summary.daily = [...totals.daily.values()].sort((a, b) => a.day.localeCompare(b.day));
     summary.activity.sort((a, b) => b.at.localeCompare(a.at));
     return summary;

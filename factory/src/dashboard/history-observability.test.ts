@@ -16,7 +16,27 @@ it('counts resumed cumulative usage once and links retry spend to the repeat att
   const summary = history.summarize(new Date('2026-10-04T10:04:00Z'), 1);
   expect(summary.cost).toBe(3);
   expect(summary.tokens?.input).toBe(300);
+  expect(summary.stageModels).toEqual([{ stage: 'design', model: 'model', input: 300, output: 0, cacheRead: 0, cacheWrite: 0, cost: 3 }]);
   expect(summary.retries).toEqual([{ outcome: 'died', runs: 1, workerMs: 60000, cost: 1 }]);
+});
+it('crosses measured model tokens with the stage that ran them without inventing older counts', async () => {
+  const home = createHome();
+  const at = '2026-10-04T10:00:00Z';
+  const agent = (model: string, input: number, output: number, cacheRead: number, cost: number): AgentUsage =>
+    ({ model, costUsd: cost, minutes: 1, modelUsage: [{ model, input, output, cacheRead, cacheWrite: 0, cost }] });
+  appendLedger(home, { kind: 'job', id: 'design', stage: 'design', issue: 1, startedAt: at, endedAt: at, outcome: 'done', agents: [agent('opus', 10, 20, 30, 1)] });
+  appendLedger(home, { kind: 'job', id: 'verify', stage: 'verify', issue: 1, startedAt: at, endedAt: at, outcome: 'done', agents: [agent('sonnet', 4, 5, 6, 2), agent('opus', 7, 8, 9, 3)] });
+  appendLedger(home, { kind: 'job', id: 'old', stage: 'verify', issue: 1, startedAt: at, endedAt: at, outcome: 'done', agents: [{ model: 'opus', costUsd: 4, minutes: 1 }] });
+  const history = new DashboardHistory(home, 60000);
+  await history.refresh(new Date(at));
+  const summary = history.summarize(new Date(at), 1);
+  expect(summary.stageModels).toEqual([
+    { stage: 'design', model: 'opus', input: 10, output: 20, cacheRead: 30, cacheWrite: 0, cost: 1 },
+    { stage: 'verify', model: 'sonnet', input: 4, output: 5, cacheRead: 6, cacheWrite: 0, cost: 2 },
+    { stage: 'verify', model: 'opus', input: 7, output: 8, cacheRead: 9, cacheWrite: 0, cost: 3 },
+  ]);
+  expect(summary.missingUsage).toBe(1);
+  expect(summary.tokens).toEqual({ input: 21, output: 33, cacheRead: 45, cacheWrite: 0 });
 });
 it('measures observed waits once per issue, not once per blocking reason', async () => {
   const home = createHome();
