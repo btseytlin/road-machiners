@@ -13,9 +13,10 @@ function createSource(value) { return { status: 'ok', at: now, value }; }
 const jobs = Array.from({ length: 45 }, (_, i) => ({ key: `job-${i}`, issue: i + 1, stage: ['design', 'implement', 'verify'][i % 3], startedAt: new Date(Date.now() - 900000).toISOString() }));
 function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
-  return { days, since: now, workerMs: 7200000, cost: 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+  const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
+  return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
-    daily: [{ day: now.slice(0, 10), cost: 14.5, tokens }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
+    daily: [...(days > 1 ? [{ day: yesterday, cost: 2, tokens: null }] : []), { day: now.slice(0, 10), cost: 14.5, tokens }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
     models: Array.from({ length: 20 }, (_, i) => ({ model: `model-${i}-${'long'.repeat(30)}`, input: 100000, output: 300, cacheRead: 100, cacheWrite: 200, cost: 0.5 })),
     activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })) };
 }
@@ -87,6 +88,14 @@ async function checkCounters(page) {
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#full-text').isVisible(), false);
   assert.equal(await page.locator('#usage-tokens').evaluate((node) => node === document.activeElement), true);
+  assert.deepEqual(await page.locator('#model-rows tr').first().locator('td').allTextContents(),
+    [`model-0-${'long'.repeat(30)}`, '100K', '300', '100', '200', '$0.50']);
+  assert.match(await page.locator('#coverage').textContent(), /History from .*UTC.*2 runs lack token counts/);
+  assert.equal(await page.getByRole('button', { name: 'Cost', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.ok((await page.locator('.chart-column').allTextContents()).some((text) => text.includes('$2.00')));
+  await page.getByRole('button', { name: 'Tokens', exact: true }).click();
+  await waitForRender(page);
+  assert.ok((await page.locator('.chart-column').allTextContents()).some((text) => text.includes('—')));
   await page.getByRole('button', { name: '24 hours', exact: true }).click();
   await waitForRender(page);
   assert.equal(await page.locator('.chart-column').count(), 2);
@@ -134,6 +143,11 @@ async function checkNarrow(page) {
   assert.equal(await page.getByRole('button', { name: 'Next release', exact: true }).isVisible(), true);
   assert.equal(await page.locator('#server-rows tr').count() > 0, true);
   await page.screenshot({ path: `${evidence}/overview-narrow.png`, fullPage: true });
+  await page.locator('#analytics-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  assert.equal(await page.locator('#model-rows tr').first().locator('td').count(), 6);
+  await page.screenshot({ path: `${evidence}/analytics-narrow.png`, fullPage: true });
 }
 async function checkUntrustedAndMissingData(page) {
   const malicious = structuredClone(fixture);
@@ -151,12 +165,13 @@ async function checkUntrustedAndMissingData(page) {
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
   assert.equal(await page.locator('#usage-wait').textContent(), '—');
+  assert.equal(await page.locator('#model-rows').textContent(), 'No reported models');
 }
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const size of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }]) {
+  for (const size of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }]) {
     const page = await browser.newPage({ viewport: size });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
