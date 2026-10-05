@@ -4,8 +4,10 @@
 // as its texture.
 
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES, type Basin, type TerrainTypeId } from "../data/terrain";
+import { TERRITORIES } from "../data/territory";
 import { groundSlope, type Terrain } from "../sim/terrain";
+import { basinUnder, isTerritory } from "../sim/territory";
 import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
@@ -20,7 +22,7 @@ const DESERT_CALM = 0.85; // share of the speckle and fine noise that full deser
 const PATCH_OFFSET = 41.5; // lattice cells; keeps the patch noise from sharing corners with the other ground noise
 
 // How much each ground type takes the warm sand and its patches. Farmland and its tracks, canals and slabs, old
-// highways, hull plating and pools keep their color, so the marks of a place read against the desert. Road tiles
+// highways and pools keep their color, so the marks of a place read against the desert. Road tiles
 // have no weight of their own: they take the look of the ground beside the road, see lookTypes().
 const DESERT_WEIGHT: Record<LookType, number> = {
   hardpan: 1,
@@ -35,7 +37,6 @@ const DESERT_WEIGHT: Record<LookType, number> = {
   mud: 0,
   dirtyWater: 0,
   toxic: 0,
-  hull: 0,
   track: 0,
   canal: 0,
   concrete: 0,
@@ -161,15 +162,69 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
+  paintCraters(c);
+  paintScree(c);
+}
+
+// Each crater's bank is rust-tinted and its floor scorched. A basin gets no paint: its floor takes the wasteland's own
+// ground, so nothing marks where it starts, and its swells show through hillshade.
+function paintCraters(c: PaintCanvas): void {
   for (const crater of TERRAIN.features.craters) {
-    disc(
-      c,
-      crater.center,
-      crater.radius + crater.bank,
-      css(PAL.rust.side, 0.18),
-    );
+    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
     disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
+}
+
+// Bands a scree slope is painted in, each reaching a step further up the bank, so the colour is densest at the foot
+// and thins toward the top, where it reads as a slope, not a stain. It reaches at most SCREE_REACH tiles up the bank,
+// since the long banks where roads come down to the floor are road grades, not scree, and a wash over them read as a
+// painted stain on the land outside.
+const SCREE_BANDS = 4;
+const SCREE_BAND_ALPHA = 0.3;
+const SCREE_REACH = 8;
+
+// A territory's scree slope, red-brown over the bank of its basin's scree arc.
+function paintScree(c: PaintCanvas): void {
+  for (const t of REGION.locations.filter(isTerritory)) {
+    const scree = TERRITORIES[t.id].wreck?.scree;
+    if (scree) paintScreeArc(c, basinUnder(t), scree);
+  }
+}
+
+// The bank of floor vertices from..to, in bands from the floor edge up the bank. The arc's two end vertices reach
+// nothing, so the slope tapers out along the rim instead of stopping at a straight cut.
+function paintScreeArc(c: PaintCanvas, b: Basin, scree: { from: number; to: number }): void {
+  const n = b.floor.length;
+  if (!isVertex(scree.from, n) || !isVertex(scree.to, n)) throw new Error(`Scree arc ${scree.from}..${scree.to} is not on a basin of ${n} floor points`);
+  const arc = Array.from({ length: ((scree.to - scree.from + n) % n) + 1 }, (_, i) => (scree.from + i) % n);
+  const foot = arc.map((k) => ({ x: b.center.x + b.floor[k].x, y: b.center.y + b.floor[k].y }));
+  const out = arc.map((k) => outward(b.floor, k));
+  for (let band = 1; band <= SCREE_BANDS; band++) {
+    const top = arc.map((k, i) => {
+      const end = i === 0 || i === arc.length - 1;
+      const reach = end ? 0 : (Math.min(b.bank[k], SCREE_REACH) * band) / SCREE_BANDS;
+      return { x: foot[i].x + out[i].x * reach, y: foot[i].y + out[i].y * reach };
+    });
+    polygon(c, [...foot, ...top.reverse()], css(PAL.scree, SCREE_BAND_ALPHA));
+  }
+}
+
+function isVertex(k: number, n: number): boolean {
+  return Number.isInteger(k) && k >= 0 && k < n;
+}
+
+// The unit direction out of a closed polygon at vertex k: the mean of its two edges' outward normals. The floor runs
+// clockwise on the map, with y down, so an edge's outward normal is its direction turned a quarter toward -y.
+function outward(poly: readonly Vec[], k: number): Vec {
+  const n = poly.length;
+  const [a, p, b] = [poly[(k + n - 1) % n], poly[k], poly[(k + 1) % n]];
+  const normal = (from: Vec, to: Vec) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    return { x: (to.y - from.y) / length, y: -(to.x - from.x) / length };
+  };
+  const [u, v] = [normal(a, p), normal(p, b)];
+  const length = Math.hypot(u.x + v.x, u.y + v.y);
+  return { x: (u.x + v.x) / length, y: (u.y + v.y) / length };
 }
 
 // Per-tile inputs of the ground color, computed once per paint instead of once per pixel.
@@ -399,12 +454,17 @@ function stroke(
 }
 
 function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
-  blob(c, p, r, style);
-}
-
-function blob(c: PaintCanvas, p: Vec, r: number, style: string): void {
   c.ctx.fillStyle = style;
   c.ctx.beginPath();
   c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);
+  c.ctx.fill();
+}
+
+// A filled closed polygon in map units.
+function polygon(c: PaintCanvas, points: readonly Vec[], style: string): void {
+  c.ctx.fillStyle = style;
+  c.ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  c.ctx.closePath();
   c.ctx.fill();
 }

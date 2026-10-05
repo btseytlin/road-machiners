@@ -114,10 +114,8 @@ type Chances = { pebbles: number; scrub: number; cactus: number };
 
 // Shares of tiles of a ground type with a stone cluster, a scrub clump and a cactus. Ground that takes no desert
 // look keeps the sparse base chances, shoulders included. Open desert moves from them toward the desert chances by
-// its desert weight, and its shoulders hold stones only. Hull plating lies over the ground, so nothing grows there
-// and pebbles would poke through it.
+// its desert weight, and its shoulders hold stones only.
 function chances(type: LookType, shoulder: boolean, byRock: boolean): Chances {
-  if (type === 'hull') return { pebbles: 0, scrub: 0, cactus: 0 };
   const w = desertWeight(type);
   if (w === 0) return { pebbles: PEBBLE_CHANCE, scrub: SCRUB_ELSEWHERE, cactus: 0 };
   if (shoulder) return { pebbles: PEBBLE_ON_SHOULDER, scrub: 0, cactus: 0 };

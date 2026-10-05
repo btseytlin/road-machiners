@@ -125,12 +125,6 @@ describe('scatterPlacements', () => {
     }
   });
 
-  it('keeps hull plating bare, even on a road shoulder', () => {
-    const types = t.types.map(() => 'hull' as const);
-    const bare = scatterPlacements({ ...t, types }, []).flatMap(all);
-    expect(bare).toEqual([]);
-  });
-
   it('places the same scatter on every load', () => {
     const again = scatterPlacements(t, world.obstacles).flatMap(all);
     expect(again.map((p) => p.matrix.elements)).toEqual(placed.map((p) => p.matrix.elements));

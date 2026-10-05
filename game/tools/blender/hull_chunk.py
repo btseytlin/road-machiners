@@ -14,12 +14,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
 
-# Colors from src/render/palette.ts.
+# Colors from src/render/palette.ts: the Fallen Sun's hull metal, as on the big pieces.
 COLORS = {
-    "metal": 0x5A5A58,  # PAL.metal
-    "metal_light": 0x8A8A84,  # PAL.metalLight
-    "rust": 0x8A4A2A,  # PAL.rust.top
-    "rust_dark": 0x3A2418,  # PAL.rust.dark
+    "metal": 0x8E887C,  # PAL.hull.grey
+    "metal_light": 0xC4BAA6,  # PAL.hull.light
+    "rust": 0x7E5634,  # PAL.hull.rust
+    "rust_dark": 0x5E3420,  # PAL.rust.side
 }
 SEED = 41
 

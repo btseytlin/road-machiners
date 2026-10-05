@@ -9,6 +9,7 @@ import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { propPose, propReach, type PropPose } from '../../sim/mapgen';
+import { propBase } from '../../sim/bridge';
 import { bodyOf } from '../../sim/body';
 import { baseModel, grayed, HULK_TILT, HULK_TONE, WEAR_LOOK_STEPS } from '../../render/partLooks';
 import { heightAt, type Terrain } from '../../sim/terrain';
@@ -231,13 +232,13 @@ function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
 
 function seat(t: Terrain, o: Obstacle): THREE.Group {
   const g = new THREE.Group();
-  g.position.set(o.pos.x * S, heightAt(t, o.pos.x, o.pos.y) * S, o.pos.y * S);
+  g.position.set(o.pos.x * S, propBase(t, o) * S, o.pos.y * S);
   return g;
 }
 
 // A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own tint.
 function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
-  const g = posed(t, propPose(o));
+  const g = posed(propBase(t, o), propPose(o));
   g.updateMatrix();
   return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
@@ -246,7 +247,7 @@ function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: 
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
   if (pose.model === 'hulk') return buildHulk(t, o, pose);
-  const g = posed(t, pose);
+  const g = posed(propBase(t, o), pose);
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
@@ -261,7 +262,7 @@ export type HulkPose = Extract<PropPose, { model: 'hulk' }>;
 // src/sim/body.ts. The base model sits with its collider center at its origin, so it rises by half the chassis height
 // to lie on the ground.
 export function buildHulk(t: Terrain, o: Obstacle, pose: HulkPose): THREE.Group {
-  const g = posed(t, pose);
+  const g = posed(propBase(t, o), pose);
   const obj = model(baseModel(pose.chassisId));
   char(obj);
   jag(obj, o.id, WEAR_LOOK_STEPS);
@@ -282,8 +283,8 @@ function char(obj: THREE.Object3D): void {
   });
 }
 
-// The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group
-// keeps its glow, so the views can pulse it.
+// The reactor's core glows by itself and lights the breach and the ground before it, so its danger is seen before it
+// is felt. The group keeps its glow, so the views can pulse it.
 function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
   const materials: THREE.MeshLambertMaterial[] = [];
   eachMaterial(reactor, (m) => {
@@ -292,7 +293,7 @@ function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
     m.emissiveIntensity = REACTOR_GLOW.emissive;
     materials.push(m);
   });
-  const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
+  const light = new THREE.PointLight(PAL.reactorLight, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
   light.position.set(0, REACTOR_GLOW.height, 0);
   g.add(light);
   const glow: Glow = { materials, light };
@@ -346,9 +347,10 @@ function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
   for (const id of fixed.treeIds) if (!standing.has(id)) fixed.trees.hide(id);
 }
 
-// Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
-// across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
-const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// Glow strength, light strength, reach and fade in meters, and the light's height above the ground in model meters.
+// The core stands in the bow's breach with a rod about 9 m tall, so the light hangs at the breach and reaches the
+// ground in front of it to about the hazard's edge, not the whole crater.
+const REACTOR_GLOW = { emissive: 2.2, intensity: 500, range: 40, decay: 1.5, height: 8 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };

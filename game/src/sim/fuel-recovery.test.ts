@@ -46,14 +46,16 @@ describe('a fuelless majority of NPCs', () => {
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
     const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    const fueled = new Set<string>();
+    // Each broke NPC's most fuel over the run. A recovered NPC may drive its tank dry again on a long trip afterwards,
+    // so the check is that it got fuel at all, not that it still holds some at the end.
+    const most = new Map(broke.map((v) => [v.id, 0]));
     for (let turn = 0; turn < bound; turn++) {
       w = endTurn(w, moveAllFar);
       stalls.push(...w.events.filter((e) => e.t === 'stall'));
-      for (const v of w.vehicles) if (getResources(w, v).fuel > 0) fueled.add(v.id);
+      for (const v of broke) most.set(v.id, Math.max(most.get(v.id)!, getResources(w, w.vehicles.find((x) => x.id === v.id)!).fuel));
     }
 
     expect(stalls).toEqual([]);
-    expect(broke.map((v) => v.id).filter((id) => !fueled.has(id))).toEqual([]);
-  });
+    for (const v of broke) expect(most.get(v.id)).toBeGreaterThan(0);
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 });

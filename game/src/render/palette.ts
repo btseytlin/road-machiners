@@ -21,6 +21,7 @@ export const PAL = {
   cactus: { body: 0x70764a, shade: 0x585e3a }, // short columnar cacti: lit column, shaded column
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
   stone: { top: 0xc98e68, side: 0xb47f5d, dark: 0x8a5e44 }, // terracotta of loose boulders and crags, and the chip in desert stone clusters
+  rimRock: { top: 0xbab3a6, side: 0x948e84, dark: 0x6e6960 }, // the grey crater walls of the Fallen Sun
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],
@@ -48,7 +49,11 @@ export const PAL = {
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   radioLight: { on: 0xff3020, off: 0x4a1a14 }, // antenna bulb, lit while the truck is on the radio
   truckGlow: 0xffffff, // faint white light over the player truck at night
-  reactorGlow: 0x7cff5a, // the Fallen Sun reactor core and the light it throws
+  reactorLight: 0x38d6e8, // the reactor's light, bluer than its core so on warm sand and hull it still reads green-teal
+  reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core, green-teal as in the level concept
+  hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
+  scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
+  dirtRoad: 0x8e7d69, // the Fallen Sun's grey-brown dirt roads: about 0.7 of PAL.sand[0]'s value, as reference 3's #6e5e50 roads over its #a08a70 islands, and greyer than the sand
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck

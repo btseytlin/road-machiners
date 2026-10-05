@@ -11,7 +11,7 @@ const SHORT_RUN = 60;
 // handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
 // to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which triples the time
+const RUN_TIMEOUT = 300_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which made a 16s run take over 120s on a loaded machine
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {
@@ -41,8 +41,10 @@ describe('record', () => {
       const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
       expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
     }
+    // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
-    expect(pool).toBeCloseTo(world.player.xp, 6);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
 });
 

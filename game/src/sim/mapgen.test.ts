@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
-import { TERRITORIES } from '../data/territory';
+import { FALLEN_SUN_DECKS, TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
+import { deckAt, deckById, underDeck } from './bridge';
 import { blockingBoxes, boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propKey, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { hulkBoxes } from './body';
 import { ROAD_INDEX } from './road-index';
@@ -10,7 +11,9 @@ import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
-import { groundAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import { boxesOverlap } from '../test/boxes';
+import { deckHeight, groundAt, heightAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import type { PosedBox } from './mapgen';
 import { budget } from '../test/budget';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
@@ -122,10 +125,11 @@ describe('world from the baked map', () => {
     const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
     const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull rib is an arch: only its two legs stand on the ground, r to each side along its yaw, and the model's leg
-    // reaches under a sixth of r each way. Other props stand under the arch between them.
-    const ground = (o: Obstacle): { pos: Vec; r: number }[] =>
-      o.kind === 'landmark' && o.look === 'hullRib' ? [1, -1].map((k) => ({ pos: { x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) }, r: o.r / 6 })) : [{ pos: o.pos, r: o.r }];
+    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
+    const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
+    const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
+    const rimPair = (a: Obstacle, b: Obstacle) => [a, b].every((o) => o.kind === 'landmark' && o.look === 'rimRock');
     // A segment prop is a line r to each side of its centre, not a disc: it overlaps a disc that reaches its line, and
     // another segment that its line crosses.
     const line = (o: Obstacle): [Vec, Vec] | null => (ends(o).length === 2 ? (ends(o) as [Vec, Vec]) : null);
@@ -133,12 +137,18 @@ describe('world from the baked map', () => {
       const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
       return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
     };
-    const overlap = (a: Obstacle, b: Obstacle) => {
+    const overlap = (a: Obstacle, b: Obstacle): boolean => {
+      if (rimPair(a, b)) return false;
+      if (boxed(a) && boxed(b)) return low(a).some((p) => low(b).some((q) => boxesOverlap(p, q)));
+      if (boxed(a) || boxed(b)) {
+        const [piece, other] = boxed(a) ? [a, b] : [b, a];
+        return low(piece).some((box) => boxDistance(box, other.pos) < other.r - 1e-6);
+      }
       const [la, lb] = [line(a), line(b)];
       if (la && lb) return crosses(la, lb);
-      if (la) return ground(b).some((q) => segmentDist(q.pos, la[0], la[1]) < q.r - 1e-6);
-      if (lb) return ground(a).some((p) => segmentDist(p.pos, lb[0], lb[1]) < p.r - 1e-6);
-      return ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+      if (la) return segmentDist(b.pos, la[0], la[1]) < b.r - 1e-6;
+      if (lb) return segmentDist(a.pos, lb[0], lb[1]) < a.r - 1e-6;
+      return dist(a.pos, b.pos) < a.r + b.r - 1e-6;
     };
     const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
@@ -186,7 +196,7 @@ describe('prop poses', () => {
     });
     expect(propKey(hulk('bus', 0))).not.toBe(propKey(hulk('buggy', 0)));
     expect(propReach(hulk('bus', 0))).toBeGreaterThan(propReach(hulk('buggy', 0)));
-    expect(blockingBoxes(hulk('buggy', 0)).length).toBeGreaterThan(0);
+    expect(blockingBoxes(hulk('buggy', 0), TEST_MAP.terrain).length).toBeGreaterThan(0);
   });
 
   it('keeps the generic wreck pose and shape for a kill wreck without a hulk', () => {
@@ -316,6 +326,9 @@ describe('prop poses', () => {
   });
 });
 
+// The Fallen Sun's hull piece looks, which stand on their low boxes.
+const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);
+
 describe('Broken Wing on the baked map', () => {
   const M = PHYSICS.metersPerTile;
   const HALF = REGION.roadWidth / 2;
@@ -370,4 +383,75 @@ describe('Broken Wing on the baked map', () => {
     const on = w.obstacles.filter((o) => o.id !== hoop.id && o.kind !== 'water' && points.some((p) => dist(o.pos, p) <= o.r));
     expect(on.map((o) => o.id)).toEqual([]);
   }, budget(60_000));
+});
+
+describe('props under a deck', () => {
+  const t = TEST_MAP.terrain;
+  const M = PHYSICS.metersPerTile;
+  const flap = deckById(FALLEN_SUN_DECKS[0].id);
+  const on = (along: number, across: number): Vec => ({
+    x: flap.from.x + flap.axis.x * along - flap.axis.y * across,
+    y: flap.from.y + flap.axis.y * along + flap.axis.x * across,
+  });
+  // Meters from the ground at p up to the flap's deck line over it.
+  const clearance = (p: Vec, along: number) => (deckHeight(t, flap, along) - groundAt(t, p.x, p.y)) * M;
+  // A box of half.x by half.y tiles at p, square to the flap, from the ground at p up to top meters.
+  const box = (p: Vec, half: Vec, top: number): PosedBox => ({ center: p, axis: flap.axis, half, z0: 0, z1: top });
+  const corners = (b: PosedBox): Vec[] => [-1, 1].flatMap((i) => [-1, 1].map((j) => ({
+    x: b.center.x + b.axis.x * b.half.x * i - b.axis.y * b.half.y * j,
+    y: b.center.y + b.axis.y * b.half.x * i + b.axis.x * b.half.y * j,
+  })));
+
+  it('drops a box whose footprint lies inside the deck outline and whose top is under the deck line', () => {
+    const p = on(flap.length - 1, 0);
+    const room = clearance(p, flap.length - 1);
+    expect(room).toBeGreaterThan(1);
+
+    expect(underDeck(box(p, { x: 0.4, y: 0.4 }, room - 0.3), groundAt(t, p.x, p.y), t)).toBe(true);
+  });
+
+  it('keeps a box that pokes up through the deck line', () => {
+    const p = on(flap.length - 1, 0);
+    const room = clearance(p, flap.length - 1);
+
+    expect(underDeck(box(p, { x: 0.4, y: 0.4 }, room + 0.3), groundAt(t, p.x, p.y), t)).toBe(false);
+  });
+
+  it('keeps a low box that reaches out past a rail or past the lip', () => {
+    const side = on(flap.length - 1, flap.width / 2 - 0.2);
+    const end = on(flap.length - 0.2, 0);
+
+    expect(underDeck(box(side, { x: 0.4, y: 0.4 }, 0.2), groundAt(t, side.x, side.y), t)).toBe(false);
+    expect(underDeck(box(end, { x: 0.4, y: 0.4 }, 0.2), groundAt(t, end.x, end.y), t)).toBe(false);
+  });
+
+  it('keeps every low box of a prop away from every deck, as it always did', () => {
+    const far: Obstacle = { id: 'junk-far', kind: 'landmark', look: 'junk', pos: on(flap.length + 10, 0), r: 0.8, yaw: 0 };
+
+    expect(blockingBoxes(far, t)).toEqual(propBoxes(far).filter((b) => b.z0 < PHYSICS.truckClearance));
+  });
+
+  it('of a prop beside the deck, drops exactly the low boxes inside the outline and under the deck line', () => {
+    // A junk pile beside the flap's rail near its lip, reaching in under the raised end.
+    const junk: Obstacle = { id: 'junk-under', kind: 'landmark', look: 'junk', pos: on(3.5, 1.7), r: 0.8, yaw: 3 };
+    expect(deckAt(junk.pos.x, junk.pos.y)).toBeNull();
+    const base = heightAt(t, junk.pos.x, junk.pos.y);
+    const low = propBoxes(junk).filter((b) => b.z0 < PHYSICS.truckClearance);
+    const inside = (b: PosedBox) => corners(b).every((c) => deckAt(c.x, c.y)?.deck === flap);
+    const under = (b: PosedBox) => {
+      const along = (b.center.x - flap.from.x) * flap.axis.x + (b.center.y - flap.from.y) * flap.axis.y;
+      return inside(b) && b.z1 < (deckHeight(t, flap, along) - base) * M;
+    };
+
+    expect(low.filter(under).length).toBeGreaterThan(0);
+    expect(low.filter((b) => !under(b) && deckAt(b.center.x, b.center.y) !== null).length).toBeGreaterThan(0);
+    expect(blockingBoxes(junk, t)).toEqual(low.filter((b) => !under(b)));
+  });
+
+  it('keeps every box of a wreck standing on the deck, which is its ground', () => {
+    const wreck: Obstacle = { id: 'wreck-on-flap', kind: 'wreck', pos: on(flap.length / 2, 0), r: 0.65 };
+
+    expect(blockingBoxes(wreck, t)).toEqual(propBoxes(wreck).filter((b) => b.z0 < PHYSICS.truckClearance));
+    expect(blockingBoxes(wreck, t).length).toBeGreaterThan(0);
+  });
 });
