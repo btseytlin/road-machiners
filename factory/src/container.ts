@@ -77,7 +77,7 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not send notes, paths, prompts or secrets. Report only when the milestone changes, without extra narration. Run a long command in the foreground and set the Bash tool's timeout long enough for it. Never start a command in the background and poll it with sleep.`;
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not send notes, paths, prompts or secrets. Report only when the milestone changes, without extra narration.`;
 }
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
@@ -107,10 +107,9 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       if (!openNetwork) await ensureProxy(run, cfg);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
-      // Long commands run in the foreground, so the Bash tool's time limit is raised from its 10 minute default.
       const env = {
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
-        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', BASH_MAX_TIMEOUT_MS: String(cfg.agentBashMaxMinutes * 60_000),
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [

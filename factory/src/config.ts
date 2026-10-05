@@ -28,7 +28,6 @@ const KEYS = {
   oauthToken: 'CLAUDE_CODE_OAUTH_TOKEN',
   elevenlabsKey: 'ELEVENLABS_API_KEY',
   sfxMaxGenerations: 'SFX_MAX_GENERATIONS',
-  agentBashMaxMinutes: 'FACTORY_AGENT_BASH_MAX_MINUTES',
   designModel: 'FACTORY_DESIGN_MODEL',
   buildModel: 'FACTORY_BUILD_MODEL',
   triageEffort: 'FACTORY_TRIAGE_EFFORT',
@@ -66,7 +65,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'sfxMaxGenerations', 'agentBashMaxMinutes', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
