@@ -10,6 +10,11 @@ import { hashStr } from './noise';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
 
+// A chassis plan is its outline from straight above, nose up, behind the truck condition panel and over the inventory
+// grid. It covers the inner grid columns and every row, and reaches PLAN_PAD grid cells past them on every side, so
+// wheels that stick out still draw.
+export const PLAN_PAD = 0.5;
+
 // The base model each chassis is drawn from. Kit parts stand on its row surfaces.
 const BASE_MODELS: Record<string, ModelName> = {
   scout: 'base_scout',
