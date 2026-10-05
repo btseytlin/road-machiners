@@ -1,6 +1,6 @@
 // Bowl's interior (C1): a terraced crater farm. Crop rows and fruit trees stand on the terraces, stairs climb the
 // risers, and the crater floor holds houses in two rings around an off-center pond, a turning windmill, two stilt
-// tanks and a greenhouse. Two sheds stand on the rim by towers. The crater itself is baked terrain (pitDepth).
+// tanks and a greenhouse. Two sheds stand on bastion platforms. The crater itself is baked terrain (pitDepth).
 //
 // Offsets are site tiles: x is map x, z is map y. Houses, trees and crop rows stand only where every height corner
 // of the tiles under their footprint is at one pit depth, so none stands on a riser (IV18). The authored floor pieces
@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { PHYSICS } from '../../../data/physics';
 import { FACTION_COLORS, mix, PAL } from '../../../render/palette';
-import { fortressOutline, pitDepth } from '../../../sim/fortress';
+import { fortressCore, pitDepth } from '../../../sim/fortress';
 import type { Site } from '../../../sim/sites';
 import { segmentDist, type Vec } from '../../../sim/vec';
 import { hash2 } from '../../../render/noise';
@@ -26,11 +26,11 @@ const TANKS = [
   { x: 5.6, z: -1.7 },
   { x: 6.2, z: -3.8 },
 ];
-const GREENHOUSE = { x: -4.5, z: 7.5, yaw: 0.4, scale: 0.6 }; // the reused quonset, 13 m long
+const GREENHOUSE = { x: -4, z: 5, yaw: 0.4, scale: 0.6 }; // the reused quonset, 13 m long
 // Houses in two rings around the pond: ring radius in tiles and the tiles between neighbours along it.
 const HOUSE_RINGS = [
-  { r: 5.4, gap: 2.9 },
-  { r: 8.4, gap: 2.9 },
+  { r: 5.4, gap: 2.6 },
+  { r: 8.4, gap: 2.6 },
 ];
 const HOUSE_JITTER = { angle: 0.3, radius: 1.2, turn: 0.6 }; // share of a gap, tiles, radians
 const HOUSE_SPAN = 2.4; // tiles, a house's footprint with its eaves (8.7 m by 6.7 m) turned any way
@@ -42,11 +42,8 @@ const ROW = { length: 0.7, width: 0.26, height: 0.3, apart: 0.5 };
 const TREE_SHARE = 0.16; // share of planted tiles that hold a tree
 const TREE_SPAN = 0.9; // tiles, a fruit tree's crown
 const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 }; // `at`: share along each side
-const SHEDS = [
-  { corner: 4, along: -2.6 }, // the front-left tower, by the outline corner index, and tiles along the side from it
-  { corner: 2, along: 2.6 },
-];
-const SHED_IN = 1.4; // tiles in from the curtain line, on the rim
+const SHEDS = [4, 2]; // the bastions that carry a shed, by core corner index
+const SHED_OUT = 1.2; // tiles out of the enclosure's corner toward the bastion's salient, onto its platform
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 
 const CROP = mix(FACTION_COLORS.bowl.top, PAL.palm, 0.3);
@@ -149,9 +146,9 @@ function addTerraces(b: SiteBuilder, site: Site, taken: Disc[]): void {
   b.addInstances('fruit_tree', trees).name = 'bowl-trees';
 }
 
-// The curtain's sides with their direction and the normal into the site.
+// The sides of the main enclosure with their direction and the normal into the site. The pit follows them.
 function curtainSides(site: Site): Side[] {
-  const outline = fortressOutline(site);
+  const outline = fortressCore(site);
   return outline.map((a, i) => {
     const b = outline[(i + 1) % outline.length];
     const length = Math.hypot(b.x - a.x, b.y - a.y);
@@ -225,14 +222,14 @@ function sideStair(site: Site, side: Side): Spot[] {
   return steps;
 }
 
-// Scrap sheds on the rim beside two towers, along the curtain.
+// Scrap sheds on two bastion platforms, facing the crater.
 function addSheds(b: SiteBuilder, site: Site): void {
-  const sides = curtainSides(site);
-  for (const shed of SHEDS) {
-    const side = shed.along < 0 ? sides[(shed.corner + sides.length - 1) % sides.length] : sides[shed.corner];
-    const s = shed.along < 0 ? side.length + shed.along : shed.along;
-    const p = onSide(site, side, s, SHED_IN);
-    b.addModel('shack', p.x, p.y, -Math.atan2(side.inward.y, side.inward.x));
+  const core = fortressCore(site);
+  for (const corner of SHEDS) {
+    const v = core[corner];
+    const d = Math.hypot(v.x - site.pos.x, v.y - site.pos.y);
+    const out = { x: (v.x - site.pos.x) / d, y: (v.y - site.pos.y) / d };
+    b.addModel('shack', v.x - site.pos.x + out.x * SHED_OUT, v.y - site.pos.y + out.y * SHED_OUT, -Math.atan2(-out.y, -out.x));
   }
 }
 
