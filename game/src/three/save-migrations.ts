@@ -298,6 +298,20 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
+  // vehicles go, and a broken prop keeps its id and turn, since the map file holds the prop.
+  (world) => {
+    const { events: _events, removed: _removed, ...rest } = world;
+    const { visible: _visible, ...player } = world.player as SavedJson;
+    const vehicles = (world.vehicles as SavedJson[]).map(({ trail: _trail, ...vehicle }) => vehicle);
+    const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
+    return { ...rest, player, vehicles, broken };
+  },
+  // 14 to 15: contacts and seen clouds go, since load rebuilds them with the rest of the player's view.
+  (world) => {
+    const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
+    return { ...world, player };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

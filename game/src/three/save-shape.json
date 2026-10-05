@@ -1,9 +1,8 @@
 {
- "format": "2.13",
+ "format": "2.15",
  "shape": {
   "broken": [],
   "dustClouds": [],
-  "events": [],
   "mapHash": "string",
   "marketRng": {
    "rngState": "number"
@@ -28,8 +27,6 @@
    "autoRepair": "boolean",
    "beacon": "boolean",
    "call": "null",
-   "clouds": [],
-   "contacts": [],
    "contracts": [],
    "costBasis": {
     "scrap": "number"
@@ -65,9 +62,6 @@
    "talked": {},
    "townPatched": "boolean",
    "vehicleId": "string",
-   "visible": [
-    "number"
-   ],
    "xp": "number",
    "xpBySource": {
     "aid": "number",
@@ -99,7 +93,6 @@
     "toughness": "number"
    }
   },
-  "removed": [],
   "rngState": "number",
   "salvage": [
    {
@@ -785,7 +778,6 @@
     },
     "resources": "null",
     "speed": "number",
-    "trail": [],
     "weaponOrders": {}
    },
    {
@@ -868,7 +860,6 @@
      "supplies": "number"
     },
     "speed": "number",
-    "trail": [],
     "weaponOrders": {}
    },
    {
@@ -962,7 +953,6 @@
      "supplies": "number"
     },
     "speed": "number",
-    "trail": [],
     "weaponOrders": {}
    }
   ],
