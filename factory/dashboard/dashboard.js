@@ -29,7 +29,7 @@ function formatDuration(ms) {
 function formatAge(at) {
   if (!at) return 'unknown';
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000));
-  return seconds < 60 ? `${seconds}s` : formatDuration(seconds * 1000);
+  return seconds < 60 ? '<1m' : formatDuration(seconds * 1000);
 }
 function countInputTokens(tokens) { return tokens == null ? null : tokens.input + tokens.cacheRead + tokens.cacheWrite; }
 function countTokens(tokens) { return tokens == null ? null : countInputTokens(tokens) + tokens.output; }
@@ -249,7 +249,6 @@ function renderManager() {
   const live = readLive();
   const manager = live?.manager;
   setText('manager-action', readManagerAction(manager));
-  setText('manager-age', manager ? `Reported ${formatAge(manager.at)} ago` : '');
 }
 function createReading(label, value) { const node = createNode('div'); node.append(createNode('span', label), createNode('strong', value)); return node; }
 function readRam(host) { const ram = host.ram.value; return ram ? `${(ram.used / 1073741824).toFixed(1)} / ${formatBytes(ram.total)}` : '—'; }
@@ -269,7 +268,6 @@ function formatMemory(value) {
 function readResourceTitle(job) { return job.issue === null ? stages[job.stage] : `#${job.issue}`; }
 function renderServer() {
   const host = snapshot.host.value;
-  setText('server-age', `Sampled ${formatAge(snapshot.host.at)} ago`);
   replaceContents('server-totals', createServerTotals(host));
   const containers = host?.containers?.value;
   const rows = containers ? [...containers].sort((a, b) => b.cpu - a.cpu) : [];
@@ -481,7 +479,8 @@ function readPauseNotice() {
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
-  setText('connection', connected ? `Updated ${formatAge(snapshot.generatedAt)} ago` : 'Reconnecting');
+  // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
+  setText('connection', connected ? 'Live' : 'Reconnecting');
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
   const pause = readPauseNotice();

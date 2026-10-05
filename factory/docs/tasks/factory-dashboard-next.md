@@ -33,6 +33,8 @@
 
 ## Progress
 - Phase 1: Safe milestone values travel through `factory-status`, structured runner output, job-scoped observations and the public projection. The view shows a reported milestone beside the runner operation and shows Manager phase duration. A live safe observation showed one active Hermes session with a fresh heartbeat and a long model phase. The current data does not prove a broken lifecycle, so no Hermes hook was changed. Focused checks passed: 44 tests, factory typecheck, the root quality gate and browser fixture at 1440×900, 1366×768 and 1024×768. No paid agent or production job was run.
+- Phase 2: Release and event dialogs, separate free slots and waits, and CPU-sorted server rows are committed. The browser fixture passed.
+- Phase 3: History emits hourly or daily buckets with stage and model segments. The Analytics chart is a Chart.js stacked bar with Stage/Model and Cost/Tokens selectors. The exact-value table was dropped to keep the change small; Chart.js tooltips show exact values. Focused tests, typecheck and the browser fixture passed.
 
 ## Verification
 - Focused observation, dashboard history, snapshot, server and Hermes tests must pass. Verify hourly UTC boundaries, resumed usage, old cost-only runs, no model attribution guesses, changing and stale manager state, privacy rejection and server sorting. Run factory typecheck and the unchanged root quality gate after the last code change.

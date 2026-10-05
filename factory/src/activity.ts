@@ -24,11 +24,13 @@ function classifyToolCommand(block: StreamBlock): Activity { return classifyComm
 function readToolResultActivity(content: unknown): ActivityUpdate {
   const text = typeof content === 'string' ? content : Array.isArray(content) && content.every((block) => block?.type === 'text' && typeof block.text === 'string')
     ? content.map((block) => block.text).join('') : null;
-  if (text !== null) {
-    const reported = parseAgentStatus(text.trim());
-    if (reported) return { ...reported, source: 'agent' };
-  }
-  return { activity: 'model', source: 'runner' };
+  const reported = text === null ? null : readReportedStatus(text);
+  return reported ? { ...reported, source: 'agent' } : { activity: 'model', source: 'runner' };
+}
+// Agents chain factory-status with other commands, so its line arrives mixed with their output. A milestone outranks an activity because the runner replaces activities at the next tool call.
+function readReportedStatus(text: string): ReturnType<typeof parseAgentStatus> {
+  const reports = text.split('\n').map((line) => parseAgentStatus(line.trim())).filter((report) => report !== null);
+  return reports.filter((report) => 'milestone' in report).at(-1) ?? reports.at(-1) ?? null;
 }
 function readStreamActivity(event: StreamEvent): ActivityUpdate | null {
   if (event.type === 'result') return { activity: 'finished', source: 'runner' };

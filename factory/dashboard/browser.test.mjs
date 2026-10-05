@@ -84,7 +84,7 @@ async function checkReleaseAndManager(page) {
   idle.live.value.manager = { activity: 'finished', phase: 'completed', status: 'ok', at: now, since: new Date(Date.now() - 12 * 3600000).toISOString() };
   await sendSnapshot(page, idle);
   assert.match(await page.locator('#manager-action').textContent(), /Idle for 12h/);
-  assert.match(await page.locator('#manager-age').textContent(), /Reported/);
+  assert.equal(await page.locator('#connection').textContent(), 'Live');
   const waiting = structuredClone(fixture);
   waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
   waiting.live.value.workers[0].milestone = 'validating';
