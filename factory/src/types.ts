@@ -299,6 +299,6 @@ export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
 // Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
-export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation and every testing pass run on the design (Opus) model
+export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
 export const OPEN_NETWORK_LABEL = 'open-network';
