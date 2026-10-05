@@ -18,6 +18,7 @@ const moveAllFar = (w: World) => {
 };
 
 // A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one drives again.
+// Each must take fuel within the bound. A driver may burn it on later trips and run dry again, as any driver may.
 describe('a fuelless majority of NPCs', () => {
   it('all recover scrap fuel at their serving sites with no stall', () => {
     let w = emptyWorld({ x: 5, y: 5 });
