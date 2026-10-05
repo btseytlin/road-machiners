@@ -5,10 +5,11 @@ import { markPost } from './post-status';
 import { deny, routeFeedback } from './stages/approval';
 import { proposalOf } from './stages/waste';
 import { readState, updateState } from './state';
+import { recordWaiver, waiverNotice } from './visual-waiver';
 import { ADHOC_LABEL, RELEASE_TASK_LABEL, WASTE_LABEL, type Ctx, type ReleaseState, type Route } from './types';
 
 const TITLE_LIMIT = 80;
-const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'waste-change'];
+const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'waste-change', 'waive-visual'];
 const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
 const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 
@@ -16,7 +17,7 @@ const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 // `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
 // which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
-  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'waste-change';
+  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'waste-change' | 'waive-visual';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -91,7 +92,7 @@ async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise
 }
 
 function answersByReply(command: InboxCommand): boolean {
-  return command.postId === null || command.kind === 'waste-change';
+  return command.postId === null || command.kind === 'waste-change' || command.kind === 'waive-visual';
 }
 
 async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
@@ -113,6 +114,7 @@ const ISSUE_HANDLERS: Partial<Record<InboxCommand['kind'], IssueHandler>> = {
   reply: (ctx, command, issue) => awaitRoute(ctx, command, issue),
   answer: routed, patch: routed, redesign: routed,
   'waste-change': (ctx, _command, issue, by) => queueReviewChange(ctx, issue, by),
+  'waive-visual': waiveVisual,
   deny: async (ctx, _command, issue, by) => {
     await deny(ctx, issue, by);
     return `Issue #${issue} is denied and closed.`;
@@ -150,6 +152,18 @@ async function routed(ctx: Ctx, command: InboxCommand, issue: number, by: string
 function requirePost(command: InboxCommand): number {
   if (command.postId === null) throw new Error(`A ${command.kind} command names no post`);
   return command.postId;
+}
+
+// The one way to post a card with no screenshot. It runs only for a committee member (handle checks that first), and a GitHub comment cannot do it.
+// The waiver is the member's, with their reason, on the issue where anyone can audit it. It covers the next approval post of this card and no other issue.
+async function waiveVisual(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
+  const reason = requireText(command).trim();
+  const card = (await ctx.github.cards()).find((item) => item.issue === issue);
+  if (card?.column !== 'Testing') throw new Error(`Issue #${issue} is not in Testing, so there is no screenshot to waive.`);
+  const waiver = recordWaiver(ctx, issue, command.by, command.byName, reason);
+  await ctx.github.comment(issue, `Screenshot waiver recorded by the committee.\n\n${waiverNotice(waiver)}\n\nThe factory still runs the tests, typecheck, CPU playtest and build. Its approval post says the screenshot was waived. The waiver covers that one post.`);
+  ctx.log('tick', issue, `screenshot waived by ${by}: ${waiver.reason}`);
+  return `Screenshot of #${issue} is waived, as recorded on the issue. The checks still run, and the approval post says it has no visual evidence. Hermes clears factory-stuck when the card is held.`;
 }
 
 async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<string> {

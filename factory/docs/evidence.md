@@ -13,6 +13,14 @@ A testing round that ends in a post writes `.factory/screenshot.png`, the primar
 
 Telegram gives a media group no buttons. So the approval post stays one photo with its caption and buttons, and the other images follow as a reply photo or album. Commands act on the primary only. When the album fails, the factory marks the primary superseded, drops its buttons and fails the stage with the card in Testing. The release candidate posts the same way, with an optional manifest that is logged and ignored when it breaks a rule.
 
+## Committee screenshot waiver
+
+A member can waive the screenshot of one card in Testing by sending `/waive-visual <issue> <reason>` in the committee chat. The reason is required. Only the committee command does it. A GitHub comment, and the testing agent's own `visual: false`, never waive anything. The factory refuses a user outside the committee and a card outside Testing, records the waiver in the state file `visualWaivers` with the member, the reason and the time, and comments it on the issue.
+
+A waived card runs the same stages. Verify still plays the feature and accepts `.factory/approval.json` with no screenshot, evidence manifest or visual review, and the card goes to the checks. The checks run the fresh-clone tests, typecheck, CPU playtest and build as usual. A failure follows the normal fix and retry rules and posts nothing.
+
+After a pass the factory posts the approval as a text message, since there is no photo. It has the same Approve and Deny buttons, post mapping and reply routing, and a status line edits its text. Its text opens with "SCREENSHOT WAIVED" and says the player-visible behavior has no visual evidence, and the issue comment says the same with the reason. The waiver covers that one post and is then removed. A later rebuild of the card needs its evidence again, unless a member waives again. A held card keeps its `factory-stuck` label until Hermes removes it.
+
 ## Visual review
 
 Testing does not trust the implementation's claim that the look is right. A round that ends in a post finishes with the agent reading its final images and writing `.factory/visual-review.json`. It compares them with the issue, the task file, `game/docs/DESIGN.md` and the game docs. The factory checks the file for consistency:

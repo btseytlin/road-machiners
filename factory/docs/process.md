@@ -40,6 +40,8 @@ The early ends:
 - bundled: triage folds the issue into a lead, and it closes when the lead ships.
 - Deny: the committee rejects the build, and the issue closes.
 
+A member can waive a card's screenshot with `/waive-visual <issue> <reason>`. The card still runs verify and the checks, and its approval post is text that says the screenshot was waived. [evidence.md](evidence.md#committee-screenshot-waiver) has the rules.
+
 A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
 
 ## Testing column

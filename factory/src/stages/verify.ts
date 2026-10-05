@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { readEvidence } from '../evidence';
+import { visualWaiverOf } from '../visual-waiver';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
@@ -79,22 +80,28 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 // It also leaves the agent's reading of those images. Returns false when that reading sent the card back, so no post follows.
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
   const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
+  const waived = shows && visualWaiverOf(ctx, issue) !== null;
   const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
-  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
-  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars));
+  const waiverRules = fillPrompt('test-waived', {}).trimEnd();
+  const evidenceRules = !shows ? 'No post follows this round, so leave the approval and the evidence as they are.' : waived ? waiverRules : `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}`;
+  const filled = fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars);
+  await runAgent(ctx, issue, 'verify', round, waived && prompt === 'test' ? `${filled.trimEnd()}\n\n${waiverRules}\n` : filled);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
-  if (shows) readApproval(home);
+  if (shows) readApproval(home, waived);
   await guardAndPush(ctx, issue, base, 'verify');
   if (!shows) return true;
+  // The committee waived the images, so there is nothing to read. The post says so, and the checks still run.
+  if (waived) return true;
   const head = await ctx.repo.headHash(BRANCH(issue));
   return visualGate(ctx, issue, home, head, readEvidence(home, head));
 }
 
-export function readApproval(home: string): Approval {
+// A committee waiver of the screenshot is the only case that accepts an approval with no image.
+export function readApproval(home: string, waived = false): Approval {
   const raw = readOutput(home, 'approval.json');
   if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
+  if (!waived && readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
   return parseApproval(JSON.parse(raw));
 }
 

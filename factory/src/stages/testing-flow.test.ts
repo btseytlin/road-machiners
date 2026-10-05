@@ -90,6 +90,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         return photos.map((_, i) => 110 + i);
       },
       editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
+      sendButtons: async (chat: string, text: string, buttons: unknown) => { calls.push(`buttons ${chat} ${text}`); photoButtons = buttons; return 120; },
     },
     container: {
       agent: async (run: AgentRun) => {
@@ -855,5 +856,72 @@ describe('visual review of the candidate', () => {
     writeState(`${home}/state.json`, { ...state(), approvedResolving: { 7: 'Ann' } });
     await runStage(fakeCtx(() => undefined), 7);
     expect(readState(`${home}/state.json`).pendingApprovals).toEqual({ 7: 'Ann' });
+  });
+});
+
+describe('committee screenshot waiver', () => {
+  const APPROVAL = JSON.stringify({ description: 'Salvage yard fights.', howToTry: 'Drive to the yard.' });
+  const waive = (issue: number): void => {
+    const state = readState(`${home}/state.json`);
+    writeFileSync(`${home}/state.json`, JSON.stringify({ ...state, visualWaivers: { [String(issue)]: { by: '11', byName: 'Dr. Boris', reason: 'Skip the requirement, move it to approval.', at: '2026-10-05T10:00:00.000Z' } } }));
+  };
+  // The agent leaves an approval and no image at all.
+  const approvalOnly = (run: AgentRun): void => writeFileSync(`${run.clone}/${run.dir}/.factory/approval.json`, APPROVAL);
+
+  it('still refuses a missing screenshot with no waiver, and a waiver of another issue does not help', async () => {
+    waive(9);
+    await expect(runVerify(fakeCtx(approvalOnly), 7)).rejects.toThrow('wrote no .factory/screenshot.png');
+    expect(readState(`${home}/state.json`).testPhase).toEqual({});
+  });
+
+  it('lets verify accept an approval with no screenshot or evidence and moves on to the checks', async () => {
+    waive(7);
+    const prompts: string[] = [];
+    await runVerify(fakeCtx((run) => { prompts.push(run.prompt); approvalOnly(run); }), 7);
+    expect(readState(`${home}/state.json`).testPhase).toEqual({ 7: 'checks' });
+    expect(prompts[0]).toContain('The committee waived the screenshot');
+    expect(calls).not.toContain('checks');
+  });
+
+  it('runs the same checks, then posts a text approval with buttons, a waiver warning and normal routing', async () => {
+    waive(7);
+    await runStage(fakeCtx(approvalOnly), 7);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(shellScript).toContain('npm run playtest -- --cpu');
+    expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+    const text = calls.find((call) => call.startsWith('buttons')) ?? '';
+    expect(text).toContain('SCREENSHOT WAIVED by Dr. Boris');
+    expect(text).toContain('no visual evidence');
+    expect(text).toContain('Play: https://play.test/abc123/');
+    expect(text).toContain('Reply to this post to ask a question or ask for a change.');
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
+    expect(commentBodies[0]).toContain('The committee waived the screenshot for this build');
+    expect(commentBodies[0]).toContain('Reason: Skip the requirement, move it to approval.');
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 120: 7 });
+    expect(state.textPosts).toEqual(['120']);
+    expect(state.postCaptions['120']).toBe(text.replace('buttons chat ', ''));
+    expect(state.visualWaivers).toEqual({});
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('posts nothing when the checks fail, and keeps the waiver for the retry', async () => {
+    waive(7);
+    await expect(runStage(fakeCtx(approvalOnly, 2), 7)).rejects.toThrow('The factory checks failed twice');
+    expect(calls.some((call) => call.startsWith('buttons') || call.startsWith('photo'))).toBe(false);
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
+    expect(readState(`${home}/state.json`).visualWaivers['7']).toBeDefined();
+  });
+
+  it('refuses a checks job with no screenshot and no waiver', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), testPhase: { 7: 'checks' } });
+    await expect(runChecks(fakeCtx(approvalOnly), 7)).rejects.toThrow();
+    expect(calls).not.toContain('checks');
+  });
+
+  it('does not take the agent\'s own visual:false as a waiver', async () => {
+    await expect(runVerify(fakeCtx((run) => { approvalOnly(run); writeFileSync(`${run.clone}/${run.dir}/.factory/visual-review.json`, JSON.stringify(NONVISUAL)); }), 7)).rejects.toThrow('wrote no .factory/screenshot.png');
   });
 });

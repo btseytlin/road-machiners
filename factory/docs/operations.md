@@ -56,7 +56,7 @@ Each job reports a heartbeat every `FACTORY_OBSERVATION_HEARTBEAT_MS`. Agents re
 
 ## Chat answers
 
-When a member acts on a post by button or reply, the factory adds a status line under its caption, like "Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back. A command on a post answers with that status line alone. `/change` gets one reply from the tick. An ad hoc task gets Hermes's reply, then the report, then any files. Errors always get a reply.
+When a member acts on a post by button or reply, the factory adds a status line under its caption, like "Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back. A command on a post answers with that status line alone. A waived approval post is a text message, so its status line edits the text, not a caption. `/change` and `/waive-visual` get one reply from the tick. An ad hoc task gets Hermes's reply, then the report, then any files. Errors always get a reply.
 
 ## Ledger and waste review
 

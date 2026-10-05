@@ -143,8 +143,13 @@ export type FactoryState = {
   patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
   unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
+  visualWaivers: Record<string, VisualWaiver>; // issue number -> the committee's waiver of the screenshot of its next approval post. The post consumes it.
+  textPosts: string[]; // Telegram message ids of approval posts sent as text, since a waived post has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
 };
+
+// A committee member's recorded decision to post an issue for approval with no screenshot. `by` is the Telegram user id, `at` an ISO time.
+export type VisualWaiver = { by: string; byName: string | null; reason: string; at: string };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 
@@ -186,6 +191,7 @@ export interface Telegram {
   sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
   sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
+  editText(chat: string, messageId: number, text: string): Promise<void>; // replaces a text message and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.

@@ -28,6 +28,7 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
     telegram: {
       sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; },
       editCaption: async (chat: string, id: number, caption: string) => { calls.push(`edit ${chat} ${id} ${caption}`); },
+      editText: async (chat: string, id: number, text: string) => { calls.push(`editText ${chat} ${id} ${text}`); },
     },
   } as unknown as Ctx;
 }
@@ -87,6 +88,49 @@ describe('drainInbox', () => {
     put('2.json', { kind: 'change', text: 'y', by: '11' });
     await drainInbox(fakeCtx([], [], []));
     expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
+  });
+
+  describe('waive-visual', () => {
+    const testing: Card[] = [{ itemId: 'i', issue: 257, column: 'Testing', labels: ['factory-stuck'] }];
+
+    it('records the waiver of a committee member on a card in Testing, and audits it on the issue', async () => {
+      const sent: string[] = [];
+      const calls: string[] = [];
+      put('1.json', { kind: 'waive-visual', issue: 257, text: 'Skip the requirement, move it to approval.', postId: null });
+      await drainInbox(fakeCtx(testing, sent, calls));
+      expect(readState(statePath).visualWaivers).toEqual({ '257': { by: '11', byName: 'Ann', reason: 'Skip the requirement, move it to approval.', at: '1970-01-01T00:00:05.000Z' } });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain('comment 257 Screenshot waiver recorded by the committee.');
+      expect(calls[0]).toContain('Ann (Telegram 11) waived the screenshot');
+      expect(sent[0]).toContain('Screenshot of #257 is waived');
+    });
+
+    it('refuses a user outside the committee, so a comment or a stranger waives nothing', async () => {
+      const sent: string[] = [];
+      put('1.json', { kind: 'waive-visual', issue: 257, text: 'please', by: '99', postId: null });
+      await drainInbox(fakeCtx(testing, sent, []));
+      expect(readState(statePath).visualWaivers).toEqual({});
+      expect(sent[0]).toContain('Only committee members');
+    });
+
+    it('needs a reason and a card in Testing', async () => {
+      const sent: string[] = [];
+      put('1.json', { kind: 'waive-visual', issue: 257, text: ' ', postId: null });
+      put('2.json', { kind: 'waive-visual', issue: 4, text: 'why', postId: null });
+      await drainInbox(fakeCtx(testing, sent, []));
+      expect(readState(statePath).visualWaivers).toEqual({});
+      expect(sent[0]).toContain('needs text');
+      expect(sent[1]).toContain('Issue #4 is not in Testing');
+    });
+  });
+
+  it('shows the status of a button press on a waived text post by editing its text', async () => {
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), postCaptions: { [POST]: 'Post' }, textPosts: [String(POST)] });
+    put('1.json', { kind: 'redesign', issue: 4, text: 'too loud' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(calls.at(-1)).toBe('editText -5 42 Post\n\n💬 Feedback from Ann. Back to design.');
+    expect(calls.some((call) => call.startsWith('edit -5'))).toBe(false);
   });
 
   it('sends a redesign back to design at once', async () => {

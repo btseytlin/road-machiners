@@ -42,6 +42,20 @@ def test_reply_to_unknown_post_is_normal_chat():
     assert route("approve", "99") is None
 
 
+def test_waive_visual_needs_an_issue_and_a_reason():
+    assert route("/waive-visual 257 Skip the requirement") == ("waive-visual", 257, "Skip the requirement")
+    assert route("/waive-visual #257 no combat shot", "55") == ("waive-visual", 257, "no combat shot")
+    assert route("/waive-visual 257") is None
+    assert route("/waive-visual Skip it") is None
+    assert route("/waive-visual 257 x", chat="-200") is None
+
+
+def test_waive_visual_inbox_command_names_no_post():
+    assert plugin.inbox_command(("waive-visual", 257, "why"), 1, "Ann", -100, 90, None) == {
+        "kind": "waive-visual", "issue": 257, "text": "why", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 90, "postId": None,
+    }
+
+
 def test_change_request():
     assert route("/change add rain") == ("change", "add rain")
     assert route("/change") is None
