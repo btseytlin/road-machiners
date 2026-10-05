@@ -103,8 +103,8 @@ function readDoing(activity) {
   return formatActivity(activity);
 }
 function formatActivity(activity) {
-  if (activity.milestone) return `Reported: ${milestones[activity.milestone]} · ${actions[activity.activity]}`;
-  return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity];
+  if (activity.milestone) return `${milestones[activity.milestone]}: ${actions[activity.activity].toLowerCase()}`;
+  return actions[activity.activity];
 }
 function createWorkerRow(job) {
   const row = createNode('tr');
