@@ -146,11 +146,10 @@ function renderCapacity(operations) {
   if (!rows.length) replaceContents('capacity-rows', [createNode('p', operations ? 'All slots occupied' : 'State unavailable', 'empty')]);
 }
 function renderFunnel() {
-  const scheduler = readLive()?.scheduler;
-  const counts = scheduler?.status === 'ready' ? scheduler.counts : null;
+  const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
   replaceContents('funnel', columns.map((column) => {
     const item = createNode('div');
-    const value = counts === null ? null : counts[column] ?? 0;
+    const value = cards ? cards.filter((card) => card.column === column).length : null;
     item.append(createNode('span', column.replace('Implementation', 'Implement').replace('Testing', 'Test')), createNode('strong', formatNumber(value)));
     item.lastChild.title = value === null ? 'Unavailable' : value.toLocaleString();
     return item;
@@ -334,14 +333,20 @@ function renderStageChart(summary) {
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
 function readStageModelLabel(stage) { return stage === null ? 'Total' : stage === 'verify' ? 'Verify + review' : stages[stage]; }
+function createStageModelCell(stage, model, usage, measure) {
+  const value = usage ? measure === 'input' ? countInputTokens(usage) : usage.output : null;
+  const cell = createNode('td', formatNumber(value), 'numeric');
+  if (usage) cell.dataset.exact = measure === 'input'
+    ? `${readStageModelLabel(stage)} · ${model}: ${value} input including ${usage.cacheRead} cache read and ${usage.cacheWrite} cache write, ${formatCost(usage.cost)} estimated cost`
+    : `${readStageModelLabel(stage)} · ${model}: ${value} output`;
+  return cell;
+}
 function createStageModelRow(stage, models, summary) {
   const row = createNode('tr');
   row.append(createNode('td', readStageModelLabel(stage)));
   for (const model of models) {
     const usage = stage === null ? summary.models.find((item) => item.model === model) : summary.stageModels.find((item) => item.stage === stage && item.model === model);
-    const cell = createNode('td', usage ? `${formatNumber(countInputTokens(usage))} / ${formatNumber(usage.output)}` : '—', 'numeric');
-    if (usage) cell.dataset.exact = `${readStageModelLabel(stage)} · ${model}: ${usage.input} uncached input, ${usage.cacheRead} cache read, ${usage.cacheWrite} cache write, ${usage.output} output, ${formatCost(usage.cost)} estimated cost`;
-    row.append(cell);
+    row.append(createStageModelCell(stage, model, usage, 'input'), createStageModelCell(stage, model, usage, 'output'));
   }
   return row;
 }
@@ -354,9 +359,15 @@ function renderStageModels(summary) {
   // Two model columns fit beside stage names at the narrowest desktop width.
   const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
   const visible = selectPage('model-column', models, 2);
-  replaceContents('stage-model-header', [createNode('th', 'Stage'), ...visible.map((model) => createNode('th', model))]);
+  const stageHeader = createNode('th', 'Stage');
+  stageHeader.rowSpan = 2;
+  stageHeader.scope = 'col';
+  const modelHeaders = visible.map((model) => { const header = createNode('th', model); header.colSpan = 2; header.scope = 'colgroup'; return header; });
+  replaceContents('stage-model-header', [stageHeader, ...modelHeaders]);
+  const measureHeaders = visible.flatMap(() => ['Input + cache', 'Output'].map((name) => { const header = createNode('th', name); header.scope = 'col'; return header; }));
+  replaceContents('stage-model-measures', measureHeaders);
   const rows = models.length ? [null, ...readStageModelNames(summary.stageModels)] : [];
-  renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length + 1);
+  renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length * 2 + 1);
 }
 function renderAnalytics() {
   const summary = readSummary();

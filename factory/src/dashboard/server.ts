@@ -51,8 +51,10 @@ export class DashboardServer {
   }
   private broadcast(): void {
     const event = `event: snapshot\ndata: ${JSON.stringify(this.collector.getSnapshot())}\n\n`;
+    // A full snapshot can exceed the writable high-water mark; skip updates until the client drains instead of treating backpressure as a disconnect.
     for (const client of this.clients) {
-      if (!client.write(event)) client.destroy();
+      if (client.writableLength > 0) continue;
+      client.write(event);
     }
   }
   private openStream(request: IncomingMessage, response: ServerResponse): void {
@@ -60,6 +62,7 @@ export class DashboardServer {
     response.write(`retry: ${this.intervals.refreshMs}\nevent: snapshot\ndata: ${JSON.stringify(this.collector.getSnapshot())}\n\n`);
     this.clients.add(response);
     request.on('close', () => this.clients.delete(response));
+    response.on('close', () => this.clients.delete(response));
     response.on('error', () => { this.clients.delete(response); response.destroy(); });
   }
   private sendJson(response: ServerResponse, value: unknown): void {
