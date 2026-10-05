@@ -82,11 +82,11 @@ describe('orchard model sizes (IV11)', () => {
 });
 
 // IV13: each gatehouse model's height in tiles. The masonry and scrap gates are FORTRESS.gate. The flush styles' gates
-// follow C1-C5: 3 tiles for patchwork, compound, ring and yard, and 4 for ship metal.
+// follow C1-C5: 3 tiles for patchwork, compound, ring and yard, and 4.5 for ship metal.
 const GATE_TILES: Record<string, number> = {
   fort_masonry_gate: FORTRESS.gate.height,
   fort_scrap_gate: FORTRESS.gate.height,
-  fort_ship_gate: 4,
+  fort_ship_gate: 4.5,
   fort_patchwork_gate: 3,
   fort_compound_gate: 3,
   fort_ring_gate: 3,
@@ -190,7 +190,9 @@ describe('prop shapes', () => {
       const top = Math.max(...SHAPES[name].boxes.map((b) => b.z1));
       // Only the masonry gatehouse ends at its parapet. The others carry a post, a rail, antennae or a tower top up to 2.5 m above it, beside the gate gun.
       expect(top, name).toBeGreaterThanOrEqual(parapet - 0.5);
-      expect(top, name).toBeLessThanOrEqual(name.includes('masonry') ? parapet + 0.5 : parapet + 2.5);
+      // Ship metal's built-in towers rise 4 m over the catwalk to 22 m, and their antennae 2 m more.
+      const over = name.includes('masonry') ? 0.5 : name.includes('ship') ? 6.5 : 2.5;
+      expect(top, name).toBeLessThanOrEqual(parapet + over);
     }
   });
 

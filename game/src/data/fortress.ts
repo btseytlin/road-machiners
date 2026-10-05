@@ -36,12 +36,13 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
     turn: 0,
     style: 'patchwork',
     bastions: { capitals: [-85.34, -44.52, -3.7, 60, 128, 198], curtain: 21.5, salient: 26.75, gorge: 2.5, flank: 2.5 },
-    // C1 drops from the rim through three crop terraces to a floor about half the site across, 9 m down. Four 0.6-tile
-    // steps give the three terraces and a floor from the main enclosure's margin.
-    pit: { margin: 1, terraceWidth: 1.8, stepHeight: 0.6, terraces: 4 },
+    // C1 drops from the rim through three crop terraces to a floor, 8 m down. Four 0.5-tile steps give the three
+    // terraces and a floor from the main enclosure's margin. A step stays under the 0.6 drive slope, so a road sample
+    // that lands on a riser is still drivable.
+    pit: { margin: 1, terraceWidth: 1.8, stepHeight: 0.5, terraces: 4 },
   },
-  // Turn 9 put a tower 0.91 tiles off the side of the 24 m flush gate at -145.7 degrees. Turns 7.25 to 8.75 clear both.
-  nose: { shape: 'circle', turn: 8, style: 'shipMetal' },
+  // C5's close towers: one every 3 sections, about 23 m apart. Turns 3.75 to 9.75 clear both 24 m flush gates.
+  nose: { shape: 'circle', turn: 8, style: 'shipMetal', towerEvery: 3 },
   dustwell: { shape: 'square', turn: 45, style: 'compound' },
   'green-pit': { shape: 'circle', turn: 8, style: 'masonry' },
   'pump-station': { shape: 'square', turn: 0, style: 'masonry' },
@@ -92,5 +93,5 @@ export const FORTRESS_STYLES: Record<FortressStyle, FortressStyleDef> = {
   // C4: rust plate leaves.
   yard: { flush: true, gate: { width: 2.5, depth: 1, height: 3 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
   // C5: shut plank doors between two built-in towers joined by a catwalk. The model is 5.5 m deep in a 6 m footprint.
-  shipMetal: { flush: true, gate: { width: 6, depth: 1.5, height: 4 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
+  shipMetal: { flush: true, gate: { width: 6, depth: 1.5, height: 4.5 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
 };

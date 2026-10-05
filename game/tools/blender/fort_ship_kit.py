@@ -5,12 +5,12 @@ shut X-braced plank doors between two built-in towers, joined by a plated catwal
 Each fort_ship_<piece>.py script calls run(piece). Geometry helpers come from fort_kit.py.
 
 Sizes, with one tile = 4 m:
-- wall: one straight section 8.0 m along X, centered on the origin, 12 m tall to its rail and 2.8 m deep. Two 4 m
+- wall: one straight section 8.0 m along X, centered on the origin, 16 m tall to its rail and 2.8 m deep. Two 4 m
   panels per face repeat within the module, so the game may stretch it along X. +Y faces out of the site, since the
   layout lays walls counterclockwise: the diamond band is on the +Y face, the timber walkway's rail and props on the
   -Y (inner) side.
-- tower: an octagon inside the 6 m footprint centered on the origin, 16 m tall to its roof, with two antennae above.
-- gate: 24 m wide along Y, 6 m deep along X and 16 m tall. Its outer face is the plane X = 0 and it faces +X, so the
+- tower: an octagon inside the 6 m footprint centered on the origin, 22 m tall to its roof, with two antennae above.
+- gate: 24 m wide along Y, 6 m deep along X and 18 m tall to its catwalk rail. Its outer face is the plane X = 0 and it faces +X, so the
   origin is the center of the outer face at ground level and the body runs to X = -6. Shut doors 12 m wide and 11 m
   high stand in a steel frame between two octagonal towers centered at Y = -9 and +9. No lamps: the gate furniture
   owns them. Nothing reaches past X = 0 (no flare).
@@ -35,18 +35,18 @@ XY = tuple[float, float]
 
 WALL_LENGTH = 8.0
 WALL_HALF_DEPTH = 1.3
-WALL_HEIGHT = 12.0
-DECK = 10.8  # the walkway floor and the band's top
-BAND = (9.6, DECK)  # the diamond band on the outer face
+WALL_HEIGHT = 16.0
+DECK = 14.4  # the walkway floor and the band's top
+BAND = (12.8, DECK)  # the diamond band on the outer face
 TOWER_R = 2.9  # octagon corner radius; the faces lie 2.68 m from the center
-TOWER_BANDS = 5
-STOREY = 12.6  # where the dark top storey starts
-TOWER_ROOF = 16.0
+TOWER_BANDS = 6
+STOREY = 17.4  # where the dark top storey starts
+TOWER_ROOF = 22.0
 GATE_WIDTH = 24.0
 GATE_DEPTH = 6.0
-GATE_HEIGHT = 16.0
+GATE_HEIGHT = 18.0
 DOOR_HALF = 6.0
-DOOR_TOP = 11.0
+DOOR_TOP = 13.0
 GATE_TOWER_Y = 9.0
 
 # Colors from src/render/palette.ts. C5's panels are pale grey, rust red, slate blue and dark grey.
@@ -139,7 +139,7 @@ def wall(kit: Kit) -> None:
     y = -d - 0.12
     for k, x in enumerate((-2.0, 2.0)):
         solid(kit, f"wall_prop{k}", x - 0.11, x + 0.11, y - 0.06, y + 0.06, 0.0, DECK, "timber")
-        strut(kit, f"wall_prop{k}_brace", (x + 1.6, y, 0.2), (x + 0.1, y, 5.5), 0.12, "timber")
+        strut(kit, f"wall_prop{k}_brace", (x + 1.6, y, 0.2), (x + 0.1, y, 7.5), 0.12, "timber")
 
 
 # --- Tower ----------------------------------------------------------------------------------------------------
@@ -177,8 +177,8 @@ def _octagon_tower(kit: Kit, name: str, at: XY, antennae: tuple[float, float]) -
 
 
 def tower(kit: Kit) -> None:
-    """An octagonal banded tower, 16 m to its roof."""
-    _octagon_tower(kit, "tower", (0.0, 0.0), (19.4, 18.2))
+    """An octagonal banded tower, 22 m to its roof."""
+    _octagon_tower(kit, "tower", (0.0, 0.0), (25.4, 24.2))
 
 
 # --- Gate -----------------------------------------------------------------------------------------------------
@@ -204,7 +204,7 @@ def gate(kit: Kit) -> None:
     """Two octagonal towers flank shut X-braced plank doors in a steel frame, under a plated catwalk."""
     cx = -GATE_DEPTH / 2
     for sign in (-1, 1):
-        _octagon_tower(kit, f"gate_tower{sign}", (cx, sign * GATE_TOWER_Y), (18.2, 17.4))
+        _octagon_tower(kit, f"gate_tower{sign}", (cx, sign * GATE_TOWER_Y), (24.2, 23.4))
         # A steel post fills between the door frame and the tower.
         y0, y1 = sorted((sign * (DOOR_HALF - 0.1), sign * (GATE_TOWER_Y - 2.0)))
         solid(kit, f"gate_post{sign}", -GATE_DEPTH + 0.4, -0.3, y0, y1, -SKIRT, DOOR_TOP + 1.2, "steel")
@@ -214,25 +214,25 @@ def gate(kit: Kit) -> None:
     solid(kit, "gate_seam", front - 0.45, front - 0.05, -0.05, 0.05, 0.0, DOOR_TOP, "core")
     # The steel frame head and the plated catwalk joining the tower tops, under the gate gun.
     solid(kit, "gate_head", -1.4, -0.3, -DOOR_HALF - 0.1, DOOR_HALF + 0.1, DOOR_TOP, DOOR_TOP + 1.2, "steel")
-    solid(kit, "gate_catwalk", -GATE_DEPTH + 0.6, -0.4, -GATE_TOWER_Y + 1.5, GATE_TOWER_Y - 1.5, DOOR_TOP + 1.2, 14.6, "core")
+    solid(kit, "gate_catwalk", -GATE_DEPTH + 0.6, -0.4, -GATE_TOWER_Y + 1.5, GATE_TOWER_Y - 1.5, DOOR_TOP + 1.2, 16.6, "core")
     plates = 6
     width = 2 * (GATE_TOWER_Y - 2.4) / plates
     for i in range(plates):
         y = -(GATE_TOWER_Y - 2.4) + (i + 0.5) * width
-        solid(kit, f"gate_catwalk_plate{i}", -0.4, -0.32, y - width / 2 + 0.05, y + width / 2 - 0.05, DOOR_TOP + 1.3, 14.0, ("pale", "dark", "slate")[i % 3])
-    _diamond_band(kit, "gate_catwalk", -(GATE_TOWER_Y - 2.4), GATE_TOWER_Y - 2.4, -0.32, 1, 14.0, 14.6, along_y=True)
-    solid(kit, "gate_deck", -GATE_DEPTH + 0.5, -0.3, -GATE_TOWER_Y + 1.5, GATE_TOWER_Y - 1.5, 14.6, 14.8, "steel")
+        solid(kit, f"gate_catwalk_plate{i}", -0.4, -0.32, y - width / 2 + 0.05, y + width / 2 - 0.05, DOOR_TOP + 1.3, 16.0, ("pale", "dark", "slate")[i % 3])
+    _diamond_band(kit, "gate_catwalk", -(GATE_TOWER_Y - 2.4), GATE_TOWER_Y - 2.4, -0.32, 1, 16.0, 16.6, along_y=True)
+    solid(kit, "gate_deck", -GATE_DEPTH + 0.5, -0.3, -GATE_TOWER_Y + 1.5, GATE_TOWER_Y - 1.5, 16.6, 16.8, "steel")
     for k, x in enumerate((-0.45, -GATE_DEPTH + 0.65)):
         for j in range(5):
             y = -(GATE_TOWER_Y - 2.4) + j * (GATE_TOWER_Y - 2.4) / 2
-            solid(kit, f"gate_rail_post{k}_{j}", x - 0.06, x + 0.06, y - 0.06, y + 0.06, 14.8, 15.9, "steel")
-        solid(kit, f"gate_rail{k}", x - 0.05, x + 0.05, -(GATE_TOWER_Y - 2.4), GATE_TOWER_Y - 2.4, 15.8, 15.9, "steel")
+            solid(kit, f"gate_rail_post{k}_{j}", x - 0.06, x + 0.06, y - 0.06, y + 0.06, 16.8, 17.9, "steel")
+        solid(kit, f"gate_rail{k}", x - 0.05, x + 0.05, -(GATE_TOWER_Y - 2.4), GATE_TOWER_Y - 2.4, 17.8, 17.9, "steel")
 
 
 PIECES: dict[str, tuple[Callable[[Kit], None], float]] = {
-    "wall": (wall, 14),
-    "tower": (tower, 32),
-    "gate": (gate, 40),
+    "wall": (wall, 18),
+    "tower": (tower, 40),
+    "gate": (gate, 44),
 }
 
 

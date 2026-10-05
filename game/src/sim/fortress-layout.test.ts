@@ -347,3 +347,22 @@ describe('flanking (IV25)', () => {
     expect(unflanked(siteOf('dustwell')).length).toBeGreaterThan(0);
   });
 });
+
+describe('Nose towers (IV30)', () => {
+  it('stand at most 26 m apart along the curtain, outside the gatehouses', () => {
+    const site = siteOf('nose');
+    const angle = (p: Vec): number => Math.atan2(p.y - site.pos.y, p.x - site.pos.x);
+    const pieces = fortressPieces(site);
+    const towers = pieces.filter((p) => p.kind === 'tower').map((p) => p.pos).sort((a, b) => angle(a) - angle(b));
+    const gates = pieces.filter((p) => p.kind === 'gate').map((p) => angle(p.pos));
+    const between = (a: number, b: number, g: number): boolean => (a <= b ? g > a && g < b : g > a || g < b);
+    let checked = 0;
+    towers.forEach((t, i) => {
+      const next = towers[(i + 1) % towers.length];
+      if (gates.some((g) => between(angle(t), angle(next), g))) return;
+      expect(dist(t, next) * 4, `tower ${i}`).toBeLessThanOrEqual(26);
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(25);
+  });
+});
