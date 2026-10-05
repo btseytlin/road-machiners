@@ -81,6 +81,7 @@ const DEFS = {
   // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
   "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
   "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
+  "score-horns": { bus: "music", setup: "score", beat: { bpm: 100, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless dark Afro-funk war loop, 100 BPM in 4/4: brutal low baritone sax and trumpet blasts on D minor, pounding heavy drums, fuzz bass hammering every beat. Hard and menacing, not happy, no fills."] },
   "accent-sighted": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["Three heavy tribal war drum hits, boom boom boom, with a low Mongolian throat singing growl rising under them."], seconds: 1.5 },
   "accent-struck": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["One distorted electric guitar power chord on D slammed with a big tribal drum hit, then a short falling throat singing groan."], seconds: 1.5 },
   "accent-miss": { bus: "music", setup: "stinger", volume: 0.75, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["A quick palm-muted distorted electric guitar chug and a tight snare flam, then silence."], seconds: 1 },
@@ -159,6 +160,7 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 const SCORE_PHASES: Record<string, number> = {
   "score-drums-1.ogg": 0.014,
   "score-bass-1.ogg": 0.232,
+  "score-horns-1.ogg": 0.176,
 };
 
 export function scorePhaseOf(file: string): number {

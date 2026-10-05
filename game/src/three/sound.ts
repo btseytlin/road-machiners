@@ -38,7 +38,7 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
 
 // Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
-const BASE_CUES = ["score-drums", "score-bass"] as const;
+const BASE_CUES = ["score-drums", "score-bass", "score-horns"] as const;
 type BaseCue = (typeof BASE_CUES)[number];
 type Base = { loop: BeatLoopHandle; grid: Grid };
 
