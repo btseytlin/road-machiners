@@ -34,5 +34,10 @@ export function newGameShape(): Shape {
   world.salvage = [...mixes.values()].flatMap((stock) =>
     [[], [makePart(world, WEAPON_ID, 0)], [makePart(world, PLAIN_ID, 0)]].map((parts) => ({ ...stock, parts })),
   );
-  return shapeOf(JSON.parse(JSON.stringify(saveOf(world).world)));
+  // Keep the cargo-free NPC shape even when every starting NPC happens to carry goods.
+  const carryingNpc = world.vehicles.find((v) => v.brain?.goals.length === 0 && v.items.some((item) => item.kind === 'good'));
+  if (!carryingNpc) throw new Error('The save shape sample has no NPC carrying goods');
+  const saved = JSON.parse(JSON.stringify(saveOf(world).world));
+  saved.vehicles.push({ ...carryingNpc, id: `shape-${carryingNpc.id}`, items: carryingNpc.items.filter((item) => item.kind !== 'good') });
+  return shapeOf(saved);
 }
