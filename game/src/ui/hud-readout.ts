@@ -27,7 +27,7 @@ import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedListNear, emptySalvageNear, lootBlockerHere, salvageListNear } from '../sim/locations';
-import { canLootTruck, canReachSalvage } from '../sim/salvage';
+import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
@@ -103,7 +103,7 @@ function getSiteActions(world: World): ContextAction[] {
   actions.push(...stocks.map((stock) => getStockAction(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
-    if (empty) actions.push({ label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left', target: { kind: 'empty' } });
+    if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
   }
   return actions;
 }
@@ -113,16 +113,37 @@ function getStockAction(world: World, stock: SalvageStock): ContextAction {
   const target = { kind: 'stock', id: stock.id } as const;
   const searched = world.player.scavenged.includes(stock.id);
   const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: `${searched ? 'Loot' : 'Search'} ${getSalvageName(stock)}`, ready: false, hint: `${blocker.name} is looting it`, target };
+  if (blocker) return { label: stockLabel(searched ? 'Loot' : 'Search', stock), ready: false, hint: `${blocker.name} is looting it`, target };
   const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: `Loot ${getSalvageName(stock)}`, ready: reachable, target };
+  if (searched) return { label: stockLabel('Loot', stock), ready: reachable, target };
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: `Search ${getSalvageName(stock)}`, ready: combat === undefined && reachable, combat, target };
+  return { label: stockLabel('Search', stock), ready: combat === undefined && reachable, combat, target };
 }
 
-function getSalvageName(stock: SalvageStock): string {
-  if (stock.pile) return 'the pile';
-  return REGION.locations.find((site) => site.id === stock.id)?.name ?? 'the wreck';
+// The verb alone at a loot spot that has no name, else the verb and the stock's name.
+function stockLabel(verb: 'Search' | 'Loot', stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? verb : `${verb} ${name}`;
+}
+
+function emptyLabel(stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? 'Picked clean' : `${name} is picked clean`;
+}
+
+// What the prompt calls the stock, or null for a loot spot that is no wreck: a farmhouse or a hangar needs no name.
+function getSalvageName(stock: SalvageStock): string | null {
+  const place = salvagePlace(stock);
+  if (place === 'pile') return 'the pile';
+  if (place === 'wreck') return 'the wreck';
+  if (place === 'spot') return null;
+  return siteName(stock.id);
+}
+
+function siteName(id: string): string {
+  const site = REGION.locations.find((l) => l.id === id);
+  if (!site) throw new Error(`Unknown site ${id}`);
+  return site.name;
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {

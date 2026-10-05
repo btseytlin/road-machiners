@@ -8,6 +8,8 @@ import { onOrchardRoad } from './region';
 export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
+// Loot spots that are wrecks, so their prompts keep wreck wording. Every other loot spot is a plain place.
+export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'deckBay'];
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
 export type SpotRule = {
   look: PropKind; // the prop kind that is a loot spot
