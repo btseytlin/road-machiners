@@ -1,12 +1,11 @@
 import { writeFileSync } from 'node:fs';
+import { readApproval } from '../clone-checks';
 import { readShown } from '../evidence';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
 import { visualGate } from './visual';
 import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
-
-export type Approval = { description: string; howToTry: string };
 
 // What a testing round does. `preview` gets a card ready to show: the agent plays the feature, fixes what blocks it and captures the evidence, with no review.
 // `harden` runs after the committee approved: verify, review, nitpicks and cost, with no post after it. `full` does both before the post.
@@ -81,7 +80,7 @@ async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | '
   const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
   const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
   const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
-  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars));
+  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars), { evidenceCheck: shows });
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   if (shows) readApproval(home);
@@ -92,16 +91,4 @@ async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | '
   if (shown.problem !== null) ctx.log('verify', issue, shown.problem);
   if (shown.evidence === null) return true;
   return visualGate(ctx, issue, home, head, shown.evidence);
-}
-
-export function readApproval(home: string): Approval {
-  const raw = readOutput(home, 'approval.json');
-  if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  return parseApproval(JSON.parse(raw));
-}
-
-function parseApproval(data: unknown): Approval {
-  const { description, howToTry } = (data ?? {}) as Record<string, unknown>;
-  if (typeof description !== 'string' || typeof howToTry !== 'string') throw new Error('.factory/approval.json needs string fields description and howToTry');
-  return { description, howToTry };
 }

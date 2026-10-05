@@ -81,3 +81,8 @@ If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
 
 Never push.
+
+Your very last step, after your last commit, is the factory's evidence check. Run `node /opt/factory-check/check.mjs test` from your folder.
+It runs the checks the factory runs after you, on your clone as it is now, and prints each failure with the factory's message.
+Fix every failure before you end. A fix needs a commit, new captures and a new manifest and visual review, and then you run the check again.
+Run it again after any later commit. Do not end while it fails.

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
@@ -76,6 +78,27 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
   return (await docker('docker ps', ['ps', '-q', '--filter', `label=${FACTORY_LABEL}`])).trim() !== '';
 }
 
+// The agent runs the factory's own evidence checks in its container. The image has Node but not the factory's code, so each run bundles the current source into one file
+// and mounts its folder read only. The agent can read the checks but never change them, and they cannot drift from the ones the factory runs after the stage.
+const CHECK_MOUNT = '/opt/factory-check';
+export const EVIDENCE_CHECK_COMMAND = `node ${CHECK_MOUNT}/check.mjs`;
+const CHECK_ENTRY = fileURLToPath(new URL('./agent-check-bin.ts', import.meta.url));
+
+// Parallel jobs bundle at once, so each writes its own file and renames it into place.
+export async function buildCheckBundle(home: string): Promise<string> {
+  const dir = join(home, 'agent-check');
+  mkdirSync(dir, { recursive: true });
+  const part = join(dir, `check-${process.pid}-${Date.now()}.mjs`);
+  await build({ entryPoints: [CHECK_ENTRY], bundle: true, platform: 'node', format: 'esm', target: 'node22', outfile: part, logLevel: 'silent' });
+  renameSync(part, join(dir, 'check.mjs'));
+  return dir;
+}
+
+async function readOnlyMounts(home: string, readOnly: Record<string, string>, evidenceCheck: boolean): Promise<string[]> {
+  const mounts = evidenceCheck ? { ...readOnly, [await buildCheckBundle(home)]: CHECK_MOUNT } : readOnly;
+  return Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
+}
+
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${LONG_JOBS_NOTE}`;
@@ -126,7 +149,7 @@ function recordedSession(cfg: FactoryConfig, jobId: string | null, session: Agen
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session: issueSession, skill, effort }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, evidenceCheck, session: issueSession, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       const session = recordedSession(cfg, jobId, issueSession);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
@@ -135,7 +158,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
-      const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
+      const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly, evidenceCheck === true);
       const args = [
         ...baseArgs(jobId, cpus, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
