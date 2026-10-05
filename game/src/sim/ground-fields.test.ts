@@ -104,6 +104,18 @@ describe('pathBehind', () => {
     expect(p.y).toBeCloseTo(23);
   });
 
+  it('goes on past the start the way its first tile ran, not along a first leg of jitter', () => {
+    const { me } = playerWith('caltrops');
+    me.trail = [{ x: 30, y: 26.03, heading: Math.PI / 2 }, { x: 30.02, y: 26, heading: Math.PI / 2 }, { x: 30, y: 28, heading: Math.PI / 2 }];
+    me.pos = { x: 30, y: 30 };
+
+    const p = pathBehind(me, 7);
+
+    // Within the few hundredths of a tile the jitter adds to the path's length.
+    expect(Math.abs(p.x - 30)).toBeLessThan(0.1);
+    expect(Math.abs(p.y - 23)).toBeLessThan(0.1);
+  });
+
   it('throws on a negative distance', () => {
     const { me } = playerWith('caltrops');
 
@@ -140,6 +152,22 @@ describe('drops land on the path behind in travel', () => {
       name: 'stopped',
       lay: (v, h) => {
         drive(v, END, END);
+        v.heading = h;
+        return unit(h);
+      },
+    },
+    {
+      // Physics settles a parked truck by a few hundredths of a tile, here backward and to the side.
+      name: 'stopped with a settling wobble',
+      lay: (v, h) => {
+        const back = unit(h + Math.PI);
+        const side = unit(h + Math.PI / 2);
+        v.trail = [
+          { x: END.x - 0.03 * back.x, y: END.y - 0.03 * back.y, heading: h },
+          { x: END.x - 0.01 * back.x + 0.02 * side.x, y: END.y - 0.01 * back.y + 0.02 * side.y, heading: h },
+          { x: END.x, y: END.y, heading: h },
+        ];
+        v.pos = { ...END };
         v.heading = h;
         return unit(h);
       },

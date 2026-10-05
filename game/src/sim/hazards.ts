@@ -45,12 +45,15 @@ export type FieldDrop = { radius: number; turns: number; behind: number };
 // it spends. The streak's size is in OIL.
 export type OilSpill = { turns: number; behind: number; fuel: number };
 
-// Below this many tiles of trail the truck counts as stopped this turn.
-const STILL_TRAIL = 0.01;
+// Below this many tiles of trail the truck counts as stopped this turn: a meter, past a parked truck's settling.
+const STILL_TRAIL = 0.25;
+// Tiles of trail from its start that set the way the path goes on back past it.
+const START_RUN = 1;
 
 // The point d tiles back along the path v drove this turn, [...trail, pos], from its position. Behind means behind in
 // travel, so a reversing truck gets ground ahead of its nose. Past the trail's start the path goes on straight the way
-// the trail started. A truck that did not move gets the line behind its heading.
+// its first START_RUN tiles ran. A truck that moved less than STILL_TRAIL, such as a parked truck settling, gets the
+// line behind its heading.
 export function pathBehind(v: Vehicle, d: number): Vec {
   if (!(d >= 0)) throw new Error(`pathBehind needs a distance of 0 or more, got ${d}`);
   const points: Vec[] = [...v.trail, v.pos].map((p) => ({ x: p.x, y: p.y }));
@@ -61,7 +64,25 @@ export function pathBehind(v: Vehicle, d: number): Vec {
     if (left <= leg.length) return along(leg.to, backward(leg), left);
     left -= leg.length;
   }
-  return along(legs[0].from, backward(legs[0]), left);
+  return along(legs[0].from, startBackward(legs), left);
+}
+
+// The unit direction back past the trail's start: from the point START_RUN along the trail, or its end when shorter,
+// to its start, so a first leg of settling jitter does not turn it.
+function startBackward(legs: { from: Vec; to: Vec; length: number }[]): Vec {
+  const start = legs[0].from;
+  let ahead = legs[legs.length - 1].to;
+  let left = START_RUN;
+  for (const leg of legs) {
+    if (left <= leg.length) {
+      ahead = along(leg.from, { x: (leg.to.x - leg.from.x) / leg.length, y: (leg.to.y - leg.from.y) / leg.length }, left);
+      break;
+    }
+    left -= leg.length;
+  }
+  const length = dist(ahead, start);
+  if (length === 0) return backward(legs[0]); // the trail came back to its start
+  return { x: (start.x - ahead.x) / length, y: (start.y - ahead.y) / length };
 }
 
 // The unit direction from a leg's end back to its start.
