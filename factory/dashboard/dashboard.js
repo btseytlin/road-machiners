@@ -32,6 +32,7 @@ function formatAge(at) {
   return seconds < 60 ? '<1m' : formatDuration(seconds * 1000);
 }
 function countInputTokens(tokens) { return tokens == null ? null : tokens.input + tokens.cacheRead + tokens.cacheWrite; }
+function formatTokenCount(value) { return value == null ? '—' : `${formatNumber(value)} tokens`; }
 function countTokens(tokens) { return tokens == null ? null : countInputTokens(tokens) + tokens.output; }
 function createLink(text, href) {
   const url = new URL(href);
@@ -319,6 +320,8 @@ function renderCounters(summary) {
   renderTokenCounters(summary.tokens);
   setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
+  setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
+  setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
   setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC · ${summary.missingUsage} runs lack token counts · ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
@@ -329,7 +332,7 @@ function renderTokenCounters(tokens) {
 }
 function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
 function clearCounters() {
-  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
+  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
 // The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.

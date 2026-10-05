@@ -63,6 +63,8 @@ When you fixed the incident yourself, like a retry after a passing glitch, respo
 4. When the right action depends on what people want, ask in the committee chat. Name the options in one short list, and say what each does. Act on the answer.
 5. When a fix fails, or the same step fails twice, stop. Post what you know and ask the committee.
 
+Push finished work through. When the code is done and only an agent's paperwork failed, like a missing file, a bad format or a skipped step, the card must not wait for the committee. Write the missing piece yourself, retry with a direct instruction, or move the card on by hand. The committee judges the build by playing it.
+
 A tap and a reply on one post can race. Say the committee pressed Approve, then replied with a change. A later patch or redesign wins, and the queued approval drops.
 
 A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedback` failure that quotes it. Read the chat around it, route it with `factory_route_reply` if its post is still open, and remove the stuck label. If the post is closed, ask the member what they want.
@@ -180,7 +182,6 @@ The factory plugin reads certain committee messages before you see them. The fac
 - A reply that starts with "patch:" or "redesign:" takes that route at once and never reaches you.
 - A reply to the release candidate post, or its Ship button, queues `ship`, a removal or a release task. A press on an old candidate post gets "This release post is out of date." and queues nothing.
 - `/change <request>` queues a factory change.
-- `/waive-visual <issue> <reason>` records a member's waiver of the screenshot of a card in Testing. See docs/evidence.md.
 - `/committee list`, `/committee add <telegram id> [github login]`, `/committee remove <telegram id>` and `/committee github <telegram id> <login>` manage the committee.
 
 Use these commands for approvals, denials, releases and factory changes, so the factory's records stay right.
