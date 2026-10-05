@@ -8,7 +8,7 @@ const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumF
 const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
 let snapshot = null;
 let selectedDays = 7;
-let metric = 'tokens';
+let metric = 'cost';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
@@ -262,7 +262,7 @@ function renderCounters(summary) {
   setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
-  setText('coverage', `${summary.missingUsage} runs missing usage, ${summary.waitingGaps} gaps in waiting records`);
+  setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC · ${summary.missingUsage} runs lack token counts · ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
 function clearCounters() {
@@ -293,6 +293,7 @@ function readDailyBuckets(summary) {
   });
 }
 function renderDailyChart(summary) {
+  setText('daily-title', metric === 'cost' ? 'Daily spend' : 'Daily tokens');
   const days = readDailyBuckets(summary);
   const capacity = Math.max(1, Math.floor(getElement('daily-chart').clientWidth / 48));
   const visible = selectPage('daily', days, capacity);
@@ -326,14 +327,14 @@ function renderStageChart(summary) {
   replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
-function createModelRow(item) { const row = createNode('tr'); row.append(createNode('td', item.model), createNode('td', formatNumber(countTokens(item)), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
+function createModelRow(item) { const row = createNode('tr'); row.append(createNode('td', item.model), ...['input', 'output', 'cacheRead', 'cacheWrite'].map((key) => createNode('td', formatNumber(item[key]), 'numeric')), createNode('td', formatCost(item.cost), 'numeric')); return row; }
 function renderAnalytics() {
   const summary = readSummary();
   renderCounters(summary);
   renderDailyChart(summary);
   renderStageChart(summary);
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
-  renderTable('model', summary?.models ?? [], createModelRow, 'No reported models', 3);
+  renderTable('model', summary?.models ?? [], createModelRow, 'No reported models', 6);
 }
 function readPauseNotice() {
   const operations = readOperations();
