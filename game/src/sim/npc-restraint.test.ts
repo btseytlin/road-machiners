@@ -53,7 +53,7 @@ describe('NPC restraint', () => {
     });
     expect(raiders.some((npc) => Object.entries(goodsCount(npc)).some(([good, count]) => good !== 'parts' && count > 0))).toBe(true);
     expect(raiders.some((npc) => (goodsCount(npc).parts ?? 0) > 0)).toBe(true);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('mostly keeps civilian work and never opens fire at an uninvolved hostile', () => {
     const { world, npc } = createNpc();
@@ -91,7 +91,7 @@ describe('NPC restraint', () => {
       return fights;
     });
     expect(fought).toBeGreaterThan(0.9);
-  }, budget(90_000)); // plans orders over many seeds, slow when the suite runs in parallel
+  }, budget(90_000)); // planning over every seed takes 10s alone and over 30s when the whole suite shares the cores
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');

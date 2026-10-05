@@ -76,7 +76,7 @@ describe('prop footprints', () => {
     const w = emptyWorld();
     w.obstacles = [{ id: 'wreck9', pos: { x: 40.2, y: 40.3 }, r: 1.2, kind: 'wreck' }];
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, []), radius);
     const boxes = propBoxes(w.obstacles[0]);
     const near = (p: Vec) => boxes.some((b) => boxDistance(b, p) < radius + CLEARANCE);
 

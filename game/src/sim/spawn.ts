@@ -238,7 +238,7 @@ function insideFortress(pos: Vec): boolean {
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
   if (!onMap(world, pos, radius) || insideFortress(pos)) return false;
   const margin = 0.3;
-  if (world.obstacles.filter(isDriveObstacle).some((o) => touchesObstacle(o, pos, radius, margin))) return false;
+  if (world.obstacles.filter(isDriveObstacle).some((o) => touchesObstacle(o, world.terrain, pos, radius, margin))) return false;
   return world.vehicles.every(
     (v) => v.id === ignoreId || dist(v.pos, pos) >= chassisDef(v.chassisId).radius + radius + margin,
   );

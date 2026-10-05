@@ -139,7 +139,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     brain: null,
   });
   const blocked = world.obstacles.filter(
-    (o) => touchesObstacle(o, truck.pos, vehicleStats(world, truck).radius),
+    (o) => touchesObstacle(o, world.terrain, truck.pos, vehicleStats(world, truck).radius),
   );
   if (blocked.length > 0)
     throw new Error(

@@ -59,7 +59,7 @@ import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { SiteMotion } from "./render/site-motion";
-import { addHullDecks } from "./render/hull-decks";
+import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
@@ -219,9 +219,10 @@ export class Game {
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
-    this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit)];
+    this.scopes = [groundScope, propScope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope, this.siteMotion);
+    addShipDecks(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles, this.world.salvage, this.world.broken);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
@@ -969,9 +970,7 @@ export class Game {
     this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
-    this.weather.advance(dt);
-    // Scenery moves on real time, like the weather.
-    this.siteMotion.tick(Math.max(0, dt) / 1000);
+    this.weather.advance(dt); this.siteMotion.tick(Math.max(0, dt) / 1000); // both run on real time
     this.weather.sync(this.world);
     this.labels.update(this.world, this.rig, this.sightLimit);
     for (const scope of this.scopes) scope.update(this.rig.camera);
