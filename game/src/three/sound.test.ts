@@ -29,7 +29,7 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, inCombat: false, inTown: false, paused: false };
+  const calm = { stormTiles: 100, inCombat: false, inTown: false, atOutpost: false, paused: false };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
@@ -46,6 +46,12 @@ describe("loopLevels", () => {
     const fight = loopLevels({ ...calm, inTown: true, inCombat: true }, MIX);
     expect([fight.calmGain, fight.townGain, fight.combatGain]).toEqual([0, 0, 1]);
     expect(loopLevels(calm, MIX).townGain).toBe(0);
+  });
+  it("plays outpost music at an outpost, and combat music over it", () => {
+    const gains = (l: ReturnType<typeof loopLevels>) => [l.calmGain, l.townGain, l.outpostGain, l.combatGain];
+    expect(gains(loopLevels({ ...calm, atOutpost: true }, MIX))).toEqual([0, 0, 1, 0]);
+    expect(gains(loopLevels({ ...calm, atOutpost: true, inCombat: true }, MIX))).toEqual([0, 0, 0, 1]);
+    expect(gains(loopLevels(calm, MIX))).toEqual([1, 0, 0, 0]);
   });
   it("muffles music during a pause between turns", () => {
     expect(loopLevels(calm, MIX).musicCutoffHz).toBe(MIX.music.openCutoffHz);
@@ -133,7 +139,7 @@ describe("next track", () => {
 
   it("crossfades the calm music to a new track at its current level", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, inCombat: false, inTown: false, paused: false });
+    loops.update({ stormTiles: 0, inCombat: false, inTown: false, atOutpost: false, paused: false });
     loops.nextTrack();
     expect(calm).toHaveLength(2);
     expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
@@ -151,7 +157,7 @@ describe("next track", () => {
 
   it("keeps the new track silent in combat", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, inCombat: true, inTown: false, paused: false });
+    loops.update({ stormTiles: 0, inCombat: true, inTown: false, atOutpost: false, paused: false });
     loops.nextTrack();
     expect(calm[1].gains).toEqual([0]);
   });

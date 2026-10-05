@@ -1,5 +1,6 @@
 // Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
+import { STALL_MARKETS } from '../data/market';
 import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
@@ -10,6 +11,12 @@ export type Site = TownDef | LocationDef;
 
 // Sites a truck is stopped at. A territory is open ground, so a click in it is an ordinary drive.
 const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
+// Outposts are the trading stops that are not towns.
+export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
+  const site = REGION.locations.find((l) => l.id === id);
+  if (!site) throw new Error(`Stall ${id} has no location`);
+  return site;
+});
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
@@ -86,6 +93,11 @@ export function townAt(world: World): TownDef | null {
 export function townNear(world: World): TownDef | null {
   const pos = playerVehicle(world).pos;
   return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
+}
+
+// Whether pos is within reach tiles of an outpost gate.
+export function isNearOutpost(pos: Vec, reach: number): boolean {
+  return OUTPOSTS.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
 }
 
 export function locationAt(world: World): LocationDef | null {

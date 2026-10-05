@@ -3,6 +3,8 @@
 // Generated cues carry prompt subjects; scripts/sfx-gen.mjs puts the SOUND_STYLE of the cue's setup in front.
 // A cue with several prompts is a family of different sounds, one prompt per variant.
 
+import { RULES } from "./rules";
+
 export type Bus = "ui" | "sfx" | "ambient" | "music";
 
 export type CueDef = {
@@ -83,6 +85,8 @@ const DEFS = {
   // "[3]lowpass=f=2500,volume=-12dB[d];[0][1][2][d]amix=inputs=4:normalize=0,acompressor=threshold=-22dB:ratio=3:attack=5:release=200:makeup=2,treble=g=-3:f=5000"
   // before import.
   "music-town": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Lively but hard wasteland junkyard groove for a trading town, 100 bpm, instrumental. Driving junk percussion: clanking scrap metal, hammered steel pipes, anvil hits, rattling chains and oil drums, over a dry acoustic drum kit and a deep upright bass riff. Baritone sax and trumpet stay in the background with a low, dark minor-key Ethiopian jazz line. Tough and gritty, not cheerful. Raw live recording in a dry room, tape. No electric guitar, no fuzz, no synths, no organ, seamless loop."], seconds: 90 },
+  // The outpost take, music-outpost-1791233198633.mp3, gets the same Demucs split and ffmpeg mix as the town take.
+  "music-outpost": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dark, menacing wasteland outpost groove with a steady pulse, 92 bpm, instrumental. Brooding minor key, like a spaghetti western standoff: baritone sax and trumpet play a grim Ethiopian jazz melody up front, over a tight dry drum kit and quiet junk percussion of clanking scrap metal and steel pipes. A deep driving bass riff, and a gritty overdriven guitar kept low in the mix, playing short muted stabs, never blasting. Hard and watchful, still moving, never happy or bright. Raw 1970s band playing live in a dry room, tape, no synths, no organ, seamless loop."], seconds: 90 },
   // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
   "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
   "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
@@ -212,7 +216,8 @@ export const MIX = {
   // Music crossfades to combat while the player is in combat, as the sim's combat state defines it.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
-  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
+  // Outpost music plays within outpostReachTiles of an outpost gate, the reach town music gets from guard range.
+  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6, outpostReachTiles: RULES.guards.range },
   // Combat score. One random base plays while the player is in combat. Heat is a fading sum of
   // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
   // and muffle each bar, full at fullHeat. Each event stabs on the lead or secondary line with its peak on the

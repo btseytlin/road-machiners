@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { clickOrder } from './steering';
-import { canUseSite, edgeCrossings, nearestPad, siteEdgeCrossings, siteGap, siteGates, sitePads, siteUnder } from './sites';
+import { canUseSite, edgeCrossings, isNearOutpost, nearestPad, OUTPOSTS, siteEdgeCrossings, siteGap, siteGates, sitePads, siteUnder } from './sites';
 import { dist } from './vec';
 
 // A territory is open ground: it has no gates or pads.
 const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const PAD = REGION.sites.pad;
+
+describe('outposts', () => {
+  it('are the trading stalls, not towns', () => {
+    expect(OUTPOSTS.map((o) => o.id).sort()).toEqual(['granary', 'pump-station', 'salvage-yard']);
+  });
+  it('are near within reach of a gate and not beyond it', () => {
+    const gate = siteGates(OUTPOSTS[0])[0];
+    expect(isNearOutpost({ x: gate.x + 3, y: gate.y }, 4)).toBe(true);
+    expect(isNearOutpost({ x: gate.x + 3, y: gate.y }, 2)).toBe(false);
+    expect(isNearOutpost(REGION.towns[0].pos, 4)).toBe(false);
+  });
+});
 
 describe('site gates and pads', () => {
   it('gives every site a gate on its edge', () => {
