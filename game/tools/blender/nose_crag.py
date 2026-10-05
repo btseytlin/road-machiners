@@ -3,7 +3,7 @@ ship runs into. It rises to about 44 m, twice the 22 m ship-metal towers, so it 
 
 Stands in the site frame of nose_rock_kit.py: the origin is the site center at ground level, +X along the ship toward
 its nose, +Y toward the south gate. Its footprint is the part of the ring behind a diagonal front edge that runs from
-60 m back at x = -48 to 22 m back at x = -85 and then straight on, past x = -48 toward the stern and inside 116 m of
+60 m back at x = -48 to 22 m back at x = -85 and then straight on, past x = -48 toward the stern and inside 120 m of
 the center. Its front is a steep cliff, and its top is a broken plateau.
 Run: blender --background --python tools/blender/nose_crag.py -- public/models/nose_crag.glb [tmp/nose_crag.png]
 """

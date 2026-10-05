@@ -7,7 +7,8 @@ import { PAL } from '../../render/palette';
 import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { fortressFootprint, fortressGates, fortressPieces, insideCurtain, pitDepth } from '../../sim/fortress';
+import { fortressGates, insideCurtain, pitDepth } from '../../sim/fortress';
+import { GATE_CLEAR, RISE } from './interiors/nose';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -20,6 +21,8 @@ await loadModels(async (name) => {
 });
 const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
 
+// The ship's belly stands at least one wall height over the yard, 16 m.
+const FORTRESS_WALL_TILES = 4;
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const ABANDONED = ALL.filter((s) => !isFortress(s));
 
@@ -51,7 +54,7 @@ describe('landmark scale', () => {
     group.traverse((o) => {
       if (o.name === 'nose-shelters') shelters += (o.children[0] as InstancedMesh).count;
     });
-    expect(shelters).toBeGreaterThanOrEqual(30);
+    expect(shelters).toBeGreaterThan(40);
     expect(group.userData.homes).toBe(shelters);
   });
 
@@ -482,44 +485,101 @@ describe('landmark scale', () => {
     node.updateMatrix();
   });
 
-  it('lays the Nose ship sections where they were authored, clear of both gatehouses', () => {
+  describe('Nose from its concept (IV8, IV27-IV29)', () => {
     const S = PHYSICS.metersPerTile;
     const nose = ALL.find((s) => s.id === 'nose')!;
     const group = sites.getObjectByName('landmark-nose')!;
-    const ship = group.getObjectByName('nose-ship')!;
-    // The nose joint, 10.25 tiles along the ship's southwest axis and 14 tiles back to the northwest, is not pulled in.
-    expect(ship.position.x / S - nose.pos.x).toBeCloseTo(-Math.SQRT1_2 * (10.25 + 14), 4);
-    expect(ship.position.z / S - nose.pos.y).toBeCloseTo(Math.SQRT1_2 * (10.25 - 14), 4);
-    const sections = ship.children.filter((o) => o.name === 'nose-ship-section');
-    expect(sections).toHaveLength(5);
-    const houses = fortressPieces(nose).filter((p) => p.kind === 'gate').map((p) => fortressFootprint(nose, p));
-    expect(houses).toHaveLength(2);
-    const inQuad = (q: { x: number; y: number }[], x: number, y: number) =>
-      q.every((a, i) => {
-        const b = q[(i + 1) % q.length];
-        return (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) >= 0;
-      }) ||
-      q.every((a, i) => {
-        const b = q[(i + 1) % q.length];
-        return (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) <= 0;
-      });
-    const v = new Vector3();
-    let inside = 0;
-    let checked = 0;
-    for (const section of sections) {
-      section.updateWorldMatrix(true, true);
-      section.traverse((o) => {
-        if (!(o instanceof Mesh)) return;
+    const gates = fortressGates(nose);
+    const south = gates[0].out.y > gates[1].out.y ? gates[0] : gates[1];
+    // The ship's frame in tiles from the center: u along the ship toward its nose, v back from the south gate.
+    const uAxis = { x: -south.out.y, y: south.out.x };
+    const toFrame = (p: { x: number; y: number }) => ({ u: (p.x - nose.pos.x) * uAxis.x + (p.y - nose.pos.y) * uAxis.y, v: -((p.x - nose.pos.x) * south.out.x + (p.y - nose.pos.y) * south.out.y) });
+    const discs = gates.map((g) => ({ ...toFrame(g.face), r: g.width / 2 + GATE_CLEAR }));
+    const inRise = (p: { u: number; v: number }) => p.v >= RISE.front && Math.hypot(p.u, p.v) <= RISE.clip && Math.hypot(p.u - RISE.hole.u, p.v - RISE.hole.v) > RISE.hole.r;
+    // Interior points on a 1 tile grid, a tile in from the curtain's wall.
+    const interior: { x: number; y: number; u: number; v: number }[] = [];
+    for (let x = Math.floor(nose.pos.x - nose.radius); x <= nose.pos.x + nose.radius; x++) {
+      for (let y = Math.floor(nose.pos.y - nose.radius); y <= nose.pos.y + nose.radius; y++) {
+        if (insideCurtain(nose, { x, y }, 1)) interior.push({ x, y, ...toFrame({ x, y }) });
+      }
+    }
+
+    it('keeps every Nose mesh inside the curtain (IV8)', () => {
+      const v = new Vector3();
+      const outside: string[] = [];
+      group.updateWorldMatrix(true, true);
+      group.traverse((o) => {
+        if (!(o instanceof Mesh) || o instanceof InstancedMesh) return;
+        // The gate furniture, lamps and guns, stands on the curtain on purpose. Everything Nose's interior adds is named nose-.
+        let ours = false;
+        for (let p: Object3D | null = o; p !== null; p = p.parent) ours = ours || p.name.startsWith('nose-');
+        if (!ours) return;
         const pos = o.geometry.getAttribute('position');
         for (let i = 0; i < pos.count; i++) {
           v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-          checked++;
-          if (houses.some((q) => inQuad(q, v.x / S, v.z / S))) inside++;
+          if (!insideCurtain(nose, { x: v.x / S, y: v.z / S })) outside.push(`${o.name || o.parent?.name} ${(v.x / S - nose.pos.x).toFixed(1)},${(v.z / S - nose.pos.y).toFixed(1)}`);
         }
       });
-    }
-    expect(checked).toBeGreaterThan(1000);
-    expect(inside).toBe(0);
+      expect(outside.slice(0, 5)).toEqual([]);
+    });
+
+    it('stands the ship on the rise, pitched nose-up, its belly a wall height over the yard (IV28)', () => {
+      const frame = group.getObjectByName('nose-frame')!;
+      const ship = group.getObjectByName('nose-ship')!;
+      frame.updateWorldMatrix(true, true);
+      expect((ship.rotation.z * 180) / Math.PI).toBeGreaterThanOrEqual(6);
+      expect((ship.rotation.z * 180) / Math.PI).toBeLessThanOrEqual(10);
+      const inFrame = new Matrix4().copy(frame.matrixWorld).invert();
+      const v = new Vector3();
+      let belly = Infinity;
+      const shipBox = new Box3();
+      const nose0 = ship.children.find((o) => o.name === 'nose-ship-section')!;
+      const dish = group.getObjectByName('nose-radar-dish')!;
+      for (const section of ship.children) {
+        section.traverse((o) => {
+          if (!(o instanceof Mesh)) return;
+          for (let d: Object3D | null = o; d !== null; d = d.parent) if (d === dish) return;
+          const pos = o.geometry.getAttribute('position');
+          for (let i = 0; i < pos.count; i++) {
+            v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+            if (section === nose0) belly = Math.min(belly, v.y);
+            shipBox.expandByPoint(v.applyMatrix4(inFrame));
+          }
+        });
+      }
+      expect(belly / S, 'the lowest point of ship_nose').toBeGreaterThanOrEqual(FORTRESS_WALL_TILES);
+      // The ship's length along its axis against the curtain's diameter.
+      const diameter = 2 * (nose.radius - FORTRESS.inset) * S;
+      const length = shipBox.max.x - shipBox.min.x;
+      expect(length / diameter).toBeGreaterThanOrEqual(0.7);
+      expect(length / diameter).toBeLessThanOrEqual(0.8);
+      // The ship's box, in the frame's meters with +y toward the gate, clears both gate discs.
+      // The open ground at a gate: half its width and 1.5 tiles more.
+      for (const d of discs.map((x) => ({ ...x, r: x.r - GATE_CLEAR + 1.5 }))) {
+        const gx = d.u * S;
+        const gy = -d.v * S;
+        const dx = Math.max(shipBox.min.x - gx, 0, gx - shipBox.max.x);
+        const dz = Math.max(shipBox.min.z - -gy, 0, -gy - shipBox.max.z);
+        expect(Math.hypot(dx, dz), 'the ship box to a gate disc').toBeGreaterThanOrEqual(d.r * S);
+      }
+    });
+
+    it('covers 35 to 50% of the interior with the rise and crag, all on the far half, and tops the crag over the towers (IV29)', () => {
+      const covered = interior.filter((p) => inRise(p));
+      expect(covered.length / interior.length).toBeGreaterThanOrEqual(0.35);
+      expect(covered.length / interior.length).toBeLessThanOrEqual(0.5);
+      for (const p of covered) expect(p.v).toBeGreaterThan(0);
+      const crag = new Box3().setFromObject(group.getObjectByName('nose-crag')!);
+      expect(crag.max.y).toBeGreaterThanOrEqual(1.5 * 22);
+    });
+
+    it('builds the yard up: no yard point is more than 4 tiles from a structure (IV27)', () => {
+      const structures = group.userData.structures as { x: number; z: number; r: number }[];
+      const yard = interior.filter((p) => !inRise(p) && !discs.some((d) => Math.hypot(p.u - d.u, p.v - d.v) < d.r));
+      expect(yard.length).toBeGreaterThan(500);
+      const bare = yard.filter((p) => structures.every((s) => Math.hypot(p.x - nose.pos.x - s.x, p.y - nose.pos.y - s.z) - s.r > 4));
+      expect(bare.slice(0, 5).map((p) => `${p.u.toFixed(0)},${p.v.toFixed(0)}`)).toEqual([]);
+    });
   });
 
   it('lights the Nose shelter doorways and the cockpit windows (IV22)', () => {

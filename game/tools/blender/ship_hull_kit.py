@@ -39,6 +39,7 @@ SPLIT_SHARE = 0.25  # share of faces whose plate is split in two across
 # Colors from src/render/palette.ts. C5's hull is pale grey-beige plates with rust patches and rust-brown frames.
 COLORS = {
     "pale": 0xB8B8B0,  # FACTION_COLORS.convoys.top
+    "sand": 0xD0B080,  # PAL.sand[3], the plates that catch the dusk light
     "bone": 0xC8B89A,  # FACTION_COLORS.vultures.cab, the warmer plates
     "grey": 0x86867E,  # FACTION_COLORS.convoys.side, the darker plates
     "rust": 0x8A4A2A,  # PAL.rust.top, rust patches
@@ -49,7 +50,7 @@ COLORS = {
     "glow": 0xFFF2C8,  # PAL.lamp.on, lit cockpit panes
 }
 # Plate colors and their weights.
-PLATES = (("pale", 0.55), ("bone", 0.3), ("grey", 0.1), ("rust", 0.05))
+PLATES = (("bone", 0.45), ("pale", 0.25), ("sand", 0.2), ("grey", 0.06), ("rust", 0.04))
 
 # A station is (x, radius, axis height) at one place along the hull.
 Station = tuple[float, float, float]

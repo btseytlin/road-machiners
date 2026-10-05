@@ -24,15 +24,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit  # noqa: E402
 
 CELL = 8.0
-CLIP = 116.0  # nothing reaches past this radius: the curtain's lie 123 m out, less a wall and a tower
+FRONT_V = 4.0  # where the front row of nodes lies, meters back from the center. A mass's front edge is a straight line
+CLIP = 120.0  # nothing reaches past this radius: the curtain lies 123 m out, and its wall a little in
 SKIRT_Z = -2.0
 # The WNW gate's open ground in the site frame: center and radius in meters. No mass covers it.
-GATE_WNW = (92.0, -80.0, 30.0)
+GATE_WNW = (92.0, -80.0, 34.0)
 
 # Colors from src/render/palette.ts, orange-brown as C5's rock.
 COLORS = {
     "rock_a": 0xA97951,  # PAL.rust.top mixed half and half with PAL.sand[0]
-    "rock_b": 0x8A4A2A,  # PAL.rust.top
+    "rock_b": 0x9D6642,  # PAL.rust.top mixed 70 to 30 with PAL.sand[0]
     "rock_c": 0xB99366,  # PAL.rust.top mixed one to three with PAL.sand[0]
     "dirt": 0xC9A878,  # PAL.sand[0]
     "timber": 0x6A4A2A,  # PAL.trunk
@@ -74,7 +75,7 @@ def tone(nz: float, z: float, ground: float, rng_value: float) -> str:
         return "rock_c" if rng_value < 0.6 else "rock_a"
     if nz > 0.55:
         return "rock_a" if rng_value < 0.7 else "rock_c"
-    return "rock_b" if rng_value < 0.8 else "rock_a"
+    return "rock_b" if rng_value < 0.45 else "rock_a"
 
 
 def heightfield(
@@ -90,7 +91,7 @@ def heightfield(
     where its footprint begins in v. terrace(x, v), where true, paints the front skirt as a timber-and-scrap retaining
     wall. Returns the lowest and highest surface point."""
     xs = [-CLIP + i * CELL for i in range(int(2 * CLIP / CELL) + 2)]
-    vs = [i * CELL - 8.0 for i in range(int((CLIP + 8.0) / CELL) + 2)]
+    vs = [FRONT_V + i * CELL for i in range(int((CLIP - FRONT_V) / CELL) + 2)]
     nodes: dict[tuple[int, int], tuple[float, float, float]] = {}
 
     def node(i: int, j: int) -> tuple[float, float, float]:
@@ -98,7 +99,7 @@ def heightfield(
             x, v = xs[i], vs[j]
             r = kit.rng
             px = x + r.uniform(-0.3, 0.3) * CELL
-            pv = v + r.uniform(-0.3, 0.3) * CELL
+            pv = v if j == 0 else v + r.uniform(-0.3, 0.3) * CELL
             px, y = clamp_in(px, -pv)
             z = height(px, -y) + r.uniform(-1, 1) * jitter(px, -y)
             nodes[(i, j)] = (px, y, z)
