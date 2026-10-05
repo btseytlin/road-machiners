@@ -126,10 +126,12 @@ function neighborsOn(mask: Mask, i: number): number[] {
 }
 
 function pieceOf(w: number, pixels: number[]): Piece {
-  const xs = pixels.map((i) => i % w);
-  const ys = pixels.map((i) => Math.floor(i / w));
-  const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
-  const [x1, y1] = [Math.max(...xs) + 1, Math.max(...ys) + 1];
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const i of pixels) {
+    const x = i % w;
+    const y = (i - x) / w;
+    [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x + 1), Math.max(y1, y + 1)];
+  }
   return { pixels, x0, y0, x1, y1, length: Math.hypot(x1 - x0, y1 - y0) };
 }
 

@@ -16,7 +16,7 @@ import {
 } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 6;
+export const ICON_STYLE_VERSION = 7;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -49,12 +49,12 @@ function iconCategory(entry: IconEntry): IconCategory {
 }
 
 const CELL = PHYSICS.cell;
-const SUPERSAMPLE = 2; // drawn at this multiple of the cell, then scaled down
+const SUPERSAMPLE = 4; // drawn at this multiple of the cell, then scaled down
 // Share of the cell left empty on each side, room for the outline. The manifest carries it and LINE_CELLS.
 export const MARGIN = 0.1;
 // Line art width as a share of one inventory grid row (CELL.along), so every item draws the same weight in the grid,
-// about 2.7 px at 42 px cells, whatever its footprint. A smaller slot shows it thinner.
-export const LINE_CELLS = 0.065;
+// about 1.9 px at 42 px cells, whatever its footprint. A smaller slot shows it thinner.
+export const LINE_CELLS = 0.045;
 // Interior lines: a crease piece is kept when the diagonal of its bounds is at least MIN_INNER of the drawing's longer
 // side, and only the MAX_INNER longest are kept. Shorter creases are detail that blurs at 42 px.
 export const MIN_INNER = 0.25;

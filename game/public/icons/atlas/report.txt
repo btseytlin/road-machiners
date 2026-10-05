@@ -1,25 +1,25 @@
 Closest item pairs at 36 px by mean RGB difference (0-255), each over its tone.
 
 top:
-    1.3  tank / tankLong
-    1.6  wheel / wheelMid
-    2.0  transmission / transmissionMid
-    2.3  pneumobolter / autocannon
-    2.8  tankLong / tankHeavy
-    2.8  tank / tankMid
-    3.0  amRifle / recoilless
-    3.1  wheel / wheelHeavy
-    3.3  amRifle / sniperCannon
-    3.8  slugCannon / recoilless
+    1.0  wheel / wheelMid
+    1.1  tank / tankLong
+    1.7  transmission / transmissionMid
+    1.8  pneumobolter / autocannon
+    1.8  amRifle / recoilless
+    1.9  wheel / wheelHeavy
+    2.1  tankLong / tankHeavy
+    2.1  tank / tankMid
+    2.2  amRifle / sniperCannon
+    2.4  recoilless / tankGun
 
 diagonal:
-    0.4  transmission / transmissionMid
-    1.3  tankLong / tankHeavy
-    1.5  transmission / transmissionHeavy
-    1.6  tank / tankLong
-    1.7  wheel / wheelMid
-    1.9  transmissionMid / transmissionHeavy
-    2.2  tank / tankMid
-    2.6  wheel / wheelHeavy
-    2.8  tank / tankHeavy
-    3.8  tankLong / tankMid
+    1.0  transmission / transmissionMid
+    1.2  wheel / wheelMid
+    1.2  tank / tankLong
+    1.4  tankLong / tankHeavy
+    1.6  transmission / transmissionHeavy
+    1.7  tank / tankMid
+    2.1  wheel / wheelHeavy
+    2.5  tank / tankHeavy
+    2.5  transmissionMid / transmissionHeavy
+    2.8  amRifle / sniperCannon
