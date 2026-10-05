@@ -520,6 +520,8 @@ body {
   width: 282px;
   height: 122px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   padding: 8px 10px;
   background: #202529e8;
   border: 0;
@@ -684,38 +686,40 @@ body {
   margin: 0 !important;
 }
 .log-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
 }
-.log-expand {
+#ui .log-expand {
   padding: 0 6px;
   font-size: 12px;
   line-height: 16px;
 }
 .log-time {
+  white-space: nowrap;
   margin-right: 6px;
   font: 11px var(--font-mono);
   color: var(--muted);
 }
 .log-lines {
   overflow-anchor: none;
-  max-height: 86px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
 }
 .log-lines > div {
   padding: 3px 0;
+  overflow-wrap: anywhere;
 }
 /* A modal takes the screen, so the log only grows while none is open. */
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
   z-index: 22;
   width: 420px;
   height: calc(100dvh - 112px - 72px);
-}
-#ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded .log-lines {
-  max-height: calc(100% - 28px);
 }
 #ui .recenter {
   left: 50%;
@@ -1471,9 +1475,6 @@ body {
     right: 14px;
     width: 200px;
     height: 80px;
-  }
-  .log-lines {
-    max-height: 48px;
   }
   #ui .radio {
     --radio-line: 12px;
