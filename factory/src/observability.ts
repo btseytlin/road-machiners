@@ -8,7 +8,9 @@ import type { JobOutcome } from './ledger';
 
 export const ACTIVITIES = ['starting', 'model', 'reading', 'editing', 'command', 'tests', 'typecheck', 'playtest', 'build', 'publish', 'install', 'git', 'lock', 'review', 'design', 'investigate', 'waiting', 'finished'] as const;
 export type Activity = typeof ACTIVITIES[number];
-export type ActivityData = { type: 'activity'; activity: Activity; phase: 'running' | 'completed' | 'failed'; source: 'runner' | 'agent'; progressAt?: string | null; ownerPid?: number | null };
+export const MILESTONES = ['understanding', 'planning', 'implementing', 'validating', 'reviewing', 'preparing-release'] as const;
+export type Milestone = typeof MILESTONES[number];
+export type ActivityData = { type: 'activity'; activity: Activity; phase: 'running' | 'completed' | 'failed'; source: 'runner' | 'agent'; milestone?: Milestone | null; progressAt?: string | null; ownerPid?: number | null };
 export type SchedulerData = { type: 'scheduler'; status: 'checking' | 'ready' | 'paused' | 'disk-low' | 'failed'; report: ScheduleReport | null; counts: Partial<Record<Column, number>> };
 export type ManagerData = { type: 'manager'; activity: Activity; intent?: Activity | null; phase: 'running' | 'completed' | 'failed'; issue: number | null };
 export type AttemptData = { type: 'attempt'; jobId: string; stage: JobStage; issue: number | null; startedAt: string; outcome: JobOutcome | 'started'; previousId: string | null };
@@ -39,7 +41,11 @@ function validateObservationData(data: ObservationData): void {
 function validateActivitySource(data: ActivityData | ManagerData): void {
   if (data.type === 'manager') return validateManagerIntent(data);
   if (!['runner', 'agent'].includes(data.source)) throw new Error('Invalid activity source');
+  validateMilestone(data.milestone);
   if (data.progressAt != null && !Number.isFinite(Date.parse(data.progressAt))) throw new Error('Invalid progress time');
+}
+function validateMilestone(milestone: Milestone | null | undefined): void {
+  if (milestone != null && !MILESTONES.includes(milestone)) throw new Error('Invalid activity milestone');
 }
 function validateManagerIntent(data: ManagerData): void {
   if (data.intent != null && !ACTIVITIES.includes(data.intent)) throw new Error('Invalid manager intent');
@@ -133,9 +139,24 @@ export function reportScheduler(home: string, status: SchedulerData['status'], n
   for (const card of cards.filter((item) => !item.labels.includes(ADHOC_LABEL))) counts[card.column] = (counts[card.column] ?? 0) + 1;
   reportObservation(home, 'scheduler', { type: 'scheduler', status, report, counts }, now);
 }
-export function parseAgentActivity(line: string): Activity | null {
-  let value: { type?: unknown; activity?: unknown };
+function readStatusFields(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const fields = value as Record<string, unknown>;
+  if (fields.type !== 'factory_status' || Object.keys(fields).length !== 2) return null;
+  return fields;
+}
+function readReportedActivity(value: unknown): { activity: Activity } | null {
+  if (typeof value !== 'string' || !ACTIVITIES.includes(value as Activity)) return null;
+  return { activity: value as Activity };
+}
+function readReportedMilestone(value: unknown): { milestone: Milestone } | null {
+  if (typeof value !== 'string' || !MILESTONES.includes(value as Milestone)) return null;
+  return { milestone: value as Milestone };
+}
+export function parseAgentStatus(line: string): { activity: Activity } | { milestone: Milestone } | null {
+  let value: unknown;
   try { value = JSON.parse(line); } catch { return null; }
-  if (value?.type !== 'factory_status') return null;
-  return ACTIVITIES.includes(value.activity as Activity) ? value.activity as Activity : null;
+  const fields = readStatusFields(value);
+  if (fields === null) return null;
+  return readReportedActivity(fields.activity) ?? readReportedMilestone(fields.milestone);
 }

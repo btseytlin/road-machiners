@@ -22,6 +22,19 @@ it('reports structured tool activity across chunk boundaries without publishing 
   expect(await observed('docker', ['run', 'factory-agent'])).toEqual({ code: 0, stdout: 'original output', stderr: '' });
   expect(readObservation(home, 'job-1')?.data).toMatchObject({ phase: 'completed' });
 });
+it('keeps an agent milestone while runner events change the current operation', async () => {
+  const home = createHome();
+  const observed = activity.createObservedRun(async (_command, _args, opts) => {
+    opts?.onStdout?.('{"type":"factory_status","milestone":"validating"}\n');
+    opts?.onStdout?.(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'npm test PRIVATE_TOKEN' } }] } }) + '\n');
+    const current = readObservation(home, 'job-milestone');
+    expect(current?.data).toMatchObject({ activity: 'tests', milestone: 'validating', source: 'runner', phase: 'running' });
+    expect(JSON.stringify(current)).not.toContain('PRIVATE_TOKEN');
+    return { code: 0, stdout: '', stderr: '' };
+  }, home, 'job-milestone', 10000, 1024 * 1024);
+  await observed('docker', ['run', 'factory-agent']);
+  expect(readObservation(home, 'job-milestone')?.data).toMatchObject({ milestone: 'validating', phase: 'completed' });
+});
 it('clears the active operation on command failure without replacing its result', async () => {
   expect(activity).toHaveProperty('createObservedRun');
   const home = createHome();
@@ -32,7 +45,10 @@ it('clears the active operation on command failure without replacing its result'
 });
 it('recognizes machine check steps and rejects arbitrary status text', () => {
   expect(activity).toHaveProperty('readActivityLine');
-  expect(activity.readActivityLine('[checks] 12:10:00 playtest')).toBe('playtest');
-  expect(activity.readActivityLine('{"type":"factory_status","activity":"install"}')).toBe('install');
+  expect(activity.readActivityLine('[checks] 12:10:00 playtest')).toEqual({ activity: 'playtest', source: 'runner' });
+  expect(activity.readActivityLine('{"type":"factory_status","activity":"install"}')).toEqual({ activity: 'install', source: 'agent' });
+  expect(activity.readActivityLine('{"type":"factory_status","milestone":"validating"}')).toEqual({ milestone: 'validating', source: 'agent' });
+  const toolResult = { type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: '{"type":"factory_status","milestone":"reviewing"}\n' }] }] } };
+  expect(activity.readActivityLine(JSON.stringify(toolResult))).toEqual({ milestone: 'reviewing', source: 'agent' });
   expect(activity.readActivityLine('PRIVATE prompt and secrets')).toBeNull();
 });

@@ -77,7 +77,7 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. Do not send notes, paths, prompts or secrets. No periodic narration is needed.`;
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not send notes, paths, prompts or secrets. Report only when the milestone changes, without extra narration.`;
 }
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.

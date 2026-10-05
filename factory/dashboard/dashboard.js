@@ -1,5 +1,6 @@
 const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
+const milestones = { understanding: 'Understanding task', planning: 'Planning approach', implementing: 'Making changes', validating: 'Checking changes', reviewing: 'Reviewing result', 'preparing-release': 'Preparing release' };
 const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
 const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
@@ -100,7 +101,10 @@ function readDoing(activity) {
   if (activity.phase === 'completed') return 'Next operation pending';
   return formatActivity(activity);
 }
-function formatActivity(activity) { return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity]; }
+function formatActivity(activity) {
+  if (activity.milestone) return `Reported: ${milestones[activity.milestone]} · ${actions[activity.activity]}`;
+  return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity];
+}
 function createWorkerRow(job) {
   const row = createNode('tr');
   const title = createNode('td');
@@ -204,7 +208,8 @@ function readManagerAction(manager) {
   if (!manager) return 'Activity unavailable';
   if (manager.status !== 'ok') return 'Activity stale';
   if (manager.phase === 'completed') return `Idle for ${formatAge(manager.since)}`;
-  return manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
+  const phase = manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
+  return `${phase} · ${formatAge(manager.since)} in phase`;
 }
 function renderManager() {
   const live = readLive();

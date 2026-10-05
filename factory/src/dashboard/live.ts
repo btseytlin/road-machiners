@@ -15,7 +15,7 @@ function readWorkerActivity(home: string, job: Job, state: FactoryState, now: Da
   const key = createWorkerKey(job.id);
   if (record === null || record.data.type !== 'activity') return { key, activity: null, status: 'unavailable' };
   const value = record.data;
-  return { key, activity: value.activity, phase: value.phase, source: value.source, progressAt: value.progressAt ?? null, since: record.since,
+  return { key, activity: value.activity, milestone: value.milestone ?? null, phase: value.phase, source: value.source, progressAt: value.progressAt ?? null, since: record.since,
     status: readFreshness(record, now, heartbeatMs), waitingFor: readLockOwner(value, state) };
 }
 function readLockOwner(data: ActivityData | null, state: FactoryState): string | null {

@@ -50,7 +50,7 @@ describe('factory-agent', () => {
     spawnSync('cp', ['-r', join(DOCKER, 'skills'), join(home, '.claude/skills')]);
     const run = runEntry(home, game);
     expect(run.code).toBe(0);
-    expect(readFileSync(join(home, 'arguments'), 'utf8')).toContain('factory-status');
+    expect(readFileSync(join(home, 'arguments'), 'utf8')).toContain('factory-status milestone');
     expect(run.out.split('\n').filter(Boolean).sort()).toEqual(['blender-image-to-3d', 'typescript-practices']);
     expect(readdirSync(join(home, '.claude/skills/blender-image-to-3d/scripts'))).toContain('review_render.py');
     rmSync(home, { recursive: true, force: true });
