@@ -1,6 +1,5 @@
 const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const milestones = { understanding: 'Understanding task', planning: 'Planning approach', implementing: 'Making changes', validating: 'Checking changes', reviewing: 'Reviewing result', 'preparing-release': 'Preparing release' };
 const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
 const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
@@ -32,6 +31,7 @@ function formatAge(at) {
   return seconds < 60 ? '<1m' : formatDuration(seconds * 1000);
 }
 function countInputTokens(tokens) { return tokens == null ? null : tokens.input + tokens.cacheRead + tokens.cacheWrite; }
+function formatTokenCount(value) { return value == null ? '—' : `${formatNumber(value)} tokens`; }
 function countTokens(tokens) { return tokens == null ? null : countInputTokens(tokens) + tokens.output; }
 function createLink(text, href) {
   const url = new URL(href);
@@ -103,7 +103,7 @@ function readDoing(activity) {
   return formatActivity(activity);
 }
 function formatActivity(activity) {
-  if (activity.milestone) return `${milestones[activity.milestone]}: ${actions[activity.activity].toLowerCase()}`;
+  if (activity.milestone) return `${activity.milestone}: ${actions[activity.activity].toLowerCase()}`;
   return actions[activity.activity];
 }
 function createWorkerRow(job) {
@@ -319,6 +319,8 @@ function renderCounters(summary) {
   renderTokenCounters(summary.tokens);
   setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
+  setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
+  setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
   setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC · ${summary.missingUsage} runs lack token counts · ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
@@ -329,7 +331,7 @@ function renderTokenCounters(tokens) {
 }
 function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
 function clearCounters() {
-  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
+  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
 // The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.

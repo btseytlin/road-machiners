@@ -2,7 +2,7 @@
 
 This file is the spec of how the factory works. Each diagram matches the code, and a change to the process updates its diagram in the same commit. The rules behind each step are in [stages.md](stages.md), [evidence.md](evidence.md) and [operations.md](operations.md).
 
-The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot` source. People see the `.svg` render. After you edit a `.dot` file, run `npm run diagrams` from `factory/`, or a test fails. The colors mean the same in every diagram:
+The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot` source. People see the `.svg` render. After you edit a `.dot` file, run `npm run diagrams` from `factory/`, or a test fails. It needs Graphviz installed. The colors mean the same in every diagram:
 
 - Black arrows are the normal path, from left to right.
 - Red dashed arrows are loops back.
@@ -17,17 +17,18 @@ The public files and votes on GitHub issues. Agents design, build and test the t
 
 ## Card lifecycle
 
-A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it.
+A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it. Hardening is slow, so it runs only on work the committee wants.
 
 ![Card lifecycle](diagrams/lifecycle.svg)
 
-- A hotfix skips Triage. It runs harden and then the preview test round before its post, and Approve ships it at once.
+- A bug a collaborator labels `hotfix` skips Triage. Triage can also label a bug `hotfix`. Approve ships a hotfix at once.
 - A merged issue stays open with the label `release-candidate`. It closes when its release ships.
 
 The loops:
 
 - unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, and triage runs again.
-- rebuild and plan wrong: the visual review found the look wrong. The card keeps its branch.
+- rebuild: the visual review found a shape, state or behavior that needs new code. The card keeps its branch.
+- plan wrong: the visual review found the plan contradicts the issue or the game docs. The card keeps its branch.
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
 - redesign: the committee reply changes the plan.
 - review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
@@ -46,16 +47,14 @@ A failed job never moves a card. It labels the issue `factory-stuck`, and the ca
 
 ## Testing column
 
-Testing is two jobs. Verify runs the testing agent in the verify queue. Checks runs the machine checks with no agent in the test queue. The `testPhase` entry of the card in the state file says which job runs next.
+Testing is two jobs. Verify runs the testing agent. Checks runs the machine checks with no agent.
 
 ![Testing column](diagrams/testing.svg)
 
-Limits:
-
-- A card gets one review-fix round per hardening, and one trip back to Design for the review. A second review redesign fails the stage.
-- A card gets two visual send-backs. A third fails the stage.
-- A check failure gets one fix round. A second failure fails the stage.
-- Checks that fail only on timeouts run up to 3 times with no agent.
+- A hotfix runs the harden line and then the preview test round before its post, since Approve ships it at once.
+- A release cleanup task runs only the harden line, since it merges with no post.
+- The visual review sends a card back at most twice. A third send-back fails the stage.
+- A card that the review already sent to Design once fails the stage on its next second FAIL.
 
 ## Committee inputs
 
@@ -80,7 +79,7 @@ Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes
 
 ![Release](diagrams/release.svg)
 
-Every merge into the release drops the Ship button of the current post. A build that finds a new release task is not posted.
+Every merge into the release drops the Ship button of the current post. A reply can open a release task while a candidate builds. That candidate lacks the task, so it is not posted.
 
 ## Side jobs
 

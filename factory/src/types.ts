@@ -24,6 +24,8 @@ export type FactoryConfig = {
   designModel: string;
   buildModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
+  designEffort: string; // reasoning effort of the design agent, passed to claude --effort
+  tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
@@ -55,6 +57,9 @@ export type FactoryConfig = {
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
 };
+
+// Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
+export type TokenPrice = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
@@ -302,7 +307,7 @@ export const VISUAL_HEADING = '## Visual review findings';
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
-// Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
+// Model routing. Baseline without labels: design Opus, implementation and testing Sonnet. Triage labels trivial and intermediate cards design-sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
 export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
