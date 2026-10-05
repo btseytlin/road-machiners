@@ -1,0 +1,48 @@
+{
+  "repository": "https://github.com/gamedev-skills/awesome-gamedev-agent-skills",
+  "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+  "files": [
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "6f82dcfeb95a1c0a0452180a3b16f21bf82111780018fed59d95a052b5b75f6c"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/ai-behavior-trees-utility-ai/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "185960eddb169cb81490e0d01efb9240663b8a465ca34ec34e0f015a727f06e4"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/ai-behavior-trees-utility-ai/references/behavior-tree-core.md",
+      "local": "references/behavior-tree-core.md",
+      "sha256": "df96b3faf1b7107240ed9c5f3bed793733dd9bdd25c05577abb7a69edd95521b"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/ai-behavior-trees-utility-ai/references/best-practices-and-pitfalls.md",
+      "local": "references/best-practices-and-pitfalls.md",
+      "sha256": "8ff83984ad998bc949d7524bae38c4d5b1acec34ff24587fdc9a9e9952c23c53"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/ai-behavior-trees-utility-ai/references/practical-examples.md",
+      "local": "references/practical-examples.md",
+      "sha256": "9be856be9e5375fa218e927125dfca3f4f1c7b2ecd9089e5fa8b86d76b07cf1e"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/ai-behavior-trees-utility-ai/references/utility-ai-system.md",
+      "local": "references/utility-ai-system.md",
+      "sha256": "a414ecd074e467d598664cde01305be054387fd3dc3e0045525ea3673d33309b"
+    }
+  ]
+}

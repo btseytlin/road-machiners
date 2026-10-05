@@ -1,5 +1,5 @@
 {
- "format": "2.9",
+ "format": "2.13",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -40,6 +40,7 @@
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
+   "headlights": "boolean",
    "health": "number",
    "hostilesSeen": [],
    "knockoutTurns": "number",
@@ -48,16 +49,16 @@
    "money": "number",
    "overdrive": "boolean",
    "perks": [],
-   "repeats": {},
-   "rumored": [],
-   "scavenged": [],
-   "skills": {
+   "ranks": {
     "driving": "number",
     "machining": "number",
     "perception": "number",
     "social": "number",
     "toughness": "number"
    },
+   "repeats": {},
+   "rumored": [],
+   "scavenged": [],
    "state": "string",
    "storage": [],
    "supplies": "number",
@@ -67,6 +68,7 @@
    "visible": [
     "number"
    ],
+   "xp": "number",
    "xpBySource": {
     "aid": "number",
     "call": "number",
@@ -797,6 +799,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
@@ -890,6 +893,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",

@@ -36,7 +36,8 @@ services:
       - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
       - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
-      - ../..:/factory/code:ro
+      # The server mounts /opt/factory at the same path, so the links code -> releases/current -> <sha> resolve inside the container.
+      - ${FACTORY_CODE_SOURCE:-../..}:${FACTORY_CODE_TARGET:-/factory/code}:ro
     # factory-host reaches the server's sshd through this name.
     extra_hosts:
       - host.docker.internal:host-gateway

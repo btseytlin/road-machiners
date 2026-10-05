@@ -38,6 +38,7 @@ describe('change', () => {
     expect(f.calls).toContain('push work-head factory-change/4');
     expect(f.calls).toContain('pr factory-change/4 main Post daily');
     expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
+    expect(f.prBodies.at(-1)).toContain('## Requested by');
     expect(readFileSync(join(ROOT, 'work/change-4/factory/.factory/request.md'), 'utf8')).toContain('ann');
   });
 

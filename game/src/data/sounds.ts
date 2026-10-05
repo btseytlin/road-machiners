@@ -120,6 +120,9 @@ const ENGINE_FILES: Record<string, string> = {
   convertible: "engine-2.ogg",
   bus: "engine-3.ogg",
   loader: "engine-3.ogg",
+  lincoln: "engine-2.ogg",
+  niva: "engine-1.ogg",
+  bukhanka: "engine-2.ogg",
 };
 
 // Two recordings with fixed pitch profiles give each chassis a recognizable horn.
@@ -137,6 +140,9 @@ const HORN_SOUNDS: Record<string, { file: string; rate: number }> = {
   convertible: { file: "horn-2.ogg", rate: 1.28 },
   bus: { file: "horn-2.ogg", rate: 0.72 },
   loader: { file: "horn-1.ogg", rate: 0.72 },
+  lincoln: { file: "horn-2.ogg", rate: 0.88 },
+  niva: { file: "horn-1.ogg", rate: 1.28 },
+  bukhanka: { file: "horn-1.ogg", rate: 0.88 },
 };
 
 export function hornSoundFor(chassisId: string): { file: string; rate: number } {

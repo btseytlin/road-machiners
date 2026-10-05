@@ -356,6 +356,7 @@ describe("weapon panel keys and the turn button", () => {
     const host = {
       world: () => world,
       apply: vi.fn(),
+      announce: vi.fn(),
       selectedWeapon: vi.fn<() => string | null>(() => null),
       selectWeapon: vi.fn(),
       pressTurn: vi.fn(),

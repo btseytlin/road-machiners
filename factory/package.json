@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "factory": "vite-node src/cli.ts --",
+    "dashboard": "vite-node src/dashboard/main.ts",
     "test": "vitest run",
     "typecheck": "tsc"
   },

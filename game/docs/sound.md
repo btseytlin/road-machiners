@@ -22,7 +22,7 @@ Four buses feed the master: `ui`, `sfx`, `ambient` and `music`. Each has a playe
 - Calm music plays out of combat. After each fight it comes back as a new random track.
 - Between turns, once no turn has played for `MIX.music.pauseDelayMs`, the music bus is muffled a little. The delay keeps the gaps between automatic turns clear.
 
-Volume sliders are stored in local storage. A slider the player never moved follows `MIX.busVolume`, so a new default reaches everyone who kept the old one.
+The volume knobs and the mute switch sit on the radio panel above the log. Their settings are stored in local storage. A knob the player never turned follows `MIX.busVolume`, so a new default reaches everyone who kept the old one.
 
 ## Combat score
 

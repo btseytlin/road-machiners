@@ -15,7 +15,7 @@ import { PARTS, PART_PRICE_MODIFIERS } from '../data/parts';
 import type { PartDef, PartKind } from '../data/parts';
 import { RULES } from '../data/rules';
 import { SALVAGE, STRIP } from '../data/salvage';
-import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
 import { SOUNDS } from '../data/sounds';
 import { TIME } from '../data/time';
 import { TOW } from '../data/tow';
@@ -194,18 +194,18 @@ const TABLES: WikiTable[] = [
   },
   {
     id: 'skills',
-    headers: ['id', 'name', 'grows from', 'effects per level'],
+    headers: ['id', 'name', 'earns XP from', 'effects per rank'],
     rows: () => entries(SKILL_INFO).map(([id, s]) => [id, s.name, s.grows, SKILL_EFFECTS[id as keyof typeof SKILL_EFFECTS]]),
   },
-  { id: 'skill-levels', headers: ['level', 'xp to reach'], rows: () => XP_TO_REACH.map((xp, level) => [level, xp]) },
+  { id: 'rank-costs', headers: ['rank', 'xp cost'], rows: () => RANK_COSTS.map((xp, i) => [i + 1, xp]) },
   {
     id: 'xp-sources',
-    headers: ['source', 'skill', 'weight (xp per unit)', 'scaled by difficulty', 'repeat factor'],
+    headers: ['source', 'activity family', 'weight (xp per unit)', 'scaled by difficulty', 'repeat factor'],
     rows: () => entries(XP_SOURCES).map(([id, s]) => [id, s.skill, s.weight, s.scaled, s.repeat]),
   },
   {
     id: 'perks',
-    headers: ['id', 'name', 'skill', 'level', 'rule'],
+    headers: ['id', 'name', 'skill', 'rank', 'rule'],
     rows: () => entries(PERKS).map(([id, p]) => [id, p.name, p.skill, p.level, p.rule]),
   },
   {
