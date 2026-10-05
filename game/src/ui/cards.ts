@@ -9,7 +9,7 @@ import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
-import { BODY_PARTS, itemTone } from "../render/partLooks";
+import { itemTone } from "../render/partLooks";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
 import { el } from "./dom";
@@ -226,9 +226,8 @@ export function toneStyle(id: string): string {
   return `--tone:#${ITEM_TONES[itemTone(id)].toString(16).padStart(6, "0")}`;
 }
 
-// Cabs have no model of their own, are built in and never trade, so they keep the cab glyph.
 export function partIconEl(part: PartInstance): HTMLElement {
-  return BODY_PARTS.has(part.defId) ? createIcon("cab") : createItemIcon(part.defId);
+  return createItemIcon(part.defId);
 }
 
 export function itemIconEl(item: GridItem): HTMLElement {
@@ -237,7 +236,6 @@ export function itemIconEl(item: GridItem): HTMLElement {
 
 // An item's icon in its inventory grid box, upright and fit to the box whatever the item's rotation.
 export function gridItemIcon(item: GridItem): HTMLElement {
-  if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
   return sheetIcon(cell, "icon item-icon", cell.box);
 }

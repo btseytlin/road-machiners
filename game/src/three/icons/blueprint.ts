@@ -1,19 +1,18 @@
 // Draws an item icon as a blueprint, all in vectors so it stays sharp at any size. The item's shape is the union of its
 // model's triangles as drawn, filled deep, with the faces turned from the light filled deeper. The outer contour draws
-// in one thick line with sharp corners and the visible model edges inside it in one thin line.
-// An edge draws where its faces turn away from the viewer or fold sharper than CREASE_DEG. A ray toward the camera
-// hides the parts of it behind other faces. Model pieces too small to read at icon size drop out entirely.
+// in one thick line with sharp corners. Inside it, thin lines mark only where one part's outline passes in front of
+// another, so each part reads and its own folds are left to the shading.
+// An edge draws where its faces turn away from the viewer. A ray toward the camera hides the parts of it behind other
+// faces. Model pieces too small to read at icon size drop out entirely.
 
 import ClipperLib from 'clipper-lib';
 import * as THREE from 'three';
 import { thicken, type Mask, type Pixels } from './lines';
 
-// Edges that fold less than this draw no line, so the side facets of 8-sided cylinders stay smooth and box edges show.
-const CREASE_DEG = 65;
 // A piece narrower than this share of the drawing's longer side drops out, so small fittings do not become squiggles.
-const MIN_PIECE = 0.08;
+const MIN_PIECE = 0.12;
 // Inner lines shorter than this share of the drawing's longer side drop out.
-const MIN_INNER = 0.045;
+const MIN_INNER = 0.1;
 // How far apart visibility samples lie along an edge, in drawing pixels.
 const SAMPLE_PX = 2;
 // A face this close to the sample, in meters, is the edge's own face, not one in front of it.
@@ -34,12 +33,14 @@ const SHADE_AT = 0.35;
 
 // Line widths in drawing pixels.
 export type BlueprintPen = { outer: number; inner: number };
-export type BlueprintColors = { line: string; fill: string; shadow: string };
+export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string };
+// The material name of window glass, which draws in its own color so cabs show their windows.
+export const GLASS_MATERIAL = 'glass';
 
 type Vec2 = { x: number; y: number };
 
-// One icon in drawing pixels of a size x size square: the filled shape, its shadow loops and its inner lines.
-export type Blueprint = { size: number; pen: BlueprintPen; shape: Vec2[][]; shadow: Vec2[][]; lines: Vec2[][] };
+// One icon in drawing pixels of a size x size square: the filled shape, its shadow and glass loops and its inner lines.
+export type Blueprint = { size: number; pen: BlueprintPen; shape: Vec2[][]; shadow: Vec2[][]; glass: Vec2[][]; lines: Vec2[][] };
 
 // draw renders the scene at size x size with the material, or with its own materials for null.
 export function blueprintOf(
@@ -63,11 +64,28 @@ export function blueprintOf(
   const lines = visibleRuns(meshes, tris, camera, toPx, near)
     .filter((r) => lengthOf(r) >= MIN_INNER * longest)
     .map((r) => (r.length > 2 ? douglasPeucker(r, LINE_TOLERANCE) : r));
-  const shade = shadeMask(draw(new THREE.MeshNormalMaterial({ flatShading: true })), solid);
-  const shadow = contours(shade)
+  const shadow = patchesOf(shadeMask(draw(new THREE.MeshNormalMaterial({ flatShading: true })), solid), longest);
+  const glass = patchesOf(glassMask(meshes, draw, solid), longest);
+  return { size, pen, shape, shadow, glass, lines };
+}
+
+// A mask's patches as straightened loops, without those under MIN_SHADOW of the drawing across.
+function patchesOf(mask: Mask, longest: number): Vec2[][] {
+  return contours(mask)
     .map((loop) => simplifyPath(loop, SHADOW_TOLERANCE))
     .filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= MIN_SHADOW * longest);
-  return { size, pen, shape, shadow, lines };
+}
+
+// Pixels inside the shape where glass shows, from a pass that draws glass white and everything else black.
+function glassMask(meshes: readonly THREE.Mesh[], draw: (override: THREE.Material | null) => Pixels, solid: Mask): Mask {
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const own = meshes.map((m) => m.material);
+  meshes.forEach((m, i) => (m.material = (own[i] as THREE.Material).name === GLASS_MATERIAL ? white : black));
+  const pass = draw(null);
+  meshes.forEach((m, i) => (m.material = own[i]));
+  [white, black].forEach((m) => m.dispose());
+  return { w: solid.w, h: solid.h, bits: solid.bits.map((b, i) => (b && pass.data[i * 4] > 127 ? 1 : 0)) };
 }
 
 // Paints the blueprint scaled to the canvas, on a transparent background.
@@ -82,6 +100,8 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.clip(shape, 'evenodd');
   ctx.fillStyle = colors.shadow;
   ctx.fill(new Path2D(loopsPath(bp.shadow)), 'evenodd');
+  ctx.fillStyle = colors.glass;
+  ctx.fill(new Path2D(loopsPath(bp.glass)), 'evenodd');
   ctx.restore();
   ctx.strokeStyle = colors.line;
   ctx.lineCap = 'round';
@@ -102,6 +122,7 @@ export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string)
     `<clipPath id="${id}"><path d="${shape}" clip-rule="evenodd"/></clipPath>`,
     `<path d="${shape}" fill="${colors.fill}" fill-rule="evenodd"/>`,
     `<path d="${loopsPath(bp.shadow)}" fill="${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    `<path d="${loopsPath(bp.glass)}" fill="${colors.glass}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
     `<path d="${linesPath(bp.lines)}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.inner)}" stroke-linecap="round" stroke-linejoin="round"/>`,
     `<path d="${shape}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.outer)}" stroke-linejoin="miter" stroke-miterlimit="3"/>`,
   ].join('');
@@ -282,8 +303,7 @@ function collapse(meshes: readonly THREE.Mesh[], dropped: readonly Tri[]): void 
 
 // The edges that draw, by the faces on each side.
 function featureEdges(tris: readonly Tri[], toward: THREE.Vector3): [THREE.Vector3, THREE.Vector3][] {
-  const cos = Math.cos(CREASE_DEG * THREE.MathUtils.DEG2RAD);
-  return [...edgeFaces(tris).values()].filter((e) => drawsEdge(e.normals, toward, cos)).map((e) => [e.a, e.b]);
+  return [...edgeFaces(tris).values()].filter((e) => drawsEdge(e.normals, toward)).map((e) => [e.a, e.b]);
 }
 
 // Every edge with the normals of the faces that share it.
@@ -301,12 +321,11 @@ function edgeFaces(tris: readonly Tri[]): Map<string, { a: THREE.Vector3; b: THR
   return faces;
 }
 
-// An open edge draws. So does one between a face toward the viewer and one away, or one that folds past cos.
-function drawsEdge(normals: readonly THREE.Vector3[], toward: THREE.Vector3, cos: number): boolean {
+// An open edge draws, and so does one between a face toward the viewer and one away: a part's outline as seen.
+function drawsEdge(normals: readonly THREE.Vector3[], toward: THREE.Vector3): boolean {
   if (normals.length === 1) return true;
   const facing = normals.map((n) => n.dot(toward) > 1e-3);
-  if (!facing.some((f) => f)) return false;
-  return facing.some((f) => !f) || normals.some((n, i) => normals.slice(i + 1).some((m) => n.dot(m) < cos));
+  return facing.some((f) => f) && facing.some((f) => !f);
 }
 
 // The visible stretches of every feature edge in pixels, outside the near mask.

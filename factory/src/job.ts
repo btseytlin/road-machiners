@@ -24,13 +24,30 @@ type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
 const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste'>, Handler> = {
-  triage, design, implement, patch, verify, checks, change, adhoc, candidate, remove, incident,
+  triage,
+  design,
+  implement,
+  patch,
+  verify,
+  checks,
+  change,
+  adhoc,
+  candidate,
+  remove,
+  incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };
 
 // Card stages leave a progress comment on their issue, so the issue shows where its work stands.
-const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = { triage: 'Triage', design: 'Design', implement: 'Implementation', patch: 'Patch', verify: 'Verify', checks: 'Checks' };
+const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = {
+  triage: 'Triage',
+  design: 'Design',
+  implement: 'Implementation',
+  patch: 'Patch',
+  verify: 'Verify',
+  checks: 'Checks',
+};
 
 export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: 'finished' | 'failed'): string {
   const minutes = startedAt ? Math.round((ctx.now().getTime() - new Date(startedAt).getTime()) / 60_000) : null;
@@ -72,7 +89,17 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
 }
 
 // A job run by hand has no record, so it has no id, its agents record no usage, and it starts now.
-function ledgerEntry(ctx: Ctx, job: Job | null, stage: JobStage, issue: number | null): { id: string | null; stage: JobStage; issue: number | null; startedAt: string } {
+function ledgerEntry(
+  ctx: Ctx,
+  job: Job | null,
+  stage: JobStage,
+  issue: number | null,
+): {
+  id: string | null;
+  stage: JobStage;
+  issue: number | null;
+  startedAt: string;
+} {
   if (job === null) return { id: null, stage, issue, startedAt: ctx.now().toISOString() };
   return { id: job.id, stage, issue, startedAt: job.startedAt };
 }
@@ -120,5 +147,12 @@ function clearQueued(state: FactoryState, stage: JobStage, issue: number | null)
   const pendingShip = stage === 'ship' ? null : state.pendingShip;
   const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
   const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
-  return { ...state, pendingApprovals, pendingChanges, pendingIncidents, pendingShip, pendingRemovals };
+  return {
+    ...state,
+    pendingApprovals,
+    pendingChanges,
+    pendingIncidents,
+    pendingShip,
+    pendingRemovals,
+  };
 }
