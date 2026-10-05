@@ -44,13 +44,13 @@ describe('combat harness', () => {
     expect(r.a.speed).toBeGreaterThan(0);
   });
 
-  it('names the side that runs from a far stronger truck', () => {
-    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 40 });
+  it('names the courier side when it flees a stronger truck', () => {
+    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('courier:standard'), seed: 1, maxTurns: 40 });
     expect(r.outcome).toBe('b fled');
   });
 
   it('fights to a knockout inside the arena rather than stopping at a truce', () => {
-    const fight = { ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 140, arena: 9 };
+    const fight = { ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy:standard'), seed: 1, maxTurns: 140, arena: 9 };
     expect(runFight(fight).outcome).toBe('won');
   });
 
