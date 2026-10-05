@@ -151,9 +151,16 @@ function neededLoadFactor(v: Vehicle): number {
   return MIN_NPC_SPEED_SHARE / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
 }
 
-// Only the player's truck has engine overdrive.
+// Only the player's truck has engine overdrive, and only while its engine allows it.
 export function inOverdrive(world: World, v: Vehicle): boolean {
-  return v.id === world.player.vehicleId && world.player.overdrive;
+  return v.id === world.player.vehicleId && world.player.overdrive && canOverdrive(v);
+}
+
+// Whether the active engine, the same one vehicleStats drives with, is above the overdrive cutoff share of its
+// max HP. No engine or a broken one blocks overdrive.
+export function canOverdrive(v: Vehicle): boolean {
+  const engine = mountedParts(v, 'engine')[0];
+  return engine !== undefined && engine.hp > RULES.overdriveMinEngineShare * maxHp(engine);
 }
 
 // The chassis tank plus every mounted fuel store.
