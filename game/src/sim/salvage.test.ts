@@ -863,4 +863,11 @@ describe('salvage place', () => {
     expect(() => salvagePlace({ ...farmhouse, id: 'mystery-0' })).toThrow();
     expect(() => salvagePlace({ ...farmhouse, id: 'farmhouse-0', pos: { x: -100, y: -100 } })).toThrow();
   }, 30_000);
+
+  it('says a looter is looting here at a spot that is no wreck', async () => {
+    const w = await realWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'farmhouse').id)).toBe(`${npc.name} is looting here`);
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toBe(`${npc.name} is looting this wreck`);
+  }, 30_000);
 });

@@ -571,7 +571,8 @@ export function requireLootFree(world: World, looter: Vehicle, targetId: string)
 }
 
 export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
-  if (world.salvage.some((s) => s.id === targetId)) return `${blocker.name} is looting this wreck`;
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return `${blocker.name} is looting ${salvagePlace(stock) === 'spot' ? 'here' : 'this wreck'}`;
   if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
   throw new Error(`No loot target ${targetId}`);
 }
