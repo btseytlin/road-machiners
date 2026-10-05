@@ -18,7 +18,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { canNpcOpenFireAt, fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
@@ -466,6 +466,17 @@ function subjectOf(world: World, decision: DecisionId, subject: string | null): 
   return vehicleById(world, subject);
 }
 
+// A fighter sees its target, or remembers the center of a contact when it cannot see the truck.
+export function findFightTargetAt(world: World, vehicle: Vehicle, target: Vehicle, contacts: Contact[]): Vec | undefined {
+  if (canVehicleSee(world, vehicle, target.pos)) return target.pos;
+  return contacts.find((c) => c.vehicleId === target.id)?.center;
+}
+
+export function findFightImpediment(world: World, vehicle: Vehicle, target: Vehicle): string | null {
+  if (!canNpcOpenFireAt(world, vehicle, target)) return 'cannot fire inside guarded town';
+  return vehicleStats(world, vehicle).weapons.length === 0 ? 'no gun left to fight with' : null;
+}
+
 // A fight needs a working gun and the subject in sight.
 function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
@@ -473,7 +484,8 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
 
 // A stranded driver holds off a robbery against a target that is not fighting it.
 function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  return canFight(world, vehicle, decision, subject) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+  const target = subjectOf(world, decision, subject);
+  return canFight(world, vehicle, decision, subject) && canNpcOpenFireAt(world, vehicle, target) && !holdsOffRobbery(world, vehicle, target);
 }
 
 function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {

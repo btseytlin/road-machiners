@@ -1,13 +1,14 @@
 // Runs the combat harness (src/test/combat-harness.ts) and writes its report to tmp/combat/.
 // Usage: npm run combat -- --a merc,merc:snowball --b buggy,buggy:buggy@heavy,buggy+buggy --seeds 1-5
-//   [--gap 8] [--orbit 6] [--turns 40] [--arena 15] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace] [--out tmp/combat]
+//   [--gap 8] [--orbit 6] [--turns 40] [--arena 9] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace] [--out tmp/combat]
 // --a and --b list lineups for the two sides, and every lineup of a fights every lineup of b on every seed. A comma
 // separates lineups, and + joins trucks in one lineup. A truck is driver:gear. The driver is an NPC template, whose
 // brain drives the truck, or a scripted style that steers the player truck: stand, orbit, charge or kite. The gear is a
 // start kit, an NPC template's rolled loadout as template or template@level, or gun/armor+ram on a hauler, with bare
 // for no armor. A driver without gear takes its own template's loadout. Hold the driver and vary the gear to tune
 // gear; hold the gear and vary the driver to tune behavior.
-// --arena <tiles> rings the fight with rocks at that radius, so no driver can run and fights go to a knockout.
+// --arena <tiles> rings the fight with rocks and resumes hostility after peace. It must fit in sight, 10 at most.
+// Arena fights allow 400 turns by default, since evenly matched buggies needed 283; open fights allow 40.
 // --set changes one balance number for this run. --trace prints one line per turn.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { formatReport, parseLineup, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
@@ -42,7 +43,7 @@ const sideA = argOf('a', 'merc').split(',').map(parseLineup);
 const sideB = argOf('b', 'buggy,gunwagon').split(',').map(parseLineup);
 const seeds = parseSeeds(argOf('seeds', '1-5'));
 const arena = argOf('arena', null);
-const base = { gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', '40'), arena: arena === null ? null : positiveInt('arena') };
+const base = { gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', arena === null ? '40' : '400'), arena: arena === null ? null : positiveInt('arena') };
 
 await initPhysics();
 console.log(`Running ${sideA.length} x ${sideB.length} lineups x ${seeds.length} seeds...`);

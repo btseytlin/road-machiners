@@ -12,7 +12,7 @@ import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
 import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
-import { decide, firepower, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
+import { decide, firepower, perceiveDanger, perceiveThreat, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
 import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
@@ -113,6 +113,20 @@ function grantPlea(world: World, pleader: Vehicle, answerer: Vehicle, plea: Plea
   endState(world, held, 'fulfilled');
   if (plea === 'truce') makePeace(world, pleader, answerer);
   else yieldTo(world, pleader, answerer);
+}
+
+// A hurt driver pleads once this turn with the last hostile that hit it, if it can still see that truck.
+export function considerPlea(world: World, vehicle: Vehicle): void {
+  const foe = findHurtingFoe(world, vehicle);
+  if (!foe) return;
+  const option = decide(world, vehicle, 'parley', foe.id, perceiveThreat(world, vehicle, foe));
+  if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
+}
+
+function findHurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
+  if (vehicle.brain!.hurt <= 0) return null;
+  const foe = world.vehicles.find((v) => v.id === vehicle.lastHitBy);
+  return foe && isHostile(world, vehicle, foe) && canVehicleSee(world, vehicle, foe.pos) ? foe : null;
 }
 
 // An NPC pleads with a foe. Another NPC answers at once. The player answers when the NPC calls.

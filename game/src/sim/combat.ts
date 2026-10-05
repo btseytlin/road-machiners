@@ -979,13 +979,18 @@ function clearOldWrecks(world: World): void {
   }
 }
 
-// An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
-// goals, and not while either stands in guard range of a town gate. A robber is no defender: its victim's return fire
-// does not let it shoot into guard range.
+// NPCs can shoot raiders at a guarded gate, since guards ignore shots at raiders. Otherwise they fire there only
+// at an attacker they were not robbing. This rule decides whether a fight goal can start or continue.
+export function canNpcOpenFireAt(world: World, v: Vehicle, target: Vehicle): boolean {
+  if (!v.brain || target.faction === 'raiders') return true;
+  return (target.id in v.brain.attackers && !robs(world, v, target)) || (!isTownGuarded(v.pos) && !isTownGuarded(target.pos));
+}
+
 function canNpcEngage(world: World, v: Vehicle, target: Vehicle): boolean {
   if (!v.brain) return true;
+  if (!canNpcOpenFireAt(world, v, target)) return false;
   if (target.id in v.brain.attackers && !robs(world, v, target)) return true;
-  return opensFireOn(v, v.brain.goals, target);
+  return opensFireOn(v.brain.goals, target);
 }
 
 function robs(world: World, v: Vehicle, target: Vehicle): boolean {
@@ -993,10 +998,9 @@ function robs(world: World, v: Vehicle, target: Vehicle): boolean {
   return feud !== null && feudData(feud).robbery;
 }
 
-function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
+function opensFireOn(goals: NpcActivity[], target: Vehicle): boolean {
   const top = goals[goals.length - 1];
-  if (top?.kind !== 'fight' || top.targetId !== target.id) return false;
-  return !isTownGuarded(v.pos) && !isTownGuarded(target.pos);
+  return top?.kind === 'fight' && top.targetId === target.id;
 }
 
 // Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire

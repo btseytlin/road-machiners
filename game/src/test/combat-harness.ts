@@ -10,18 +10,21 @@ import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS } from '../data/skills';
 import { START_KITS } from '../data/start';
+import { TERRAIN } from '../data/terrain';
+import { PERF } from '../data/perf';
 import { buildDrive, freeDrive, type Drive } from '../phys/drive';
 import { physicsMove } from '../phys/turn';
+import { isHostile } from '../sim/combat';
 import { isDefeated } from '../sim/defeat';
 import { makePart } from '../sim/factory';
 import { mountPart } from '../sim/inventory';
 import { hangUp } from '../sim/dialogue';
-import { mountedParts } from '../sim/grid';
+import { isMounted, mountedParts } from '../sim/grid';
 import { maxHp } from '../sim/wear';
 import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
 import { topGoal } from '../sim/npc-activities';
 import { spawnAt } from '../sim/spawn';
-import { addState } from '../sim/states';
+import { addState, endState, stateOf } from '../sim/states';
 import { vehicleStats } from '../sim/stats';
 import type { Obstacle, Vehicle, World } from '../sim/types';
 import { bearing, dist, type Vec } from '../sim/vec';
@@ -54,16 +57,17 @@ export type Fight = {
   gap: number; // tiles between the sides at the start
   orbit: number; // tiles; orbit radius and charge stop distance of a scripted driver
   maxTurns: number;
-  arena: number | null; // radius in tiles of a closed ring of rocks around the fight, so no driver can run; null for open ground
+  arena: number | null; // radius in tiles of a closed ring where survivors resume after peace; null for open ground
 };
 
 // odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its trucks still in the fight.
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
 // won: every truck of side b is out. lost: every truck of side a is out. a fled, b fled: the sides drove apart, and
 // the side named left the fight: the side that last dropped its fight goal while the other side fought on. When that
-// never happened, the side farther from the middle of the fight.
-export type Outcome = 'won' | 'lost' | 'a fled' | 'b fled' | 'timeout';
-const OUTCOMES: Outcome[] = ['won', 'lost', 'a fled', 'b fled', 'timeout'];
+// never happened, the side farther from the middle of the fight. truce: no truck of either side is hostile to one of
+// the other any more, through a truce, mercy or a surrender.
+export type Outcome = 'won' | 'lost' | 'a fled' | 'b fled' | 'truce' | 'timeout';
+const OUTCOMES: Outcome[] = ['won', 'lost', 'a fled', 'b fled', 'truce', 'timeout'];
 // crashes counts collisions between trucks of opposite sides, rams included. bHpLeft is the share of max part HP the
 // side b trucks keep at the end of a won fight, wrecks included, and null for any other outcome.
 export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; a: Side; b: Side; bHpLeft: number | null };
@@ -71,8 +75,10 @@ export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crash
 // The middle of the map, so a truck that backs or drives away for a whole fight never reaches the map edge.
 const CENTER: Vec = { x: TEST_MAP.terrain.size / 2, y: TEST_MAP.terrain.size / 2 };
 const FLED_RANGE = 40; // tiles between the sides; this far apart, the fight is over
-// Where the player truck waits when brains drive both sides: past any sight range, so no driver notices it.
-const PARKED: Vec = { x: CENTER.x - 200, y: CENTER.y };
+// Where the player truck waits when brains drive both sides. Trucks drive in physics only within the player's live
+// range, sight plus PERF.liveMargin, and by the cheap far rules beyond it, so the player waits inside that range but
+// past a driver's sight. It carries no cargo, so no raider wants it if a fight drifts its way.
+const PARKED: Vec = { x: CENTER.x, y: CENTER.y + TERRAIN.vision.radius + PERF.liveMargin / 2 };
 const LINE_SPACING = 3; // tiles between trucks of one side
 const ARENA_ROCK = 1; // tiles; radius of each rock in the arena ring
 const ARENA_STEP = 1.6; // tiles between rock centers along the ring, less than a rock's width, so no gap opens
@@ -207,11 +213,14 @@ type Ids = { a: string[]; b: string[] };
 // fight.
 function setup(fight: Fight): { w: World; ids: Ids } {
   if (fight.arena !== null && fight.arena <= fight.gap / 2 + LINE_SPACING) throw new Error(`An arena of ${fight.arena} tiles leaves no room for a gap of ${fight.gap}`);
+  // Across a wider ring, trucks on opposite sides lose sight of each other and the fight stalls.
+  if (fight.arena !== null && 2 * fight.arena > TERRAIN.vision.radius) throw new Error(`An arena of ${fight.arena} tiles is wider than sight, ${TERRAIN.vision.radius} tiles across`);
   const scripted = scriptedTruck(fight);
   const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted), fight.arena)), seedStreams(fight.seed));
   const player = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   if (scripted?.gear.kind === 'outfit') outfit(w, player, scripted.gear.outfit);
-  player.pos = scripted ? { x: CENTER.x - fight.gap / 2, y: CENTER.y } : { ...PARKED };
+  if (scripted) player.pos = { x: CENTER.x - fight.gap / 2, y: CENTER.y };
+  else park(player);
   const npcA = scripted ? [] : fight.a;
   const ids: Ids = { a: scripted ? [player.id] : [], b: [] };
   ids.a.push(...placeSide(w, npcA, CENTER.x - fight.gap / 2, 0));
@@ -219,6 +228,11 @@ function setup(fight: Fight): { w: World; ids: Ids } {
   for (const a of ids.a) for (const b of ids.b) setAgainst(w, a, b);
   refreshVision(w);
   return { w: setAutoFire(w, true), ids };
+}
+
+function park(player: Vehicle): void {
+  player.pos = { ...PARKED };
+  player.items = player.items.filter((it) => it.kind === 'part' && isMounted(player.chassisId, it));
 }
 
 function placeSide(w: World, trucks: Truck[], x: number, heading: number): string[] {
@@ -292,7 +306,7 @@ function kite(w: World, me: Vehicle, foe: Vehicle): World {
 
 // One line about a turn: each fighting truck's place, speed, top goal and state, then the shots.
 export function turnLine(w: World, turn: number): string {
-  const trucks = w.vehicles.filter((v) => dist(v.pos, PARKED) > FLED_RANGE).map((v) =>
+  const trucks = w.vehicles.filter((v) => v.id !== w.player.vehicleId || dist(v.pos, PARKED) > 1).map((v) =>
     `${v.id} ${v.pos.x.toFixed(1)},${v.pos.y.toFixed(1)} v${v.speed.toFixed(1)} ${v.brain?.goals.at(-1)?.kind ?? v.order?.kind ?? '-'}${isDefeated(v) ? ' OUT' : ''}`);
   const shots = w.events.flatMap((e) => (e.t === 'shot' ? [`${e.shooter}:${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}@${Math.round(e.chance * 100)}%`] : []));
   return `t${turn} ${trucks.join(' | ')} | ${shots.join(' ')}`;
@@ -353,6 +367,7 @@ function outcomeOf(w: World, c: Count): Outcome | null {
   const b = inFight(w, c.ids.b);
   if (a.length === 0) return 'lost';
   if (b.length === 0) return 'won';
+  if (!a.some((x) => b.some((y) => isHostile(w, x, y) || isHostile(w, y, x)))) return 'truce';
   if (b.every((v) => dist(v.pos, nearest(v, a).pos) > FLED_RANGE)) return fledSide(a, b, c.leaver);
   return null;
 }
@@ -376,16 +391,32 @@ function fledSide(a: Vehicle[], b: Vehicle[], leaver: 'a' | 'b' | null): Outcome
 }
 
 // Plays one turn and counts it. Returns the next physics drive.
-function playTurn(w: World, d: Drive, c: Count): { w: World; d: Drive } {
+function playTurn(w: World, d: Drive, c: Count, arena: boolean): { w: World; d: Drive } {
   const before = new Map(w.vehicles.map((v) => [v.id, partHp(v)]));
   let next: Drive | null = null;
   w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
   freeDrive(d);
+  if (arena) keepArenaFight(w, c.ids);
   countShots(w, c);
   countDamage(w, c, before);
   countMoves(w, c);
   noteLeaver(w, c);
   return { w, d: next! };
+}
+
+// Arena duels continue after settlements. A real turn resolves each plea or surrender, then surviving opponents
+// resume their feud for the next turn. Open-ground fights keep the game's normal peace outcomes.
+function keepArenaFight(w: World, ids: Ids): void {
+  const a = inFight(w, ids.a);
+  const b = inFight(w, ids.b);
+  for (const x of a) for (const y of b) {
+    if (isHostile(w, x, y) || isHostile(w, y, x)) continue;
+    for (const [holder, other] of [[x, y], [y, x]]) {
+      const truce = stateOf(w, 'truce', holder.id, other.id);
+      if (truce) endState(w, truce, 'broken');
+    }
+    setAgainst(w, x.id, y.id);
+  }
 }
 
 // The scripted driver's orders for the turn, at the nearest foe still fighting. Brains need none.
@@ -407,7 +438,7 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
   while (outcome === null && turns < fight.maxTurns) {
     if (w.player.call) w = hangUp(w); // a raider demand; the fight goes on
     w = steer(w, fight, c);
-    ({ w, d } = playTurn(w, d, c));
+    ({ w, d } = playTurn(w, d, c, fight.arena !== null));
     turns++;
     watch?.(w, turns);
     outcome = outcomeOf(w, c);
@@ -445,10 +476,10 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `# Combat harness`,
     '',
     `${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
-    'A truck is driver:gear. Won means every side b truck is out, lost every side a truck. A fled and b fled name the side that left the fight. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
+    'A truck is driver:gear. Won means every side b truck is out, lost every side a truck. A fled and b fled name the side that left the fight. Truce means no truck is hostile to the other side any more. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
     '',
-    '| a | b | won | lost | a fled | b fled | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| a | b | won | lost | a fled | b fled | truce | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';

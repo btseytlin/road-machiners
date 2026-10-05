@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveThreat, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, findFightImpediment, findFightTargetAt,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -31,7 +31,7 @@ import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, loo
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
-import { judgeStrandedFoe, plead, warnedOff } from './parley';
+import { considerPlea, judgeStrandedFoe, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -101,6 +101,7 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
   const goals = goalsOf(v);
   const popped = goals.pop();
   if (!popped) throw new Error(`${v.id} has no goal to pop`);
+  reconsider(v, popped);
   logChange(w, v, popped, reason);
   return popped;
 }
@@ -109,7 +110,14 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
 function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
   const previous = topGoal(v);
   v.brain!.goals = goalsOf(v).filter((g) => g !== goal);
+  reconsider(v, goal);
   logChange(w, v, previous, reason);
+}
+
+// A fight or a flight that ends leaves its hostile unnoticed, so a driver that still sees it decides about it again
+// instead of going back to work beside it.
+function reconsider(v: Vehicle, goal: NpcActivity): void {
+  if ((goal.kind === 'fight' || goal.kind === 'flee') && goal.targetId) delete v.brain!.noticed[`hostileSeen:${goal.targetId}`];
 }
 
 // Swaps the long-term goal at the bottom, keeping any interruptions above it.
@@ -390,26 +398,20 @@ function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contact
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
   if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
-  if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
+  const impediment = findFightImpediment(world, vehicle, target);
+  if (impediment) return impediment;
   return fightTargetLost(world, vehicle, goal, target, contacts) ? 'lost the target' : null;
 }
 
 function fightTargetLost(world: World, vehicle: Vehicle, goal: NpcActivity, target: Vehicle, contacts: Contact[]): boolean {
-  if (fightTargetAt(world, vehicle, target, contacts)) return false;
+  if (findFightTargetAt(world, vehicle, target, contacts)) return false;
   if (goal.perceived === undefined) throw new Error(`${vehicle.id} fights ${target.id} with no turn it last perceived it`);
   return world.turn - goal.perceived > NPC_BEHAVIOR.fightSearchTurns;
 }
 
-// Where the driver perceives its fight target now: the truck in sight, else the center of its contact. Undefined
-// when it perceives neither.
-function fightTargetAt(world: World, vehicle: Vehicle, target: Vehicle, contacts: Contact[]): Vec | undefined {
-  if (canVehicleSee(world, vehicle, target.pos)) return target.pos;
-  return contacts.find((c) => c.vehicleId === target.id)?.center;
-}
-
 // A fighter re-aims at its target each turn it perceives it. Without sight or contact it drives on to the last point.
 function steerFight(world: World, vehicle: Vehicle, goal: NpcActivity, _profile: NpcProfile, contacts: Contact[]): void {
-  const at = fightTargetAt(world, vehicle, vehicleById(world, goal.targetId!), contacts);
+  const at = findFightTargetAt(world, vehicle, vehicleById(world, goal.targetId!), contacts);
   if (!at) return;
   goal.destination = { ...at };
   goal.perceived = world.turn;
@@ -592,6 +594,11 @@ export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle,
   return decide(world, vehicle, decision, id, seen ? perceiveThreat(world, vehicle, vehicleById(world, id)) : null);
 }
 
+// Returns a cornered fighter to combat, replacing its interrupted goal.
+export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): void {
+  interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
+}
+
 // Pushes a danger goal. A tower in danger drops its tow for free.
 function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
   const tow = heldTow(world, vehicle);
@@ -687,22 +694,6 @@ function onGrievances(world: World, vehicle: Vehicle): void {
     startFeuds(world, other, vehicle);
     vehicle.brain!.attackers[other.id] = false;
   }
-}
-
-// One roll per turn the driver was hurt, about the hostile that hit it last, while it sees that hostile. A truce
-// or a beg pleads with it.
-function onParley(world: World, vehicle: Vehicle): void {
-  const foe = hurtingFoe(world, vehicle);
-  if (!foe) return;
-  const option = decide(world, vehicle, 'parley', foe.id, perceiveThreat(world, vehicle, foe));
-  if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
-}
-
-// The hostile in sight that hit the driver last, when the driver took damage last turn.
-function hurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
-  if (vehicle.brain!.hurt <= 0) return null;
-  const foe = world.vehicles.find((v) => v.id === vehicle.lastHitBy);
-  return foe && isHostile(world, vehicle, foe) && canVehicleSee(world, vehicle, foe.pos) ? foe : null;
 }
 
 // A driver that refuses a threat starts a feud with the one who made it, then fights it or runs from it.
@@ -882,7 +873,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   if (isDefeated(vehicle)) return retreatHome(world, vehicle);
   applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
-  onParley(world, vehicle);
+  considerPlea(world, vehicle);
   // A truce ends hostility, so goals that held only against the truce partner end here.
   dropInvalidGoals(world, vehicle, contacts);
   onAttacked(world, vehicle, profile);

@@ -49,8 +49,18 @@ describe('combat harness', () => {
     expect(r.outcome).toBe('b fled');
   });
 
+  it('fights to a knockout inside the arena rather than stopping at a truce', () => {
+    const fight = { ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 140, arena: 9 };
+    expect(runFight(fight).outcome).toBe('won');
+  });
+
+  it('a damaged arena fighter turns back when it cannot escape for repairs', () => {
+    const fight = { ...FIGHT, a: parseLineup('buggy'), b: parseLineup('buggy'), seed: 3, maxTurns: 140, arena: 9 };
+    expect(['won', 'lost']).toContain(runFight(fight).outcome);
+  });
+
   it('keeps every truck inside the arena ring', () => {
-    const arena = 15;
+    const arena = 9;
     let farthest = 0;
     runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 30, arena }, (w) => {
       const center = w.obstacles.reduce((s, o) => ({ x: s.x + o.pos.x / w.obstacles.length, y: s.y + o.pos.y / w.obstacles.length }), { x: 0, y: 0 });
