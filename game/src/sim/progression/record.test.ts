@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_IDS } from '../../data/skills';
+import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
-import type { World } from '../types';
+import type { World, XpSource } from '../types';
 import { emptyWorld } from '../testkit';
-import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './record';
+import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
@@ -11,7 +11,7 @@ const SHORT_RUN = 60;
 // handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
 // to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which triples the time
+const RUN_TIMEOUT = 300_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which made a 16s run take over 120s on a loaded machine
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {
@@ -37,8 +37,27 @@ describe('record', () => {
 
     const curve = replay(lines, SHORT_RUN);
 
-    for (const skill of SKILL_IDS) expect(curve[skill].total, skill).toBe(world.player.skills[skill]);
+    for (const skill of SKILL_IDS) {
+      const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
+      expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
+    }
+    // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
+    const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
+});
+
+describe('record with a pool to spend', () => {
+  it('buys the ranks the pool pays for before the bot plays the turn', () => {
+    const start = emptyWorld();
+    start.player.xp = RANK_COSTS[0];
+
+    const [step] = [...stepsFrom(start, 'saver', 'trader', 1)];
+
+    expect(step.world.player.ranks).toEqual({ ...start.player.ranks, driving: 1 });
+    expect(step.world.player.xp).toBeLessThan(RANK_COSTS[0]);
+  });
 });
 
 describe('record at the player\'s death', () => {

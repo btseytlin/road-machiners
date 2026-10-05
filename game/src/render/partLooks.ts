@@ -22,6 +22,9 @@ const BASE_MODELS: Record<string, ModelName> = {
   convertible: 'base_convertible',
   bus: 'base_bus',
   loader: 'base_loader',
+  niva: 'base_niva',
+  bukhanka: 'base_bukhanka',
+  lincoln: 'base_lincoln',
 };
 
 export function baseModel(chassisId: string): ModelName {
@@ -244,6 +247,10 @@ export const GRAY_MAX = 0.7;
 export const JAG_MAX = 0.14;
 // Share of a model's smallest extent its jag may reach, so thin parts bend but stay whole.
 export const JAG_THIN = 0.25;
+// A hulk, the chassis a dead truck leaves, is fully gray, then darkened by this factor so it reads burnt, not worn.
+export const HULK_TONE = 0.45;
+// Radians a hulk may lean in roll or pitch, seeded by its id, so it lies slumped. Its collision boxes stay level.
+export const HULK_TILT = 0.06;
 // Same weld as debris.ts: corners within a millimeter move together.
 const WELD = 1000;
 

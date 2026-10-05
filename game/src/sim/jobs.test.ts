@@ -242,6 +242,17 @@ describe('auto patch and promised parts', () => {
     startAutoRepair(w);
     expect(me.job).not.toBeNull();
   });
+
+  it('spends only the parts above what a haul contract carries', () => {
+    const { w, me } = setup(4, 'paid', true);
+    w.player.autoRepair = true;
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'parts', units: 3, to: 'nose', reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+    for (let i = 0; i < 100; i++) {
+      startAutoRepair(w);
+      advanceJobs(w);
+    }
+    expect(goodsCount(me).parts).toBe(3);
+  });
 });
 
 describe('auto patch', () => {

@@ -7,6 +7,8 @@ model:
 
 telegram:
   require_mention: true
+  # Deploys restart Hermes often. Its "shutting down" and "back online" posts are noise in the committee chat.
+  gateway_restart_notification: false
 
 # Keep Hermes's own notices out of the committee chat.
 compression:
@@ -23,6 +25,8 @@ auxiliary:
 display:
   # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
   busy_input_mode: queue
+  # The background self-improvement review reads only this global key, not the per-platform one. The review still runs.
+  memory_notifications: "off"
   platforms:
     telegram:
       tool_progress: "off"
@@ -41,6 +45,8 @@ terminal:
 # Hermes acts on the factory without waiting on approval cards. Its prompt waited 5 minutes for an answer nobody saw, then dropped the step. SOUL.md says what to ask the committee first.
 approvals:
   mode: "off"
+  # /new, /reset and /undo run without an "Approve Once / Always Approve" prompt.
+  destructive_slash_confirm: false
 
 # A scheduled job's post is Hermes's message alone, with no "Cronjob Response" header or footer.
 cron:

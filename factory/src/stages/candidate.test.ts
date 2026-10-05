@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
-import { fake, reset } from './test-fakes';
+import { ROOT, fake, reset } from './test-fakes';
 
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
@@ -35,6 +38,16 @@ describe('candidate', () => {
     expect(photo.caption).toContain('Play: https://play.test/rc/');
     expect(photo.caption).toContain('2 changes, listed in the message under this post.');
     expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+  });
+
+  it('lists the issues bundled into a change under it, so the changelog sums up the bundle in one line', async () => {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, bundles: { '3': [8, 9] } });
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    await candidate(f.ctx, 11);
+    const input = readFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'changelog.md'), 'utf8');
+    expect(input).toBe('#3 faster trucks\n  bundled: #8 T\n  bundled: #9 T\n#5 louder horn\n');
   });
 
   it('opens the pull request to main when none is open', async () => {
@@ -83,6 +96,44 @@ describe('candidate', () => {
     await expect(candidate(f.ctx, 11)).rejects.toThrow('release.md names #3, but the release holds #3, #5');
     expect(deployed).toEqual([]);
     expect(f.photos).toEqual([]);
+  });
+});
+
+describe('candidate evidence', () => {
+  // The fake agent writes into the clone's .factory, and the fake shell leaves the screenshot there.
+  function setup(commit = 'abc1234'): ReturnType<typeof fake> {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': pngBytes(0).toString('latin1'), 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': JSON.stringify({ commit, features: [{ name: '#3', kind: 'other' }, { name: '#5', kind: 'other' }], images: [{ file: 'screenshot.png', description: 'Faster trucks', covers: ['#3'] }, { file: 'view1.png', description: 'Louder horn', covers: ['#5'] }] }) };
+    return f;
+  }
+
+  it('posts the Ship post alone, then the extra view as a reply to it, then the changelog', async () => {
+    const f = setup();
+    await candidate(f.ctx, 11);
+    expect(f.photos).toHaveLength(1);
+    expect(f.photos[0].buttons).toEqual([[{ text: 'Ship', data: 'factory:ship:11' }]]);
+    expect(f.albums).toEqual([{ chat: 'committee', paths: [expect.stringContaining('view1.png')], captions: ['2/2 Louder horn'], replyTo: 42 }]);
+    const posts = f.calls.filter((call) => /^(photo|album|message)/.test(call));
+    expect(posts).toEqual(['photo committee', 'album committee 1 42', expect.stringContaining('message committee 42')]);
+    expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+  });
+
+  it('falls back to the one screenshot when the manifest is for another commit', async () => {
+    const f = setup('ffffff0');
+    await candidate(f.ctx, 11);
+    expect(f.albums).toEqual([]);
+    expect(f.photos).toHaveLength(1);
+  });
+
+  it('clears the post id and fails when the album fails, so no dead Ship post stays current', async () => {
+    const f = setup();
+    f.albumFails = true;
+    await expect(candidate(f.ctx, 11)).rejects.toThrow('boom');
+    expect(readState(f.ctx.statePath).release?.postId).toBeNull();
+    expect(readState(f.ctx.statePath).postCaptions).toEqual({});
+    expect(f.calls.some((call) => call.startsWith('editCaption 42 Superseded'))).toBe(true);
+    expect(f.calls.some((call) => call.startsWith('message committee 42'))).toBe(false);
   });
 });
 

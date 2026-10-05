@@ -5,8 +5,8 @@ import {
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
-import { DECKS, type Deck } from "../../sim/bridge";
-import { deckEnds, type Terrain } from "../../sim/terrain";
+import { DECKS, railOffset, type Deck } from "../../sim/bridge";
+import { deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
@@ -119,11 +119,18 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   return chunks;
 }
 
-// An unseen flat quad on a deck, so a click on the deck picks the deck, not the ground under it. The
-// deck's model draws the deck.
+// An unseen flat quad on each straight piece of a deck, so a click on the deck picks the deck, not the ground under
+// it. The deck's model draws the deck.
 function deckPick(t: Terrain, deck: Deck, scope: RenderScope): void {
-  const [h0, h1] = deckEnds(t, deck);
-  const [[a0, a1], [b0, b1]] = deck.rails;
+  for (const seg of deckSegments(t, deck)) piecePick(deck, seg, scope);
+}
+
+function piecePick(deck: Deck, seg: DeckSegment, scope: RenderScope): void {
+  const { h0, h1 } = seg;
+  const [a0, a1, b0, b1] = [-1, 1].flatMap((side) => {
+    const off = railOffset(deck.axis, deck.width, side);
+    return [{ x: seg.from.x + off.x, y: seg.from.y + off.y }, { x: seg.to.x + off.x, y: seg.to.y + off.y }];
+  });
   const corners = [[a0, h0], [a1, h1], [b1, h1], [b0, h0]] as const;
   const geo = new THREE.BufferGeometry()
     .setAttribute("position", new THREE.Float32BufferAttribute(corners.flatMap(([p, h]) => [p.x * S, h * S, p.y * S]), 3))
@@ -132,5 +139,5 @@ function deckPick(t: Terrain, deck: Deck, scope: RenderScope): void {
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
   mesh.visible = false;
   const mid = { x: (a0.x + b1.x) / 2, y: (a0.y + b1.y) / 2 };
-  scope.add(mesh, mid, deck.length / 2);
+  scope.add(mesh, mid, seg.length / 2);
 }

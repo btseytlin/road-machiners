@@ -1,12 +1,15 @@
 # Social
 
-Radio calls, topics and the horn. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+Radio calls, topics, the horn and Waste Of Time Radio. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
 Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other. A driver in combat with another truck answers a call with a short refusal in the call panel, and the player can only hang up. It does not honk back. Other drivers do not rob it, tow it or hire it until that combat ends. A driver that only flees, with nobody attacking or hunting it, takes calls. A hostile driver is part of the player's fight, so it takes calls even while it fights another truck. While the player is in combat, only the foe calls, with a cargo demand, a truce or a plea for mercy. Tow offers and patch requests wait until the fight ends.
+
+A truck on the radio blinks a red light on its antenna tip: both trucks on a call, a truck sending the beacon, and drivers that just talked to each other.
 
 Talk is built from topics. A topic is lines and replies in data, and its logic is named conditions and effects in code. The player's call opens on a menu of the topics that truck can take up. A driver's traits decide its voice and its topics. A topic can be once per driver: that driver remembers how it ended.
 
 - Directions: traders and scavengers name the nearest town they know, with direction and distance. The town counts as found.
+- Anything interesting: traders, scavengers, couriers, roamers, vultures and suppliers tell one trading tip from the shops they did business at in the last day. They name a good they saw at least a fifth over or under its value, the furthest off first, or say they have nothing worth telling. The tip is as old as the visit, so prices may have moved since.
 - Tow: see [Defeat and recovery](defeat.md).
 - Spares: traders and scavengers sell their spare parts to the player. The player cannot sell over the radio.
 - Patch: a patch gets a broken engine or gearbox going again, and seals a holed tank that has run dry, at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free. A deal that breaks, for lack of parts or pay or an attack, shows in the log.
@@ -20,3 +23,5 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
 H honks, also while a turn plays. Traders and scavengers in earshot that are not hostile honk back. During a turn they answer once it ends.
+
+Waste Of Time Radio plays on the radio panel above the log, and above the held contracts when there are some. It steps away while the hover panel of a truck would cover it. J.J. reports weather as it starts and ends, new contracts on boards of found places, raider robberies and knockouts of other drivers, dawn, noon, dusk and midnight, and road wisdom after a quiet stretch. She names a place only when the player has found it and it lies near the news. Anywhere else she gives a basin direction. She never reports the player's own fights and never quotes prices. News comes before clock calls, and clock calls before road wisdom. Broadcasts keep a gap of several turns between them, old news is dropped unsent, one place gets one raid report in a long while, and one restock gives at most one contract report, the best paid. A load or a new game starts the station over without announcing what is already on the boards. NPCs do not listen, since the radio changes no rule or decision.

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RoaM factory</title>
+<link rel="stylesheet" href="/factory/dashboard.css">
+<script src="/factory/dashboard.js" defer></script>
+</head>
+<body>
+<div class="connection" id="connection" role="status">Connecting to the factory…</div>
+<div class="frame">
+<header class="top"><div class="wordmark">RoaM</div><span class="divider">/</span><h1>Factory</h1><div class="top-right"><a id="github-link" class="button">GitHub ↗</a><a id="play-link" class="button on">Play RoaM ↗</a></div></header>
+<section class="instrument" aria-label="Factory status">
+<div class="lcd"><span id="factory-status">Awaiting factory state</span><small id="state-age">No reading yet</small></div>
+<div class="readout"><small>Workers</small><strong id="worker-count">—</strong><em>Agent, test and branch queues</em></div>
+<div class="readout"><small>Next release</small><strong id="change-count">—</strong><em id="release-phase">Awaiting GitHub</em></div>
+<div class="readout"><small>Tokens today</small><strong id="tokens-today">—</strong><em id="usage-coverage">Awaiting measurements</em></div>
+<div class="readout"><small>Estimated cost today</small><strong id="cost-today">—</strong><em>Not billed spend</em></div>
+<div class="readout"><small>Worker time today</small><strong id="time-today">—</strong><em>Concurrent job time</em></div>
+</section>
+<main class="workbench">
+<div class="bench-head"><h2>Factory operations</h2><span class="source" id="source-age">Sources unavailable</span></div>
+<nav aria-label="Dashboard sections"><a class="button on" href="#jobs">Jobs</a><a class="button" href="#release">Release</a><a class="button" href="#host">Server</a><a class="button" href="#usage">Usage</a><a class="button" href="#channel">Telegram</a></nav>
+<div class="columns">
+<section id="jobs"><div class="section-head"><h3>Jobs</h3><span class="mono" id="job-count">Awaiting state</span></div><div class="pipeline" id="pipeline"></div><div class="table-scroll"><table><thead><tr><th>Issue</th><th>Stage</th><th>Elapsed</th></tr></thead><tbody id="job-rows"></tbody></table></div><p class="small dim" id="job-note">Factory state and GitHub are collected independently.</p></section>
+<section class="right" id="release"><div class="section-head"><h3>Next release</h3><span class="mono" id="release-count">Awaiting GitHub</span></div><div class="branch"><span id="release-name">—</span><span class="gold" id="release-status">Unavailable</span></div><ul class="release-list" id="release-changes"></ul><div class="release-status"><p class="gold small" id="release-blockers">Awaiting release data</p><p class="small dim">Then: candidate build → committee playtest → ship.</p></div><div class="release-actions" id="release-actions"></div><p class="small dim release-note">Jobs still in progress are not included. No ship date confirmed.</p></section>
+</div>
+<section class="lower" id="host"><div class="section-head"><h3>Factory server</h3><span class="mono" id="host-age">Awaiting host readings</span></div><div class="host-grid" id="host-readings"></div><p class="small dim">CPU is host-wide. RAM includes reclaimable cache as available on Linux. SSD is the factory data volume. GPU readings require NVIDIA drivers.</p></section>
+<div class="columns lower">
+<section id="usage"><div class="usage-top"><h3>Agent usage</h3><div class="range" role="group" aria-label="Usage date range"><button data-days="1" type="button" aria-pressed="false">Today</button><button data-days="7" type="button" class="on" aria-pressed="true">7 days</button><button data-days="30" type="button" aria-pressed="false">30 days</button></div></div><div class="usage-totals"><div><strong id="usage-tokens">—</strong><small>Reported tokens</small></div><div><strong id="usage-cost">—</strong><small>Estimated model cost</small></div><div><strong id="usage-time">—</strong><small>Worker time</small></div></div><div class="chart" id="usage-chart" role="img" aria-label="Daily measured token usage"></div><div class="chart-days" id="chart-days"></div><div class="legend"><span><i></i>Input + output</span><span><i class="cache"></i>Cache read + write</span></div><p class="small dim" id="token-split"></p><div class="usage-breakdown"><div><h4>Time by stage</h4><div id="stage-usage"></div></div><div><h4>Tokens by model</h4><div id="model-usage"></div><p class="small dim" id="usage-outcomes"></p></div></div><details><summary>Usage by public issue</summary><div class="table-scroll"><table><thead><tr><th>Issue</th><th>Worker time</th><th>Measured cost</th></tr></thead><tbody id="issue-usage"></tbody></table></div></details><p class="data-note" id="measurement-note">No measurements yet. Missing usage is never counted as zero.</p><p class="small dim">Factory jobs only. Excludes Hermes chat, external agent runs, audio and hosting charges. Cost is an estimate, not a bill. All date ranges use UTC days.</p></section>
+<div class="right"><section><div class="section-head"><h3>Event log</h3><span class="mono">Latest first</span></div><div class="log" id="event-log"></div></section><section class="radio" id="channel"><div class="section-head"><h3>Telegram channel</h3><a class="link" id="channel-link">Open channel ↗</a></div><div id="posts"></div><p class="small dim">Public factory announcements from the last 30 days. Older posts are in Telegram. Committee chat stays private.</p></section></div>
+</div>
+</main>
+<footer class="footer"><span>Read-only · No factory controls</span><span id="footer-status">Waiting for live data</span></footer>
+</div>
+</body>
+</html>

@@ -36,9 +36,9 @@ describe('map file', () => {
     expect(decodeMap(encodeMap(d, 1)).props).toEqual(d.props);
   });
 
-  it('keeps the stored code of every older prop kind and ground type', () => {
-    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'escapePod', 'habitat', 'wingShard', 'powerCell']);
-    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'hull', 'track', 'canal', 'concrete']);
+  it('stores prop kinds and ground types in this order, which only a new file version may change', () => {
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'escapePod', 'habitat', 'wingShard', 'powerCell']);
+    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete']);
   });
 
   it('round-trips pool ground types', () => {
@@ -75,6 +75,13 @@ describe('map file', () => {
     new DataView(bytes.buffer).setUint32(4, 1, true);
 
     expect(() => decodeMap(bytes)).toThrow(/version 1\b/i);
+  });
+
+  it('refuses a version 2 file, whose prop and ground codes still held the old Fallen Sun hull', () => {
+    const bytes = encodeMap(smallDraft(), 1);
+    new DataView(bytes.buffer).setUint32(4, 2, true);
+
+    expect(() => decodeMap(bytes)).toThrow(/version 2\b/i);
   });
 
   it('rounds heights to the stored step', () => {

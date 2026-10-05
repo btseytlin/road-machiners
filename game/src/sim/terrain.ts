@@ -4,7 +4,7 @@
 // The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { deckAt, spanAt, type Deck } from './bridge';
+import { besideDeck, deckAt, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
 
 export type Terrain = {
@@ -38,11 +38,14 @@ export function heightAt(t: Terrain, x: number, y: number): number {
 
 // Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside a deck,
 // a mark stays level with the deck where the truck is nearer the deck than the ground below, so it does
-// not hang down into a canyon like Canyon Bridge's.
+// not hang down into a canyon like Canyon Bridge's. Both the mark and the truck must lie beside that deck, within
+// the sight radius of its sides, since every mark lies within its truck's sight. A deck far away never lifts a mark.
+// One drivable surface is one deck, however it climbs and falls, so a truck on it shares the deck with every mark
+// beside it.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
-  const span = spanAt(x, y);
-  if (span === null) return h;
+  const span = spanAt(x, y, T.vision.radius);
+  if (span === null || !besideDeck(span.deck, origin, T.vision.radius)) return h;
   const deck = deckHeight(t, span.deck, span.along);
   if (h >= deck) return h;
   const from = heightAt(t, origin.x, origin.y);
@@ -67,25 +70,57 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Deck surface height at a distance along it: a straight line between the ground at both ends.
+// Tiles a distance along a deck may lie past its ends, for rounding.
+const ALONG_SLACK = 1e-6;
+
+// Deck surface height at a distance along it: a straight line between the heights of the two stations around it.
+// A distance off the deck is a bug, since callers clamp it or test the outline first.
 export function deckHeight(t: Terrain, deck: Deck, along: number): number {
-  const [from, to] = deckEnds(t, deck);
-  return from + (to - from) * (along / deck.length);
+  if (along < -ALONG_SLACK || along > deck.length + ALONG_SLACK) throw new Error(`Deck ${deck.id} has no point ${along} tiles along it`);
+  const k = pieceAt(deck, along);
+  const a = deck.stations[k];
+  const b = deck.stations[k + 1];
+  const h0 = stationHeight(t, a);
+  const h1 = stationHeight(t, b);
+  return h0 + (h1 - h0) * ((along - a.along) / (b.along - a.along));
 }
 
-// Ground height at the deck's from and to ends.
-export function deckEnds(t: Terrain, deck: Deck): [number, number] {
-  return [groundAt(t, deck.from.x, deck.from.y), groundAt(t, deck.to.x, deck.to.y)];
+// The index of the first of the two neighbouring stations whose piece holds a distance along a deck.
+function pieceAt(deck: Deck, along: number): number {
+  const { stations } = deck;
+  let k = 0;
+  while (k < stations.length - 2 && along > stations[k + 1].along) k++;
+  return k;
 }
 
-// Height change per tile along x and y. A tile centered on the deck takes the deck's grade.
+// A straight piece of a deck between two neighbouring stations: its end points on the axis, its tiles along the deck
+// from the from end to its start, its length in tiles and the deck line's height at its two ends.
+export type DeckSegment = { from: Vec; to: Vec; along: number; length: number; h0: number; h1: number };
+
+// A deck's straight pieces in order, one per pair of neighbouring stations. The only source of a deck's pieces and
+// their end heights, which its slope, physics, models and pick quads follow.
+export function deckSegments(t: Terrain, deck: Deck): DeckSegment[] {
+  return deck.stations.slice(1).map((b, k) => {
+    const a = deck.stations[k];
+    return { from: a.at, to: b.at, along: a.along, length: b.along - a.along, h0: stationHeight(t, a), h1: stationHeight(t, b) };
+  });
+}
+
+// The deck line at a station: the ground there plus its rise.
+function stationHeight(t: Terrain, s: { at: Vec; rise: number }): number {
+  return groundAt(t, s.at.x, s.at.y) + s.rise;
+}
+
+// Height change per tile along x and y. A tile centered on a deck takes the grade of the deck's piece under its centre.
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
   const on = deckAt(i + 0.5, j + 0.5);
   if (on === null) return groundSlope(t, tile);
-  const [from, to] = deckEnds(t, on.deck);
-  const grade = (to - from) / on.deck.length;
+  const k = pieceAt(on.deck, on.along);
+  const a = on.deck.stations[k];
+  const b = on.deck.stations[k + 1];
+  const grade = (stationHeight(t, b) - stationHeight(t, a)) / (b.along - a.along);
   return { x: grade * on.deck.axis.x, y: grade * on.deck.axis.y };
 }
 
@@ -112,9 +147,9 @@ export function isCliff(t: Terrain, tile: number): boolean {
 //   prop count u32, then per prop: kind u8 as an index into PROP_KINDS, x, y, r and yaw as f32, group and step as u16.
 // The hash is FNV-1a over every byte, so any change to the file changes it.
 
-// Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
-// New kinds go last, so older files keep their kinds.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
+// Kinds of baked props, in their stored order: the map file keeps a kind as its index here. A change to this order
+// or a removed kind bumps VERSION, so a file with the old codes is refused rather than misread.
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.
@@ -123,11 +158,11 @@ export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: Ba
 // What the map file stores of a bake: corner heights, tile type indexes into TYPE_IDS and props.
 export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 
-// Ground types in their stored order: the map file keeps a type as its index here.
+// Ground types in their stored order: the map file keeps a type as its index here, and a change to it bumps VERSION.
 export const TYPE_IDS = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
 
 const MAGIC = 'KMAP';
-const VERSION = 2;
+const VERSION = 3;
 const HEADER = 20;
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 const INT16_MAX = 32767;
