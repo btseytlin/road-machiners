@@ -135,7 +135,7 @@ export class Game {
   private readonly controls: TruckControls;
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
-  private readonly loops: SoundLoops;
+  readonly loops: SoundLoops;
   private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
   private readonly radioLights = new RadioLights();

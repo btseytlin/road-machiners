@@ -370,6 +370,13 @@ export class SoundLoops {
     this.calm.setGain(gain, fade);
 }
 
+  // The radio's next button crossfades to another calm track at the current calm level.
+  nextTrack(): void {
+    const fade = MIX.music.fadeSeconds;
+    this.nextCalm(fade);
+    this.calm.setGain(this.last?.calmGain ?? 0, fade);
+  }
+
   private nextCalm(fadeSeconds: number): void {
     this.calm.stop(fadeSeconds * 1000);
     this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 });

@@ -110,6 +110,37 @@ describe("engine sound assignment", () => {
   });
 });
 
+describe("next track", () => {
+  const fake = () => {
+    const calm: { gains: number[]; stops: number[] }[] = [];
+    const player = {
+      setBusTone: () => {},
+      loop: (id: string) => {
+        const handle = { gains: [] as number[], stops: [] as number[] };
+        if (id === "music-calm") calm.push(handle);
+        return { glide: () => {}, once: () => {}, setGain: (g: number) => handle.gains.push(g), stop: (ms: number) => handle.stops.push(ms) };
+      },
+    } as unknown as SoundPlayer;
+    return { calm, loops: new SoundLoops(player, { setCombat: () => {}, setPaused: () => {}, tick: () => {} }) };
+  };
+
+  it("crossfades the calm music to a new track at its current level", () => {
+    const { calm, loops } = fake();
+    loops.update({ stormTiles: 0, inCombat: false, paused: false });
+    loops.nextTrack();
+    expect(calm).toHaveLength(2);
+    expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
+    expect(calm[1].gains).toEqual([1]);
+  });
+
+  it("keeps the new track silent in combat", () => {
+    const { calm, loops } = fake();
+    loops.update({ stormTiles: 0, inCombat: true, paused: false });
+    loops.nextTrack();
+    expect(calm[1].gains).toEqual([0]);
+  });
+});
+
 describe("horn sound assignment", () => {
   it("gives every chassis a distinct, loaded horn and rejects unknown chassis", () => {
     const sounds = Object.keys(CHASSIS).map((id) => hornSoundFor(id));
