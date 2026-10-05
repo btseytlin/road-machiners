@@ -142,7 +142,12 @@ export type FactoryState = {
   unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  holds: Record<string, DependencyHold>; // issue number -> the prerequisite issues its text says must merge into dev first. A held card starts no stage.
+  dependencyScanned: number[]; // issues whose text the tick read once for explicit prerequisites, so no later tick calls GitHub for them
 };
+
+// `released` is the ISO time the last prerequisite landed. A released hold stays as the record that the author never needs to be asked about these issues.
+export type DependencyHold = { prerequisites: number[]; since: string; released: string | null };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 
@@ -224,6 +229,7 @@ export interface HostRepo {
   // Merges `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
+  issueMerged(issue: number, branch: string): Promise<boolean>; // whether the factory merge of the issue is in the history of `branch` on GitHub and no revert undid it
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;

@@ -123,6 +123,35 @@ describe('design stage', () => {
     expect(calls.filter((call) => call.startsWith('message'))).toEqual([]);
   });
 
+  it('asks nothing again when the author already answered the question, and fails instead of announcing it', async () => {
+    earlier = ['## Questions from the factory\n\n1. Should this wait for #242 and #243?\n\n<!-- roam-factory -->'];
+    const ctx = fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Should this wait for #242 and #243?'));
+    // The fake comments put a member's reply first, so the earlier question counts as unanswered. Put the reply after it.
+    const comments = ctx.github.comments;
+    ctx.github.comments = async (n: number) => [...(await comments(n)), { login: 'anna', body: 'Yes, wait.' }];
+    await expect(runStage(ctx, 7)).rejects.toThrow('already answered');
+    expect(calls.filter((call) => /^(comment|addLabel|message|move)/.test(call))).toEqual([]);
+  });
+
+  it('drops a question about waiting for a held prerequisite', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), holds: { '7': { prerequisites: [242, 243], since: '', released: '2026-10-05T10:00:00Z' } } });
+    const ctx = fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Should I wait until #242 merges?\nWhich horn?'));
+    await runStage(ctx, 7);
+    const post = calls.find((call) => call.startsWith('comment 7 ## Questions from the factory')) ?? '';
+    expect(post).toContain('1. Which horn?');
+    expect(post).not.toContain('#242');
+  });
+
+  it('tells the agent the prerequisites merged once a hold released', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), holds: { '7': { prerequisites: [242, 243], since: '', released: '2026-10-05T10:00:00Z' } } });
+    let note = '';
+    await runStage(fakeCtx((run) => {
+      note = readFileSync(`${run.clone}/${run.dir}/.factory/dependencies.md`, 'utf8');
+      writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n');
+    }), 7);
+    expect(note).toContain('#242 and #243 merged into dev');
+  });
+
   it('checks questions before wont-do and the plan', async () => {
     const ctx = fakeCtx((run) => {
       writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Which horn?');

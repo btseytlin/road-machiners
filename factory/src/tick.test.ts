@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readLedger } from './ledger';
 import { resumedStage } from './sessions';
-import { chooseJobs, tick, type TickDeps } from './tick';
+import { chooseJobs, evaluateSchedule, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
@@ -188,7 +188,7 @@ describe('chooseJobs', () => {
   });
 });
 
-type Harness = { ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: string[]; spawned: string[][]; pinned: string[] };
+type Harness = { reads: number[]; merged: Set<number>; ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: string[]; spawned: string[][]; pinned: string[] };
 
 function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: IssueComment[] = [], devHead = DEV): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'tick-'));
@@ -200,18 +200,73 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const killed: string[] = [];
   const spawned: string[][] = [];
   const pinned: string[] = [];
-  const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
+  const reads: number[] = [];
+  const merged = new Set<number>();
+  const github = { issue: async (n: number) => { reads.push(n); return { number: n, body: n === 253 ? 'Wait until #242 and #243 merge into dev.' : 'Plain.' }; }, comment: async () => {}, move: async () => {}, cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
-  const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
+  const repo = { fetch: async () => {}, issueMerged: async (n: number) => merged.has(n), headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus) => { spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus}`); return 77; }, cores: () => 4 };
-  return { ctx, sent, labels, removed, deps, killed, spawned, pinned };
+  return { ctx, sent, labels, removed, deps, killed, spawned, pinned, reads, merged };
 }
 
 const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | null = 5): Job => ({ id: `${stage}-job`, stage, issue, pid: 42, startedAt, log: '/l.log' });
 // The spawned args without the job id at the end.
 const args = (h: Harness): string[][] => h.spawned.map((call) => call.slice(0, 2));
+
+describe('a dependency hold', () => {
+  const hold = { prerequisites: [242, 243], since: '2026-01-10T00:00:00Z', released: null };
+  const held = state({ holds: { '253': hold } });
+
+  it('keeps its card out of every card stage and says why', () => {
+    for (const column of ['Triage', 'Design', 'Implementation'] as const) {
+      const report = evaluateSchedule(held, [card(253, column), card(7, 'Design')], NOW, CFG);
+      expect(report.picks).toEqual([{ stage: 'design', issue: 7 }]);
+      expect(report.decisions.find((decision) => decision.issue === 253)?.reasons).toEqual(['dependency']);
+    }
+  });
+
+  it('starts nothing for a released hold', () => {
+    const released = state({ holds: { '253': { ...hold, released: '2026-01-10T11:00:00Z' } } });
+    expect(chooseJobs(released, [card(253, 'Design')], NOW, CFG)).toEqual([{ stage: 'design', issue: 253 }]);
+  });
+
+  it('holds #253 on every tick until #242 and #243 both merged, then starts Design with no answer', async () => {
+    const h = harness(null, false, [card(253, 'Design', [STUCK_LABEL])]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([]);
+    expect(h.removed).toEqual([`253:${STUCK_LABEL}`]);
+    h.merged.add(242);
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([]);
+    expect(readState(h.ctx.statePath).holds['253']).toMatchObject({ prerequisites: [242, 243], released: null });
+    expect(h.sent).toEqual([]);
+    expect(h.removed).toHaveLength(1);
+    expect(readState(h.ctx.statePath).failures).toEqual([]);
+    h.merged.add(243);
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).holds['253'].released).toBe(NOW.toISOString());
+    expect(h.sent).toEqual([]);
+  });
+
+  it('starts the released card\'s Design on the tick after its prerequisites merged', async () => {
+    const h = harness(null, false, [card(253, 'Design')]);
+    await tick(h.ctx, '/code', h.deps);
+    h.merged.add(242);
+    h.merged.add(243);
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([['design', '253']]);
+  });
+
+  it('reads each card once and makes no GitHub issue call on later ticks without a hold', async () => {
+    const h = harness(null, false, [card(1, 'Triage'), card(2, 'Design')]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.reads.sort()).toEqual([1, 2]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.reads).toHaveLength(2);
+  });
+});
 
 describe('tick', () => {
   it('kills a job past the timeout by its id, clears it and reports', async () => {

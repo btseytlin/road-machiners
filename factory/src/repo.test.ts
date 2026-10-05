@@ -176,6 +176,26 @@ describe('merging on GitHub', () => {
   });
 });
 
+describe('issueMerged', () => {
+  it('is true for a factory merge in the history of the branch, matching the number exactly', async () => {
+    const { repo, feature, commit } = await setup();
+    await feature(12, 'f.txt', 'twelve\n');
+    await commit('factory/issue-5', 'g.txt', 'five\n');
+    await repo.fetch();
+    expect(await repo.issueMerged(12, 'dev')).toBe(true);
+    expect(await repo.issueMerged(1, 'dev')).toBe(false);
+    expect(await repo.issueMerged(5, 'dev')).toBe(false);
+    expect(await repo.issueMerged(12, 'main')).toBe(false);
+  });
+
+  it('is false once a revert undid the merge', async () => {
+    const { repo, feature } = await setup();
+    await feature(3, 'f.txt', 'three\n');
+    await repo.revertIssueMerge(3, 'dev');
+    expect(await repo.issueMerged(3, 'dev')).toBe(false);
+  });
+});
+
 describe('reverting an issue merge', () => {
   it('reverts the merge on the branch that has it, pushes it, and leaves the other branch alone', async () => {
     const { repo, feature, show } = await setup();

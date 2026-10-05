@@ -35,6 +35,11 @@ Never make it a pass or fail gate for a perspective concept, since the skill its
 Judge the compare sheet by looking at it, and write each mismatch as a measurement or a plain description.
 
 
+The factory holds an issue until the prerequisite issues its text says must land first have merged into dev.
+It reads the issue for them before this stage starts, so when you run, they have merged.
+Never ask the author whether to wait for a prerequisite issue, and never ask a question the author already answered in the comments.
+If `.factory/dependencies.md` exists, it names them.
+
 Read CLAUDE.md and DESIGN.md first.
 Follow them.
 

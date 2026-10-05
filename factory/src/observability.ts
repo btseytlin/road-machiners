@@ -58,7 +58,7 @@ function validateFunnelCount(column: string, count: number): void {
 function validateDecision(decision: ScheduleReport['decisions'][number]): void {
   if (!Object.hasOwn(QUEUE_OF, decision.stage)) throw new Error('Invalid scheduler stage');
   validateIssue(decision.issue);
-  const reasons = ['queue-full', 'issue-running', 'daily-cap', 'needs-info', 'failed', 'approval'];
+  const reasons = ['queue-full', 'issue-running', 'daily-cap', 'needs-info', 'failed', 'approval', 'dependency'];
   if (!decision.reasons.every((reason) => reasons.includes(reason))) throw new Error('Invalid scheduler reason');
 }
 function validateIssue(issue: number | null): void {

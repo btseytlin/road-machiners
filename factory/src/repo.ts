@@ -162,6 +162,10 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (result.code === 0 || result.code === 1) return result.code === 0;
       throw new Error(`git merge-base --is-ancestor ${base} ${branch} failed: ${result.stderr.trim()}`);
     },
+    async issueMerged(issue, branch) {
+      const log = await git(['log', '--first-parent', '--fixed-strings', `--grep=Merge issue #${issue}:`, '--format=%H %s', await ref(branch)]);
+      return mergeToRevert(log, issue) !== null;
+    },
     async headHash(branch) {
       return (await git(['rev-parse', '--short', await ref(branch)])).trim();
     },

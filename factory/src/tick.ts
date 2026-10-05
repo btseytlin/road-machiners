@@ -12,6 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
+import { isHeld, settleHolds } from './dependencies';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
@@ -49,8 +50,8 @@ function queuedLast(state: FactoryState): JobPick | null {
   return incident === undefined ? null : { stage: 'incident', issue: incident };
 }
 
-function openCards(cards: Card[]): Card[] {
-  return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL));
+function openCards(state: FactoryState, cards: Card[]): Card[] {
+  return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL) && !isHeld(state, card));
 }
 
 // Furthest along first, lowest issue first.
@@ -77,7 +78,7 @@ const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(
 // Card jobs in order: hotfixes, ad hoc tasks, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
 function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
-  const open = openCards(cards).filter(lacks(RELEASE_LABEL));
+  const open = openCards(state, cards).filter(lacks(RELEASE_LABEL));
   const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
   const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
@@ -142,7 +143,7 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval' | 'dependency';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -156,6 +157,7 @@ function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
   if (card.labels.includes(NEEDS_INFO_LABEL)) reasons.push('needs-info');
+  if (isHeld(state, card)) reasons.push('dependency');
   if (card.column === 'Approval') reasons.push('approval');
   return reasons.length ? [{ stage: readWaitingStage(state, card), issue: card.issue, reasons }] : [];
 }
@@ -359,9 +361,9 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await settleRouting(ctx);
   await intake(ctx);
-  const cards = await releaseAnswered(ctx, await ctx.github.cards());
-  cleanBuilds(ctx, cards);
-  cleanWork(ctx, cards);
+  const answered = await releaseAnswered(ctx, await ctx.github.cards());
+  cleanBuilds(ctx, answered);
+  cleanWork(ctx, answered);
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
   const free = freeGb(ctx.cfg.home);
@@ -370,6 +372,7 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
   }
   await ctx.repo.fetch();
+  const cards = await settleHolds(ctx, answered);
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);
   const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);

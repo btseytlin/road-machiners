@@ -1,7 +1,8 @@
-// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
+// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake | hold <issue> <prerequisite...> | unhold <issue>>
 import { readEnvFiles } from './config';
 import { realContext } from './context';
 import { writeHealth } from './health';
+import { applyHold, dropHold } from './dependencies';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
@@ -22,7 +23,7 @@ async function main(args: string[]): Promise<void> {
   loadEnv();
   const ctx = realContext(process.env);
   const codeDir = process.cwd();
-  const [command, stage, issue] = args;
+  const [command] = args;
   if (command === 'tick') {
     writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.cfg.minAvailableGb, ctx.now());
     if (paused(ctx)) {
@@ -34,13 +35,33 @@ async function main(args: string[]): Promise<void> {
       await tick(ctx, codeDir);
     });
   }
+  return otherCommand(ctx, command, args);
+}
+
+type CliContext = ReturnType<typeof realContext>;
+
+async function otherCommand(ctx: CliContext, command: string | undefined, args: string[]): Promise<void> {
+  const [, stage, issue] = args;
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
-  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
+  if (command === 'hold') return holdCommand(ctx, args.slice(1));
+  if (command === 'unhold') return unholdCommand(ctx, parseIssue(stage));
+  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, intake, hold <issue> <prerequisite...> or unhold <issue>.`);
+}
+
+// Holds an issue until its prerequisites merged into dev. The next tick lifts it by itself.
+async function holdCommand(ctx: CliContext, numbers: string[]): Promise<void> {
+  const [issue, ...prerequisites] = numbers.map(parseIssue);
+  if (issue === undefined || prerequisites.length === 0) throw new Error('Use hold <issue> <prerequisite...>.');
+  await applyHold(ctx, issue, prerequisites);
+}
+
+function unholdCommand(ctx: CliContext, issue: number): void {
+  ctx.log('tick', issue, dropHold(ctx, issue) ? 'dependency hold dropped' : 'no dependency hold to drop');
 }
 
 // Lifts a pause whose process ended, then tells whether the tick must skip.
-function paused(ctx: ReturnType<typeof realContext>): boolean {
+function paused(ctx: CliContext): boolean {
   const lifted = liftEndedPause(ctx.cfg.home);
   if (lifted !== null) ctx.log('tick', null, `pause lifted, its process ended: ${lifted.replaceAll('\n', ' ')}`);
   const reason = pausedReason(ctx.cfg.home);

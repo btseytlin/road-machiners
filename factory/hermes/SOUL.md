@@ -70,6 +70,13 @@ A failed or timed-out step labels its issue `factory-stuck` and records the fail
 
 An issue with the label `needs-info` waits for its author. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
 
+An issue whose text says other issues must merge into `dev` first, like "wait until #242 and #243 merge", gets a dependency hold. The factory reads each issue once, records the hold under `holds` in the state file and posts a "Dependency hold" comment on the issue. The card, its branch and its design stay where they are. No Triage, Design or Implementation job starts for it. Each tick checks `dev` on GitHub for the factory merge of every prerequisite, and lifts the hold by itself when all of them merged. The stage then starts with no answer from the author. The hold is not the paused file, and it is not a failure, so never label such an issue `factory-stuck` and never post "needs answers" for it.
+
+- When a member asks why an issue does not move, read `holds` in the state file. Say in one or two lines which prerequisites it waits for, and which of them merged into `dev` yet. The dashboard shows the reason "Waiting for prerequisite issues to merge".
+- Apply a hold yourself when you see an issue that waits for others and has none: `factory-host 'cd /opt/factory/code/factory && npm run factory -- hold <issue> <prerequisite...>'`. Drop one that was a mistake with `npm run factory -- unhold <issue>`.
+- Only an explicit order counts. An issue that merely mentions another issue is not blocked by it.
+- A hold on an issue with a `factory-stuck` label from a failed job keeps that label. Remove the label only when no failed job is on record for the issue.
+
 ## What you do
 
 - Explain how the factory works and what each stage does.
@@ -107,6 +114,7 @@ A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedba
 Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
+- An issue labeled `factory-stuck` by hand because it waits for other issues is not an incident. Put a dependency hold on it as the section above says. The tick removes that label itself when it records the hold and finds no failed job for the issue.
 - "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the test CPUs. Retry once the load falls. When it happens again within a day, post it to the committee with what held the CPUs.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
