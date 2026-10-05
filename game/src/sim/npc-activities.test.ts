@@ -440,7 +440,11 @@ describe('NPC activities', () => {
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
       // A spot seen on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
-      const scrapIn = (world: World) => world.salvage.find((s) => s.id === spot.id)!.goods.scrap ?? 0;
+      // Hidden and revealed scrap alike, since the search reveals before the driver takes.
+      const scrapIn = (world: World) => {
+        const stock = world.salvage.find((s) => s.id === spot.id)!;
+        return (stock.goods.scrap ?? 0) + (stock.hidden.goods.scrap ?? 0);
+      };
       const before = scrapIn(w);
 
       let next = w;

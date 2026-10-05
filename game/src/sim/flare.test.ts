@@ -92,6 +92,7 @@ describe('flare light', () => {
 
   it('does not see through a hill', () => {
     const { w, npc, east } = viewer(night());
+    w.vehicles[0].pos = { x: 100, y: 96 }; // in the live range, where hills count
     const terrain = editableTerrain(w);
     for (let y = 0; y <= w.size; y++) terrain.heights[y * (w.size + 1) + 108] = 5; // a ridge across x = 108
 
