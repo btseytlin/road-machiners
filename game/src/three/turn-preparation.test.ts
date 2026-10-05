@@ -124,7 +124,7 @@ it("posts a copy of a snapshot in hand and leaves that snapshot attached", () =>
   expect(Buffer.from(posted.snapshot).equals(Buffer.from(bytes))).toBe(true);
   expect(saved.snapshot.byteLength).toBe(bytes.byteLength);
   expect(spy).not.toHaveBeenCalled();
-});
+}, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
 it("prepares from a snapshot once per world", () => {
   const turns = new TurnPreparation();

@@ -753,7 +753,7 @@ describe('territory loot spots', () => {
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
     const spots = spotsOf(w).filter((o) => siteGap(orchard, o.pos) < 0);
     const farm = TERRITORIES.orchard.farm!;
-    expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + TERRITORIES.orchard.spots.reduce((n, s) => n + s.count, 0));
+    expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
     for (const o of spots) {
       const stocks = w.salvage.filter((s) => s.id === o.id);
       expect(stocks, o.id).toHaveLength(1);
@@ -765,12 +765,12 @@ describe('territory loot spots', () => {
     expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
   }, budget(30_000));
 
-  it('rolls deck bays from the landmark table and field spots from the hull scrap table', async () => {
+  it('rolls caches from the landmark table and field spots from the hull scrap table', async () => {
     const w = await realWorld();
     for (const o of spotsOf(w).filter((spot) => territoryAt(spot.pos)?.id === 'fallen-sun')) {
       const table = spotTable(o);
       const stock = stockOf(w, o.id);
-      expect(table).toBe(o.kind === 'landmark' && o.look === 'deckBay' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      expect(table).toBe(o.kind === 'landmark' && o.look === 'hullCache' ? SALVAGE.landmark : SALVAGE.hullScrap);
       expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
       expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
       expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
@@ -780,19 +780,19 @@ describe('territory loot spots', () => {
 
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    // Every deck bay at once, since one bay may draw a lucky full day: a day refills a share, not the table highs.
-    const bays = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'deckBay');
-    const stocks = bays.map((o) => stockOf(w, o.id));
+    // Every cache at once, since one cache may draw a lucky full day: a day refills a share, not the table highs.
+    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache');
+    const stocks = caches.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 1);
     const scrap = () => stocks.reduce((n, stock) => n + (stock.goods.scrap ?? 0), 0);
     expect(scrap()).toBeLessThan(stocks.length * SALVAGE.landmark.goods.scrap[1]);
     runDays(w, 365);
     for (const [k, stock] of stocks.entries()) {
-      expect(stock.goods.scrap, bays[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
-      expect(stock.goods.parts, bays[k].id).toBe(SALVAGE.landmark.parts[1]);
-      expect(stock.fuel, bays[k].id).toBe(SALVAGE.landmark.fuel[1]);
-      expect(stockOf(w, bays[k].id).parts.length, bays[k].id).toBeLessThanOrEqual(1);
+      expect(stock.goods.scrap, caches[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
+      expect(stock.goods.parts, caches[k].id).toBe(SALVAGE.landmark.parts[1]);
+      expect(stock.fuel, caches[k].id).toBe(SALVAGE.landmark.fuel[1]);
+      expect(stockOf(w, caches[k].id).parts.length, caches[k].id).toBeLessThanOrEqual(1);
     }
   }, budget(30_000));
 

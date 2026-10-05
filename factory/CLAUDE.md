@@ -1,7 +1,6 @@
 # Game factory
 
-The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it. [README](README.md) describes the flow, the queues, the committee and the setup. [The factory task](docs/tasks/game-factory.md) holds the design and its reasons.
-
+The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it. [README](README.md) describes the flow, the queues, the committee and the setup.
 ## Commands
 
 Run these from `factory/`. Run `npm ci` first.

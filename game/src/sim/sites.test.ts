@@ -120,14 +120,15 @@ describe('territories', () => {
 });
 
 describe('site edges', () => {
-  const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+  // A site with no outline: its edge is its circle.
+  const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
   const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
 
   it('measures a circle site from its circle, negative inside', () => {
-    expect(siteGap(sun, sun.pos)).toBeCloseTo(-sun.radius, 9);
-    expect(siteGap(sun, { x: sun.pos.x + sun.radius + 2, y: sun.pos.y })).toBeCloseTo(2, 9);
-    const [a, b] = [{ x: sun.pos.x - 100, y: sun.pos.y + 3 }, { x: sun.pos.x + 100, y: sun.pos.y + 3 }];
-    expect(siteEdgeCrossings(sun, a, b)).toEqual(edgeCrossings(a, b, sun.pos, sun.radius));
+    expect(siteGap(pump, pump.pos)).toBeCloseTo(-pump.radius, 9);
+    expect(siteGap(pump, { x: pump.pos.x + pump.radius + 2, y: pump.pos.y })).toBeCloseTo(2, 9);
+    const [a, b] = [{ x: pump.pos.x - 100, y: pump.pos.y + 3 }, { x: pump.pos.x + 100, y: pump.pos.y + 3 }];
+    expect(siteEdgeCrossings(pump, a, b)).toEqual(edgeCrossings(a, b, pump.pos, pump.radius));
   });
 
   it('measures an outlined site from its outline', () => {

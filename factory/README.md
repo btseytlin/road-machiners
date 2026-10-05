@@ -4,8 +4,6 @@ The public files and votes on GitHub issues. Agents design and build the top one
 
 Run every command in this file from `factory/`, unless it says otherwise. The factory reads its settings from two files. Git tracks `settings.env`, with the limits, the models and the timeouts. `.env` holds the secrets, the committee ids and the host paths, and never leaves its host. Copy `.env.example` to `.env` first. A key in both files stops the factory.
 
-The design and its reasons are in [the factory task](docs/tasks/game-factory.md).
-
 ## Flow
 
 1. Intake marks an aged `feature-request` or `bug` issue with enough thumbs-up, or one from a committee member. It goes to the Triage column of the GitHub Project.

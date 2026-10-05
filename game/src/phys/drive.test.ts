@@ -149,7 +149,9 @@ describe('physics turns', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const toNose = bearing(bowl.pos, nose.pos);
-    const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
+    // Four tenths of the way from the Bowl, on open ground. The halfway point is the head of the Fallen Sun's crash
+    // furrow, where a flap's foot would box in the east trader.
+    const mid = { x: bowl.pos.x + (nose.pos.x - bowl.pos.x) * 0.4, y: bowl.pos.y + (nose.pos.y - bowl.pos.y) * 0.4 };
     const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
     // The player watches from the side, so both traders drive in physics.
     const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });

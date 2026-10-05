@@ -7,7 +7,7 @@ import { dist, polylineDist, type Vec } from '../sim/vec';
 import { editableTerrain, emptyWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
-import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
+import { buildDrive, freeDrive, GROUND, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
@@ -45,9 +45,9 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
     world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
     world.player.engineHeat = 0; // this drive never stops to cool down
     for (const e of world.events)
-      // A route can graze a site's edge, which the game allows, and a cross-country leg can bottom out on a crest of
-      // the relief, which is terrain and not an obstacle; a rock or building should not touch it.
-      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-') && e.b !== 'ground')
+      // A route can graze a site's edge, which the game allows; a rock or building should not touch it. The body
+      // scraping rough natural ground is terrain, not an obstacle.
+      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-') && e.b !== GROUND)
         staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
     return dist(world.vehicles[0].pos, nose.pos) <= nose.radius + 1.5;
   });

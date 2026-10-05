@@ -43,8 +43,10 @@ describe('record', () => {
       const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
       expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
     }
+    // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
-    expect(pool).toBeCloseTo(world.player.xp, 6);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
 });
 
