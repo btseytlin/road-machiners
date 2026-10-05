@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, gridIconFrame, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -104,49 +104,12 @@ describe("item icons", () => {
 });
 
 describe("grid item icons", () => {
-  const straight = { rot: 0, side: null } as const;
-  const sideways = { rot: 1, side: null } as const;
-
-  it("turn a gun lying sideways a quarter with its box, cropped to its drawing", () => {
-    const rifle = itemIconCell("longRifle");
-    expect(gridIconFrame(rifle, sideways)).toEqual({ crop: boxOf(ICONS.items.longRifle.box), turn: 1 });
-  });
-
-  it("leave a gun lying straight unturned, barrel up", () => {
-    const rifle = itemIconCell("longRifle");
-    const frame = gridIconFrame(rifle, straight);
-    expect(frame).toEqual({ crop: rifle.box, turn: 0 });
-    expect(frame.crop.h).toBeGreaterThan(2 * frame.crop.w);
-  });
-
-  it("turn a square gun at rot 1 a quarter too", () => {
-    expect(gridIconFrame(itemIconCell("mg"), sideways).turn).toBe(1);
-  });
-
   it("give every item one cell, with no lying cell", () => {
     for (const icon of Object.values(ICONS.items)) expect(icon).not.toHaveProperty("lying");
   });
 
-  it("turn another top-down part a quarter with the part, and not when it lies straight", () => {
-    const engine = itemIconCell("stockEngine");
-    expect(gridIconFrame(engine, sideways)).toEqual({ crop: engine.box, turn: 1 });
-    expect(gridIconFrame(engine, straight).turn).toBe(0);
-  });
-
-  it("turn armor, drawn as a front plate, to face the side it covers, whatever its rot", () => {
-    const [, , w, h] = ICONS.items.cage.box;
-    expect(w).toBeGreaterThan(h);
-    const frame = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => gridIconFrame(itemIconCell(id), { rot, side });
-    const turn = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => frame(id, rot, side).turn;
-    expect([turn("cage", 1, "F"), turn("cage", 0, "L"), turn("cage", 1, "B"), turn("cage", 0, "R")]).toEqual([0, 1, 2, 3]);
-    expect(turn("steelPlate", 0, "R")).toBe(3);
-    expect(frame("cage", 1, "L").crop).toEqual(boxOf(ICONS.items.cage.box));
-  });
-
-  it("never turn a good, which is drawn diagonal", () => {
-    const scrap = itemIconCell("scrap");
-    expect(scrap.view).toBe("diagonal");
-    expect(gridIconFrame(scrap, sideways)).toEqual({ crop: scrap.box, turn: 0 });
+  it("draw every item diagonal, so no icon turns with its box", () => {
+    for (const id of ["longRifle", "stockEngine", "cage", "scrap"]) expect(itemIconCell(id).view).toBe("diagonal");
   });
 });
 
@@ -154,7 +117,7 @@ describe("item tones", () => {
   it("give each item its category's background as --tone", () => {
     expect(["mg", "cage", "panniers", "salt", "stockEngine", "scanner"].map(toneStyle)).toEqual([
       "--tone:#8c3a30",
-      "--tone:#686c6f",
+      "--tone:#4f5458",
       "--tone:#6e5236",
       "--tone:#6e5236",
       "--tone:#35587a",

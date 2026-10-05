@@ -408,9 +408,15 @@ function goodDraft(def: GoodDef): IconDraft {
   return { entry: { id: def.id, section: 'good', label: def.name, models: [partModel(def.id)], footprint: { w: 1, h: 1 }, weapon: null }, hp: 0 };
 }
 
+// The models a garage portrait draws besides the base: the game's bare truck with its suspension and loose parts.
+const PORTRAIT_MODELS: readonly ModelName[] = ['coilover', 'axle', 'antenna', 'tow_chain'];
+
+// A chassis portrait draws the bare truck, so its models are the base, the built-in parts' and PORTRAIT_MODELS.
 function chassisDraft(def: ChassisDef): IconDraft {
   const footprint = { w: def.layout[0].length, h: def.layout.length };
-  return { entry: { id: def.id, section: 'chassis', label: def.name, models: [baseModel(def.id)], footprint, weapon: null }, hp: 0 };
+  const cores = def.core.filter((c) => !BODY_PARTS.has(c.defId)).map((c) => partModel(c.defId));
+  const models = [...new Set([baseModel(def.id), ...cores, ...PORTRAIT_MODELS])];
+  return { entry: { id: def.id, section: 'chassis', label: def.name, models, footprint, weapon: null }, hp: 0 };
 }
 
 function checkUniqueIds(drafts: readonly IconDraft[]): void {

@@ -1,8 +1,8 @@
 // The dev-only icons page that npm run icons drives in headless Chromium. It renders every catalog entry in both views,
 // then lays out the two unlabeled sprite sheets the game reads, the three labeled atlases (top-down, diagonal and the
-// view the game shows), the closest-pairs report and the manifest body. Item tiles sit on their category tone. It checks
-// that weapon barrels read the right way and that line cells keep to the line style's colors.
-// scripts/icons.mjs writes the files and fails on either check.
+// view the game shows), the closest-pairs report and the manifest body. The items sheet is an SVG of vector blueprints,
+// and the chassis sheet a PNG. Item tiles sit on their category tone. It checks that weapon barrels read the right way.
+// scripts/icons.mjs writes the files and fails on the check.
 
 import { CHASSIS } from '../../data/chassis';
 import { GOODS } from '../../data/goods';
@@ -13,20 +13,18 @@ import { loadModels, type ModelName } from '../render/models';
 import {
   barrelReads,
   context,
+  DIAGONAL_PITCH_DEG,
+  DIAGONAL_YAW_DEG,
   hex,
   iconHash,
-  iconStyle,
   iconView,
   ICON_VIEWS,
-  LINE_CELLS,
-  LINE_COLORS,
   MARGIN,
   renderIcon,
   type BarrelRead,
   type IconCategory,
   type IconView,
 } from './render';
-import { styleMisses } from './lines';
 
 const CELL = { items: 128, chassis: 192 };
 const COLS = { items: 16, chassis: 8 };
@@ -48,38 +46,34 @@ const SECTION_TITLES: Record<IconSection, string> = {
 
 // Atlas layout in pixels.
 const ATLAS = { cols: 6, tileW: 300, tileH: 176, big: 128, pad: 12, heading: 44, title: 56 };
-const TOP_CAPTION = 'Top-down, nose up. Items in white lines on their category color';
-const DIAGONAL_CAPTION = 'Diagonal: side view, nose right, 20° toward the rear and 20° up';
-const GAME_CAPTION = 'Equipment top-down, goods and chassis diagonal';
+const TOP_CAPTION = 'Top-down, nose up';
+const DIAGONAL_CAPTION = `Diagonal: side view, nose right, ${DIAGONAL_YAW_DEG}° toward the rear and ${DIAGONAL_PITCH_DEG}° up`;
+const GAME_CAPTION = 'The view the game shows';
 const PANEL = 0x272b2e; // the UI panel color, behind chassis portraits as in the truck shop
 const PAGE = 0x1b1c1d;
 const TEXT = 0xe0d8ca;
 const MUTED = 0xaaa69e;
 
 type Sheet = 'items' | 'chassis';
-type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement> };
+// svg: an item's blueprint in the view the game shows, as an SVG group in cell units. Null for a chassis.
+type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement>; svg: string | null };
 // A drawn extent as shares of the cell: x, y, w, h.
 type Box = [number, number, number, number];
 type Cell = { index: number; hash: string; box: Box };
 type Manifest = {
   cell: Record<Sheet, number>;
   margin: number;
-  lineCells: number;
   cols: Record<Sheet, number>;
   views: Record<IconCategory, IconView>;
   items: Record<string, Cell>;
   chassis: Record<string, Cell>;
 };
 type Orientation = { id: string; ok: boolean; read: BarrelRead };
-// misses: pixels of a line cell, before the downscale, that are neither transparent nor a LINE_COLORS color. inner: its
-// interior line pieces.
-type Style = { id: string; view: IconView; misses: number; inner: number };
 type AtlasSection = { title: string; tiles: { entry: IconEntry; icon: HTMLCanvasElement }[] };
 export type IconBuild = {
   files: Record<string, string>;
   manifest: Manifest;
   orientation: Orientation[];
-  style: Style[];
   report: string;
 };
 
@@ -87,24 +81,20 @@ async function build(): Promise<IconBuild> {
   await loadModels();
   const catalog = iconCatalog(PARTS, GOODS, CHASSIS, ICON_WEAPON_PICKS);
   const bytes = await modelBytes(catalog);
-  const style: Style[] = [];
-  const render = (entry: IconEntry, view: IconView, sheet: Sheet): HTMLCanvasElement => {
-    const { icon, drawn, inner } = renderIcon(entry, view, CELL[sheet]);
-    if (iconStyle(entry) === 'line') style.push({ id: entry.id, view, misses: styleMisses(drawn, LINE_COLORS), inner });
-    return icon;
-  };
   const rendered: Rendered[] = catalog.map((entry) => {
     const sheet: Sheet = entry.section === 'chassis' ? 'chassis' : 'items';
-    return { entry, sheet, views: { top: render(entry, 'top', sheet), diagonal: render(entry, 'diagonal', sheet) } };
+    const top = renderIcon(entry, 'top', CELL[sheet]);
+    const diagonal = renderIcon(entry, 'diagonal', CELL[sheet]);
+    return { entry, sheet, views: { top: top.icon, diagonal: diagonal.icon }, svg: (iconView(entry) === 'top' ? top : diagonal).svg };
   });
   const files: Record<string, string> = {
-    'public/icons/items.png': sheetOf(rendered, 'items').toDataURL('image/png'),
+    'public/icons/items.svg': `data:image/svg+xml;base64,${btoa(svgSheetOf(rendered))}`,
     'public/icons/chassis.png': sheetOf(rendered, 'chassis').toDataURL('image/png'),
     'public/icons/atlas/atlas-top.png': atlasOf(sectionsOf(rendered, () => 'top'), TOP_CAPTION).toDataURL('image/png'),
     'public/icons/atlas/atlas-diagonal.png': atlasOf(sectionsOf(rendered, () => 'diagonal'), DIAGONAL_CAPTION).toDataURL('image/png'),
     'public/icons/atlas/atlas-game.png': atlasOf(sectionsOf(rendered, iconView), GAME_CAPTION).toDataURL('image/png'),
   };
-  return { files, manifest: manifestOf(rendered, bytes), orientation: orientationOf(catalog), style, report: reportOf(rendered) };
+  return { files, manifest: manifestOf(rendered, bytes), orientation: orientationOf(catalog), report: reportOf(rendered) };
 }
 
 async function modelBytes(catalog: readonly IconEntry[]): Promise<Map<ModelName, Uint8Array>> {
@@ -127,6 +117,19 @@ function inSheet(rendered: readonly Rendered[], sheet: Sheet): Rendered[] {
 // A sheet's cells in order, each entry in the view the game shows. manifestOf() numbers them the same way.
 function cellsOf(rendered: readonly Rendered[], sheet: Sheet): HTMLCanvasElement[] {
   return inSheet(rendered, sheet).map((r) => r.views[iconView(r.entry)]);
+}
+
+// The items sheet as one SVG, each blueprint in its cell, in the order manifestOf() numbers them.
+function svgSheetOf(rendered: readonly Rendered[]): string {
+  const items = inSheet(rendered, 'items');
+  const cell = CELL.items;
+  const cols = COLS.items;
+  const cells = items.map((r, i) => {
+    if (r.svg === null) throw new Error(`Item ${r.entry.id} has no blueprint`);
+    return `<g transform="translate(${(i % cols) * cell} ${Math.floor(i / cols) * cell})">${r.svg}</g>`;
+  });
+  const [w, h] = [cols * cell, Math.ceil(items.length / cols) * cell];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${cells.join('')}</svg>\n`;
 }
 
 function sheetOf(rendered: readonly Rendered[], sheet: Sheet): HTMLCanvasElement {
@@ -152,7 +155,6 @@ function manifestOf(rendered: readonly Rendered[], bytes: Map<ModelName, Uint8Ar
   return {
     cell: CELL,
     margin: MARGIN,
-    lineCells: LINE_CELLS,
     cols: COLS,
     views: ICON_VIEWS,
     items: Object.fromEntries(items),

@@ -1,25 +1,25 @@
 Closest item pairs at 36 px by mean RGB difference (0-255), each over its tone.
 
 top:
-    1.0  wheel / wheelMid
-    1.1  tank / tankLong
-    1.7  transmission / transmissionMid
-    1.8  pneumobolter / autocannon
-    1.8  amRifle / recoilless
-    1.9  wheel / wheelHeavy
-    2.1  tankLong / tankHeavy
-    2.1  tank / tankMid
-    2.2  amRifle / sniperCannon
-    2.4  recoilless / tankGun
+    0.0  transmission / transmissionMid
+    0.0  transmission / transmissionHeavy
+    0.0  transmissionMid / transmissionHeavy
+    0.0  wheel / wheelMid
+    0.0  wheel / wheelHeavy
+    0.0  wheelMid / wheelHeavy
+    0.0  tank / tankLong
+    0.0  tank / tankMid
+    0.0  tank / tankHeavy
+    0.0  tankLong / tankMid
 
 diagonal:
-    1.0  transmission / transmissionMid
-    1.2  wheel / wheelMid
-    1.2  tank / tankLong
-    1.4  tankLong / tankHeavy
-    1.6  transmission / transmissionHeavy
-    1.7  tank / tankMid
-    2.1  wheel / wheelHeavy
-    2.5  tank / tankHeavy
-    2.5  transmissionMid / transmissionHeavy
-    2.8  amRifle / sniperCannon
+    0.0  transmission / transmissionMid
+    0.0  transmission / transmissionHeavy
+    0.0  transmissionMid / transmissionHeavy
+    0.0  wheel / wheelMid
+    0.0  wheel / wheelHeavy
+    0.0  wheelMid / wheelHeavy
+    0.0  tank / tankLong
+    0.0  tank / tankMid
+    0.0  tank / tankHeavy
+    0.0  tankLong / tankMid
