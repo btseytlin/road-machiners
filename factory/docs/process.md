@@ -65,6 +65,14 @@ Members talk to the bot in the committee chat. The Hermes plugin turns commands 
 
 A reply that gets no route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a failure, so Hermes sees it.
 
+A patch or a redesign queues only when the issue has what the next stage reads. The plugin checks this in code, for Hermes's route and for a member's `patch:` or `redesign:` reply. If anything is missing it queues nothing and tells Hermes or the member what to get.
+
+- Every image the member sent in Telegram is on the issue. Telegram files stay in Hermes's cache and no tool can attach them, so the member uploads them as a comment on the issue.
+- Every image the issue shows, and every image the reply links, downloads under the fetch rules of `src/media.ts`. A link on another host, or one that fails, is refused.
+- The text has at least `FACTORY_ROUTE_MIN_WORDS` words, so it names what to change.
+
+A reference that arrives while the card is in Design waits. The running design already read its images, so nothing interrupts it. The next stage reads every image on the issue again, and a member who needs the design to see it replies `redesign:` at the approval post.
+
 ## Branches
 
 Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes at once. Steps that move several branches push them in one atomic push, so a conflict moves nothing.

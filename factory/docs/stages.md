@@ -58,6 +58,8 @@ A rerun of design, implementation and testing costs hours, so a reply takes the 
 - patch: the card moves to Implementation, and `patching` keeps the commit of the played build. The patch job runs Sonnet with `prompts/patch.md`. It merges the base, applies the reply, checks only the diff since the played build and writes new approval text and evidence. Then the card goes to Testing in phase `checks`. An agent that finds the plan must change writes `.factory/needs-redesign.md`, and the card goes to Design.
 - redesign: the card goes to Design.
 
+Before a patch or a redesign queues, the plugin checks the issue as [process.md](process.md#committee-inputs) says. A refusal queues nothing and names what to get from the member.
+
 A patch or a redesign goes on the issue under "## Committee feedback", closes the post and drops a queued approval. Every route adds a line to the ledger.
 
 ## Release
