@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
 import { engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
-import type { SoundPlayer } from "../audio/player";
-import { accentOf, CombatScore, CombatWatch, engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
+import type { Glide, SoundPlayer } from "../audio/player";
+import { accentOf, CombatScore, CombatWatch, engineGlide, EngineStrain, loopLevels, SoundDirector, SoundLoops, stingOf, strainGlides } from "./sound";
 import type { CameraRig } from "./render/camera";
 
 describe("stingOf", () => {
@@ -98,24 +98,112 @@ describe("engine sound assignment", () => {
     expect(() => engineStrainFileFor("unknown")).toThrow("Unknown chassis");
   });
 
-  it("changes the engine loop only when the chassis changes", () => {
+  it("changes the healthy and strained engine loops together, and only when the chassis changes", () => {
     const started: string[] = [];
-    const stopped: number[] = [];
+    const stopped: string[] = [];
+    const glides: Record<string, Glide[]> = {};
     const player = {
       loop: (id: string, _at: unknown, file?: string) => {
-        if (id === "engine") started.push(file ?? "random");
-        return { glide: () => {}, once: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
+        const name = file ?? id;
+        if (id === "engine" || id === "engine-strain") started.push(name);
+        return {
+          glide: (g: Glide) => (glides[name] ??= []).push(g),
+          once: () => {},
+          setGain: () => {},
+          stop: () => stopped.push(name),
+        };
       },
     } as unknown as SoundPlayer;
     const loops = new SoundLoops(player, { setCombat: () => {}, setPaused: () => {}, tick: () => {} });
     const glide = engineGlide(0, 10, 1, MIX, false)!;
 
-    loops.drive(glide, "scout");
-    loops.drive(glide, "scout");
-    loops.drive(glide, "hauler");
+    loops.drive(glide, "scout", { from: 0, to: 0 });
+    loops.drive(glide, "scout", { from: 1, to: 1 });
+    loops.drive(glide, "scout", { from: 1, to: 0.5 });
+    loops.drive(glide, "hauler", { from: 0, to: 0 });
 
-    expect(started).toEqual([engineFileFor("scout"), engineFileFor("hauler")]);
-    expect(stopped).toEqual([0]);
+    expect(started).toEqual([
+      engineFileFor("scout"),
+      engineStrainFileFor("scout"),
+      engineFileFor("hauler"),
+      engineStrainFileFor("hauler"),
+    ]);
+    expect(stopped).toEqual([engineFileFor("scout"), engineStrainFileFor("scout")]);
+    expect(glides[engineFileFor("scout")].map((g) => g.gainFrom)).toEqual([glide.gainFrom, 0, 0]);
+    expect(glides[engineStrainFileFor("scout")].map((g) => g.gainFrom)).toEqual([0, glide.gainFrom, glide.gainFrom]);
+  });
+
+  it("plays the strained engine on the same bus and level as the engine, so mute and volume match", () => {
+    expect(SOUNDS["engine-strain"].bus).toBe(SOUNDS.engine.bus);
+    expect(SOUNDS["engine-strain"].volume).toBe(SOUNDS.engine.volume);
+    expect(SOUNDS["engine-strain"].loop).toBe(true);
+  });
+});
+
+describe("engine strain", () => {
+  const run = (turns: [number, boolean][]) => {
+    const strain = new EngineStrain();
+    return turns.map(([turn, damaging]) => strain.next(turn, damaging));
+  };
+
+  it("strains fully from the start of the first damaging turn", () => {
+    expect(run([[5, true]])).toEqual([{ from: 1, to: 1 }]);
+  });
+
+  it("falls back to healthy over two turns once damage stops, then stays healthy", () => {
+    expect(run([[1, true], [2, false], [3, false], [4, false]])).toEqual([
+      { from: 1, to: 1 },
+      { from: 1, to: 1 - MIX.engine.strainRelease },
+      { from: 0.5, to: 0 },
+      { from: 0, to: 0 },
+    ]);
+  });
+
+  it("never drops to none and back to full when damage flips every turn", () => {
+    const levels = run([[1, true], [2, false], [3, true], [4, false]]);
+    expect(levels.map((s) => s.to)).toEqual([1, 0.5, 1, 0.5]);
+    expect(levels.every((s) => s.from > 0)).toBe(true);
+  });
+
+  it("starts healthy after a gap in turns, like a parked turn or a loaded save", () => {
+    expect(run([[1, true], [3, false]])).toEqual([{ from: 1, to: 1 }, { from: 0, to: 0 }]);
+    expect(run([[9, true], [2, false]])).toEqual([{ from: 1, to: 1 }, { from: 0, to: 0 }]);
+  });
+
+  it("never strains a turn without heat damage", () => {
+    expect(run([[1, false], [2, false], [3, false]]).every((s) => s.from === 0 && s.to === 0)).toBe(true);
+  });
+});
+
+describe("strainGlides", () => {
+  const g = engineGlide(5, 15, 1, MIX, true)!;
+
+  it("splits the engine level between the layers and keeps both rates", () => {
+    const { healthy, strained } = strainGlides(g, { from: 1, to: 0.5 });
+    expect(healthy.gainFrom + strained.gainFrom).toBeCloseTo(g.gainFrom);
+    expect(healthy.gainTo + strained.gainTo).toBeCloseTo(g.gainTo);
+    expect(strained.gainFrom).toBeCloseTo(g.gainFrom);
+    expect(strained.gainTo).toBeCloseTo(g.gainTo / 2);
+    for (const layer of [healthy, strained]) {
+      expect([layer.rateFrom, layer.rateTo, layer.seconds, layer.fadeSeconds]).toEqual([g.rateFrom, g.rateTo, g.seconds, g.fadeSeconds]);
+    }
+  });
+
+  it("leaves the strained layer silent without strain", () => {
+    const { healthy, strained } = strainGlides(g, { from: 0, to: 0 });
+    expect([strained.gainFrom, strained.gainTo]).toEqual([0, 0]);
+    expect([healthy.gainFrom, healthy.gainTo]).toEqual([g.gainFrom, g.gainTo]);
+  });
+});
+
+describe("engine strain log", () => {
+  it("logs strain only on turns that have some", () => {
+    const rig: Pick<CameraRig, "focus" | "screenOf"> = { focus: () => ({ x: 0, y: 0, z: 0 }), screenOf: () => ({ x: 0, y: 0 }) };
+    const director = new SoundDirector({ play: () => {} }, rig, { accent: () => null });
+    director.engineStrain({ from: 0, to: 0 });
+    director.engineStrain({ from: 1, to: 0.5 });
+    director.engineStrain({ from: 0.5, to: 0 });
+    expect(director.log).toEqual(["engine-strain 1.0->0.5", "engine-strain 0.5->0.0"]);
   });
 });
 

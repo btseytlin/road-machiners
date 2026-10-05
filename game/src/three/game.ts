@@ -24,7 +24,7 @@ import {
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 
-import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
+import { inOverdrive, isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route } from "../sim/path";
 import type { Vehicle, World } from "../sim/types";
@@ -33,6 +33,7 @@ import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import { inCombat } from "../sim/combat";
+import { engineOverheating } from "../sim/engine-heat";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckContext, TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
@@ -75,7 +76,7 @@ import { SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedN
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { CombatScore, CombatWatch, computeEngineGlide, EngineStrain, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { isBrowserChord, uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
@@ -134,6 +135,7 @@ export class Game {
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
   private readonly combatWatch = new CombatWatch();
+  private readonly engineStrain = new EngineStrain();
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -768,10 +770,13 @@ export class Game {
   }
 
   private playDriveSound(result: TurnResult): void {
-    const frames = result.frames[playerVehicle(this.world).id];
-    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, this.world.player.overdrive);
+    const me = playerVehicle(this.world);
+    const frames = result.frames[me.id];
+    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, inOverdrive(this.world, me));
     if (!g) return;
-    this.loops.drive(g, playerVehicle(this.world).chassisId);
+    const strain = this.engineStrain.next(this.world.turn, engineOverheating(this.world));
+    this.loops.drive(g, me.chassisId, strain);
+    this.sound.engineStrain(strain);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
   }
 

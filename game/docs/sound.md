@@ -16,7 +16,7 @@ Four buses feed the master: `ui`, `sfx`, `ambient` and `music`. Each has a playe
 
 - World sounds, like guns, hits and crashes, play where they happen. Pan follows the screen position, and level halves at `MIX.halfGainMeters` from the camera focus. They use the same points as the visual effects, so fog of war silences what the player cannot see.
 - Each turn plays at most one result sting, the most important one: defeat, level-up, discovery or money.
-- The engine is one recorded loop per chassis. Its pitch and level follow speed over the turn, so speeding up revs and braking drops. Continuous sounds are always bent loops like this, never short clips per state.
+- The engine is one recorded loop per chassis. Its pitch and level follow speed over the turn, so speeding up revs and braking drops. Continuous sounds are always bent loops like this, never short clips per state. While heat damages the engine, the loop crossfades to a strained copy of the same recording, started with it and bent the same way, and falls back to the healthy note over two turns once the damage stops. The ffmpeg recipe for the strained copies lives in `sounds.ts`.
 - A hard slowdown adds the air brake where the truck is. Passing or reaching an order point makes no sound of its own.
 - Wind rises near dust storms.
 - Calm music plays out of combat. After each fight it comes back as a new random track.
