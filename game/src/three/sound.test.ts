@@ -187,7 +187,7 @@ describe("CombatWatch", () => {
 });
 
 describe("CombatScore", () => {
-  type BaseId = "score-drums" | "score-bass" | "score-horns";
+  type BaseId = "score-drums" | "score-bass" | "score-horns" | "score-trombone";
   type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
   type Play = [string, { pan: number; gain: number }, number, { file: string; rate: number }?];
   const fakePlayer = () => {
@@ -227,7 +227,7 @@ describe("CombatScore", () => {
   it("starts every base silent at one time, each at its first beat", () => {
     const { player, loops } = fakePlayer();
     new CombatScore(player, () => 0);
-    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass", "score-horns"]);
+    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass", "score-horns", "score-trombone"]);
     expect(new Set(loops.map((l) => l.when)).size).toBe(1);
     expect(loops.map((l) => l.offset)).toEqual(loops.map((l) => scorePhaseOf(l.file)));
     expect(loops.every((l) => l.gains.length === 0)).toBe(true);
@@ -235,13 +235,13 @@ describe("CombatScore", () => {
 
   it("plays one random base per battle, quiet and muffled with no heat, and fades it out after", () => {
     const { player, loops } = fakePlayer();
-    const rolls = [0.5, 0, 0, 0.1];
+    const rolls = [0.3, 0, 0, 0.1];
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
     score.setCombat(true, 3);
     score.setCombat(true, 3);
     score.setCombat(false, 3);
     score.setCombat(true, 3);
-    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0], []]);
+    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0], [], []]);
     expect(loops[1].tones).toEqual([s.quietCutoffHz]);
   });
 
