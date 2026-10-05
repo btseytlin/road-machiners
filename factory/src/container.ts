@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
-import { appendUsage, usageFromOutput } from './ledger';
+import { closeRun, closeRunFromTranscript, openRun, runProjectsDir, usageFromOutput } from './ledger';
 import { withLock } from './lock';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
 
@@ -93,18 +94,35 @@ function effortArgs(effort: string | undefined): string[] {
   return effort === undefined ? [] : ['--effort', effort];
 }
 
-// A finished run must report its cost. A failed run may have died before its result event, and then it records nothing.
-function recordUsage(home: string, jobId: string, result: RunResult, model: string, resumed: boolean): void {
-  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
-  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
+// A finished run must report its cost, and one that does not fails its job, which then prices the run from its transcript.
+// A failed run may have died before its result event, and then its transcript prices it at once.
+function recordUsage(cfg: FactoryConfig, jobId: string | null, result: RunResult, model: string, session: AgentSession | undefined): void {
+  if (jobId === null) return;
+  if (result.code === 0 || result.stdout.includes('"type":"result"')) return closeRun(cfg.home, jobId, usageFromOutput(result.stdout, model, session?.resume ?? false));
+  closeRunFromTranscript(cfg.home, jobId, cfg.tokenPrices, new Date());
+}
+
+// A run by hand has no job id and records no usage.
+function openRecordedRun(cfg: FactoryConfig, jobId: string | null, model: string, session: AgentSession | undefined): void {
+  if (jobId === null || session === undefined) return;
+  openRun(cfg.home, jobId, { model, projects: session.dir, sessionId: session.id, resumed: session.resume, startedAt: new Date().toISOString() });
+}
+
+// Every run of a job keeps its transcript on the host. A run with no issue session gets one of its own that lives until the run is priced.
+function recordedSession(cfg: FactoryConfig, jobId: string | null, session: AgentSession | undefined): AgentSession | undefined {
+  if (session !== undefined || jobId === null) return session;
+  const dir = runProjectsDir(cfg.home, jobId);
+  mkdirSync(dir, { recursive: true });
+  return { dir, id: randomUUID(), resume: false };
 }
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill, effort }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session: issueSession, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
+      const session = recordedSession(cfg, jobId, issueSession);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
       const env = {
@@ -117,8 +135,9 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
+      openRecordedRun(cfg, jobId, model, session);
       const result = await run('docker', args, { env, input, logPath: log });
-      if (jobId !== null) recordUsage(cfg.home, jobId, result, model, session?.resume ?? false);
+      recordUsage(cfg, jobId, result, model, session);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {

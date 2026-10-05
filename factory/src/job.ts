@@ -65,7 +65,7 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
     await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
     await noteProgress(ctx, stage, issue, job, 'failed');
   } finally {
-    recordJob(ctx.cfg.home, ctx.now(), entry, outcome);
+    recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), entry, outcome);
     clearJob(ctx, stage, issue);
     clearSessionsOf(ctx, stage, issue);
   }

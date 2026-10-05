@@ -7,7 +7,7 @@ const FULL = {
   FACTORY_OBSERVATION_HEARTBEAT_MS: '10000', FACTORY_OBSERVATION_MAX_EVENT_BYTES: '1048576',
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
   FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', FACTORY_GPU: 'on', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
-  FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
+  FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5/8 sonnet=2/10/0.2/2.5/4', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_TRIAGE_TIMEOUT_MINUTES: '30', FACTORY_DESIGN_TIMEOUT_MINUTES: '135', FACTORY_IMPLEMENT_TIMEOUT_MINUTES: '330', FACTORY_VERIFY_TIMEOUT_MINUTES: '240',
   FACTORY_TEST_TIMEOUT_MINUTES: '90', FACTORY_BRANCH_TIMEOUT_MINUTES: '60',FACTORY_REPLY_ROUTE_MINUTES: '15', FACTORY_RELEASE_DAYS: '7', FACTORY_WASTE_REVIEW_DAYS: '7',
@@ -31,6 +31,12 @@ describe('loadConfig', () => {
     expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.verifyWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1, 1]);
     expect(cfg.triageEffort).toBe('low');
     expect([cfg.minFreeGb, cfg.minAvailableGb, cfg.logDays]).toEqual([5, 1, 14]);
+  });
+
+  it('reads token prices per model and requires one for each model the factory picks', () => {
+    expect(loadConfig(FULL).tokenPrices.opus).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 });
+    expect(() => loadConfig({ ...FULL, FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5/8' })).toThrow('no price for sonnet');
+    expect(() => loadConfig({ ...FULL, FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5 sonnet=2/10/0.2/2.5/4' })).toThrow('entry "opus=4/20/0.2/5"');
   });
 
   it('names every missing key', () => {
