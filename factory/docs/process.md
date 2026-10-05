@@ -17,7 +17,7 @@ The public files and votes on GitHub issues. Agents design, build and test the t
 
 ## Card lifecycle
 
-A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it.
+A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it. Hardening is slow, so it runs only on work the committee wants.
 
 ![Card lifecycle](diagrams/lifecycle.svg)
 
