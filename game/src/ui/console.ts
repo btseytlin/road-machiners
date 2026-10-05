@@ -16,6 +16,7 @@ import {
   randomKit,
   repairAll,
   revealMap,
+  setEngineHeat,
   setFuel,
   setHealth,
   setMoney,
@@ -98,6 +99,7 @@ export const COMMANDS: readonly Command[] = [
   setter("fuel", "Set fuel, capped by the tanks.", setFuel),
   setter("supplies", "Set supplies, capped by the storage.", setSupplies),
   setter("health", "Set driver health.", setHealth),
+  setter("engineheat", "Set engine heat, 0 cold to 1 overheated.", setEngineHeat),
   command("xp <skill> <n>", "Add XP to a skill.", { min: 2, max: 2 }, (world, [skill, text], usage) => {
     const n = parseNumber(text, usage);
     return changed(addSkillXp(world, skill, n), `${skill} XP added: ${n}`);

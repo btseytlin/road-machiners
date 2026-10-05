@@ -10,7 +10,7 @@ import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
   addSkillXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
-  repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
+  repairAll, revealMap, setEngineHeat, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
@@ -45,6 +45,14 @@ describe('resource cheats', () => {
     expect(() => addSkillXp(w, 'driving', Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
+  });
+
+  it('sets engine heat from cold to overheated and rejects values outside', () => {
+    expect(setEngineHeat(emptyWorld(), 1).player.engineHeat).toBe(1);
+    expect(setEngineHeat(emptyWorld(), 0.8).player.engineHeat).toBe(0.8);
+    expect(() => setEngineHeat(emptyWorld(), 1.5)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), -0.1)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), Number.NaN)).toThrow(CheatError);
   });
 
   it('sets fractional fuel and supplies up to their caps', () => {
