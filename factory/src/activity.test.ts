@@ -52,3 +52,14 @@ it('recognizes machine check steps and rejects arbitrary status text', () => {
   expect(activity.readActivityLine(JSON.stringify(toolResult))).toEqual({ milestone: 'reviewing', source: 'agent' });
   expect(activity.readActivityLine('PRIVATE prompt and secrets')).toBeNull();
 });
+
+it('finds a milestone in chained command output, as agents send it in the factory', () => {
+  // Shape copied from a factory job log: `factory-status reading; factory-status milestone understanding; wc -l ...`.
+  const text = '{"type":"factory_status","activity":"reading"}\n{"type":"factory_status","milestone":"understanding"}\n  120 .factory-tasks/issue-157.md\nPRIVATE {"type":"factory_status","milestone":"planning"}\n';
+  const chained = { type: 'user', message: { content: [{ type: 'tool_result', content: text }] } };
+  expect(activity.readActivityLine(JSON.stringify(chained))).toEqual({ milestone: 'understanding', source: 'agent' });
+  const activityOnly = { type: 'user', message: { content: [{ type: 'tool_result', content: '{"type":"factory_status","activity":"investigate"}\n ✓ src/fog.test.ts (3 tests)' }] } };
+  expect(activity.readActivityLine(JSON.stringify(activityOnly))).toEqual({ activity: 'investigate', source: 'agent' });
+  const plain = { type: 'user', message: { content: [{ type: 'tool_result', content: 'tests passed' }] } };
+  expect(activity.readActivityLine(JSON.stringify(plain))).toEqual({ activity: 'model', source: 'runner' });
+});

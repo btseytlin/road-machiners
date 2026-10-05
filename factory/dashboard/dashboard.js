@@ -29,7 +29,7 @@ function formatDuration(ms) {
 function formatAge(at) {
   if (!at) return 'unknown';
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000));
-  return seconds < 60 ? `${seconds}s` : formatDuration(seconds * 1000);
+  return seconds < 60 ? '<1m' : formatDuration(seconds * 1000);
 }
 function countInputTokens(tokens) { return tokens == null ? null : tokens.input + tokens.cacheRead + tokens.cacheWrite; }
 function countTokens(tokens) { return tokens == null ? null : countInputTokens(tokens) + tokens.output; }
@@ -249,7 +249,6 @@ function renderManager() {
   const live = readLive();
   const manager = live?.manager;
   setText('manager-action', readManagerAction(manager));
-  setText('manager-age', manager ? `Reported ${formatAge(manager.at)} ago` : '');
 }
 function createReading(label, value) { const node = createNode('div'); node.append(createNode('span', label), createNode('strong', value)); return node; }
 function readRam(host) { const ram = host.ram.value; return ram ? `${(ram.used / 1073741824).toFixed(1)} / ${formatBytes(ram.total)}` : '—'; }
@@ -269,7 +268,6 @@ function formatMemory(value) {
 function readResourceTitle(job) { return job.issue === null ? stages[job.stage] : `#${job.issue}`; }
 function renderServer() {
   const host = snapshot.host.value;
-  setText('server-age', `Sampled ${formatAge(snapshot.host.at)} ago`);
   replaceContents('server-totals', createServerTotals(host));
   const containers = host?.containers?.value;
   const rows = containers ? [...containers].sort((a, b) => b.cpu - a.cpu) : [];
@@ -362,6 +360,17 @@ function readSegmentLabel(key) {
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
 const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
+// Matches the #full-text detail popup: dark panel, gold border, readable body text. Lists every segment of the hovered bar, largest first, then the total.
+const usageTooltip = {
+  backgroundColor: '#171c1f', borderColor: '#dac7a2', borderWidth: 1, cornerRadius: 0, padding: 12, boxPadding: 6,
+  titleColor: '#dac7a2', titleFont: { family: 'Plex', size: 12 }, bodyColor: '#e0d8ca', bodyFont: { family: 'Barlow', size: 15 }, footerColor: '#e0d8ca', footerFont: { family: 'Barlow', size: 15, weight: 'bold' },
+  filter: (item) => item.raw !== null && item.raw > 0,
+  itemSort: (a, b) => b.raw - a.raw,
+  callbacks: {
+    label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}`,
+    footer: (items) => `Total: ${formatUsageValue(items.reduce((sum, item) => sum + item.raw, 0))}`,
+  },
+};
 let usageChart = null;
 function createUsageChart() {
   Chart.defaults.color = '#a5aaa7';
@@ -370,7 +379,8 @@ function createUsageChart() {
   return new Chart(getElement('usage-chart'), { type: 'bar', data: { labels: [], datasets: [] }, options: {
     animation: false, maintainAspectRatio: false,
     scales: { x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0 } }, y: { stacked: true, grid: { color: '#424d52' }, ticks: { callback: (value) => formatUsageValue(value) } } },
-    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatUsageValue(item.raw)}` } } },
+    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Barlow', size: 12 } } }, tooltip: usageTooltip },
+    interaction: { mode: 'index', intersect: false },
   } });
 }
 function renderUsageChart(summary) {
@@ -469,7 +479,8 @@ function readPauseNotice() {
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
-  setText('connection', connected ? `Updated ${formatAge(snapshot.generatedAt)} ago` : 'Reconnecting');
+  // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
+  setText('connection', connected ? 'Live' : 'Reconnecting');
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
   const pause = readPauseNotice();
