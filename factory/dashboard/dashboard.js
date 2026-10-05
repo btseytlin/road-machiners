@@ -1,6 +1,5 @@
 const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const milestones = { understanding: 'Understanding task', planning: 'Planning approach', implementing: 'Making changes', validating: 'Checking changes', reviewing: 'Reviewing result', 'preparing-release': 'Preparing release' };
 const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
 const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
@@ -104,7 +103,7 @@ function readDoing(activity) {
   return formatActivity(activity);
 }
 function formatActivity(activity) {
-  if (activity.milestone) return `${milestones[activity.milestone]}: ${actions[activity.activity].toLowerCase()}`;
+  if (activity.milestone) return `${activity.milestone}: ${actions[activity.activity].toLowerCase()}`;
   return actions[activity.activity];
 }
 function createWorkerRow(job) {

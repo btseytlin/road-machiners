@@ -78,8 +78,14 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not send notes, paths, prompts or secrets. Report only when the milestone changes, without extra narration.`;
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${LONG_JOBS_NOTE}`;
 }
+
+// The public dashboard shows the milestone beside the activity, so a reader sees which part of the card is in work.
+const MILESTONE_NOTE = 'Each time you start a new part of the work, run factory-status milestone \'<step>\' with a short step in the card\'s words, like \'Building orchard buildings\' or \'Testing the tow fee\'. Use 3 to 80 letters, digits, spaces and , . \' - only. Never name files, commands or secrets.';
+
+// Background tasks are off, and a sleep loop on a stuck command lost hours. factory-job runs a long command under a time limit and reports its activity on each check.
+const LONG_JOBS_NOTE = 'Start a command that may run longer than 5 minutes with factory-job start <name> <activity> <minutes> \'<command>\', with a time limit of about twice its expected run. Then check it with sleep 240; factory-job check <name>, with a Bash timeout of 5 minutes, until it ends. If its log has not changed for 15 minutes, stop it with factory-job stop <name> and find out why. Never end your run while a job is running, since the end of the run kills it.';
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
 function sessionMount(session: AgentSession | undefined): string[] {
