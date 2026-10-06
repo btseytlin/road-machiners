@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path';
 
 export type DashboardConfig = {
-  home: string; repo: string; projectOwner: string; projectNumber: number; publicUrl: string;
+  home: string; repo: string; projectOwner: string; projectNumber: number; githubRetries: number; githubRetryBaseSeconds: number; publicUrl: string;
   playUrl: string; channelUrl: string | null; publicChannel: string | null; socket: string | null; port: number | null;
   refreshMs: number; githubRefreshMs: number; commandTimeoutMs: number; observationHeartbeatMs: number; tickIntervalMs: number;
   triageWorkers: number; designWorkers: number; implementWorkers: number; verifyWorkers: number; testWorkers: number;
@@ -56,6 +56,7 @@ export function loadDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig {
     repo: requireMatch(requireValue(env, 'FACTORY_REPO'), /^[\w.-]+\/[\w.-]+$/, 'FACTORY_REPO'),
     projectOwner: requireMatch(requireValue(env, 'FACTORY_PROJECT_OWNER'), /^[\w-]+$/, 'FACTORY_PROJECT_OWNER'),
     projectNumber: readPositive(env, 'FACTORY_PROJECT_NUMBER'), publicUrl: readPublicUrl(env),
+    githubRetries: readPositive(env, 'FACTORY_GITHUB_RETRIES'), githubRetryBaseSeconds: readPositive(env, 'FACTORY_GITHUB_RETRY_BASE_SECONDS'),
     playUrl: `https://${target[0]}.itch.io/${target[1]}`,
     ...readChannel(env),
     ...readListener(env), refreshMs: readPositive(env, 'DASHBOARD_REFRESH_MS'), githubRefreshMs: readPositive(env, 'DASHBOARD_GITHUB_REFRESH_MS'),

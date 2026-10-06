@@ -20,6 +20,8 @@ const KEYS = {
   repo: 'FACTORY_REPO',
   projectOwner: 'FACTORY_PROJECT_OWNER',
   projectNumber: 'FACTORY_PROJECT_NUMBER',
+  githubRetries: 'FACTORY_GITHUB_RETRIES',
+  githubRetryBaseSeconds: 'FACTORY_GITHUB_RETRY_BASE_SECONDS',
   home: 'FACTORY_HOME',
   webRoot: 'FACTORY_WEB_ROOT',
   publicUrl: 'FACTORY_PUBLIC_URL',
@@ -67,7 +69,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'githubRetries', 'githubRetryBaseSeconds', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

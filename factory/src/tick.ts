@@ -353,11 +353,16 @@ async function settleRouting(ctx: Ctx): Promise<void> {
   if (readState(ctx.statePath).lastWasteReview === null) updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: ctx.now().toISOString() }));
 }
 
-// One tick: check the running jobs, run intake, clean old builds, clones and logs, then start every job that fits while the disk has room. `deps` defaults to the real process control.
+// One tick: check the running jobs, clean old builds, clones and logs, start every job that fits while the disk has room, then run intake. `deps` defaults to the real process control.
+// Intake runs last, so a failed intake never holds back a job, like the factory change that would fix it. A card it adds starts on the next tick.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await settleRouting(ctx);
+  await startJobs(ctx, codeDir, deps);
   await intake(ctx);
+}
+
+async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
   cleanWork(ctx, cards);

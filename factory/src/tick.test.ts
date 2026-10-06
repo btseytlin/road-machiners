@@ -403,7 +403,14 @@ describe('tick', () => {
     expect(h.sent).toEqual([]);
   });
 
-  it('deletes builds outside Approval after intake, keeping dev', async () => {
+  it('starts jobs before intake, so a failed intake still fails the tick but holds back no job', async () => {
+    const h = harness(null, true, [card(8, 'Design')]);
+    h.ctx.github.candidates = async () => { throw new Error('HTTP 403: API rate limit exceeded'); };
+    await expect(tick(h.ctx, '/code', h.deps)).rejects.toThrow('rate limit');
+    expect(args(h)).toEqual([['design', '8']]);
+  });
+
+  it('deletes builds outside Approval, keeping dev', async () => {
     const h = harness(null, false, [card(8, 'Approval'), card(9, 'Done')]);
     const web = h.ctx.cfg.webRoot;
     for (const name of ['dev', 'aaa1111', 'bbb2222', 'ccc3333']) mkdirSync(join(web, name), { recursive: true });

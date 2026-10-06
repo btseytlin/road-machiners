@@ -32,7 +32,7 @@ A job whose process dies within its time limit resumes once. This covers a crash
 
 ## Cleanup and health
 
-Every tick, after intake:
+Every tick, after it checks the running jobs:
 
 - It deletes each folder in the web root except `dev`, `concepts` and the builds of cards in Approval. It skips this while a checks or branch job runs, since those deploy builds.
 - It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, and `release-candidate` with no release open. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
@@ -43,6 +43,8 @@ Every tick writes `$FACTORY_HOME/health` with its time, the free disk and the av
 When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`, so a merge made outside the factory reaches the dev link too. A failed build records its commit in `devFailed`, and the tick skips it until `dev` moves again.
 
 ## Failures and Hermes
+
+Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once.
 
 A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
