@@ -6,6 +6,8 @@ import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
+import { SALVAGE } from '../data/salvage';
+import { collectSalvage } from './salvage';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
@@ -642,6 +644,31 @@ describe('salvage on the way', () => {
     w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
     return { w, npc };
   }
+
+  // The same driver with a robbery leftover in sight: a pile that nobody claims any more.
+  function passingPile(traits: TraitId[]) {
+    const { w, npc } = passingWreck(traits);
+    w.salvage = [{ id: 'dump-v77-10', pos: { x: 14, y: 10 }, radius: 0.6, goods: { salt: 30 }, parts: [], pile: { until: w.turn + SALVAGE.pileTurns, fromPlayer: false, basis: {} } }];
+    return { w, npc, pile: w.salvage[0] };
+  }
+
+  it('a scavenger passing a leftover pile loots it', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc, pile } = passingPile(['scavenger']);
+    thinkNpc(w, npc);
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', targetId: pile.id });
+    npc.pos = { x: 14, y: 10.5 };
+    npc.speed = 0;
+    const took = collectSalvage(w, npc, pile.id, 5);
+    expect(took).toBeGreaterThan(0);
+    expect(goodsCount(npc).salt).toBe(took);
+    expect(pile.goods.salt).toBe(30 - took);
+  });
+
+  it('a trader keeps on past a leftover pile for its trait weight', () => {
+    const { w, npc, pile } = passingPile(['trader']);
+    expect(optionChances(optionWeights(w, npc, 'salvageSeen', pile.id, null)).loot).toBeCloseTo(MIN_CHANCE);
+  });
 
   it('a scavenger mostly stops, and a trader rarely does', () => {
     const scavenger = passingWreck(['scavenger']);

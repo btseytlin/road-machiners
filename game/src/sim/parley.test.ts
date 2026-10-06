@@ -11,9 +11,9 @@ import { advanceJobs } from './jobs';
 import { makePart } from './factory';
 import { RULES } from '../data/rules';
 import { takeAllLoot } from './locations';
-import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { finishGoal, pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
-import { makePeace, plead, surrenderTo, yieldTo } from './parley';
+import { makePeace, plead, surrenderTo, warnedOff, yieldTo } from './parley';
 import { claimantOf, clearPiles, dumpOnPile, hasCargo, lootBlocker, looterOf, salvageUnits } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
@@ -522,6 +522,21 @@ describe('pile claims', () => {
     expect(visibleSalvage(w, other)).toContain(pile);
     pile.pile!.claim!.warned.push(other.id);
     expect(visibleSalvage(w, other)).not.toContain(pile);
+  });
+
+  it('a lapsed claim opens the pile to passers', () => {
+    const { w, robber, pile } = handover('npc');
+    const other = npcAt(w, 'scavengers', ['scavenger'], 34);
+    pile.pile!.claim!.warned.push(other.id);
+    clearPiles(w);
+    expect(claimantOf(w, pile)).toBe(robber);
+    expect(visibleSalvage(w, other)).not.toContain(pile);
+    finishGoal(w, robber, 'cargo cannot hold salvage');
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeUndefined();
+    expect(w.salvage).toContain(pile);
+    expect(visibleSalvage(w, other)).toContain(pile);
+    expect(warnedOff(w, other, pile)).toBe(false);
   });
 });
 
