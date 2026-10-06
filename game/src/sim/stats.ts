@@ -64,6 +64,79 @@ export function isStranded(world: World, v: Vehicle): boolean {
   return !hasWorkingEngine(v) || !isWorking(corePart(v, 'transmission')) || getResources(world, v).fuel <= 0;
 }
 
+// One step of the max-speed rule, with the speed after it. A reader follows the chain from the first step to the last.
+export type SpeedStep =
+  | { kind: 'chassis'; base: number; speed: number }
+  | { kind: 'engine'; bonus: number; worn: boolean; speed: number }
+  | { kind: 'load'; factor: number; mass: number; rated: number; speed: number }
+  | { kind: 'guns'; draw: number; capacity: number; factor: number; capped: boolean; speed: number }
+  | { kind: 'wheels'; broken: number; factor: number; speed: number }
+  | { kind: 'floor'; speed: number }
+  | { kind: 'overdrive'; factor: number; speed: number }
+  | { kind: 'transmission'; speed: number }
+  | { kind: 'limp'; cause: 'noEngine' | 'brokenEngine' | 'stalled'; skill: number; speed: number }
+  | { kind: 'weather'; factor: number; speed: number }
+  | { kind: 'towing'; factor: number; speed: number };
+
+// The only max-speed rule. vehicleStats takes its last step, so the HUD breakdown and the number cannot drift apart.
+export function maxSpeedSteps(world: World, v: Vehicle): SpeedStep[] {
+  const limpSpeed = limpSpeedOf(world, v);
+  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed.
+  const steps = hasWorkingEngine(v) && !isStalled(world, v) ? drivingSteps(world, v, limpSpeed) : [limpStep(v, limpSpeed)];
+  let speed = steps[steps.length - 1].speed;
+  const weather = weatherAt(world, v.pos).speed;
+  if (weather !== 1) {
+    speed *= weather;
+    steps.push({ kind: 'weather', factor: weather, speed });
+  }
+  // A tower drives with care while a truck hangs on its rope.
+  if (isTowing(world, v.id)) steps.push({ kind: 'towing', factor: TOW.speedShare, speed: speed * TOW.speedShare });
+  return steps;
+}
+
+function limpStep(v: Vehicle, limpSpeed: number): SpeedStep {
+  const cause = mountedParts(v, 'engine').length === 0 ? 'noEngine' : !hasWorkingEngine(v) ? 'brokenEngine' : 'stalled';
+  return { kind: 'limp', cause, skill: limpSpeed / RULES.limpSpeed - 1, speed: limpSpeed };
+}
+
+// Chassis, engine, load, wheels and guns, then the floor, overdrive and transmission limits.
+function drivingSteps(world: World, v: Vehicle, limpSpeed: number): SpeedStep[] {
+  const ch = chassisDef(v.chassisId);
+  const engine = mountedParts(v, 'engine')[0];
+  const e = wornDef<EngineDef>(engine);
+  let speed = ch.maxSpeed + e.speedBonus;
+  const steps: SpeedStep[] = [{ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', bonus: e.speedBonus, worn: engine.wear > 0, speed }];
+  // Top speed follows loadFactor(), which drops hard past the rated mass.
+  const load = loadFactor(v);
+  speed *= load;
+  steps.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
+  // Each broken wheel cuts top speed by the same share.
+  const broken = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  const wheels = (1 - RULES.wheelLoss) ** broken;
+  speed *= wheels;
+  if (broken > 0) steps.push({ kind: 'wheels', broken, factor: wheels, speed });
+  const draw = gunDraw(v);
+  const drag = gunDrag(v, e.capacity);
+  speed *= drag;
+  steps.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, capped: draw >= e.capacity, speed });
+  limitSteps(world, v, limpSpeed, steps);
+  return steps;
+}
+
+function limitSteps(world: World, v: Vehicle, limpSpeed: number, steps: SpeedStep[]): void {
+  let speed = steps[steps.length - 1].speed;
+  if (speed < RULES.minSpeedCap) {
+    speed = RULES.minSpeedCap;
+    steps.push({ kind: 'floor', speed });
+  }
+  if (inOverdrive(world, v)) {
+    speed *= RULES.overdriveBoost;
+    steps.push({ kind: 'overdrive', factor: RULES.overdriveBoost, speed });
+  }
+  // A broken transmission leaves only a crawl to limp home.
+  if (!isWorking(corePart(v, 'transmission')) && speed > limpSpeed) steps.push({ kind: 'transmission', speed: limpSpeed });
+}
+
 export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const ch = chassisDef(v.chassisId);
   const engines = mountedParts(v, 'engine');
@@ -79,29 +152,20 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
   const limpAccel = limpSpeed * ch.accel;
 
-  let maxSpeed = limpSpeed;
   let accel = limpAccel;
   let fuelMult = 0;
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
     const drag = gunDrag(v, e.capacity);
-    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels * drag);
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
-    if (inOverdrive(world, v)) {
-      maxSpeed *= RULES.overdriveBoost;
-      accel *= RULES.overdriveBoost;
-    }
-    // A broken transmission leaves only a crawl to limp home.
-    if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
+    if (inOverdrive(world, v)) accel *= RULES.overdriveBoost;
   }
-  maxSpeed *= weatherAt(world, v.pos).speed;
-  // A tower drives with care while a truck hangs on its rope.
-  if (isTowing(world, v.id)) maxSpeed *= TOW.speedShare;
+  const steps = maxSpeedSteps(world, v);
 
   return {
-    maxSpeed,
+    maxSpeed: steps[steps.length - 1].speed,
     accel,
     brake: ch.brake * force,
     turnSlow: ch.turnSlow * DEG * turnMult,
@@ -117,11 +181,20 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   };
 }
 
+// Total draw of the working guns. Broken guns draw nothing.
+export function gunDraw(v: Vehicle): number {
+  return mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
+}
+
+// Capacity of the first mounted engine, or null with no working engine. Capacity does not wear.
+export function workingEngineCapacity(v: Vehicle): number | null {
+  return hasWorkingEngine(v) ? wornDef<EngineDef>(mountedParts(v, 'engine')[0]).capacity : null;
+}
+
 // Speed and acceleration multiplier from the working guns. Each draws power from the engine, up to gunDragMax slower
 // once their total draw reaches the engine's capacity. The curve is convex: the first guns cost little.
 export function gunDrag(v: Vehicle, capacity: number): number {
-  const draw = mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
-  return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
+  return 1 - RULES.gunDragMax * Math.min(1, gunDraw(v) / capacity) ** RULES.gunDragCurve;
 }
 
 // Kilograms an NPC truck can still take before load and gun drag cut its speed below MIN_NPC_SPEED_SHARE of the unloaded
