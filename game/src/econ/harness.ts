@@ -237,7 +237,7 @@ function fight(world: World, telemetry: Telemetry): void {
 
 // Resolves one abstract fight. With a `target` (a bounty's named raider), a win removes it from
 // world.vehicles and pushes the `destroyed` event advanceContracts reads to pay the bounty
-// (src/sim/market.ts bountyFulfilled). With no target, a win loots a sampled raider template
+// (src/sim/market.ts playerDefeats). With no target, a win loots a sampled raider template
 // instead, same as a random road encounter.
 function resolveEncounter(world: World, telemetry: Telemetry, target: Vehicle | null): void {
   telemetry.fights++;
@@ -257,6 +257,7 @@ function resolveEncounter(world: World, telemetry: Telemetry, target: Vehicle | 
 // destruction pipeline, only its salvage outcome.
 function killTarget(world: World, target: Vehicle): void {
   world.vehicles = world.vehicles.filter((v) => v.id !== target.id);
+  world.removed.push(target);
   world.events.push({ t: 'destroyed', vehicle: target.id, by: world.player.vehicleId });
   createWreckSalvage(world, target);
   const stockId = wreckStockId(target.id);
