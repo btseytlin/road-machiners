@@ -736,12 +736,12 @@ describe('Glass Flats on the baked map', () => {
     for (const c of territoryCaches(gt)) expect(caches.filter((o) => dist(o.pos, c) < 1e-3), `cache at ${c.x},${c.y}`).toHaveLength(1);
   });
 
-  it('gives each of its 19 loot spots one stock after world creation (IV5)', () => {
+  it('gives each of its 21 loot spots one stock after world creation (IV5)', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
     const spots = w.obstacles.filter((o) => isLootSpot(o) && territoryAt(o.pos)?.id === 'glass-flats');
-    expect(spots).toHaveLength(19);
+    expect(spots).toHaveLength(21);
     for (const o of spots) expect(w.salvage.filter((s) => s.id === o.id), o.id).toHaveLength(1);
-    expect(w.salvage.filter((s) => territoryOfStock(s)?.id === 'glass-flats')).toHaveLength(19);
+    expect(w.salvage.filter((s) => territoryOfStock(s)?.id === 'glass-flats')).toHaveLength(21);
   });
 
   it('marks every dirt road and spur centreline tile as track, or road where a region road crosses it', () => {

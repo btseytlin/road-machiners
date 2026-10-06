@@ -485,14 +485,17 @@ describe('Glass Flats', () => {
     expect(hazardZones().filter((z) => z.id === 'glass-flats')).toEqual([]);
   });
 
-  it('has an outline about 34 tiles out, whose radius is its bounding radius, and outside every other site', () => {
+  it('has an outline 47 to 95 tiles out, five times the area of the 34-tile circle it grew from, whose radius is its bounding radius, and outside every other site', () => {
     if (flats.kind !== 'territory' || !flats.outline) throw new Error('Glass Flats has no outline');
     const reach = flats.outline.map((p) => Math.hypot(p.x, p.y));
     expect(flats.radius).toBeCloseTo(Math.max(...reach), 9);
     for (const r of reach) {
-      expect(r).toBeGreaterThan(28);
-      expect(r).toBeLessThan(36);
+      expect(r).toBeGreaterThanOrEqual(47);
+      expect(r).toBeLessThanOrEqual(95);
     }
+    const o = flats.outline;
+    const area = Math.abs(o.reduce((s, p, i) => s + p.x * o[(i + 1) % o.length].y - o[(i + 1) % o.length].x * p.y, 0)) / 2;
+    expect(area / (Math.PI * 34 ** 2)).toBeCloseTo(5, 0);
     const poly = flats.outline.map(onMap);
     const rim = poly.flatMap((a, i) => along([a, poly[(i + 1) % poly.length]]));
     const others = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'glass-flats');
@@ -524,10 +527,10 @@ describe('Glass Flats', () => {
     for (const look of ['carWreck', 'engineNozzle', 'engineFrame', 'watchtower', 'glassSpire', 'scrapWall', 'junk', 'hullChunk'] as PropKind[]) expect(isLootSpot(landmarkAt(look, flats.pos)), look).toBe(false);
   });
 
-  it('places 19 loot spots: 3 engine caches, 11 compounds and 5 dead trucks', () => {
+  it('places 21 loot spots: 3 engine caches, 11 compounds and 7 dead trucks', () => {
     expect(wreck.caches).toHaveLength(3);
     expect(wreck.buildings.map((b) => [b.look, b.table, b.poses.length])).toEqual([['ruinCompound', 'cityStores', 11]]);
-    expect(wreck.patches.reduce((n, p) => n + p.spots, 0)).toBe(5);
+    expect(wreck.patches.reduce((n, p) => n + p.spots, 0)).toBe(7);
   });
 
   it('holds less full-stock loot than the Fallen Sun (IV7)', () => {
@@ -555,7 +558,7 @@ describe('Glass Flats', () => {
 
   it('keeps every dirt road inside the outline, and starts every spur on a web road and ends it past its fade', () => {
     for (const road of roads) for (const p of along(road.points)) expect(siteGap(flats, p), `${p.x},${p.y}`).toBeLessThan(0);
-    expect(spurs).toHaveLength(2);
+    expect(spurs).toHaveLength(1);
     for (const spur of spurs) {
       expect(Math.min(...roads.map((road) => polylineDist(spur.points[0], road.points)))).toBeLessThan(0.05);
       expect(siteGap(flats, spur.points.at(-1)!)).toBeGreaterThan(wreck.spurFade);
@@ -588,9 +591,11 @@ describe('Glass Flats', () => {
     expect(dist(crossroads, mouth)).toBeLessThan(5);
   });
 
-  it('puts every cache and compound within 6 tiles of a dirt road', () => {
+  // The engine keeps the concept's shape, so its caches lie within the concept's 6 tiles of a road. The spread town
+  // doubles that for a compound.
+  it('puts every cache within 6 tiles of a dirt road and every compound within 12', () => {
     for (const c of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
-    for (const b of wreck.buildings.flatMap((g) => g.poses)) expect(nearestRoad(onMap(b.at)), `${b.at.x},${b.at.y}`).toBeLessThanOrEqual(6);
+    for (const b of wreck.buildings.flatMap((g) => g.poses)) expect(nearestRoad(onMap(b.at)), `${b.at.x},${b.at.y}`).toBeLessThanOrEqual(12);
   });
 
   it('keeps every spur clear of the region roads, the other sites and the map margin', () => {
