@@ -264,6 +264,11 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
 }
 
+// Fills the tank as far as the money goes, for a driver doing business at a pump.
+export function buyFuel(world: World, vehicle: Vehicle): void {
+  topUp(world, vehicle, ["fuel"]);
+}
+
 // Fills each kind up to its cap, as far as the money goes. A driver in debt buys nothing.
 function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
   const resources = getResources(world, vehicle);

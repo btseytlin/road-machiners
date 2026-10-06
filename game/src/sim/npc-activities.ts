@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
-import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -1229,12 +1229,17 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
 
+// A driver fills its tank where it already does business, so it does not leave a pump on a half-speed tank. The
+// distance rule in isLowOnFuel still decides when it makes a trip just for fuel.
+const topUpAtPump = (world: World, vehicle: Vehicle, siteId: string): void => { if (pumpsOf(vehicle, npcProfile(vehicle), isBroke(world, vehicle)).includes(siteId)) buyFuel(world, vehicle); };
+
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   noteTown(vehicle, site.id);
+  topUpAtPump(world, vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }
 
@@ -1248,6 +1253,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
+    topUpAtPump(world, vehicle, site.id);
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
     replaceBase(world, vehicle, createSiteActivity('sell', activity.purchase.sellShop, 'deliver purchased cargo'));
     return;
