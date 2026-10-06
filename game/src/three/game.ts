@@ -433,7 +433,7 @@ export class Game {
 
   // Combat details stay in the fixed inspection panel and hide during playback.
   private placeHitCard(): void {
-    const f = this.inspected() ? this.frames[this.inspected()!] : undefined;
+    const f = this.frames[this.inspected() ?? ""];
     if (this.anim !== null || this.modalOpen() || !f)
       return this.hitCard.hide();
     this.hitCard.show();
