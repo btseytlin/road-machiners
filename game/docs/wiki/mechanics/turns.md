@@ -8,7 +8,7 @@ A truck is in combat while a hostile act of another truck against it, or of it a
 
 Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn. Vehicles are physics bodies with suspension. Time only runs while a turn plays: each turn simulates one second of driving. Slopes, bumps and collisions come from the physics.
 
-A click sets a point to drive through. A click on that point switches it to a stop, and Shift-click sets a stop at once. A stop brakes on the point and takes corners carefully. A click on a site stops at the site's pad nearest the truck. Clicking your own truck brakes it.
+A click sets a point to drive through. A click on that point switches it to a stop, and Shift-click sets a stop at once. A stop brakes on the point and takes corners carefully. A click on a site stops at the site's pad nearest the truck. Clicking anywhere on your own moving truck brakes it, even where a rock covers it, and the pointer turns into a hand while it is on it.
 
 The zones around a moving truck split its reach: a near click brakes, a middle click holds speed, and a far click accelerates. From rest, a nearby click starts the truck slowly. A click almost straight behind within reach backs toward that point. A farther click is a course: the truck turns around and follows a route around obstacles over as many turns as it takes, so Space alone carries it there. A point it cannot reach sends it to the closest point it can reach. After the order point, or with no order, the truck coasts on.
 

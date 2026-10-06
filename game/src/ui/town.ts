@@ -119,7 +119,7 @@ export class TownScreen {
     );
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, siteName(shopId), truckChips(w)),
+      el("h3", {}, siteName(shopId), truckChips(w, { freeCells: def.kind !== "garage" })),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...shop)),
     );
     this.inventory.fitTo(truck);
@@ -323,7 +323,7 @@ export class TownScreen {
       "div",
       { class: "town-repair" },
       createIcon("tools"),
-      el("span", { class: broken ? "bad" : "dim" }, broken ? `${broken} broken` : "Nothing broken"),
+      broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
       this.button(basics === 0 ? "Basics fine" : `Repair basics ${basics}`, repairBasics, basics === 0),
       this.button(all === 0 ? "No repairs" : `Repair all ${all}`, repairAll, all === 0),
     );

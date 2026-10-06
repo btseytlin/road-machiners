@@ -5,7 +5,7 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, beatenBy, fireWeapons, hitOdds, isHostile, laneOfOffset, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
+import { autoOrders, beatenBy, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
 import { knockOutNpc } from './defeat';
 import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { thinkNpc, topGoal } from './npc-activities';
@@ -16,6 +16,7 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
+import { PHYSICS } from '../data/physics';
 import { endTurn, update } from './world';
 import { gunFor } from './factory';
 
@@ -920,5 +921,19 @@ describe('who beat a truck', () => {
     buggy.lastHitBy = 'other';
     wreckVehicle(w, buggy);
     expect(w.events.find((e) => e.t === 'destroyed')).toMatchObject({ by: me.id });
+  });
+});
+
+describe('missPoint', () => {
+  it('puts a positive offset on the shooter\'s right, offset meters from the target', () => {
+    const from = { x: 10, y: 10 };
+    const target = { x: 30, y: 10 };
+    const p = missPoint(from, target, 6);
+    expect(p.x).toBeCloseTo(30);
+    expect(p.y).toBeCloseTo(10 + 6 / PHYSICS.metersPerTile);
+  });
+
+  it('throws when the shooter stands on the target', () => {
+    expect(() => missPoint({ x: 5, y: 5 }, { x: 5, y: 5 }, 1)).toThrow();
   });
 });

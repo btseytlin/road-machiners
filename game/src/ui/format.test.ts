@@ -172,7 +172,7 @@ describe("shot log", () => {
       rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
     };
     const line = eventText(w, e);
-    expect(line?.text).toContain(" · stray fire hits ");
+    expect(line?.text).toContain(", stray fire hits ");
     expect(line?.cls).toBe("bad");
   });
 
@@ -194,7 +194,7 @@ describe("shot log", () => {
     const { w, raider, cab, shot } = duel();
     cab.hp = maxHp(cab);
     const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
-    expect(line.text).toMatch(/^.+ → .+ · 1\/2 hit \(40%\) · .+ −2$/);
+    expect(line.text).toMatch(/^.+ → .+, 1\/2 hit \(40%\): .+ −2$/);
     expect(line.text).toContain(raider.name);
   });
 
