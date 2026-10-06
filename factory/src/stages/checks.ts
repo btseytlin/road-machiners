@@ -4,8 +4,9 @@ import { readShown, type Shown } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
+import { judgeFpsWaiver, waiverNotice } from '../fps-waiver';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { BRANCH, FPS_WAIVED_LABEL, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { setPhase } from './verify';
@@ -13,7 +14,8 @@ import { setPhase } from './verify';
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-const checkScript = (playtest: string) => `set -e
+// A waived issue keeps the playtest's output in tmp/playtest.log and its failed exit code in tmp/playtest.exit, and goes on to the build. The host judges both after.
+const checkScript = (playtest: string, waived: boolean) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
 step "npm ci"
@@ -35,8 +37,8 @@ done
 if [ "$ready" -ne 1 ]; then kill "$server"; exit 1; fi
 step "playtest"
 set +e
-${playtest}
-code=$?
+${waived ? waivedPlaytest(playtest) : `${playtest}
+code=$?`}
 kill "$server"
 if [ "$code" -ne 0 ]; then exit "$code"; fi
 set -e
@@ -44,6 +46,13 @@ step "build"
 SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
+
+const waivedPlaytest = (playtest: string) => `${playtest} 2>&1 | tee tmp/playtest.log
+code=\${PIPESTATUS[0]}
+if [ "$code" -ne 0 ]; then echo "$code" > tmp/playtest.exit; code=0; fi`;
+
+// A passing check, with the measured frame rate when the fps-waived label let a frame rate failure through.
+type Passed = { waivedFps: number | null };
 
 // The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
 // It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
@@ -57,15 +66,30 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   // An approved card merges with no post, so only a card that will be posted needs the approval. It is read before the checks, so a missing one fails fast.
   const approver = approvedAlready(ctx, issue, item.labels);
   const approval = approver === null ? readApproval(home) : null;
+  const waived = fpsWaived(ctx, issue, item.labels);
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
-  const failure = await checkPatiently(ctx, issue, base, build);
-  if (failure !== null) return failed(ctx, issue, home, phase, failure);
+  const outcome = await checkPatiently(ctx, issue, base, build, waived);
+  if (typeof outcome === 'string') return failed(ctx, issue, home, phase, outcome);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base);
+  const waiver = outcome.waivedFps === null ? null : waiverNotice(outcome.waivedFps);
+  if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base, waiver);
+  else await commentWaiver(ctx, issue, url, waiver);
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
+}
+
+// A card that merges with no post still gets a frame rate waiver on its issue.
+async function commentWaiver(ctx: Ctx, issue: number, url: string, waiver: string | null): Promise<void> {
+  if (waiver !== null) await ctx.github.comment(issue, `Checks passed for ${url}\n\n${waiver}`);
+}
+
+// Only a collaborator can set the label, so it is the committee's waiver for this one issue. The CPU playtest checks no frame rate, so there it waives nothing.
+function fpsWaived(ctx: Ctx, issue: number, labels: string[]): boolean {
+  if (!labels.includes(FPS_WAIVED_LABEL)) return false;
+  ctx.log('checks', issue, ctx.cfg.gpu ? `FPS gate waived by label ${FPS_WAIVED_LABEL}: the full GPU playtest runs, and a frame rate failure alone passes` : `label ${FPS_WAIVED_LABEL} waives nothing, since the CPU playtest checks no frame rate`);
+  return ctx.cfg.gpu;
 }
 
 function checksPhase(ctx: Ctx, issue: number): TestPhase {
@@ -107,8 +131,8 @@ function checkDir(ctx: Ctx, issue: number): string {
 }
 
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
-// Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
-async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+// Passing checks leave the build of scope `build` in the clone. Returns the pass, or the tail of the check log when they fail.
+async function runChecks(ctx: Ctx, issue: number, base: string, build: string, waived: boolean): Promise<Passed | string> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
@@ -116,11 +140,22 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
-    return null;
+    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg), waived), log, { BUILD_SCOPE: build });
   } catch (error) {
     return checkFailure(log, error);
   }
+  return waived ? judgeWaivedPlaytest(ctx, issue, `${dir}/${GAME_DIR}/tmp`) : { waivedFps: null };
+}
+
+// The waived script passed. A playtest that passed too needs no waiver. A failed one passes only when the judge finds the frame rate its one problem.
+// A missing log fails, so nothing unseen passes.
+function judgeWaivedPlaytest(ctx: Ctx, issue: number, tmp: string): Passed | string {
+  if (!existsSync(`${tmp}/playtest.exit`)) return { waivedFps: null };
+  const output = existsSync(`${tmp}/playtest.log`) ? stripAnsi(readFileSync(`${tmp}/playtest.log`, 'utf8')) : '';
+  const verdict = judgeFpsWaiver(output, Number(readFileSync(`${tmp}/playtest.exit`, 'utf8').trim()));
+  if ('reason' in verdict) return `The playtest failed, and the ${FPS_WAIVED_LABEL} label does not cover it: ${verdict.reason}.\n${output.split('\n').slice(-FAILURE_TAIL_LINES).join('\n')}`;
+  ctx.log('checks', issue, `the playtest failed on the frame rate alone at ${verdict.fps} fps, waived by label ${FPS_WAIVED_LABEL}`);
+  return { waivedFps: verdict.fps };
 }
 
 // Vitest's messages when a test, a hook or the runner itself ran out of time.
@@ -137,11 +172,11 @@ export function timeoutOnly(failure: string): boolean {
 const CHECK_RUNS = 3;
 
 // Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
-// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
-async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+// since an agent would only raise the time limits. Returns the pass, or the real failure. Throws after CHECK_RUNS timeouts.
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string, waived: boolean): Promise<Passed | string> {
   for (let run = 1; ; run++) {
-    const failure = await runChecks(ctx, issue, base, build);
-    if (failure === null || !timeoutOnly(failure)) return failure;
+    const failure = await runChecks(ctx, issue, base, build, waived);
+    if (typeof failure !== 'string' || !timeoutOnly(failure)) return failure;
     if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
     ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
   }
@@ -162,14 +197,15 @@ const TRIM_MARK = '…';
 // The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
 // Further evidence images follow as a reply photo or album, which no command acts on.
 // A post with no screenshot is a text message with the same buttons, mapping and reply routing. It says up front that it has no screenshot.
-export async function post(ctx: Ctx, issue: number, approval: Approval, shown: Shown, url: string, base: string): Promise<void> {
+// A frame rate waiver goes on the issue and at the top of the caption.
+export async function post(ctx: Ctx, issue: number, approval: Approval, shown: Shown, url: string, base: string, waiver: string | null = null): Promise<void> {
   const { evidence, problem } = shown;
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
-  const notice = problem === null ? '' : `⚠️ ${problem}\n\n`;
+  const notice = [waiver, problem === null ? null : `⚠️ ${problem}`].filter((line) => line !== null).map((line) => `${line}\n\n`).join('');
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${notice}${approval.description}\n\nHow to try: ${approval.howToTry}`);
-  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence === null);
+  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence === null, waiver);
   const track = {
     add: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption }, textPosts: evidence === null ? [...state.textPosts, String(id)] : state.textPosts })),
     drop: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id), textPosts: state.textPosts.filter((name) => name !== String(id)) })),
@@ -199,17 +235,20 @@ export function approvalButtons(issue: number, base: string): InlineButton[][] {
   return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
 }
 
-export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, noScreenshot = false): string {
-  // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
-  const hotfix = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
-  const unseen = noScreenshot ? '⚠️ No screenshot. Judge it by playing.\n\n' : '';
-  const warning = `${hotfix}${unseen}`;
-  const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
+export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, noScreenshot = false, waiver: string | null = null): string {
+  const head = `${captionWarnings(base, noScreenshot, waiver)}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
   const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. Reply to this post to ask a question or ask for a change.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
   return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');
+}
+
+// The warnings open the post, so the committee cannot miss them. A hotfix skips dev and the release.
+function captionWarnings(base: string, noScreenshot: boolean, waiver: string | null): string {
+  const hotfix = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.' : null;
+  const unseen = noScreenshot ? '⚠️ No screenshot. Judge it by playing.' : null;
+  return [hotfix, waiver, unseen].filter((line) => line !== null).map((line) => `${line}\n\n`).join('');
 }
 
 // Shortens the two texts to fit the room, cutting the longer one first. The full texts are on the issue.

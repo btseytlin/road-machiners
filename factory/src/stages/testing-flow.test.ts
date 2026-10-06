@@ -28,6 +28,8 @@ let commentBodies: string[] = [];
 let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
+// What the playtest of a waived script leaves in the clone's tmp/. Null leaves nothing, as a passing playtest does. A null log leaves only the exit code.
+let playtestRun: { log: string | null; code: number } | null = null;
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -60,6 +62,7 @@ beforeEach(() => {
   openPr = null;
   labels = [];
   bases = [];
+  playtestRun = null;
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -100,11 +103,16 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         const output = reviews.length > 0 ? reviews.shift() : PASSED;
         if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
       },
-      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
+      shell: async (dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
         shellEnv = env;
         calls.push('checks');
         if (failuresLeft-- > 0) throw new Error(failureText);
+        if (playtestRun !== null && script.includes('tmp/playtest.exit')) {
+          mkdirSync(`${dir}/game/tmp`, { recursive: true });
+          if (playtestRun.log !== null) writeFileSync(`${dir}/game/tmp/playtest.log`, playtestRun.log);
+          writeFileSync(`${dir}/game/tmp/playtest.exit`, `${playtestRun.code}\n`);
+        }
       },
     },
     repo: {
@@ -830,5 +838,87 @@ describe('a round with no screenshot', () => {
     expect(calls.some((call) => call.startsWith('buttons') || call.startsWith('photo'))).toBe(false);
     expect(calls).not.toContain('move 7 Approval');
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
+  });
+});
+
+describe('the fps-waived label', () => {
+  const APPROVAL = JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' });
+  const agent = (run: AgentRun): void => writeOutputs(run, APPROVAL);
+  const PREAMBLE = '\n> roam@0.1.0 playtest\n> node scripts/playtest.mjs\n\n';
+  const SOLE_FPS = `${PREAMBLE}turns 12, fps 44.5\nFAIL\nfps 44.5 under 50\n`;
+  const NOTICE = '⚠️ FPS gate waived by the fps-waived label. The GPU playtest measured 44.5 fps, under the 50 fps gate. Every other check passed.';
+  const gpuCtx = (shellFailures = 0, failureText?: string): Ctx => {
+    const ctx = fakeCtx(agent, shellFailures, failureText);
+    ctx.cfg.gpu = true;
+    return ctx;
+  };
+
+  it('leaves the checks as they were on an issue without the label', async () => {
+    await runStage(gpuCtx(), 7);
+    expect(shellScript).toContain('\nnpm run playtest\ncode=$?\nkill "$server"\nif [ "$code" -ne 0 ]; then exit "$code"; fi\n');
+    expect(shellScript).not.toContain('playtest.exit');
+    expect(commentBodies.join('\n')).not.toContain('waived');
+  });
+
+  it('fails an FPS failure on an issue without the label, like any playtest failure', async () => {
+    await expect(runStage(gpuCtx(2, SOLE_FPS), 7)).rejects.toThrow('The factory checks failed twice');
+    expect(shellScript).not.toContain('playtest.exit');
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+  });
+
+  it('runs the full GPU playtest, keeps its output and accepts a sole FPS failure, and says so in the post and on the issue', async () => {
+    labels = ['fps-waived'];
+    playtestRun = { log: SOLE_FPS, code: 1 };
+    await runStage(gpuCtx(), 7);
+    expect(shellScript).toContain('\nnpm run playtest 2>&1 | tee tmp/playtest.log\ncode=${PIPESTATUS[0]}\n');
+    expect(shellScript).not.toContain('--cpu');
+    expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+    const photo = calls.find((call) => call.startsWith('photo')) ?? '';
+    expect(photo).toContain(`${NOTICE}\n\n#7 Big horn`);
+    expect(commentBodies[0]).toContain(`Ready for approval: https://play.test/abc123/\n\n${NOTICE}`);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('posts no waiver when the waived playtest passed', async () => {
+    labels = ['fps-waived'];
+    await runStage(gpuCtx(), 7);
+    expect(shellScript).toContain('tmp/playtest.exit');
+    expect(calls.find((call) => call.startsWith('photo'))).not.toContain('waived');
+    expect(commentBodies.join('\n')).not.toContain('waived');
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('hands an FPS failure mixed with another problem to the fix round, then stops the card', async () => {
+    labels = ['fps-waived'];
+    playtestRun = { log: `${PREAMBLE}turns 12, fps 44.5\nFAIL\ncrash screen shown\nfps 44.5 under 50\n`, code: 1 };
+    await expect(runStage(gpuCtx(), 7)).rejects.toThrow('the fps-waived label does not cover it: the playtest reported 2 problems');
+    expect(readFileSync(`${home}/work/issue-7/game/.factory/check-failure.md`, 'utf8')).toContain('crash screen shown');
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('fails a waived playtest that left no output', async () => {
+    labels = ['fps-waived'];
+    playtestRun = { log: null, code: 1 };
+    await expect(runStage(gpuCtx(), 7)).rejects.toThrow('printed no single "turns N, fps X" result');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('waives nothing on a CPU host, where the playtest checks no frame rate', async () => {
+    labels = ['fps-waived'];
+    await runStage(fakeCtx(agent), 7);
+    expect(shellScript).toContain('\nnpm run playtest -- --cpu\ncode=$?\n');
+    expect(shellScript).not.toContain('playtest.exit');
+  });
+
+  it('comments the waiver on an approved card, which merges with no post', async () => {
+    labels = ['fps-waived'];
+    playtestRun = { log: SOLE_FPS, code: 1 };
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), testPhase: { '7': 'checks' }, approvedResolving: { '7': 'alice' } });
+    await runChecks(gpuCtx(), 7);
+    expect(commentBodies).toEqual([`Checks passed for https://play.test/abc123/\n\n${NOTICE}`]);
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('buttons'))).toBe(false);
+    expect(queued()).toEqual({ 7: 'alice' });
   });
 });
