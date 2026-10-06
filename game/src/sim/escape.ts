@@ -1,9 +1,10 @@
 // Escapes: the player gets away from hostile trucks. At each turn's end the player keeps the ids of the hostile
 // trucks in sight. A turn that ends with none of them in sight and no hostile seen practices driving, unless one
-// of them was destroyed, which is a win and not an escape. The strongest escaped truck is the target, so slipping in
-// and out of sight of the same truck soon stops paying.
+// of them was destroyed, which is a win and not an escape. Only a truck in combat with the player or hunting it
+// counts, since a raider in sight is only a warning. The strongest such truck is the target, so slipping in and out of
+// sight of the same truck soon stops paying.
 
-import { isHostile } from './combat';
+import { engagedWith, isHostile } from './combat';
 import { playerVehicle } from './damage';
 import { vehicleDanger } from './npc-decisions';
 import { practice } from './progress';
@@ -17,18 +18,20 @@ export function noteEscape(world: World): void {
   const before = p.hostilesSeen;
   p.hostilesSeen = p.state === 'active' ? hostilesInSight(world, me) : [];
   if (p.state !== 'active' || p.hostilesSeen.length > 0) return;
-  const escaped = escapedFrom(world, before);
+  const escaped = escapedFrom(world, me, before);
   if (!escaped) return;
   const strongest = escaped.reduce((a, b) => (vehicleDanger(world, b) > vehicleDanger(world, a) ? b : a));
   practice(world, 'escape', 1, escapeDifficulty(world, me, strongest), strongest.id);
 }
 
-// The trucks seen last turn when all of them still exist and are out of sight, or null.
-function escapedFrom(world: World, seen: string[]): Vehicle[] | null {
+// The trucks seen last turn that fought or hunted the player, when all seen trucks still exist and are out of sight.
+// Null when there are none.
+function escapedFrom(world: World, me: Vehicle, seen: string[]): Vehicle[] | null {
   if (seen.length === 0) return null;
   const escaped = world.vehicles.filter((v) => seen.includes(v.id));
   if (escaped.length < seen.length || escaped.some((v) => playerSees(world, v.pos))) return null;
-  return escaped;
+  const engaged = escaped.filter((v) => engagedWith(world, v, me));
+  return engaged.length > 0 ? engaged : null;
 }
 
 function hostilesInSight(world: World, me: Vehicle): string[] {

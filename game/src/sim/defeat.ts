@@ -54,6 +54,9 @@ export function checkKnockout(world: World): void {
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  // Combat with the knocked-out truck ends now, as an NPC knockout's does in the same turn, so robbers keep their loot goal.
+  for (const s of world.states.filter((x) => x.kind === "combat" && (x.holder === me.id || x.other === me.id)))
+    endState(world, s, "broken");
   sendToLoot(world, me, robbers);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });

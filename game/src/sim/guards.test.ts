@@ -3,6 +3,7 @@ import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
 import { fireWeapons } from "./combat";
 import { corePart, mountedParts } from "./grid";
+import { advanceNpcKnockouts } from "./defeat";
 import { fireGuards } from "./guards";
 import { siteGates } from "./sites";
 import { addVehicle, emptyWorld } from "./testkit";
@@ -66,6 +67,37 @@ describe("town guards", () => {
     expect(w.events.some((e) => e.t === "shot" && e.shooter === raider.id)).toBe(true);
     raider.defeat = { phase: "out", turns: 0, unseen: 0, foes: [], gaveUp: false };
     fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
+  });
+
+  it("spare a woken NPC retreating after a knockout", () => {
+    const { w, raider } = raiderFiringAt(outside(4));
+    fireWeapons(w);
+    raider.defeat = { phase: "retreat", turns: 3, unseen: 0, foes: [], gaveUp: false };
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
+  });
+
+  it("fire at the same raider again once its defeat ends", () => {
+    const { w, raider } = raiderFiringAt(outside(4));
+    fireWeapons(w);
+    raider.defeat = { phase: "retreat", turns: 3, unseen: 0, foes: [], gaveUp: false };
+    delete raider.defeat;
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot" && e.target === raider.id)).toBe(true);
+  });
+
+  it("camp guns spare a roamer they knocked out, awake or retreating, and never destroy it", () => {
+    const camp = REGION.locations.find((l) => l.kind === "camp")!;
+    const gunGate = siteGates(camp)[0];
+    const w = emptyWorld({ x: gunGate.x + 200, y: gunGate.y });
+    const roamer = addVehicle(w, "traders", "hauler", [], { x: gunGate.x + 2, y: gunGate.y });
+    corePart(roamer, "cab").hp = 0;
+    roamer.defeat = { phase: "out", turns: 0, unseen: 0, foes: [], gaveUp: false };
+    advanceNpcKnockouts(w);
+    expect(roamer.defeat?.phase).toBe("retreat");
+    expect(w.events.some((e) => e.t === "npcWake" && e.vehicle === roamer.id)).toBe(true);
+    for (let turn = 0; turn < 5; turn++) fireGuards(w);
     expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
   });
 
