@@ -39,7 +39,10 @@ describe('lock', () => {
     mkdirSync(lock);
     writeFileSync(join(lock, 'owner'), String(process.ppid));
     expect(() => withLockSync(lock, 300, () => 'ran')).toThrow(`Its owner pid is ${process.ppid}`);
-    await expect(withLock(lock, 300, async () => 'ran')).rejects.toThrow('stayed busy');
+    const owners: (number | null)[] = [];
+    await expect(withLock(lock, 300, async () => 'ran', (owner) => { owners.push(owner); })).rejects.toThrow('stayed busy');
+    expect(owners.length).toBeGreaterThan(0);
+    expect(new Set(owners)).toEqual(new Set([process.ppid]));
   });
 
   it('lets async work of one process take turns', async () => {

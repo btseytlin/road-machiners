@@ -1,0 +1,20 @@
+[Unit]
+Description=Public ROAM factory dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ service_user }}
+WorkingDirectory={{ code_dir }}/factory
+ExecStart={{ code_dir }}/factory/node_modules/.bin/vite-node src/dashboard/main.ts
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths={{ factory_root }}/dashboard
+StandardOutput=append:{{ home_dir }}/logs/dashboard.log
+StandardError=append:{{ home_dir }}/logs/dashboard.log
+
+[Install]
+WantedBy=multi-user.target
