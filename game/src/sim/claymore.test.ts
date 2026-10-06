@@ -159,7 +159,7 @@ describe('claymore detonation', () => {
 
     applyContactCrash(w, user, null, 'rock1', CLAYMORE.minImpact, { a: { side, lanes: [0, 1] }, b: null });
 
-    expect(blasts(w)).toMatchObject([{ vehicle: user.id, other: 'rock1', hits: [] }]);
+    expect(blasts(w)).toMatchObject([{ vehicle: user.id, part: claymore.id, other: 'rock1', hits: [] }]);
     expect(blasts(w)[0]).toHaveProperty('selfHits', expect.arrayContaining([expect.objectContaining({ part: expect.any(String) })]));
     expect(hpOf(user)).toBeLessThan(hp);
     expect(claymore.charge?.armed).toBeUndefined();

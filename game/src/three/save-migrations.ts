@@ -411,6 +411,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 18 to 19: a caltrops event lists the wheel damage it dealt. A saved one gets none, so its log line shows no
   // numbers.
   (world) => ({ ...world, events: (world.events as SavedJson[]).map((e) => (e.t === 'caltrops' ? { ...e, hits: [] } : e)) }),
+  // 19 to 20: a claymore event names the ram that went off. A saved one cannot know it, so the last turn's blasts are
+  // dropped. Their damage is already on the trucks.
+  (world) => ({ ...world, events: (world.events as SavedJson[]).filter((e) => e.t !== 'claymore') }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

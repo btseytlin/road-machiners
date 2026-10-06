@@ -102,23 +102,30 @@ function playCrash(host: CombatHost, e: CollisionEvent): void {
   host.sound.at("crash", p, 0);
 }
 
-// The blast shows at its point when either truck in it is seen, also when it went off against an obstacle.
+// The blast shows at the ram when either truck in it is seen, also when it went off against an obstacle.
 function playBlast(host: CombatHost, e: ClaymoreEvent): void {
   if (!host.eventPoint(e.vehicle) && !host.eventPoint(e.other)) return;
-  const g = groundPoint(host.world.terrain, e.pos);
-  const p = { x: g.x, y: g.y + BLAST_HEIGHT, z: g.z };
+  const p = ramShown(host, e.vehicle, e.part, e.pos);
   host.fx.claymoreBlast(p);
   host.sound.at("explosion", p, 0);
 }
 
-const BLAST_HEIGHT = 1; // meters above the ground the claymore's fireball centers, about a ram's middle
+// Where a claymore charge shows: the ram on its drawn truck, where the truck is at that moment of the playback. A ram
+// the view no longer draws, as once it broke, shows at the ram's face at the end of the turn.
+function ramShown(host: CombatHost, vehicle: string, part: string, pos: Vec): V3 {
+  const view = host.views.get(vehicle);
+  if (view?.hasPart(part)) return view.partPoint(part);
+  const g = groundPoint(host.world.terrain, pos);
+  return { x: g.x, y: g.y + BLAST_HEIGHT, z: g.z };
+}
+
+const BLAST_HEIGHT = 1; // meters above the ground a ram's face centers
 
 // A broken armed claymore ram cooks off as its break plays: the round that broke it lands, or the shot band ends.
-export function playCookOff(host: Pick<VolleyHost, "world" | "fx" | "sound">, brk: PartBreak): void {
+export function playCookOff(host: CombatHost, brk: PartBreak): void {
   const e = host.world.events.find((x) => x.t === "claymoreCookOff" && x.vehicle === brk.vehicle && x.part === brk.part);
   if (!e || e.t !== "claymoreCookOff") return;
-  const g = groundPoint(host.world.terrain, e.pos);
-  const p = { x: g.x, y: g.y + BLAST_HEIGHT, z: g.z };
+  const p = ramShown(host, e.vehicle, e.part, e.pos);
   host.fx.claymoreBlast(p);
   host.sound.at("explosion", p, 0);
 }

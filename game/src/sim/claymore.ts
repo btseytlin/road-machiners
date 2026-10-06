@@ -55,8 +55,9 @@ export function detonateOnCrash(world: World, user: Vehicle, other: Vehicle, ram
 // A ram into an obstacle blasts only its own truck. The obstacle stands.
 export function detonateOnObstacle(world: World, user: Vehicle, obstacle: string, rams: PartInstance[], crash: ClaymoreCrash): void {
   for (const part of rams) {
+    const pos = ramPoint(user, part);
     const selfHits = spend(world, user, part, crash);
-    world.events.push({ t: 'claymore', vehicle: user.id, other: obstacle, pos: contactPoint(user, crash.own), hits: [], selfHits });
+    world.events.push({ t: 'claymore', vehicle: user.id, part: part.id, other: obstacle, pos, hits: [], selfHits });
   }
 }
 
@@ -70,12 +71,12 @@ function detonate(world: World, user: Vehicle, other: Vehicle, part: PartInstanc
   if (!crash.theirs) throw new Error('A truck crash has no contact on the other truck');
   const c = claymoreOf(part);
   const calm = !isHostile(world, other, user);
-  const pos = contactPoint(other, crash.theirs);
-  const hits = blastTruck(world, other, pos, c.blast.radius, blastRound(c.blast), null);
+  const pos = ramPoint(user, part);
+  const hits = blastTruck(world, other, contactPoint(other, crash.theirs), c.blast.radius, blastRound(c.blast), null);
   const selfHits = spend(world, user, part, crash);
   if (hits.length > 0) other.lastHitBy = user.id;
   noteAttack(world, user, other, calm);
-  world.events.push({ t: 'claymore', vehicle: user.id, other: other.id, pos, hits, selfHits });
+  world.events.push({ t: 'claymore', vehicle: user.id, part: part.id, other: other.id, pos, hits, selfHits });
 }
 
 // The charge goes off: the ram starts its reload, and the blast walks the user's struck lanes.
@@ -108,17 +109,23 @@ export function cookOffClaymores(world: World): void {
 }
 
 function cookOff(world: World, v: Vehicle, item: PartItem): void {
-  const letter = sideOf(v, item.part);
-  if (!letter) throw new Error(`Claymore ram ${item.part.id} on ${v.id} covers no side`);
-  const side = SIDES[letter];
-  const lanes = itemCells(item).map((c) => (side === 'front' || side === 'rear' ? c.x : c.y));
-  const pos = lanePoint(v, side, (Math.min(...lanes) + Math.max(...lanes)) / 2);
+  const pos = ramPoint(v, item.part);
   const c = claymoreOf(item.part);
   const charge = chargeOf(item.part);
   delete charge.armed;
   charge.reload = wornReload(item.part);
   const hits = blastTruck(world, v, pos, c.blast.radius, blastRound(c.blast), null);
   world.events.push({ t: 'claymoreCookOff', vehicle: v.id, part: item.part.id, pos, hits });
+}
+
+// Where a claymore ram's charge goes off: the middle of the ram's face on the side it covers, at the truck's pose now.
+function ramPoint(v: Vehicle, part: PartInstance): Vec {
+  const item = mountedItems(v, 'armor').find((it) => it.part.id === part.id);
+  const letter = item && sideOf(v, part);
+  if (!item || !letter) throw new Error(`Claymore ram ${part.id} on ${v.id} is not mounted on a side`);
+  const side = SIDES[letter];
+  const lanes = itemCells(item).map((c) => (side === 'front' || side === 'rear' ? c.x : c.y));
+  return lanePoint(v, side, (Math.min(...lanes) + Math.max(...lanes)) / 2);
 }
 
 const SIDES: Record<SideLetter, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };

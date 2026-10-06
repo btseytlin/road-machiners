@@ -40,7 +40,7 @@ describe("collisionSteps", () => {
 });
 
 describe("collisionSteps with claymore blasts", () => {
-  const blast = (vehicle: string, other: string): GameEvent => ({ t: "claymore", vehicle, other, pos: { x: 0, y: 0 }, hits: [], selfHits: [] });
+  const blast = (vehicle: string, other: string): GameEvent => ({ t: "claymore", vehicle, part: "ram", other, pos: { x: 0, y: 0 }, hits: [], selfHits: [] });
 
   it("times each blast at the step of the crash it follows", () => {
     const timed = collisionSteps([hit("a", "b"), blast("a", "b"), blast("b", "a")], { ...none, crashes: [crash("a", "b", 12)] });
@@ -53,14 +53,20 @@ describe("collisionSteps with claymore blasts", () => {
 });
 
 describe("playCrashes with claymore blasts", () => {
-  const blast = (other: string): GameEvent => ({ t: "claymore", vehicle: "a", other, pos: { x: 30, y: 30 }, hits: [], selfHits: [] });
+  const blast = (other: string): GameEvent => ({ t: "claymore", vehicle: "a", part: "ram", other, pos: { x: 30, y: 30 }, hits: [], selfHits: [] });
 
-  // The fx and sounds one blast plays, with these trucks seen.
-  function played(e: GameEvent, seen: string[]): string[] {
-    const out: string[] = [];
+  const RAM_AT = { x: 7, y: 2, z: 9 };
+  // A view of truck a that draws the ram, or none.
+  const drawn = (ram: boolean) => new Map([["a", { hasPart: (id: string) => ram && id === "ram", partPoint: () => RAM_AT }]]);
+
+  // The fx and sounds one blast plays and where, with these trucks seen.
+  function played(e: GameEvent, seen: string[], views = drawn(true)): (string | V3)[] {
+    const out: (string | V3)[] = [];
+    const world = emptyWorld();
     const host = {
-      world: emptyWorld(),
-      fx: { claymoreBlast: () => out.push("fx"), crash: () => out.push("crash") },
+      world,
+      views,
+      fx: { claymoreBlast: (p: V3) => out.push(p), crash: () => out.push("crash") },
       sound: { at: (cue: string) => out.push(cue) },
       eventPoint: (id: string) => (seen.includes(id) ? { x: 0, y: 0, z: 0 } : null),
     } as unknown as CombatHost;
@@ -68,8 +74,14 @@ describe("playCrashes with claymore blasts", () => {
     return out;
   }
 
-  it("shows a blast against an obstacle when its truck is seen", () => {
-    expect(played(blast("rock1"), ["a"])).toEqual(["fx", "explosion"]);
+  it("shows the blast at the ram on its drawn truck, also against an obstacle", () => {
+    expect(played(blast("rock1"), ["a"])).toEqual([RAM_AT, "explosion"]);
+    expect(played(blast("b"), ["b"])).toEqual([RAM_AT, "explosion"]);
+  });
+
+  it("shows the blast at the ram's saved face when the view does not draw the ram", () => {
+    const g = groundPoint(emptyWorld().terrain, { x: 30, y: 30 });
+    expect(played(blast("b"), ["a"], drawn(false))[0]).toEqual({ x: g.x, y: g.y + 1, z: g.z });
   });
 
   it("shows no blast when neither truck in it is seen", () => {
