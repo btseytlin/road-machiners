@@ -15,7 +15,7 @@ import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
 import { backOffLoot, finishGoal, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
-import { CANNOT_HOLD } from './salvage';
+import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
@@ -828,7 +828,7 @@ describe('salvage on the way', () => {
     forceOption('salvageSeen', 'loot');
     const { w, npc } = passingWreck();
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
-    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'longRifle', 0)] });
     npc.speed = 0;
     npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 10.5, y: 10 }, phase: 'travel', reason: 'loot salvage on the way' });
     resolveNpcActivities(w);
@@ -843,12 +843,16 @@ describe('salvage on the way', () => {
     expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).toHaveProperty('loot');
   });
 
-  it('a driver with nothing to sell passes up only the loot it could not take', () => {
+  it('a driver that a sale would not make room for passes up only that loot', () => {
     const { w, npc } = passingWreck();
-    w.salvage.push({ id: 'wreck901', pos: { x: 12, y: 10 }, radius: 0.6, goods: { scrap: 1 }, parts: [] });
-    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 12, y: 10 }, phase: 'travel', reason: 'loot salvage on the way' });
+    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] });
+    addGoods(w, npc, 'scrap', 2);
+    npc.speed = 0;
+    expect(canTakeAny(w, npc, w.salvage.find((s) => s.id === 'wreck901')!)).toBe(false);
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 10.5, y: 10 }, phase: 'travel', reason: 'loot salvage on the way' });
     finishGoal(w, npc, CANNOT_HOLD);
     expect(npc.brain!.fullAt).toBeUndefined();
+    expect(npc.brain!.unfit).toEqual(['wreck901']);
     expect(visibleSalvage(w, npc).map((s) => s.id)).toEqual(['wreck900']);
     w.salvage = w.salvage.filter((s) => s.id !== 'wreck901');
     thinkNpc(w, npc);

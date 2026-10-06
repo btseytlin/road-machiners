@@ -293,24 +293,52 @@ export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
   return jobTarget(vehicle) === targetId;
 }
 
-// A driver learns what a loot holds only when it reaches it. When nothing there fits, it remembers its free cells
-// then. With cargo to sell, its hold counts as full: it passes up all loot until the hold frees cells, as a sale does,
-// so a loaded driver does not detour to every wreck on its way to sell. With nothing to sell, only that loot is out
-// of reach: the driver passes it up until its hold frees cells.
+// A driver learns what a loot holds only when it reaches it. When nothing there fits, it judges whether a sale would
+// make room. If so, its hold counts as full: it passes up all loot until the hold frees cells, as a sale does, so a
+// loaded driver does not detour to every wreck on its way to sell. If not, that loot is out of its truck's reach and
+// it passes the loot up while the loot lasts.
 export function holdFull(vehicle: Vehicle): boolean {
   const fullAt = vehicle.brain!.fullAt;
   return fullAt !== undefined && freeCells(vehicle) <= fullAt;
 }
 
 function knownUnfit(vehicle: Vehicle, targetId: string): boolean {
-  const cells = vehicle.brain!.unfit?.[targetId];
-  return cells !== undefined && freeCells(vehicle) <= cells;
+  return vehicle.brain!.unfit?.includes(targetId) ?? false;
 }
 
-export function noteCannotHold(vehicle: Vehicle, targetId: string | null, saleCargo: boolean): void {
+export function noteCannotHold(world: World, vehicle: Vehicle, targetId: string | null): void {
   const brain = vehicle.brain!;
-  if (saleCargo || targetId === null) brain.fullAt = freeCells(vehicle);
-  else brain.unfit = { ...brain.unfit, [targetId]: freeCells(vehicle) };
+  if (targetId !== null && !fitsAfterSale(world, vehicle, targetId)) brain.unfit = [...(brain.unfit ?? []), targetId];
+  else brain.fullAt = freeCells(vehicle);
+}
+
+function fitsAfterSale(world: World, vehicle: Vehicle, targetId: string): boolean {
+  const sold = afterSale(vehicle);
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return canTakeAny(world, sold, stock);
+  const truck = world.vehicles.find((v) => v.id === targetId);
+  return truck !== undefined && canTakeFromTruck(sold, truck);
+}
+
+// Goods beyond the repair parts reserve, or a spare part.
+export function hasSaleCargo(vehicle: Vehicle): boolean {
+  return afterSale(vehicle).items.length < vehicle.items.length;
+}
+
+// The truck with its sale cargo sold: its mounted parts and the repair parts reserve stay.
+function afterSale(vehicle: Vehicle): Vehicle {
+  const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
+  let reserve = NPC_UPKEEP.repairParts;
+  const kept = vehicle.items.filter((it) => (it.kind === 'part' ? mounted.has(it.part.id) : it.good === 'parts' && reserve-- > 0));
+  return { ...vehicle, items: kept };
+}
+
+// Why a driver gives up a scavenge or loot goal it set out on before it learned its hold is full or the loot unfit.
+// Work already under way on the target goes on.
+export function lootPassedUp(vehicle: Vehicle, targetId: string | null): string | null {
+  if (targetId !== null && worksOnLoot(vehicle, targetId)) return null;
+  if (holdFull(vehicle)) return 'the hold is full';
+  return targetId !== null && knownUnfit(vehicle, targetId) ? 'the loot will not fit' : null;
 }
 
 // A hold that freed cells takes loot again. Loot that is gone is forgotten.
@@ -318,9 +346,8 @@ export function forgetFullHold(world: World, vehicle: Vehicle): void {
   const brain = vehicle.brain!;
   if (!holdFull(vehicle)) delete brain.fullAt;
   if (!brain.unfit) return;
-  const exists = (id: string) => world.salvage.some((s) => s.id === id) || world.vehicles.some((v) => v.id === id);
-  const kept = Object.entries(brain.unfit).filter(([id]) => exists(id) && knownUnfit(vehicle, id));
-  if (kept.length > 0) brain.unfit = Object.fromEntries(kept);
+  const kept = brain.unfit.filter((id) => world.salvage.some((s) => s.id === id) || world.vehicles.some((v) => v.id === id));
+  if (kept.length > 0) brain.unfit = kept;
   else delete brain.unfit;
 }
 

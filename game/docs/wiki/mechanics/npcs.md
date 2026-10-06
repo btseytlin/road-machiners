@@ -21,7 +21,7 @@ Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy 
 
 A raider camp's gate guns shoot every driver outside the raiders. A driver the guns shoot at, hit or miss, flees from the camp with no roll, since it cannot win. It keeps running until it is a few tiles past the gun range. No driver outside the raiders starts a repair, a tow or a loot stop inside a camp's gun range. A driver that stands inside it with no shade to drive to waits with its repair until it is out.
 
-A driver with no room for any good, by cells or by mass, takes no detour to salvage and rolls no scavenge or haul. It sells its cargo instead. A driver learns what a wreck holds only when it reaches it. When nothing there fits and it carries cargo to sell, it takes no detour to salvage and rolls no scavenge or prowl until its hold frees cells, as a sale does. With nothing to sell, it passes up only that wreck until its hold frees cells.
+A driver with no room for any good, by cells or by mass, takes no detour to salvage and rolls no scavenge or haul. It sells its cargo instead. A driver learns what a wreck holds only when it reaches it. When nothing there fits but a sale would make room, its hold counts as full: it drops its scavenge and loot goals, takes no detour to salvage and rolls no scavenge or prowl until its hold frees cells, as a sale does. When even a sale would not make room, it passes up that wreck for as long as the wreck lasts.
 
 A started refit on a knocked-out truck finishes before a repair or service trip takes the driver off the loot goal. Only urgent supplies interrupt it.
 

@@ -10,7 +10,7 @@ import { TOW } from '../data/tow';
 import { campById, campGunning, nearestGate } from './camp-guns';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { corePart } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -144,13 +144,6 @@ function chooseNearestSite(vehicle: Vehicle, ids: string[]) {
 
 function createSiteActivity(kind: NpcActivity['kind'], id: string, reason: string): NpcActivity {
   return createActivity(kind, id, { ...getKnownSite(id).pos }, reason);
-}
-
-// Goods beyond the repair parts reserve, or a spare part.
-function hasSaleCargo(vehicle: Vehicle): boolean {
-  const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
-  const goods = Object.entries(goodsCount(vehicle)).some(([good, count]) => count > (good === 'parts' ? NPC_UPKEEP.repairParts : 0));
-  return goods || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
 }
 
 // Where an NPC flees to, away from a threat at `threatPos`: its spot at the nearest known town or own camp whose
@@ -357,7 +350,7 @@ function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
 // that goal too, so the empty stack rolls idle. A loot that ends on a full hold is remembered.
 export function finishGoal(world: World, vehicle: Vehicle, reason: string): void {
   const done = popGoal(world, vehicle, reason);
-  if (reason === CANNOT_HOLD) noteCannotHold(vehicle, done.targetId, hasSaleCargo(vehicle));
+  if (reason === CANNOT_HOLD) noteCannotHold(world, vehicle, done.targetId);
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
   if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
@@ -423,8 +416,13 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
   return holdsOffRobbery(world, vehicle, target) ? GAVE_UP_ROBBERY : null;
 }
 
-// A wreck or a loot pile is an opportunity only while it remains observable. A known site or loot spot stays one.
+// A wreck or a loot pile is an opportunity only while it remains observable. A known site or loot spot stays one. No
+// scavenging goes on once the hold is full or the loot is known not to fit.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  return lootPassedUp(vehicle, goal.targetId) ?? scavengeTargetInvalid(world, vehicle, goal);
+}
+
+function scavengeTargetInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
   const known = world.salvage.some((stock) => stock.id === goal.targetId && territoryOfStock(stock));
   if (known) return lootTaken(world, vehicle, goal.targetId);
@@ -435,7 +433,7 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
 // A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const truck = world.vehicles.find((v) => v.id === goal.targetId);
-  return lootTaken(world, vehicle, goal.targetId) ?? (truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal));
+  return lootPassedUp(vehicle, goal.targetId) ?? lootTaken(world, vehicle, goal.targetId) ?? (truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal));
 }
 
 function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
