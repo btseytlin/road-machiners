@@ -11,6 +11,7 @@ import { chance, randInt, randRange } from './rng';
 import { siteGates, type Site } from './sites';
 import type { ShotRound, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+import { damageScale } from './settings';
 
 export function isTownGuarded(pos: Vec): boolean {
   return REGION.towns.some((town) => siteGates(town).some((gate) => dist(gate, pos) <= RULES.guards.range));
@@ -45,7 +46,7 @@ function fireSite(world: World, site: Site, isTarget: (v: Vehicle) => boolean): 
     const lanes = laneCount(target, side);
     const rounds: ShotRound[] = Array.from({ length: G.rounds }, () =>
       chance(world, G.hitChance)
-        ? { hit: true, crit: false, offset: 0, struck: target.id, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), { ...G.round, damage: G.round.damage * RULES.weaponDamage }), blast: [] }
+        ? { hit: true, crit: false, offset: 0, struck: target.id, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), { ...G.round, damage: G.round.damage * RULES.weaponDamage * damageScale(world) }), blast: [] }
         : { hit: false, crit: false, offset: randRange(world, -G.missOffset, G.missOffset), struck: null, hits: [], blast: [] },
     );
     if (rounds.some((r) => r.hits.length > 0)) target.lastHitBy = `guard-${site.id}`;

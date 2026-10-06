@@ -2,12 +2,12 @@
 // and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
-import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
-import type { PartInstance, Vehicle } from "../sim/types";
+import type { PartInstance, Vehicle, World } from "../sim/types";
+import { roundDamage } from "../sim/combat";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -234,6 +234,7 @@ export function conditionRow(part: PartInstance): HTMLElement | null {
 }
 
 export type PartCardOptions = {
+  world: World;
   part: PartInstance;
   base: PartInstance | null; // the part it is weighed against, or null for plain stats
   action: HTMLElement | null;
@@ -242,7 +243,7 @@ export type PartCardOptions = {
 
 export function partCard(o: PartCardOptions): HTMLElement {
   const def = partDef(o.part.defId);
-  const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
+  const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
   const card = el(
     "div",
     { class: `card k-${def.kind}` },
@@ -354,18 +355,18 @@ function signed(value: number, decimals: number): string {
 
 // The few stats that decide a part's job and weakness, most important first, with its wear applied.
 // The condition meter already shows HP.
-export function partStats(part: PartInstance): Stat[] {
+export function partStats(world: World, part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](world, part), stat("mass", "Mass", def.mass, "kg", "less")];
 }
 
-const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
+const KIND_STATS: Record<PartKind, (world: World, part: PartInstance) => Stat[]> = {
   weapon: weaponStats,
-  engine: engineStats,
-  armor: armorStats,
-  cargo: cargoStats,
-  scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
-  store: storeStats,
+  engine: (_, part) => engineStats(part),
+  armor: (_, part) => armorStats(part),
+  cargo: (_, part) => cargoStats(part),
+  scanner: (_, part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  store: (_, part) => storeStats(part),
   core: () => [],
 };
 
@@ -394,9 +395,9 @@ function partDefOf<T>(part: PartInstance): T {
   return partDef(part.defId) as T;
 }
 
-function weaponStats(part: PartInstance): Stat[] {
+function weaponStats(world: World, part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const round = d.round.damage * RULES.weaponDamage;
+  const round = roundDamage(world, d);
   const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
   if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [

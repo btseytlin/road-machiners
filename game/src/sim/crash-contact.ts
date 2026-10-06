@@ -16,6 +16,7 @@ import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import { towsClient } from './tow';
 import type { Vehicle, World } from './types';
+import { damageScale } from './settings';
 
 export type CrashContact = { side: Side; lanes: number[] };
 export type CrashGeometry = { a: CrashContact; b: CrashContact | null };
@@ -47,7 +48,7 @@ export function applyLanding(world: World, v: Vehicle, what: string, impact: num
   if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad landing impact ${impact}`);
   if (impact < RULES.collisionMinImpact) return;
   const driving = skillEffect(world, v, 'driving', 'crashDamage');
-  const damage = RULES.ramDamage * RULES.crashDamage * RULES.landingDamage * impact * impact * Math.max(0, 1 - driving);
+  const damage = RULES.ramDamage * RULES.crashDamage * damageScale(world) * RULES.landingDamage * impact * impact * Math.max(0, 1 - driving);
   const hitsA = coreParts(v, 'wheel').filter((wheel) => wheel.hp > 0).map((wheel) => ({ part: wheel.id, damage: damagePart(world, v, wheel, damage) }));
   world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
 }
@@ -114,10 +115,10 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   return applyCrashHits(world, vehicle, hits);
 }
 
-// The player's driving cuts the crash damage the player truck takes.
+// The player's driving cuts the crash damage the player truck takes. The world's Damage setting scales every crash.
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
-  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving);
+  return RULES.ramDamage * RULES.crashDamage * damageScale(world) * impact * impact * share * mult * Math.max(0, 1 - driving);
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {

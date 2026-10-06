@@ -233,6 +233,7 @@ export class TownScreen {
       const kind = partDef(p.defId).kind;
       const price = partTradePrice(w, me, p, "buy");
       return partCard({
+        world: w,
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
         action: this.button(`Buy ${price}`, (x) => buyStockPart(x, p.id), w.player.money < price),
@@ -278,6 +279,7 @@ export class TownScreen {
     const cards = sellable.map((p) => {
       const kind = partDef(p.defId).kind;
       return partCard({
+        world: w,
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
         action: this.button(`Sell ${partTradePrice(w, me, p, "sell")}`, (x) => sellPart(x, p.id)),
@@ -649,7 +651,7 @@ export class TruckTradeScreen {
     const me = playerVehicle(w);
     const card = (p: PartInstance, action: HTMLElement) => {
       const kind = partDef(p.defId).kind;
-      return partCard({ part: p, base: compareBase(this.inventory.selectedPart(), p), action, onHover: this.hintMounts(kind) });
+      return partCard({ world: w, part: p, base: compareBase(this.inventory.selectedPart(), p), action, onHover: this.hintMounts(kind) });
     };
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");

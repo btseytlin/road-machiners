@@ -396,7 +396,7 @@ export class InventoryView {
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
-      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
+      ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, mounted) : []),
       ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
@@ -685,7 +685,7 @@ export class InventoryView {
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
-      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
+      ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, false) : []),
     );
   }
 
@@ -1014,14 +1014,14 @@ function shopOnlyPatch(part: PartInstance): HTMLElement | null {
 }
 
 // A part's condition and stats. A spare shows the change against the mounted part of its kind.
-function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
+function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
   const row = conditionRow(part);
   return [
     ...(row ? [row] : []),
     conditionMeter(part),
-    statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
+    statGrid(diffStats(partStats(w, part), base ? partStats(w, base) : null)),
     base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }
