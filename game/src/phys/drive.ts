@@ -69,7 +69,7 @@ export type DeckColliders = { plates: number[]; rails: number[]; lips: number[] 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s downward
+export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s: the speed into the ground along the contact normal, counted only while also moving downward
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -340,14 +340,35 @@ class Landings {
 
   private noteCar(c: Car, motion: ImpactMotion, step: number): void {
     const touching = wheelsTouch(c.ctl);
-    const impact = Math.max(0, -motion.velocity.y);
-    if (c.mem.airborne && touching && impact > (this.hardest.get(c.v.id)?.impact ?? 0)) this.hardest.set(c.v.id, { impact, step });
+    if (c.mem.airborne && touching) {
+      const impact = landingImpact(c, motion);
+      if (impact > (this.hardest.get(c.v.id)?.impact ?? 0)) this.hardest.set(c.v.id, { impact, step });
+    }
     c.mem.airborne = !touching;
   }
 
   all(): Landing[] {
     return [...this.hardest].map(([vehicle, h]) => ({ vehicle, ...h }));
   }
+}
+
+// The hardest speed into the ground over the wheels touching it, from the body's motion before the step: the
+// motion at each contact point against that wheel's contact normal. Only motion that is also downward counts, so a
+// truck meeting a slope along it lands softly, and one whose wheels meet a rising bump face drives up it.
+function landingImpact(c: Car, motion: ImpactMotion): number {
+  const com = c.body.worldCom();
+  const { velocity: v, spin: w } = motion;
+  let impact = 0;
+  for (let i = 0; i < c.ctl.numWheels(); i++) {
+    if (!c.ctl.wheelIsInContact(i)) continue;
+    const point = c.ctl.wheelContactPoint(i);
+    const normal = c.ctl.wheelContactNormal(i);
+    if (!point || !normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact point or normal`);
+    const r = { x: point.x - com.x, y: point.y - com.y, z: point.z - com.z };
+    const at = { x: v.x + w.y * r.z - w.z * r.y, y: v.y + w.z * r.x - w.x * r.z, z: v.z + w.x * r.y - w.y * r.x };
+    impact = Math.max(impact, Math.min(-(at.x * normal.x + at.y * normal.y + at.z * normal.z), -at.y));
+  }
+  return impact;
 }
 
 function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
@@ -676,19 +697,59 @@ function turnWheels(c: Car, steerTo: number): void {
 // so a truck holds its speed on a slope. Without engine push the truck brakes.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
-  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
+  const cap = climbForce(c, target);
+  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target, cap), -1, 1);
   const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
   const brake = brakeOf(plan, u, target, pushing);
-  const force = pushing ? u * plan.engineForce : 0;
+  const force = pushing ? u * cap : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
-function slopeThrottle(c: Car, target: number): number {
+// Throttle share that holds the truck against gravity along its nose, at cap force per driven wheel. A truck holding still brakes instead.
+function slopeThrottle(c: Car, target: number, cap: number): number {
   if (target === 0) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
-  return pull / (2 * c.plan.engineForce);
+  return pull / (2 * cap);
+}
+
+// Full-throttle force of each driven wheel: the plan's engine force, plus a reserve against a climb in the direction
+// the engine pushes. The reserve is at most climbReserve of the engine force and never more than gravity's pull along
+// the ground the wheels stand on, so flat ground, downhill and the air get none.
+function climbForce(c: Car, target: number): number {
+  if (target === 0) return c.plan.engineForce;
+  const pull = (T.gravityScale * PHYSICS.gravity * c.s.mass * climbSine(c, Math.sign(target))) / 2;
+  return c.plan.engineForce + Math.min(T.climbReserve * c.plan.engineForce, Math.max(0, pull));
+}
+
+// Sum of the contact normals of the wheels touching the ground, as of the last vehicle update.
+function contactNormals(c: Car): { x: number; y: number; z: number } {
+  const n = { x: 0, y: 0, z: 0 };
+  for (let i = 0; i < c.ctl.numWheels(); i++) {
+    if (!c.ctl.wheelIsInContact(i)) continue;
+    const normal = c.ctl.wheelContactNormal(i);
+    if (!normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact normal`);
+    n.x += normal.x;
+    n.y += normal.y;
+    n.z += normal.z;
+  }
+  return n;
+}
+
+// Sine of the grade under the wheels along the nose, or along the tail for a sign of -1: positive uphill. The ground
+// is the mean contact normal of the wheels touching it. 0 when no wheel touches.
+function climbSine(c: Car, sign: number): number {
+  const n = contactNormals(c);
+  const length = Math.hypot(n.x, n.y, n.z);
+  if (length === 0) return 0;
+  const heading = headingOf(c.body.rotation());
+  const way = { x: Math.cos(heading) * sign, z: Math.sin(heading) * sign };
+  // The travel direction laid onto the ground plane; its vertical share is the grade's sine.
+  const into = (way.x * n.x + way.z * n.z) / (length * length);
+  const along = { x: way.x - into * n.x, y: -into * n.y, z: way.z - into * n.z };
+  const run = Math.hypot(along.x, along.y, along.z);
+  // A wall contact normal parallel to the travel direction leaves no ground direction to climb along.
+  return run === 0 ? 0 : along.y / run;
 }
 
 // No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
