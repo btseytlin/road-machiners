@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { PARTS, partDef } from '../data/parts';
 import { GOODS } from '../data/goods';
 import { REPAIR } from '../data/wear';
@@ -75,7 +75,7 @@ describe('repairPlan', () => {
     const cage = armorPart(me);
     cage.hp = 1;
     const base = repairPlan(w, me, cage.id);
-    w.player.skills.machining = XP_TO_REACH[3];
+    w.player.ranks.machining = 3;
     const tuned = repairPlan(w, me, cage.id);
     expect(tuned.parts).toBeLessThanOrEqual(base.parts);
     expect(tuned.turns).toBeLessThanOrEqual(base.turns);
@@ -83,14 +83,14 @@ describe('repairPlan', () => {
 });
 
 describe('field repair cap', () => {
-  it('lifts a part past the base field cap for the player at level 5', () => {
+  it('lifts a part past the base field cap for the player at rank 5', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const cage = armorPart(me);
     const max = partDef(cage.defId).hp;
     cage.hp = Math.floor(max * REPAIR.fieldCapShare);
     expect(repairPlan(w, me, cage.id).needed).toBe(0);
-    w.player.skills.machining = XP_TO_REACH[5];
+    w.player.ranks.machining = 5;
     const cap = max * (REPAIR.fieldCapShare + 5 * SKILL_EFFECTS.machining.fieldCap);
     expect(repairPlan(w, me, cage.id).hp).toBeCloseTo(cap - cage.hp, 5);
   });
@@ -100,7 +100,7 @@ describe('field repair cap', () => {
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     const engine = mountedParts(npc, 'engine')[0];
     engine.hp = Math.ceil(partDef(engine.defId).hp * REPAIR.fieldCapShare);
-    w.player.skills.machining = XP_TO_REACH[5];
+    w.player.ranks.machining = 5;
     expect(repairPlan(w, npc, engine.id).needed).toBe(0);
   });
 });

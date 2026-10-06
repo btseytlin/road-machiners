@@ -1,5 +1,5 @@
-// Character skills. Each skill grows from its own XP sources, and each level adds `perLevel` of every
-// effect in SKILL_EFFECTS. XP numbers are starting values for the progression simulator to tune.
+// Character skills. Activity earns XP into one shared pool, and the player spends it on ranks of any skill. Each rank
+// adds `perLevel` of every effect in SKILL_EFFECTS. XP numbers are starting values for the progression simulator to tune.
 
 import type { Archetype } from '../sim/progression/bot';
 import type { SkillId, XpSource } from '../sim/types';
@@ -7,7 +7,7 @@ import { TIME } from './time';
 
 export const SKILL_IDS: readonly SkillId[] = ['driving', 'perception', 'machining', 'toughness', 'social'];
 
-// `grows` names what the skill learns from, for the character screen.
+// `grows` names the activities that earn XP in the skill's family, for the character screen.
 export const SKILL_INFO: Record<SkillId, { name: string; grows: string }> = {
   driving: { name: 'Driving', grows: 'rough ground, rams, escapes' },
   perception: { name: 'Perception', grows: 'hits, contacts, discoveries' },
@@ -54,9 +54,9 @@ const EFFECTS = {
 export type SkillEffect<S extends SkillId> = keyof (typeof EFFECTS)[S] & string;
 export const SKILL_EFFECTS: { [S in SkillId]: Record<SkillEffect<S>, number> } = EFFECTS;
 
-// Total XP a skill needs to reach each level; index is the level. Each step costs more than the last.
-export const XP_TO_REACH: readonly number[] = [0, 200, 600, 1200, 2000, 3000];
-export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
+// XP from the pool that buys each rank; index 0 is rank 1. Each rank costs more than the last.
+export const RANK_COSTS: readonly number[] = [200, 400, 600, 800, 1000];
+export const MAX_RANK = RANK_COSTS.length;
 
 // weight is XP per unit of amount. A scaled source multiplies by the difficulty curve in XP_RULES;
 // an unscaled source has no difficulty. Weights aim for about dailyCap XP from one day (300 turns) of the matching
@@ -65,6 +65,7 @@ export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 // what each earlier event on the same target multiplies the pay by. The count of earlier events halves every
 // XP_RULES.repeatHalfLife turns, so a target pays again slowly with game time. A repeat of 0 pays once per target
 // for good. Every source decays, so spamming a target pays a bounded total: 1 / (1 - repeat) events.
+// `skill` names the source's activity family, which shares one daily cap. The XP itself goes to the shared pool.
 export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean; repeat: number };
 
 export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
@@ -97,7 +98,7 @@ export const XP_RULES = {
   // Difficulty 0 is a sure thing and pays `easy` times the weight; difficulty 1 is a long shot and pays `hard`.
   easy: 0.25,
   hard: 2,
-  // XP a skill earns per in-game day at the full rate. Past it, XP pays `overCap` times as much.
+  // XP an activity family earns per in-game day at the full rate. Past it, XP pays `overCap` times as much.
   dailyCap: 150,
   overCap: 0.1,
   // Turns for the count of earlier events on one target to halve: one day.
@@ -108,7 +109,7 @@ export const XP_RULES = {
   regionTiles: 16,
 };
 
-// Perks. At each perk level of a skill the player picks one perk from its pair, for good. A perk changes a rule the
+// Perks. At each perk rank of a skill the player picks one perk from its pair, for good. A perk changes a rule the
 // player can see in play. `rule` is the player-facing line on the character screen.
 
 export type PerkId =
@@ -118,7 +119,7 @@ export type PerkId =
   | 'desertRat' | 'stormRider' | 'fightThrough' | 'longHaul'
   | 'marketEars' | 'rumorMill' | 'paidTruce' | 'bountyTalk';
 
-// Skill levels that open a pair of perks.
+// Skill ranks that open a pair of perks.
 export const PERK_LEVELS = [2, 4] as const;
 export type PerkLevel = (typeof PERK_LEVELS)[number];
 
@@ -142,7 +143,7 @@ export const PERKS: Record<PerkId, PerkDef> = {
   stormRider: { skill: 'toughness', level: 2, name: 'Storm rider', rule: 'Dust storms do not cut your sight or aim.' },
   fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab, or a hit on a cab below half, does not knock you out while health is above half.' },
   longHaul: { skill: 'toughness', level: 4, name: 'Long haul', rule: 'You heal while driving, not only while parked.' },
-  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left.' },
+  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left, as they were then.' },
   rumorMill: { skill: 'social', level: 2, name: 'Rumor mill', rule: 'A driver you call marks a wreck or site it passed.' },
   paidTruce: { skill: 'social', level: 4, name: 'Paid truce', rule: 'You can pay a hostile driver to end its feud with you.' },
   bountyTalk: { skill: 'social', level: 4, name: 'Bounty talk', rule: 'A raider that gives up to you counts for bounty contracts.' },
@@ -174,12 +175,15 @@ export const PERK_NUMBERS = {
 // ---- Progression targets, checked by the progression band test and printed by npm run progression:report.
 // Edit these days to change the curve, then tune XP_SOURCES until the report passes.
 
-// The skill each archetype mostly practices. The mixed bot has none; all its skills count as off skills.
+// The skill each archetype mostly practices. The markov bot has none; all its skills count as off skills.
 export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
   trader: 'social',
   scavenger: 'machining',
-  fighter: 'perception',
-  mixed: null,
+  hunter: 'perception',
+  fastTrader: 'driving',
+  hauler: 'social',
+  climber: 'social',
+  markov: null,
 };
 
 // In-game day by which a skill reaches a level, keyed by level. A level missing from a table is not checked.
