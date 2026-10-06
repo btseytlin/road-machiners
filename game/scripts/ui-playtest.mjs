@@ -11,7 +11,7 @@ function doRectsOverlap(a, b) {
 }
 
 async function checkVisibleReadouts(page) {
-  for (const label of ['Money', 'Fuel', 'Supplies', 'Driver']) {
+  for (const label of ["M's", 'Fuel', 'Supplies', 'Driver']) {
     assert(await page.locator(`[data-resource="${label}"]`).isVisible(), `${label} must remain visible`);
   }
   assert(await page.locator('.log').isVisible(), 'Event log must remain visible');

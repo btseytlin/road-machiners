@@ -1906,8 +1906,20 @@ canvas.view {
   color: var(--muted);
 }
 .delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font: 11px var(--font-mono);
 }
+.delta .price,
+.dim .price,
+.priced .price,
+.note .price {
+  min-width: 0;
+  font: inherit;
+  vertical-align: middle;
+}
+
 .delta.better {
   color: #b9d27f;
 }

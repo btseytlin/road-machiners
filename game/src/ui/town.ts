@@ -359,9 +359,7 @@ export class TownScreen {
       el(
         "div",
         { class: "note" },
-        "Your truck trades in for ",
-        moneyEl(tradeIn),
-        ".",
+        el("span", { class: "priced" }, "Your truck trades in for ", moneyEl(tradeIn), "."),
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
