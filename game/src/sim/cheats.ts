@@ -207,6 +207,16 @@ function circlePoints(center: Vec, r: number, count: number): Vec[] {
   });
 }
 
+// count points on a circle around center, ordered from the one straight along heading outward to both sides, so a
+// spawn lands ahead of the truck when it can.
+function frontFirst(center: Vec, heading: number, r: number, count: number): Vec[] {
+  const step = (2 * Math.PI) / count;
+  return Array.from({ length: count }, (_, i) => {
+    const a = heading + Math.ceil(i / 2) * step * (i % 2 === 0 ? -1 : 1);
+    return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
+  });
+}
+
 function firstFree(w: World, points: Vec[], radius: number, ignoreId: string | null): Vec | null {
   return points.find((p) => isFree(w, p, radius, ignoreId)) ?? null;
 }
@@ -344,9 +354,9 @@ function gearLevelOf(level: number): GearLevel {
 function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
   const loadout = generateNpcLoadout(w, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
-  const center = playerVehicle(w).pos;
-  const circle = circlePoints(center, CHEATS.spawnDistance, CHEATS.spawnAngles);
-  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, center, radius, null);
+  const me = playerVehicle(w);
+  const circle = frontFirst(me.pos, me.heading, CHEATS.spawnDistance, CHEATS.spawnAngles);
+  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, me.pos, radius, null);
   if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
   const v = spawnAt(w, tpl, loadout, spot);
   if (hostile) turnHostile(w, v);

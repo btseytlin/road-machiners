@@ -385,6 +385,18 @@ describe('vehicle cheats', () => {
     expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
   });
 
+  it('places the hostile straight ahead of the truck, whichever way it faces, when that spot is free', () => {
+    for (const heading of [0, 2, -2.5]) {
+      const w = emptyWorld();
+      playerVehicle(w).heading = heading;
+      const me = playerVehicle(w);
+      const next = startBattle(w);
+      const foe = next.vehicles[next.vehicles.length - 1];
+      expect(foe.pos.x).toBeCloseTo(me.pos.x + Math.cos(heading) * CHEATS.spawnDistance);
+      expect(foe.pos.y).toBeCloseTo(me.pos.y + Math.sin(heading) * CHEATS.spawnDistance);
+    }
+  });
+
   it('picks templates of every kind with the world RNG', () => {
     const factions = new Set<string>();
     let w = emptyWorld();

@@ -168,7 +168,7 @@ export const COMMANDS: readonly Command[] = [
     const me = next.vehicles.find((v) => v.id === next.player.vehicleId)!;
     return changed(next, `randomkit: ${me.chassisId} with ${mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').map((p) => partDef(p.defId).name).join(', ')}`);
   }),
-  command("battle", "Place a random hostile NPC of any kind near the truck.", { min: 0, max: 0 }, (world) => {
+  command("battle", "Place a random hostile NPC of any kind ahead of the truck.", { min: 0, max: 0 }, (world) => {
     const next = startBattle(world);
     return changed(next, `battle: ${next.vehicles[next.vehicles.length - 1].name} is hostile`);
   }),
