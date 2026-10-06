@@ -49,7 +49,7 @@ async function checkInstruments(page) {
   assert(/Day \d+\s+\d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
   assert.equal(m.panelText.match(/Day \d+\s+\d+:\d\d/g).length, 1, 'Time must show once');
   assert(!m.actionsText.includes('broken'), 'No broken badge in the action row');
-  assert(!/km\/h|·/.test(m.speedoText), 'No unit text under the dial');
+  assert(!/km\/h/.test(m.speedoText), 'No unit text under the dial');
   assert(m.heights.every(h => Math.abs(h - m.heights[0]) <= 1), `Action buttons must share one height: ${m.heights}`);
   for (const other of [m.log, m.weapons].filter(Boolean)) {
     assert(!doRectsOverlap(panel, other), 'Instruments must not overlap the log or weapons');

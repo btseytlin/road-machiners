@@ -41,7 +41,8 @@ it('rejects traversal and unknown activity names instead of persisting arbitrary
   expect(() => observations.recordObservation(home, 'bad', { type: 'scheduler', status: 'PRIVATE', report: null, counts: {} } as never)).toThrow('scheduler');
   expect(observations.parseAgentStatus('{"type":"factory_status","activity":"PRIVATE secret"}')).toBeNull();
   expect(observations.parseAgentStatus('{"type":"factory_status","activity":"tests"}')).toEqual({ activity: 'tests' });
-  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"PRIVATE secret"}')).toBeNull();
-  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"validating","note":"PRIVATE secret"}')).toBeNull();
-  expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'tests', phase: 'running', source: 'runner', milestone: 'PRIVATE secret' } as never)).toThrow('milestone');
+  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"PRIVATE /etc/secret"}')).toBeNull();
+  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"Testing the tow fee","note":"PRIVATE secret"}')).toBeNull();
+  expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"Testing the tow fee"}')).toEqual({ milestone: 'Testing the tow fee' });
+  expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'tests', phase: 'running', source: 'runner', milestone: 'PRIVATE <script>' } as never)).toThrow('milestone');
 });

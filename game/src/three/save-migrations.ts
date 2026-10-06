@@ -249,6 +249,15 @@ function withPatchParts_13_14(world: SavedJson): SavedJson {
   return { ...world, states: (world.states as SavedJson[]).map(recording) };
 }
 
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -319,6 +328,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
   // driver still on its retreat lies up when it gets home.
   (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

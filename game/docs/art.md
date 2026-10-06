@@ -23,7 +23,7 @@ Some models come from Blender scripts in `tools/blender/`. Blender is installed 
 
 When a place has a concept image, like Old Orchard's `docs/concepts/old-orchard-issue-111.jpg`, model each building it shows from a crop of the image with the `blender-image-to-3d` skill, then write the result as a Kit script by the steps above. Keep the briefs and review sheets in `tmp/models/<name>/`. The concept is a perspective painting, so take sizes from scale cues (a road about 10 m wide, a truck about 8 m long, a storey about 3.2 m) and judge the review sheets by eye.
 
-Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck`, `barrier`, `drums`, `woodpile`, the `bunker` blockhouse with its sandbag ring, and `dead_tree`. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
+Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck`, `barrier`, `drums`, `woodpile`, the `bunker` blockhouse with its sandbag ring, and `dead_tree`. The `sandbags` arc carries no hedgehog. `tank_trap` is its own prop, the steel hedgehog the orchard's emplacements stand ahead of their arcs, with the girders the sandbag model once held. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
 
 The `desert_scrub` and `cactus` scatter models were built the same way from `docs/concepts/wasteland-reference-issue-129.jpg`, sized against the 5.5 m van in it.
 

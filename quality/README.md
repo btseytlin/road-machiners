@@ -32,11 +32,12 @@ The hook exports the index to a temporary directory under `tmp/` and removes it 
 - New lint-disable comments, `@ts-ignore`, and `@ts-nocheck` are rejected. Quoted examples in strings are not suppression comments.
 - Fragmentation follows the Steelman rule: at most 5 production source files per 1,000 code lines for a new component. Each immediate `game/src/` subdirectory, including its descendants, is a component. Files directly in `game/src/` form a separate component. Tests and comment-only files do not count. An existing component is checked only when its file count grows, against the higher of 5 or its previous ratio.
 - Every `CLAUDE.md` and `AGENTS.md`, in any folder and any case, and every `DESIGN.md`, must stay under 2,500 words. Symlinks are skipped, since their target is checked. This is a fixed ceiling with no debt allowance. Move details to `docs/` instead.
+- No text file may hold the middle dot separator, U+00B7. Use a comma or a colon instead. Git grep finds it in every tracked text file, and in untracked ones for `npm run quality`. Binary files and the folders the gate ignores, like `.claude/` with its vendored skills, are skipped. This is a fixed ban with no debt allowance.
 - `tsc` must pass for the complete source tree selected by `game/tsconfig.json` and by `factory/tsconfig.json`. Type errors have no debt allowance.
 
 Lint debt is compared by file, rule, and diagnostic message, without line numbers. Structural diagnostics also compare the measured size, so reducing an over-limit function passes. The check rejects new findings, extra copies of an existing finding, and larger structural measurements. It does not prove that each existing defect stayed at the same location. Renaming a file gives it no old debt allowance. Each successful commit becomes the next baseline, so removed debt cannot return for free.
 
-`.oxlintrc.json` owns lint rules and structural limits. `.quality.json` owns the fragmentation ceiling and the guidance word limit. `quality/quality-policy.mjs` owns source inspection, fragmentation and the guidance limit. `quality/quality.mjs` owns staged snapshots, debt comparison, and type checking. Do not weaken policy or add bypasses to get a commit through. Policy changes require user approval.
+`.oxlintrc.json` owns lint rules and structural limits. `.quality.json` owns the fragmentation ceiling and the guidance word limit. `quality/quality-policy.mjs` owns source inspection, fragmentation, the guidance limit and the separator ban. `quality/quality.mjs` owns staged snapshots, debt comparison, and type checking. Do not weaken policy or add bypasses to get a commit through. Policy changes require user approval.
 
 ## Port scope
 

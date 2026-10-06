@@ -75,6 +75,11 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
       markOf(readout.target.id).weapons.push({ slot: i + 1, look: mw.def.look, status: readout.status, ready: readout.canFire });
   });
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
+  markSeenNpcs(w, markOf);
+  return marks;
+}
+
+function markSeenNpcs(w: World, markOf: (id: string) => VehicleMark): void {
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
     if (job) markOf(v.id).job = job;
@@ -83,7 +88,6 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
       markOf(v.id).gaveUp = gaveUp(v);
     }
   }
-  return marks;
 }
 
 function seenNpcJob(w: World, v: Vehicle): JobMark | null {
