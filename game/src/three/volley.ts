@@ -24,6 +24,10 @@ export type VolleyHost = {
   breakPart: (brk: PartBreak) => void;
 };
 
+// Guns with sounds of their own, as they fire and as a round strikes. Every other gun fires with its look's cue and
+// strikes with hit-metal.
+const GUN_SOUNDS: Record<string, { fire: CueId; struck: CueId }> = { harpoon: { fire: "harpoon-fire", struck: "harpoon-hook" } };
+
 // Plays one volley's bolts from the muzzle and sounds from a to b. The volley starts at its own moment in the
 // first CONFIG.combatFireSpreadMs of the band. Each round sounds as it leaves and as it lands, and each round that
 // damages parts shows its damage over the target as it lands. A part a round breaks breaks as that round lands. A dry
@@ -46,13 +50,13 @@ export function playVolley(
   const ground = (p: V3) => groundPoint(host.world.terrain, toMap(p)).y;
   const timing = { startMs: Math.random() * CONFIG.combatFireSpreadMs, windowMs: CONFIG.combatShotMs, burstMaxMs: CONFIG.combatBurstMaxMs };
   const plans = planVolley(spec, a, roundAims(b, targetId, rounds, host.eventPoint), timing, ground);
-  const fireCue = spec.look === "tracer" ? "mg-fire" : "cannon-fire";
+  const sounds = GUN_SOUNDS[weapon] ?? { fire: spec.look === "tracer" ? "mg-fire" : "cannon-fire", struck: "hit-metal" };
   plans.forEach((plan, k) => {
     const last = dry && k === plans.length - 1;
     const cues = {
-      fired: (m: Muzzle) => host.sound.at(fireCue, m.pos, 0),
+      fired: (m: Muzzle) => host.sound.at(sounds.fire, m.pos, 0),
       landed: () => {
-        host.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, 0);
+        host.sound.at(plan.struck ? sounds.struck : "miss", plan.land, 0);
         if (last) host.sound.at("gun-empty", a, 0);
         for (const brk of breaks.ofRound(event, k)) host.breakPart(brk);
       },
@@ -114,7 +118,7 @@ export function playDryGuns(host: CombatHost, played: Set<string>): void {
 const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
 
 // Utilities have no cues of their own and borrow the gun cues: a mortar or flare round leaves with the cannon's boom,
-// and an emitter pulse crackles with the sparks of a breaking part. The harpoon sounds as a shot, and a claymore
+// and an emitter pulse crackles with the sparks of a breaking part. The harpoon sounds as a shot with its own cues, and a claymore
 // blast as an explosion with its crash. Other utilities play silent.
 const UTILITY_CUES: Partial<Record<UtilityEffectType | "claymore", CueId>> = { mortar: "cannon-fire", flare: "cannon-fire" };
 const PULSE_CUE: CueId = "part-broken";
@@ -122,7 +126,8 @@ const PULSE_CUE: CueId = "part-broken";
 // What utility sounds read: the turn's events, where each truck is seen, and the cue player.
 export type UtilitySoundHost = Pick<VolleyHost, "eventPoint"> & { world: Pick<World, "events">; sound: Pick<SoundDirector, "at"> };
 
-// Sounds each seen utility launch and emitter pulse of the turn at its user, as the band starts.
+// Sounds each seen utility launch and emitter pulse of the turn at its user, and each torn harpoon line at the truck it
+// held, as the band starts.
 export function playUtilitySounds(host: UtilitySoundHost): void {
   for (const e of host.world.events) {
     const use = utilityCueOf(e);
@@ -133,6 +138,7 @@ export function playUtilitySounds(host: UtilitySoundHost): void {
 
 function utilityCueOf(e: GameEvent): { cue: CueId; vehicle: string } | null {
   if (e.t === "pulse") return { cue: PULSE_CUE, vehicle: e.vehicle };
+  if (e.t === "lineTorn") return { cue: "line-tear", vehicle: e.vehicle };
   if (e.t !== "utility") return null;
   const cue = UTILITY_CUES[e.effect];
   return cue ? { cue, vehicle: e.vehicle } : null;

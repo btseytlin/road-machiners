@@ -89,6 +89,37 @@ describe("playUtilitySounds", () => {
   it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
     expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "harpoon"), use("a", "claymore")])).toEqual([]);
   });
+
+  it("snaps a torn harpoon line at the truck it held, and stays silent when that truck is unseen", () => {
+    const torn = (vehicle: string): GameEvent => ({ t: "lineTorn", line: "l1", vehicle, part: `${vehicle}-p`, damage: 12 });
+    expect(played([torn("a"), torn("hidden")])).toEqual([{ cue: "line-tear", p: seen.a }]);
+  });
+});
+
+describe("playVolley sounds", () => {
+  // The cues one round of this gun plays as it fires and lands, striking the target or not.
+  function cuesOf(weapon: string, struck: boolean): string[] {
+    const cues: string[] = [];
+    const p = { x: 0, y: 0, z: 0 };
+    const round: ShotRound = { hit: struck, crit: false, offset: 0, struck: struck ? "t" : null, hits: [], blast: [] };
+    const event = { t: "shot", shooter: "s", weapon: "w", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds: [round] } as ShotLike;
+    const fly = (_s: unknown, _m: unknown, _p: unknown, _r: unknown, c: { fired: (m: never) => void; landed: () => void }) => {
+      c.fired({ pos: p } as never);
+      c.landed();
+    };
+    const host = { world: emptyWorld(), fx: { shot: fly, label: () => {} }, sound: { at: (cue: string) => cues.push(cue) }, eventPoint: () => p, breakPart: () => {} } as unknown as VolleyHost;
+    playVolley(host, p, () => ({ pos: p, dir: { x: 1, y: 0, z: 0 } }) as never, { x: 5, y: 0, z: 0 }, event, new BreakCues([event]), weapon, "t", new Map(), false);
+    return cues;
+  }
+
+  it("fires and hooks with the harpoon's own cues", () => {
+    expect(cuesOf("harpoon", true)).toEqual(["harpoon-fire", "harpoon-hook"]);
+  });
+
+  it("lets a harpoon miss like any round, and keeps every other gun on its look's cues", () => {
+    expect(cuesOf("harpoon", false)).toEqual(["harpoon-fire", "miss"]);
+    expect(cuesOf("mg", true)).toEqual(["mg-fire", "hit-metal"]);
+  });
 });
 
 describe("playVolley breaks", () => {
