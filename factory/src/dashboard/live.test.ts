@@ -17,13 +17,22 @@ it('projects worker activity with freshness and no internal identity or private 
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   expect(JSON.stringify(result)).not.toContain('987');
 });
-it('projects a safe worker milestone without copying private job fields', () => {
+it('projects a card worker milestone without copying private job fields', () => {
   const home = createHome();
   const state = structuredClone(EMPTY_STATE);
-  state.jobs.push({ id: 'PRIVATE-job', stage: 'change', issue: 987, pid: 4, log: 'PRIVATE/path', startedAt: '2026-10-04T12:00:00Z' });
-  recordObservation(home, 'PRIVATE-job', { type: 'activity', activity: 'tests', milestone: 'validating', phase: 'running', source: 'runner' }, new Date('2026-10-04T12:00:00Z'));
+  state.jobs.push({ id: 'PRIVATE-job', stage: 'implement', issue: 987, pid: 4, log: 'PRIVATE/path', startedAt: '2026-10-04T12:00:00Z' });
+  recordObservation(home, 'PRIVATE-job', { type: 'activity', activity: 'tests', milestone: 'Building orchard buildings', phase: 'running', source: 'runner' }, new Date('2026-10-04T12:00:00Z'));
   const result = live.readLiveOperations(home, state, new Date('2026-10-04T12:00:01Z'), 10000, 60000);
-  expect(result.workers[0]).toMatchObject({ activity: 'tests', milestone: 'validating', status: 'ok' });
+  expect(result.workers[0]).toMatchObject({ activity: 'tests', milestone: 'Building orchard buildings', status: 'ok' });
+  expect(JSON.stringify(result)).not.toContain('PRIVATE');
+});
+it('hides the milestone of a private task', () => {
+  const home = createHome();
+  const state = structuredClone(EMPTY_STATE);
+  state.jobs.push({ id: 'change-job', stage: 'change', issue: null, pid: 4, log: 'log', startedAt: '2026-10-04T12:00:00Z' });
+  recordObservation(home, 'change-job', { type: 'activity', activity: 'tests', milestone: 'PRIVATE plan', phase: 'running', source: 'runner' }, new Date('2026-10-04T12:00:00Z'));
+  const result = live.readLiveOperations(home, state, new Date('2026-10-04T12:00:01Z'), 10000, 60000);
+  expect(result.workers[0]).toMatchObject({ activity: 'tests', milestone: null });
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });
 it('projects only allowlisted manager intent and rejects free text', () => {

@@ -140,7 +140,7 @@ function getConditionState(ratio: number): string {
 
 // The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
-  return part.percent === 0 ? `${part.name} · broken` : `${part.name} · ${part.percent}%`;
+  return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
 }
 
 export class TruckConditionReadout {

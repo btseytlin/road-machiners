@@ -12,13 +12,14 @@ function pending(f: Fake): void {
 }
 
 describe('change', () => {
-  it('rejects a diff outside factory/', async () => {
+  it('opens a pull request for a diff outside factory/ and lists its files', async () => {
     const f = fake();
     pending(f);
-    f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\ndiff --git a/src/sim/world.ts b/src/sim/world.ts\n+y\n';
-    await expect(change(f.ctx, 4)).rejects.toThrow('src/sim/world.ts');
-    expect(f.calls.some((call) => call.startsWith('push'))).toBe(false);
-    expect(readState(f.ctx.statePath).pendingChanges).toHaveLength(1);
+    f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\ndiff --git a/quality/check.ts b/quality/check.ts\n+y\n';
+    await change(f.ctx, 4);
+    expect(f.calls).toContain('push work-head factory-change/4');
+    expect(f.prBodies.at(-1)).toContain('quality/check.ts');
+    expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
   });
 
   it('opens a pull request for a factory-only diff and clears the request', async () => {
