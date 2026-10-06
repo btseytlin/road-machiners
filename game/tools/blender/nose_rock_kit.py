@@ -12,7 +12,8 @@ the site, which falls up to 10 m away from it. A floor under every cell closes t
 The ship came down on a mountain, and the town's ring was built up to its flanks. Inside CLIP meters of the center a
 mass may stand anywhere its own footprint says. Past it, only the mountain's arc carries rock, out to a ragged foot
 REACH meters away. The arc's bearing is PHI, in degrees from +X toward the back (-Y). The curtain stops where the rock
-meets it, so the rock closes the ring there. A gorge through the rock leads the WNW road and its pad to the gate.
+meets it, so the rock closes the ring there. The bake raises the ground around the foot (src/mapgen/fortress.ts), so
+the foot is a short face over a slope of the landscape.
 """
 
 from __future__ import annotations
@@ -37,20 +38,17 @@ FRONT_V = 4.0  # where the front row of nodes lies, meters back from the center.
 CLIP = 120.0  # off the mountain's arc nothing reaches past this radius: the curtain lies 123 m out, and its wall a little in
 SKIRT_Z = -12.0  # deep enough to meet the open ground, which falls up to 10 m around the site
 # The mountain's arc past CLIP, and its foot: REACH meters from the center mid-arc, narrowing to REACH_ENDS at the
-# arc's ends, give or take REACH_WOBBLE. The west wall ends where the straight front meets the curtain, at 2 degrees,
-# and the east wall where the bent front meets it, at 190. The WNW gate stands in a gorge through the rock.
-PHI = (0.0, 215.0)
+# arc's ends, give or take REACH_WOBBLE. The arc starts north of the WNW gate's open ground, which reaches 57 degrees,
+# so the gate and its road stay open, and the east wall ends where the bent front meets the curtain, at 190.
+PHI = (60.0, 215.0)
 REACH = 220.0
 REACH_ENDS = 160.0
 REACH_WOBBLE = 12.0
 # Off the yard, the front edge bends toward the gate east of BEND_X, so the east wall ends in rock and not on the sand.
 BEND_X = -105.0
 BEND = 1.6  # meters toward the gate per meter past BEND_X
-# The WNW gate's open ground in the site frame: center and radius in meters. No mass covers it. Its road runs out
-# straight from the center through the gate, in a gorge GORGE_HALF meters to either side of that line, so the gate's
-# pad and the road stay clear.
+# The WNW gate's open ground in the site frame: center and radius in meters. No mass covers it.
 GATE_WNW = (92.0, -80.0, 34.0)
-GORGE_HALF = 30.0
 
 # Colors from src/render/palette.ts, orange-brown as C5's rock.
 COLORS = {
@@ -71,13 +69,9 @@ def v_of(y: float) -> float:
 
 
 def in_gate(x: float, y: float) -> bool:
-    """Whether (x, y) is on the WNW gate's open ground, or in the gorge its road runs out through."""
+    """Whether (x, y) is on the WNW gate's open ground."""
     gx, gy, gr = GATE_WNW
-    if math.hypot(x - gx, y - gy) < gr:
-        return True
-    gd = math.hypot(gx, gy)
-    along = (x * gx + y * gy) / gd
-    return along > gd and abs(x * gy - y * gx) / gd < GORGE_HALF
+    return math.hypot(x - gx, y - gy) < gr
 
 
 def bent(x: float) -> float:

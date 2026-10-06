@@ -3,7 +3,7 @@ ship runs into. It rises to about 44 m, twice the 22 m ship-metal towers, so it 
 
 Stands in the site frame of nose_rock_kit.py: the origin is the site center at ground level, +X along the ship toward
 its nose, +Y toward the south gate. Its footprint is the part of the ring behind a diagonal front edge that runs from
-60 m back at x = -48 to 22 m back at x = -85 and then straight on, past x = -48 toward the stern and inside 120 m of
+60 m back at x = -90 to 22 m back at x = -127 and then straight on, past x = -90 toward the stern and inside 120 m of
 the center, or out to the mountain's foot on its arc. Its front is a steep cliff, and its top is a broken plateau that
 falls toward the foot outside the ring.
 Run: blender --background --python tools/blender/nose_crag.py -- public/models/nose_crag.glb [tmp/nose_crag.png]
@@ -20,13 +20,13 @@ from kit import Kit, parse_args  # noqa: E402
 from nose_rock_kit import COLORS, heightfield, past_ring  # noqa: E402
 
 SEED = 62
-EDGE_X = -48.0  # the crag's near end, toward the nose
+EDGE_X = -90.0  # the crag's near end, toward the nose, where the torn hull runs into it
 TOP = 44.0
 OUT_FALL = 0.7  # share of its height the crag loses from the ring to the mountain's foot
 
 
 def front(x: float) -> float:
-    """Where the footprint begins, meters back: 60 at the near end, sloping to 22 at x = -85 and beyond."""
+    """Where the footprint begins, meters back: 60 at the near end, sloping to 22 at x = -127 and beyond."""
     t = min(1.0, max(0.0, (EDGE_X - x) / 37.0))
     return 60.0 + (22.0 - 60.0) * t
 

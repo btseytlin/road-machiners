@@ -1,10 +1,13 @@
-// The fortress bake layer on a flat draft: the Bowl pit and the pieces as props.
+// The fortress bake layer on a flat draft: the Bowl pit, the pieces as props, and Nose's rock and the ground around it.
 
 import { describe, expect, it } from 'vitest';
-import { FORTRESS_SITES } from '../data/fortress';
+import { FORTRESS_SITES, NOSE_APRON } from '../data/fortress';
 import { REGION } from '../data/region';
+import { TERRAIN } from '../data/terrain';
 import { FORT_MODELS, fortressPieces, insideCurtain, pitDepth } from '../sim/fortress';
 import { noseFrame } from '../sim/nose';
+import { sitePads } from '../sim/sites';
+import { dist, segmentDist } from '../sim/vec';
 import { newDraft, typeCode, type MapDraft } from './bake';
 import { fortressLayer } from './fortress';
 
@@ -30,6 +33,31 @@ describe('fortress layer', () => {
     expect(d.props.filter((p) => !FORT_MODELS.has(p.kind)).map((p) => p.kind)).toEqual(['noseRise', 'noseCrag']);
   });
 
+  it('raises the ground around Nose rock, outside its circle and off its roads and pads', () => {
+    const nose = REGION.towns.find((t) => t.id === 'nose')!;
+    const raised: { p: { x: number; y: number }; h: number }[] = [];
+    for (let y = Math.floor(nose.pos.y - 70); y <= nose.pos.y + 70; y++) {
+      for (let x = Math.floor(nose.pos.x - 70); x <= nose.pos.x + 70; x++) {
+        const h = d.heights[y * n + x] - RIM;
+        if (h !== 0) raised.push({ p: { x, y }, h });
+      }
+    }
+    expect(Math.max(...raised.map((r) => r.h))).toBeCloseTo(NOSE_APRON.height);
+    expect(Math.min(...raised.map((r) => r.h))).toBeGreaterThan(0);
+    for (const { p } of raised) expect(dist(p, nose.pos)).toBeGreaterThan(nose.radius);
+    const scree = typeCode('scree');
+    const up = (x: number, y: number) => d.heights[y * n + x] > RIM;
+    for (const { p } of raised) {
+      const onMargin = dist({ x: p.x + 0.5, y: p.y + 0.5 }, nose.pos) < nose.radius + TERRAIN.types.siteMargin;
+      if (!onMargin && up(p.x, p.y) && up(p.x + 1, p.y) && up(p.x, p.y + 1) && up(p.x + 1, p.y + 1)) expect(d.types[p.y * d.size + p.x], `tile ${p.x},${p.y}`).toBe(scree);
+    }
+    const roads = REGION.roads.flatMap((road) => road.slice(1).map((b, i) => [road[i], b] as const));
+    for (const { p } of raised) {
+      expect(Math.min(...roads.map(([a, b]) => segmentDist(p, a, b))) - REGION.roadWidth / 2).toBeGreaterThan(NOSE_APRON.clear);
+      for (const pad of sitePads(nose)) expect(dist(p, pad) - REGION.sites.pad.width / 2).toBeGreaterThan(NOSE_APRON.clear);
+    }
+  });
+
   it('clears the earlier props Nose rock would bury, and keeps the rest', () => {
     const draft = flatDraft();
     const nose = REGION.towns.find((t) => t.id === 'nose')!;
@@ -47,7 +75,8 @@ describe('fortress layer', () => {
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const h = d.heights[j * n + i];
-        if (h === RIM) continue;
+        // Nose's raised ground is the only ground over the rim.
+        if (h >= RIM) continue;
         const p = { x: i, y: j };
         expect(insideCurtain(bowl, p, pit.margin), `corner ${i},${j}`).toBe(true);
         expect(h).toBeCloseTo(RIM - pitDepth(bowl, p), 5);
@@ -65,6 +94,7 @@ describe('fortress layer', () => {
       for (let x = 0; x < d.size; x++) {
         const corners = [d.heights[y * n + x], d.heights[y * n + x + 1], d.heights[(y + 1) * n + x], d.heights[(y + 1) * n + x + 1]];
         const type = d.types[y * d.size + x];
+        if (corners.some((h) => h > RIM)) continue;
         if (corners.every((h) => h === RIM)) {
           expect(type, `tile ${x},${y}`).toBe(SAND);
         } else if (corners.every((h) => h === corners[0])) {

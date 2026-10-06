@@ -32,8 +32,8 @@ const SQUAT = { x: -0.1, z: 1.9, height: 0.42 }; // height: share of the tall ta
 // just behind the gate, but the 12 m east wall hides everything there lower than about 5 m from the camera, so it
 // stands two tiles further in, in front of the tanks, where its roof shows over the walls.
 const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2 };
-// A shed is the scrap shack at this scale. Its lit doorway fills the shack's door gap (tools/blender/shack.py), in
-// tiles after the scale.
+// A shed is the scrap shack at this scale. Its door fills the shack's door gap (tools/blender/shack.py), in tiles
+// after the scale.
 const SHED_SCALE = 1.5;
 const SHED_DOOR = {
   reach: (2.03 * SHED_SCALE) / 4 + 0.01, // just out of the door plane, 2.03 m along the shack's +X
@@ -62,13 +62,14 @@ function addPumpjack(b: SiteBuilder): void {
   b.addMover(beam, rock(new THREE.Vector3(0, 0, 1), STROKE.amplitude, STROKE.period));
 }
 
-// A shed with its doorway lit, as C2's and C4's sheds glow at the door. Its door (the shack's +X) faces along yaw.
+// A shed with a shut door and a lit lantern over it, as C2's and C4's sheds glow at the door. Its door (the shack's
+// +X) faces along yaw.
 function addShed(b: SiteBuilder, site: string, shed: { x: number; z: number; yaw: number }): void {
   b.addModel('shack', shed.x, shed.z, shed.yaw, SHED_SCALE).name = `${site}-shed`;
   const out = { x: Math.cos(shed.yaw), z: -Math.sin(shed.yaw) };
   const at = (reach: number) => ({ x: shed.x + out.x * reach, z: shed.z + out.z * reach });
   const door = at(SHED_DOOR.reach);
-  b.addBox(door.x, door.z, 0.02, SHED_DOOR.height, SHED_DOOR.width, PAL.lamp.on, 0, shed.yaw).name = `${site}-shed-door`;
+  b.addBox(door.x, door.z, 0.02, SHED_DOOR.height, SHED_DOOR.width, PAL.rust.dark, 0, shed.yaw).name = `${site}-shed-door`;
   const bracket = at(SHED_DOOR.reach + SHED_LAMP.reach / 2);
   b.addBox(bracket.x, bracket.z, SHED_LAMP.reach, 0.03, 0.03, PAL.metal, SHED_LAMP.lift + SHED_LAMP.size, shed.yaw);
   const lamp = at(SHED_DOOR.reach + SHED_LAMP.reach);

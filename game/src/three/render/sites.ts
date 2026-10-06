@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES } from '../../data/fortress';
-import { fortressGates, insideCurtain, type FortGate } from '../../sim/fortress';
+import { fortressGates, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
 import { guardedSites } from '../../sim/guards';
 import { groundPoint, type V3 } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
@@ -458,12 +458,14 @@ function copiesOf(o: THREE.Mesh): THREE.Matrix4[] {
   return Array.from({ length: o.count }, (_, k) => o.matrixWorld.clone().multiply(o.getMatrixAt(k, new THREE.Matrix4())));
 }
 
+// Where rock closes the curtain, a piece may run on into the rock, like Nose's ship into its mountain.
 function verticesInside(site: Site, geometry: THREE.BufferGeometry, at: THREE.Matrix4): boolean {
   const v = new THREE.Vector3();
   const pos = geometry.getAttribute('position');
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i).applyMatrix4(at);
-    if (!insideCurtain(site, { x: v.x / S, y: v.z / S })) return false;
+    const p = { x: v.x / S, y: v.z / S };
+    if (!insideCurtain(site, p) && !onFortressRock(site, p)) return false;
   }
   return true;
 }

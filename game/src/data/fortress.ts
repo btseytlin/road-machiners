@@ -46,11 +46,10 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
   },
   // C5's close towers: one every 3 sections, about 23 m apart. Turns 3.75 to 9.75 clear both 24 m flush gates.
   // The ring was built around the crashed ship, up to the flanks of the mountain it came down on. The mountain
-  // (nose_rise.py) covers the curtain line from 167 to 190 degrees past the turn, from its straight front in the west
-  // to the WNW gate's open ground, and from 222 to 355, north of that ground, round the back, to where its bent front
-  // meets the curtain in the east. Each rock stretch lies a few degrees inside, so each wall end reaches into the rock.
-  // A test checks the walls' ends against the rock's boxes.
-  nose: { shape: 'circle', turn: 8, style: 'shipMetal', towerEvery: 3, rock: [{ from: 171, to: 186 }, { from: 226, to: 352 }] },
+  // (nose_rise.py) covers the curtain line from 225 to 355 degrees past the turn: north of the WNW gate's open ground,
+  // round the back, to where its bent front meets the curtain in the east. The rock stretch lies a few degrees inside,
+  // so each wall end reaches into the rock. A test checks the walls' ends against the rock's boxes.
+  nose: { shape: 'circle', turn: 8, style: 'shipMetal', towerEvery: 3, rock: [{ from: 228, to: 352 }] },
   dustwell: { shape: 'square', turn: 45, style: 'compound' },
   'green-pit': { shape: 'circle', turn: 8, style: 'masonry' },
   'pump-station': { shape: 'square', turn: 0, style: 'masonry' },
@@ -62,6 +61,12 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
   scrapjaw: { shape: 'circle', turn: -10, style: 'scrap' },
   kiln: { shape: 'square', turn: 93, style: 'scrap' },
 };
+
+// The ground the bake raises around Nose's mountain, so its foot is a slope of the landscape. Tiles. The ground
+// under the rock stands `height` up, 5 m, under the rock's 8 m foot, and falls to the plain over `run` tiles from the
+// rock's boxes, a 0.125 grade any truck climbs. It stays at the plain within `clear` tiles of a road's edge or a pad and
+// rises over `ramp` tiles past that, and it stays at the plain inside the site circle.
+export const NOSE_APRON = { height: 1.25, run: 10, clear: 4, ramp: 4 };
 
 export const FORTRESS = {
   // Gap from the site circle in to the outline corners. A corner tower's half diagonal, 0.75 * sqrt(2), fits in it.
