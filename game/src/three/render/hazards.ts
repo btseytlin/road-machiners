@@ -16,7 +16,7 @@
 //
 // Shown: clouds and fields the player sees any part of, and the player's own.
 //
-// Flares from world.flares: a white-hot core in a faint warm halo hanging over its point, and a white point light,
+// Flares from world.flares: a white-hot core in a red glow hanging over its point, and a red point light,
 // drawn while it burns within FLARE.seenRange of the player. It sinks FLARE_LOOK.sink a turn. The truck its launch or its light shows is marked by
 // contacts.ts from the player's contacts.
 //
@@ -708,14 +708,14 @@ const FLARE_LOOK = {
   sink: 1, // tiles the hanging flare sinks a turn
   flightMs: 1600, // from the cannon to the top
   igniteMs: 300, // the light's ramp once lit
-  core: 0.8, // tiles across the white-hot core sprite
-  halo: { size: 3, opacity: 0.35 }, // the faint glow around the core: tiles across, opacity at full brightness
-  burst: { size: 7, ms: 450 }, // the shell bursting at the top: the halo starts this many tiles across and shrinks to its size over ms
+  core: 0.5, // tiles across the white-hot core sprite
+  halo: { size: 3, opacity: 0.75 }, // the red glow around the core: tiles across, opacity at full brightness
+  burst: { size: 4, ms: 300 }, // the shell bursting at the top: the glow starts this many tiles across and shrinks to its size over ms
   light: { intensity: 60, reach: 1.6, decay: 1 }, // reach: the light's range as a share of the flare's radius
   flicker: { share: 0.25, speed: 6 }, // the glow and the light waver by this share, this many noise cycles a second
   lastTurn: 0.55, // brightness share in the flare's last turn, so a dying flare reads as ending
 };
-const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.45, radius: 0.12, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
+const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radius: 0.024, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
 
 // igniteMs: when it bursts and lights at the top. bornTurn: the world's turn when first drawn, for its sinking.
 type FlareView = { core: THREE.Sprite; halo: THREE.Sprite; igniteMs: number; bornTurn: number };
