@@ -66,7 +66,8 @@ import {
   footprint,
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
-import { moneyLabel } from "./hud-readout";
+import { maxSpeedSteps } from "../sim/stats";
+import { moneyLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -962,7 +963,7 @@ export class InventoryScreen {
   }
 }
 
-// Header chips for the player's truck: chassis, money, free cells and load.
+// Header chips for the player's truck: chassis, money, free cells, load and power.
 export function truckChips(w: World): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
@@ -979,7 +980,14 @@ export function truckChips(w: World): HTMLElement {
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
+    powerChipNode(w, me),
   );
+}
+
+// Engine power against the working guns' draw, and what the draw costs in top speed.
+function powerChipNode(w: World, me: Vehicle): HTMLElement {
+  const chip = powerChip(maxSpeedSteps(w, me), me);
+  return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
 // Why a Patch button is disabled, or null when the patch can start.
