@@ -8,7 +8,7 @@ import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, ESTIMATE_HELP, heldLines, heldReadout, lotTitle } from "./format";
+import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -273,72 +273,71 @@ describe("aid handover text", () => {
   });
 });
 
-const texts = (held: number, sell: number, basis: number | undefined) => heldLines(heldReadout(held, sell, basis)).map((l) => l.text);
-
-describe("heldReadout", () => {
+describe("saleEstimate", () => {
   it("words a loss per unit against the average cost", () => {
-    expect(heldReadout(11, 37, 45)).toEqual({ kind: "loss", held: 11, perUnit: 8, avgCost: 45 });
-    expect(texts(11, 37, 45)).toEqual(["11 in truck", "Est. loss 8 / unit", "avg cost 45"]);
+    const e = saleEstimate(11, 12, 20);
+    expect(e).toEqual({ kind: "loss", perUnit: 8, avgCost: 20 });
+    expect(estimateText(e)).toBe("\u22128");
+    expect(estimateTitle(e)).toBe("Avg cost 20");
   });
 
   it("words a gain", () => {
-    expect(heldReadout(3, 37, 32.4)).toEqual({ kind: "gain", held: 3, perUnit: 5, avgCost: 32 });
-    expect(texts(3, 37, 32.4)).toEqual(["3 in truck", "Est. gain 5 / unit", "avg cost 32"]);
+    expect(estimateText(saleEstimate(1, 38, 5))).toBe("+33");
   });
 
-  it("calls a rounded zero break-even, never -0", () => {
-    expect(heldReadout(2, 37, 37).kind).toBe("even");
-    expect(heldReadout(2, 37, 37.4).kind).toBe("even");
-    expect(texts(2, 37, 37.4)).toEqual(["2 in truck", "Est. break-even", "avg cost 37"]);
+  it("calls a rounded zero even, never -0", () => {
+    for (const basis of [37, 37.4]) {
+      const e = saleEstimate(2, 37, basis);
+      expect(e.kind).toBe("even");
+      expect(estimateText(e)).toBe("0");
+    }
   });
 
   it("says when no cost is on record", () => {
-    expect(texts(11, 37, undefined)).toEqual(["11 in truck", "No cost on record"]);
+    const e = saleEstimate(1, 42, undefined);
+    expect(estimateText(e)).toBe("?");
+    expect(estimateTitle(e)).toBe("No cost on record");
   });
 
-  it("shows None when nothing is held", () => {
-    expect(heldReadout(0, 37, 45).kind).toBe("none");
-    expect(texts(0, 37, 45)).toEqual(["None"]);
+  it("has nothing to say when nothing is held", () => {
+    const e = saleEstimate(0, 37, 45);
+    expect(e.kind).toBe("none");
+    expect(estimateText(e)).toBe("");
   });
 
   it("keeps multi-digit values whole", () => {
-    expect(texts(12, 987, 1234)).toEqual(["12 in truck", "Est. loss 247 / unit", "avg cost 1234"]);
+    expect(estimateText(saleEstimate(12, 987, 1234))).toBe("\u2212247");
   });
 
-  it("never leans on a sign glyph", () => {
-    for (const r of [heldReadout(11, 37, 45), heldReadout(3, 37, 30), heldReadout(2, 37, 37), heldReadout(2, 37, undefined), heldReadout(0, 37, 1)]) {
-      for (const line of heldLines(r)) {
-        expect(line.text).not.toMatch(/^[+\-−]/);
-        expect(line.text).not.toMatch(/[+\-−]\d/);
-        expect(line.text).not.toMatch(/paid|fee|charge/i);
-      }
-      for (const line of heldLines(r).filter((l) => l.tone === "gain" || l.tone === "loss" || l.tone === "even")) {
-        expect(line.text).toMatch(/gain|loss|break-even/);
-      }
+  it("only ever gives a signed number, ? or nothing", () => {
+    for (const e of [saleEstimate(11, 37, 45), saleEstimate(3, 37, 30), saleEstimate(2, 37, 37), saleEstimate(2, 37, undefined), saleEstimate(0, 37, 1)]) {
+      expect(estimateText(e)).toMatch(/^([+\u2212]\d*[1-9]\d*|0|\?|)$/);
     }
   });
 
   it("fails loud on impossible input", () => {
-    expect(() => heldReadout(-1, 37, 45)).toThrow();
-    expect(() => heldReadout(1.5, 37, 45)).toThrow();
-    expect(() => heldReadout(1, NaN, 45)).toThrow();
-    expect(() => heldReadout(1, 37, -1)).toThrow();
-    expect(() => heldReadout(1, 37, Infinity)).toThrow();
+    expect(() => saleEstimate(-1, 37, 45)).toThrow();
+    expect(() => saleEstimate(1.5, 37, 45)).toThrow();
+    expect(() => saleEstimate(1, NaN, 45)).toThrow();
+    expect(() => saleEstimate(1, 37, -1)).toThrow();
+    expect(() => saleEstimate(1, 37, Infinity)).toThrow();
   });
 });
 
-describe("lotTitle and help", () => {
+describe("goods table words", () => {
+  it("has terse column heads", () => {
+    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" });
+  });
+
+  it("explains the profit head in a hover title without turns", () => {
+    expect(PROFIT_HEAD_TITLE).toContain("average cost");
+    expect(PROFIT_HEAD_TITLE).toContain("usual value");
+    expect(PROFIT_HEAD_TITLE).not.toMatch(/turn/i);
+  });
+
   it("words lot totals", () => {
     expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 180 total");
     expect(lotTitle("sell", 11, 312)).toBe("Sell all 11 for 312 total");
-  });
-
-  it("explains the estimate without turns", () => {
-    const text = ESTIMATE_HELP.join(" ");
-    expect(text).toContain("not a fee");
-    expect(text).toContain("usual value");
-    expect(text).toContain("less per unit");
-    expect(text).not.toMatch(/turn/i);
   });
 });
 

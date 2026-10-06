@@ -1943,14 +1943,22 @@ canvas.view {
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(150px, 0.9fr);
+  grid-template-columns: minmax(150px, 1fr) auto auto 44px 64px;
   gap: 10px;
   align-items: center;
   padding: 4px 6px;
   border-bottom: 1px solid #3b454b;
 }
+.goods.truck .goods-head,
+.goods.truck .good-row {
+  grid-template-columns: minmax(120px, 1fr) 48px auto auto 44px 64px;
+}
 .goods-head {
   font-size: 12px;
+}
+.goods-head span:nth-last-child(-n + 2),
+.goods.truck .goods-head span:nth-child(2) {
+  text-align: right;
 }
 .good-row:hover {
   background: #2c3438;
@@ -1991,63 +1999,58 @@ canvas.view {
 .tag.sell {
   color: #e8b86a;
 }
-.held {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  align-items: flex-start;
-  font-size: 11px;
-}
-.held span {
+.count,
+.profit {
+  text-align: right;
   white-space: nowrap;
 }
-.held .held-count {
+.num {
   font: 13px var(--font-mono);
 }
-.trade-caption {
+.cap {
   display: none;
+  margin-right: 4px;
   font-size: 11px;
+  color: var(--muted);
 }
-.goods-help {
-  margin-top: 12px;
-  font-size: 12px;
-}
-.goods-help summary {
-  cursor: pointer;
-}
-.goods-help > div {
-  margin-top: 7px;
-  max-width: 560px;
-}
-@container (max-width: 560px) {
+@container (max-width: 620px) {
   .goods-head {
     display: none;
   }
   .good-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr auto auto;
     grid-template-areas:
-      "name held"
-      "buy sell";
+      "name held profit"
+      "buy buy sell";
     row-gap: 6px;
+  }
+  .goods.truck .good-row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas:
+      "name theirs held profit"
+      "buy buy sell sell";
   }
   .good-row .good-name {
     grid-area: name;
   }
-  .good-row .held {
+  .good-row .count.theirs {
+    grid-area: theirs;
+  }
+  .good-row .count.held {
     grid-area: held;
+  }
+  .good-row .profit {
+    grid-area: profit;
   }
   .good-row .trade.buy {
     grid-area: buy;
   }
   .good-row .trade.sell {
     grid-area: sell;
+    justify-self: end;
   }
-  .trade {
-    flex-wrap: wrap;
-  }
-  .trade-caption {
-    display: block;
-    flex-basis: 100%;
+  .cap {
+    display: inline;
   }
 }
 
