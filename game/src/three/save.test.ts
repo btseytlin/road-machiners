@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
 import { addVehicle, emptyWorld } from '../sim/testkit';
-import { moveItem } from '../sim/inventory';
+import { addGoods, moveItem } from '../sim/inventory';
+import { surrenderTo } from '../sim/parley';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, writeSave } from './save';
@@ -39,6 +40,21 @@ describe('local game save', () => {
     expect(loadWorld(storage, 'auto', TEST_MAP)).toEqual(world);
     clearSlot(storage, 'auto');
     expect(hasSave(storage, SLOTS)).toBe(false);
+  });
+
+  it('keeps a robbery pile, its clock, basis and claim across a save', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const [robber, victim] = world.vehicles.filter((v) => v.brain);
+    victim.pos = { x: robber.pos.x + 1, y: robber.pos.y };
+    addGoods(world, victim, 'scrap', 2);
+    surrenderTo(world, victim, robber);
+    const pile = world.salvage.find((s) => s.pile)!;
+    expect(pile.pile!.claim?.by).toBe(robber.id);
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    expect(loaded?.salvage.find((s) => s.id === pile.id)).toEqual(pile);
+    expect(loaded).toEqual(world);
   });
 
   it('clears the save and the seen tips for a new game, and keeps sound settings', () => {

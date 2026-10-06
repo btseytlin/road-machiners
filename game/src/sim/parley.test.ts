@@ -5,17 +5,21 @@ import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentLine, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
-import { addGoods } from './inventory';
+import { freeCells } from './grid';
+import { addGoods, stowPart } from './inventory';
+import { advanceJobs } from './jobs';
+import { makePart } from './factory';
+import { RULES } from '../data/rules';
 import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
-import { makePeace, plead, yieldTo } from './parley';
-import { hasCargo, lootBlocker, looterOf } from './salvage';
+import { makePeace, plead, surrenderTo, yieldTo } from './parley';
+import { claimantOf, clearPiles, dumpOnPile, hasCargo, lootBlocker, looterOf, salvageUnits } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
 import type { Contract } from './market';
-import type { Faction, Vehicle, World } from './types';
+import type { Faction, SalvageStock, Vehicle, World } from './types';
 import { refreshVision } from './vision';
 
 function quietWorld(): World {
@@ -518,6 +522,116 @@ describe('pile claims', () => {
     expect(visibleSalvage(w, other)).toContain(pile);
     pile.pile!.claim!.warned.push(other.id);
     expect(visibleSalvage(w, other)).not.toContain(pile);
+  });
+});
+
+describe('a robbery pile the robber cannot carry', () => {
+  // A raider with two free cells robs a trader carrying textiles and two loose spares.
+  function robbedTrader() {
+    const w = quietWorld();
+    const robber = npcAt(w, 'raiders', ['raider'], 36);
+    addGoods(w, robber, 'scrap', freeCells(robber) - 2);
+    const victim = addVehicle(w, 'traders', 'scout', ['stockEngine', 'mg'], { x: 37, y: 30 });
+    victim.brain = npcBrain('trader', victim.pos, ['trader']);
+    const spares = [makePart(w, 'shotgun', 4), makePart(w, 'panniers', 1)];
+    for (const part of spares) expect(stowPart(w, victim, part)).toBe(true);
+    expect(addGoods(w, victim, 'textiles', 8)).toBe(8);
+    refreshVision(w);
+    return { w, robber, victim, spares };
+  }
+
+  // Sorted part ids and summed goods over the given trucks and every pile.
+  function holdings(w: World, ids: string[]): { parts: string[]; goods: Record<string, number> } {
+    const parts: string[] = [];
+    const goods: Record<string, number> = {};
+    const add = (good: string, n: number) => { goods[good] = (goods[good] ?? 0) + n; };
+    for (const v of w.vehicles.filter((x) => ids.includes(x.id))) {
+      for (const item of v.items) {
+        if (item.kind === 'part') parts.push(item.part.id);
+        else add(item.good, 1);
+      }
+    }
+    for (const stock of w.salvage) {
+      parts.push(...stock.parts.map((part) => part.id));
+      for (const [good, n] of Object.entries(stock.goods)) if (n > 0) add(good, n);
+    }
+    return { parts: parts.sort(), goods };
+  }
+
+  // The robber parks at the pile and works it until it gives the loot goal up, for at most `turns` turns.
+  function robberSearches(w: World, robber: Vehicle, pile: SalvageStock, turns = 5): void {
+    robber.pos = { x: pile.pos.x + 0.5, y: pile.pos.y };
+    robber.speed = 0;
+    for (let i = 0; i < turns && topGoal(robber)?.kind === 'loot'; i++) {
+      resolveNpcActivities(w);
+      advanceJobs(w);
+      w.turn++;
+    }
+  }
+
+  it('a surrender drops the trader cargo, spares and best installed parts on one pile', () => {
+    const { w, robber, victim, spares } = robbedTrader();
+    const partsBefore = victim.items.filter((item) => item.kind === 'part').length;
+    surrenderTo(w, victim, robber);
+    const piles = w.salvage.filter((s) => s.pile);
+    expect(piles).toHaveLength(1);
+    const [pile] = piles;
+    expect(pile.id).toBe(`dump-${victim.id}-${w.turn}`);
+    expect(pile.pile).toMatchObject({ fromPlayer: false, until: w.turn + SALVAGE.pileTurns, claim: { by: robber.id } });
+    expect(pile.goods).toEqual({ textiles: 8 });
+    expect(pile.parts).toEqual(expect.arrayContaining(spares));
+    const dropped = pile.parts.length - spares.length;
+    expect(dropped).toBeGreaterThan(0);
+    expect(dropped).toBeLessThanOrEqual(RULES.surrenderParts);
+    expect(victim.items.filter((item) => item.kind === 'part')).toHaveLength(partsBefore - pile.parts.length);
+    expect(victim.items.some((item) => item.kind === 'good')).toBe(false);
+  });
+
+  it('the robber takes what fits, quits, and leaves the rest until the pile expires', () => {
+    const { w, robber, victim } = robbedTrader();
+    surrenderTo(w, victim, robber);
+    const pile = w.salvage.find((s) => s.pile)!;
+    const units = salvageUnits(pile);
+    w.events = [];
+    robberSearches(w, robber, pile);
+    expect(topGoal(robber)?.kind).not.toBe('loot');
+    expect(w.events).toContainEqual(expect.objectContaining({ previous: 'loot', activity: null, reason: 'cargo cannot hold salvage' }));
+    expect(freeCells(robber)).toBe(0);
+    clearPiles(w);
+    expect(claimantOf(w, pile)).toBeNull();
+    expect(pile.pile!.claim).toBeUndefined();
+    expect(w.salvage).toContain(pile);
+    expect(salvageUnits(pile)).toBeGreaterThan(0);
+    expect(salvageUnits(pile)).toBeLessThan(units);
+    w.turn = pile.pile!.until - 1;
+    clearPiles(w);
+    expect(w.salvage).toContain(pile);
+    w.turn = pile.pile!.until;
+    clearPiles(w);
+    expect(w.salvage).not.toContain(pile);
+  });
+
+  it('items are conserved through surrender, search and a merged drop', () => {
+    const { w, robber, victim } = robbedTrader();
+    const ids = [robber.id, victim.id];
+    const start = holdings(w, ids);
+    surrenderTo(w, victim, robber);
+    expect(holdings(w, ids)).toEqual(start);
+    const pile = w.salvage.find((s) => s.pile)!;
+    robberSearches(w, robber, pile);
+    expect(holdings(w, ids)).toEqual(start);
+
+    const passer = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: pile.pos.x, y: pile.pos.y + 0.5 });
+    const spare = makePart(w, 'panniers', 2);
+    expect(stowPart(w, passer, spare)).toBe(true);
+    const before = holdings(w, [...ids, passer.id]);
+    const claim = pile.pile!.claim;
+    w.turn += 10;
+    expect(dumpOnPile(w, passer, passer.items.find((item) => item.kind === 'part' && item.part === spare)!)).toBe(pile);
+    expect(w.salvage.filter((s) => s.pile)).toEqual([pile]);
+    expect(pile.pile!.until).toBe(w.turn + SALVAGE.pileTurns);
+    expect(pile.pile!.claim).toEqual(claim);
+    expect(holdings(w, [...ids, passer.id])).toEqual(before);
   });
 });
 
