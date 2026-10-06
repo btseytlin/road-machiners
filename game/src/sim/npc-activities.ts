@@ -15,7 +15,6 @@ import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
-import { route } from './path';
 import {
   tradeOffers, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
@@ -42,7 +41,7 @@ import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
-import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
+import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -87,7 +86,7 @@ function goalKind(goal: NpcActivity | null): NpcActivity['kind'] | null {
 }
 
 // Logs the change. A new top goal cancels a running job that is not its own, since the driver moves off.
-function logChange(w: World, v: Vehicle, previous: NpcActivity | null, reason: string): void {
+export function logChange(w: World, v: Vehicle, previous: NpcActivity | null, reason: string): void {
   const top = topGoal(v);
   w.events.push({ t: 'activity', vehicle: v.id, previous: goalKind(previous), activity: goalKind(top), reason });
   if (top !== previous && v.job && !jobBelongs(v.job, v)) cancelJob(w, v);
@@ -250,7 +249,7 @@ function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): stri
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
-function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
+export function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
   const buyers = profile.markets.map(getKnownSite);
   buyers.sort((a, b) => cargoSaleValue(world, vehicle, b.id) - cargoSaleValue(world, vehicle, a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   if (!buyers[0]) throw new Error(`${vehicle.id} knows no buyer`);
@@ -307,7 +306,7 @@ function travelGoal(world: World, vehicle: Vehicle): NpcActivity {
 }
 
 // A random free point anywhere on the map, off road included. Rare bad luck on every try gives a wait this turn.
-function exploreGoal(world: World, vehicle: Vehicle): NpcActivity {
+export function exploreGoal(world: World, vehicle: Vehicle): NpcActivity {
   const radius = vehicleStats(world, vehicle).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
     const point = { x: randRange(world, radius, world.size - radius), y: randRange(world, radius, world.size - radius) };
@@ -337,7 +336,7 @@ const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   escort: joinLeader,
 };
 
-function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
+export function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
   if (keepsWord(world, vehicle, 'idle', null)) return createActivity('wait', null, null, 'keep its word');
   const option = decide(world, vehicle, 'idle', null, null);
   if (option === 'wait') return createActivity('wait', null, null, 'nothing worth doing');
@@ -1002,7 +1001,7 @@ function currentActivity(world: World, vehicle: Vehicle, profile: NpcProfile): N
   return topGoal(vehicle) ?? nextGoal(world, vehicle, profile);
 }
 
-function awaitsTower(world: World, vehicle: Vehicle): boolean {
+export function awaitsTower(world: World, vehicle: Vehicle): boolean {
   return !inDanger(vehicle) && world.states.some((s) => s.kind === 'answering' && s.other === vehicle.id);
 }
 
@@ -1031,78 +1030,6 @@ function noteGunned(world: World): void {
     const target = world.vehicles.find((v) => v.id === e.target);
     if (target?.brain && gunSiteById(e.site)) target.brain.gunnedBy = e.site;
   }
-}
-
-// ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
-
-// Runs each turn. A driver with no progress for NPC_BEHAVIOR.stallTurns turns gives up its top goal, or with no goal
-// drives off to explore. Each give-up logs a stall event, and the progression recorder fails on any.
-export function watchStalls(world: World): void {
-  for (const v of world.vehicles) {
-    if (!v.brain) continue;
-    if (madeProgress(world, v)) v.brain.progress = { key: progressKey(v), since: world.turn };
-    else if (world.turn - v.brain.progress!.since >= NPC_BEHAVIOR.stallTurns) giveUp(world, v);
-  }
-}
-
-// A driver waiting on a timed state, knocked out, towed, with a tower on its way or lying up at its site, counts as
-// making progress: the state ends the wait.
-function madeProgress(world: World, v: Vehicle): boolean {
-  if (isKnockedOut(v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v)) return true;
-  return v.brain!.progress?.key !== progressKey(v);
-}
-
-// The driver's tile, top goal and job turn. Any change is progress.
-function progressKey(v: Vehicle): string {
-  const top = topGoal(v);
-  const goal = top ? `${top.kind}:${top.targetId}:${top.reason}` : 'idle';
-  return `${Math.round(v.pos.x)},${Math.round(v.pos.y)} ${goal} ${v.job ? `${v.job.kind}:${v.job.turnsLeft}` : '-'}`;
-}
-
-// The driver drops every goal, jumps clear and starts over with a fresh goal.
-function giveUp(world: World, v: Vehicle): void {
-  const top = topGoal(v);
-  world.events.push({ t: 'stall', vehicle: v.id, goal: top?.kind ?? null, reason: top?.reason ?? 'idle' });
-  v.brain!.goals = [];
-  logChange(world, v, top, 'no progress for too long');
-  jumpClear(world, v);
-  freshGoal(world, v);
-  v.brain!.progress = { key: progressKey(v), since: world.turn };
-}
-
-// What an empty stack would pick, but never a wait: a wait rolls explore instead.
-function freshGoal(world: World, v: Vehicle): void {
-  const next = hasSaleCargo(v) ? saleGoal(world, v, npcProfile(v)) : idleGoal(world, v);
-  const goal = next.kind === 'wait' ? exploreGoal(world, v) : next;
-  if (goal.kind !== 'wait') pushGoal(world, v, goal);
-}
-
-// A stuck driver out of the player's sight jumps to a free spot within NPC_BEHAVIOR.stallJump tiles that has a route
-// to its home, so a jam it cannot drive out of cannot hold it. The player never sees a truck vanish or appear.
-function jumpClear(world: World, v: Vehicle): void {
-  const player = vehicleById(world, world.player.vehicleId);
-  const home = npcHomeSite(v);
-  if (!home || canVehicleSee(world, player, v.pos)) return;
-  const spot = jumpSpot(world, v, player, nearestPad(home, v.pos));
-  if (!spot) return;
-  v.pos = spot;
-  v.speed = 0;
-  v.order = null;
-  v.trail = [];
-  delete v.brain!.farRoute;
-}
-
-function jumpSpot(world: World, v: Vehicle, player: Vehicle, pad: Vec): Vec | null {
-  const radius = vehicleStats(world, v).radius;
-  for (let i = 0; i < SPAWN.tries; i++) {
-    const angle = randRange(world, 0, Math.PI * 2);
-    const d = randRange(world, radius * 2, NPC_BEHAVIOR.stallJump);
-    const spot = { x: v.pos.x + Math.cos(angle) * d, y: v.pos.y + Math.sin(angle) * d };
-    if (!isFree(world, spot, radius, v.id) || canVehicleSee(world, player, spot)) continue;
-    const end = route(world, spot, pad, radius, [], v).at(-1) ?? spot;
-    if (dist(end, pad) <= RULES.arriveRadius * 2) return spot;
-  }
-  return null;
 }
 
 // A repair spot is driven to directly. Once there, the driver brakes.

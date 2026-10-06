@@ -14,7 +14,8 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { backOffLoot, finishGoal, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { backOffLoot, finishGoal, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
 import { knockOutNpc } from './defeat';
@@ -1189,6 +1190,17 @@ describe('stall watchdog', () => {
       run(w, 1);
     }
     expect(w.events.some((e) => e.t === 'stall')).toBe(false);
+  });
+
+  it('counts a follower parked at its spot as waiting on its leader, and one short of its spot as stuck', () => {
+    const follower = (off: number) => {
+      const { w, npc } = createScavenger();
+      npc.brain!.goals = [{ kind: 'follow', targetId: 'v-leader', destination: { x: npc.pos.x + off, y: npc.pos.y }, phase: 'travel', reason: 'test goal' }];
+      run(w, NPC_BEHAVIOR.stallTurns + 1);
+      return w.events.some((e) => e.t === 'stall');
+    };
+    expect(follower(0)).toBe(false);
+    expect(follower(RULES.arriveRadius + 2)).toBe(true);
   });
 });
 

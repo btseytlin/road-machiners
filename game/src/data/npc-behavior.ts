@@ -8,7 +8,7 @@ import type { MemoryFact } from '../sim/types';
 export const NPC_BEHAVIOR = {
   // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
   // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
-  // turns without progress is always a bug. See watchStalls() in src/sim/npc-activities.ts.
+  // turns without progress is always a bug. See watchStalls() in src/sim/npc-watchdog.ts.
   stallTurns: 100,
   // Tiles a stalled driver out of the player's sight may jump to get clear of whatever holds it. 20 tiles is about
   // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
