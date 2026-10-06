@@ -288,7 +288,8 @@ CHANGE_TOOL = "factory_queue_change"
 CHANGE_SCHEMA = {
     "name": CHANGE_TOOL,
     "description": (
-        "Queue a change to the factory itself, its code or factory/settings.env, when a committee member asks for one. "
+        "Queue a change to the factory itself, its code or factory/settings.env, or to anything else in the repo, "
+        "like the quality gate or game text, when a committee member asks for one. "
         "A coding agent makes the change in a clone of main and opens a pull request to main. A member merges it, "
         "and the server deploys main by itself. Call it once per change."
     ),

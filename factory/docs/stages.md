@@ -82,7 +82,7 @@ Ship and the hotfix ship queue an incident job for each shipped fix of a `bug` i
 
 ## Factory change
 
-A committee message starting with `/change`, Hermes's `factory_queue_change` tool or the waste review's button queues a factory change. The job runs the design model in a clone of `main` with the cwd in `factory/`. The agent runs up:make in hands-off mode on the task file `.factory-tasks/change-<id>.md`, through design, plan, execute, verify and review. It writes the pull request title and body from `prompts/change-pr.md`. The factory refuses a diff outside `factory/`, pushes `factory-change/<id>` and opens a pull request against `main`. It never merges it. Once a member merges it, the server deploys it.
+A committee message starting with `/change`, Hermes's `factory_queue_change` tool or the waste review's button queues a factory change. The job runs the design model in a clone of `main` with the cwd in `factory/`. The agent runs up:make in hands-off mode on the task file `.factory-tasks/change-<id>.md`, through design, plan, execute, verify and review. It writes the pull request title and body from `prompts/change-pr.md`. The change may touch any file in the repo, like the quality gate at the root or game text. The factory pushes `factory-change/<id>` and opens a pull request against `main`. It never merges it. Once a member merges it, the server deploys it.
 
 ## Ad hoc
 
