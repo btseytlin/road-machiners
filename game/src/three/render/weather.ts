@@ -82,8 +82,9 @@ export class WeatherView {
   }
 
   // Eases each storm bank's haze toward its target, and drops a bank whose storm ended once its haze is gone.
+  // A first frame's clock can run backwards, so a negative dtMs holds the haze still.
   fade(dtMs: number): void {
-    const step = (WEATHER.storm.fadePerSecond * dtMs) / 1000;
+    const step = (WEATHER.storm.fadePerSecond * Math.max(0, dtMs)) / 1000;
     for (const [id, bank] of this.storms) {
       this.show(bank, stepFade(bank.shown, bank.target, step));
       if (bank.shown > 0 || bank.target > 0) continue;

@@ -59,6 +59,16 @@ describe('WeatherView storm haze', () => {
     expect(view.shownOf('w1')).toBe(1);
   });
 
+  it('holds the haze still on a frame whose clock ran backwards', () => {
+    const w = emptyWorld();
+    withStorm(w, 'w1', FADE, 100);
+    const view = new WeatherView(w);
+    w.weather = [];
+    view.sync(w);
+    view.fade(-500);
+    expect(view.shownOf('w1')).toBe(1);
+  });
+
   it('fades out a storm that ended, then removes its bank and frees its material', () => {
     const w = emptyWorld();
     withStorm(w, 'w1', FADE, 1);
