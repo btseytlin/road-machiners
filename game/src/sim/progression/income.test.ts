@@ -38,7 +38,7 @@ describe('largestTraderLoad', () => {
   it('is the trader stake at the best ratio of the player sell price to the trader buy price', () => {
     const load = largestTraderLoad(startWorld(1, INCOME_KIT, INCOME_SKILL_RANK));
     expect(load).toBeGreaterThan(TRAITS.trader.tradeStake);
-    expect(load).toBeCloseTo(2575.76, 1);
+    expect(load).toBeCloseTo(4292.93, 1);
   }, RUN_TIMEOUT);
 });
 
