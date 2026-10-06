@@ -61,7 +61,7 @@ export function playVolley(
         for (const brk of breaks.ofRound(event, k)) host.breakPart(brk);
       },
     };
-    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues);
+    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues, ground);
     showDamage(host, rounds[k], plan.delayMs + plan.flightMs, rows);
   });
   return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs));

@@ -69,10 +69,10 @@ describe('harpoon line physics', () => {
     ['from rest', 'hauler', 0],
     ['already at speed', 'hauler', 7],
     ['from a parked scout, at speed', 'scout', 7],
-  ])('holds a scout fleeing at full throttle %s for the line\'s 3 turns', (_name, from, speed) => {
+  ])('holds a scout fleeing at full throttle %s for the line\'s 5 turns', (_name, from, speed) => {
     const { w } = tethered({ from: from as string, speed: speed as number });
 
-    play(w, 3, (r) => expect(r.tears).toEqual([]));
+    play(w, 5, (r) => expect(r.tears).toEqual([]));
 
     expect(w.lines).toHaveLength(1);
   });

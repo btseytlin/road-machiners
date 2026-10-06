@@ -50,11 +50,11 @@ const hit = (gap?: number) => firstFire((s) => s.w.lines.length === 1, gap);
 const miss = (gap?: number) => firstFire((s) => shotOf(s.w).rounds[0].struck === null, gap);
 
 describe('firing the harpoon', () => {
-  it('is a gun with a one-round magazine, a five-turn reload and a three-turn line', () => {
+  it('is a gun with a one-round magazine, a five-turn reload and a five-turn line', () => {
     const def = partDef('harpoon') as WeaponDef;
 
     expect(def.kind).toBe('weapon');
-    expect({ magazine: def.magazine, reload: def.reload, line: def.line }).toEqual({ magazine: 1, reload: 5, line: { turns: 3 } });
+    expect({ magazine: def.magazine, reload: def.reload, line: def.line }).toEqual({ magazine: 1, reload: 5, line: { turns: 5 } });
   });
 
   it('empties its magazine on a miss and makes no line', () => {
@@ -71,7 +71,7 @@ describe('firing the harpoon', () => {
 
     expect(round.struck).toBe(trader.id);
     expect(w.lines).toEqual([
-      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 3 },
+      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 5 },
     ]);
     expect(gunOf(part).ammo).toBe(0);
     expect(trader.lastHitBy).toBe(me.id);
@@ -142,11 +142,10 @@ describe('firing the harpoon', () => {
 });
 
 describe('the harpoon line', () => {
-  it('lasts 3 turns', () => {
+  it('lasts 5 turns', () => {
     const { w } = hit();
 
-    advanceUtilityEffects(w);
-    advanceUtilityEffects(w);
+    for (let turn = 1; turn <= 4; turn++) advanceUtilityEffects(w);
     expect(w.lines).toHaveLength(1);
 
     advanceUtilityEffects(w);

@@ -1,6 +1,6 @@
 """Harpoon launcher body for the 'harpoon' weapon.
 
-About 0.75 m long: a short breech block on the pivot with a rope reel behind it, wound with pale rope (PAL.rope) that
+About 0.75 m long: a short breech block on the pivot with a rope reel behind it, wound with black rope (PAL.rope) that
 runs forward over the breech to the bolt. Origin at the pivot. socket_muzzle at the front face center (0.2, 0, 0.16).
 socket_extra on the top front edge (0.14, 0, 0.26).
 Run: blender --background --python tools/blender/wrec_harpoon.py -- public/models/wrec_harpoon.glb [tmp/wrec_harpoon.png]

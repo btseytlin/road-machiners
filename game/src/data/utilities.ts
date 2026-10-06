@@ -160,7 +160,8 @@ export function oilSlickLength(): number {
 // Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. The peak
 // stretch pull over 3 turns: a scout fleeing at full throttle from a parked scout 15 kN, the same scout already at
 // speed when the line goes taut 26 kN, and from a parked hauler 31 kN; a hauler dragging a braking scout 38 kN and
-// more at speed. So a line holds a truck of the target's own size for its turns, and a much stronger truck tears it.
+// more at speed. The scouts stay held over the line's 5 turns as well. So a line holds a truck of the target's own
+// size for its turns, and a much stronger truck tears it.
 // Stiffer 10000 with damping 2000 jerked a scout at speed to 72 kN, so no tear force held a fleeing truck.
 export const HARPOON = {
   stiffness: 5000, // N per meter of stretch

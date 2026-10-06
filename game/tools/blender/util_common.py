@@ -17,7 +17,6 @@ from parts_common_core import check_footprint
 COLORS = {
     **CORE_COLORS,
     "mustard": 0xB39A3A,  # PAL.utility
-    "rope": 0xC9B98A,  # PAL.rope
     "spark": 0x9FD8FF,  # PAL.pulse.ring
     "flare": 0xFF4A3A,  # PAL.flare.glow
 }
