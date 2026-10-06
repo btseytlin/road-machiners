@@ -160,6 +160,27 @@ export function highestUnder(chassisId: string, rect: CellRect): number {
   return topOver(map, xa, xb, ya, yb);
 }
 
+// The model's top surface samples whose centers lie within radius of a body point, in body meters: x and z the sample
+// center, y its top and half its half size. Samples over air are left out.
+export function surfaceSamples(chassisId: string, center: { x: number; z: number }, radius: number): { x: number; z: number; y: number; half: number }[] {
+  const map = truckShape(chassisId).heights;
+  const out: { x: number; z: number; y: number; half: number }[] = [];
+  const reach = Math.ceil(radius / map.cell) + 1;
+  // Model y points to the truck's left, body z to its right.
+  const i0 = Math.floor(center.x / map.cell);
+  const j0 = Math.floor(-center.z / map.cell);
+  for (let i = i0 - reach; i <= i0 + reach; i++) {
+    for (let j = j0 - reach; j <= j0 + reach; j++) {
+      const top = map.top[i - map.i0]?.[j - map.j0];
+      if (typeof top !== 'number') continue;
+      const x = (i + 0.5) * map.cell;
+      const z = -(j + 0.5) * map.cell;
+      if (Math.hypot(x - center.x, z - center.z) <= radius) out.push({ x, z, y: top / 100, half: map.cell / 2 });
+    }
+  }
+  return out;
+}
+
 // How far a surface may stand above a resting part before the part would cut into it, in meters.
 const CLIP_TOLERANCE = 0.05;
 // A part never shrinks below this share of its footprint along either axis to clear taller surfaces. A small part
