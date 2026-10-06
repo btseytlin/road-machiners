@@ -440,6 +440,21 @@ describe('botOrders', () => {
     expect(playerVehicle(botOrders(w, 'hunter').world).order).not.toBeNull();
   });
 
+  it('has a scavenging hunter that left town with more repair parts than it needs not drive back to sell them', () => {
+    const site = town('bowl');
+    const pad = nearestPad(site, site.pos);
+    const out = dist(pad, site.pos);
+    const w = emptyWorld({ x: pad.x + ((pad.x - site.pos.x) / out) * 10, y: pad.y + ((pad.y - site.pos.y) / out) * 10 });
+    w.player.discovered = [];
+    removeAllGoods(playerVehicle(w));
+    addGoods(w, playerVehicle(w), 'parts', START_KITS.standard.cargo.parts! + 1);
+
+    const order = playerVehicle(botOrders(w, 'hunter').world).order;
+
+    expect(order?.kind).toBe('stopAt');
+    expect(order?.kind === 'stopAt' && order.dest).not.toEqual(nearestPad(site, playerVehicle(w).pos));
+  });
+
   it('has a broke hunter with no gun scavenge instead of patrol', () => {
     const armed = withPrey(parkedAt('bowl'));
     armed.player.money = 0;
@@ -905,5 +920,19 @@ describe('camp gate guns', () => {
     const far = turnFacing(RULES.guards.range + 20);
     expect(near?.kind === 'stopAt' && dist(near.dest, gate) <= RULES.guards.range).toBe(false);
     expect(far).toEqual({ kind: 'stopAt', dest: outside(RULES.guards.range + 20) });
+  });
+
+  it('has a hunter in a fight not charge a foe that ran inside a camp gun range', () => {
+    const w = emptyWorld(outside(RULES.guards.range + 4));
+    const me = playerVehicle(w);
+    me.speed = 0;
+    for (let i = 0; i < 4; i++) expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], outside(RULES.guards.range - 4));
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+
+    const order = playerVehicle(botOrders(w, 'hunter').world).order;
+
+    expect(order?.kind === 'stopAt' && dist(order.dest, gate) <= RULES.guards.range).toBe(false);
   });
 });

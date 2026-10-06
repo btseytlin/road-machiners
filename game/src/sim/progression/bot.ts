@@ -611,19 +611,18 @@ function sellAt(world: World, town: TownDef, good: string): number {
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
 // sellCargo.
 function scavenge(o: Orders, stripping: boolean): boolean {
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, stripping);
+  if (townAt(o.world) && sellsCargo(o, stripping)) sellCargo(o, stripping);
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
-  else if (cargoToTown(o)) driveToSite(o, nearestTown(o.world));
+  else if (cargoToTown(o, stripping)) driveToSite(o, nearestTown(o.world));
   else return findSalvageSite(o);
   return true;
 }
 
-// Cargo still to take to town. In town the sale already sold what the bot would sell, and a field repairer keeps its
-// repair parts.
-function cargoToTown(o: Orders): boolean {
-  return hasCargo(o.world, o.me) && !townAt(o.world);
+// Cargo still to take to town. In town the sale already sold what the bot would sell.
+function cargoToTown(o: Orders, stripping: boolean): boolean {
+  return sellsCargo(o, stripping) && !townAt(o.world);
 }
 
 function findSalvageSite(o: Orders): boolean {
@@ -640,7 +639,7 @@ function findSalvageSite(o: Orders): boolean {
 function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, true);
+  if (townAt(o.world) && sellsCargo(o, true)) sellCargo(o, true);
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
@@ -791,7 +790,9 @@ function charge(o: Orders, foe: Vehicle, goal: Goal): void {
   driveTo(o, foe.pos);
 }
 
+// A foe under a camp's gate guns is never fought: the guns join the fight on its side.
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  if (campGunning(o.me, foe.pos)) return false;
   const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
   return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
 }
@@ -839,7 +840,7 @@ function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null
 // the sale is done and it goes on with the hunt, since waiting frees no cell.
 function collectOrHunt(o: Orders): void {
   if (freeCells(o.me) === 0) {
-    if (townAt(o.world) || !hasCargo(o.world, o.me)) return hunt(o);
+    if (townAt(o.world) || !sellsCargo(o, true)) return hunt(o);
     return driveToSite(o, nearestTown(o.world));
   }
   const wreck = nearestStock(o.world, knownStocks(o.world).filter((s) => s.id.startsWith('wreck-') && playerSees(o.world, s.pos)));
@@ -939,9 +940,18 @@ function hasCargo(world: World, v: Vehicle): boolean {
 // Sells the goods for sale and the spare parts. Every shop buys both. A field repairer with stripping on keeps its
 // repair parts and strips its spares instead of selling them. A bot that needs the money now sells everything.
 function sellCargo(o: Orders, stripping = false): void {
+  for (const [good, n] of goodsToSell(o, stripping)) o.run((w) => sellGood(w, good, n), 'goodsSold');
+  sellSpares(o, stripping && o.fieldRepair);
+}
+
+function goodsToSell(o: Orders, stripping: boolean): [string, number][] {
   const keep = stripping && o.fieldRepair;
-  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) if (!keep || good !== 'parts') o.run((w) => sellGood(w, good, n), 'goodsSold');
-  sellSpares(o, keep);
+  return Object.entries(cargoForSale(o.world, o.me)).filter(([good]) => !keep || good !== 'parts');
+}
+
+// Whether sellCargo with this stripping setting would sell anything.
+function sellsCargo(o: Orders, stripping: boolean): boolean {
+  return goodsToSell(o, stripping).length > 0 || spareItems(o.me).length > 0;
 }
 
 function sellSpares(o: Orders, keep: boolean): void {
