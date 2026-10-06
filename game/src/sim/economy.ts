@@ -500,6 +500,11 @@ export function repairBasics(world: World): World {
   return repairParts(world, basicParts);
 }
 
+// Only the broken engine, transmission, wheels and tank: the fix that gets a stranded truck going.
+export function repairDrive(world: World): World {
+  return repairParts(world, brokenDriveParts);
+}
+
 // Buy or sell price at one place, both scaled by the part's current condition (HP share), not only
 // its wear. The spread is added on top for buy and cut for sell, so buy always rounds to strictly
 // above sell (IV4), even at the narrowest Social skill spread. Both are floored at the scrap value.
@@ -607,6 +612,14 @@ function garageParts(world: World, v: Vehicle): PartInstance[] {
 
 function basicParts(world: World, v: Vehicle): PartInstance[] {
   return garageParts(world, v).filter((p) => partDef(p.defId).kind === "core");
+}
+
+function brokenDriveParts(world: World, v: Vehicle): PartInstance[] {
+  return driveParts(v).filter((p) => !isWorking(p) && (!isJunk(p) || canRebuild(world, p)));
+}
+
+export function driveRepairCost(world: World): number {
+  return costOf(world, brokenDriveParts(world, playerVehicle(world)));
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.

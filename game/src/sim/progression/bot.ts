@@ -23,7 +23,7 @@ import { campGunning, nearestGate } from '../camp-guns';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
-import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, driveRepairCost, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, repairDrive, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { cargoRoom, getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
@@ -385,14 +385,25 @@ function restoreEngine(o: Orders, shopId: string): void {
 }
 
 // Badly damaged built-in parts get fixed before fuel and supplies, with cargo and then gear sold for the bill, since
-// the truck must drive to earn. Gear sells only when it covers the whole bill. The repair waits for the end of a fight.
+// the truck must drive to earn. Gear sells only when it covers the whole bill. A stranded truck that cannot cover
+// them all fixes only its broken engine, transmission, wheels and tank, as a player would: the town's scrap patch
+// counts that bill as paid by the gear, so it patches nothing. The repair waits for the end of a fight.
 function restoreBasics(o: Orders, shopId: string): void {
   if (underFire(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
   const cost = basicsRepairCost(o.world);
   if (o.world.player.money < cost) sellCargo(o);
-  if (saleBudget(o.world, shopId) < cost) return;
+  if (saleBudget(o.world, shopId) >= cost) payRepair(o, shopId, cost, repairBasics);
+  else if (isStranded(o.world, o.me)) restoreDrive(o, shopId);
+}
+
+function restoreDrive(o: Orders, shopId: string): void {
+  const cost = driveRepairCost(o.world);
+  if (saleBudget(o.world, shopId) >= cost) payRepair(o, shopId, cost, repairDrive);
+}
+
+function payRepair(o: Orders, shopId: string, cost: number, repair: (w: World) => World): void {
   sellGearFor(o, shopId, cost);
-  o.run(repairBasics, 'repairs');
+  o.run(repair, 'repairs');
 }
 
 // Each sale can change what else comes off, so the list is drawn again after every one.

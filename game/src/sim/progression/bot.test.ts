@@ -22,7 +22,7 @@ import { NPCS } from '../../data/npcs';
 import { playerTow } from '../tow';
 import { towData } from '../states';
 import { endTurn, hostileToPlayer } from '../world';
-import { partTradePrice, repairCost } from '../economy';
+import { basicsRepairCost, driveRepairCost, partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { botOrders } from './bot';
@@ -335,6 +335,27 @@ describe('botOrders', () => {
     expect(mountedParts(after, 'core').every((p) => p.hp === maxHp(p))).toBe(true);
     expect(turn.ledger.gear).toBeGreaterThan(0);
     expect(turn.ledger.repairs).toBeLessThan(0);
+  });
+
+  // The town's scrap patch counts the drive fix as paid when the money covers it, so a bot that waited for money to
+  // fix the cab as well left town still stranded.
+  it('has a stranded bot that cannot pay for every built-in part fix the ones that strand it', () => {
+    const w = parkedAt('nose');
+    const me = playerVehicle(w);
+    me.items = me.items.filter((it) => it.kind !== 'part' || ['core', 'engine'].includes(partDef(it.part.defId).kind));
+    for (const p of mountedParts(me, 'core')) {
+      if (p.defId.includes('transmission')) p.hp = 0;
+      if (p.defId.startsWith('cab')) p.hp = maxHp(p) * 0.2;
+    }
+    w.player.money = driveRepairCost(w);
+    expect(basicsRepairCost(w)).toBeGreaterThan(w.player.money);
+
+    const turn = botOrders(w, 'trader');
+
+    const after = playerVehicle(turn.world);
+    expect(isStranded(turn.world, after)).toBe(false);
+    expect(mountedParts(after, 'core').find((p) => p.defId.startsWith('cab'))!.hp).toBeLessThan(maxHp(mountedParts(after, 'core').find((p) => p.defId.startsWith('cab'))!));
+    expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
   });
 
   // Haul goods ride on the roof rack's row, so the rack cannot come off for the repair money.
