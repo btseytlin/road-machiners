@@ -157,40 +157,31 @@ describe("targeting by click", () => {
 describe("vehicle marks", () => {
   it("shows each aimed weapon on its target with slot, look and status", () => {
     const { world, target, gun } = createDuel();
-    expect(vehicleMarks(world, null, false).get(target.id)).toEqual({
+    expect(vehicleMarks(world, null).get(target.id)).toEqual({
       weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
       radio: false,
       job: null,
       out: false,
       gaveUp: false,
-      stop: false,
     });
   });
 
-  it("marks only the player truck with a stop sign when the cue shows", () => {
+  it("leaves no player mark without a weapon aimed at it", () => {
     const { world } = createDuel();
-    const marks = vehicleMarks(world, null, true);
-    expect([...marks.keys()]).toContain(world.player.vehicleId);
-    expect([...marks.values()].filter((m) => m.stop)).toHaveLength(1);
-    expect(marks.get(world.player.vehicleId)?.stop).toBe(true);
-  });
-
-  it("leaves no player mark without the stop cue", () => {
-    const { world } = createDuel();
-    expect(vehicleMarks(world, null, false).has(world.player.vehicleId)).toBe(false);
+    expect(vehicleMarks(world, null).has(world.player.vehicleId)).toBe(false);
   });
 
   it("shows nothing for a vehicle without orders", () => {
     const { world, target } = createDuel();
     world.vehicles[0].weaponOrders = {};
-    expect(vehicleMarks(world, null, false).has(target.id)).toBe(false);
+    expect(vehicleMarks(world, null).has(target.id)).toBe(false);
   });
 
   it("shows the job of a seen NPC with its progress", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
-    expect(vehicleMarks(world, null, false).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
   });
 
   it("shows the patch a seen NPC does with its progress", () => {
@@ -200,7 +191,7 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 3 });
-    expect(vehicleMarks(world, null, false).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
   });
 
   it("shows the patch a seen NPC gets with its patcher", () => {
@@ -210,18 +201,18 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 1 });
-    expect(vehicleMarks(world, null, false).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
   });
 
   it("marks a seen knocked-out NPC and offers no radio key on it", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [], gaveUp: true };
-    expect(vehicleMarks(world, target.id, false).get(target.id)).toMatchObject({ out: true, gaveUp: true, radio: false });
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: true, radio: false });
     target.defeat.gaveUp = false;
-    expect(vehicleMarks(world, target.id, false).get(target.id)).toMatchObject({ out: true, gaveUp: false });
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: false });
     target.defeat.phase = "retreat";
-    expect(vehicleMarks(world, target.id, false).get(target.id)).toMatchObject({ out: false, radio: true });
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: false, radio: true });
   });
 
   it("hides the job of an NPC out of sight", () => {
@@ -230,7 +221,7 @@ describe("vehicle marks", () => {
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
     target.pos = { x: 58, y: 58 };
-    expect(vehicleMarks(world, null, false).has(target.id)).toBe(false);
+    expect(vehicleMarks(world, null).has(target.id)).toBe(false);
   });
 });
 

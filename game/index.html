@@ -8,7 +8,7 @@
       #overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
       #overlay .vehicle-marker { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 3px; pointer-events: none; font: 11px/1.2 var(--font-mono); color: #f0e0b8; }
       #overlay .marker-weapons { display: flex; gap: 3px; }
-      #overlay .vehicle-marker.aims-hidden .marker-weapons, #overlay .vehicle-marker.aims-hidden .marker-radio, #overlay .vehicle-marker.aims-hidden .marker-stop { display: none; }
+      #overlay .vehicle-marker.aims-hidden .marker-weapons, #overlay .vehicle-marker.aims-hidden .marker-radio { display: none; }
       #overlay .marker-weapon { position: relative; display: flex; flex-direction: column; align-items: center; padding: 2px 4px 3px; background: #261c14ee; border: 2px solid #8a8f88; border-radius: 4px; }
       #overlay .marker-weapon.ready { border-color: #e06a3c; }
       #overlay .marker-weapon .icon { width: 30px; height: 30px; }
@@ -18,8 +18,6 @@
       #overlay .marker-status { white-space: nowrap; }
       #overlay .marker-job { min-width: 72px; max-width: 180px; padding: 3px 6px 4px; background: #261c14ee; border-radius: 3px; text-align: center; }
       #overlay .marker-radio, #overlay .marker-out { padding: 3px 6px; background: #261c14ee; border-radius: 3px; white-space: nowrap; }
-      #overlay .marker-stop { display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: #261c14ee; border-radius: 3px; white-space: nowrap; }
-      #overlay .stop-sign { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: #b04a26; color: #f6ead0; font: bold 8px/1 var(--font-mono); clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
     </style>
   </head>
   <body>

@@ -105,24 +105,19 @@ function weaponsRow(weapons: WeaponMark[]): HTMLElement | null {
   return weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...weapons.map(weaponChip)) : null;
 }
 
-function stopChip(): HTMLElement {
-  return el('div', { class: 'marker-stop' }, el('span', { class: 'stop-sign' }, 'STOP'), el('span', {}, 'Click: stop'));
-}
-
 function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     weaponsRow(mark.weapons),
     mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
     mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? 'Gave up' : 'Knocked out') : null,
     mark.job ? jobChip(mark.job) : null,
-    mark.stop ? stopChip() : null,
   );
 }
 
 const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
 
 // Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
-// truck, the stop sign over the player truck, a knocked-out driver, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
+// truck, a knocked-out driver, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
   private readonly els = new Map<string, HTMLElement>(); // by vehicle id
 

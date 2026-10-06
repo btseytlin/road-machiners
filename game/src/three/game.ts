@@ -450,7 +450,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered, this.picker.stopCue));
+    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
   }
 
   private readonly ignoresKey = (e: KeyboardEvent): boolean => isBrowserChord(e) || this.isEditingControl();
@@ -539,7 +539,7 @@ export class Game {
   }
 
   private updateStopCue(): void {
-    if (this.picker.updateCue(this.canClick())) this.refreshTargetMarkers();
+    if (this.picker.updateCue(this.canClick())) this.renderer.domElement.style.cursor = this.picker.stopCue ? "pointer" : "";
   }
 
   private canClick(): boolean {

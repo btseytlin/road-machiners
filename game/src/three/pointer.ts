@@ -36,9 +36,9 @@ type PickerDeps = {
   radiusPick: (x: number, y: number) => string | null;
 };
 
-// Collects the hits under a screen point for resolvePointer() and keeps the stop sign's state.
+// Collects the hits under a screen point for resolvePointer() and keeps the stop cursor's state.
 export class PointerPicker {
-  stopCue = false; // the stop sign shows over the player truck
+  stopCue = false; // the pointer cursor shows over the player truck
   private at: { x: number; y: number } | null = null; // last pointer position over the canvas
 
   constructor(private readonly deps: PickerDeps) {}
@@ -66,7 +66,7 @@ export class PointerPicker {
     return kind === 'stop' || kind === 'own';
   }
 
-  // Shows the sign exactly when a click at the pointer would stop the truck. True when the cue flipped.
+  // Shows the cursor exactly when a click at the pointer would stop the truck. True when the cue flipped.
   updateCue(canClick: boolean): boolean {
     const cue = this.at !== null && canClick && !isAtRest(playerVehicle(this.deps.world())) && this.action(this.at.x, this.at.y).kind === 'stop';
     const flipped = cue !== this.stopCue;
