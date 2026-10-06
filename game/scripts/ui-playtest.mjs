@@ -314,7 +314,7 @@ try {
   await page.goto(url);
   await page.waitForFunction(() => window.__ROAM__?.state);
   assert(await page.locator('.icon').evaluateAll(nodes => nodes.every(node => node.title)), 'Every icon needs a hover name');
-  assert(await page.locator('#ui *').evaluateAll(nodes => nodes.filter(node => !node.closest('button.switch')).every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces, apart from the metal switches');
+  assert(await page.locator('#ui *').evaluateAll(nodes => nodes.filter(node => !node.closest('button.switch, .radio')).every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces, apart from the metal switches and the radio faceplate');
   await checkInstruments(page);
   await checkContractClicks(page);
   // ROAM_UI_SIZES=800x800,700x800 narrows the run on a slow machine.
