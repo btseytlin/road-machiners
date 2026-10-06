@@ -509,7 +509,7 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
-  return `Defeat any ${c.targetName}`;
+  return `Knock out or wreck any ${c.targetName}`;
 }
 
 // How long a contract allows from acceptance, in whole game hours.

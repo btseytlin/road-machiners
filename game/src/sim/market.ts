@@ -475,7 +475,7 @@ export function deliverContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const contract = w.player.contracts.find((c) => c.id === contractId);
     if (!contract) throw new Error(`No active contract ${contractId}`);
-    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or destroy the target');
+    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or wreck the target');
     if (contract.kind === 'haul') handInHaul(w, contract);
     else handInFetch(w, contract);
     finishContract(w, contract, 'done');
