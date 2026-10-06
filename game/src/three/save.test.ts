@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
 import { addVehicle, emptyWorld } from '../sim/testkit';
-import { moveItem } from '../sim/inventory';
+import { canStowPart, moveItem, storePart, stowPart, takeFromStorage } from '../sim/inventory';
+import { buyStockPart } from '../sim/economy';
+import { makePart } from '../sim/factory';
+import { siteOf } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, writeSave } from './save';
@@ -85,6 +88,23 @@ describe('local game save', () => {
     for (let turn = 0; turn < 4; turn++) advanceJobs(loaded);
     expect(loaded.vehicles[0].job).toBeNull();
     expect(loaded.vehicles[0].items.find((item) => item.id === weapon.id)).toMatchObject(to);
+  });
+
+  it('keeps a part bought into storage at a stall, and takes it out after loading', () => {
+    const storage = makeStorage();
+    let world = emptyWorld(sitePads(siteOf('pump-station'))[0]);
+    world.player.money = 100000;
+    const part = world.shops['pump-station'].stock[0];
+    while (canStowPart(world.vehicles[0], makePart(world, part.defId, 0))) stowPart(world, world.vehicles[0], makePart(world, part.defId, 0));
+    world = buyStockPart(world, part.id);
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected save');
+    expect(loaded.player.storage.find((p) => p.id === part.id)).toEqual({ ...part });
+    const filler = loaded.vehicles[0].items.at(-1)!;
+    const freed = storePart(loaded, filler.id);
+    const back = takeFromStorage(freed, part.id, { x: filler.x, y: filler.y, rot: filler.rot });
+    expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
   it('stores explored as a string', () => {
