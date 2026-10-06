@@ -37,7 +37,7 @@ import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type 
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
-import { canHire, canTakeEscort, declineFactor, escortsOf, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
+import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -767,7 +767,12 @@ function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _su
 
 // An escort of the driver that is not knocked out and that the driver sees.
 function guardedNow(world: World, vehicle: Vehicle): boolean {
-  return escortsOf(world, vehicle.id).some((e) => !isDefeated(e) && canVehicleSee(world, vehicle, e.pos));
+  return world.states.some((s) => s.kind === 'escort' && s.other === vehicle.id && seesAwake(world, vehicle, s.holder));
+}
+
+function seesAwake(world: World, vehicle: Vehicle, otherId: string): boolean {
+  const other = world.vehicles.find((v) => v.id === otherId);
+  return !!other && !isDefeated(other) && canVehicleSee(world, vehicle, other.pos);
 }
 
 // A stranded truck that can crawl to a gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown at a
