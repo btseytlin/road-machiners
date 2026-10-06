@@ -9,7 +9,8 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
+// heavySlots: Infinity shows the queue rules alone. heavy-schedule.test.ts covers the heavy slot.
+const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1, heavySlots: Infinity };
 // One worker per agent queue, so a test sees which card each queue prefers.
 const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
@@ -303,7 +304,7 @@ describe('tick', () => {
     const cards = [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(4, 'Testing')];
     const phases = state({ testPhase: { 2: 'checks', 3: 'fix', 4: 'checks-after-fix' } });
     const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
-    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
+    expect(picks).toEqual([{ stage: 'checks', issue: 2 }, { stage: 'checks', issue: 4 }, { stage: 'verify', issue: 1 }, { stage: 'verify', issue: 3 }]);
   });
 
   it('runs a patch for an Implementation card with a queued patch, in the implement queue', () => {
@@ -340,7 +341,15 @@ describe('tick', () => {
 
   it('runs a checks job beside a verify agent, one per queue', () => {
     const picks = chooseJobs(state({ testPhase: { 2: 'checks', 3: 'checks' } }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
-    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
+    expect(picks).toEqual([{ stage: 'checks', issue: 2 }, { stage: 'verify', issue: 1 }]);
+  });
+
+  it('starts no heavy job beside a running one under the real heavy limit', async () => {
+    const h = harness(job(NOW.toISOString(), 'implement', 5), true, [card(8, 'Design'), card(9, 'Testing')]);
+    delete (h.ctx.cfg as { heavySlots?: number }).heavySlots;
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([]);
+    expect(readState(h.ctx.statePath).jobs.map((item) => item.stage)).toEqual(['implement']);
   });
 
   it('starts a /dev/ rebuild when origin dev moved past the build', async () => {

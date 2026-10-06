@@ -13,13 +13,14 @@ import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
+import { ADHOC_LABEL, AGENT_QUEUES, HEAVY_OF, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
+// `heavySlots` is no setting: the tick always runs HEAVY_SLOTS, and tests raise it to see the queue rules alone.
+type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'> & { heavySlots?: number };
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
@@ -140,8 +141,13 @@ function limits(cfg: Due): Record<Queue, number> {
   return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, verify: cfg.verifyWorkers, test: cfg.testWorkers };
 }
 
-// A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+// Heavy jobs share the host, so only this many run at once across all queues.
+const HEAVY_SLOTS = 1;
+// A stage that an older factory wrote and this one no longer knows counts as heavy.
+const isHeavy = (stage: JobStage): boolean => HEAVY_OF[stage] ?? true;
+
+// A job fits when its queue has a free worker, no other job works on its issue and, for a heavy job, no heavy job runs.
+export type WaitReason = 'queue-full' | 'issue-running' | 'heavy-busy' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -149,7 +155,11 @@ function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitR
   const reasons: WaitReason[] = [];
   if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
   if (pick.issue !== null && running.some((job) => job.issue === pick.issue)) reasons.push('issue-running');
+  if (heavyBusy(pick, running, cfg)) reasons.push('heavy-busy');
   return reasons;
+}
+function heavyBusy(pick: JobPick, running: JobPick[], cfg: Due): boolean {
+  return isHeavy(pick.stage) && running.filter((job) => isHeavy(job.stage)).length >= (cfg.heavySlots ?? HEAVY_SLOTS);
 }
 function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
@@ -166,13 +176,18 @@ function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null 
   return new Date(Date.parse(recentStarts(state, now).sort()[0]) + DAY_MS).toISOString();
 }
 
+// Checks first, so a card that already passed its long jobs gets the next heavy slot. The rest keep their order.
+function checksFirst(candidates: Candidate[]): Candidate[] {
+  return [...candidates.filter((item) => item.stage === 'checks'), ...candidates.filter((item) => item.stage !== 'checks')];
+}
+
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
 // At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
 export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const picks: JobPick[] = [];
   const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
-  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
+  for (const candidate of checksFirst([...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)])) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
     const reasons = findCapacityReasons(pick, [...state.jobs, ...picks], cfg);
