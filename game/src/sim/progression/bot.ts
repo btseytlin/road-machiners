@@ -907,13 +907,32 @@ function postDests(post: Post): Vec[] {
 }
 
 // The hunter patrols the shops and the roads out of the raider camps, where lone raiders prey on traders. It keeps
-// driving to the post it is bound for. Without one, it goes to the post after the one nearest it.
+// driving to the post it is bound for. At a post it goes on to the post after it. Between posts, as after a stop to
+// cool the engine, it goes on to the nearest post ahead: the post after the nearest one could lie behind it, and
+// turned it back across the map short of the post it drove for.
 function hunt(o: Orders): void {
   const order = o.me.order;
   if (order?.kind === 'stopAt' && PATROL.some((p) => postDests(p).some((d) => d.x === order.dest.x && d.y === order.dest.y))) return;
-  const here = PATROL.reduce((best, p, i) => (dist(o.me.pos, p.pos) < dist(o.me.pos, PATROL[best].pos) ? i : best), 0);
-  const next = PATROL[(here + 1) % PATROL.length];
+  const next = nextPost(o.me);
   driveTo(o, next.shop ? nearestPad(next.shop, o.me.pos) : next.pos);
+}
+
+function nextPost(me: Vehicle): Post {
+  return (atPost(me.pos) ? null : postAhead(me)) ?? postAfterNearest(me.pos);
+}
+
+function atPost(pos: Vec): boolean {
+  return PATROL.some((p) => (p.shop ? canUseSite(pos, p.shop) : dist(pos, p.pos) <= RULES.arriveRadius));
+}
+
+function postAhead(me: Vehicle): Post | null {
+  const ahead = PATROL.filter((p) => (p.pos.x - me.pos.x) * Math.cos(me.heading) + (p.pos.y - me.pos.y) * Math.sin(me.heading) > 0);
+  return ahead.reduce<Post | null>((best, p) => (!best || dist(me.pos, p.pos) < dist(me.pos, best.pos) ? p : best), null);
+}
+
+function postAfterNearest(pos: Vec): Post {
+  const here = PATROL.reduce((best, p, i) => (dist(pos, p.pos) < dist(pos, PATROL[best].pos) ? i : best), 0);
+  return PATROL[(here + 1) % PATROL.length];
 }
 
 // ---- Salvage.

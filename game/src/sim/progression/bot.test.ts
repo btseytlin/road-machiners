@@ -435,6 +435,19 @@ describe('botOrders', () => {
     expect(Math.hypot(order.dest.x - me.pos.x, order.dest.y - me.pos.y)).toBeGreaterThan(20);
   });
 
+  // It stopped to cool its engine on the way from the north to the Bowl pad, which dropped its order.
+  it('has a hunter that lost its order between posts patrol on to a post ahead, not back the way it came', () => {
+    const w = withPrey(emptyWorld({ x: 120, y: 368 }));
+    const me = playerVehicle(w);
+    me.heading = Math.atan2(442 - 368, 93 - 120);
+    me.speed = 0;
+
+    const order = playerVehicle(botOrders(w, 'hunter').world).order;
+
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect((order.dest.x - me.pos.x) * Math.cos(me.heading) + (order.dest.y - me.pos.y) * Math.sin(me.heading)).toBeGreaterThan(0);
+  });
+
   it('has a hunter scavenge while no raider is weak enough to hunt', () => {
     const order = (w: World, archetype: 'hunter' | 'scavenger') => playerVehicle(botOrders(w, archetype).world).order;
 
