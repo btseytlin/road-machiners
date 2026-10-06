@@ -64,7 +64,7 @@ import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
-import { daylightAt, lightScene, NightLights, nightLightsWanted, sunLight, vehicleLampsOn } from "./render/daylight";
+import { daylightAt, lightScene, VehicleLights, nightLightsWanted, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
@@ -105,7 +105,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly nightLights = new NightLights(this.scene);
+  private readonly nightLights = new VehicleLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -956,7 +956,7 @@ export class Game {
     this.rig.leash(truck, sightRadius);
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
-    lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
+    const light = lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     const lit = this.world.vehicles
       .filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos))
       .map((v) => ({
@@ -965,7 +965,7 @@ export class Game {
         on: vehicleLampsOn(this.world, v, this.lightTurn()),
         player: v.id === this.world.player.vehicleId,
       }));
-    this.nightLights.update(nightLightsWanted(this.world.turn, lit), truck, lit);
+    this.nightLights.update(nightLightsWanted(this.world.turn, lit), light.beam, truck, lit);
     const at = playerVehicle(this.world).pos;
     const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
     this.stormTint.style.display = stormy ? "" : "none";

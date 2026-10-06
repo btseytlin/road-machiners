@@ -45,4 +45,4 @@ The sun also heats the player's running engine, faster at higher speed. Airflow,
 
 Engine overdrive, on the O key, gives the player 33% more top speed and acceleration. It heats a driving engine in any sun. A cold engine overheats in about 16 turns at night and 8 in full noon sun. The G key pours 1 supply of water over the engine and takes away half of the full heat at once, with a cloud of steam.
 
-The L key switches the player's headlights on and off at any time, even while a turn plays. NPC lamps come on at dusk and go off at dawn. The lamps light the way at night and change no sight or detection rule.
+The L key switches the player's headlights on and off at any time, even while a turn plays. NPC lamps come on at dusk and go off at dawn. The player's lamps light the way whenever they are on, dimmer in bright sun. The lamps change no sight or detection rule.
