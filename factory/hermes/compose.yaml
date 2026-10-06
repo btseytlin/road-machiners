@@ -20,6 +20,8 @@ services:
       # The bot account's token. The start script signs gh in with it, so Hermes can act on the repo and the board.
       GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN}
       FACTORY_REPO: ${FACTORY_REPO:?set FACTORY_REPO}
+      FACTORY_PUBLIC_URL: ${FACTORY_PUBLIC_URL:?set FACTORY_PUBLIC_URL}
+      FACTORY_STATUS_TIMEOUT_MS: ${FACTORY_STATUS_TIMEOUT_MS:?set FACTORY_STATUS_TIMEOUT_MS}
       GH_CONFIG_DIR: /opt/data/.config/gh
       # Hermes's file tools write its own home and the factory home, where it fixes state and branches.
       HERMES_WRITE_SAFE_ROOT: /opt/data:/factory/home
@@ -32,11 +34,13 @@ services:
       TELEGRAM_HOME_CHANNEL: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
       FACTORY_INBOX: /factory/home/inbox
       FACTORY_STATE_DIR: /factory/home/state
+      FACTORY_OBSERVATION_HEARTBEAT_MS: ${FACTORY_OBSERVATION_HEARTBEAT_MS:?set FACTORY_OBSERVATION_HEARTBEAT_MS}
     volumes:
       - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
       - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
-      - ../..:/factory/code:ro
+      # The server mounts /opt/factory at the same path, so the links code -> releases/current -> <sha> resolve inside the container.
+      - ${FACTORY_CODE_SOURCE:-../..}:${FACTORY_CODE_TARGET:-/factory/code}:ro
     # factory-host reaches the server's sshd through this name.
     extra_hosts:
       - host.docker.internal:host-gateway

@@ -51,6 +51,27 @@ export function topRight(): HTMLElement {
   return row;
 }
 
+// Panels in the right column above the log stack upward in one column. See .right-dock in style.css.
+export function rightDock(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .right-dock');
+  if (found) return found;
+  const dock = el('div', { class: 'right-dock' });
+  root.append(dock);
+  return dock;
+}
+
+// A screen box, as getBoundingClientRect() gives.
+export type Box = { left: number; top: number; right: number; bottom: number };
+
+const isEmpty = (b: Box): boolean => b.right <= b.left || b.bottom <= b.top;
+
+// Whether two boxes share area. Boxes that only touch do not, and an empty box, as a hidden panel measures, never does.
+export function overlaps(a: Box, b: Box): boolean {
+  if (isEmpty(a) || isEmpty(b)) return false;
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
   // Keep clicks on panels from reaching the game canvas.

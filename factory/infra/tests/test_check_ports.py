@@ -11,17 +11,18 @@ def check(lines: str) -> subprocess.CompletedProcess:
     return subprocess.run(["bash", str(SCRIPT), str(listing)], text=True, capture_output=True)
 
 
-def test_caddy_public_web_ports_pass():
-    result = check("factory-caddy\t0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 2019/tcp\nfactory-hermes\t\n")
+def test_exposed_ports_without_mapping_pass():
+    result = check("factory-caddy\t80/tcp, 443/tcp, 2019/tcp\nfactory-tunnel\t\nfactory-hermes\t\n")
     assert result.returncode == 0, result.stdout
 
 
-def test_any_other_published_port_fails():
+def test_any_published_port_fails():
     result = check("factory-hermes\t0.0.0.0:8642->8642/tcp\n")
     assert result.returncode == 1
     assert "factory-hermes" in result.stdout
 
 
-def test_extra_caddy_port_fails():
-    result = check("factory-caddy\t0.0.0.0:80->80/tcp, 0.0.0.0:2019->2019/tcp\n")
+def test_published_caddy_port_fails():
+    result = check("factory-caddy\t0.0.0.0:80->80/tcp\n")
     assert result.returncode == 1
+    assert "factory-caddy" in result.stdout

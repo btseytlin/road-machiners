@@ -17,12 +17,17 @@ function savedFormat(gameDir: string): string {
   return shape.format;
 }
 
-// The latest commit whose change adds the format string. The search matches what `npm run save:shape` writes.
+// The latest commit whose change adds the format string. The search matches what `npm run save:shape` writes. Plain
+// pickaxe skips merges, so a format that first appears in a merge, as when two branches each add a step, is looked up
+// again with each merge diffed against its first parent.
 function formatCommit(gameDir: string, format: string): string {
   if (git(gameDir, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error('Cannot work out the game version in a shallow clone. Fetch the full git history.');
   }
-  const found = git(gameDir, ['log', '-1', '--format=%H', `-S"format": "${format}"`, '--', SHAPE_FILE]);
+  const search = [`-S"format": "${format}"`, '--', SHAPE_FILE];
+  const found =
+    git(gameDir, ['log', '-1', '--format=%H', ...search]) ||
+    git(gameDir, ['log', '-1', '--format=%H', '--diff-merges=first-parent', '--no-patch', ...search]);
   if (!found) {
     throw new Error(`No commit brings format ${format} into ${SHAPE_FILE}. Commit the output of npm run save:shape, with full git history.`);
   }
