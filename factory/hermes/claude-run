@@ -13,7 +13,7 @@ dir=$jobs/$name
 [[ ! -e $dir ]] || { echo "job $name exists in $dir" >&2; exit 1; }
 mkdir -p "$dir"
 cat > "$dir/prompt.md"
-token=$(grep '^CLAUDE_CODE_OAUTH_TOKEN=' /opt/factory/code/factory/.env | cut -d= -f2-)
+token=$(grep '^CLAUDE_CODE_OAUTH_TOKEN=' /opt/factory/factory.env | cut -d= -f2-)
 [[ -n $token ]] || { echo "no CLAUDE_CODE_OAUTH_TOKEN in the factory env" >&2; exit 1; }
 cd "$dir"
 export CLAUDE_CODE_OAUTH_TOKEN=$token MODEL=$model

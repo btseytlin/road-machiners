@@ -30,7 +30,7 @@ describe('state', () => {
     const job = { stage: 'testing', issue: 8, pid: 5, startedAt: 's', log: '/h/logs/testing-8-x.log' };
     writeFileSync(path, JSON.stringify({ job }));
     const state = readState(path);
-    expect(state.jobs).toEqual([{ ...job, id: 'testing-8-x' }]);
+    expect(state.jobs).toEqual([{ ...job, stage: 'verify', id: 'testing-8-x' }]);
     expect('job' in state).toBe(false);
     writeFileSync(path, JSON.stringify({ job: null }));
     expect(readState(path).jobs).toEqual([]);

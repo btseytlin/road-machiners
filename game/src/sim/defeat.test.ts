@@ -16,6 +16,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWher
 import { maxHp } from './wear';
 import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
+import { territoryOfStock } from './territory';
 import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
@@ -260,6 +261,8 @@ describe('waking', () => {
 
   it('wakes at the turn limit with the raider that fought it idling in sight', () => {
     let { w } = knockedOutByRaider();
+    // The turns spawn NPCs, and a spawned scavenger may head for a territory loot spot, which every map has.
+    w.salvage = emptyWorld().salvage.filter((stock) => territoryOfStock(stock) !== null);
     let turns = 0;
     while (w.player.state === 'knockedOut') {
       w = endTurn(w, testDrive);

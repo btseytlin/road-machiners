@@ -1,8 +1,11 @@
 // Time of day and the sun. Pure functions of the turn number.
 
 import { TIME } from "../data/time";
+import { isCheapMeeting } from "./fidelity";
+import { shadeCastersAround } from "./prop-index";
 import { weatherAt } from "./weather";
 import type { Obstacle, World } from "./types";
+import { propBase } from "./bridge";
 import { heightAt } from "./terrain";
 import { clamp, dist, type Vec } from "./vec";
 
@@ -29,10 +32,9 @@ export function sunAt(turn: number): Sun | null {
 }
 
 // The obstacles that can shade a point within `radius` of center. Obstacles farther than the shade reach can
-// never block. A caller that checks many points near one spot filters once and passes the result to inShade,
-// since filtering the whole map per point stalled every turn.
+// never block. A caller that checks many points near one spot gets the casters once and passes them to inShade.
 export function shadeCasters(world: World, center: Vec, radius: number): Obstacle[] {
-  return world.obstacles.filter((o) => TIME.obstacleShade[o.kind] !== undefined && dist(center, o.pos) <= radius + TIME.shadeReach + o.r);
+  return shadeCastersAround(world, center, radius);
 }
 
 // Whether pos sits in shade: steps toward the sun and checks the terrain and blocking obstacles
@@ -52,7 +54,7 @@ export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = sha
 
 // Whether obstacle o covers ray point p and stands above the ray there.
 function obstacleBlocks(world: World, o: Obstacle, p: Vec, rayHeight: number): boolean {
-  return dist(p, o.pos) <= o.r && heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight;
+  return dist(p, o.pos) <= o.r && propBase(world.terrain, o) + TIME.obstacleShade[o.kind] > rayHeight;
 }
 
 // 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:
@@ -61,10 +63,15 @@ export function heatAt(world: World, pos: Vec): number {
   return cappedHeatAt(world, pos, 1);
 }
 
+// Whether shade at pos is worth computing. Out of the player's live range, nobody sees it, so ground there is open sun.
+export function shadeMatters(world: World, pos: Vec): boolean {
+  return !isCheapMeeting(world, pos, pos);
+}
+
 // Heat at pos with the sun height share capped at `cap`, so a high sun heats like a lower one.
 export function cappedHeatAt(world: World, pos: Vec, cap: number): number {
   const sun = sunAt(world.turn);
-  if (!sun || inShade(world, pos, sun)) return 1;
+  if (!sun || (shadeMatters(world, pos) && inShade(world, pos, sun))) return 1;
   return heatOfShare(world, pos, Math.min(cap, sunShare(sun)));
 }
 
