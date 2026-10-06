@@ -18,5 +18,12 @@ if [ -f /factory/home/health ]; then
 else
   echo "tick stalled: no health file, so no tick ran on this code"
 fi
+# Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once.
+# A failed audit runs once more, so one ssh or GitHub error does not open an incident. Two failures print one stable line.
+if audit=$(factory audit 2>/dev/null || factory audit 2>/dev/null); then
+  if [ -n "$audit" ]; then printf '%s\n' "$audit" | sed 's/^/drift: /'; fi
+else
+  echo "audit failed"
+fi
 # Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.
 if [ -n "$(find /factory/home/paused -mmin +60 2>/dev/null)" ]; then echo "paused over an hour: $(cat /factory/home/paused)"; fi

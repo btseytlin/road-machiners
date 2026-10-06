@@ -233,6 +233,9 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
     async closePullRequest(branch, comment) {
       await gh(['pr', 'close', branch, '-R', repo, '--comment', comment]);
     },
+    async mergePullRequest(branch) {
+      await gh(['pr', 'merge', branch, '-R', repo, '--merge']);
+    },
     async reopen(number) {
       await gh(['issue', 'reopen', String(number), '-R', repo]);
     },

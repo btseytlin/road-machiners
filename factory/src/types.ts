@@ -5,7 +5,7 @@ export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Appro
 // Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
 export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
 export type FactoryConfig = {
   observationHeartbeatMs: number;
@@ -158,7 +158,8 @@ export type UnroutedReply = { issue: number; postId: number; text: string; at: s
 
 // `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.
-export type TestPhase = 'checks' | 'fix' | 'checks-after-fix';
+// `post`: a control move to Approval. Only the build and the post run, with no tests and no playtest.
+export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;
@@ -178,6 +179,7 @@ export interface GitHub {
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;
+  mergePullRequest(branch: string): Promise<void>; // merges the open pull request of that head branch with a merge commit
 }
 
 // One inline keyboard button. `data` comes back as the callback data of a press.

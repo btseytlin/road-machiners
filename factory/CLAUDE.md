@@ -31,5 +31,6 @@ Run these from `factory/`. Run `npm ci` first.
 - Branch moves that go together, like a ship or a hotfix, go to GitHub in one atomic push.
 - An agent's work reaches GitHub only after the factory checks its diff. Only `butler push` on the host gets `BUTLER_API_KEY`.
 - Jobs share the host clone and the state file, so every state update runs under its lock.
-- Hermes's SOUL.md repeats no process detail. It points to `docs/process.md`.
+- Hermes's SOUL.md repeats no process detail. It points to `docs/process.md` and `docs/state.md`.
+- A change to factory state, like a new state field, queue or card position, updates `docs/state.md`, `src/position.ts` and the `factory` CLI in `src/ctl.ts` in the same commit.
 - The factory never imports game code.

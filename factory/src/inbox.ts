@@ -1,11 +1,13 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
+import { applyControl, openRelease, parseControl, queueRemoval, queueShip } from './control';
+import { reportFailure } from './fail';
 import { markPost } from './post-status';
 import { deny, routeFeedback } from './stages/approval';
 import { proposalOf } from './stages/waste';
-import { readState, updateState } from './state';
-import { ADHOC_LABEL, RELEASE_TASK_LABEL, WASTE_LABEL, type Ctx, type ReleaseState, type Route } from './types';
+import { updateState } from './state';
+import { ADHOC_LABEL, RELEASE_TASK_LABEL, WASTE_LABEL, type Ctx, type Route } from './types';
 
 const TITLE_LIMIT = 80;
 const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'waste-change'];
@@ -57,9 +59,36 @@ export async function drainInbox(ctx: Ctx): Promise<void> {
   for (const name of files) await handleFile(ctx, join(dir, name));
 }
 
+function isControlFile(raw: string): boolean {
+  try {
+    return (JSON.parse(raw) as { kind?: unknown } | null)?.kind === 'control';
+  } catch {
+    // Not JSON at all. The command path reports it.
+    return false;
+  }
+}
+
+// A control order comes from the `factory` CLI, not from a chat. A failure is a failure record that Hermes's incident watch reports, and the chat hears nothing.
+// The failure names the card in its text but carries no issue, so a refused order does not stick the card.
+async function handleControl(ctx: Ctx, raw: string): Promise<void> {
+  let card = '';
+  try {
+    const command = parseControl(JSON.parse(raw));
+    if ('issue' in command) card = `#${command.issue}: `;
+    await applyControl(ctx, command);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await reportFailure(ctx, 'control', null, `${card}${message}`, null);
+  }
+}
+
 async function handleFile(ctx: Ctx, path: string): Promise<void> {
   const raw = readFileSync(path, 'utf8');
   rmSync(path);
+  await (isControlFile(raw) ? handleControl(ctx, raw) : handleChatCommand(ctx, raw));
+}
+
+async function handleChatCommand(ctx: Ctx, raw: string): Promise<void> {
   let command: InboxCommand | null = null;
   try {
     command = parseCommand(raw);
@@ -167,28 +196,6 @@ async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<
   const reply = { chat: command.chat, messageId: command.messageId };
   updateState(ctx.statePath, (state) => ({ ...state, adhocReplies: { ...state.adhocReplies, [String(n)]: reply } }));
   return `Queued as #${n}. The report comes as a reply here.`;
-}
-
-function openRelease(ctx: Ctx): ReleaseState {
-  const release = readState(ctx.statePath).release;
-  if (release === null) throw new Error('No release is open.');
-  return release;
-}
-
-// Ship acts on the current candidate post alone (IV1, IV5). The job checks the release tasks (IV3) when it runs.
-function queueShip(ctx: Ctx, issue: number, by: string): string {
-  const release = openRelease(ctx);
-  if (release.issue !== issue) throw new Error(`Issue #${issue} is not the open release, #${release.issue} is.`);
-  if (release.postId === null) throw new Error('The release has no current candidate post yet. Wait for the next one.');
-  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: by }));
-  return `Ship of release ${release.day} is queued. The merge into main starts on a coming tick.`;
-}
-
-function queueRemoval(ctx: Ctx, issue: number, by: string, text: string): string {
-  const release = openRelease(ctx);
-  if (release.removed.includes(issue)) throw new Error(`Issue #${issue} is already removed from release ${release.day}.`);
-  updateState(ctx.statePath, (state) => ({ ...state, pendingRemovals: [...state.pendingRemovals, { issue, by, text }] }));
-  return `Removal of #${issue} from release ${release.day} is queued. The revert starts on a coming tick.`;
 }
 
 // A reply to the candidate post that is not a command. The old post cannot ship, since the new task must be played first.

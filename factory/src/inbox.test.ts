@@ -329,3 +329,56 @@ describe('parseCommand', () => {
     expect(() => parseCommand('{"kind":"merge","by":"1","chat":"c","messageId":1}')).toThrow('Unknown inbox command kind');
   });
 });
+
+describe('control files', () => {
+  const putControl = (name: string, body: object): void => writeFileSync(join(ROOT, 'inbox', name), JSON.stringify({ kind: 'control', by: 'boss', reason: 'the gate failed on load', ...body }));
+
+  beforeEach(() => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(join(ROOT, 'inbox'), { recursive: true });
+    writeState(statePath, withPost(structuredClone(EMPTY_STATE)));
+  });
+
+  it('applies a control order, empties the inbox and sends no chat message', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    putControl('1-control.json', { action: 'move', issue: 4, to: 'design' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Testing', labels: [] }], sent, calls));
+    expect(calls).toContain('move 4 Design');
+    expect(calls.find((call) => call.startsWith('comment 4'))).toContain('Reason: the gate failed on load');
+    expect(readdirSync(join(ROOT, 'inbox'))).toEqual([]);
+    expect(sent).toEqual([]);
+    expect(readState(statePath).failures).toEqual([]);
+  });
+
+  it('turns an order that cannot apply into a failure that names the reason, with no chat message and no change (IV4)', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    putControl('1-control.json', { action: 'move', issue: 4, to: 'design' });
+    await drainInbox(fakeCtx([], sent, calls));
+    const failure = readState(statePath).failures[0];
+    expect(failure).toMatchObject({ stage: 'control', issue: null, log: null });
+    expect(failure.error).toContain('#4: Issue #4 is not on the board');
+    expect(calls).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('fails a bad shape and an unknown actor as control failures', async () => {
+    const sent: string[] = [];
+    putControl('1-control.json', { action: 'explode' });
+    putControl('2-control.json', { action: 'cut', by: 'mallory' });
+    await drainInbox(fakeCtx([], sent, []));
+    const errors = readState(statePath).failures.map((failure) => failure.error);
+    expect(errors[0]).toContain('Unknown control action explode');
+    expect(errors[1]).toContain('mallory');
+    expect(sent).toEqual([]);
+  });
+
+  it('refuses Hermes on a gated order', async () => {
+    openRelease();
+    putControl('1-control.json', { action: 'ship', by: 'hermes' });
+    await drainInbox(fakeCtx([], [], []));
+    expect(readState(statePath).pendingShip).toBeNull();
+    expect(readState(statePath).failures[0].error).toContain('--by <member>');
+  });
+});

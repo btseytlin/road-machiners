@@ -1,6 +1,6 @@
 # Factory process
 
-This file is the spec of how the factory works. Each diagram matches the code, and a change to the process updates its diagram in the same commit. The rules behind each step are in [stages.md](stages.md), [evidence.md](evidence.md) and [operations.md](operations.md).
+This file is the spec of how the factory works. Each diagram matches the code, and a change to the process updates its diagram in the same commit. The rules behind each step are in [stages.md](stages.md), [evidence.md](evidence.md) and [operations.md](operations.md). [state.md](state.md) describes the stores, card positions, queues and health records.
 
 The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot` source. People see the `.svg` render. After you edit a `.dot` file, run `npm run diagrams` from `factory/`, or a test fails. It needs Graphviz installed. The colors mean the same in every diagram:
 
@@ -45,9 +45,11 @@ Screenshots never block a card. A card with no screenshot still runs verify and 
 
 A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
 
+Hermes can put a card in any position with `factory move`. The move clears the state of the old position, so every store agrees on the new one. [state.md](state.md) lists the positions.
+
 ## Testing column
 
-Testing is two jobs. Verify runs the testing agent. Checks runs the machine checks with no agent.
+Testing is two jobs. Verify runs the testing agent. Checks runs the machine checks with no agent. A third phase, post, builds and posts the branch with no tests. Only Hermes starts it, when it moves a card to Approval.
 
 ![Testing column](diagrams/testing.svg)
 

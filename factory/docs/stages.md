@@ -42,6 +42,7 @@ Implementation runs Sonnet with up:uexecute on the task file. For a change a pla
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
 - Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
+- The post phase runs `npm ci` and the build only, once, with no tests, playtest or fix round. Hermes starts it with `factory move N approval`. A failed build fails the stage. The post and the issue comment say that no factory checks ran on this build. A card that the committee approved already queues its merge as usual.
 - The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
 
 ## Approval
