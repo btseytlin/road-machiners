@@ -27,9 +27,12 @@ export const TOW = {
   perTile: TURNS_PER_TILE * TURN_PRICE,
   // The most a tow costs before the Social cut.
   maxFee: CAP_TURNS * TURN_PRICE,
-  // Tiles between the tower's center and the towed truck's center. Two tiles is 8 m, about one and a half truck
+  // Tiles between the tower's center and the towed truck's center when the tow bar is straight. Two tiles is 8 m, about one and a half truck
   // lengths, and more than the two largest chassis radii together, so the two trucks never overlap on a straight.
   gap: 2,
+  // The most the towed truck's front axle moves per substep, as a multiple of the hitch's own move. It closes the
+  // slack at hitching smoothly instead of in one jump.
+  takeUp: 1.5,
   // Share of its top speed the tower drives at. It drives with care, so the towed truck does not swing out.
   speedShare: 0.6,
 };
