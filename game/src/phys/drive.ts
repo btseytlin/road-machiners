@@ -229,7 +229,7 @@ function noteOwner(owner: Map<number, string>, body: RAPIER.RigidBody, vehicleId
   for (let i = 0; i < body.numColliders(); i++) owner.set(body.collider(i).handle, vehicleId);
 }
 
-type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult };
+type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult; grip: number }; // grip: the ground's grip under the truck, set each step
 
 function run(d: Drive, w: World, steps: number): TurnResult {
   const world = RAPIER.World.restoreSnapshot(d.world.takeSnapshot());
@@ -241,7 +241,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false }, grip: 1 };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
@@ -501,11 +501,13 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield.
+// the heightfield. Slippery ground, like glass, cuts the tires' hold on top of that, for every truck and skill.
+// Drivers plan their braking and corners with the same grip, so they slow down early instead of sliding past.
 function applyTerrainGrip(c: Car, terrain: Terrain): void {
   const p = c.body.translation();
-  const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
-  const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
+  const ground = TERRAIN_TYPES[terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })]];
+  c.grip = ground.grip;
+  const grip = T.frictionSlip * groundSpeed(c.s, ground.speed) * ground.grip;
   for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
 }
 
@@ -549,7 +551,7 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
     const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
     return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
-  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel));
+  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang, D.cornerAccel * c.grip), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel * c.grip, D.cornerAccel * c.grip));
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
 }
 
@@ -561,7 +563,7 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
     return c.plan.target;
   }
   if (far < RULES.arriveRadius * S) c.result.arrived = true;
-  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * c.grip * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
 // Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
@@ -659,9 +661,9 @@ function samePoint(a: Vec | null, b: Vec): boolean {
 // The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
 // that leaves along the nose and ends on the point has radius aimDist / (2 sin ang). Without this cap a
 // fast truck circles a point inside its turning circle forever.
-function cornerSpeed(aimDist: number, ang: number): number {
+function cornerSpeed(aimDist: number, ang: number, cornerAccel: number): number {
   const sin = Math.abs(Math.sin(ang));
-  return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
+  return sin === 0 ? Infinity : Math.sqrt((cornerAccel * aimDist) / (2 * sin));
 }
 
 // The fastest speed now that still brakes in time for every route corner ahead. A corner turned by
@@ -669,7 +671,7 @@ function cornerSpeed(aimDist: number, ang: number): number {
 // Theta runs to the route point cornerCut past the corner, so a sharp turn split into small steps counts whole.
 // Corners past the braking distance at the current speed cannot limit it, so the scan stops there.
 // A driver without a route drives straight and has no corners.
-function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number): number {
+function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number, cornerAccel: number): number {
   if (!route) return Infinity;
   const reach = (speed * speed) / (2 * decel) + D.cornerCut;
   let limit = Infinity;
@@ -678,7 +680,7 @@ function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: nu
   for (let k = 0; k + 1 < route.length && along <= reach; k++) {
     const theta = Math.abs(angleDiff(bearing(prev, route[k]), bearing(route[k], pointAfter(route, k, D.cornerCut / S))));
     if (theta > 0) {
-      const corner = Math.sqrt((D.cornerAccel * D.cornerCut) / Math.tan(theta / 2));
+      const corner = Math.sqrt((cornerAccel * D.cornerCut) / Math.tan(theta / 2));
       limit = Math.min(limit, Math.sqrt(corner * corner + 2 * decel * Math.max(0, along - D.cornerCut)));
     }
     along += dist(route[k], route[k + 1]) * S;
