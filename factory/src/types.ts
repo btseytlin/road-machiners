@@ -312,3 +312,5 @@ export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build 
 export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
 export const OPEN_NETWORK_LABEL = 'open-network';
+// A collaborator waives the GPU playtest's frame rate gate for one issue. Checks still run the full playtest and accept only a sole frame rate failure.
+export const FPS_WAIVED_LABEL = 'fps-waived';
