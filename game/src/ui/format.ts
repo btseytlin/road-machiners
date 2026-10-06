@@ -92,12 +92,14 @@ export function workProgress(work: WorkLeft): number {
 import { damage, fuelLiters, hp } from './units';
 import { npcName } from '../sim/spawn';
 
-// A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
-// been rebuilt before (one wear step per break).
+// A part's condition in a few words: junk, pristine, or how often a part that has broken was rebuilt
+// (one wear step per break). The count is in words, so it never reads like the x<count> of a goods stack.
 export function wearLabel(part: PartInstance): string {
   if (isJunk(part)) return 'junk';
   if (part.wear === 0) return 'pristine';
-  return `rebuilt x${part.wear}`;
+  if (part.wear === 1) return 'rebuilt once';
+  if (part.wear === 2) return 'rebuilt twice';
+  return `rebuilt ${part.wear} times`;
 }
 
 export type ConditionTier = 'pristine' | `w${number}` | 'junk';

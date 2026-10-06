@@ -20,9 +20,14 @@ describe("wearLabel", () => {
     expect(wearLabel(part(0))).toBe("pristine");
   });
 
-  it("counts rebuilds for a part that has broken and been rebuilt before", () => {
-    expect(wearLabel(part(1))).toBe("rebuilt x1");
-    expect(wearLabel(part(2))).toBe("rebuilt x2");
+  it("counts rebuilds in words for a part that has broken and been rebuilt before", () => {
+    expect(wearLabel(part(1))).toBe("rebuilt once");
+    expect(wearLabel(part(2))).toBe("rebuilt twice");
+    expect(wearLabel(part(3))).toBe("rebuilt 3 times");
+  });
+
+  it("never reads like a stack count", () => {
+    for (let wear = 0; wear <= CONDITION.maxWear + 1; wear++) expect(wearLabel(part(wear))).not.toMatch(/x\d/);
   });
 
   it("reads a part past the last wear step as junk", () => {
