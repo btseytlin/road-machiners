@@ -30,10 +30,11 @@ function writeAtomic(path, text) {
   renameSync(temp, path);
 }
 
-// The build a run measures: the last commit that changed game code, outside tests, and a hash of any uncommitted
-// change to it, so a candidate diff left in a worktree reads as its own build.
+// The build a run measures: the last commit that changed game code, outside tests and this harness in
+// src/sim/progression/, and a hash of any uncommitted change to it, so a candidate diff left in a worktree reads as its
+// own build. A fix to what the harness samples leaves the build the runs measured unchanged.
 function buildId() {
-  const paths = "src ':(exclude)src/**/*.test.ts'";
+  const paths = "src ':(exclude)src/**/*.test.ts' ':(exclude)src/sim/progression/**'";
   const commit = execSync(`git log -1 --format=%h -- ${paths}`, { encoding: 'utf8' }).trim();
   const diff = execSync(`git diff HEAD -- ${paths}`, { encoding: 'utf8' });
   return diff === '' ? commit : `${commit}+${createHash('sha1').update(diff).digest('hex').slice(0, 8)}`;
