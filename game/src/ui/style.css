@@ -1592,7 +1592,7 @@ canvas.view {
     rgba(157, 121, 84, 0.18),
     rgba(120, 88, 58, 0.55)
   );
-  /* Opacity follows the storm's strength each turn; the transition glides between turns. */
+  /* Opacity follows the player's storm exposure each turn; the transition glides between turns. */
   transition: opacity 1s linear;
 }
 

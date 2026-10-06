@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WEATHER } from '../../data/weather';
 import { emptyWorld } from '../../sim/testkit';
 import type { WeatherEvent, World } from '../../sim/types';
-import { nearestStorm, stepFade, stormTintAt, WeatherView } from './weather';
+import { stepFade, WeatherView } from './weather';
 
 const FADE = WEATHER.sim.stormFadeTurns;
 type Storm = Extract<WeatherEvent, { kind: 'storm' }>;
@@ -79,25 +79,5 @@ describe('WeatherView storm haze', () => {
     expect(dispose).toHaveBeenCalledOnce();
     expect(stormGroups(view)).toHaveLength(1);
     expect(view.shownOf('w2')).toBe(1);
-  });
-});
-
-describe('storm cues', () => {
-  it('tints the screen by the strongest storm holding the player, and not outside', () => {
-    const w = emptyWorld();
-    const me = w.vehicles[0].pos;
-    expect(stormTintAt(w, me)).toBe(0);
-    withStorm(w, 'w1', 2, 100);
-    expect(stormTintAt(w, me)).toBeCloseTo(3 / FADE);
-    withStorm(w, 'w2', FADE, 100);
-    expect(stormTintAt(w, me)).toBe(1);
-    expect(stormTintAt(w, { x: me.x + 200, y: me.y })).toBe(0);
-  });
-
-  it('gives the wind the nearest storm and its strength', () => {
-    const w = emptyWorld();
-    expect(nearestStorm(w, w.vehicles[0].pos)).toEqual({ tiles: Infinity, strength: 0 });
-    withStorm(w, 'w1', 4, 100);
-    expect(nearestStorm(w, { x: w.vehicles[0].pos.x + 10, y: w.vehicles[0].pos.y })).toEqual({ tiles: 10, strength: 5 / FADE });
   });
 });

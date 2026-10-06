@@ -62,7 +62,8 @@ import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
-import { nearestStorm, stormTintAt, WeatherView } from "./render/weather";
+import { WeatherView } from "./render/weather";
+import { stormShare } from "../sim/weather";
 import { ZonesView } from "./render/zones";
 import { daylightAt, lightScene, NightLights, nightLightsWanted, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
@@ -802,8 +803,7 @@ export class Game {
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
-    const storm = nearestStorm(this.world, at);
-    this.loops.update({ stormTiles: storm.tiles, stormStrength: storm.strength, inCombat: inCombat(this.world, me), place: musicPlaceAt(at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    this.loops.update({ stormShare: stormShare(me), inCombat: inCombat(this.world, me), place: musicPlaceAt(at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
@@ -963,7 +963,7 @@ export class Game {
       .filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos))
       .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: vehicleLampsOn(this.world, v, this.lightTurn()), player: v.id === this.world.player.vehicleId }));
     this.nightLights.update(nightLightsWanted(this.world.turn, lit), truck, lit);
-    const tint = stormTintAt(this.world, playerVehicle(this.world).pos);
+    const tint = stormShare(playerVehicle(this.world));
     this.stormTint.style.display = tint > 0 ? "" : "none";
     this.stormTint.style.opacity = String(tint);
     this.fx.tick(dt * speed);

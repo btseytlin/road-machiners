@@ -250,8 +250,8 @@ export function musicPlaceAt(pos: Vec): MusicPlace {
 }
 
 // What the loops respond to each frame.
-// stormStrength is the nearest storm's strength in [0, 1], which scales its share of the wind.
-export type LoopState = { stormTiles: number; stormStrength: number; inCombat: boolean; place: MusicPlace; paused: boolean };
+// stormShare is the player's storm exposure in [0, 1], from stormShare() in src/sim/weather.ts; it sets the storm's share of the wind.
+export type LoopState = { stormShare: number; inCombat: boolean; place: MusicPlace; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
@@ -272,7 +272,7 @@ function musicOf(s: LoopState): "calm" | "combat" | NonNullable<MusicPlace> {
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
-  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles) * s.stormStrength;
+  const near = s.stormShare;
   const music = musicOf(s);
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,

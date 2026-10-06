@@ -31,15 +31,12 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, stormStrength: 1, inCombat: false, place: null, paused: false } as const;
+  const calm = { stormShare: 0, inCombat: false, place: null, paused: false } as const;
   const gains = (l: ReturnType<typeof loopLevels>) => [l.calmGain, l.townGain, l.outpostGain, l.abandonedGain, l.combatGain];
-  it("raises wind near storms", () => {
+  it("raises the wind with the player's storm share", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
-    expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
-  });
-  it("scales the storm's share of the wind by its strength", () => {
-    expect(loopLevels({ ...calm, stormTiles: 0, stormStrength: 0 }, MIX).windGain).toBe(MIX.wind.baseGain);
-    expect(loopLevels({ ...calm, stormTiles: 0, stormStrength: 0.5 }, MIX).windGain).toBeCloseTo((MIX.wind.baseGain + MIX.wind.stormGain) / 2);
+    expect(loopLevels({ ...calm, stormShare: 0.5 }, MIX).windGain).toBeCloseTo((MIX.wind.baseGain + MIX.wind.stormGain) / 2);
+    expect(loopLevels({ ...calm, stormShare: 1 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
   it("switches music to combat while in combat", () => {
     expect(gains(loopLevels({ ...calm, inCombat: true }, MIX))).toEqual([0, 0, 0, 0, 1]);
@@ -67,7 +64,7 @@ describe("loopLevels", () => {
   it("keeps the music choice when paused or near storms", () => {
     for (const inCombat of [true, false]) {
       const base = loopLevels({ ...calm, inCombat }, MIX);
-      const other = loopLevels({ ...calm, inCombat, paused: true, stormTiles: 0 }, MIX);
+      const other = loopLevels({ ...calm, inCombat, paused: true, stormShare: 1 }, MIX);
       expect([other.calmGain, other.combatGain]).toEqual([base.calmGain, base.combatGain]);
     }
   });
@@ -146,7 +143,7 @@ describe("next track", () => {
 
   it("crossfades the calm music to a new track at its current level", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, stormStrength: 1, inCombat: false, place: null, paused: false });
+    loops.update({ stormShare: 1, inCombat: false, place: null, paused: false });
     loops.nextTrack();
     expect(calm).toHaveLength(2);
     expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
@@ -164,7 +161,7 @@ describe("next track", () => {
 
   it("keeps the new track silent in combat", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, stormStrength: 1, inCombat: true, place: null, paused: false });
+    loops.update({ stormShare: 1, inCombat: true, place: null, paused: false });
     loops.nextTrack();
     expect(calm[1].gains).toEqual([0]);
   });

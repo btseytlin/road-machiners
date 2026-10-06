@@ -7,7 +7,6 @@ import { WEATHER } from '../../data/weather';
 import { hash2 } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { World } from '../../sim/types';
-import { dist, type Vec } from '../../sim/vec';
 import { stormStrength } from '../../sim/weather';
 
 const S = PHYSICS.metersPerTile;
@@ -142,24 +141,4 @@ export class WeatherView {
 // Moves shown toward target by at most maxStep.
 export function stepFade(shown: number, target: number, maxStep: number): number {
   return shown < target ? Math.min(target, shown + maxStep) : Math.max(target, shown - maxStep);
-}
-
-// Map tiles from a point to the nearest live storm's center and that storm's strength; Infinity and 0 with no storm.
-export function nearestStorm(world: World, at: Vec): { tiles: number; strength: number } {
-  let nearest = { tiles: Infinity, strength: 0 };
-  for (const e of world.weather) {
-    if (e.kind !== 'storm') continue;
-    const tiles = dist(at, e.pos);
-    if (tiles < nearest.tiles) nearest = { tiles, strength: stormStrength(world, e) };
-  }
-  return nearest;
-}
-
-// The screen tint's share at a point: the strongest storm whose radius holds it, or 0 outside every storm.
-export function stormTintAt(world: World, at: Vec): number {
-  let tint = 0;
-  for (const e of world.weather) {
-    if (e.kind === 'storm' && dist(at, e.pos) <= e.radius) tint = Math.max(tint, stormStrength(world, e));
-  }
-  return tint;
 }
