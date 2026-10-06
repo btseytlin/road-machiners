@@ -11,7 +11,7 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, utilityKey, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -528,6 +528,32 @@ function harpoonDuel(gap = 5) {
   refreshVision(w);
   return { w, me, harpoon, target };
 }
+
+describe("slot keys", () => {
+  it("gives the utility slots the numbers after the last gun, so a gun and a utility never share a key", () => {
+    const keysWith = (parts: string[]) => {
+      const w = emptyWorld();
+      const me = w.vehicles[0];
+      for (const defId of parts) if (!mountPart(w, me, makePart(w, defId, 0))) throw new Error(`No room for ${defId}`);
+      return { guns: vehicleStats(w, me).weapons.length, keys: utilitySlots(w).map((_, i) => utilityKey(w, i)) };
+    };
+    const plain = keysWith(["sprout"]);
+    const hooked = keysWith(["harpoon", "sprout"]);
+
+    expect(plain.keys).toEqual([plain.guns + 1]);
+    expect(hooked.guns).toBe(plain.guns + 1);
+    expect(hooked.keys).toEqual([hooked.guns + 1]);
+  });
+
+  it("leaves a utility slot past key 9 without a key", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    if (!mountPart(w, me, makePart(w, "sprout", 0))) throw new Error("No room for the sprout");
+    const guns = vehicleStats(w, me).weapons.length;
+    expect(utilityKey(w, 9 - guns - 1)).toBe(9);
+    expect(utilityKey(w, 9 - guns)).toBeNull();
+  });
+});
 
 describe("the harpoon on the weapon panel", () => {
   const harpoonGun = (s: ReturnType<typeof harpoonDuel>) => {

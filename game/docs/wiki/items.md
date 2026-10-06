@@ -52,7 +52,7 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 | grenadeLauncher | Grenade launcher | 3 | 587 | 2 x 2 | 130 | 50 | 4 | false | 12 | 1 | 4 | 3 | 180 | 5 | 3 | 2 | 1 |  |
 | tankGun | Tank gun | 3 | 604 | 2 x 3 | 210 | 90 | 8 | true | 16 | 1 | 2 | 2 | 45 | 2 | 1 | 8 | 2 |  |
 | flechette | Flechette gun | 3 | 655 | 2 x 2 | 120 | 44 | 3 | false | 18 | 1 | 4 | 2 | 180 | 1.2 | 4 | 1.5 | 1.5 |  |
-| harpoon | Harpoon | 2 | 287 | 1 x 2 | 120 | 40 | 4 | false | 8 | 1 | 1 | 5 | 180 | 4 | 1 | 0 | 1 | 10 |
+| harpoon | Harpoon | 2 | 287 | 1 x 2 | 120 | 40 | 4 | false | 8 | 1 | 1 | 5 | 270 | 1 | 1 | 0 | 0.3 | 10 |
 <!-- /wiki:weapons -->
 
 Each weapon's round:
@@ -78,7 +78,7 @@ Each weapon's round:
 | grenadeLauncher | 24 | 7 | true | 120 | 2 | 6 | 4 |
 | tankGun | 114 | 14 | false | 500 | 1.5 | 10 | 5 |
 | flechette | 15 | 14 | false | 1100 | 0 | 0 | 0 |
-| harpoon | 6 | 3 | false | 120 | 0 | 0 | 0 |
+| harpoon | 6 | 3 | false | 1000 | 0 | 0 | 0 |
 <!-- /wiki:weapon-rounds -->
 
 ## Engines
@@ -110,7 +110,7 @@ Each weapon's round:
 | spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
 | reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
 | plowRam | Plow ram | 3 | 602 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
-| claymoreRam | Claymore ram | 2 | 420 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"reload":20} |
+| claymoreRam | Claymore ram | 2 | 420 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
 | steelPlate | Steel plate | 2 | 198 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
 | scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
 | ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |

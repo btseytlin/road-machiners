@@ -38,7 +38,7 @@ When several things are in reach, such as a shop and a loot pile or two knocked-
 
 ## Utilities
 
-Utilities act on an order. An order is for the current turn and clears once the turn plays. The weapon panel has a utility row of up to four slots on keys 5 to 8: the truck's active utilities and claymore rams. Each slot has one state, with its own look beyond its text:
+Utilities act on an order. An order is for the current turn and clears once the turn plays. The weapon panel has a utility row of up to four slots: the truck's active utilities and claymore rams. The number keys run the panel in order: the guns take 1 and up, and the utility slots take the next numbers after the last gun, up to 9. So no two slots share a key, and a slot past 9 is used by click. Each slot has one state, with its own look beyond its text:
 
 - Ready: a lit mustard frame.
 - Aiming: the selected point utility, filled bright mustard with a crosshair badge and a pulsing outline. At most one slot aims.
@@ -64,7 +64,7 @@ Caltrops drop a field of 1.25 tiles. A caltrop field lasts 10 turns. A truck who
 
 ### Harpoon
 
-The Harpoon is a gun, not a utility. It sits in the weapon panel on a gun key, and it aims, waits, holds fire and auto fires like any gun. It reaches 8 tiles in a 180 degree arc and fires one barbed bolt, rolled like any round, so every scatter cause applies, smoke too. Its magazine holds one bolt. After a shot, hit or miss, it reloads for 5 turns and fires again in the sixth, and its slot shows the reload until then.
+The Harpoon is a gun, not a utility. It sits in the weapon panel on a gun key, and it aims, waits, holds fire and auto fires like any gun. It reaches 8 tiles in a 270 degree arc and fires one barbed bolt, rolled like any round, so every scatter cause applies, smoke too. Its reach is short, so it aims tight and leads a moving truck well: from 5 tiles it lands about 95% on a parked truck and 65% on one crossing at 4 tiles a turn. Its magazine holds one bolt. After a shot, hit or miss, it reloads for 5 turns and fires again in the sixth, and its slot shows the reload until then.
 
 The bolt flies as fast as a cannon shell, with the other guns, and trails its rope from the launcher. The launcher turns toward its target like any turret. The rope is thin and black, and it hangs: it sags when slack, runs straight when stretched and rests on the ground. A bolt that lands on the target ties the line for 10 turns from the turn it fires. While its line is out, the harpoon holds fire, reloaded or not, and its slot reads "line out". It holds the first working part in the lane the bolt struck, even one past what the bolt can pierce. A lane with no working part, as an outer lane of empty armor slots, passes the hold to the nearest lane that has one. A bolt that misses falls past the target, its rope lies on the ground, and then it reels back into the launcher. The log names the part the line holds, or that the bolt missed.
 

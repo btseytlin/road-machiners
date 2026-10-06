@@ -174,7 +174,15 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
   };
 }
 
-export const UTILITY_SLOTS = 4; // keys 5 to 8
+export const UTILITY_SLOTS = 4;
+// The number keys 1 to 9 run the slots in panel order: the guns first, then the utility row. A slot past 9 has no key.
+export const SLOT_KEYS = 9;
+
+// The number key of utility slot i, the next after the truck's guns, or null past SLOT_KEYS.
+export function utilityKey(w: World, i: number): number | null {
+  const key = vehicleStats(w, playerVehicle(w)).weapons.length + i + 1;
+  return key <= SLOT_KEYS ? key : null;
+}
 
 // What a selected slot asks for, and what a slot with an order that acts this turn reads.
 const PICK_TEXT: Record<"point", string> = { point: "aim: click the ground" };
@@ -255,7 +263,7 @@ export class UtilityRow {
     const selected = this.host.selectedUtility() === part.id;
     const status = utilityStatus(w, part, selected);
     const name = partDef(part.defId).name;
-    const key = i + 1 + UTILITY_SLOTS;
+    const key = utilityKey(w, i);
     return el(
       "div",
       { class: "weapon-slot utility-slot", "data-utility": part.id, "data-state": status.state },
@@ -265,10 +273,10 @@ export class UtilityRow {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           "aria-label": `${name}: ${status.text}`,
-          title: `${name} [${key}]`,
-          onclick: () => this.host.runKey(`Digit${key}`),
+          title: key === null ? name : `${name} [${key}]`,
+          onclick: () => (key === null ? this.selectUtility(i) : this.host.runKey(`Digit${key}`)),
         },
-        el("span", { class: "weapon-number" }, `${key}`),
+        el("span", { class: "weapon-number" }, key === null ? "" : `${key}`),
         el("span", { class: "weapon-name" }, name),
         createIcon("utility"),
         BADGE[status.state] ? el("span", { class: "slot-badge", "data-badge": BADGE[status.state], "aria-hidden": "true" }) : null,
@@ -485,6 +493,14 @@ export class WeaponPanel {
   selectWeapon(id: string | null): void {
     if (this.host.getTurnPhase() !== null) return;
     this.host.selectWeapon(id);
+  }
+
+  // Number key n: the gun at that place, or past the guns the utility slot after them.
+  pressKey(n: number): void {
+    const w = this.host.world();
+    const guns = vehicleStats(w, playerVehicle(w)).weapons.length;
+    if (n <= guns) this.selectIndex(n - 1);
+    else this.utilities.selectUtility(n - guns - 1);
   }
 
   // A digit key picks the weapon at that index, and picks all again when it is already selected.
