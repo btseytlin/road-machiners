@@ -51,7 +51,13 @@ const GLASS_TINT = 0.16;
 // Meters across a seam: about 2 screen pixels at zoom 1, a thin crisp line like the concept's, wide enough not to
 // break up at zoom 0.5.
 const GLASS_SEAM = 0.25;
-const GLASS_SEAM_MIX = 0.8; // how far a seam goes toward its pale color, so it keeps a hint of the plate's shade
+const GLASS_SEAM_MIX = 0.45; // how far a seam goes toward its pale color, so it keeps a hint of the plate's shade
+// Committee patch: the plates read as a neat triangulated overlay. The grid is bent by noise, seams show only in
+// patches and fade along their length, and dust tints the glass in broad patches, so the field looks weathered.
+const GLASS_WARP = 2.2; // meters a plate edge wanders
+const GLASS_WARP_SCALE = 2.5; // meters over which that wander changes
+const GLASS_DUST_MIX = 0.35; // how far dusty patches go toward the sand color
+const GLASS_DUST = mix(PAL.glass.top, 0xb9a47c, 0.6);
 // Pale seam glass, whiter than the lit glass, so seamed plates read apart from flat dark water.
 const GLASS_SEAM_COLOR = mix(PAL.glass.top, 0xffffff, 0.45);
 
@@ -86,6 +92,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     glassTint: { value: GLASS_TINT },
     glassSeam: { value: GLASS_SEAM },
     glassSeamColor: { value: new THREE.Color(GLASS_SEAM_COLOR) },
+    glassDust: { value: new THREE.Color(GLASS_DUST) },
     ...padUniforms(pixel),
   };
   const before = material.onBeforeCompile.bind(material);
@@ -130,12 +137,22 @@ uniform float glassPlate;
 uniform float glassTint;
 uniform float glassSeam;
 uniform vec3 glassSeamColor;
+uniform vec3 glassDust;
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
 uniform vec2 padHalf;
 uniform float padBorder;
 uniform vec3 padDust;
-uniform vec3 padMark;`;
+uniform vec3 padMark;
+float glassHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float glassNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(glassHash(i), glassHash(i + vec2(1.0, 0.0)), f.x), mix(glassHash(i + vec2(0.0, 1.0)), glassHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`;
 
 // Samples everything at the road pixel center, so edges step in whole road pixels like the ground
 // paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
@@ -152,18 +169,23 @@ uniform vec3 padMark;`;
 const ROAD_FRAGMENT = `{
   vec2 glassPaintAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / (roadPixel * ${PIXEL_SPLIT}.0)) + 0.5) * roadPixel * ${PIXEL_SPLIT}.0;
   if (texture2D(roadMask, (glassPaintAt - roadOrigin) / roadMaskMeters).b > 0.5) {
-    vec2 plateAt = vRoadXZ / glassPlate;
+    vec2 glassAt = vRoadXZ + (vec2(glassNoise(vRoadXZ / ${GLASS_WARP_SCALE.toFixed(2)}), glassNoise(vRoadXZ / ${GLASS_WARP_SCALE.toFixed(2)} + 31.7)) - 0.5) * ${GLASS_WARP.toFixed(2)};
+    vec2 plateAt = glassAt / glassPlate;
     vec2 plateCell = floor(plateAt);
     vec2 plateIn = plateAt - plateCell;
     float plateFlip = step(0.5, fract(sin(dot(plateCell, vec2(27.17, 91.43))) * 43758.5453));
     float plateU = mix(plateIn.x, 1.0 - plateIn.x, plateFlip);
     float plateHalf = plateU + plateIn.y > 1.0 ? 1.0 : 0.0;
     float plateHash = fract(sin(dot(plateCell + plateHalf * vec2(0.53, 0.29), vec2(12.9898, 78.233))) * 43758.5453);
-    diffuseColor.rgb *= 1.0 + (plateHash - 0.5) * 2.0 * glassTint;
+    float glassBroad = glassNoise(vRoadXZ / 7.0);
+    float glassFine = glassNoise(vRoadXZ / 0.8);
+    diffuseColor.rgb *= 1.0 + (plateHash - 0.5) * 2.0 * glassTint + (glassBroad - 0.5) * 0.16 + (glassFine - 0.5) * 0.06;
+    diffuseColor.rgb = mix(diffuseColor.rgb, glassDust, smoothstep(0.35, 0.8, glassNoise(vRoadXZ / 4.0 + 7.3)) * ${GLASS_DUST_MIX.toFixed(2)});
     float plateEdge = min(min(plateIn.x, 1.0 - plateIn.x), min(plateIn.y, 1.0 - plateIn.y));
     float seamDist = min(plateEdge, abs(plateU + plateIn.y - 1.0) * 0.70710678) * glassPlate;
-    float seamSoft = fwidth(seamDist);
+    float seamSoft = fwidth(seamDist) * 1.5;
     float seam = 1.0 - smoothstep(glassSeam * 0.5 - seamSoft, glassSeam * 0.5 + seamSoft, seamDist);
+    seam *= smoothstep(0.4, 0.8, glassNoise(vRoadXZ / 3.0 + 19.1)) * (0.4 + 0.6 * glassFine);
     diffuseColor.rgb = mix(diffuseColor.rgb, glassSeamColor, seam * ${GLASS_SEAM_MIX});
   }
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
