@@ -254,7 +254,7 @@ describe('the storm rider perk', () => {
   function stormWorld() {
     const w = emptyWorld({ x: 60, y: 60 });
     w.turn = day();
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 62, y: 60 });
     return { w, me: w.vehicles[0], npc };
   }

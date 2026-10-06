@@ -237,12 +237,15 @@ export function skipToHour(world: World, hour: number): World {
   throw new Error(`No turn within a day of ${world.turn} starts hour ${hour}`);
 }
 
-export function startWeather(world: World, kind: string): World {
+// Starts weather, replacing any of that kind. A turn count overrides the drawn duration.
+export function startWeather(world: World, kind: string, turns: number | null): World {
   const known = WEATHER_KINDS.find((k) => k === kind);
   if (!known) throw new CheatError(`Unknown weather ${kind}. Kinds: ${WEATHER_KINDS.join(', ')}`);
+  if (turns !== null) requireInteger('Turns', turns, 1, Number.MAX_SAFE_INTEGER);
   return update(world, (w) => {
     w.weather = w.weather.filter((e) => e.kind !== known);
     const event = makeWeather(w, known);
+    if (turns !== null) event.turnsLeft = turns;
     if (event.kind === 'storm') event.pos = { ...playerVehicle(w).pos };
     w.weather.push(event);
     w.events.push({ t: 'weather', event, outcome: 'started' });

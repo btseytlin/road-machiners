@@ -269,15 +269,22 @@ describe('places and time', () => {
   });
 
   it('starts one storm at the truck', () => {
-    const w = startWeather(startWeather(emptyWorld(), 'storm'), 'storm');
+    const w = startWeather(startWeather(emptyWorld(), 'storm', null), 'storm', null);
     const storms = w.weather.filter((e) => e.kind === 'storm');
     expect(storms).toHaveLength(1);
     expect(storms[0]).toMatchObject({ pos: playerVehicle(w).pos });
-    expect(() => startWeather(w, 'snow')).toThrow(CheatError);
+    expect(() => startWeather(w, 'snow', null)).toThrow(CheatError);
   });
 
   it('starts regional weather', () => {
-    expect(startWeather(emptyWorld(), 'heatwave').weather.map((e) => e.kind)).toContain('heatwave');
+    expect(startWeather(emptyWorld(), 'heatwave', null).weather.map((e) => e.kind)).toContain('heatwave');
+  });
+
+  it('starts a storm for a set number of turns, born this turn', () => {
+    const w = startWeather(emptyWorld(), 'storm', 70);
+    expect(w.weather.find((e) => e.kind === 'storm')).toMatchObject({ turnsLeft: 70, born: w.turn });
+    expect(() => startWeather(w, 'storm', 0)).toThrow(CheatError);
+    expect(() => startWeather(w, 'storm', 2.5)).toThrow(CheatError);
   });
 
   it('reveals the whole map', () => {

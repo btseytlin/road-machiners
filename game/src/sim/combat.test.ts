@@ -659,7 +659,7 @@ describe('aim perks', () => {
 
   // A storm over both trucks.
   const storm = (w: World) => {
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
   };
 
   it('storm rider takes the storm scatter away from the player', () => {

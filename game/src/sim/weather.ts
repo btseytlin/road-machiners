@@ -1,4 +1,5 @@
 // Weather events that change the rules. weatherAt is the single query every effect reads.
+// A storm builds over its first stormFadeTurns and clears over its last; stormStrength owns that ramp.
 
 import { WEATHER } from '../data/weather';
 import { newId } from './factory';
@@ -10,6 +11,8 @@ import { dist, type Vec } from './vec';
 export type WeatherEffects = { sight: number; spread: number; speed: number; wear: number; heat: number };
 
 const SIM = WEATHER.sim;
+
+type Storm = Extract<WeatherEvent, { kind: 'storm' }>;
 
 export function advanceWeather(world: World): void {
   for (const e of world.weather) {
@@ -24,7 +27,7 @@ export function advanceWeather(world: World): void {
   spawnIfClear(world, 'overcast');
 }
 
-function moveStorm(world: World, e: Extract<WeatherEvent, { kind: 'storm' }>): void {
+function moveStorm(world: World, e: Storm): void {
   let nx = e.pos.x + e.vel.x;
   let ny = e.pos.y + e.vel.y;
   if (nx < 0 || nx > world.size) { e.vel.x = -e.vel.x; nx = e.pos.x + e.vel.x; }
@@ -57,6 +60,7 @@ export function makeWeather(world: World, kind: WeatherEvent['kind']): WeatherEv
         radius: randRange(world, SIM.stormRadius[0], SIM.stormRadius[1]),
         vel: angledVel(world, randRange(world, SIM.stormSpeed[0], SIM.stormSpeed[1])),
         turnsLeft,
+        born: world.turn,
       }
     : { id, kind, turnsLeft };
 }
@@ -64,6 +68,16 @@ export function makeWeather(world: World, kind: WeatherEvent['kind']): WeatherEv
 function angledVel(world: World, speed: number): Vec {
   const a = randRange(world, -Math.PI, Math.PI);
   return { x: Math.cos(a) * speed, y: Math.sin(a) * speed };
+}
+
+// A live storm's strength in (0, 1] from its age: 1/F on its spawn turn, rising 1/F a turn to 1,
+// and falling back to 1/F on its last turn. A storm shorter than 2F turns peaks below 1.
+export function stormStrength(world: World, storm: Storm): number {
+  const age = world.turn - storm.born;
+  if (age < 0) throw new Error(`Storm ${storm.id} born on turn ${storm.born}, after turn ${world.turn}`);
+  if (storm.turnsLeft <= 0) throw new Error(`Storm ${storm.id} has ended but is still active`);
+  const fade = SIM.stormFadeTurns;
+  return Math.min(1, (age + 1) / fade, storm.turnsLeft / fade);
 }
 
 export function weatherAt(world: World, pos: Vec): WeatherEffects {
@@ -74,8 +88,9 @@ export function weatherAt(world: World, pos: Vec): WeatherEffects {
   let heat = 1;
   for (const e of world.weather) {
     if (e.kind === 'storm') {
-      const depth = Math.min(1, (e.radius - dist(pos, e.pos)) / SIM.stormEdge);
-      if (depth <= 0) continue;
+      const edge = Math.min(1, (e.radius - dist(pos, e.pos)) / SIM.stormEdge);
+      if (edge <= 0) continue;
+      const depth = edge * stormStrength(world, e);
       const fx = SIM.effects.storm;
       sight *= 1 + (fx.sight - 1) * depth;
       spread += fx.spread * depth;

@@ -152,6 +152,7 @@ export type WeatherEvent =
       radius: number;
       vel: Vec;
       turnsLeft: number;
+      born: number; // world turn it spawned on; its strength builds from here, see stormStrength()
     }
   | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
