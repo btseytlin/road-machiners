@@ -1095,7 +1095,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight. Scavengers are helpers who give aid: about one in five gives fuel
   // or supplies when asked, and about one in 35 offers it unprompted to a poor, low player.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard', 'glass-flats'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -1174,7 +1174,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // one free merc in six it sees. About one roamer in five gives fuel or supplies when asked, and about one in 35
   // offers it unprompted to a poor, low player.
   roamer: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard', 'glass-flats'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Vultures prowl lonely roads and hunting grounds: an idle vulture prowls four times in five and scavenges a site
@@ -1182,7 +1182,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // stops for 20 in 21 wrecks, piles and knocked-out trucks it passes, and rarely tows. Retaliate 0.5 against forgive
   // 4 makes it a bit touchier than most.
   vulture: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'fallen-sun', 'orchard', 'glass-flats'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { prowl: { add: 10 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 20 } }, crashed: { retaliate: { add: 0.5 } } },
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
