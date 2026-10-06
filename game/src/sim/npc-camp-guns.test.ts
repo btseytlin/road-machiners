@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { RULES } from '../data/rules';
-import { campGunning, nearestGate } from './camp-guns';
+import { campGunning, inGunRange, nearestGate } from './camp-guns';
 import { corePart } from './grid';
 import { addGoods } from './inventory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
@@ -43,7 +43,7 @@ describe('camp gate guns as a danger', () => {
     expect(npc.brain!.gunnedBy).toBe('kiln');
     w.events = [];
     thinkNpc(w, npc);
-    expect(topGoal(npc)).toMatchObject({ kind: 'flee', targetId: 'kiln', reason: 'shot by camp guns' });
+    expect(topGoal(npc)).toMatchObject({ kind: 'flee', targetId: 'kiln', reason: 'shot by gate guns' });
     expect(npc.brain!.gunnedBy).toBeUndefined();
     expect(dist2(topGoal(npc)!.destination!, gate)).toBeGreaterThan(dist2(npc.pos, gate));
   });
@@ -59,16 +59,21 @@ describe('camp gate guns as a danger', () => {
     npc.pos = outside(RULES.guards.range + NPC_BEHAVIOR.campGunMargin + 1);
     w.events = [];
     thinkNpc(w, npc);
-    expect(w.events).toContainEqual(expect.objectContaining({ previous: 'flee', reason: 'out of the camp gun range' }));
+    expect(w.events).toContainEqual(expect.objectContaining({ previous: 'flee', reason: 'out of the gun range' }));
     expect(topGoal(npc)?.kind).not.toBe('flee');
   });
 
-  it('a town gate shot at a driver does not start a camp flee', () => {
+  it('a driver shot by a town gate gun flees out of its range, and not to that town', () => {
     const w = emptyWorld({ x: 5, y: 5 });
-    const npc = scavengerAt(w, outside(5));
-    w.events.push({ t: 'guardShot', site: 'bowl', from: { ...gate }, target: npc.id, rounds: [] });
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const bowlGate = siteGates(bowl)[0];
+    const npc = scavengerAt(w, { x: bowlGate.x + 2, y: bowlGate.y });
+    w.events.push({ t: 'guardShot', site: 'bowl', from: { ...bowlGate }, target: npc.id, rounds: [] });
     noteHurt(w);
-    expect(npc.brain!.gunnedBy).toBeUndefined();
+    w.events = [];
+    thinkNpc(w, npc);
+    expect(topGoal(npc)).toMatchObject({ kind: 'flee', targetId: 'bowl', reason: 'shot by gate guns' });
+    expect(inGunRange(bowl, topGoal(npc)!.destination!)).toBe(false);
   });
 
   it('a raider is never in a camp gun range', () => {

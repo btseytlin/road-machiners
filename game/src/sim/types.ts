@@ -184,7 +184,7 @@ export type NpcBrain = {
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
-    gunnedBy?: string; // the camp whose gate gun shot at this driver last turn, until the driver decides on it
+    gunnedBy?: string; // the camp or town whose gate gun shot at this driver last turn, until the driver decides on it
     fullAt?: number; // free cells when a sale would have made room for a loot the hold could not take, until the hold frees more
     unfit?: string[]; // loot the driver reached and found would not fit its truck even after a sale
     // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
