@@ -477,7 +477,7 @@ const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger
 function traderGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!trade(o) && !takeHaul(o) && !scavenge(o)) checkNextBoard(o);
+  if (!trade(o) && !takeHaul(o) && !scavenge(o, false)) checkNextBoard(o);
 }
 
 // The hauler takes the best haul on the board it stands at before it looks at the market, so a contract pays the trip
@@ -485,7 +485,7 @@ function traderGoal(o: Orders): void {
 function haulerGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!takeHaul(o) && !trade(o) && !scavenge(o)) checkNextBoard(o);
+  if (!takeHaul(o) && !trade(o) && !scavenge(o, false)) checkNextBoard(o);
 }
 
 // ---- Haul contracts: paid work for a trader too poor for a load. The contract loads its goods free.
@@ -530,7 +530,7 @@ function checkNextBoard(o: Orders): void {
 function scavengerGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!scavenge(o) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
+  if (!scavenge(o, false) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
 }
 
 type Purchase = { town: TownDef; good: string; count: number; profit: number };
@@ -595,9 +595,10 @@ function sellAt(world: World, town: TownDef, good: string): number {
 
 // The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
-// salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find.
-function scavenge(o: Orders): boolean {
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
+// salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
+// sellCargo.
+function scavenge(o: Orders, stripping: boolean): boolean {
+  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, stripping);
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
@@ -615,7 +616,8 @@ function findSalvageSite(o: Orders): boolean {
 
 // The hunter strips a knocked-out truck it sees of its parts and goods. It drives at the weakest hostile it sees and
 // demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
-// it sees, sells in town when full and otherwise patrols the roads between the shops.
+// it sees, sells in town when full and otherwise patrols the roads between the shops. While no raider in the world is weak enough to
+// hunt, it scavenges instead, as a player too weak to hunt does.
 function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
@@ -623,6 +625,11 @@ function hunterGoal(o: Orders): void {
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
+  scavengeOrHunt(o);
+}
+
+function scavengeOrHunt(o: Orders): void {
+  if (huntedSpeed(o.world) === undefined && scavenge(o, true)) return;
   collectOrHunt(o);
 }
 

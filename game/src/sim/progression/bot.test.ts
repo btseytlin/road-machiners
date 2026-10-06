@@ -48,6 +48,14 @@ function parkedAt(id: string) {
   return w;
 }
 
+// A raider with no gun far off, so a hunter always has prey in the world and patrols for it.
+function withPrey(w: World): World {
+  const me = playerVehicle(w);
+  const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: me.pos.x + 150, y: me.pos.y });
+  raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+  return w;
+}
+
 // Salt flooded at Nose and short at Bowl, so it is the clear best haul whatever the tuned prices.
 function saltGlut(w: World): World {
   w.shops.nose.pressure.salt = -PRESSURE_MAX;
@@ -405,7 +413,7 @@ describe('botOrders', () => {
   });
 
   it('has a hunter with no foe in sight patrol on to a shop other than the one it stands at', () => {
-    const w = parkedAt('bowl');
+    const w = withPrey(parkedAt('bowl'));
     const me = playerVehicle(w);
     me.order = null;
 
@@ -416,8 +424,15 @@ describe('botOrders', () => {
     expect(Math.hypot(order.dest.x - me.pos.x, order.dest.y - me.pos.y)).toBeGreaterThan(20);
   });
 
+  it('has a hunter scavenge while no raider is weak enough to hunt', () => {
+    const order = (w: World, archetype: 'hunter' | 'scavenger') => playerVehicle(botOrders(w, archetype).world).order;
+
+    expect(order(parkedAt('bowl'), 'hunter')).toEqual(order(parkedAt('bowl'), 'scavenger'));
+    expect(order(withPrey(parkedAt('bowl')), 'hunter')).not.toEqual(order(parkedAt('bowl'), 'scavenger'));
+  });
+
   it('has a broke hunter with no gun scavenge instead of patrol', () => {
-    const armed = parkedAt('bowl');
+    const armed = withPrey(parkedAt('bowl'));
     armed.player.money = 0;
     const unarmed = structuredClone(armed);
     const me = playerVehicle(unarmed);
