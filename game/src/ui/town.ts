@@ -160,13 +160,15 @@ export class TownScreen {
 
   // Runs a command; a thrown rule error shows in the screen instead of changing the world.
   private run(cmd: (w: World) => World): void {
-    try {
-      this.host.apply(cmd(this.host.world()));
-      this.error = "";
-    } catch (e) {
-      this.error = (e as Error).message;
-    }
-    keepFocus(this.root, () => this.render());
+    keepFocus(this.root, () => {
+      try {
+        this.host.apply(cmd(this.host.world()));
+        this.error = "";
+      } catch (e) {
+        this.error = (e as Error).message;
+      }
+      this.render();
+    });
   }
 
   private button(label: string, cmd: (w: World) => World, disabled = false, title = "", key = ""): HTMLElement {
@@ -473,7 +475,7 @@ function profitCell(e: SaleEstimate): HTMLElement {
   return el("div", { class: "profit", title: estimateTitle(e) }, caption(GOODS_COLUMNS.profit), el("span", { class: `num ${tone}` }, estimateText(e)));
 }
 
-// Redraws a screen and puts focus back on the button the player pressed, found by its data-key.
+// Runs a change that redraws a screen (apply may redraw it too) and puts focus back on the button the player pressed, found by its data-key.
 function keepFocus(root: HTMLElement, render: () => void): void {
   const key = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
   render();
@@ -614,13 +616,15 @@ export class TruckTradeScreen {
 
   // Runs a command. A thrown rule error shows in the screen instead of changing the world.
   private run(cmd: (w: World) => World): void {
-    try {
-      this.host.apply(cmd(this.host.world()));
-      this.error = "";
-    } catch (e) {
-      this.error = (e as Error).message;
-    }
-    keepFocus(this.root, () => this.render());
+    keepFocus(this.root, () => {
+      try {
+        this.host.apply(cmd(this.host.world()));
+        this.error = "";
+      } catch (e) {
+        this.error = (e as Error).message;
+      }
+      this.render();
+    });
   }
 
   private button(label: string, cmd: (w: World) => World, disabled = false, key = ""): HTMLElement {
