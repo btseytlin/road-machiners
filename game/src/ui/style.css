@@ -25,7 +25,12 @@ body {
   --inspection-width: 300px;
   --inspection-height: 340px;
   --log-width: 282px;
-  --right-column: max(calc(var(--inspection-width) + 14px), calc(var(--log-width) + 16px));
+  --right-column: calc(var(--log-width) + 16px);
+  --weapon-card: 96px;
+  --weapon-card-min: 64px;
+  --weapon-gap: 6px;
+  --weapon-auto: 72px;
+  --weapons-min: calc(16px + var(--weapon-auto) + 2 * (var(--weapon-gap) + var(--weapon-card-min)));
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -394,21 +399,29 @@ body {
 .weapons fieldset {
   display: flex;
   align-items: stretch;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   border: 0;
   margin: 0;
   padding: 0;
   min-width: 0;
 }
+.weapons fieldset > .switch {
+  flex: 0 0 var(--weapon-auto);
+  white-space: normal;
+}
 .weapons .weapon-slots {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: var(--weapon-gap);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .weapons .weapon-slot {
-  width: 96px;
-  min-width: 0;
+  width: var(--weapon-card);
+  min-width: var(--weapon-card-min);
+  flex-shrink: 1;
 }
 #ui .weapon-pick {
   position: relative;
@@ -450,6 +463,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px;
   margin-top: 2px;
 }
 .weapon-ammo {
@@ -753,9 +768,6 @@ body {
   height: calc(100dvh - 112px - 72px);
 }
 #ui .recenter {
-  left: 50%;
-  bottom: 124px;
-  transform: translateX(-50%);
   padding: 0;
   border: 0;
 }
@@ -1040,6 +1052,7 @@ body {
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
 }
@@ -1609,14 +1622,16 @@ canvas.view {
 #ui .top-left > .panel {
   position: static;
 }
-/* The instruments and the weapons sit side by side, and the weapons wrap above when they do not fit. */
+/* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
 .bottom-left {
   position: absolute;
   left: 14px;
   bottom: 14px;
   display: flex;
+  flex-direction: row-reverse;
   flex-wrap: wrap-reverse;
-  align-items: flex-start;
+  justify-content: flex-end;
+  align-items: stretch;
   gap: 8px;
   max-width: calc(100vw - 22px - var(--right-column));
 }
@@ -1624,10 +1639,20 @@ canvas.view {
   position: static;
 }
 #ui .bottom-left > .instruments {
-  order: 0;
+  order: 1;
 }
 #ui .bottom-left > .weapons {
-  order: 1;
+  order: 0;
+  flex: 1 1 var(--weapons-min);
+  max-width: max-content;
+  min-width: 0;
+}
+#ui .bottom-left > .recenter {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  transform: none;
 }
 .top-right {
   position: absolute;

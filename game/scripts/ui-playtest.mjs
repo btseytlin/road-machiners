@@ -57,7 +57,7 @@ async function checkInstruments(page) {
 }
 
 const DOCK_VIEWPORTS = [[1920, 1080], [1280, 720], [1280, 656], [1024, 656], [900, 656], [800, 656], [700, 800]];
-const DOCK_PANELS = ['.instruments', '.weapons', '.truck-condition', '.log', '.turn-control', '.info'];
+const DOCK_PANELS = ['.instruments', '.weapons', '.truck-condition', '.log', '.turn-control', '.recenter', '.info'];
 
 // Long weather, the Cool engine button, the most weapons a random truck mounts, and a hovered truck.
 async function loadHeavyHud(page) {
@@ -65,12 +65,12 @@ async function loadHeavyHud(page) {
     const { runCommand } = await import('/src/ui/console.ts');
     const game = window.__ROAM__;
     const run = line => { const r = runCommand(game.state, line); if (r.world) game.apply(r.world); };
-    let best = 0;
-    for (let i = 0; i < 40 && best < 6; i++) {
+    let guns = 0;
+    for (let i = 0; i < 40 && guns < 6; i++) {
       run('randomkit 5');
-      best = Math.max(best, document.querySelectorAll('.weapon-pick').length);
-      if (document.querySelectorAll('.weapon-pick').length >= 6) break;
+      guns = document.querySelectorAll('.weapon-pick').length;
     }
+    game.hud.showRecenter(true);
     run('spawn buggy');
     run('weather storm');
     run('weather heatwave');
@@ -87,7 +87,7 @@ async function loadHeavyHud(page) {
     }
     // Tips are transient, not panels.
     document.head.append(Object.assign(document.createElement('style'), { textContent: '#ui .tip { display: none !important }' }));
-    return { other: other.id, seen: getComputedStyle(document.querySelector('.info')).display, hov: game.hovered };
+    return { guns, other: other.id, seen: getComputedStyle(document.querySelector('.info')).display, hov: game.hovered };
   }).then(r => console.log(JSON.stringify(r)));
 }
 
@@ -108,16 +108,30 @@ async function checkDockLayout(page, [width, height]) {
     const shown = node => node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden';
     const rects = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector)]).filter(([, node]) => shown(node)).map(([selector, node]) => [selector, node.getBoundingClientRect().toJSON()]));
     const controls = [...document.querySelectorAll('.weapons button, .weapons .switch, .weapons .weapon-pick')].map(node => {
+      node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       const r = node.getBoundingClientRect();
       const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
       return { name: node.innerText.replace(/\s+/g, ' ').slice(0, 24), hit: hit?.className, ok: node.contains(hit) };
     });
-    return { rects, controls };
+    const row = document.querySelector('.weapons .weapon-slots');
+    const guns = document.querySelectorAll('.weapon-pick').length;
+    return { rects, controls, guns, scroll: { width: row.scrollWidth, client: row.clientWidth }, viewport: { width: innerWidth, height: innerHeight } };
   }, [DOCK_PANELS, width <= 720]);
   console.log(`${width}x${height}`, Object.entries(m.rects).map(([n, r]) => `${n}=${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
   await page.screenshot({ path: `.playtest/dock-${width}x${height}.png`, timeout: 180000 });
   assert(m.rects['.weapons'], `Weapons panel must show at ${width}x${height}`);
   assertNoOverlaps(m.rects, width, height);
+  const at = `at ${width}x${height}`, weapons = m.rects['.weapons'], instruments = m.rects['.instruments'];
+  assert(Math.abs(m.viewport.height - weapons.bottom - 14) <= 1, `Weapons bottom must sit 14px above the screen bottom ${at}: ${weapons.bottom} of ${m.viewport.height}`);
+  assert(weapons.height <= 190, `Weapons panel must be at most 190px tall ${at}: ${weapons.height}`);
+  const stacked = weapons.x < instruments.right - 1;
+  if (stacked) assert(weapons.y >= instruments.bottom - 1, `Stacked weapons must sit below the instruments ${at}`);
+  else assert(weapons.y >= instruments.y - 1, `Weapons must not rise above the instruments ${at}: ${weapons.y} < ${instruments.y}`);
+  if (m.guns === 6 && width >= 1280) {
+    assert(!stacked, `Six guns must sit beside the instruments ${at}`);
+    assert(Math.abs(weapons.bottom - instruments.bottom) <= 1, `Weapons and instruments bottoms must be level ${at}`);
+    assert(m.scroll.width <= m.scroll.client + 1, `Six guns must not scroll ${at}: ${m.scroll.width} > ${m.scroll.client}`);
+  }
   for (const c of m.controls) assert(c.ok, `Weapon control "${c.name}" must take the click at its center at ${width}x${height}, hit ${c.hit}`);
 }
 

@@ -107,7 +107,7 @@ export class Hud {
   // Stands on top of the part condition panel.
   private stranded = panel("stranded", this.condition.root);
   // Shows only while a pan has left the truck.
-  private recenter = panel("recenter");
+  private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";

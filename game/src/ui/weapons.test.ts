@@ -326,11 +326,17 @@ class FakeNode {
   style: Record<string, string> = {};
   children: (FakeNode | string)[] = [];
   listeners = new Map<string, ((e: unknown) => void)[]>();
+  attrs = new Map<string, string>();
+  scrollLeft = 0;
+  scrollIntoView = vi.fn();
   constructor(readonly tag: string) {}
   append(...c: (FakeNode | string)[]) { this.children.push(...c); }
   replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
-  setAttribute() {}
+  setAttribute(k: string, v: string) { this.attrs.set(k, v); }
   querySelector(sel: string): FakeNode | undefined {
+    const byWeapon = sel.match(/^\[data-weapon="(.*)"\]$/);
+    if (byWeapon) return this.find((n) => n.attrs.get("data-weapon") === byWeapon[1]);
+    if (sel === ".weapon-slots") return this.find((n) => n.className === "weapon-slots");
     const cls = sel.replace(":scope > .", "");
     return this.children.find((c): c is FakeNode => typeof c !== "string" && c.className.split(" ").includes(cls));
   }
@@ -372,7 +378,7 @@ describe("weapon panel keys and the turn button", () => {
     const panel = new WeaponPanel(host);
     panel.render();
     const panels = (ui.children as FakeNode[]).map((n) => n);
-    return { panel, host, gun, button: (text: string) => panels.map((n) => n.find((b) => b.tag === "button" && (text === "Auto" ? b.text() === text : b.text().includes(text)))).find(Boolean)! };
+    return { panel, host, gun, row: () => ui.children.map((n) => (n as FakeNode).querySelector(".weapon-slots")).find(Boolean)!, card: (id: string) => ui.children.map((n) => (n as FakeNode).querySelector(`[data-weapon="${id}"]`)).find(Boolean)!, button: (text: string) => panels.map((n) => n.find((b) => b.tag === "button" && (text === "Auto" ? b.text() === text : b.text().includes(text)))).find(Boolean)! };
   }
 
   it("selectIndex picks a weapon, picks all again on repeat, and ignores a missing index", () => {
@@ -385,6 +391,23 @@ describe("weapon panel keys and the turn button", () => {
     host.selectWeapon.mockClear();
     panel.selectIndex(9);
     expect(host.selectWeapon).not.toHaveBeenCalled();
+  });
+
+  it("a re-render keeps the weapon row scrolled where it was", () => {
+    const { panel, row } = build();
+    row().scrollLeft = 120;
+    panel.render();
+    expect(row().scrollLeft).toBe(120);
+  });
+
+  it("scrolls a newly selected weapon into view once", () => {
+    const { panel, host, gun, card } = build();
+    expect(card(gun.part.id).scrollIntoView).not.toHaveBeenCalled();
+    host.selectedWeapon.mockReturnValue(gun.part.id);
+    panel.render();
+    expect(card(gun.part.id).scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    panel.render();
+    expect(card(gun.part.id).scrollIntoView).toHaveBeenCalledTimes(0);
   });
 
   it("the Q, X and All buttons run their keys", () => {

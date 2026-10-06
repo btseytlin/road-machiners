@@ -173,6 +173,7 @@ export class WeaponPanel {
   private root = panel("weapons", bottomLeft());
   private turn = panel('turn-control');
   private expanded = true;
+  private shownSelection: string | null = null;
 
   constructor(private host: UiHost) {}
 
@@ -187,8 +188,26 @@ export class WeaponPanel {
       this.expanded ? this.renderAllButton(locked) : null,
       el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
     );
-    this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
+    this.replaceKeepingScroll(head, w, locked);
     this.turn.replaceChildren(this.renderTurnButton(phase));
+  }
+
+  // The panel is rebuilt on every render, so the row's scroll position is carried over.
+  private replaceKeepingScroll(head: HTMLElement, w: World, locked: boolean): void {
+    const scrolled = this.root.querySelector<HTMLElement>(".weapon-slots")?.scrollLeft ?? 0;
+    this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
+    const row = this.root.querySelector<HTMLElement>(".weapon-slots");
+    if (row) row.scrollLeft = scrolled;
+    this.keepSelectionInView(row);
+  }
+
+  // A gun picked by key must not sit off-screen in the scrolled row.
+  private keepSelectionInView(row: HTMLElement | null): void {
+    const selected = this.host.selectedWeapon();
+    if (selected === this.shownSelection) return;
+    this.shownSelection = selected;
+    if (!row || selected === null) return;
+    row.querySelector<HTMLElement>(`[data-weapon="${selected}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   // While turns run on their own, the button shows it and stops them.
