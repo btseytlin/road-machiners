@@ -1,6 +1,7 @@
 // Trucks drawn as one base model per chassis, with every grid item's model from the shared kit on its own cells.
 // Items stand on the model's top surface under their projected footprint. A mounted engine stands at the model's engine anchor.
 // Body space: +x is the nose, +z the truck's right, +y up, origin at the collider center. Models share that frame.
+// A gun stands on a post that lifts its head over the cab ahead and over every drawn item and body surface its barrel can sweep.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -9,13 +10,14 @@ import { partDef, type PartDef, type PartKind, type WeaponDef } from '../../data
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor';
-import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
+import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, surfaceSamples, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
+import { clearTop, headShape, sweepOf, type Obstacle } from './gunClearance';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
 import { TruckMotion, WHIPS } from './truckMotion';
@@ -44,6 +46,8 @@ const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2
 // Bumpers are authored 1 m tall with their top on the deck top. They stretch to the chassis box height plus the skirt.
 const EDGE_H = 1;
 const SIDE_SKIN = 0.1; // meters a mounted side plate stands out from the model face
+const GUN_GAP = 0.03; // meters a gun head stands above the highest thing it sweeps over
+const SAMPLE_REACH = 0.1; // meters past the head's reach where a body sample's center can still have its box under the head
 const SKIRT = 0.22; // meters a base hangs below the collider, SKIRT in tools/blender/parts_common_base.py
 
 // A truck behind terrain or props shows through as a flat faction-color silhouette.
@@ -191,7 +195,7 @@ export class VehicleView {
     for (const [id, turret] of this.turrets) {
       const yaw = yawOf(id);
       const want = yaw === null ? 0 : angleDiff(this.heading, yaw) / DEG;
-      const turn = turret.spans.length ? aimWithin(turret.spans, want) : 0;
+      const turn = aimWithin(sweepOf(turret.spans, true), want);
       const q = headingQuat(turn * DEG);
       turret.head.quaternion.set(q.x, q.y, q.z, q.w);
     }
@@ -233,15 +237,20 @@ export class VehicleView {
     const onBody = v.items.filter((item) => onChassis(v, item));
     this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody), cabLook(v));
     const wheelItems: PartItem[] = [];
+    const guns: PartItem[] = [];
+    const obstacles: Obstacle[] = [];
     // The transmission and the tank of a truck that does not show its cores sit inside the body. A part with no surface
     // to rest on would float, so it is not drawn either.
     for (const item of onBody.filter((it) => !hidesInside(v, it) && !wouldFloat(v, it))) {
       if (item.kind === 'good') {
-        still.add(this.placeItem(v, item, paint, standingY(v, item)));
+        const good = this.placeItem(v, item, paint, standingY(v, item));
+        still.add(good);
+        obstacles.push(obstacleOf(good));
         continue;
       }
-      this.drawPart(v, body, item, still, paint, wheelItems);
+      this.drawPart(v, body, item, still, paint, wheelItems, guns, obstacles);
     }
+    for (const gun of guns) this.buildWeapon(v, gun, isMounted(v.chassisId, gun), still, paint, obstacles);
     this.buildWheels(v, body, wheelItems, paint);
     this.anchorUndrawn(v, body);
     this.buildSuspension(body, paint);
@@ -254,13 +263,20 @@ export class VehicleView {
   }
 
   // One part's model. The cab core has no model: the base draws the cab.
-  private drawPart(v: Vehicle, body: Body, item: PartItem, still: THREE.Group, paint: number, wheelItems: PartItem[]): void {
+  // Guns wait in guns, so they draw after everything their heads can turn over. Items a gun can hit add to obstacles.
+  private drawPart(v: Vehicle, body: Body, item: PartItem, still: THREE.Group, paint: number, wheelItems: PartItem[], guns: PartItem[], obstacles: Obstacle[]): void {
     const def = partDef(item.part.defId);
     const mounted = isMounted(v.chassisId, item);
     if (BODY_PARTS.has(def.id)) return;
-    if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
+    if (def.kind === 'weapon') guns.push(item);
     else if (isWheel(def) && mounted) wheelItems.push(item);
-    else this.addPart(still, item, this.placedPart(v, body, item, def, paint));
+    else this.drawModel(v, body, item, def, still, paint, obstacles);
+  }
+
+  private drawModel(v: Vehicle, body: Body, item: PartItem, def: PartDef, still: THREE.Group, paint: number, obstacles: Obstacle[]): void {
+    const obj = this.placedPart(v, body, item, def, paint);
+    this.addPart(still, item, obj);
+    if (blocksGuns(v, item, def)) obstacles.push(obstacleOf(obj));
   }
 
   private placedPart(v: Vehicle, body: Body, item: PartItem, def: PartDef, paint: number): THREE.Object3D {
@@ -407,10 +423,9 @@ export class VehicleView {
     return obj;
   }
 
-  // A weapon standing below the highest point ahead of it in its lane gets a riser post up to it, so its turret clears the cab.
-  // Returns where the weapon mount stands.
-  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group): Placement {
-    const { at, bottom, top } = weaponStand(v, item);
+  // A gun's post starts on the model's surface under it and rises to top, where the mount stands.
+  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
+    const { at, bottom } = weaponStand(v, item);
     const mount = { ...at, pos: at.pos.clone().setY(top) };
     if (bottom >= top) return mount;
     const post = model('wmount_riser');
@@ -422,14 +437,10 @@ export class VehicleView {
 
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
   // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
-  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
+  // The post lifts the head over the cab ahead and over every obstacle and body surface the head can sweep, see clearTop().
+  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, obstacles: readonly Obstacle[]): void {
     const look = weaponLook(item.part.id, item.part.defId);
     const wear = lookOf(item);
-    const mount = model(look.mount);
-    place(mount, at);
-    tint(mount, paint, wear);
-    still.add(mount);
-
     const parts = new THREE.Group();
     const receiver = model(look.receiver);
     parts.add(receiver);
@@ -444,15 +455,36 @@ export class VehicleView {
     }
     for (const p of parts.children) tint(p, paint, wear);
     const head = mergeStatic(parts);
+
+    const stand = weaponStand(v, item);
+    const headAt = socket(look.mount, 'head');
+    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
+    const shape = headShape(head, socket(look.receiver, 'muzzle').x);
+    // The head socket turns and stretches with the mount, so its x and z come from the mount's matrix.
+    const mount = model(look.mount);
+    place(mount, stand.at);
     mount.updateMatrix();
-    head.position.copy(socket(look.mount, 'head').applyMatrix4(mount.matrix));
+    const pivot = headAt.clone().applyMatrix4(mount.matrix);
+    const own = rectOf(v, item);
+    const ground = surfaceSamples(v.chassisId, pivot, Math.max(shape.core, shape.reach) + SAMPLE_REACH)
+      .filter((s) => !(s.x >= own.x0 && s.x <= own.x1 && s.z >= own.z0 && s.z <= own.z1))
+      .map((s): Obstacle => ({ x0: s.x - s.half, x1: s.x + s.half, z0: s.z - s.half, z1: s.z + s.half, top: s.y }));
+    const clear = clearTop(pivot, shape, sweepOf(spans, active), [...obstacles, ...ground], GUN_GAP);
+    const top = Math.max(stand.top, clear - headAt.y - shape.bottom);
+    if (!Number.isFinite(top)) throw new Error(`Gun ${item.part.id} on ${v.chassisId} has a post height of ${top}`);
+
+    const at = this.riser(v, item, paint, still, top);
+    place(mount, at);
+    tint(mount, paint, wear);
+    still.add(mount);
+    mount.updateMatrix();
+    head.position.copy(headAt.applyMatrix4(mount.matrix));
     this.anchors.set(item.part.id, { local: head.position.clone(), parent: this.body });
     if (!active) {
       still.add(head);
       return;
     }
     this.body.add(head);
-    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
     this.turrets.set(item.part.id, { head, tip, spans });
   }
 
@@ -740,6 +772,17 @@ export function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: numb
   const pos = new THREE.Vector3((rect.x0 + rect.x1) / 2, y, (rect.z0 + rect.z1) / 2);
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(dx / (own.h * CELL.along), 1, dz / (own.w * CELL.across)) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(dz / (own.h * CELL.along), 1, dx / (own.w * CELL.across)) };
+}
+
+// A mounted plate is skin on the body, and a mounted engine sits in its bay under the hood cutout. Neither stands in a gun's way.
+function blocksGuns(v: Vehicle, item: PartItem, def: PartDef): boolean {
+  return !(isMounted(v.chassisId, item) && (def.kind === 'armor' || def.kind === 'engine'));
+}
+
+// The upright box a placed model fills, in body space.
+function obstacleOf(obj: THREE.Object3D): Obstacle {
+  const box = new THREE.Box3().setFromObject(obj);
+  return { x0: box.min.x, x1: box.max.x, z0: box.min.z, z1: box.max.z, top: box.max.y };
 }
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);

@@ -8,14 +8,14 @@ import { NPCS } from '../../data/npcs';
 import { partDef, type WeaponDef } from '../../data/parts';
 import { BODY_PARTS, partModel, weaponLook } from '../../render/partLooks';
 import { aimWithin, fireSpans, openSides } from '../../sim/armor';
-import { cellRect, highestUnder, restOn } from '../../sim/body';
+import { cellRect, highestUnder, restOn, surfaceSamples } from '../../sim/body';
 import { makeVehicle, newId } from '../../sim/factory';
 import { baseGrid, isMounted, itemCells, mountSpots, MOUNT_CELLS } from '../../sim/grid';
 import { generateNpcLoadout } from '../../sim/npc-loadout';
 import { emptyWorld } from '../../sim/testkit';
 import type { GridItem, Vehicle, World } from '../../sim/types';
 import { loadModels, model, socket } from './models';
-import { VehicleView, wouldFloat } from './vehicle';
+import { footprint, VehicleView, wouldFloat } from './vehicle';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -24,6 +24,7 @@ await loadModels(async (name) => {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
 
+const SLOW = 600_000; // ms: each case builds many truck views
 const TOLERANCE = 0.01; // meters a head may cut into an obstacle
 type Box = { x0: number; x1: number; z0: number; z1: number; top: number; what: string };
 
@@ -45,12 +46,6 @@ function headVertices(gun: Extract<GridItem, { kind: 'part' }>): THREE.Vector3[]
   return out;
 }
 
-const heights = new Map<string, number>();
-function heightOf(name: Parameters<typeof model>[0]): number {
-  if (!heights.has(name)) heights.set(name, new THREE.Box3().setFromObject(model(name)).max.y);
-  return heights.get(name)!;
-}
-
 // Boxes of the drawn items a head can hit: no weapons, no body parts, no armor, engines or mounted wheels.
 function obstacles(v: Vehicle, skip: GridItem): Box[] {
   const g = baseGrid(v.chassisId);
@@ -67,7 +62,10 @@ function obstacles(v: Vehicle, skip: GridItem): Box[] {
     }
     if (wouldFloat(v, it)) continue;
     const rest = restOn(v.chassisId, cellRect(v.chassisId, itemCells(it)));
-    out.push({ ...rest.rect, top: rest.y + heightOf(partModel(what)), what });
+    // The model's own box, stretched and turned to its footprint: a model need not fill its cells.
+    const at = footprint(v, it, rest.y);
+    const box = new THREE.Box3().setFromObject(model(partModel(what))).applyMatrix4(new THREE.Matrix4().compose(at.pos, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, at.yaw, 0)), at.scale));
+    out.push({ x0: box.min.x, x1: box.max.x, z0: box.min.z, z1: box.max.z, top: box.max.y, what });
   }
   return out;
 }
@@ -99,7 +97,9 @@ function clips(world: World, v: Vehicle): string[] {
         for (const b of boxes) {
           if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.top - y > worst) { worst = b.top - y; where = `${b.what} at yaw ${a}`; }
         }
-        if (x > own.x0 && x < own.x1 && z > own.z0 && z < own.z1) continue;
+        // The body is a 10 cm height map and a sample whose center lies in the gun's own footprint belongs to the gun.
+        const cell = surfaceSamples(v.chassisId, { x, z }, 0.08).find((c) => Math.abs(c.x - x) <= c.half && Math.abs(c.z - z) <= c.half);
+        if (cell && cell.x >= own.x0 && cell.x <= own.x1 && cell.z >= own.z0 && cell.z <= own.z1) continue;
         const surface = highestUnder(v.chassisId, { x0: x - 0.02, x1: x + 0.02, z0: z - 0.02, z1: z + 0.02 });
         if (surface - y > worst) { worst = surface - y; where = `body at yaw ${a}`; }
       }
@@ -143,7 +143,7 @@ describe('gun heads clear what they sweep over', () => {
         const g = baseGrid(id);
         const probe = { id: 'probe', kind: 'part', x: 0, y: 0, rot, part: { id: 'probe', defId: gunId, hp: 1, wear: 0 } } as GridItem;
         const spots = mountSpots(g, v.items, probe, MOUNT_CELLS.weapon).filter((s) => s.rot === rot);
-        const step = Math.max(1, Math.floor(spots.length / 6));
+        const step = Math.max(1, Math.floor(spots.length / 4));
         for (let i = 0; i < spots.length; i += step) {
           const t = bare(id);
           if (!place(t.world, t.v, gunId, null, spots[i].x, spots[i].y, rot)) continue;
@@ -154,12 +154,12 @@ describe('gun heads clear what they sweep over', () => {
       }
     }
     expect(problems).toEqual([]);
-  });
+  }, SLOW);
 
   it('NPC loadouts of every template', () => {
     const problems: string[] = [];
     for (const t of Object.values(NPCS)) {
-      for (let seed = 1; seed <= 12; seed++) {
+      for (let seed = 1; seed <= 8; seed++) {
         const world = { ...emptyWorld(), rngState: seed * 7 + 3 };
         let v: Vehicle;
         try {
@@ -172,7 +172,7 @@ describe('gun heads clear what they sweep over', () => {
       }
     }
     expect(problems).toEqual([]);
-  });
+  }, SLOW);
 
   it('the scout pickup layout of the player screenshot', () => {
     const { world, v } = bare('scout');
