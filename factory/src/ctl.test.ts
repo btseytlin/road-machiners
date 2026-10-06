@@ -1,0 +1,187 @@
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EMPTY_STATE, readState, writeState } from './state';
+import { ROOT, fake, reset, type Fake } from './stages/test-fakes';
+
+// The control module has its own tests. These fakes write the inbox file like the real one and let only the name "ann" act.
+vi.mock('./control', () => ({
+  resolveActor: (_ctx: unknown, by: string, gated: boolean) => {
+    if (by === 'hermes' && gated) throw new Error('hermes cannot order this');
+    if (by !== 'hermes' && by !== 'ann') throw new Error(`unknown actor ${by}`);
+    return by;
+  },
+  isGated: (_ctx: unknown, command: { action: string }) => command.action === 'ship',
+  writeControl: (home: string, command: unknown, now: Date) => {
+    mkdirSync(join(home, 'inbox'), { recursive: true });
+    const path = join(home, 'inbox', `${now.getTime()}-control.json`);
+    writeFileSync(path, JSON.stringify({ kind: 'control', ...(command as object) }));
+    return path;
+  },
+}));
+const { runCtl } = await import('./ctl');
+
+let out: string[];
+beforeEach(() => {
+  reset();
+  out = [];
+  vi.spyOn(console, 'log').mockImplementation((line: string) => void out.push(line));
+});
+afterEach(() => vi.restoreAllMocks());
+
+const run = (f: Fake, ...args: string[]) => runCtl(f.ctx, args);
+const inbox = () => (existsSync(join(ROOT, 'inbox')) ? readdirSync(join(ROOT, 'inbox')) : []);
+const stored = () => JSON.parse(readFileSync(join(ROOT, 'inbox', inbox()[0]), 'utf8'));
+
+describe('argument errors', () => {
+  it('rejects an unknown command and points to help', async () => {
+    await expect(run(fake(), 'dance')).rejects.toThrow('factory help');
+    await expect(runCtl(fake().ctx, [])).rejects.toThrow('factory help');
+  });
+
+  it('rejects a bad issue number and a bad position', async () => {
+    await expect(run(fake(), 'move', 'x', 'design', '--by', 'ann', '--reason', 'r')).rejects.toThrow('not an issue number');
+    await expect(run(fake(), 'move', '5', 'limbo', '--by', 'ann', '--reason', 'r')).rejects.toThrow('Unknown position');
+    await expect(run(fake(), 'drop', 'bin', '5', '--by', 'ann', '--reason', 'r')).rejects.toThrow('Unknown queue');
+    expect(inbox()).toEqual([]);
+  });
+
+  it('needs --by and --reason on every write command', async () => {
+    await expect(run(fake(), 'move', '5', 'design', '--reason', 'r')).rejects.toThrow('Missing --by');
+    await expect(run(fake(), 'move', '5', 'design', '--by', 'ann')).rejects.toThrow('Missing --reason');
+    await expect(run(fake(), 'move', '5', 'design', '--by', 'ann', '--reason')).rejects.toThrow('Missing --reason');
+    expect(inbox()).toEqual([]);
+  });
+
+  it('refuses an unknown actor and a gated order from hermes before writing', async () => {
+    await expect(run(fake(), 'cut', '--by', 'bob', '--reason', 'r')).rejects.toThrow('unknown actor');
+    await expect(run(fake(), 'ship', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('cannot order');
+    expect(inbox()).toEqual([]);
+  });
+});
+
+describe('write commands', () => {
+  it('leaves one inbox file and says it applies on the next tick', async () => {
+    await run(fake(), 'move', '5', 'design', '--reason', 'gate failed on load', '--by', 'hermes');
+    expect(stored()).toEqual({ kind: 'control', action: 'move', issue: 5, to: 'design', by: 'hermes', reason: 'gate failed on load' });
+    expect(out[0]).toContain('next tick');
+  });
+
+  it.each([
+    [['merge', '5'], { action: 'merge', issue: 5 }],
+    [['ship'], { action: 'ship' }],
+    [['cut'], { action: 'cut' }],
+    [['remove', '5'], { action: 'remove', issue: 5 }],
+    [['drop', 'approval', '5'], { action: 'drop', queue: 'approval', id: 5 }],
+    [['drop', 'ship'], { action: 'drop', queue: 'ship', id: null }],
+    [['merge-change', '9'], { action: 'merge-change', id: 9 }],
+  ])('%j writes %j', async (args, action) => {
+    await run(fake(), ...args, '--by', 'ann', '--reason', 'because');
+    expect(stored()).toEqual({ kind: 'control', ...action, by: 'ann', reason: 'because' });
+  });
+});
+
+describe('read commands', () => {
+  function board(): Fake {
+    const f = fake();
+    f.cards = [
+      { itemId: 'i5', issue: 5, column: 'Design', labels: ['hotfix'] },
+      { itemId: 'i6', issue: 6, column: 'Approval', labels: [] },
+    ];
+    return f;
+  }
+
+  it('audit prints nothing on a clean factory', async () => {
+    const f = board();
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { '77': 6 } });
+    await run(f, 'audit');
+    expect(out).toEqual([]);
+  });
+
+  it('audit prints only the drift lines', async () => {
+    writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    await run(board(), 'audit');
+    expect(out).toEqual(['#5 testPhase checks but column Design', '#6 column Approval but no open post and no approval']);
+  });
+
+  it('audit and the other read commands change no store', async () => {
+    const f = board();
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    const before = readFileSync(f.ctx.statePath, 'utf8');
+    for (const args of [['audit'], ['cards'], ['card', '5'], ['jobs'], ['queues'], ['release'], ['failures'], ['help']]) await run(f, ...args);
+    expect(readFileSync(f.ctx.statePath, 'utf8')).toBe(before);
+    expect(f.calls.filter((call) => /^(comment|move|removeLabel|editIssue)/.test(call))).toEqual([]);
+    expect(inbox()).toEqual([]);
+  });
+
+  it('cards lists each card with its position', async () => {
+    await run(board(), 'cards');
+    expect(out).toEqual(['#5 design Design [hotfix]', '#6 approval Approval []']);
+  });
+
+  it('card prints one fact per line and its drift', async () => {
+    const f = board();
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, builds: { '5': 'abc1234' } });
+    await run(f, 'card', '5');
+    expect(out).toContain('position: design');
+    expect(out).toContain('labels: hotfix');
+    expect(out).toContain('testPhase: checks');
+    expect(out).toContain('build: abc1234');
+    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    await expect(run(f, 'card', '99')).rejects.toThrow('No card');
+  });
+
+  it('help lists every command', async () => {
+    await run(fake(), 'help');
+    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'retry N', 'pause', 'resume']) {
+      expect(out.some((line) => line.startsWith(name))).toBe(true);
+    }
+  });
+
+  it('status asks the dashboard with the curl agent', async () => {
+    const f = fake();
+    f.ctx.cfg.publicUrl = 'https://play.test';
+    const fetchMock = vi.fn(async () => new Response('{"jobs":[]}'));
+    f.ctx.fetch = fetchMock as unknown as typeof fetch;
+    await run(f, 'status');
+    expect(fetchMock).toHaveBeenCalledWith('https://play.test/factory/api/snapshot', { headers: { Accept: 'application/json', 'User-Agent': 'curl/8.0' } });
+    expect(out.join('\n')).toContain('"jobs"');
+  });
+
+  it('log prints the tail of the newest log of the issue', async () => {
+    const f = fake();
+    const logs = join(ROOT, 'logs');
+    mkdirSync(logs, { recursive: true });
+    writeFileSync(join(logs, 'design-5-1.log'), 'old\n');
+    writeFileSync(join(logs, 'issue-5-adhoc.log'), `${Array.from({ length: 80 }, (_, i) => `line ${i}`).join('\n')}\n`);
+    writeFileSync(join(logs, 'design-6-9.log'), 'other\n');
+    utimesSync(join(logs, 'design-5-1.log'), new Date(1000), new Date(1000));
+    await run(f, 'log', '5');
+    expect(out[0]).toContain('issue-5-adhoc.log');
+    expect(out[1]).toContain('line 79');
+    expect(out[1]).not.toContain('line 0\n');
+    await run(f, 'log', '5', 'design');
+    expect(out[2]).toContain('design-5-1.log');
+    await expect(run(f, 'log', '7')).rejects.toThrow('No log');
+  });
+});
+
+describe('immediate commands', () => {
+  it('retry removes the stuck label and only that card failures', async () => {
+    const f = fake();
+    const failure = (issue: number) => ({ stage: 'checks' as const, issue, error: 'boom', log: null, at: '2026-09-29T09:00:00Z' });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), failures: [failure(5), failure(6)] });
+    await run(f, 'retry', '5');
+    expect(f.calls).toContain('removeLabel 5 factory-stuck');
+    expect(readState(f.ctx.statePath).failures.map((row) => row.issue)).toEqual([6]);
+  });
+
+  it('pause writes the pause file and resume removes it', async () => {
+    const f = fake();
+    await run(f, 'pause', 'fixing', 'state');
+    expect(readFileSync(join(ROOT, 'paused'), 'utf8')).toBe('fixing state\n');
+    await expect(run(f, 'pause')).rejects.toThrow('needs a reason');
+    await run(f, 'resume');
+    expect(existsSync(join(ROOT, 'paused'))).toBe(false);
+  });
+});

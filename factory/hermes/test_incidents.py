@@ -10,7 +10,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None) -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0") -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
     (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
@@ -25,6 +25,9 @@ def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = Non
     bin_dir.mkdir()
     (bin_dir / "gh").write_text("#!/bin/sh\n")
     (bin_dir / "gh").chmod(0o755)
+    # The factory wrapper runs `factory audit`. The stub prints what the test gives.
+    (bin_dir / "factory").write_text(f"#!/bin/sh\n{audit}\n")
+    (bin_dir / "factory").chmod(0o755)
     script = tmp_path / "factory-incidents.sh"
     script.write_text(SCRIPT.read_text().replace("/factory/home", str(home)))
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FACTORY_REPO": "o/r"}
@@ -69,3 +72,12 @@ def test_only_a_pause_over_an_hour_is_reported(tmp_path):
     fresh = health()
     assert run(tmp_path / "new", fresh, pause_age_minutes=10) == []
     assert run(tmp_path / "old", fresh, pause_age_minutes=90) == ["paused over an hour: Hermes fixing #5"]
+
+
+def test_each_audit_line_is_a_drift_line(tmp_path):
+    lines = run(tmp_path, health(), audit="echo '#5 testPhase checks but column Design'; echo 'pending ship but no current candidate post'")
+    assert lines == ["drift: #5 testPhase checks but column Design", "drift: pending ship but no current candidate post"]
+
+
+def test_a_failed_audit_prints_one_stable_line(tmp_path):
+    assert run(tmp_path, health(), audit="echo boom >&2; exit 1") == ["audit failed"]

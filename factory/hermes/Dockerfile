@@ -23,6 +23,7 @@ COPY SOUL.md /opt/hermes-factory/SOUL.md
 COPY --chmod=755 factory-incidents.sh /opt/hermes-factory/factory-incidents.sh
 COPY plugin /opt/hermes-factory/plugin
 COPY --chmod=755 factory-host /usr/local/bin/factory-host
+COPY --chmod=755 factory /usr/local/bin/factory
 
 # The image supervises the gateway with s6, and the gateway reads its env from $HERMES_HOME/.env.
 # So the start script writes the repo's config, identity and committee allow list there, then hands over.

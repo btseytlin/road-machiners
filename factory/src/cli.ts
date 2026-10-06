@@ -1,6 +1,8 @@
-// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
+// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake | command>
+// Any other command is a Hermes command of ctl.ts. `help` lists them.
 import { readEnvFiles } from './config';
 import { realContext } from './context';
+import { runCtl } from './ctl';
 import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
@@ -36,7 +38,7 @@ async function main(args: string[]): Promise<void> {
   }
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
-  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
+  return runCtl(ctx, args);
 }
 
 // Lifts a pause whose process ended, then tells whether the tick must skip.
