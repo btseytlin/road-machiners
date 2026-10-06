@@ -28,6 +28,7 @@ import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
+import { defaultSetup } from '../settings';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
@@ -106,7 +107,7 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
 }
 
 function startWorld(seed: number, kit = 'standard'): World {
-  return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
+  return update(newWorld(seed, startKit(kit), TEST_MAP, defaultSetup('roaming')), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {

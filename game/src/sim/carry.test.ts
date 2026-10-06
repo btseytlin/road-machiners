@@ -11,6 +11,7 @@ import { perkPair } from './progress';
 import { townAt } from './sites';
 import { MAX_RANK, PERKS } from '../data/skills';
 import { CONDITION } from '../data/wear';
+import { defaultSetup } from './settings';
 
 
 const KIT = START_KITS.standard;
@@ -22,7 +23,7 @@ function part(defId: string, over: Partial<Extract<CarriedItem, { kind: 'part' }
 
 // The kit truck as the reader would hand it over.
 function kitItems(): CarriedItem[] {
-  const w = newWorld(1, KIT, TEST_MAP, false);
+  const w = newWorld(1, KIT, TEST_MAP, defaultSetup('roaming'), false);
   return playerVehicle(w).items.map((it): CarriedItem =>
     it.kind === 'good'
       ? { kind: 'good', good: it.good, x: it.x, y: it.y, rot: it.rot }

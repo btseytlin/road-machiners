@@ -11,6 +11,7 @@ import { refreshVision } from './vision';
 import { bodyOf } from './body';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 // Old Orchard stands at (22.8, 56.8), north of its first place.
 const original = [
@@ -30,7 +31,7 @@ describe('Icarus exploration distances', () => {
   });
 
   it('starts off the trunk road facing it, the road in grey vision past clear sight, out of clear sight of every site', () => {
-    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')));
     const player = world.vehicles.find((v) => v.id === world.player.vehicleId)!;
     refreshVision(world);
     discoverSites(world);
@@ -56,7 +57,7 @@ describe('Icarus exploration distances', () => {
   });
 
   it('shares immutable terrain between turns without sharing mutable state', () => {
-    const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const next = setMoveOrder(world, { kind: 'stopAt', dest: { x: 100, y: 440 } });
     expect(next.terrain).toBe(world.terrain);
     expect(Object.isFrozen(next.terrain.heights)).toBe(true);
@@ -72,14 +73,14 @@ describe('discovering an outlined territory', () => {
   const at = (s: number, c: number): Vec => ({ x: orchard.pos.x + onOrchardRoad(s, c).x, y: orchard.pos.y + onOrchardRoad(s, c).y });
 
   it('discovers the orchard from one seen tile of its north-west pocket', () => {
-    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')));
     world.player.visible = [tileAt(world.terrain.size, at(60, 30))];
     discoverSites(world);
     expect(world.player.discovered).toEqual(['orchard']);
   }, budget(15_000));
 
   it('does not discover it from a tile inside its bounding radius but past its outline', () => {
-    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')));
     const beyond = at(-30, 44);
     expect(dist(beyond, orchard.pos)).toBeLessThan(orchard.radius);
     world.player.visible = [tileAt(world.terrain.size, beyond)];

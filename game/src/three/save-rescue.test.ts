@@ -10,6 +10,7 @@ import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { MIGRATIONS } from './save-migrations';
+import { defaultSetup } from '../sim/settings';
 
 const KIT = startKit('standard');
 const fresh = () => 5;
@@ -30,7 +31,7 @@ type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number 
 
 // A current save of a played world, as JSON.
 function currentSave(): { format: unknown; world: SavedWorld } {
-  const world = newWorld(1337, KIT, TEST_MAP);
+  const world = newWorld(1337, KIT, TEST_MAP, defaultSetup('roaming'));
   world.player.money = 4321;
   world.player.xp = 150;
   world.player.ranks.driving = 2;

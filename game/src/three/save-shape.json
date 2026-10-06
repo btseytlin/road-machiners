@@ -1,5 +1,5 @@
 {
- "format": "2.13",
+ "format": "2.14",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -375,6 +375,14 @@
    }
   ],
   "seed": "number",
+  "setup": {
+   "mode": "string",
+   "settings": {
+    "damage": "number",
+    "fuelUse": "number",
+    "supplyUse": "number"
+   }
+  },
   "shops": {
    "bowl": {
     "contracts": [

@@ -14,6 +14,7 @@ import { newWorld } from '../../sim/world';
 import { TEST_MAP } from '../../test/map';
 import { loadModels } from './models';
 import { signatureOf, VehicleView } from './vehicle';
+import { defaultSetup } from '../../sim/settings';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -23,7 +24,7 @@ await loadModels(async (name) => {
 });
 
 function truck(): Vehicle {
-  return playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP));
+  return playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')));
 }
 
 function colors(view: VehicleView): string {

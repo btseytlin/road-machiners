@@ -419,6 +419,12 @@ export type GameEvent =
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
+export type GameModeId = 'roaming';
+// Multipliers on base rule numbers, 1 for the standard game; src/data/modes.ts has the names and bounds.
+export type WorldSettings = { damage: number; fuelUse: number; supplyUse: number };
+// The mode and settings the player picked for this world at New game. src/sim/settings.ts owns them.
+export type WorldSetup = { mode: GameModeId; settings: WorldSettings };
+
 export type World = {
   seed: number;
   rngState: number;
@@ -434,6 +440,7 @@ export type World = {
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file
   mapHash: string; // hash of the map file the world was made on; a save on another map does not load
+  setup: WorldSetup; // fixed at New game
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action
   removed: Vehicle[]; // vehicles destroyed or gone this turn, kept for the render

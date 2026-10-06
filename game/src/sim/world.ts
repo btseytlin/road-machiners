@@ -37,7 +37,8 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, WorldSetup, XpSource } from './types';
+import { defaultSetup, parseSetup } from './settings';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -57,8 +58,9 @@ export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'ma
 }
 
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
-// `populate` false leaves the map with no NPCs and no spawn draws, for tools that place their own trucks.
-export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
+// `setup` is the mode and world settings picked at New game. `populate` false leaves the map with no NPCs and no spawn
+// draws, for tools that place their own trucks.
+export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
@@ -73,6 +75,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     shops: {},
     terrain: map.terrain,
     mapHash: map.hash,
+    setup: parseSetup(setup),
     player: {
       vehicleId: "",
       money: kit.money,
@@ -421,7 +424,7 @@ const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.
 export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
   const report: CarryReport = { toGarage: [], sold: [], lost: [] };
   const truckKit = carriedKit(carried, kit, report);
-  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, true, townStart());
+  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, defaultSetup('roaming'), true, townStart());
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);

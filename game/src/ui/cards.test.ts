@@ -6,6 +6,7 @@ import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
 import { baselinePart, chassisStats, compareBase, diffStats, partStats } from "./cards";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "../sim/settings";
 
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
 
@@ -40,7 +41,7 @@ describe("part stats and their change against the player's part", () => {
 
 describe("the part a new part is weighed against", () => {
   it("is the most valuable mounted part of the same kind", () => {
-    const me = playerVehicle(newWorld(1, START_KITS.standard, TEST_MAP));
+    const me = playerVehicle(newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming')));
     const engines = mountedParts(me, "engine");
     expect(baselinePart(me, "engine")).toBe(engines[0]);
     expect(baselinePart(me, "scanner")).toBeNull();

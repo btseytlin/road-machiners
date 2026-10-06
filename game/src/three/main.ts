@@ -30,6 +30,7 @@ import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
+import { defaultSetup } from '../sim/settings';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -86,7 +87,7 @@ async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
 }
 
 function newGame(): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map, defaultSetup('roaming'));
 }
 
 installCrashScreen();

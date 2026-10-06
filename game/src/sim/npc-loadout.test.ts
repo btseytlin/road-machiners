@@ -22,6 +22,7 @@ import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 // A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
@@ -324,7 +325,7 @@ describe('weighted equipment rolls', () => {
 
 describe('spawned NPCs', () => {
   it('carry the rolled wear and spares into the world', () => {
-    const world = newWorld(1, START_KITS.standard, TEST_MAP);
+    const world = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const npcs = world.vehicles.filter((v) => v.brain !== null);
     const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
     expect(parts.some((p) => p.wear > 0)).toBe(true);
