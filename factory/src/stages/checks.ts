@@ -5,7 +5,7 @@ import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, STUCK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { setPhase } from './verify';
@@ -100,6 +100,21 @@ function clearPhase(ctx: Ctx, issue: number): void {
 function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
   if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
   return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
+}
+
+// The way back for an approved card whose checks failed twice, often from a loaded host. It runs no agent round.
+// The next tick runs the fresh-clone checks on the branch head as it stands. A pass publishes the build and queues the merge of the recorded approval.
+// The phase is checks-after-fix, so a real failure stops the card again instead of starting another fix round.
+export async function queueRecheck(ctx: Ctx, issue: number): Promise<string> {
+  const card = (await ctx.github.cards()).find((item) => item.issue === issue);
+  if (card?.column !== 'Testing' || !card.labels.includes(STUCK_LABEL)) throw new Error(`Issue #${issue} is no stuck card in Testing.`);
+  const approver = approvedAlready(ctx, issue, card.labels);
+  if (approver === null) throw new Error(`Issue #${issue} has no recorded approval, so it must post first. Remove the stuck label to start again from verify.`);
+  if (readState(ctx.statePath).jobs.some((job) => job.issue === issue)) throw new Error(`A job runs on #${issue}. Wait for it to end.`);
+  setPhase(ctx, issue, 'checks-after-fix');
+  await ctx.github.comment(issue, `Recheck: the factory checks run again on the unchanged branch in a fresh clone, with no agent round. A pass publishes the build and queues the merge approved by ${approver}. A failure stops the card again.`);
+  await ctx.github.removeLabel(issue, STUCK_LABEL);
+  return `Recheck of #${issue} is queued. The checks run on a coming tick.`;
 }
 
 // The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.

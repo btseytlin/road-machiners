@@ -6,7 +6,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly, playtestVerdict } = await import('./checks');
+const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly, playtestVerdict, queueRecheck } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
 const { runStage: runPatch } = await import('./patch');
 
@@ -30,6 +30,9 @@ let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
 // The log of each check script run in order, before the shellFailures count applies. A null passes.
 let checkOutcomes: (string | null)[] = [];
+// The board's view of card 7, for the recheck.
+let cardColumn = 'Testing';
+let cardLabels: string[] = [];
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -52,6 +55,8 @@ beforeEach(() => {
   albumFails = false;
   shellScript = '';
   checkOutcomes = [];
+  cardColumn = 'Testing';
+  cardLabels = [];
   reviews = [];
   reviewPrompts = [];
   conflicts = [];
@@ -81,6 +86,8 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number, body: string) => { calls.push(`comment ${issue}`); commentBodies.push(body); },
       comments: async () => priorComments,
+      cards: async () => [{ itemId: 'i7', issue: 7, column: cardColumn, labels: [...labels, ...cardLabels] }],
+      removeLabel: async (issue: number, label: string) => { calls.push(`removeLabel ${issue} ${label}`); },
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
       openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
@@ -643,6 +650,70 @@ describe('playtest frame rate and browser crashes', () => {
     expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
     expect(shellScript).toContain('\nnpm run playtest\n');
     expect(shellScript).toContain('host: $(nproc) cpus');
+  });
+});
+
+describe('recheck of a stuck approved card', () => {
+  const approval = JSON.stringify({ description: 'd', howToTry: 'h' });
+  const harden = (ctx: Ctx) => runStage(ctx, 7);
+  const approved = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+
+  it('runs fresh checks on the unchanged branch with no agent round, then publishes and queues the recorded merge', async () => {
+    approved();
+    const agents: string[] = [];
+    const failing = fakeCtx((run) => { agents.push(run.prompt); writeOutputs(run, approval); }, 2);
+    await expect(harden(failing)).rejects.toThrow('The factory checks failed twice');
+    expect(readState(failing.statePath).testPhase).toEqual({});
+    const before = agents.length;
+    cardLabels = ['factory-stuck'];
+    calls = [];
+    const ctx = fakeCtx((run) => { agents.push(run.prompt); });
+    expect(await queueRecheck(ctx, 7)).toBe('Recheck of #7 is queued. The checks run on a coming tick.');
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks-after-fix' });
+    expect(commentBodies.at(-1)).toContain('queues the merge approved by Ann');
+    expect(calls).toEqual(['comment 7', 'removeLabel 7 factory-stuck']);
+    await runChecks(ctx, 7);
+    expect(agents).toHaveLength(before);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(queued()).toEqual({ 7: 'Ann' });
+    expect(readState(ctx.statePath).approvedResolving).toEqual({ 7: 'Ann' });
+  });
+
+  it('stops the card again on a real failure, with no fix round', async () => {
+    approved();
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => { throw new Error('a recheck runs no agent'); }, 1);
+    await queueRecheck(ctx, 7);
+    await expect(runChecks(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(queued()).toEqual({});
+    expect(readState(ctx.statePath).approvedResolving).toEqual({ 7: 'Ann' });
+  });
+
+  it('refuses a card with no recorded approval, a card that is not stuck, a card outside Testing and a card with a running job', async () => {
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => undefined);
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('has no recorded approval');
+    approved();
+    cardLabels = [];
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('no stuck card in Testing');
+    cardLabels = ['factory-stuck'];
+    cardColumn = 'Approval';
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('no stuck card in Testing');
+    cardColumn = 'Testing';
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), jobs: [{ id: 'j', stage: 'verify', issue: 7, pid: 1, startedAt: '', log: '' }] });
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('A job runs on #7');
+    expect(readState(ctx.statePath).testPhase).toEqual({});
+    expect(calls).not.toContain('removeLabel 7 factory-stuck');
+  });
+
+  it('rechecks a stuck cleanup task, which the factory approves itself', async () => {
+    labels = ['release-task', 'maintenance'];
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => undefined);
+    await queueRecheck(ctx, 7);
+    await runChecks(ctx, 7);
+    expect(queued()).toEqual({ 7: 'the factory' });
   });
 });
 

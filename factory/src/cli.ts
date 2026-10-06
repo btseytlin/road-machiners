@@ -1,10 +1,11 @@
-// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
+// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | recheck <issue> | intake>
 import { readEnvFiles } from './config';
 import { realContext } from './context';
 import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
+import { queueRecheck } from './stages/checks';
 import { liftEndedPause, pausedReason } from './pause';
 import { reportScheduler } from './observability';
 import { tick } from './tick';
@@ -34,9 +35,15 @@ async function main(args: string[]): Promise<void> {
       await tick(ctx, codeDir);
     });
   }
+  return oneShot(ctx, command, stage, issue);
+}
+
+// The commands a person or Hermes runs by hand.
+async function oneShot(ctx: ReturnType<typeof realContext>, command: string | undefined, stage: string | undefined, issue: string | undefined): Promise<void> {
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
-  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
+  if (command === 'recheck') return void console.log(await queueRecheck(ctx, parseIssue(stage)));
+  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, recheck <issue>, or intake.`);
 }
 
 // Lifts a pause whose process ended, then tells whether the tick must skip.
