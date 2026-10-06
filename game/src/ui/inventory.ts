@@ -1,5 +1,5 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
-// In a town the garage storage shows beside the grid.
+// At a shop the garage storage shows beside the grid.
 
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
@@ -29,7 +29,6 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
-import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
@@ -169,7 +168,7 @@ export class InventoryView {
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     this.showFan(me, this.selectedGun(me));
-    const inTown = townAt(w) !== null;
+    const atShop = shopAt(w) !== null;
     this.root.replaceChildren(
       el(
         "div",
@@ -191,12 +190,12 @@ export class InventoryView {
           ...this.refitBanner(me),
           this.loot
             ? this.lootEl(w, this.loot)
-            : inTown
+            : atShop
               ? this.storageEl(w)
               : el(
                   "div",
                   { class: "dim" },
-                  "Park to install or remove parts.",
+                  "Park at a shop to use garage storage. Drag onto a mount to start a refit.",
                 ),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           // Below the lists, so selecting an item never moves the chips a second click aims at.
@@ -397,7 +396,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
+      ...(item.kind === "part" && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }

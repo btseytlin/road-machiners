@@ -1789,6 +1789,14 @@ canvas.view {
   padding: 3px 12px;
   font-size: 13px;
 }
+/* A stock part that will not fit the grid: the Buy button with a note that it goes to garage storage. */
+.buy-stored {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 11px;
+}
 /* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
   display: flex;
