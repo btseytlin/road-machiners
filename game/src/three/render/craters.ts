@@ -63,9 +63,9 @@ export class CraterViews {
   // Adds a view for each new crater and drops the views of craters gone from the world. A blast inside a crater
   // replaces it with one on the same centre (digCrater()), which keeps showing if the old one did.
   sync(world: World): void {
-    const shown = [...this.views.values()].filter((v) => v.obj.visible).map((v) => v.crater.pos);
     this.turn = world.turn;
     const ids = new Set(world.craters.map((c) => c.id));
+    const shown = this.shownPoints(world);
     for (const [id, view] of this.views) if (!ids.has(id)) this.drop(id, view.obj);
     for (const c of world.craters) {
       if (this.views.has(c.id)) continue;
@@ -73,6 +73,12 @@ export class CraterViews {
       if (shown.some((p) => p.x === c.pos.x && p.y === c.pos.y)) this.revealed.add(c.id);
     }
     this.refresh();
+  }
+
+  // The centres of the craters showing now, when a new one comes in to inherit their reveal; else none.
+  private shownPoints(world: World): Vec[] {
+    if (world.craters.every((c) => this.views.has(c.id))) return [];
+    return [...this.views.values()].filter((v) => v.obj.visible).map((v) => v.crater.pos);
   }
 
   // A blast landed at a point in tiles: the hidden crater it lies in shows.

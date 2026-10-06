@@ -508,10 +508,9 @@ export class TruckFx {
   // moving: a turn plays, so wheels turn and engines pull. dt: seconds of playback since the last frame. seen: the
   // player sees the truck, so it may leave ruts.
   emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number, seen: boolean): void {
-    this.fx.ruts.track(world, v, f, { seen, playing: moving });
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
-    if (moving) this.driving(world, v, pose, traits, dt);
+    if (moving) this.driving(world, v, pose, traits, seen, dt);
     if (v.id === world.player.vehicleId) {
       this.overdriveExhaust(world, v, traits, pose, dt);
       this.steam(world.player.engineHeat, pose, dt);
@@ -523,9 +522,9 @@ export class TruckFx {
 
   // Wheel dust, and exhaust from a working engine: puffs grow with forward acceleration, and at high
   // speed an engine at full revs puffs now and then.
-  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, dt: number): void {
+  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, seen: boolean, dt: number): void {
     const back = { x: -Math.cos(pose.h), y: 0, z: -Math.sin(pose.h) };
-    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, dt);
+    this.wheels(world, v, pose, back, seen, dt);
     if (traits.stranded) return;
     const along = -(pose.f.acc.x * back.x + pose.f.acc.z * back.z);
     const cruise = v.speed > traits.maxSpeed * CRUISE_SHARE ? CRUISE_RATE : 0;
@@ -559,13 +558,21 @@ export class TruckFx {
     this.puffs(DOUSE_RATE, dt, () => this.fx.douseSteam(onBody(pose, 0.3 + Math.random() * 0.8, 0.8, Math.random() * 2.4 - 1.2)));
   }
 
+  // Ruts for a seen truck and dust from a fast one, both at each tire's ground contact, found once.
+  private wheels(world: World, v: Vehicle, pose: Pose, back: V3, seen: boolean, dt: number): void {
+    if (!seen && v.speed <= MIN_DUST_SPEED) return;
+    const tires = tirePoints(world.terrain, v.chassisId, pose.f);
+    if (seen) this.fx.ruts.layTracks(world, v, pose.f, tires);
+    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, tires, dt);
+  }
+
   // Dust from each tire's ground contact, thrown back and out to the tire's side.
-  private dust(world: World, v: Vehicle, pose: Pose, back: V3, dt: number): void {
+  private dust(world: World, v: Vehicle, pose: Pose, back: V3, tires: V3[], dt: number): void {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
     // Sim speed is tiles per one-second turn.
     const rate = DUST.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
     const mounts = wheelMounts(bodyOf(v.chassisId));
-    for (const [i, tire] of tirePoints(world.terrain, v.chassisId, pose.f).entries()) {
+    for (const [i, tire] of tires.entries()) {
       const side = Math.sign(mounts[i].z);
       const out = { x: -Math.sin(pose.h) * side, y: 0, z: Math.cos(pose.h) * side };
       this.puffs(rate * (i < 2 ? FRONT_DUST : 1), dt, () => this.fx.wheelDust(tire, back, out));

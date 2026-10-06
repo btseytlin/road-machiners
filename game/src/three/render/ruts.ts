@@ -66,8 +66,11 @@ export class Ruts {
   // Extends each grounded rear wheel's strip by the frame's pose. Only a seen truck in a playing turn marks the ground, so
   // ruts never give away a truck the player cannot see.
   track(world: World, v: Vehicle, f: VehicleFrame, sight: RutSight): void {
-    if (!sight.seen || !sight.playing) return;
-    const tires = tirePoints(world.terrain, v.chassisId, f);
+    if (sight.seen && sight.playing) this.layTracks(world, v, f, tirePoints(world.terrain, v.chassisId, f));
+  }
+
+  // Extends the strips of a truck known to be seen and driving. tires are the frame's tirePoints().
+  layTracks(world: World, v: Vehicle, f: VehicleFrame, tires: V3[]): void {
     if (tires.length !== f.wheels.length) throw new Error(`Vehicle ${v.id} has ${f.wheels.length} wheel frames for ${tires.length} wheels`);
     const ends = this.endsOf(v.id, tires.length);
     for (const i of RUT.wheels) this.extend(ends, i, tires[i], f.wheels[i].ground ? rutAt(world.terrain, tires[i]) : 0, world.turn);
