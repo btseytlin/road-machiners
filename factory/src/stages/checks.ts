@@ -5,14 +5,14 @@ import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, STUCK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { setPhase } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
-// The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
-// Only the build gets SAVE_SCOPE, since the tests expect the default save key.
+// The typecheck runs beside the tests. The script ends after the playtest, and BUILD_SCRIPT follows it, so a frame rate under the minimum can still build.
+// The host line before the playtest records the load the frame rate was measured under. The container sees the host's load and memory.
 const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -33,13 +33,18 @@ for i in $(seq 1 60); do
   sleep 1
 done
 if [ "$ready" -ne 1 ]; then kill "$server"; exit 1; fi
+step "host: $(nproc) cpus, load $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null), $(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null) MB memory available"
 step "playtest"
 set +e
 ${playtest}
 code=$?
 kill "$server"
-if [ "$code" -ne 0 ]; then exit "$code"; fi
-set -e
+exit "$code"
+`;
+
+// A passing check leaves dist/ ready to publish. Only the build gets SAVE_SCOPE, since the tests expect the default save key.
+const BUILD_SCRIPT = `set -e
+step() { echo "[checks] $(date -u +%T) $1"; }
 step "build"
 SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
@@ -57,11 +62,12 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   // An approved card merges with no post, so only a card that will be posted needs the approval. It is read before the checks, so a missing one fails fast.
   const approver = approvedAlready(ctx, issue, item.labels);
   const approval = approver === null ? readApproval(home) : null;
-  // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
-  const failure = await checkPatiently(ctx, issue, base, build);
+  // Timeouts and browser crashes alone rerun here. A real failure goes to verify for one fix round. Three cut-short runs throw with the phase kept, so a retry runs the checks again.
+  const { failure, lowFps } = await checkPatiently(ctx, issue, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
+  if (lowFps !== null) await recordLowFps(ctx, issue, build, lowFps);
   if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base);
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
@@ -96,6 +102,21 @@ function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | nu
   return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
 }
 
+// The way back for an approved card whose checks failed twice, often from a loaded host. It runs no agent round.
+// The next tick runs the fresh-clone checks on the branch head as it stands. A pass publishes the build and queues the merge of the recorded approval.
+// The phase is checks-after-fix, so a real failure stops the card again instead of starting another fix round.
+export async function queueRecheck(ctx: Ctx, issue: number): Promise<string> {
+  const card = (await ctx.github.cards()).find((item) => item.issue === issue);
+  if (card?.column !== 'Testing' || !card.labels.includes(STUCK_LABEL)) throw new Error(`Issue #${issue} is no stuck card in Testing.`);
+  const approver = approvedAlready(ctx, issue, card.labels);
+  if (approver === null) throw new Error(`Issue #${issue} has no recorded approval, so it must post first. Remove the stuck label to start again from verify.`);
+  if (readState(ctx.statePath).jobs.some((job) => job.issue === issue)) throw new Error(`A job runs on #${issue}. Wait for it to end.`);
+  setPhase(ctx, issue, 'checks-after-fix');
+  await ctx.github.comment(issue, `Recheck: the factory checks run again on the unchanged branch in a fresh clone, with no agent round. A pass publishes the build and queues the merge approved by ${approver}. A failure stops the card again.`);
+  await ctx.github.removeLabel(issue, STUCK_LABEL);
+  return `Recheck of #${issue} is queued. The checks run on a coming tick.`;
+}
+
 // The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
 function queueMerge(ctx: Ctx, issue: number, by: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
@@ -106,21 +127,106 @@ function checkDir(ctx: Ctx, issue: number): string {
   return `${ctx.cfg.home}/work/check-issue-${issue}`;
 }
 
+// `failure` is null when the checks pass, or the tail of the check log. `lowFps` is set when they passed with a frame rate under the minimum.
+type CheckResult = { failure: string | null; lowFps: LowFps | null };
+
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
-// Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
-async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+// Passing checks leave the build of scope `build` in the clone. A playtest that finished every turn and failed only the frame rate still builds.
+async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<CheckResult> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(`${ctx.cfg.home}/work`, { recursive: true });
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
+  const failure = await shellStep(ctx, dir, checkScript(playtestCommand(ctx.cfg)), log);
+  const lowFps = failure === null ? null : lowFpsOf(failure);
+  if (failure !== null && lowFps === null) return { failure, lowFps };
+  if (lowFps !== null) ctx.log('checks', issue, `${lowFpsLine(lowFps)} Host: ${lowFps.host}.`);
+  return { failure: await shellStep(ctx, dir, BUILD_SCRIPT, log, { BUILD_SCOPE: build }), lowFps };
+}
+
+// Returns null when the script passes, or the tail of the check log.
+async function shellStep(ctx: Ctx, dir: string, script: string, log: string, env: Record<string, string> = {}): Promise<string | null> {
   try {
-    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, script, log, env);
     return null;
   } catch (error) {
     return checkFailure(log, error);
   }
+}
+
+// The committee waived the playtest's frame-rate minimum, since a loaded host fails it on sound builds. It is advisory: measured and recorded, never blocking.
+// Every other playtest problem, and a playtest that never finished, still fails the checks.
+export type LowFps = { fps: number; min: number; host: string };
+export type PlaytestVerdict = { kind: 'low-fps'; lowFps: LowFps } | { kind: 'browser-crash' } | { kind: 'other' };
+
+const OTHER: PlaytestVerdict = { kind: 'other' };
+// Step lines of the check script, and the lines the game's playtest prints: a summary after a finished run, then FAIL and one problem per line.
+const RUN_START = /^\[checks\] \S+ npm ci$/;
+const PLAYTEST_STEP = /^\[checks\] \S+ playtest$/;
+const HOST_STEP = /^\[checks\] \S+ host: (.*)$/;
+const SUMMARY = /^turns \d+, fps [\d.]+$/;
+const LOW_FPS = /^fps ([\d.]+) under ([\d.]+)$/;
+// npm's report of the failed script, and the shell's note on the killed dev server, end the playtest's own lines.
+const PLAYTEST_END = /^npm (error|ERR!)|Terminated/;
+// Playwright's errors when Chromium crashed or closed under the playtest. Such a run never finished, so it is no frame-rate failure and never passes.
+const BROWSER_CRASH = /Target crashed|Page crashed|Target page, context or browser has been closed|Browser has been closed|browser has disconnected/i;
+
+// Reads the last run in a check failure. `low-fps`: the playtest finished and its only problem is the frame rate.
+// `browser-crash`: the playtest never finished, since its browser went away. `other`: any other failure.
+export function playtestVerdict(failure: string): PlaytestVerdict {
+  const lines = lastRun(failure.split('\n').map((line) => line.trim()));
+  const start = lines.findIndex((line) => PLAYTEST_STEP.test(line));
+  if (start < 0) return OTHER;
+  const played = lines.slice(start + 1);
+  if (!played.some((line) => SUMMARY.test(line))) return played.some((line) => BROWSER_CRASH.test(line)) ? { kind: 'browser-crash' } : OTHER;
+  const host = lines.slice(0, start).map((line) => HOST_STEP.exec(line)?.[1]).find((match) => match !== undefined) ?? 'not recorded';
+  return lowFpsOnly(played, host);
+}
+
+// The log appends every run, so a rerun's tail can hold the end of the run before it.
+function lastRun(lines: string[]): string[] {
+  const starts = lines.flatMap((line, index) => (RUN_START.test(line) ? [index] : []));
+  return starts.length === 0 ? lines : lines.slice(starts[starts.length - 1]);
+}
+
+function lowFpsOnly(played: string[], host: string): PlaytestVerdict {
+  const fail = played.lastIndexOf('FAIL');
+  if (fail < 0) return OTHER;
+  const after = played.slice(fail + 1);
+  const end = after.findIndex((line) => PLAYTEST_END.test(line));
+  // The summary goes to stdout and the problems to stderr, so the summary can land among them.
+  // Only blank lines at the end are dropped. A blank line among the problems is an empty console error, which blocks.
+  const problems = trimEnd(end < 0 ? after : after.slice(0, end)).filter((line) => !SUMMARY.test(line));
+  const low = problems.length === 1 ? LOW_FPS.exec(problems[0]) : null;
+  return low === null ? OTHER : { kind: 'low-fps', lowFps: { fps: Number(low[1]), min: Number(low[2]), host } };
+}
+
+function trimEnd(lines: string[]): string[] {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === '') end -= 1;
+  return lines.slice(0, end);
+}
+
+function lowFpsOf(failure: string): LowFps | null {
+  const verdict = playtestVerdict(failure);
+  return verdict.kind === 'low-fps' ? verdict.lowFps : null;
+}
+
+function lowFpsLine(low: LowFps): string {
+  return `Playtest frame rate ${low.fps} fps, under the ${low.min} fps minimum. It is advisory under the committee's waiver, so it does not block the card.`;
+}
+
+// The issue keeps the measured frame rate, the host load and the waiver, so a reviewer can tell a slow build from a busy host.
+async function recordLowFps(ctx: Ctx, issue: number, build: string, low: LowFps): Promise<void> {
+  const body = [
+    `${lowFpsLine(low)}`,
+    `The playtest of build ${build} finished every turn with no crash screen, page error or blank canvas, and the tests, typecheck and build passed.`,
+    `Host during the playtest: ${low.host}.`,
+    'The committee waived the frame-rate minimum because a loaded host fails it on sound builds. A playtest that fails in any other way, or never finishes, still blocks the card.',
+  ];
+  await ctx.github.comment(issue, body.join('\n\n'));
 }
 
 // Vitest's messages when a test, a hook or the runner itself ran out of time.
@@ -136,15 +242,28 @@ export function timeoutOnly(failure: string): boolean {
 // Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
 const CHECK_RUNS = 3;
 
-// Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
-// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
-async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+// Runs the checks until they pass or fail for a real reason. Timeouts alone, or a crashed playtest browser, rerun the unchanged build
+// with no agent round, since an agent would only raise the time limits. Throws after CHECK_RUNS such runs, and none of them passed.
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<CheckResult> {
   for (let run = 1; ; run++) {
-    const failure = await runChecks(ctx, issue, base, build);
-    if (failure === null || !timeoutOnly(failure)) return failure;
-    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
-    ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
+    const result = await runChecks(ctx, issue, base, build);
+    const cut = result.failure === null ? null : cutShort(result.failure);
+    if (cut === null) return result;
+    if (run === CHECK_RUNS) throw new Error(`${CUT_SHORT[cut]}\n${result.failure}`);
+    ctx.log('checks', issue, `the checks were cut short by ${cut}, run ${run} of ${CHECK_RUNS}, running them again on the unchanged build`);
   }
+}
+
+type CutShort = 'timeouts' | 'a browser crash';
+const CUT_SHORT: Record<CutShort, string> = {
+  timeouts: `The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.`,
+  'a browser crash': `The playtest browser crashed before the playtest finished, after ${CHECK_RUNS} runs, under load or low memory. It is no frame-rate failure, and no run passed. Retry once the load falls.`,
+};
+
+// Why a failure says the host was overloaded, not that the code is wrong. Null for a real failure.
+function cutShort(failure: string): CutShort | null {
+  if (timeoutOnly(failure)) return 'timeouts';
+  return playtestVerdict(failure).kind === 'browser-crash' ? 'a browser crash' : null;
 }
 
 const FAILURE_TAIL_LINES = 150;

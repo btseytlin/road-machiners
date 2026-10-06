@@ -11,7 +11,12 @@ export const realRun: Run = (cmd, args, opts = {}) => new Promise((done, fail) =
   child.stdout.on('data', (chunk: Buffer) => { stdout += chunk; log?.write(chunk); opts.onStdout?.(chunk.toString()); });
   child.stderr.on('data', (chunk: Buffer) => { stderr += chunk; log?.write(chunk); });
   child.on('error', fail);
-  child.on('close', (code) => { log?.end(); done({ code: code ?? 1, stdout, stderr }); });
+  // The log is flushed before the result, so a caller can read the end of it at once.
+  child.on('close', (code) => {
+    const result = { code: code ?? 1, stdout, stderr };
+    if (log) log.end(() => done(result));
+    else done(result);
+  });
   if (opts.input !== undefined) child.stdin.end(opts.input);
   else child.stdin.end();
 });

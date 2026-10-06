@@ -72,6 +72,8 @@ A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedba
 Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
+- An approved card stuck with "The factory checks failed twice": read the failure. When the build is sound and only load hurt it, run `factory-host 'cd /opt/factory/code/factory && npm run factory -- recheck N'`. It removes the label and runs the checks with no agent round. Otherwise remove the label, and the card starts again from verify.
+- "The playtest browser crashed": a crash or a memory kill, not a frame-rate failure. Read the memory as in Server health, and retry once it frees.
 - "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the test CPUs. Retry once the load falls. When it happens again within a day, post it to the committee with what held the CPUs.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.

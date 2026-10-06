@@ -20,7 +20,7 @@ Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_
 
 On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the checks always get their CPUs. Docker pins containers with `--cpuset-cpus`, which the game's test runner sees. A step run by hand is not pinned.
 
-`FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest checks the frame rate. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check.
+`FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest measures the frame rate. A rate under the minimum is advisory and only noted on the issue. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check.
 
 ## Daily cap
 
@@ -44,7 +44,7 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 
 ## Failures and Hermes
 
-A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again. An approved card whose checks failed twice restarts from verify that way, so `npm run factory -- recheck N` sends it straight to the checks instead, with no agent round.
 
 Hermes manages the factory. Its incident watch wakes it on a stuck issue, a failed job, a tick crash in `lastTickError`, a failed `/dev/` build, a failed factory update, low disk, low memory, no tick for 20 minutes or a pause older than an hour. Hermes reads the logs, the state and the chat, then fixes the incident or asks the committee. [hermes/SOUL.md](../hermes/SOUL.md) holds its rules.
 

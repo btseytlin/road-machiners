@@ -35,7 +35,7 @@ Run every command in this file from `factory/`. The factory reads two files.
 
 ## Parts
 
-- `src/` holds the Node CLI. `npm run factory -- tick` runs one tick, and `npm run factory -- run <stage> <issue|->` runs one job.
+- `src/` holds the Node CLI. `npm run factory -- tick` runs one tick, `npm run factory -- run <stage> <issue|->` runs one job, and `npm run factory -- recheck <issue>` sends a stuck approved card back to the checks.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image with Blender and ffmpeg, the egress proxy and the vendored `blender-image-to-3d` skill. `FACTORY_SMOKE_IMAGE=<image> npx vitest run agent-image` checks that Claude reads a mounted image's pixels in the built image.
 - `hermes/` holds the Hermes compose file, config, identity, incident watch, the `factory-host` ssh command and the chat plugin.

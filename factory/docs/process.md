@@ -55,6 +55,9 @@ Testing is two jobs. Verify runs the testing agent. Checks runs the machine chec
 - A release cleanup task runs only the harden line, since it merges with no post.
 - The visual review sends a card back at most twice. A third send-back fails the stage.
 - A card that the review already sent to Design once fails the stage on its next second FAIL.
+- The playtest's frame-rate minimum is advisory. The committee waived it, since a loaded host fails it on sound builds. A playtest that finished every turn and failed only the frame rate passes, and the issue gets a comment with the measured fps, the host load and the waiver. Any other playtest problem still fails the checks.
+- A crashed playtest browser never finished, so it is no frame-rate failure and never passes. Like timeouts, it reruns the unchanged build with no agent round.
+- recheck: an approved card stuck after its checks failed twice goes back to the checks with no agent round. `npm run factory -- recheck N` does it. A pass publishes the build and queues the recorded merge. A failure stops the card again.
 
 ## Committee inputs
 

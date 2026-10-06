@@ -6,7 +6,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
+const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly, playtestVerdict, queueRecheck } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
 const { runStage: runPatch } = await import('./patch');
 
@@ -28,6 +28,11 @@ let commentBodies: string[] = [];
 let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
+// The log of each check script run in order, before the shellFailures count applies. A null passes.
+let checkOutcomes: (string | null)[] = [];
+// The board's view of card 7, for the recheck.
+let cardColumn = 'Testing';
+let cardLabels: string[] = [];
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -48,6 +53,10 @@ let reviewPrompts: string[] = [];
 beforeEach(() => {
   albums = [];
   albumFails = false;
+  shellScript = '';
+  checkOutcomes = [];
+  cardColumn = 'Testing';
+  cardLabels = [];
   reviews = [];
   reviewPrompts = [];
   conflicts = [];
@@ -77,6 +86,8 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number, body: string) => { calls.push(`comment ${issue}`); commentBodies.push(body); },
       comments: async () => priorComments,
+      cards: async () => [{ itemId: 'i7', issue: 7, column: cardColumn, labels: [...labels, ...cardLabels] }],
+      removeLabel: async (issue: number, label: string) => { calls.push(`removeLabel ${issue} ${label}`); },
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
       openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
@@ -100,11 +111,15 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         const output = reviews.length > 0 ? reviews.shift() : PASSED;
         if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
       },
+      // The check script runs first and the build script after it, in each checks run. Only the check script fails here.
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
-        shellScript = script;
+        shellScript = `${shellScript}${script}`;
         shellEnv = env;
+        if (script.includes('npm run build')) return void calls.push('build');
         calls.push('checks');
-        if (failuresLeft-- > 0) throw new Error(failureText);
+        const planned = checkOutcomes.shift();
+        if (planned !== undefined && planned !== null) throw new Error(planned);
+        if (planned === undefined && failuresLeft-- > 0) throw new Error(failureText);
       },
     },
     repo: {
@@ -521,6 +536,186 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
     expect(queued()).toEqual({});
+  });
+});
+
+// The end of a check log the way the check script and the game's playtest print it, with `played` as the playtest's own output.
+const checkLog = (played: string): string => [
+  '[checks] 10:00:00 npm ci', 'added 300 packages', '[checks] 10:01:00 tests and typecheck', ' Test Files  80 passed (80)', '[checks] 10:03:00 tests done',
+  '[checks] 10:03:01 dev server', '[checks] 10:03:05 host: 4 cpus, load 7.80 6.10 5.02, 2100 MB memory available', '[checks] 10:03:05 playtest',
+  '> roam@0.0.0 playtest', '> node scripts/playtest.mjs', played,
+  'npm error Lifecycle script `playtest` failed with error:', 'npm error code 1',
+].join('\n');
+const LOW_FPS_LOG = checkLog('turns 12, fps 43\nFAIL\nfps 43 under 50');
+const CRASH_LOG = checkLog('file:///work/game/scripts/playtest.mjs:32\n  await page.evaluate((i) => {\n             ^\npage.evaluate: Target crashed\n    at file:///work/game/scripts/playtest.mjs:32:14');
+const TURN_LOG = checkLog('turns 9, fps 44.5\nFAIL\nexpected turn 13, got 10\nfps 44.5 under 50');
+const PAGE_ERROR_LOG = checkLog('turns 12, fps 60\nFAIL\nTypeError: cannot read x of undefined');
+
+describe('playtest frame rate and browser crashes', () => {
+  const approval = JSON.stringify({ description: 'd', howToTry: 'h' });
+  const agentPrompts: string[] = [];
+  const ctxWith = (...outcomes: (string | null)[]): Ctx => {
+    checkOutcomes = outcomes;
+    agentPrompts.length = 0;
+    const ctx = fakeCtx((run) => { agentPrompts.push(run.prompt); writeOutputs(run, approval); });
+    ctx.cfg.gpu = true;
+    return ctx;
+  };
+
+  it('reads a finished playtest whose only problem is the frame rate as advisory, with the host line', () => {
+    expect(playtestVerdict(LOW_FPS_LOG)).toEqual({ kind: 'low-fps', lowFps: { fps: 43, min: 50, host: '4 cpus, load 7.80 6.10 5.02, 2100 MB memory available' } });
+    expect(playtestVerdict(checkLog('turns 12, fps 49\nFAIL\nfps 49 under 50')).kind).toBe('low-fps');
+    expect(playtestVerdict(checkLog('FAIL\nfps 44.5 under 50\nturns 12, fps 44.5'))).toMatchObject({ kind: 'low-fps', lowFps: { fps: 44.5 } });
+  });
+
+  it('reads a crash, a functional failure or a failure before the playtest as no frame-rate failure', () => {
+    expect(playtestVerdict(CRASH_LOG).kind).toBe('browser-crash');
+    expect(playtestVerdict(TURN_LOG).kind).toBe('other');
+    expect(playtestVerdict(checkLog('turns 12, fps 43\nFAIL\n\nfps 43 under 50')).kind).toBe('other');
+    expect(playtestVerdict(PAGE_ERROR_LOG).kind).toBe('other');
+    expect(playtestVerdict(checkLog('turns 12, fps 43\nFAIL\ncrash screen shown\nfps 43 under 50')).kind).toBe('other');
+    expect(playtestVerdict(checkLog('Error: Turn 3 did not finish playing within 10000 ms')).kind).toBe('other');
+    expect(playtestVerdict('[checks] 10:00:00 npm ci\n[checks] 10:01:00 tests and typecheck\nAssertionError: expected 3 to be 4').kind).toBe('other');
+  });
+
+  it('reads only the last run of a log that holds an earlier one', () => {
+    expect(playtestVerdict(`${LOW_FPS_LOG}\n[checks] 11:00:00 npm ci\n[checks] 11:01:00 tests and typecheck\nAssertionError: expected 3 to be 4`).kind).toBe('other');
+  });
+
+  it('passes a low frame rate, builds and records the fps, the host load and the waiver on the issue', async () => {
+    const ctx = ctxWith(LOW_FPS_LOG);
+    await runStage(ctx, 7);
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    const note = commentBodies.find((body) => body.startsWith('Playtest frame rate')) ?? '';
+    expect(note).toContain('43 fps, under the 50 fps minimum');
+    expect(note).toContain('build abc123 finished every turn');
+    expect(note).toContain('Host during the playtest: 4 cpus, load 7.80 6.10 5.02, 2100 MB memory available.');
+    expect(note).toContain('The committee waived the frame-rate minimum');
+  });
+
+  it('queues the recorded merge of an approved card that hardened with a low frame rate', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+    await runStage(ctxWith(LOW_FPS_LOG), 7);
+    expect(queued()).toEqual({ 7: 'Ann' });
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(true);
+  });
+
+  it('reruns the unchanged build after a browser crash, with no agent round, and passes only a finished run', async () => {
+    const ctx = ctxWith(CRASH_LOG, null);
+    await runStage(ctx, 7);
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+  });
+
+  it('never passes a browser that crashes on every run, and keeps the phase for a retry', async () => {
+    const ctx = ctxWith(CRASH_LOG, CRASH_LOG, CRASH_LOG);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The playtest browser crashed before the playtest finished, after 3 runs');
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls).not.toContain('build');
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks' });
+  });
+
+  it('blocks a playtest that missed turns, even with a low frame rate, and hands it to the fix round', async () => {
+    const ctx = ctxWith(TURN_LOG, TURN_LOG);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(agentPrompts.at(-1)).toContain('second round');
+    expect(calls).not.toContain('build');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('blocks a page error and a failed test as before', async () => {
+    await expect(runStage(ctxWith(PAGE_ERROR_LOG, PAGE_ERROR_LOG), 7)).rejects.toThrow('The factory checks failed twice');
+    await expect(runStage(ctxWith('npm test failed: 1 failed', 'npm test failed: 1 failed'), 8)).rejects.toThrow('The factory checks failed twice');
+    expect(calls).not.toContain('build');
+  });
+
+  it('still blocks the card when the build fails after a low frame rate', async () => {
+    const ctx = ctxWith(LOW_FPS_LOG, LOW_FPS_LOG);
+    ctx.container.shell = async (_dir, script) => {
+      calls.push(script.includes('npm run build') ? 'build' : 'checks');
+      if (script.includes('npm run build')) throw new Error('vite build failed');
+      throw new Error(LOW_FPS_LOG);
+    };
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+  });
+
+  it('leaves a passing card as before: one run, a build and no frame-rate note', async () => {
+    const ctx = ctxWith(null);
+    await runStage(ctx, 7);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+    expect(shellScript).toContain('\nnpm run playtest\n');
+    expect(shellScript).toContain('host: $(nproc) cpus');
+  });
+});
+
+describe('recheck of a stuck approved card', () => {
+  const approval = JSON.stringify({ description: 'd', howToTry: 'h' });
+  const harden = (ctx: Ctx) => runStage(ctx, 7);
+  const approved = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+
+  it('runs fresh checks on the unchanged branch with no agent round, then publishes and queues the recorded merge', async () => {
+    approved();
+    const agents: string[] = [];
+    const failing = fakeCtx((run) => { agents.push(run.prompt); writeOutputs(run, approval); }, 2);
+    await expect(harden(failing)).rejects.toThrow('The factory checks failed twice');
+    expect(readState(failing.statePath).testPhase).toEqual({});
+    const before = agents.length;
+    cardLabels = ['factory-stuck'];
+    calls = [];
+    const ctx = fakeCtx((run) => { agents.push(run.prompt); });
+    expect(await queueRecheck(ctx, 7)).toBe('Recheck of #7 is queued. The checks run on a coming tick.');
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks-after-fix' });
+    expect(commentBodies.at(-1)).toContain('queues the merge approved by Ann');
+    expect(calls).toEqual(['comment 7', 'removeLabel 7 factory-stuck']);
+    await runChecks(ctx, 7);
+    expect(agents).toHaveLength(before);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(queued()).toEqual({ 7: 'Ann' });
+    expect(readState(ctx.statePath).approvedResolving).toEqual({ 7: 'Ann' });
+  });
+
+  it('stops the card again on a real failure, with no fix round', async () => {
+    approved();
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => { throw new Error('a recheck runs no agent'); }, 1);
+    await queueRecheck(ctx, 7);
+    await expect(runChecks(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(queued()).toEqual({});
+    expect(readState(ctx.statePath).approvedResolving).toEqual({ 7: 'Ann' });
+  });
+
+  it('refuses a card with no recorded approval, a card that is not stuck, a card outside Testing and a card with a running job', async () => {
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => undefined);
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('has no recorded approval');
+    approved();
+    cardLabels = [];
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('no stuck card in Testing');
+    cardLabels = ['factory-stuck'];
+    cardColumn = 'Approval';
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('no stuck card in Testing');
+    cardColumn = 'Testing';
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), jobs: [{ id: 'j', stage: 'verify', issue: 7, pid: 1, startedAt: '', log: '' }] });
+    await expect(queueRecheck(ctx, 7)).rejects.toThrow('A job runs on #7');
+    expect(readState(ctx.statePath).testPhase).toEqual({});
+    expect(calls).not.toContain('removeLabel 7 factory-stuck');
+  });
+
+  it('rechecks a stuck cleanup task, which the factory approves itself', async () => {
+    labels = ['release-task', 'maintenance'];
+    cardLabels = ['factory-stuck'];
+    const ctx = fakeCtx(() => undefined);
+    await queueRecheck(ctx, 7);
+    await runChecks(ctx, 7);
+    expect(queued()).toEqual({ 7: 'the factory' });
   });
 });
 
