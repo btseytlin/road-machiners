@@ -138,6 +138,47 @@ describe('NPC pleas to NPCs', () => {
     expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
   });
 
+  // A robber with two mates, so its group never reads the pleader as a threat.
+  function holdUp(): { w: World; a: Vehicle; b: Vehicle } {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    addGoods(w, a, 'scrap', 2);
+    const b = npcAt(w, 'scavengers', ['scavenger', 'scumbag'], 40);
+    npcAt(w, 'scavengers', ['scavenger'], 40, 28);
+    npcAt(w, 'scavengers', ['scavenger'], 40, 32);
+    addState(w, 'feud', b.id, a.id, { kind: 'feud', robbery: true });
+    addState(w, 'feud', a.id, b.id, { kind: 'feud', robbery: false });
+    return { w, a, b };
+  }
+
+  it('a robber holding up its prey grants no truce, even when the roll would accept', () => {
+    forceOption('truceOffered', 'accept');
+    forceOption('threatened', 'fightBack');
+    const { w, a, b } = holdUp();
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, b, a)).toBe(true);
+    expect(w.events).toContainEqual({ t: 'plea', from: a.id, to: b.id, plea: 'truce', accepted: false });
+    expect(hasCargo(a)).toBe(true);
+  });
+
+  it('prey that complies drops its cargo for the robber and makes peace', () => {
+    forceOption('threatened', 'comply');
+    const { w, a, b } = holdUp();
+    plead(w, a, b, 'truce');
+    expect(hasCargo(a)).toBe(false);
+    expect(isHostile(w, b, a)).toBe(false);
+    expect(stateOf(w, 'plea', a.id, b.id)).toBeNull();
+  });
+
+  it('a weak robber still takes the truce', () => {
+    forceOption('truceOffered', 'accept');
+    const { w, a, b } = holdUp();
+    b.resources = { fuel: 10, supplies: 10, money: 0, health: 1 };
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, b, a)).toBe(false);
+    expect(hasCargo(a)).toBe(true);
+  });
+
   it('an accepted plea leaves no wait, so a driver whose truce breaks can plead again', () => {
     forceOption('truceOffered', 'accept');
     const w = quietWorld();
