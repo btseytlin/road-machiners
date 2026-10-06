@@ -1,34 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY } from '../data/goods';
+import { PHYSICS } from '../data/physics';
 import { ORCHARD_HEADING, REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
-import { TERRAIN } from '../data/terrain';
-import { onOrchardRoad, TERRITORIES } from '../data/territory';
-import { bayPoints, deckAlongAt, deckPlane, hullDecks, isLootSpot, ribPoses, territoryEntries, type HullDeck } from '../sim/territory';
-import { propBoxes, propPose, propReach } from '../sim/mapgen';
-import { PHYSICS } from '../data/physics';
+import { MAPGEN, TERRAIN } from '../data/terrain';
+import { FALLEN_SUN_DECKS, onOrchardRoad, TERRITORIES } from '../data/territory';
+import { deckAt, deckById } from '../sim/bridge';
+import { boxDistance, onDeck, propBoxes, propPose, propReach, type PosedBox } from '../sim/mapgen';
+import { CELL, navLayer } from '../sim/nav/layer';
 import { siteGap } from '../sim/sites';
 import { route } from '../sim/path';
 import { ROAD_INDEX } from '../sim/road-index';
-import { groundAt, heightAt, isCliff, tileAt, type BakedProp, type Terrain } from '../sim/terrain';
+import { hazardZones, isLootSpot, landingStrips, reactorPos, territoryAt, territoryEntries, territoryOfStock, territoryPieces, territoryRoads, type BakedPiece, type LandingStrip } from '../sim/territory';
+import { groundAt, isCliff, type BakedProp, type Terrain } from '../sim/terrain';
 import { newWorld } from '../sim/world';
-import { angleDiff, dist, lerp, type Vec } from '../sim/vec';
+import { angleDiff, dist, lerp, segmentDist, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import { fillFarm } from './farm';
 import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileOf, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
+import { budget } from '../test/budget';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
-const rules = TERRITORIES['fallen-sun'];
-const hull = rules.hull!;
-const decks = hullDecks().filter((d) => d.territory === 'fallen-sun');
-const inside = TEST_MAP.props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
-const bayCount = hull.sections.reduce((n, s) => n + s.bays.length, 0);
-const fieldCount = rules.spots.reduce((n, s) => n + s.count, 0);
+const t = fallenSun as never;
+const rules = TERRITORIES['fallen-sun'].wreck!;
+const reactor = TERRITORIES['fallen-sun'].reactor!;
+const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
+const pieces = territoryPieces(t);
+const inside = TEST_MAP.props.filter((p) => siteGap(fallenSun, p.pos) < 0);
+const DEBRIS_LOOKS = new Set<string>(rules.patches.flatMap((p) => p.debris.map((d) => d.look)));
 
-// A draft over the whole region with rolling ground, so decks meet ground both below and above their plane.
+// A draft over the whole region with rolling ground, so the seat levels ground both below and above a piece's centre.
 function rollingDraft(): MapDraft {
   const d = newDraft(REGION.size);
   const w = d.size + 1;
@@ -40,17 +44,24 @@ function terrainOf(size: number, heights: ArrayLike<number>): Terrain {
   return { size, heights: Array.from(heights), types: [] };
 }
 
-function pointAlong(deck: HullDeck, share: number): Vec {
-  return { x: lerp(deck.low.x, deck.high.x, share), y: lerp(deck.low.y, deck.high.y, share) };
+function lowBoxes(p: BakedPiece, k: number) {
+  return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
 }
 
-// Tiles from pos to the nearest point of the deck's footprint, 0 inside it.
-function gapToDeck(deck: HullDeck, pos: Vec): number {
-  const mid = pointAlong(deck, 0.5);
-  const yaw = deck.section.yaw;
-  const a = (pos.x - mid.x) * Math.cos(yaw) + (pos.y - mid.y) * Math.sin(yaw);
-  const c = -(pos.x - mid.x) * Math.sin(yaw) + (pos.y - mid.y) * Math.cos(yaw);
-  return Math.hypot(Math.max(0, Math.abs(a) - deck.section.length / 2), Math.max(0, Math.abs(c) - deck.section.width / 2));
+// Map corners under any of a piece's low boxes.
+function cornersUnder(p: BakedPiece, k: number): Vec[] {
+  const boxes = lowBoxes(p, k);
+  const reach = Math.max(...boxes.map((b) => dist(b.center, p.pos) + Math.hypot(b.half.x, b.half.y)));
+  const out: Vec[] = [];
+  for (let j = Math.floor(p.pos.y - reach); j <= p.pos.y + reach; j++) {
+    for (let i = Math.floor(p.pos.x - reach); i <= p.pos.x + reach; i++) if (boxes.some((b) => boxDistance(b, { x: i, y: j }) === 0)) out.push({ x: i, y: j });
+  }
+  return out;
+}
+
+// Drawn props: debris and field spots, by their looks, off the authored pieces.
+function drawnProps(): BakedProp[] {
+  return inside.filter((p) => (DEBRIS_LOOKS.has(p.kind) || p.kind === rules.spotLook) && !pieces.some((q) => q.look === p.kind && dist(q.pos, p.pos) < 1e-3));
 }
 
 describe('the territory layer', () => {
@@ -72,128 +83,278 @@ describe('the territory layer', () => {
       REGION.locations.splice(0, REGION.locations.length, ...all);
     }
     const full = territoryLayer(7, rollingDraft());
-    const ofSun = (props: readonly BakedProp[]) => props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
+    const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
     expect(full.heights).toEqual(solo.heights);
   });
 
-  it('raises every corner on a deck to the higher of the ground and the deck plane, and leaves the rest alone', () => {
+  it("levels the ground under every piece's low boxes to the height at its centre, less its sink", () => {
     const before = rollingDraft();
     const ground = terrainOf(before.size, before.heights);
     const after = territoryLayer(7, rollingDraft());
     const w = before.size + 1;
-    const r = fallenSun.radius + 1;
-    let onDeck = 0;
-    let raised = 0;
-    for (let j = Math.floor(fallenSun.pos.y - r); j <= fallenSun.pos.y + r; j++) {
-      for (let i = Math.floor(fallenSun.pos.x - r); i <= fallenSun.pos.x + r; i++) {
-        const k = j * w + i;
-        const deck = decks.find((dk) => deckAlongAt(dk, { x: i, y: j }) !== null);
-        if (!deck) {
-          expect(after.heights[k], `${i},${j}`).toBe(before.heights[k]);
-          continue;
+    pieces.forEach((p, k) => {
+      const centre = groundAt(ground, p.pos.x, p.pos.y) - p.sink;
+      const corners = cornersUnder(p, k);
+      expect(corners.length, p.look).toBeGreaterThan(0);
+      for (const c of corners) expect(after.heights[c.y * w + c.x], `${p.look} ${c.x},${c.y}`).toBeCloseTo(centre, 6);
+    });
+    // Far from every piece the relief is untouched.
+    const far = { x: Math.round(fallenSun.pos.x - 40), y: Math.round(fallenSun.pos.y - 30) };
+    expect(after.heights[far.y * w + far.x]).toBe(before.heights[far.y * w + far.x]);
+  });
+
+  it("digs a sunk piece's pit no wider than its low boxes and the seat ease", () => {
+    const before = rollingDraft();
+    const after = territoryLayer(7, rollingDraft());
+    const w = before.size + 1;
+    const sunk = pieces.map((p, k) => ({ p, k })).filter(({ p }) => p.sink > 0);
+    expect(sunk).toHaveLength(2);
+    const gapTo = (k: number, c: Vec) => Math.min(...lowBoxes(pieces[k], k).map((b) => boxDistance(b, c)));
+    for (const { p, k } of sunk) {
+      const reach = Math.max(...lowBoxes(p, k).map((b) => dist(b.center, p.pos) + Math.hypot(b.half.x, b.half.y))) + rules.seatEase + 2;
+      for (let j = Math.floor(p.pos.y - reach); j <= p.pos.y + reach; j++) {
+        for (let i = Math.floor(p.pos.x - reach); i <= p.pos.x + reach; i++) {
+          if (pieces.some((_, n) => gapTo(n, { x: i, y: j }) < rules.seatEase)) continue;
+          expect(after.heights[j * w + i], `${i},${j}`).toBe(before.heights[j * w + i]);
         }
-        const plane = deckPlane(deck, groundAt(ground, deck.low.x, deck.low.y), deckAlongAt(deck, { x: i, y: j })!);
-        expect(after.heights[k], `${deck.section.id} ${i},${j}`).toBeCloseTo(Math.max(before.heights[k], plane), 5);
-        onDeck++;
-        if (after.heights[k] > before.heights[k]) raised++;
-      }
-    }
-    expect(onDeck).toBeGreaterThan(100);
-    expect(raised).toBeGreaterThan(onDeck / 2);
-  });
-
-  it('bakes the spot, debris, wall and reactor counts the data asks for', () => {
-    for (const rule of [...rules.spots, ...rules.debris]) {
-      expect(inside.filter((p) => p.kind === rule.look).length, rule.look).toBeGreaterThanOrEqual(rule.count);
-    }
-    expect(inside.filter((p) => p.kind === 'hullWall')).toHaveLength(hull.walls.length);
-    expect(inside.filter((p) => p.kind === 'deckBay')).toHaveLength(bayCount);
-    expect(inside.filter((p) => p.kind === rules.reactor!.look)).toHaveLength(1);
-  });
-
-  it('stands one deck bay prop at each bay and one rib at each rib pose', () => {
-    const near = (kind: BakedProp['kind'], p: Vec) => TEST_MAP.props.filter((o) => o.kind === kind && dist(o.pos, p) < 1e-3);
-    for (const deck of decks) {
-      for (const bay of bayPoints(deck)) expect(near('deckBay', bay), deck.section.id).toHaveLength(1);
-      for (const rib of ribPoses(deck)) {
-        const [found] = near('hullRib', rib.pos);
-        expect(found, deck.section.id).toBeDefined();
-        expect(found.r).toBeCloseTo(rib.r, 5);
-        expect(found.yaw).toBeCloseTo(rib.yaw, 5);
       }
     }
   });
 
-  it('lays hull plating on every deck tile', () => {
-    const t = TEST_MAP.terrain;
-    for (const deck of decks) {
-      for (let s = 0.05; s < 1; s += 0.1) expect(t.types[tileAt(t, pointAlong(deck, s))], `${deck.section.id} at ${s}`).toBe('hull');
-    }
-  });
-
-  it('drops a deck side to the floor over a cliff where it stands high', () => {
-    const t = TEST_MAP.terrain;
-    let checked = 0;
-    for (const deck of decks) {
-      const across = { x: -Math.sin(deck.section.yaw), y: Math.cos(deck.section.yaw) };
-      for (const side of [-1, 1]) {
-        const top = pointAlong(deck, 0.9);
-        const out = deck.section.width / 2 + 1.5;
-        const floor = { x: top.x + across.x * out * side, y: top.y + across.y * out * side };
-        if (heightAt(t, top.x, top.y) - heightAt(t, floor.x, floor.y) < 2 * TERRAIN.drive.maxSlope) continue;
-        const edge = [-1, -0.5, 0, 0.5, 1].map((o) => deck.section.width / 2 + o).map((c) => tileAt(t, { x: top.x + across.x * c * side, y: top.y + across.y * c * side }));
-        expect(edge.some((tile) => isCliff(t, tile)), `${deck.section.id} side ${side}`).toBe(true);
-        checked++;
-      }
-    }
-    expect(checked).toBeGreaterThan(0);
-  });
-
-  it('keeps every field spot and every piece of debris off the decks and the roads', () => {
-    // Deck ribs share the hullRib kind with debris ribs, so they are told apart by their authored poses.
-    const placed = inside.filter((p) => [...rules.spots, ...rules.debris].some((rule) => rule.look === p.kind));
-    const authoredRibs = decks.flatMap((deck) => ribPoses(deck).map((rib) => rib.pos));
-    const drawn = placed.filter((p) => !authoredRibs.some((q) => dist(p.pos, q) < 1e-3));
-    expect(drawn.length).toBe(placed.length - authoredRibs.length);
-    for (const p of drawn) {
-      for (const deck of decks) expect(gapToDeck(deck, p.pos), `${p.kind} by ${deck.section.id}`).toBeGreaterThan(p.r);
-      const reach = REGION.roadWidth / 2 + p.r;
-      expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, reach), p.kind).toBe(Infinity);
-    }
-  });
-
-  it('keeps every field spot apart and outside the hazard', () => {
-    const spots = inside.filter((p) => rules.spots.some((s) => s.look === p.kind));
-    spots.forEach((a, i) => {
-      expect(dist(a.pos, fallenSun.pos), a.kind).toBeGreaterThan(rules.hazard!.radius + a.r);
-      for (const b of spots.slice(i + 1)) expect(dist(a.pos, b.pos)).toBeGreaterThanOrEqual(rules.spotGap);
+  it('keeps the seat in the baked map, to the map file rounding', () => {
+    const terrain = TEST_MAP.terrain;
+    pieces.forEach((p, k) => {
+      const centre = groundAt(terrain, p.pos.x, p.pos.y);
+      for (const c of cornersUnder(p, k)) expect(Math.abs(terrain.heights[c.y * (terrain.size + 1) + c.x] - centre), `${p.look} ${c.x},${c.y}`).toBeLessThanOrEqual(2 / MAPGEN.heightScale);
     });
   });
 
-  it('enters the Fallen Sun by three roads', () => {
-    expect(territoryEntries(fallenSun as never)).toHaveLength(3);
+  it('bakes every authored piece, the reactor, nine caches and fifteen field spots', () => {
+    for (const p of pieces) expect(TEST_MAP.props.filter((o) => o.kind === p.look && dist(o.pos, p.pos) < 1e-3), p.look).toHaveLength(1);
+    expect(inside.filter((p) => p.kind === reactor.look)).toHaveLength(1);
+    expect(dist(inside.find((p) => p.kind === reactor.look)!.pos, reactorPos(t))).toBeLessThan(1e-3);
+    expect(inside.filter((p) => p.kind === rules.cacheLook)).toHaveLength(9);
+    expect(inside.filter((p) => p.kind === rules.spotLook)).toHaveLength(15);
+    expect(TEST_MAP.props.filter((p) => p.kind === 'rimRock')).toHaveLength(rules.rimRocks.count);
   });
 
-  it('lets a truck drive from each approach road up every deck and to the side of every spot', () => {
+  it('gives each cache and field spot one stock after world creation', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
-    const spots = w.obstacles.filter((o) => isLootSpot(o) && dist(o.pos, fallenSun.pos) < fallenSun.radius);
-    expect(spots.length).toBe(fieldCount + bayCount);
+    const spots = w.obstacles.filter((o) => isLootSpot(o) && territoryAt(o.pos)?.id === 'fallen-sun');
+    expect(spots).toHaveLength(24);
+    for (const o of spots) expect(w.salvage.filter((s) => s.id === o.id), o.id).toHaveLength(1);
+    expect(w.salvage.filter((s) => territoryOfStock(s)?.id === 'fallen-sun')).toHaveLength(24);
+  });
+
+  it("keeps every drawn prop off the roads, the pieces' boxes and the hazard", () => {
+    const boxes = pieces.flatMap((p, k) => propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }));
+    const drawn = drawnProps();
+    expect(drawn).toHaveLength(rules.patches.reduce((n, p) => n + p.spots + p.debris.reduce((m, d) => m + d.count, 0), 0));
+    for (const p of drawn) {
+      const reach = REGION.roadWidth / 2 + p.r;
+      expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, reach), p.kind).toBe(Infinity);
+      for (const b of boxes) expect(boxDistance(b, p.pos), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(p.r);
+      expect(dist(p.pos, zone.pos) - p.r, p.kind).toBeGreaterThan(zone.radius);
+    }
+  });
+
+  it('keeps every loot spot apart and outside the hazard', () => {
+    const spots = inside.filter((p) => p.kind === rules.spotLook || p.kind === rules.cacheLook);
+    spots.forEach((a, i) => {
+      expect(dist(a.pos, zone.pos), a.kind).toBeGreaterThan(zone.radius + a.r);
+      for (const b of spots.slice(i + 1)) expect(dist(a.pos, b.pos)).toBeGreaterThanOrEqual(TERRITORIES['fallen-sun'].spotGap);
+    });
+  });
+
+  it('keeps every prop but the reactor and its housing out of the hazard', () => {
+    const housing = pieces.find((p) => p.look === 'shipBow')!;
+    const others = inside.filter((p) => p.kind !== reactor.look && !(p.kind === housing.look && dist(p.pos, housing.pos) < 1e-3));
+    for (const p of others) expect(dist(p.pos, zone.pos), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(zone.radius);
+  });
+
+  it('lets a truck drive from each road to the side of every cache and field spot', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const spots = w.obstacles.filter((o) => isLootSpot(o) && siteGap(fallenSun, o.pos) < 0);
     const reach = (o: (typeof spots)[number]) => (propReach(o) + ECONOMY.useRange) * ECONOMY.interactionScale;
-    for (const entry of territoryEntries(fallenSun as never)) {
-      // The truck gets up onto the top quarter of each deck, short of the drop at its high end.
-      for (const deck of decks) {
-        const end = route(w, entry, pointAlong(deck, 1 - 1.5 / deck.section.length), 0.6, []).at(-1)!;
-        expect(deckAlongAt(deck, end), `${deck.section.id} from ${entry.x},${entry.y}`).toBeGreaterThanOrEqual(0.75);
-      }
+    for (const entry of territoryEntries(t)) {
       for (const spot of spots) {
         const end = route(w, entry, spot.pos, 0.6, []).at(-1)!;
-        expect(dist(end, spot.pos), spot.id).toBeLessThanOrEqual(reach(spot));
+        expect(dist(end, spot.pos), `${spot.id} from ${entry.x},${entry.y}`).toBeLessThanOrEqual(reach(spot));
       }
     }
   });
+
+  it('lets a truck drive through the cage from end to end', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const cage = pieces.find((p) => p.look === 'shipCage')!;
+    const along = { x: Math.cos(cage.yaw), y: Math.sin(cage.yaw) };
+    // Points 2 tiles past each open end, on the axis.
+    const end = (side: number): Vec => ({ x: cage.pos.x + along.x * (cage.r + 2) * side, y: cage.pos.y + along.y * (cage.r + 2) * side });
+    const path = [end(-1), ...route(w, end(-1), end(1), 0.6, [])];
+    expect(dist(path.at(-1)!, end(1))).toBeLessThan(1);
+    // The route stays inside the tube: never farther from the axis than its walls.
+    const offAxis = (p: Vec) => Math.abs((p.x - cage.pos.x) * along.y - (p.y - cage.pos.y) * along.x);
+    const alongAxis = (p: Vec) => (p.x - cage.pos.x) * along.x + (p.y - cage.pos.y) * along.y;
+    const samples = path.slice(1).flatMap((b, i) => Array.from({ length: 20 }, (_, k) => ({ x: path[i].x + ((b.x - path[i].x) * k) / 20, y: path[i].y + ((b.y - path[i].y) * k) / 20 })));
+    const insideTube = samples.filter((p) => Math.abs(alongAxis(p)) < cage.r * 0.8);
+    expect(insideTube.length).toBeGreaterThan(0);
+    for (const p of insideTube) expect(offAxis(p)).toBeLessThan(3.5);
+  });
 });
+
+describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => {
+  const terrain = TEST_MAP.terrain;
+  const { roads, spurs } = territoryRoads(t);
+  const web = [...roads, ...spurs];
+  const strips = landingStrips(t);
+  const pieceAt = (p: BakedProp) => pieces.some((q) => q.look === p.kind && dist(q.pos, p.pos) < 1e-3);
+  const onRegionRoad = (c: Vec) => ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2;
+
+  // Tiles whose centre lies within a road's half width of its centreline: the tiles the bake marks.
+  function roadTiles(road: { points: Vec[]; width: number }): number[] {
+    const out = new Set<number>();
+    for (let k = 1; k < road.points.length; k++) {
+      const [a, b] = [road.points[k - 1], road.points[k]];
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      for (const tile of tilesWithin(terrain.size, mid, dist(a, b) / 2 + road.width)) {
+        const c = { x: (tile % terrain.size) + 0.5, y: Math.floor(tile / terrain.size) + 0.5 };
+        if (segmentDist(c, a, b) <= road.width / 2) out.add(tile);
+      }
+    }
+    return [...out];
+  }
+  const dirtTiles = new Set(web.flatMap(roadTiles));
+
+  // The tiles a circle overlaps, as the bake's mark test reads them.
+  function touched(pos: Vec, r: number): number[] {
+    const out: number[] = [];
+    for (let y = Math.floor(pos.y - r); y <= Math.floor(pos.y + r); y++) {
+      for (let x = Math.floor(pos.x - r); x <= Math.floor(pos.x + r); x++) {
+        const near = { x: Math.min(Math.max(pos.x, x), x + 1), y: Math.min(Math.max(pos.y, y), y + 1) };
+        if (dist(near, pos) < r || (x === Math.floor(pos.x) && y === Math.floor(pos.y))) out.push(y * terrain.size + x);
+      }
+    }
+    return out;
+  }
+
+  it('marks every dirt road and spur tile as track, where no region road or deck makes it road (IV9)', () => {
+    for (const road of web) {
+      for (const tile of roadTiles(road)) {
+        const c = { x: (tile % terrain.size) + 0.5, y: Math.floor(tile / terrain.size) + 0.5 };
+        const want = deckAt(c.x, c.y) !== null || onRegionRoad(c) ? 'road' : 'track';
+        expect(terrain.types[tile], `${c.x},${c.y}`).toBe(want);
+      }
+    }
+  });
+
+  it('lays no dirt road or spur tile on a cliff, and climbs at most 0.2 height units per tile along each road (IV9)', () => {
+    for (const road of web) {
+      for (const tile of roadTiles(road)) expect(isCliff(terrain, tile), `cliff at ${tile % terrain.size},${Math.floor(tile / terrain.size)}`).toBe(false);
+      const points = along(road.points, 1);
+      for (let k = 1; k < points.length; k++) {
+        const [a, b] = [points[k - 1], points[k]];
+        const grade = Math.abs(groundAt(terrain, b.x, b.y) - groundAt(terrain, a.x, a.y)) / dist(a, b);
+        expect(grade, `grade at ${a.x.toFixed(1)},${a.y.toFixed(1)}`).toBeLessThanOrEqual(0.2);
+      }
+    }
+  });
+
+  it('keeps each landing strip off cliffs, under half the cliff slope, and clear of props and decks (IV9)', () => {
+    for (const s of strips) {
+      const box = stripBox(s);
+      for (const tile of tilesWithin(terrain.size, box.center, Math.hypot(box.half.x, box.half.y) + 1)) {
+        const c = { x: (tile % terrain.size) + 0.5, y: Math.floor(tile / terrain.size) + 0.5 };
+        if (boxDistance(box, c) > 0) continue;
+        expect(tileSteepness(terrain.heights, terrain.size, tile), `strip at ${c.x},${c.y}`).toBeLessThan(TERRAIN.drive.maxSlope / 2);
+      }
+      // The pieces' low boxes keep off the strips by the layout (src/sim/territory.test.ts); every other prop by its circle.
+      for (const p of TEST_MAP.props.filter((o) => !pieceAt(o))) expect(boxDistance(box, p.pos), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(p.r);
+      // Just past the lip, so the strip does not count its own flap.
+      for (let k = 0.25; k <= dist(s.a, s.b); k += 0.5) {
+        for (let c = -s.width / 2; c <= s.width / 2; c += 0.5) {
+          const at = { x: s.a.x + box.axis.x * k - box.axis.y * c, y: s.a.y + box.axis.y * k + box.axis.x * c };
+          expect(deckAt(at.x, at.y)?.deck.id ?? null, `a deck on the strip at ${at.x},${at.y}`).toBeNull();
+        }
+      }
+    }
+  });
+
+  it('keeps every prop but the pieces and the reactor off the dirt road tiles, the decks and the landing strips (IV12)', () => {
+    const near = TEST_MAP.props.filter((p) => !pieceAt(p) && p.kind !== reactor.look && dist(p.pos, fallenSun.pos) < fallenSun.radius + 40);
+    expect(near.length).toBeGreaterThan(50);
+    for (const p of near) {
+      const where = `${p.kind} at ${p.pos.x.toFixed(1)},${p.pos.y.toFixed(1)}`;
+      expect(touched(p.pos, p.r).filter((tile) => dirtTiles.has(tile)), where).toEqual([]);
+      expect(onDeck(p.pos, p.r), where).toBe(false);
+      for (const s of strips) expect(boxDistance(stripBox(s), p.pos), where).toBeGreaterThan(p.r);
+    }
+  });
+
+  it('lets a truck drive from each road to both ends of the wing and to the run-up of every flap', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const decks = FALLEN_SUN_DECKS.map((d) => deckById(d.id));
+    const wing = decks.filter((d) => d.lips.length === 0);
+    const flaps = decks.filter((d) => d.lips.length > 0);
+    // The wing's feet, where its ramps meet the ground, and a point 3 tiles before each flap's foot.
+    const goals = [wing[0].from, wing.at(-1)!.to, ...flaps.map((f) => (f.stations[0].rise === 0 ? { x: f.from.x - f.axis.x * 3, y: f.from.y - f.axis.y * 3 } : { x: f.to.x + f.axis.x * 3, y: f.to.y + f.axis.y * 3 }))];
+    for (const entry of territoryEntries(t)) {
+      for (const goal of goals) {
+        const end = route(w, entry, goal, 0.6, []).at(-1)!;
+        expect(dist(end, goal), `${goal.x.toFixed(1)},${goal.y.toFixed(1)} from ${entry.x.toFixed(1)},${entry.y.toFixed(1)}`).toBeLessThanOrEqual(1);
+      }
+    }
+  }, 120_000);
+
+  // IV4: from each entry, a route reaches every free point of a 5-tile grid inside the outline, at most 1.35 times the
+  // straight line at the 90th percentile and 1.8 times at worst. Round 3's layout measured 1.68 and 2.87. A free point
+  // is open to a standard truck's routes and lies outside every piece's outline on the ground, so the closed pockets
+  // inside a hull, like the bow's, are no destination.
+  it('routes from each entry to a 5-tile grid of free points without long detours (IV4)', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const layer = navLayer(w.terrain, w.obstacles, 0.6);
+    const hulls = pieces.flatMap((p, k) => propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }));
+    const free = (p: Vec) => layer.blocked[Math.floor(p.y / CELL) * layer.n + Math.floor(p.x / CELL)] === 0 && hulls.every((b) => boxDistance(b, p) > 0);
+    const reach = Math.ceil(fallenSun.radius / 5) * 5;
+    const points: Vec[] = [];
+    for (let y = -reach; y <= reach; y += 5) for (let x = -reach; x <= reach; x += 5) {
+      const p = { x: fallenSun.pos.x + x, y: fallenSun.pos.y + y };
+      if (siteGap(fallenSun, p) < 0 && free(p)) points.push(p);
+    }
+    expect(points.length).toBeGreaterThan(200);
+    const ratios: number[] = [];
+    const unreached: string[] = [];
+    for (const entry of territoryEntries(t)) {
+      for (const p of points) {
+        const path = [entry, ...route(w, entry, p, 0.6, [])];
+        if (dist(path.at(-1)!, p) > 1) unreached.push(`${(p.x - fallenSun.pos.x).toFixed(0)},${(p.y - fallenSun.pos.y).toFixed(0)}`);
+        else ratios.push(path.slice(1).reduce((sum, q, k) => sum + dist(path[k], q), 0) / Math.max(1, dist(entry, p)));
+      }
+    }
+    ratios.sort((a, b) => a - b);
+    expect(unreached).toEqual([]);
+    expect(ratios[Math.floor(ratios.length * 0.9)]).toBeLessThanOrEqual(1.35);
+    expect(ratios.at(-1)).toBeLessThanOrEqual(1.8);
+  }, 300_000); // about 700 routes over the whole territory: seconds alone, minutes beside the full suite on one core
+});
+
+// Points at most step tiles apart along a polyline, its corners included.
+function along(points: readonly Vec[], step: number): Vec[] {
+  const out: Vec[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const n = Math.max(1, Math.ceil(dist(points[i - 1], points[i]) / step));
+    for (let k = 1; k <= n; k++) out.push({ x: lerp(points[i - 1].x, points[i].x, k / n), y: lerp(points[i - 1].y, points[i].y, k / n) });
+  }
+  return out;
+}
+
+// A landing strip as a box on the ground.
+function stripBox(s: LandingStrip): PosedBox {
+  const length = dist(s.a, s.b);
+  const axis = { x: (s.b.x - s.a.x) / length, y: (s.b.y - s.a.y) / length };
+  return { center: { x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, axis, half: { x: length / 2, y: s.width / 2 }, z0: 0, z1: 1 };
+}
 
 describe('the orchard farm', () => {
   const orchard = REGION.locations.find((l) => l.id === 'orchard') as TerritoryDef;
@@ -229,14 +390,27 @@ describe('the orchard farm', () => {
   const props = baked.props.filter((p) => siteGap(orchard, p.pos) < 0);
   const trees = props.filter((p) => p.kind === groves.look);
   const buildingLooks = new Set(farm.buildings.map((b) => b.look));
-  const spots = props.filter((p) => buildingLooks.has(p.kind) || rules.spots.some((rule) => rule.look === p.kind));
+  const spots = props.filter((p) => buildingLooks.has(p.kind));
   // Clutter shares looks with runs, so a clutter piece is told by its footprint: every run segment is half its
   // segment long.
   const runRadius = new Map(farm.runs.map((run) => [run.look, run.segment / 2]));
   const clutterLooks = new Set(farm.clutter.map((rule) => rule.look));
-  const debrisLooks = new Set(rules.debris.map((rule) => rule.look));
+  const debrisLooks = new Set(farm.debris.map((rule) => rule.look));
   const loose = props.filter((p) => (clutterLooks.has(p.kind) || debrisLooks.has(p.kind)) && !(runRadius.has(p.kind) && p.r === runRadius.get(p.kind)));
   const segments = props.filter((p) => runRadius.has(p.kind) && p.r === runRadius.get(p.kind));
+
+  it('marks the same tiles as before the road marks moved to ./marks', () => {
+    // Counts and a hash of every marked tile's index and code, taken from the farm's own road marks before the move.
+    const counts: Record<number, number> = {};
+    let hash = 0;
+    baked.built.forEach((code, tile) => {
+      if (code === 0 || siteGap(orchard, { x: (tile % baked.size) + 0.5, y: Math.floor(tile / baked.size) + 0.5 }) >= 0) return;
+      counts[code] = (counts[code] ?? 0) + 1;
+      hash = (hash * 31 + tile * 7 + code) >>> 0;
+    });
+    expect(counts).toEqual({ [BUILT_OLD_ROAD]: 321, [BUILT_FIELD]: 1484, [BUILT_TRACK]: 632, [BUILT_CANAL]: 321, [BUILT_PAD]: 119 });
+    expect(hash).toBe(2377274311);
+  });
 
   it('bakes the same farm for the same seed', () => {
     const again = territoryLayer(7, groundDraft());
@@ -408,7 +582,7 @@ describe('the orchard farm', () => {
   it('lets a truck drive from the spur road to the side of every orchard spot and to the outer end of each road', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
     const found = w.obstacles.filter((o) => isLootSpot(o) && siteGap(orchard, o.pos) < 0);
-    expect(found.length).toBe(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + rules.spots.reduce((n, s) => n + s.count, 0));
+    expect(found.length).toBe(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
     const reach = (o: (typeof found)[number]) => (propReach(o) + ECONOMY.useRange) * ECONOMY.interactionScale;
     const [entry] = territoryEntries(orchard);
     for (const spot of found) {
@@ -420,7 +594,7 @@ describe('the orchard farm', () => {
       const end = route(w, entry, goal, 0.6, []).at(-1)!;
       expect(dist(end, goal), `road end at ${goal.x},${goal.y}`).toBeLessThanOrEqual(1);
     }
-  }, 120_000);
+  }, budget(120_000));
 
   it('throws on a building off the outline', () => {
     const moved = structuredClone(rules);

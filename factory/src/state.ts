@@ -3,7 +3,34 @@ import { basename, dirname, join } from 'node:path';
 import { withLockSync } from './lock';
 import type { FactoryState, Job } from './types';
 
-export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], capNoticed: false, postCaptions: {}, devBuild: null, devFailed: null };
+export const EMPTY_STATE: FactoryState = {
+  jobs: [],
+  approvalPosts: {},
+  lastRelease: null,
+  release: null,
+  pendingShip: null,
+  pendingRemovals: [],
+  pendingApprovals: {},
+  approvedResolving: {},
+  pendingChanges: [],
+  pendingIncidents: [],
+  bundles: {},
+  adhocReplies: {},
+  lastTickError: null,
+  failures: [],
+  builds: {},
+  jobStarts: [],
+  capNoticed: false,
+  postCaptions: {},
+  devBuild: null,
+  devFailed: null,
+  interrupted: [],
+  testPhase: {},
+  patching: {},
+  unroutedReplies: {},
+  visualSendBacks: {},
+  lastWasteReview: null,
+};
 
 // A state update is a few file operations, so a writer that waits this long found a stuck lock.
 const STATE_LOCK_MS = 30_000;
@@ -14,9 +41,14 @@ export function readState(path: string): FactoryState {
   if (!existsSync(path)) return structuredClone(EMPTY_STATE);
   const { job, ...saved } = JSON.parse(readFileSync(path, 'utf8')) as SavedState;
   // A file from before parallel jobs holds one `job`. Its log name serves as its id.
-  const jobs = saved.jobs ?? (job ? [{ ...job, id: basename(job.log, '.log') }] : []);
+  const jobs = (saved.jobs ?? (job ? [{ ...job, id: basename(job.log, '.log') }] : [])).map(renameTesting);
   // Fields an old file lacks take the empty value.
   return { ...structuredClone(EMPTY_STATE), ...saved, jobs };
+}
+
+// Testing split into verify and checks. A testing job saved before the split ran the agent half first, so the tick checks and resumes it as verify.
+function renameTesting(job: Job): Job {
+  return (job.stage as string) === 'testing' ? { ...job, stage: 'verify' } : job;
 }
 
 // Writes a temp file and renames it, so a crash never leaves half a state file.
