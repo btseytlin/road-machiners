@@ -2,13 +2,14 @@ import { execFile } from 'node:child_process';
 import { readFile, statfs } from 'node:fs/promises';
 import { cpus, freemem, platform, totalmem } from 'node:os';
 import { promisify } from 'node:util';
+import { readContainerResources, type ContainerResource } from './resources';
 
 const runFile = promisify(execFile);
 export type Capacity = { used: number; total: number; free: number };
 export type CpuCounters = { total: number; idle: number };
 export type Gpu = { index: number; name: string; utilization: number; memory: Capacity };
 export type Reading<T> = { value: T | null; at: string | null; status: 'ok' | 'unavailable'; error: string | null };
-export type HostLoad = { cpu: Reading<number>; ram: Reading<Capacity>; gpu: Reading<Gpu[]>; ssd: Reading<Capacity & { reserved: number }> };
+export type HostLoad = { cpu: Reading<number>; ram: Reading<Capacity>; gpu: Reading<Gpu[]>; ssd: Reading<Capacity & { reserved: number }>; containers?: Reading<ContainerResource[]> };
 
 function requireRange(value: number, min: number, max: number): number {
   if (!Number.isFinite(value) || value < min || value > max) throw new Error('Invalid host measurement');
@@ -81,12 +82,13 @@ export class HostSampler {
     return { total, free, used: total - free };
   }
   async sample(): Promise<HostLoad> {
-    const [cpu, ram, gpu, ssd] = await Promise.all([
+    const [cpu, ram, gpu, ssd, containers] = await Promise.all([
       readSafely('CPU', async () => this.sampleCpu()),
       readSafely('RAM', () => this.readRam()),
       readSafely('GPU', async () => parseGpu((await runFile('nvidia-smi', ['--query-gpu=index,name,utilization.gpu,memory.used,memory.total', '--format=csv,noheader,nounits'], { timeout: this.timeoutMs })).stdout)),
       readSafely('SSD', async () => computeStorage(await statfs(this.home))),
+      readSafely('Containers', () => readContainerResources(this.timeoutMs)),
     ]);
-    return { cpu, ram, gpu, ssd };
+    return { cpu, ram, gpu, ssd, containers };
   }
 }

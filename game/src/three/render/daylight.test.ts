@@ -19,6 +19,13 @@ describe('daylightAt', () => {
   });
 });
 
+describe('noon light', () => {
+  it('lets the sun outweigh the sky, so shadow sides read darker than lit sides', () => {
+    const noon = daylightAt(turnAt(12));
+    expect(noon.sunIntensity / noon.skyIntensity).toBeGreaterThan(2.5);
+  });
+});
+
 describe('vehicleLampsOn', () => {
   const world = emptyWorld();
   const npc = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });

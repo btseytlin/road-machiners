@@ -233,12 +233,28 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
-// Step 13 to 14: a shot round records the ground point where an exploding round burst. A saved round has none, so the
-// renderer plays its old miss.
-const SHOT_EVENTS_13_14 = ['shot', 'guardShot'];
+// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
+// 0 HP. Settling keeps only those that are still patchable and below the target.
+function withPatchParts_13_14(world: SavedJson): SavedJson {
+  const vehicles = world.vehicles as SavedJson[];
+  const brokenIds = (id: string): string[] => {
+    const client = vehicles.find((v) => v.id === id);
+    const items = client ? (client.items as SavedJson[]) : [];
+    return items.flatMap((item) => (item.kind === 'part' && (item.part as SavedJson).hp === 0 ? [(item.part as SavedJson).id as string] : []));
+  };
+  const recording = (s: SavedJson): SavedJson => {
+    const data = s.data as SavedJson;
+    return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
+  };
+  return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
 
-function withBurst_13_14(event: SavedJson): SavedJson {
-  if (!SHOT_EVENTS_13_14.includes(event.t as string)) return event;
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
@@ -307,8 +323,13 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
-  // 13 to 14: craters and the burst point of shot rounds. A new game has no craters.
-  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_13_14) }),
+  // 13 to 14: a patch records the parts it lifts.
+  withPatchParts_13_14,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

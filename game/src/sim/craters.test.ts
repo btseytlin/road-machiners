@@ -122,14 +122,14 @@ describe('digCrater', () => {
     expect(w.craters).toEqual([]);
   });
 
-  it('digs no crater on dirty water or hull plating', () => {
+  it('digs no crater on dirty water or in a canal', () => {
     const w = emptyWorld();
     const types = editableTerrain(w).types;
     types[tileAt(w.terrain, at)] = 'dirtyWater';
-    const hull = { x: at.x + 5, y: at.y };
-    types[tileAt(w.terrain, hull)] = 'hull';
+    const canal = { x: at.x + 5, y: at.y };
+    types[tileAt(w.terrain, canal)] = 'canal';
     digCrater(w, at, 1);
-    digCrater(w, hull, 1);
+    digCrater(w, canal, 1);
     expect(w.craters).toEqual([]);
   });
 

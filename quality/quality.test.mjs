@@ -208,6 +208,22 @@ test('rejects an oversized agent guidance file in any folder', () => {
   assertRejected(runCheck(), /factory\/AGENTS\.md: 2500 words/);
 });
 
+test('rejects a staged middle dot in any text file but skips vendored skills and an unstaged copy', () => {
+  const dot = String.fromCharCode(0xb7);
+  writeSource(`Speed ${dot} 40%\n`, 'game/notes.md');
+  mkdirSync(path.join(directory, 'game/.claude'));
+  writeSource(`a ${dot} b\n`, 'game/.claude/skill.md');
+  runGit('add', 'game');
+  assertRejected(runCheck(), /game\/notes\.md:1: middle dot separator/);
+  assert.doesNotMatch(runCheck().stderr, /skill\.md/);
+  writeSource('Speed, 40%\n', 'game/notes.md');
+  assertRejected(runCheck(), /game\/notes\.md:1/);
+  runGit('add', 'game');
+  assert.equal(runCheck().status, 0);
+  writeSource(`Speed ${dot} 40%\n`, 'game/notes.md');
+  assertRejected(runCheck('--working'), /game\/notes\.md:1/);
+});
+
 test('rejects staged type errors in the factory project', () => {
   writeSource('export const value: number = "wrong";\n', 'factory/src/example.ts');
   runGit('add', 'factory');

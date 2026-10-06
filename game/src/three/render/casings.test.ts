@@ -110,7 +110,7 @@ describe('a burst throwing casings', () => {
     const projectiles = new Projectiles(scene, () => undefined);
     const landed: number[] = [];
     const gap = PROJECTILES.mg.gapMs;
-    const plan = (k: number) => ({ land: { x: MUZZLE.pos.x + 60, y: MUZZLE.pos.y, z: MUZZLE.pos.z }, struck: false, delayMs: k * gap, flightMs: 900 });
+    const plan = (k: number) => ({ land: { x: MUZZLE.pos.x + 60, y: MUZZLE.pos.y, z: MUZZLE.pos.z }, impact: 'ground' as const, delayMs: k * gap, flightMs: 900 });
     for (let k = 0; k < 3; k++) {
       projectiles.launch({
         spec: PROJECTILES.mg,

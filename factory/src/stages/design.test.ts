@@ -26,7 +26,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(agent: (run: AgentRun) => void): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', designEffort: 'medium', repo: 'o/r', committeeChat: 'chat' },
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     statePath: `${home}/state.json`,
@@ -84,6 +84,12 @@ describe('design stage', () => {
     const models: string[] = [];
     await runStage(fakeCtx((run) => { models.push(run.model); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
     expect(models).toEqual([model]);
+  });
+
+  it('passes the design effort to the agent', async () => {
+    const efforts: Array<string | undefined> = [];
+    await runStage(fakeCtx((run) => { efforts.push(run.effort); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
+    expect(efforts).toEqual(['medium']);
   });
 
   it('comments, labels, closes and moves to Done on won\'t do', async () => {

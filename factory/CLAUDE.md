@@ -1,6 +1,8 @@
 # Game factory
 
-The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it. [README](README.md) describes the flow, the queues, the committee and the setup. [The factory task](docs/tasks/game-factory.md) holds the design and its reasons.
+The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it.
+
+Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec, and it says how to keep its diagrams in step with the code. [README](README.md) lists the other docs.
 
 ## Commands
 
@@ -8,13 +10,14 @@ Run these from `factory/`. Run `npm ci` first.
 
 - `npm test` runs the CLI tests.
 - `npm run typecheck` runs tsc.
+- `npm run diagrams` renders the process diagrams.
 - `npm run factory -- tick` runs one tick. The server runs it on a timer.
-- `uv run --with pytest pytest hermes` runs the Hermes plugin tests.
+- `uv run --with pytest --with pyyaml pytest hermes` runs the Hermes plugin tests.
 - `cd infra && uv run pytest` runs the infra helper tests.
 
 ## Layout
 
-- `src/` holds the Node CLI. `src/tick.ts` runs a tick, `src/jobs.ts` the queues, and `src/stages/` each stage.
+- `src/` holds the Node CLI. `src/tick.ts` picks and starts jobs, `src/job.ts` runs one, and `src/stages/` holds each stage.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image.
 - `hermes/` holds Hermes, the agent that manages the factory, with its config, identity, incident watch and chat plugin.
@@ -28,4 +31,5 @@ Run these from `factory/`. Run `npm ci` first.
 - Branch moves that go together, like a ship or a hotfix, go to GitHub in one atomic push.
 - An agent's work reaches GitHub only after the factory checks its diff. Only `butler push` on the host gets `BUTLER_API_KEY`.
 - Jobs share the host clone and the state file, so every state update runs under its lock.
+- Hermes's SOUL.md repeats no process detail. It points to `docs/process.md`.
 - The factory never imports game code.

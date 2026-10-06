@@ -165,7 +165,7 @@ export type DriverResources = {
 export type NpcActivity = {
   kind:
     | 'scavenge' | 'prowl' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
-    | 'meet' | 'retreat' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
+    | 'meet' | 'retreat' | 'rearm' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -174,6 +174,7 @@ export type NpcActivity = {
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
+  until?: number; // the turn a rearm's fresh gear is ready
 };
 
 export type NpcBrain = {
@@ -279,7 +280,7 @@ export type StateData =
   | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'escort'; site: string | null; fee: number }
-  | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
+  | { kind: 'patch'; deal: PatchDeal; parts: number; partIds: string[]; price: number; work: number; workLeft: number } // holder patches other; partIds are the client parts it lifts, fixed at agreement
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
   | { kind: 'none' };

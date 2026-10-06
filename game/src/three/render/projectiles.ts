@@ -1,7 +1,6 @@
 // What flies from a muzzle to where each round lands: tracers, shells and missiles, with their look and speed per
-// weapon. Rounds fly straight from the barrel tip. Hits end on the target truck, and misses fly past it into the
-// ground, so the sim's spread shows. An exploding round that missed lands where the sim burst it. Render-only:
-// randomness here never changes rules.
+// weapon. Rounds fly straight from the barrel tip. Hits end on the truck they struck, and misses end on the ground
+// at the point the sim put them, so the sim's spread shows. Render-only: randomness here never changes rules.
 
 import * as THREE from 'three';
 import { PARTS } from '../../data/parts';
@@ -10,7 +9,6 @@ import { computeRoundPoint, groundPoint, toMap, type V3 } from '../../phys/frame
 import { PAL } from '../../render/palette';
 import type { Terrain } from '../../sim/terrain';
 import type { ShotRound } from '../../sim/types';
-import type { Vec } from '../../sim/vec';
 
 // Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
 export type Muzzle = { pos: V3; dir: V3 };
@@ -86,8 +84,7 @@ export function projectileOf(key: string): ProjectileSpec {
 
 // Hits land below the gun point on the truck body, scattered over a band of its height.
 const HIT = { drop: 0.8, band: 0.7 }; // meters
-// A stray round flies on past the target and hits the ground this many meters beyond it.
-const MISS = { minPast: 3, maxPast: 9 };
+const MISS_DEPTH = 1; // meters a non-exploding ground miss may land short or long of the sim point
 const GRENADE_ARC = 3; // meters a grenade climbs above the straight line at mid flight
 const SHELL_TAIL = 3; // a shell's glowing trail, as a multiple of its length
 const MISSILE = {
@@ -97,37 +94,40 @@ const MISSILE = {
   flame: 0xffc060,
 };
 
-export type RoundPlan = { land: V3; struck: boolean; delayMs: number; flightMs: number };
-// Where one round flies: point b of the truck it struck, or of its target when it struck none, and its offset
-// across the line of fire. burst is the ground point where the sim burst an exploding round that struck no truck.
-export type RoundAim = { b: V3; struck: boolean; offset: number; burst: V3 | null };
+// What a round hit: a truck, the ground, or nothing drawn, like a stray into a truck the player cannot see.
+export type Impact = 'truck' | 'ground' | 'none';
+export type RoundPlan = { land: V3; impact: Impact; delayMs: number; flightMs: number };
+// Where one round flies: point b of the truck it struck and its offset across the line of fire, or the point where
+// it lands on the ground or ends unseen.
+export type RoundAim = { impact: 'truck'; b: V3; offset: number } | { impact: 'ground' | 'none'; land: V3 };
 
-// A round that struck a truck other than its target flies to that truck when it shows, else past the target.
-// pointOf gives the point of a truck that shows, and groundOf the ground point under a map point.
-export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null, groundOf: (p: Vec) => V3): RoundAim[] {
-  return rounds.map((r) => {
-    if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset, burst: r.burst && groundOf(r.burst) };
+// A round that struck no truck lands where the sim put its miss. A round that struck a truck other than its target
+// flies to that truck when it shows, else it ends unseen at the miss point. pointOf gives the point of a truck that
+// shows, and missAt the ground point of a miss at an offset across the line of fire.
+export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null, missAt: (offset: number) => V3): RoundAim[] {
+  return rounds.map((r): RoundAim => {
+    if (r.struck === null) return { impact: 'ground', land: missAt(r.offset) };
+    if (r.struck === targetId) return { impact: 'truck', b, offset: r.offset };
     const p = pointOf(r.struck);
-    return p ? { b: p, struck: true, offset: 0, burst: null } : { b, struck: false, offset: r.offset, burst: null };
+    return p ? { impact: 'truck', b: p, offset: 0 } : { impact: 'none', land: missAt(r.offset) };
   });
 }
 
 // When a volley leaves and how long its band is. startMs is the volley's own start; burstMaxMs caps one burst's length.
 export type VolleyTiming = { startMs: number; windowMs: number; burstMaxMs: number };
 
-// Where and when each round of a volley from gun point a lands. A round that burst lands at its burst point, and
-// other misses past the target on the ground, where groundY gives the ground height under a point. Rounds leave
-// gapMs apart from startMs, and every one lands within the window.
-export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number): RoundPlan[] {
+// Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
+// Rounds leave gapMs apart from startMs, and every one lands within the window. A ground miss of a round with a
+// blast radius lands exactly on its point, since the sim applied the splash there.
+export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number, blastRadius: number): RoundPlan[] {
   const { startMs, windowMs, burstMaxMs } = timing;
   const gap = rounds.length > 1 ? Math.min(spec.gapMs, burstMaxMs / (rounds.length - 1)) : 0;
   if (startMs + Math.max(0, rounds.length - 1) * gap >= windowMs) throw new Error(`A volley starting at ${startMs} ms leaves no time to fire ${rounds.length} rounds in ${windowMs} ms`);
   return rounds.map((r, k) => {
-    const struck = r.struck;
-    const land = struck ? hitPoint(a, r.b, r.offset) : (r.burst ?? missPoint(a, r.b, r.offset, groundY));
+    const land = r.impact === 'truck' ? hitPoint(a, r.b, r.offset) : r.impact === 'ground' && blastRadius === 0 ? groundMiss(a, r.land, groundY) : r.land;
     const delayMs = startMs + k * gap;
     const meters = Math.hypot(land.x - a.x, land.y - a.y, land.z - a.z);
-    return { land, struck, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };
+    return { land, impact: r.impact, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };
   });
 }
 
@@ -136,13 +136,13 @@ function hitPoint(a: V3, b: V3, offset: number): V3 {
   return { x: p.x, y: b.y - HIT.drop + (Math.random() - 0.5) * HIT.band, z: p.z };
 }
 
-function missPoint(a: V3, b: V3, offset: number, groundY: (p: V3) => number): V3 {
-  const p = computeRoundPoint(a, b, offset);
-  const dx = p.x - a.x;
-  const dz = p.z - a.z;
+// A miss moved a little short or long along the line of fire, so a burst does not sit on one straight line.
+function groundMiss(a: V3, land: V3, groundY: (p: V3) => number): V3 {
+  const dx = land.x - a.x;
+  const dz = land.z - a.z;
   const len = Math.hypot(dx, dz);
-  const past = MISS.minPast + Math.random() * (MISS.maxPast - MISS.minPast);
-  const end = { x: p.x + (dx / len) * past, y: 0, z: p.z + (dz / len) * past };
+  const shift = (Math.random() * 2 - 1) * MISS_DEPTH;
+  const end = { x: land.x + (dx / len) * shift, y: 0, z: land.z + (dz / len) * shift };
   return { ...end, y: groundY(end) };
 }
 

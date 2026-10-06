@@ -230,11 +230,15 @@ export function autoRuns(world: World): boolean {
   return waitsOnBeacon(world);
 }
 
+// Slower than `RULES.parkedSpeed` with no move order.
+export function isAtRest(v: Vehicle): boolean {
+  return v.speed <= RULES.parkedSpeed && (v.order === null || v.order.kind === 'brake');
+}
+
 function waitsOnBeacon(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
-  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
-  return p.state === 'active' && p.beacon && parked && playerTow(world) === null;
+  return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
