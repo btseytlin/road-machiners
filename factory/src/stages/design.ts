@@ -15,7 +15,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
-  await runAgent(ctx, issue, 'design', 'design', prompt);
+  await runAgent(ctx, issue, 'design', 'design', prompt, { effort: ctx.cfg.designEffort });
   throwIfNeedsCommittee(home);
   const questions = readOutput(home, 'questions.md');
   if (questions !== null) return askBack(ctx, issue, questions);

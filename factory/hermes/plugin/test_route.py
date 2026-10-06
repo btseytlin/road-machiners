@@ -15,6 +15,18 @@ spec.loader.exec_module(plugin)
 
 CFG = plugin.Config("/inbox", "/state", "-100", None)
 POSTS = {"55": 12}
+readiness = sys.modules["factory_plugin.readiness"]
+EMPTY_ISSUE = readiness.IssueView("", 0.0, [])
+
+
+def make_readiness(tmp_path, view=EMPTY_ISSUE, fetch=None, now=lambda: 1000.0):
+    """A readiness check on a fake issue. A fetch that is not given fails the test when the check downloads."""
+    def no_fetch(url, headers, timeout):
+        raise AssertionError(f"unexpected download of {url}")
+    return plugin.Readiness(
+        min_words=3, pending=tmp_path / "pending-media.json", view=lambda issue: view, token=lambda: None,
+        fetch=fetch or no_fetch, now=now,
+    )
 
 
 def route(text, reply=None, chat="-100"):
@@ -154,6 +166,7 @@ def env(tmp_path):
         "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": str(tmp_path / "state"), "FACTORY_COMMITTEE_CHAT": "-100",
         "FACTORY_OBSERVATION_HEARTBEAT_MS": "10000",
         "FACTORY_PUBLIC_URL": "https://example.org", "FACTORY_STATUS_TIMEOUT_MS": "10000",
+        "FACTORY_ROUTE_MIN_WORDS": "4", "FACTORY_REPO": "owner/repo",
         "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
         "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
     }
@@ -233,7 +246,7 @@ def dispatch(tmp_path, user, text="/change x", chat="-100", monkeypatch=None):
     gateway = types.SimpleNamespace(adapters={"telegram": adapter})
     source = types.SimpleNamespace(user_id=user, user_name="Ann", chat_id=chat, platform="telegram")
     event = types.SimpleNamespace(text=text, reply_to_message_id=None, source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     return result, adapter, tmp_path / "inbox"
 
 
@@ -248,7 +261,7 @@ def test_hook_routes_release_reply(tmp_path):
     gateway = types.SimpleNamespace(adapters={"telegram": adapter})
     source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
     event = types.SimpleNamespace(text="ship", reply_to_message_id="90", source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     assert result == {"action": "skip", "reason": "factory-ship"}
     (file,) = (tmp_path / "inbox").iterdir()
     assert json.loads(file.read_text())["issue"] == 40
@@ -264,7 +277,7 @@ def test_hook_queues_a_plain_approval_reply_and_hands_it_to_hermes_with_a_header
     gateway = types.SimpleNamespace(adapters={"telegram": Adapter()})
     source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
     event = types.SimpleNamespace(text="show us the top-down atlas", reply_to_message_id="55", source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     assert result["action"] == "rewrite"
     assert result["text"].startswith("[Factory: a committee reply to the approval post 55 of issue #12.")
     assert "factory_route_reply" in result["text"]
@@ -275,7 +288,7 @@ def test_hook_queues_a_plain_approval_reply_and_hands_it_to_hermes_with_a_header
     }
 
 
-def route_setup(tmp_path, session=None):
+def route_setup(tmp_path, session=None, **ready):
     committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
     committee.seed()
     (tmp_path / "state").mkdir()
@@ -284,7 +297,7 @@ def route_setup(tmp_path, session=None):
     inbox.mkdir()
     cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
     values = SESSION if session is None else session
-    return inbox, plugin.make_route_handler(cfg, session_env=lambda key: values.get(key, ""))
+    return inbox, plugin.make_route_handler(cfg, make_readiness(tmp_path, **ready), session_env=lambda key: values.get(key, ""))
 
 
 @pytest.mark.parametrize("route_name", ["answer", "patch", "redesign"])

@@ -2071,8 +2071,10 @@ canvas.view {
   border-bottom: 1px solid #3b454b;
   font: 13px var(--font-mono);
 }
-.town-repair .bad,
-.town-repair .dim {
+.town-repair > button:first-of-type {
+  margin-left: auto;
+}
+.town-repair .bad {
   flex: 1;
 }
 #ui .town-repair button {
