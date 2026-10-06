@@ -28,7 +28,7 @@ export type VehicleStats = {
   turnFast: number;
   reverseTurn: number; // radians over one turn of backing up
   fuelPerTile: number;
-  limpSpeed: number; // top speed with no working engine, a broken transmission or an empty tank
+  limpSpeed: number; // top speed with no working engine or a broken transmission. The tank is not part of it, see fuelLimit() in far.ts
   limpAccel: number; // acceleration of a truck pushed with no working engine or fuel
   roughSkill: number; // share of the speed penalty of slow ground the driver cancels
   mass: number; // kilograms
@@ -80,9 +80,14 @@ export type SpeedStep =
 
 // The only max-speed rule. vehicleStats takes its last step, so the HUD breakdown and the number cannot drift apart.
 export function maxSpeedSteps(world: World, v: Vehicle): SpeedStep[] {
-  const limpSpeed = limpSpeedOf(world, v);
+  const broken = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  return speedSteps(world, v, limpSpeedOf(world, v), loadFactor(v), broken);
+}
+
+// The steps from values the caller has already worked out, so vehicleStats does not repeat them.
+function speedSteps(world: World, v: Vehicle, limpSpeed: number, load: number, brokenWheels: number): SpeedStep[] {
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed.
-  const steps = hasWorkingEngine(v) && !isStalled(world, v) ? drivingSteps(world, v, limpSpeed) : [limpStep(v, limpSpeed)];
+  const steps = hasWorkingEngine(v) && !isStalled(world, v) ? drivingSteps(world, v, limpSpeed, load, brokenWheels) : [limpStep(v, limpSpeed)];
   let speed = steps[steps.length - 1].speed;
   const weather = weatherAt(world, v.pos).speed;
   if (weather !== 1) {
@@ -100,23 +105,21 @@ function limpStep(v: Vehicle, limpSpeed: number): SpeedStep {
 }
 
 // Chassis, engine, load, wheels and guns, then the floor, overdrive and transmission limits.
-function drivingSteps(world: World, v: Vehicle, limpSpeed: number): SpeedStep[] {
+function drivingSteps(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number): SpeedStep[] {
   const ch = chassisDef(v.chassisId);
   const engine = mountedParts(v, 'engine')[0];
   const e = wornDef<EngineDef>(engine);
   let speed = ch.maxSpeed + e.speedBonus;
   const steps: SpeedStep[] = [{ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', bonus: e.speedBonus, worn: engine.wear > 0, speed }];
   // Top speed follows loadFactor(), which drops hard past the rated mass.
-  const load = loadFactor(v);
   speed *= load;
   steps.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
   // Each broken wheel cuts top speed by the same share.
-  const broken = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
   const wheels = (1 - RULES.wheelLoss) ** broken;
   speed *= wheels;
   if (broken > 0) steps.push({ kind: 'wheels', broken, factor: wheels, speed });
   const draw = gunDraw(v);
-  const drag = gunDrag(v, e.capacity);
+  const drag = gunDragOf(draw, e.capacity);
   speed *= drag;
   steps.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, capped: draw >= e.capacity, speed });
   limitSteps(world, v, limpSpeed, steps);
@@ -146,23 +149,25 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const load = loadFactor(v);
   const force = ch.handlingMass / mass;
   // Each broken wheel cuts top speed and turning by the same share.
-  const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  const brokenWheels = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  const wheels = (1 - RULES.wheelLoss) ** brokenWheels;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
   const limpSpeed = limpSpeedOf(world, v);
   // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
   const limpAccel = limpSpeed * ch.accel;
 
+  const steps = speedSteps(world, v, limpSpeed, load, brokenWheels);
   let accel = limpAccel;
   let fuelMult = 0;
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
-  if (hasWorkingEngine(v) && !isStalled(world, v)) {
+  const guns = steps.find((s) => s.kind === 'guns');
+  if (guns) {
     const e = wornDef<EngineDef>(engines[0]);
-    const drag = gunDrag(v, e.capacity);
+    const drag = guns.factor;
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
     if (inOverdrive(world, v)) accel *= RULES.overdriveBoost;
   }
-  const steps = maxSpeedSteps(world, v);
 
   return {
     maxSpeed: steps[steps.length - 1].speed,
@@ -183,7 +188,9 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
 
 // Total draw of the working guns. Broken guns draw nothing.
 export function gunDraw(v: Vehicle): number {
-  return mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
+  let draw = 0;
+  for (const item of mountedItems(v, 'weapon')) if (isWorking(item.part)) draw += wornDef<WeaponDef>(item.part).draw;
+  return draw;
 }
 
 // Capacity of the first mounted engine, or null with no working engine. Capacity does not wear.
@@ -194,7 +201,11 @@ export function workingEngineCapacity(v: Vehicle): number | null {
 // Speed and acceleration multiplier from the working guns. Each draws power from the engine, up to gunDragMax slower
 // once their total draw reaches the engine's capacity. The curve is convex: the first guns cost little.
 export function gunDrag(v: Vehicle, capacity: number): number {
-  return 1 - RULES.gunDragMax * Math.min(1, gunDraw(v) / capacity) ** RULES.gunDragCurve;
+  return gunDragOf(gunDraw(v), capacity);
+}
+
+function gunDragOf(draw: number, capacity: number): number {
+  return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
 }
 
 // Kilograms an NPC truck can still take before load and gun drag cut its speed below MIN_NPC_SPEED_SHARE of the unloaded
