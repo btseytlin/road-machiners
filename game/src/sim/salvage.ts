@@ -593,6 +593,9 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 
 // ---- NPC looters
 
+// Why a loot ends when the looter's hold takes nothing more of it.
+export const CANNOT_HOLD = 'cargo cannot hold the loot';
+
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
 // installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
 // Returns why the loot ends, or null while work remains.
@@ -601,7 +604,7 @@ export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): s
   takeLooseItems(world, looter, target);
   if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
-  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? CANNOT_HOLD : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);
   return null;
 }

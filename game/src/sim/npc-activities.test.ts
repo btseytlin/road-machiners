@@ -204,7 +204,7 @@ describe('NPC activities', () => {
     w.events = [];
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
-    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargo cannot hold salvage' })]);
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargo cannot hold the loot' })]);
   });
 
   it('does not see a reachable stock as salvage when nothing in it fits', () => {
@@ -821,6 +821,25 @@ describe('salvage on the way', () => {
     npc.speed = 0;
     thinkNpc(w, npc);
     expect(topGoal(npc)?.targetId).toBe('podfield');
+  });
+
+  it('a driver whose hold could not take a loot passes up wrecks until it sells', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc } = passingWreck();
+    addGoods(w, npc, 'scrap', freeCells(npc) - 1);
+    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] });
+    npc.speed = 0;
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 10.5, y: 10 }, phase: 'travel', reason: 'loot salvage on the way' });
+    resolveNpcActivities(w);
+    expect(npc.brain!.fullAt).toBe(1);
+    expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).not.toHaveProperty('loot');
+    expect(optionWeights(w, npc, 'idle', null, null)).not.toHaveProperty('scavenge');
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).not.toContain('loot');
+    npc.items = npc.items.filter((it) => it.kind !== 'good');
+    thinkNpc(w, npc);
+    expect(npc.brain!.fullAt).toBeUndefined();
+    expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).toHaveProperty('loot');
   });
 
   it('rolls once per sighting', () => {

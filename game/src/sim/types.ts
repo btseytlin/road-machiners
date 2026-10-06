@@ -185,6 +185,7 @@ export type NpcBrain = {
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
     gunnedBy?: string; // the camp whose gate gun shot at this driver last turn, until the driver decides on it
+    fullAt?: number; // free cells when the hold last could not take a loot, until the hold frees more
     // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
     // is true once the driver decided on the latest shots. Attackers may always be fired back at.
     attackers: Record<string, boolean>;

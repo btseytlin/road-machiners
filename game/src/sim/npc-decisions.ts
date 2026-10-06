@@ -25,7 +25,7 @@ import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
-import { corePart, hasLoot, mountedParts } from './grid';
+import { corePart, freeCells, hasLoot, mountedParts } from './grid';
 import { hasCargoRoom } from './inventory';
 import { campGunning } from './camp-guns';
 import { isTownGuarded } from './guards';
@@ -34,7 +34,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
@@ -288,20 +288,36 @@ export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
   return jobTarget(vehicle) === targetId;
 }
 
+// A driver whose hold could not take a loot passes up loot until its hold frees cells, as a sale does. It learns what
+// a wreck holds only on arrival, so without this a loaded driver would detour to every wreck on its way to sell.
+export function holdFull(vehicle: Vehicle): boolean {
+  const fullAt = vehicle.brain!.fullAt;
+  return fullAt !== undefined && freeCells(vehicle) <= fullAt;
+}
+
+export function noteFullHold(vehicle: Vehicle): void {
+  vehicle.brain!.fullAt = freeCells(vehicle);
+}
+
+// A hold that freed cells since it was full takes loot again.
+export function forgetFullHold(vehicle: Vehicle): void {
+  if (!holdFull(vehicle)) delete vehicle.brain!.fullAt;
+}
+
 // Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
 export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
-  if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? 'cargo cannot hold the loot' : null;
+  if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? CANNOT_HOLD : null;
   if (!hasSalvage(stock)) return 'nothing left to loot';
-  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
+  return canTakeAny(world, vehicle, stock) ? null : CANNOT_HOLD;
 }
 
 // Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
 export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
   if (!isKnockedOut(truck)) return 'the truck got away';
   if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
+  return canTakeFromTruck(vehicle, truck) ? null : CANNOT_HOLD;
 }
 
 // Whether the vehicle is where a site's services work: on a pad, or inside a territory, which has none.
@@ -521,14 +537,14 @@ function canTrade(world: World, vehicle: Vehicle): boolean {
 }
 
 function canScavenge(world: World, vehicle: Vehicle): boolean {
-  if (!hasCargoRoom(vehicle)) return false;
+  if (!hasCargoRoom(vehicle) || holdFull(vehicle)) return false;
   return visibleSalvage(world, vehicle).length > 0 || visibleDowned(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
 }
 
-// Looting salvage or a knocked-out truck on the way needs cargo room and the loot in sight.
+// Looting salvage or a knocked-out truck on the way needs cargo room, a hold not known full and the loot in sight.
 function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   if (subject === null) throw new Error(`${decision} needs a subject`);
-  if (!hasCargoRoom(vehicle)) return false;
+  if (!hasCargoRoom(vehicle) || holdFull(vehicle)) return false;
   const stock = world.salvage.find((entry) => entry.id === subject);
   if (stock) return seesSalvage(world, vehicle, stock);
   const truck = world.vehicles.find((v) => v.id === subject);
@@ -540,9 +556,10 @@ function canRaid(_world: World, vehicle: Vehicle): boolean {
   return huntsPrey(vehicle) && raiderGroundsAway(vehicle).length > 0;
 }
 
-// Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
+// Any driver that can drive can prowl to a hunting ground, unless its hold is known full. Only vultures weigh it above
+// the minimum.
 function canProwl(world: World, vehicle: Vehicle): boolean {
-  return canDrive(world, vehicle) && huntingGroundsAway(vehicle).length > 0;
+  return canDrive(world, vehicle) && !holdFull(vehicle) && huntingGroundsAway(vehicle).length > 0;
 }
 
 // Lawmen patrol their town and raiders their camp, where they have road to drive.
