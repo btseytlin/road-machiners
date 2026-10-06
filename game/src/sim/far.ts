@@ -26,8 +26,8 @@ export function isNear(w: World, v: Vehicle): boolean {
 }
 
 // Why the tank limits the truck now: 'low' halves top speed, 'empty' leaves a crawl. Null when it limits nothing.
-export function fuelLimit(w: World, v: Vehicle, s: VehicleStats): 'low' | 'empty' | null {
-  if (s.fuelPerTile <= 0) return null;
+export function fuelLimit(w: World, v: Vehicle, burnsFuel: boolean): 'low' | 'empty' | null {
+  if (!burnsFuel) return null;
   const fuel = getResources(w, v).fuel;
   if (fuel <= 0) return 'empty';
   return fuel < fuelCap(v) * RULES.lowFuelThreshold ? 'low' : null;
@@ -39,7 +39,7 @@ export function fuelLimit(w: World, v: Vehicle, s: VehicleStats): 'low' | 'empty
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = fuelLimit(w, v, s) === 'low';
+  const low = fuelLimit(w, v, s.fuelPerTile > 0) === 'low';
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);

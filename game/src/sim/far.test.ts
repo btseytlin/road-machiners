@@ -151,11 +151,11 @@ describe('far NPC travel', () => {
     const me = w.vehicles[0];
     const s = vehicleStats(w, me);
     w.player.fuel = fuelCap(me);
-    expect(fuelLimit(w, me, s)).toBeNull();
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBeNull();
     w.player.fuel = fuelCap(me) * RULES.lowFuelThreshold * 0.5;
-    expect(fuelLimit(w, me, s)).toBe('low');
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBe('low');
     w.player.fuel = 0;
-    expect(fuelLimit(w, me, s)).toBe('empty');
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBe('empty');
   });
 
   it('a brake order or no order slows a far vehicle where it stands', () => {

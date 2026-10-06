@@ -12,6 +12,7 @@ import { PARTS, type EngineDef, type StoreDef } from '../data/parts';
 import { makePart } from './factory';
 import { mountPart, stowPart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
+import { wornDef } from './wear';
 
 describe('worn parts in vehicle stats', () => {
   it('a worn engine gives a lower top speed and acceleration', () => {
@@ -361,7 +362,7 @@ describe('max speed steps', () => {
         if (s.kind === 'load' || s.kind === 'guns' || s.kind === 'wheels' || s.kind === 'overdrive' || s.kind === 'weather' || s.kind === 'towing') {
           expect(s.speed, `${name} ${s.kind}`).toBeCloseTo(before * s.factor, 10);
         }
-        if (s.kind === 'engine') expect(s.speed, name).toBeCloseTo(steps[0].speed + s.bonus, 10);
+        if (s.kind === 'engine') expect(s.speed, name).toBeCloseTo(steps[0].speed + wornDef<EngineDef>(mountedParts(v, 'engine')[0]).speedBonus, 10);
         if (s.kind === 'floor') expect(s.speed, name).toBe(RULES.minSpeedCap);
         if (s.kind === 'transmission') expect(s.speed, name).toBeLessThan(before);
       });

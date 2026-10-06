@@ -67,14 +67,14 @@ export function isStranded(world: World, v: Vehicle): boolean {
 // One step of the max-speed rule, with the speed after it. A reader follows the chain from the first step to the last.
 export type SpeedStep =
   | { kind: 'chassis'; base: number; speed: number }
-  | { kind: 'engine'; bonus: number; worn: boolean; speed: number }
+  | { kind: 'engine'; worn: boolean; speed: number }
   | { kind: 'load'; factor: number; mass: number; rated: number; speed: number }
-  | { kind: 'guns'; draw: number; capacity: number; factor: number; capped: boolean; speed: number }
+  | { kind: 'guns'; draw: number; capacity: number; factor: number; speed: number }
   | { kind: 'wheels'; broken: number; factor: number; speed: number }
   | { kind: 'floor'; speed: number }
   | { kind: 'overdrive'; factor: number; speed: number }
   | { kind: 'transmission'; speed: number }
-  | { kind: 'limp'; cause: 'noEngine' | 'brokenEngine' | 'stalled'; skill: number; speed: number }
+  | { kind: 'limp'; cause: 'noEngine' | 'brokenEngine' | 'stalled'; speed: number }
   | { kind: 'weather'; factor: number; speed: number }
   | { kind: 'towing'; factor: number; speed: number };
 
@@ -101,7 +101,7 @@ function speedSteps(world: World, v: Vehicle, limpSpeed: number, load: number, b
 
 function limpStep(v: Vehicle, limpSpeed: number): SpeedStep {
   const cause = mountedParts(v, 'engine').length === 0 ? 'noEngine' : !hasWorkingEngine(v) ? 'brokenEngine' : 'stalled';
-  return { kind: 'limp', cause, skill: limpSpeed / RULES.limpSpeed - 1, speed: limpSpeed };
+  return { kind: 'limp', cause, speed: limpSpeed };
 }
 
 // Chassis, engine, load, wheels and guns, then the floor, overdrive and transmission limits.
@@ -110,7 +110,7 @@ function drivingSteps(world: World, v: Vehicle, limpSpeed: number, load: number,
   const engine = mountedParts(v, 'engine')[0];
   const e = wornDef<EngineDef>(engine);
   let speed = ch.maxSpeed + e.speedBonus;
-  const steps: SpeedStep[] = [{ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', bonus: e.speedBonus, worn: engine.wear > 0, speed }];
+  const steps: SpeedStep[] = [{ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', worn: engine.wear > 0, speed }];
   // Top speed follows loadFactor(), which drops hard past the rated mass.
   speed *= load;
   steps.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
@@ -121,7 +121,7 @@ function drivingSteps(world: World, v: Vehicle, limpSpeed: number, load: number,
   const draw = gunDraw(v);
   const drag = gunDragOf(draw, e.capacity);
   speed *= drag;
-  steps.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, capped: draw >= e.capacity, speed });
+  steps.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, speed });
   limitSteps(world, v, limpSpeed, steps);
   return steps;
 }

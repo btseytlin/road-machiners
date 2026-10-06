@@ -185,7 +185,18 @@ body {
   display: block;
 }
 .speed-row {
+  display: grid;
+  grid-template-columns: 1fr auto 3ch;
+  gap: 12px;
   padding: 2px 0;
+  border-bottom: 1px solid #5a6165;
+}
+.speed-row span:not(:first-child) {
+  text-align: right;
+}
+.speed-row.total {
+  font-weight: bold;
+  border-bottom: 0;
 }
 .speed-notes p {
   margin: 2px 0 0;

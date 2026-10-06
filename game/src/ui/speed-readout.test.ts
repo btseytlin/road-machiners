@@ -30,38 +30,54 @@ const CASES: Record<string, (w: World, v: Vehicle) => void> = {
 };
 
 describe('max speed breakdown', () => {
-  it('lists signed km/h changes that add up to the number the HUD shows', () => {
+  it('ends in the number the HUD shows, with chained running speeds, in every case', () => {
     for (const [name, tweak] of Object.entries(CASES)) {
       const { w, v } = playerWith(tweak);
       const rows = getHudReadout(w).maxSpeedRows;
-      const steps = maxSpeedSteps(w, v);
-      if (steps[0].kind === 'limp') continue;
-      const total = rows.reduce((sum, r) => sum + r.delta, kph(steps[0].speed));
-      expect(String(total), name).toBe(getHudReadout(w).maxSpeed);
-      expect(
-        rows.every((r) => r.delta !== 0),
-        name,
-      ).toBe(true);
+      const last = rows[rows.length - 1];
+      expect(String(last.kph), name).toBe(getHudReadout(w).maxSpeed);
+      expect(last.kph, name).toBe(kph(vehicleStats(w, v).maxSpeed));
+      expect(rows.filter((r) => r.total), name).toHaveLength(1);
     }
   });
 
-  it('words each cause tersely', () => {
+  it('starts from the chassis base and shows engine effects as km/h', () => {
+    const { w, v } = playerWith();
+    const rows = speedRows('Clear', maxSpeedSteps(w, v));
+    expect(rows[0]).toMatchObject({ label: 'Chassis', effect: 'base' });
+    expect(rows[1].effect).toMatch(/^[+−]\d+ km\/h$/);
+  });
+
+  it('words each cause with its numbers', () => {
     const { w, v } = playerWith((world, truck) => {
       CASES.wheels(world, truck);
       CASES.guns(world, truck);
     });
     const labels = speedRows('Clear', maxSpeedSteps(w, v)).map((r) => r.label);
-    expect(labels).toContain('Guns power');
+    expect(labels.some((l) => /^Load [\d,]+ kg \/ [\d,]+ kg$/.test(l))).toBe(true);
+    expect(labels.some((l) => /^Gun power [\d.]+ \/ [\d.]+$/.test(l))).toBe(true);
     expect(labels).toContain('2 broken wheels');
-    expect(labels).not.toContain('Chassis');
     const stalled = playerWith(CASES.stalled);
-    expect(speedRows('Clear', maxSpeedSteps(stalled.w, stalled.v)).map((r) => r.label)).toContain('Engine stalled');
+    expect(speedRows('Clear', maxSpeedSteps(stalled.w, stalled.v)).map((r) => r.label)).toContain('Engine stalled: pushed at crawl speed');
+  });
+
+  it('keeps the limp cases consistent with the HUD number', () => {
+    for (const name of ['brokenEngine', 'stalled', 'transmission']) {
+      const { w, v } = playerWith(CASES[name]);
+      const rows = speedRows('Clear', maxSpeedSteps(w, v));
+      expect(String(rows[rows.length - 1].kph), name).toBe(getHudReadout(w).maxSpeed);
+    }
   });
 
   it('notes low and empty fuel apart from the number', () => {
     const { w, v } = playerWith();
     w.player.fuel = 0;
-    expect(speedNotes(w, v, vehicleStats(w, v)).join(' ')).toContain('Empty tank');
+    expect(speedNotes(w, v, maxSpeedSteps(w, v)).join(' ')).toContain('Empty tank');
+  });
+
+  it('explains gun power without a cost per gun', () => {
+    const { w, v } = playerWith(CASES.guns);
+    expect(speedNotes(w, v, maxSpeedSteps(w, v)).join(' ')).toContain('one total, not a cost per gun');
   });
 });
 

@@ -108,18 +108,20 @@ export class MaxSpeedView {
   render(maxSpeed: string, rows: SpeedRow[], notes: string[]): void {
     this.text.textContent = `max ${maxSpeed}`;
     this.rows.replaceChildren(
-      ...rows.map((row) => el('div', { class: 'speed-row' }, row.text)),
+      ...rows.map((row) =>
+        el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, String(row.kph))),
+      ),
     );
-    this.notes.replaceChildren(...(rows.length + notes.length === 0 ? ['No speed penalties'] : notes).map((note) => el('p', {}, note)));
+    this.notes.replaceChildren(...notes.map((note) => el('p', {}, note)));
   }
 }
 
 export class Hud {
   private top = panel("instruments");
   private clockSlot = el("div", { class: "instrument-clock", role: "timer", title: "Day and time" });
-  private speedDial = el("button");
+  private dialSlot = el("div", { class: "speed-dial-slot" });
   private maxSpeed = new MaxSpeedView();
-  private speedSlot = el("div", { class: "speedometer" }, this.speedDial, this.maxSpeed.root);
+  private speedSlot = el("div", { class: "speedometer" }, this.dialSlot, this.maxSpeed.root);
   private readoutSlot = el("div", { class: "readouts" });
   private actionSlot = el("div", { class: "instrument-actions" });
   private condition = new TruckConditionView();
@@ -461,8 +463,7 @@ export class Hud {
       el("span", { class: "speed-value" }, readout.speed),
       createIcon("truck"),
     );
-    this.speedDial.replaceWith(dial);
-    this.speedDial = dial;
+    this.dialSlot.replaceChildren(dial);
     this.maxSpeed.render(readout.maxSpeed, readout.maxSpeedRows, readout.maxSpeedNotes);
   }
 
