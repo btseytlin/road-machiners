@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/CloudAI-X/threejs-skills",
+  "revision": "b1c623076c661fc9b03dac19292e825a5d106823",
+  "license": "none upstream",
+  "files": [
+    {
+      "repo": "CloudAI-X/threejs-skills",
+      "revision": "b1c623076c661fc9b03dac19292e825a5d106823",
+      "source": "skills/threejs-textures/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "2a90ce70931e9b172fa5b70c13fd12e7b6f1600482d3ba0c73d95570fe728b65"
+    }
+  ]
+}

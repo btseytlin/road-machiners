@@ -672,6 +672,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   tank: {
     id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
+  // The convertible's and the Lincoln's tank.
   tankLong: {
     id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },

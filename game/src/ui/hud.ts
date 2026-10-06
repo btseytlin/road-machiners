@@ -4,7 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { bottomLeft, el, isBrowserChord, panel, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   eventText,
@@ -24,9 +24,10 @@ import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
-import { pendingPerkPairs } from "../sim/progress";
+import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
+import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
 // The E key action. ready is false while the truck must stop first.
@@ -61,6 +62,8 @@ type HudActions = {
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
+  toggleHeadlights: () => void;
+  headlightsOn: () => boolean; // the live switch, since the HUD draws the world before the turn while it plays
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -112,13 +115,26 @@ export class Hud {
 
   private readonly dialogue: DialoguePanel;
 
-  constructor(private actions: HudActions) {
+  // The hover panel wins the right column: the radio steps away while the shown hover panel overlaps it. Visibility
+  // keeps the radio's box, so the step-away never changes what it measures.
+  private keepRadioClear = (): void => {
+    const shown = this.info.style.display !== "none";
+    const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
+    this.radio.root.classList.toggle("away", away);
+  };
+
+  constructor(private actions: HudActions, private radio: RadioPanel) {
     this.dialogue = new DialoguePanel(actions.dialogue);
     bottomLeft().append(this.row);
     this.row.prepend(this.condition.root);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
+    // Any change in the hover panel's size or the dock's, or a layout switch, rechecks the radio.
+    const observer = new ResizeObserver(this.keepRadioClear);
+    observer.observe(this.info);
+    observer.observe(rightDock());
+    window.addEventListener("resize", this.keepRadioClear);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.stranded.style.display = "none";
@@ -331,8 +347,16 @@ export class Hud {
     );
   }
 
-  // The character button, marked while a perk pair waits for a pick.
+  // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const headlights = createSwitch({
+      on: "Lights on",
+      off: "Lights off",
+      checked: this.actions.headlightsOn(),
+      key: "L",
+      title: "Headlights [L]",
+      onclick: () => this.actions.toggleHeadlights(),
+    });
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
@@ -352,21 +376,22 @@ export class Hud {
       },
       "Cool engine [G]",
     );
-    return [overdrive, douse];
+    return [headlights, overdrive, douse];
   }
 
+  // The character button, marked while a perk pair waits for a pick or the XP pool pays for a rank.
   private characterButton(w: World, busy: boolean): HTMLElement {
-    const perkOpen = pendingPerkPairs(w).length > 0;
+    const marked = pendingPerkPairs(w).length > 0 || affordableRanks(w).length > 0;
     return el(
       "button",
       {
         class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
-        title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
+        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
       },
       createIcon("driver"),
-      perkOpen ? "! [C]" : "[C]",
+      marked ? "! [C]" : "[C]",
     );
   }
 
@@ -488,6 +513,7 @@ export class Hud {
       if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
     this.log.add(w.turn, lines);
+    this.radio.hear(w);
   }
 
   // A log line from the UI itself, not from a sim event.

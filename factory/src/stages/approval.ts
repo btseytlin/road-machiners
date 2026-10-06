@@ -1,8 +1,10 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
+import { appendLedger } from '../ledger';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
+import { BRANCH, FEEDBACK_HEADING, QUESTION_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
 import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, workDir } from './common';
+import { releaseBundle } from './bundle';
 import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -19,20 +21,36 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     delete builds[String(issue)];
     const approvedResolving = { ...state.approvedResolving };
     delete approvedResolving[String(issue)];
-    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving };
+    const testPhase = { ...state.testPhase };
+    delete testPhase[String(issue)];
+    // A reply to a closed post can no longer be routed, so it must not turn into a failure later.
+    const unroutedReplies = Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.issue !== issue));
+    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase, unroutedReplies };
   });
 }
 
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
-  const message = await mergeOrResolve(ctx, issue, item.title, by, baseBranchFor(ctx, item.labels));
+  const base = baseBranchFor(ctx, item.labels);
+  if (base !== HOTFIX_BASE && !(String(issue) in readState(ctx.statePath).approvedResolving)) return harden(ctx, issue, by, base);
+  const message = await mergeOrResolve(ctx, issue, item.title, by, base);
   if (message === null) return;
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
+}
+
+// The committee approved a preview, which had no review yet. The card goes back to Testing to harden under the same approver,
+// and the checks after it queue the merge with no new post. A hotfix hardened before its post, so it merges at once instead.
+async function harden(ctx: Ctx, issue: number, by: string, base: string): Promise<void> {
+  forgetPosts(ctx, issue, true);
+  updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into ${base} by itself, with no new post.`);
+  await ctx.github.move(issue, 'Testing');
+  ctx.log('approve', issue, `approved by ${by}, back to Testing to harden`);
 }
 
 // Parallel work moves the base on after testing, so the branch may conflict with it. That is routine work, not an incident.
@@ -77,14 +95,28 @@ async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: str
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
 
-// Feedback wins over an approval queued for the same issue, since the card leaves Approval. Returns whether it dropped one.
-export async function feedback(ctx: Ctx, issue: number, by: string, text: string): Promise<boolean> {
+// A routed committee reply. Every route lands on the issue with its route, and the ledger records it.
+// An answer leaves the card and its post as they are. A patch or a redesign wins over an approval queued for the same issue,
+// since the card leaves Approval. Returns whether it dropped one.
+export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: string, route: Route): Promise<boolean> {
   await requireApproval(ctx, issue);
-  await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}:\n\n${text}`);
-  await ctx.github.move(issue, 'Design');
-  const dropped = String(issue) in readState(ctx.statePath).pendingApprovals;
+  const state = readState(ctx.statePath);
+  // Checked before anything is written, so a refused patch leaves no comment or ledger line behind.
+  const played = route === 'patch' ? playedBuild(state, issue) : null;
+  await ctx.github.comment(issue, `${route === 'answer' ? QUESTION_HEADING : FEEDBACK_HEADING}\n\nFrom ${by}, routed as ${route}:\n\n${text}`);
+  appendLedger(ctx.cfg.home, { kind: 'route', issue, route, by, at: ctx.now().toISOString() });
+  if (route === 'answer') return false;
+  if (played !== null) updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));
+  await ctx.github.move(issue, route === 'patch' ? 'Implementation' : 'Design');
   forgetPosts(ctx, issue, true);
-  return dropped;
+  return String(issue) in state.pendingApprovals;
+}
+
+// The patch checks its diff against the build the committee played, so the card keeps that commit.
+function playedBuild(state: FactoryState, issue: number): string {
+  const played = state.builds[String(issue)];
+  if (played === undefined) throw new Error(`Issue #${issue} has no recorded build, so a patch has nothing to start from`);
+  return played;
 }
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
@@ -96,4 +128,5 @@ export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
   await ctx.github.close(issue, 'not planned');
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
+  await releaseBundle(ctx, issue, 'was denied');
 }
