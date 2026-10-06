@@ -234,7 +234,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     expect(c.trail).toHaveLength(0);
     expect(c.defeat).toBeUndefined();
     const frames: Parameters<typeof addRopeFrames>[2] = {};
-    addRopeFrames(before, after, frames);
+    addRopeFrames(before, after, frames, {});
     expect(frames[client.id]).toHaveLength(TURN_STEPS);
   });
 });

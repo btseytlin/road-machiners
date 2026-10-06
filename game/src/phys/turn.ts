@@ -17,7 +17,7 @@ import { setDownSpot } from '../sim/steering';
 import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
 import { angleDiff, dist, lerp } from '../sim/vec';
 import { exploreFrom } from '../sim/vision';
-import { bodyState, GROUND, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
+import { bodyState, GROUND, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, restWheels, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -93,7 +93,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
     applyTurn(w, r);
     for (const v of far) {
       advanceFar(w, v);
-      r.frames[v.id] = trailFrames(w, v);
+      r.frames[v.id] = trailFrames(w, v, restWheels(v.chassisId));
     }
     exploreAlong(w);
     done(r);

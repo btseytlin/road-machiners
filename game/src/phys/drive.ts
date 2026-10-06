@@ -19,12 +19,12 @@ import { routeBlockers } from '../sim/ai';
 import { DECKS, type Deck } from '../sim/bridge';
 import { deckEnds, groundAt, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
-import type { MoveOrder, Obstacle, Vehicle, World } from '../sim/types';
+import type { MoveOrder, Obstacle, Pose, Vehicle, World } from '../sim/types';
 import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame, type WheelFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -732,10 +732,13 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
 // A vehicle standing on the ground at its sim pose, wheels at rest. For vehicles that have not
 // driven a turn yet, such as ones that spawned at the end of the last turn.
 export function restFrame(w: World, v: Vehicle): VehicleFrame {
-  const b = bodyOf(v.chassisId);
   const q = headingQuat(v.heading);
-  const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
-  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
+  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels: restWheels(v.chassisId) };
+}
+
+// Wheels standing still at rest height, in wheelMounts order.
+export function restWheels(chassisId: string): WheelFrame[] {
+  return wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
 }
 
 // Frames for a vehicle that jumped this turn, with no trail to follow: it stands at its sim pose all turn.
@@ -744,21 +747,44 @@ export function restFrames(w: World, v: Vehicle): VehicleFrame[] {
 }
 
 // Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
-// ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
-export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
+// ending on its sim pose. Far vehicles and trucks on a rope get these so the view moves them smoothly, like driven
+// ones. Each wheel rolls by the distance its mount travels along the body's heading, from the `start` wheels.
+export function trailFrames(w: World, v: Vehicle, start: WheelFrame[]): VehicleFrame[] {
   const last = v.trail.length - 1;
   if (last < 1) throw new Error(`Vehicle ${v.id} has no trail to frame`);
+  const b = bodyOf(v.chassisId);
+  const mounts = wheelMounts(b);
+  if (start.length !== mounts.length) throw new Error(`Vehicle ${v.id} starts with ${start.length} wheels, not ${mounts.length}`);
+  const spin = start.map((wheel) => wheel.spin);
+  let prev = mounts.map((m) => mountPoint(v.trail[0], m));
   const frames: VehicleFrame[] = [];
   for (let i = 1; i <= TURN_STEPS; i++) {
     const t = (i / TURN_STEPS) * last;
     const k = Math.min(Math.floor(t), last - 1);
     const f = t - k;
     const a = v.trail[k];
-    const b = v.trail[k + 1];
-    const heading = a.heading + angleDiff(a.heading, b.heading) * f;
-    frames.push(restFrame(w, { ...v, pos: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, heading }));
+    const c = v.trail[k + 1];
+    const pose = { x: a.x + (c.x - a.x) * f, y: a.y + (c.y - a.y) * f, heading: a.heading + angleDiff(a.heading, c.heading) * f };
+    const at = mounts.map((m) => mountPoint(pose, m));
+    const frame = restFrame(w, { ...v, pos: { x: pose.x, y: pose.y }, heading: pose.heading });
+    frame.wheels = frame.wheels.map((wheel, n) => {
+      spin[n] += (((at[n].x - prev[n].x) * Math.cos(pose.heading) + (at[n].y - prev[n].y) * Math.sin(pose.heading)) * S * ROLL_SIGN) / b.wheelRadius;
+      return { ...wheel, spin: spin[n] };
+    });
+    prev = at;
+    frames.push(frame);
   }
   return frames;
+}
+
+// Rapier's wheelRotation grows by this sign when a wheel rolls forward.
+const ROLL_SIGN = 1;
+
+// A wheel mount in map tiles for a truck at a pose. Body +x is the nose and +z the truck's right.
+function mountPoint(p: Pose, m: { x: number; z: number }): Vec {
+  const x = m.x / S;
+  const z = m.z / S;
+  return { x: p.x + Math.cos(p.heading) * x - Math.sin(p.heading) * z, y: p.y + Math.sin(p.heading) * x + Math.cos(p.heading) * z };
 }
 
 // Height of the body center for a truck standing at its sim position with springs at rest.

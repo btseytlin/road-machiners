@@ -15,7 +15,7 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
-import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
+import { buildDrive, freeDrive, initPhysics, restWheels, routeAim, simulateTurn, syncDrive, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
@@ -752,5 +752,55 @@ describe('stranded trucks', () => {
     const me = after.vehicles[0];
     const hauler = after.vehicles.find((v) => v.id === npc.id)!;
     expect(dist(me.pos, hauler.pos)).toBeGreaterThan(chassisDef(me.chassisId).radius + chassisDef('hauler').radius);
+  });
+});
+
+describe('rope frames roll the wheels', () => {
+  it('rolls a wheel in the same direction as a truck driving forward', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.order = { kind: 'stopAt', dest: { x: 40, y: 30 } };
+    const d = buildDrive(w);
+    const result = simulateTurn(d, w);
+    const frames = result.frames[me.id];
+    expect(frames[frames.length - 1].pos.x).toBeGreaterThan(frames[0].pos.x);
+    const drove = frames[frames.length - 1].wheels[2].spin - frames[0].wheels[2].spin;
+    const dx = (frames[frames.length - 1].pos.x - frames[0].pos.x) / bodyOf(me.chassisId).wheelRadius;
+    freeDrive(d);
+
+    const rope = emptyWorld({ x: 30, y: 30 });
+    const towed = rope.vehicles[0];
+    towed.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    const roped = trailFrames(rope, towed, restWheels(towed.chassisId));
+    expect(Math.sign(roped[roped.length - 1].wheels[2].spin)).toBe(Math.sign(drove));
+    expect(Math.sign(drove)).toBe(Math.sign(dx));
+  });
+
+  it('rolls every wheel by the distance driven over its radius, from the given spin', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    const start = restWheels(v.chassisId).map((wheel) => ({ ...wheel, spin: 2 }));
+    const frames = trailFrames(w, v, start);
+    expect(frames).toHaveLength(TURN_STEPS);
+    const roll = PHYSICS.metersPerTile / bodyOf(v.chassisId).wheelRadius;
+    for (const wheel of frames[frames.length - 1].wheels) expect(Math.abs(wheel.spin - 2)).toBeCloseTo(roll, 6);
+    expect(Math.abs(frames[0].wheels[0].spin - 2)).toBeLessThan(roll / TURN_STEPS + 1e-6);
+  });
+
+  it('turns the outer wheels more than the inner ones in a bend', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 31, heading: Math.PI / 2 }];
+    const frames = trailFrames(w, v, restWheels(v.chassisId));
+    const last = frames[frames.length - 1].wheels;
+    expect(Math.abs(last[2].spin - last[3].spin)).toBeGreaterThan(0.1);
+  });
+
+  it('throws when the start wheels do not match the chassis', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    expect(() => trailFrames(w, v, [])).toThrow(/wheels/);
   });
 });
