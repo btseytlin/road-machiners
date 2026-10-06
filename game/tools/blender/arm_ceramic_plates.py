@@ -1,7 +1,7 @@
 """Tiled ceramic plates for the 'ceramicPlates' armor.
 
 A front-edge row of 2 cells: 0.97 m across, 0.65 m deep, outer face at +X. A steel frame on the outer edge holds a
-4 by 4 grid of pale ceramic tiles, 0.9 m tall. One tile is cracked out. The frame cap takes the faction paint.
+4 by 4 grid of pale ceramic tiles, 0.9 m tall, on a foot with short gussets behind. One tile is cracked out. The frame cap takes the faction paint.
 Run: blender --background --python tools/blender/arm_ceramic_plates.py -- public/models/arm_ceramic_plates.glb [tmp/arm_ceramic_plates.png]
 """
 
@@ -32,8 +32,9 @@ def build_row(kit: Kit, n: int, tiles: tuple[str, str]) -> None:
     kit.box("backing", (0.05, half * 2, HEIGHT), (BACK_X, 0, HEIGHT / 2), "metal")
     kit.box("cap", (0.12, half * 2, 0.05), (BACK_X + 0.03, 0, HEIGHT + 0.025), "paint")
     kit.box("sill", (0.12, half * 2, 0.05), (BACK_X + 0.03, 0, 0.025), "metal")
+    kit.box("foot", (0.16, half * 2, 0.05), (BACK_X - 0.1, 0, 0.025), "metal")
     for y in (-half + 0.1, half - 0.1):
-        strut(kit, f"brace{y:.2f}", (BACK_X - 0.02, y, HEIGHT * 0.7), (BACK_X - 0.42, y, 0.02), 0.05, "metal")
+        strut(kit, f"gusset{y:.2f}", (BACK_X - 0.04, y, 0.3), (BACK_X - 0.13, y, 0.05), 0.05, "metal")
     tile_w = (half * 2 - GAP * (cols + 1)) / cols
     tile_h = (HEIGHT - 0.05 - GAP * (ROWS + 1)) / ROWS
     for c in range(cols):

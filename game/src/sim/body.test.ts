@@ -3,7 +3,7 @@ import { CHASSIS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { partDef, type CoreDef } from '../data/parts';
 import BASELINE from './body-baseline.json';
-import { bodyOf, cellCenter, cellRect, engineAnchor, lanesAt, restOn, surfaceAt } from './body';
+import { bodyOf, cellCenter, cellRect, engineAnchor, hulkBoxes, lanesAt, restOn, surfaceAt } from './body';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
 
@@ -268,5 +268,24 @@ describe('resting parts', () => {
     }
         console.log(`resting parts: ${leaning} of ${total} footprints lean on a slope, ${perched} find no rest and are hidden unless always drawn, floating ${[0.1, 0.2, 0.4].map((lim) => `${floats.filter((f) => f > lim).length} more than ${lim} m`).join(', ')}`);
     expect(problems).toEqual([]);
+  });
+});
+
+describe('hulk boxes', () => {
+  it('stand every chassis on the ground from its chassis bottom', () => {
+    for (const id of ids) {
+      const boxes = hulkBoxes(id);
+      expect(Math.min(...boxes.map((b) => b.z0)), id).toBeCloseTo(0, 9);
+      expect(boxes.every((b) => b.z1 > b.z0), id).toBe(true);
+    }
+  });
+
+  it('keep each chassis outline, so a bus hulk is longer than a buggy hulk', () => {
+    const shapes = TRUCK_SHAPES as unknown as Record<string, { boxes: { x0: number; x1: number; y0: number; y1: number }[] }>;
+    const outline = (boxes: readonly { x0: number; x1: number; y0: number; y1: number }[]) => boxes.map((b) => [b.x0, b.x1, b.y0, b.y1]);
+    const length = (id: string) => Math.max(...hulkBoxes(id).map((b) => b.x1)) - Math.min(...hulkBoxes(id).map((b) => b.x0));
+
+    for (const id of ids) expect(outline(hulkBoxes(id)), id).toEqual(outline(shapes[`base_${id}`].boxes));
+    expect(length('bus')).toBeGreaterThan(length('buggy') + 2);
   });
 });

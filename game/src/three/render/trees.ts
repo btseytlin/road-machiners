@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { propPose, propReach, type PropPose } from '../../sim/mapgen';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { propBase } from '../../sim/bridge';
+import type { Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { instancedModel } from './models';
@@ -53,7 +54,7 @@ export class TreeInstances {
 
   private addChunk(scope: RenderScope, terrain: Terrain, list: readonly Landmark[]): void {
     const placements = list.map((o) => {
-      const g = posed(terrain, propPose(o));
+      const g = posed(propBase(terrain, o), propPose(o));
       g.updateMatrix();
       return g.matrix;
     });
@@ -70,11 +71,11 @@ export class TreeInstances {
   }
 }
 
-// A group at the prop's pose. A three.js turn by -yaw points the model's +X at map direction yaw. Model
-// sideways is three.js z and model up is three.js y.
-export function posed(t: Terrain, pose: PropPose): THREE.Group {
+// A group at the prop's pose, standing at base height units: propBase() in src/sim/bridge.ts. A three.js turn by -yaw
+// points the model's +X at map direction yaw. Model sideways is three.js z and model up is three.js y.
+export function posed(base: number, pose: PropPose): THREE.Group {
   const g = new THREE.Group();
-  g.position.set(pose.pos.x * S, heightAt(t, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
+  g.position.set(pose.pos.x * S, base * S, pose.pos.y * S);
   g.rotation.y = -pose.yaw;
   g.scale.set(pose.scale.x, pose.scale.z, pose.scale.y);
   return g;

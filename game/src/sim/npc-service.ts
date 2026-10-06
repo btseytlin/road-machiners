@@ -9,7 +9,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isDefeated, refitAtHome } from './defeat';
 import { scrapFuel, serviceAtCamp, serviceAtStall, serviceVehicle } from './economy';
-import { dropGoal, finishGoal, isBroke, noteTown, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
+import { dropGoal, finishGoal, isBroke, noteShop, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
 import { fitToHunt, getKnownSite, huntsPrey, npcProfile, type NpcProfile } from './npc-decisions';
 import { getResources } from './resources';
 import { canUseSite, type Site } from './sites';
@@ -49,7 +49,7 @@ function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, s
 export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   const profile = npcProfile(vehicle);
   serviceAt(world, vehicle, site);
   scrapFuelIfBroke(world, vehicle, profile, site.id);

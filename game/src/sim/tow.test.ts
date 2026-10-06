@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { BEACON, TOW } from '../data/tow';
-import { SKILL_EFFECTS, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import { MAX_RANK, SKILL_EFFECTS, XP_SOURCES } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
@@ -38,6 +38,8 @@ const MID_FAR: Vec = { x: 80, y: 330 };
 
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
+  // No region spawns, so NPCs elsewhere on the map never cross a long tow.
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   w.player.fuel = 0;
   const trader = withTower(w, 'trader', 'traders', 'hauler', traderPos);
   return { w, trader };
@@ -594,6 +596,41 @@ describe('tow deals', () => {
     expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
   });
+
+  it('a tower that dropped the tow for danger waits before it offers again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    for (let i = 0; i < 5; i++) w = endTurn(w, testDrive);
+    const holder = playerTow(w)!.holder;
+    dropTow(w, playerTow(w)!, 'danger');
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, holder));
+
+    // The sibling test shows the same tower offers again within 30 turns. A long wait must hold it back.
+    const wait = TOW.dangerWait;
+    TOW.dangerWait = 200;
+    try {
+      expect(playerTow(runUntil(w, 30, (x) => playerTow(x) !== null).w)).toBeNull();
+    } finally {
+      TOW.dangerWait = wait;
+    }
+  });
+
+  // A promise kept for a later breakdown charged the old fee for a far shorter tow.
+  it('a tower forgets its promise once the player drives again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    const tower = playerTow(w)!.holder;
+    dropTow(w, playerTow(w)!, 'danger');
+    w.player.fuel = 30;
+
+    w = endTurn(w, testDrive);
+
+    expect(isStranded(w, playerVehicle(w))).toBe(false);
+    expect(stateOf(w, 'towPromise', tower, w.player.vehicleId)).toBeNull();
+  });
 });
 
 describe('free tow for a broke player', () => {
@@ -654,8 +691,8 @@ describe('free tow for a broke player', () => {
     expect(towData(playerTow(r.w)!).fee).toBe(0);
   });
 
-  it('never names a paid fee of 0, even at the top social level', () => {
-    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * (XP_TO_REACH.length - 1))).toBeGreaterThan(1);
+  it('never names a paid fee of 0, even at the top social rank', () => {
+    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * MAX_RANK)).toBeGreaterThan(1);
   });
 });
 
@@ -789,9 +826,9 @@ describe('emergency beacon', () => {
 });
 
 describe('social on tow fees', () => {
-  it('prices the tow lower for a player at level 5', () => {
+  it('prices the tow lower for a player at rank 5', () => {
     const s = stranded();
-    s.w.player.skills.social = XP_TO_REACH[5];
+    s.w.player.ranks.social = 5;
     const w = offered(s);
     const me = playerVehicle(w);
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -803,7 +840,7 @@ describe('social on tow fees', () => {
 
   it('cuts a capped fee too', () => {
     const s = stranded(FAR, { x: FAR.x + 10, y: FAR.y });
-    s.w.player.skills.social = XP_TO_REACH[5];
+    s.w.player.ranks.social = 5;
     expect(feeOf(offered(s))).toBe(Math.round(TOW.maxFee * (1 - 5 * SKILL_EFFECTS.social.towFee)));
   });
 });

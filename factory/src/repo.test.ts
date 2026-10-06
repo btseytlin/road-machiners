@@ -248,6 +248,16 @@ describe('work clones', () => {
     expect(await repo.isMerged(commit, 'factory/issue-8')).toBe(true);
   });
 
+  it('keeps the mounted reference image folder out of every commit', async () => {
+    const { home, repo } = await setup();
+    const work = join(home, 'work', 'issue-11');
+    await repo.prepareWorkClone('factory/issue-11', 'dev', work);
+    mkdirSync(join(work, '.factory-media'), { recursive: true });
+    writeFileSync(join(work, '.factory-media', 'ref-a.png'), 'png');
+    await git(work, 'add', '-A');
+    expect(await git(work, 'status', '--short')).toBe('');
+  });
+
   it('takes a force-committed task file out of the branch and keeps it on disk', async () => {
     const { home, repo } = await setup();
     const work = join(home, 'work', 'issue-10');

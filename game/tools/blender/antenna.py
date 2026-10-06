@@ -25,11 +25,13 @@ def build(kit: Kit) -> None:
     whip = kit.cylinder("whip", 0.018, HEIGHT - 0.2, (0, 0, 0.2 + (HEIGHT - 0.2) / 2), "metal_light", vertices=4)
     taper(whip, 0.5)
     kit.box("flag", (0.12, 0.01, 0.08), (-0.07, 0, HEIGHT - 0.06), "red")
+    kit.cylinder("bulb", 0.04, 0.08, (0, 0, HEIGHT - 0.01), "radio_light", vertices=6)
 
 
 def main() -> None:
     args = parse_args()
-    kit = Kit(COLORS, SEED)
+    # radio_light is PAL.radioLight.off in src/render/palette.ts; the view swaps it for its own material.
+    kit = Kit({**COLORS, "radio_light": 0x4A1A14}, SEED)
     build(kit)
     kit.export("antenna", args, view_size=2.0)
 

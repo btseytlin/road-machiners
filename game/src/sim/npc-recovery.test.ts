@@ -123,7 +123,7 @@ describe('NPC gameplay recovery', () => {
       return JSON.stringify(topGoal(me)) === JSON.stringify(work);
     });
     expect(resumed).toBeGreaterThan(0.8);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it.each(['scavenger', 'trader'])('allows a retreating %s to return fire', (template) => {
     const { world, npc } = createScenario(template);

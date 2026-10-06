@@ -25,7 +25,7 @@ import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
 import { lootRobbed } from "./npc-activities";
 import { liesUp } from "./npc-service";
-import { wantsLoot } from "./npc-decisions";
+import { isWeak, wantsLoot } from "./npc-decisions";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
@@ -124,6 +124,13 @@ export function knockOutNpc(world: World, v: Vehicle): void {
   world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
   if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
+  sendToLoot(world, v, strippers(world, v));
+}
+
+// The NPCs that beat the driver and want its truck's cargo and parts: raiders, and drivers that rob. A winner that is
+// itself hurt or stranded leaves the truck alone.
+function strippers(world: World, victim: Vehicle): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain && victim.defeat!.foes.includes(v.id) && !isKnockedOut(v) && !isWeak(world, v) && (v.faction === "raiders" || wantsLoot(world, v, victim)));
 }
 
 // The driver is out, so the truck brakes to a stop instead of coasting on. Every gun aimed at it drops its order,

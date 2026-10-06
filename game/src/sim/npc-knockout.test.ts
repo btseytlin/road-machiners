@@ -315,3 +315,33 @@ describe('cab knock', () => {
     expect(buggy.defeat).toBeUndefined();
   });
 });
+
+describe('winners strip the trucks they knock out', () => {
+  function duel(): { w: World; winner: Vehicle; loser: Vehicle } {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const winner = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    winner.brain = npcBrain('buggy', winner.pos, ['raider']);
+    const loser = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    loser.brain = npcBrain('trader', loser.pos, ['trader']);
+    loser.lastHitBy = winner.id;
+    loser.brain.attackers[winner.id] = true;
+    return { w, winner, loser };
+  }
+
+  it('sends a raider that knocked out another driver to loot the truck', () => {
+    const { w, winner, loser } = duel();
+
+    knockOutNpc(w, loser);
+
+    expect(topGoal(winner)).toMatchObject({ kind: 'loot', targetId: loser.id });
+  });
+
+  it('leaves a hurt raider out of the looting', () => {
+    const { w, winner, loser } = duel();
+    corePart(winner, 'cab').hp = 1;
+
+    knockOutNpc(w, loser);
+
+    expect(topGoal(winner)?.kind).not.toBe('loot');
+  });
+});
