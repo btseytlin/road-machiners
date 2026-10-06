@@ -28,6 +28,20 @@ it('streams new ledger lines once and keeps private routes out of public history
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
+it('reads past committee control lines without publishing them', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'control', action: 'move', issue: 12, by: 'PRIVATE', reason: 'PRIVATE reason', at: '2026-10-10T11:00:00Z' });
+    appendLedger(home, { kind: 'job', id: 'job-1', stage: 'design', issue: 12, startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T11:00:00Z', outcome: 'done', agents: [] });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const summary = history.summarize(now, 1);
+    expect(summary.completed).toBe(1);
+    expect(JSON.stringify(summary)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 it('reports token coverage as missing for older cost-only records', async () => {
   const home = mkdtempSync(resolve('tmp/history-'));
   try {

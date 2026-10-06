@@ -160,7 +160,10 @@ function addRetry(summary: Summary, jobs: Job[], job: Job): void {
   for (const agent of job.agents) row.cost = (row.cost ?? 0) + agent.costUsd;
 }
 function readPreviousOutcome(jobs: Job[], id: string): string { return jobs.find((job) => job.id === id)?.outcome ?? 'unknown'; }
-function retainRecord(line: LedgerLine): boolean { return line.kind !== 'observation' || line.data.type === 'scheduler'; }
+function retainRecord(line: LedgerLine): boolean {
+  if (line.kind === 'control') return false;
+  return line.kind !== 'observation' || line.data.type === 'scheduler';
+}
 type SchedulerPoint = Observation & { data: SchedulerData };
 function addWaitInterval(summary: Summary, point: SchedulerPoint, duration: number): void {
   if (point.data.report === null) return;
@@ -196,7 +199,7 @@ function addWaiting(summary: Summary, records: LedgerLine[], now: Date, days: nu
 
 function parseHistoryRecord(text: string): LedgerLine {
   const line = JSON.parse(text) as LedgerLine;
-  if (!['job', 'route', 'post', 'observation'].includes(line.kind)) throw new Error('Invalid ledger line');
+  if (!['job', 'route', 'post', 'observation', 'control'].includes(line.kind)) throw new Error('Invalid ledger line');
   if (!Number.isFinite(Date.parse(lineTime(line)))) throw new Error('Invalid ledger timestamp');
   return line;
 }
