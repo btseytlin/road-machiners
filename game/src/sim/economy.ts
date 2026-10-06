@@ -135,7 +135,7 @@ export function affordableBuyCount(
   return count;
 }
 
-// Social grows from profit over the average price paid. A sale at a loss teaches nothing. The target is the buyer, a
+// Social XP comes from profit over the average price paid. A sale at a loss teaches nothing. The target is the buyer, a
 // shop or a truck, and the good.
 function practiceSale(world: World, buyer: string, good: string, price: number, count: number): void {
   const profit = (price - (world.player.costBasis[good] ?? 0)) * count;

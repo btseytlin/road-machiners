@@ -53,7 +53,7 @@ const SEAT_CAB: Record<string, string> = {
 // Chassis values before the layout rules. The rules move deck cells, and base makes up the price.
 const VALUES = {
   scout: 2444, hauler: 3676, buggy: 1928, wagon: 3022, courier: 2320, van: 3080, longbed: 5384,
-  carrier: 4876, tractor: 4382, jeep: 2186, convertible: 2992, bus: 3800, loader: 5088,
+  carrier: 4876, tractor: 4382, jeep: 2186, convertible: 2992, bus: 3800, loader: 5088, niva: 3148, bukhanka: 3450, lincoln: 4288,
 };
 
 // Chassis with no free 2 by 2 block of deck cells, with the reason. A stale entry fails the test.
@@ -230,5 +230,35 @@ describe('shown cores', () => {
   it('shows the transmission and the tank on the junk-built trucks and hides them on the others', () => {
     const shown = Object.entries(CHASSIS).filter(([, c]) => c.showsCores).map(([id]) => id).sort();
     expect(shown).toEqual(['courier', 'scout', 'wagon']);
+  });
+});
+
+describe('chassis tradeoffs', () => {
+  const count = (c: ChassisDef, letter: string): number => c.layout.reduce((n, row) => n + [...row].filter((ch) => ch === letter).length, 0);
+  const armorCells = (c: ChassisDef): number => [...ARMOR].reduce((n, letter) => n + count(c, letter), 0);
+  const coreHp = (c: ChassisDef): number => c.core.reduce((n, core) => n + partDef(core.defId).hp, 0);
+  const axes = (c: ChassisDef): number[] => [c.maxSpeed, c.accel, c.brake, c.turnSlow, c.turnFast, count(c, 'D'), armorCells(c), c.ratedMass, coreHp(c), c.fuelCap / c.fuelPerTile];
+
+  // True when a is at least as good as b on every stat and better on one.
+  function chassisDominates(a: ChassisDef, b: ChassisDef): boolean {
+    const x = axes(a);
+    const y = axes(b);
+    return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
+  }
+
+  it('flags a strictly better copy of a chassis', () => {
+    const better = { ...CHASSIS.van, maxSpeed: CHASSIS.van.maxSpeed + 1 };
+    expect(chassisDominates(better, CHASSIS.van)).toBe(true);
+    expect(chassisDominates(CHASSIS.van, better)).toBe(false);
+  });
+
+  it('keeps every chassis from issue 149 from matching or beating another of its tier on every stat', () => {
+    for (const id of ['lincoln', 'niva', 'bukhanka']) {
+      for (const other of Object.values(CHASSIS).filter((c) => c.tier === CHASSIS[id].tier && c.id !== id)) {
+        expect(chassisDominates(CHASSIS[id], other), `${id} beats ${other.id}`).toBe(false);
+        expect(chassisDominates(other, CHASSIS[id]), `${other.id} beats ${id}`).toBe(false);
+        expect(axes(CHASSIS[id]), `${id} matches ${other.id}`).not.toEqual(axes(other));
+      }
+    }
   });
 });

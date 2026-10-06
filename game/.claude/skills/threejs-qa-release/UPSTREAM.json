@@ -1,0 +1,48 @@
+{
+  "repository": "https://github.com/majidmanzarpour/threejs-game-skills",
+  "revision": "8286774b22a2566bf894dbc825825c16921866af",
+  "files": [
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "21042d59f3983e487c436f77ce3be0cba6ac4c183e49b40ed495de3a1cdd2d61"
+    },
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/agents/openai.yaml",
+      "local": "agents/openai.yaml",
+      "sha256": "f84fbc43475eac4019ed23606c2f751b6e3f1a2cf670758655d9852ce2e64004"
+    },
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/references/playtest-bot.md",
+      "local": "references/playtest-bot.md",
+      "sha256": "5a158154c1735934f9f2124e259439246917f32164297745c46eafa13976d926"
+    },
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/references/release-checks.md",
+      "local": "references/release-checks.md",
+      "sha256": "78142b3b6eeb19be436ee1564ab923b0cdd3c2702e906e37a3a802c96166f236"
+    },
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/references/visual-test-harness.md",
+      "local": "references/visual-test-harness.md",
+      "sha256": "5d0c00fe0c47c5d49e522f2eaa7763589f95a9c522e2f0039db137c654c85f5b"
+    },
+    {
+      "repo": "majidmanzarpour/threejs-game-skills",
+      "revision": "8286774b22a2566bf894dbc825825c16921866af",
+      "source": "skills/threejs-qa-release/scripts/inspect-threejs-canvas.mjs",
+      "local": "scripts/inspect-threejs-canvas.mjs",
+      "sha256": "a906affed3ad8f1efb5ab3df87f7e673745d59579e2a46b39997f719ff9a97d9"
+    }
+  ]
+}

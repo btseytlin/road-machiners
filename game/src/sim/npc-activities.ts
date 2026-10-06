@@ -23,6 +23,8 @@ import {
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
+import { standingPressures } from './market';
+import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
@@ -260,8 +262,10 @@ function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: 
 }
 
 // A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall, a broke driver only in a town.
+// A truck stranded for good goes where serveStranded refits it, since no stall fits an engine.
 function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
+  if (isStrandedForGood(vehicle)) return servingSiteIds(profile);
   return pumpsOf(vehicle, profile, isBroke(world, vehicle));
 }
 
@@ -462,7 +466,7 @@ function patchInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string
 // The goal a patch deal gives an NPC party: the patcher drives to the client, and the client waits parked.
 export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: boolean): void {
   const goal = patcher
-    ? createActivity('patch', other.id, { ...other.pos }, 'patch a stranded truck')
+    ? createActivity('patch', other.id, { ...other.pos }, 'patch a truck')
     : createActivity('patch', other.id, null, 'wait for a patch');
   pushGoal(world, npc, goal);
 }
@@ -1019,7 +1023,7 @@ export function noteHurt(world: World): void {
 // ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
 
 // Runs each turn. A driver with no progress for NPC_BEHAVIOR.stallTurns turns gives up its top goal, or with no goal
-// drives off to explore. Each give-up logs a stall event, and the stuck soak test fails on any.
+// drives off to explore. Each give-up logs a stall event, and the progression recorder fails on any.
 export function watchStalls(world: World): void {
   for (const v of world.vehicles) {
     if (!v.brain) continue;
@@ -1206,15 +1210,15 @@ function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof g
   return site;
 }
 
-// A driver remembers the last town it did business in, and tells its prices on the radio.
-function noteTown(vehicle: Vehicle, siteId: string): void {
-  if (REGION.towns.some((t) => t.id === siteId)) vehicle.brain!.lastTown = siteId;
+// A driver remembers the prices of a shop it did business at, and tells of them on the radio.
+function noteShop(world: World, vehicle: Vehicle, siteId: string): void {
+  if (siteId in SHOPS) remember(world, vehicle, { kind: 'prices', shop: siteId, pressure: standingPressures(world, siteId) });
 }
 
 function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   serviceAt(world, vehicle, site);
   scrapFuelIfBroke(world, vehicle, npcProfile(vehicle), site.id);
   finishGoal(world, vehicle, 'finished service');
@@ -1236,10 +1240,8 @@ const topUpAtPump = (world: World, vehicle: Vehicle, siteId: string): void => { 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  noteTown(vehicle, site.id);
-  topUpAtPump(world, vehicle, site.id);
+  ('kind' in site && site.kind === 'camp' ? sellAtCamp : sellVehicleCargo)(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  noteShop(world, vehicle, site.id); topUpAtPump(world, vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }
 
@@ -1248,7 +1250,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
-  noteTown(vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {

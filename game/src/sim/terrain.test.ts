@@ -1,11 +1,12 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES, type DeckSpec, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
 import { PHYSICS } from "../data/physics";
-import { deckById } from "./bridge";
+import { buildDecks, deckById } from "./bridge";
 import {
+  deckSegments,
   deckHeight,
   groundAt,
   heightAt,
@@ -16,12 +17,12 @@ import {
 } from "./terrain";
 import { emptyWorld } from "./testkit";
 import { ROAD_INDEX } from "./road-index";
-import { dist, polylineDist, segmentDist, type Vec } from "./vec";
+import { dist, polylineDist, type Vec } from "./vec";
 import { newWorld } from "./world";
-import { siteGap } from "./sites";
+import { siteEdgeCrossings, siteGap } from "./sites";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
-import { TERRITORIES } from "../data/territory";
+import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
 
 // Several tests below read the start world without changing it (destinations, canyon shape,
 // cliff checks), so they share one.
@@ -136,14 +137,15 @@ describe("terrain grid", () => {
 
   it('puts three dead-end approaches into the Fallen Sun without a road through it', () => {
     const wreck = REGION.locations.find((site) => site.id === 'fallen-sun')!;
-    const entering = REGION.roads.filter((road) => road.some((p) => dist(p, wreck.pos) < wreck.radius));
+    const entering = REGION.roads.filter((road) => road.some((p) => siteGap(wreck, p) < 0));
     expect(entering).toHaveLength(3);
     for (const road of REGION.roads) {
-      const firstInside = road.findIndex((p) => dist(p, wreck.pos) < wreck.radius);
+      const firstInside = road.findIndex((p) => siteGap(wreck, p) < 0);
       const outside = firstInside < 0 ? road : road.slice(0, firstInside);
       // Once a road is inside, it ends there.
-      if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(dist(p, wreck.pos)).toBeLessThan(wreck.radius);
-      for (let i = 1; i < outside.length; i++) expect(segmentDist(wreck.pos, outside[i - 1], outside[i])).toBeGreaterThanOrEqual(wreck.radius);
+      if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(siteGap(wreck, p)).toBeLessThan(0);
+      // Before it enters, no stretch crosses the edge.
+      for (let i = 1; i < outside.length; i++) expect(siteEdgeCrossings(wreck, outside[i - 1], outside[i])).toEqual([]);
     }
   });
 
@@ -313,3 +315,84 @@ describe("the Broken Wing deck on the baked map", () => {
       }
   });
 });
+
+describe("deck heights", () => {
+  const t = TEST_MAP.terrain;
+
+  it("rests both ends of a deck with no rise on the ground, as Canyon Bridge and the Broken Wing deck always did", () => {
+    for (const id of ["canyon-bridge", "broken-wing"]) {
+      const deck = deckById(id);
+      const segments = deckSegments(t, deck);
+      expect(segments).toHaveLength(1);
+      expect([segments[0].h0, segments[0].h1]).toEqual([groundAt(t, deck.from.x, deck.from.y), groundAt(t, deck.to.x, deck.to.y)]);
+    }
+  });
+
+  it("raises each end of a deck by its rise over the ground there", () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    const [{ h0, h1 }] = deckSegments(t, flap);
+
+    expect(h0).toBeCloseTo(groundAt(t, flap.from.x, flap.from.y) + flap.stations[0].rise, 12);
+    expect(h1).toBeCloseTo(groundAt(t, flap.to.x, flap.to.y) + flap.stations[1].rise, 12);
+    expect(flap.stations[1].rise).toBeGreaterThan(0);
+  });
+
+  it("puts the flap's lip, its raised end, at the rise over the ground everywhere across the deck", () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    const lip = flap.length - 1e-6;
+    for (let across = -flap.width / 2 + 0.1; across < flap.width / 2; across += 0.4) {
+      const p = { x: flap.from.x + flap.axis.x * lip - flap.axis.y * across, y: flap.from.y + flap.axis.y * lip + flap.axis.x * across };
+      expect(heightAt(t, p.x, p.y)).toBeCloseTo(groundAt(t, flap.to.x, flap.to.y) + flap.stations[1].rise, 5);
+    }
+  });
+
+  // A ramp, a span and a ramp as one deck, on the baked map's uneven ground.
+  const spec: DeckSpec = {
+    id: "ridge",
+    line: [[100, 0], [108, 1.5], [130, 1.5], [138, 0]].map(([x, rise]) => ({ at: { x, y: 205 }, rise })),
+    width: 8,
+    cut: null,
+    skirt: true,
+  };
+  const [ridge] = buildDecks([spec]);
+
+  it("stands the deck line at each station on the ground there plus its rise (IV2)", () => {
+    for (const s of ridge.stations) expect(deckHeight(t, ridge, s.along)).toBeCloseTo(groundAt(t, s.at.x, s.at.y) + s.rise, 12);
+  });
+
+  it("keeps the deck line continuous across each change of grade, and its pieces end to end (IV2)", () => {
+    for (const s of ridge.stations.slice(1, -1)) expect(deckHeight(t, ridge, s.along - 1e-9)).toBeCloseTo(deckHeight(t, ridge, s.along + 1e-9), 6);
+    const segments = deckSegments(t, ridge);
+    expect(segments).toHaveLength(3);
+    for (let k = 1; k < segments.length; k++) {
+      expect(segments[k].h0).toBe(segments[k - 1].h1);
+      expect(segments[k].from).toEqual(segments[k - 1].to);
+      expect(segments[k].along).toBeCloseTo(segments[k - 1].along + segments[k - 1].length, 12);
+    }
+  });
+
+  it("fails loudly on a distance off the deck", () => {
+    expect(() => deckHeight(t, ridge, -0.1)).toThrow("Deck ridge has no point -0.1 tiles along it");
+    expect(() => deckHeight(t, ridge, ridge.length + 0.1)).toThrow();
+  });
+
+  it("gives a tile on the wing the grade of the piece under its centre", () => {
+    const wing = deckById("fallen-sun-wing");
+    const segments = deckSegments(t, wing);
+    let checked = 0;
+    for (const seg of segments) {
+      const mid = { x: seg.from.x + (wing.axis.x * seg.length) / 2, y: seg.from.y + (wing.axis.y * seg.length) / 2 };
+      const tile = tileAt(t, mid);
+      const centre = { x: (tile % t.size) + 0.5, y: Math.floor(tile / t.size) + 0.5 };
+      const along = (centre.x - wing.from.x) * wing.axis.x + (centre.y - wing.from.y) * wing.axis.y;
+      if (along <= seg.along || along >= seg.along + seg.length) continue;
+      const grade = (seg.h1 - seg.h0) / seg.length;
+      const slope = tileSlope(t, tile);
+      expect(slope.x).toBeCloseTo(grade * wing.axis.x, 12);
+      expect(slope.y).toBeCloseTo(grade * wing.axis.y, 12);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+});
+

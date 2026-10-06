@@ -1,6 +1,5 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
-import { XP_TO_REACH } from "../data/skills";
 import { CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { SHOPS } from "../data/market";
@@ -90,7 +89,7 @@ describe("trade", () => {
     const total = getLotTradePrice(w, w.vehicles[0], "bowl", "salt", held, "sell");
     w = sellGood(w, "salt", held);
     expect(w.player.money - money).toBe(total);
-    expect(w.player.skills.social).toBeGreaterThan(0);
+    expect(w.player.xp).toBeGreaterThan(0);
   });
 
   it("buying raises the local price and selling lowers it", () => {
@@ -105,7 +104,7 @@ describe("trade", () => {
   it("social narrows the spread", () => {
     const w = startAtBowl();
     const before = buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt");
-    w.player.skills.social = XP_TO_REACH[3];
+    w.player.ranks.social = 3;
     expect(
       buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt"),
     ).toBeLessThan(before);
@@ -113,7 +112,7 @@ describe("trade", () => {
 
   it("social at max level cuts the spread by at most half", () => {
     const w = startAtBowl();
-    w.player.skills.social = XP_TO_REACH[5];
+    w.player.ranks.social = 5;
     const spreadAtMax = buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt");
     const w0 = startAtBowl();
     const spreadAtZero = buyPrice(w0, "bowl", "salt") - sellPrice(w0, "bowl", "salt");
@@ -146,12 +145,12 @@ describe("trade", () => {
     }
   });
 
-  it.each([0, XP_TO_REACH[3]])(
-    "selling then buying back 25 units always loses money, at social skill %i",
+  it.each([0, 3])(
+    "selling then buying back 25 units always loses money, at social rank %i",
     (social) => {
       for (const pressureStart of [0, 0.3, -0.3]) {
         const w = longbedAtBowl();
-        w.player.skills.social = social;
+        w.player.ranks.social = social;
         w.shops.bowl.pressure.scrap = pressureStart;
         addGoods(w, w.vehicles[0], "scrap", 25 - (goodsCount(w.vehicles[0]).scrap ?? 0));
 
@@ -162,12 +161,12 @@ describe("trade", () => {
     },
   );
 
-  it.each([0, XP_TO_REACH[3]])(
-    "buying then selling back 25 units always loses money, at social skill %i",
+  it.each([0, 3])(
+    "buying then selling back 25 units always loses money, at social rank %i",
     (social) => {
       for (const pressureStart of [0, 0.3, -0.3]) {
         const w = longbedAtBowl();
-        w.player.skills.social = social;
+        w.player.ranks.social = social;
         w.shops.bowl.pressure.scrap = pressureStart;
 
         const before = w.player.money;
@@ -504,10 +503,10 @@ describe("part value and trade price", () => {
     );
   });
 
-  it("buy price is strictly above sell price for every part def and wear step, at any Social level", () => {
+  it("buy price is strictly above sell price for every part def and wear step, at any Social rank", () => {
     const w = startAtBowl();
-    for (const social of [0, XP_TO_REACH[3]]) {
-      w.player.skills.social = social;
+    for (const social of [0, 3]) {
+      w.player.ranks.social = social;
       for (const defId of Object.keys(PARTS)) {
         for (let wear = 0; wear <= CONDITION.maxWear; wear++) {
           const part = makePart(w, defId, wear);
@@ -585,7 +584,7 @@ describe("supplies", () => {
   it("toughness cuts use", () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
-    w.player.skills.toughness = XP_TO_REACH[2];
+    w.player.ranks.toughness = 2;
     const before = w.player.supplies;
     consumeSupplies(w);
     expect(before - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
