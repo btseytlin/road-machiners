@@ -48,7 +48,7 @@ async function checkInstruments(page) {
   assert(m.clock.bottom <= m.dial.y && m.clock.bottom <= m.readouts.y, 'Clock must sit above the dial and readouts');
   assert(/Day \d+\s+\d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
   assert.equal(m.panelText.match(/Day \d+\s+\d+:\d\d/g).length, 1, 'Time must show once');
-  assert(!m.actionsText.includes('broken'), 'No broken badge in the action row');
+  assert(!m.actionsText.includes('broken'), 'No broken badge in the action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
   assert(!/km\/h|·/.test(m.speedoText), 'No unit text under the dial');
   assert(m.heights.every(h => Math.abs(h - m.heights[0]) <= 1), `Action buttons must share one height: ${m.heights}`);
   for (const other of [m.log, m.weapons].filter(Boolean)) {
@@ -135,6 +135,109 @@ async function checkRightColumn(page, radioStays) {
   assert((await boxes(page)).radio, `${at} the radio must come back once the hover panel hides`);
 }
 
+const KNOB_BUSES = ['Music', 'Effects', 'Wind', 'Interface'];
+
+// Turns every radio knob with the real mouse from a point in its column outside the dial, at the given viewport.
+async function checkKnobs(url, viewport) {
+  const page = await browser.newPage({ viewport });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(url);
+    await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: 90000 });
+    await page.waitForFunction(() => document.querySelector('.radio-text')?.textContent.trim(), null, { timeout: 90000 });
+    const at = `At ${viewport.width}x${viewport.height}`;
+    const values = () => page.evaluate(() => [...document.querySelectorAll('.radio .knob')].map(k => k.getAttribute('aria-valuenow')));
+    const muted = () => page.evaluate(() => document.querySelector('.radio-mute button').getAttribute('aria-pressed') ?? document.querySelector('.radio-mute').innerHTML);
+    const game = () => page.evaluate(() => {
+      const g = window.__ROAM__;
+      return JSON.stringify([g.state === window.__knobState, g.rig.camera.position.toArray()]);
+    });
+    await page.evaluate(() => { window.__knobState = window.__ROAM__.state; });
+    const box = selector => page.evaluate(selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }, selector);
+    const cells = page.locator('.radio .knob-cell');
+    const rects = await cells.evaluateAll(nodes => nodes.map(n => ({ cell: n.getBoundingClientRect().toJSON(), knob: n.querySelector('.knob').getBoundingClientRect().toJSON() })));
+    const mute = await box('.radio-mute');
+    assert.equal(rects.length, 4, `${at} the radio must carry four knob columns`);
+    rects.forEach((r, i) => {
+      assert(r.cell.width >= 24 && r.cell.height >= 40, `${at} ${KNOB_BUSES[i]} column must be at least 24x40, got ${r.cell.width}x${r.cell.height}`);
+      assert(!doRectsOverlap(r.cell, { x: mute.x, y: mute.y, right: mute.x + mute.width, bottom: mute.y + mute.height }), `${at} the columns must clear the mute switch`);
+      if (i) assert(!doRectsOverlap(rects[i - 1].cell, r.cell), `${at} the columns must not overlap`);
+    });
+    for (let i = 0; i < 4; i++) {
+      const { cell, knob } = rects[i];
+      const x = cell.x + 2, y = cell.bottom - 2;
+      assert(x < knob.x || x > knob.right || y > knob.bottom, `${at} the grab point must lie outside the ${KNOB_BUSES[i]} dial`);
+      const before = await values();
+      const focusBefore = await page.evaluate(() => document.activeElement?.className);
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 200, { steps: 10 });
+      await page.mouse.up();
+      assert.equal((await values())[i], '0', `${at} a drag down must silence ${KNOB_BUSES[i]}`);
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y - 80, { steps: 10 });
+      const mid = await page.evaluate(i => {
+        const cell = document.querySelectorAll('.radio .knob-cell')[i];
+        const readout = cell.querySelector('.knob-readout');
+        const hidden = [...document.querySelectorAll('.radio .knob-readout')].filter(r => getComputedStyle(r).visibility !== 'hidden');
+        return { now: Number(cell.querySelector('.knob').getAttribute('aria-valuenow')), turning: cell.classList.contains('turning'), text: readout.textContent, valuetext: cell.querySelector('.knob').getAttribute('aria-valuetext'), shown: hidden.length === 1 && hidden[0] === readout };
+      }, i);
+      assert(Math.abs(mid.now - 50) <= 1, `${at} 80px up must give about 50, got ${mid.now}`);
+      assert(mid.turning && mid.shown, `${at} only the turned column must show its level`);
+      assert.equal(mid.text, mid.valuetext, `${at} the readout must match aria-valuetext`);
+      assert.equal(mid.text, `${mid.now}%`);
+      if (i === 0) await page.screenshot({ path: `.playtest/knobs-${viewport.width}.png`, clip: await box('.radio'), timeout: 120000 });
+      await page.mouse.move(x, y - 200, { steps: 10 });
+      await page.mouse.up();
+      const after = await values();
+      assert.equal(after[i], '100', `${at} a drag up must open ${KNOB_BUSES[i]} fully`);
+      assert.deepEqual(after.filter((_, j) => j !== i), before.filter((_, j) => j !== i), `${at} no other knob may change`);
+      assert.equal(await page.evaluate(() => document.activeElement?.className), focusBefore, `${at} a drag must not move focus`);
+      await page.keyboard.press('ArrowLeft');
+      assert.deepEqual(await values(), after, `${at} ArrowLeft after a drag must not turn a knob`);
+      await page.mouse.move(x + 100, y - 100, { steps: 5 });
+      assert.deepEqual(await values(), after, `${at} moving after release must not turn a knob`);
+      assert.equal(await game(), JSON.stringify([true, JSON.parse(await game())[1]]), `${at} a drag must leave the game state alone`);
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 200, { steps: 5 });
+      await page.mouse.up();
+      await page.mouse.move(x, y);
+      await page.mouse.wheel(0, -100);
+      await page.waitForFunction(i => document.querySelectorAll('.radio .knob')[i].getAttribute('aria-valuenow') === '5', i, { timeout: 60000 });
+    }
+    const cameraBefore = await game();
+    const knobs = page.locator('.radio .knob');
+    await knobs.first().focus();
+    const base = Number((await values())[0]);
+    await page.keyboard.press('ArrowUp');
+    assert.equal(Number((await values())[0]), base + 5, `${at} ArrowUp on a focused knob must raise it 5`);
+    assert(await page.locator('.radio .knob-readout').first().isVisible(), `${at} a focused knob must show its level`);
+    await knobs.first().blur();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(Number((await values())[0]), base + 5, `${at} ArrowUp must not turn a blurred knob`);
+    const held = await values();
+    const muteBefore = await muted();
+    await page.keyboard.press('m');
+    assert.notEqual(await muted(), muteBefore, `${at} M must flip the mute switch`);
+    assert.deepEqual(await values(), held, `${at} M must not change a level`);
+    assert.equal(await game(), cameraBefore, `${at} the knob checks must leave the camera alone`);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('roam-sound')).volume);
+    assert.deepEqual(['music', 'sfx', 'ambient', 'ui'].map(b => String(Math.round(stored[b] * 100))), held, `${at} the stored levels must match the knobs`);
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: `.playtest/knobs-rest-${viewport.width}.png`, clip: await box('.radio'), timeout: 120000 });
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll('.radio .knob').length === 4);
+    assert.deepEqual(await values(), held, `${at} the levels must survive a reload`);
+    assert.equal(await page.locator('.speedometer [role=slider], .speedometer [tabindex]').count(), 0, `${at} the speedometer must hold no knob`);
+    assert.deepEqual(errors, [], `${at} no uncaught page errors`);
+  } finally {
+    await page.close();
+  }
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
@@ -180,10 +283,11 @@ try {
     await page.setViewportSize({ width, height });
     await checkRightColumn(page, radioStays);
   }
-  assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 700, height: 800 }]) await checkKnobs(url, viewport);
+  assert.deepEqual(errors, [], 'No uncaught page errors');
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
+  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
 } finally {
   await browser.close();
 }
