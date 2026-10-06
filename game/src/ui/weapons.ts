@@ -34,16 +34,16 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
 // Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
-export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
+export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean; stop: boolean };
 
 // Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
-// radio key on the hovered truck when it can take a call, the job of each seen NPC, and each seen knocked-out NPC.
-export function vehicleMarks(w: World, hovered: string | null): Map<string, VehicleMark> {
+// radio key on the hovered truck when it can take a call, the stop sign on the player truck while a click would stop it, the job of each seen NPC, and each seen knocked-out NPC.
+export function vehicleMarks(w: World, hovered: string | null, stopCue: boolean): Map<string, VehicleMark> {
   const marks = new Map<string, VehicleMark>();
   const markOf = (id: string) => {
     const found = marks.get(id);
     if (found) return found;
-    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false, gaveUp: false };
+    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false, gaveUp: false, stop: false };
     marks.set(id, made);
     return made;
   };
@@ -52,7 +52,13 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
     if (readout.target)
       markOf(readout.target.id).weapons.push({ slot: i + 1, look: mw.def.look, status: readout.status, ready: readout.canFire });
   });
+  if (stopCue) markOf(w.player.vehicleId).stop = true;
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
+  markSeenNpcs(w, markOf);
+  return marks;
+}
+
+function markSeenNpcs(w: World, markOf: (id: string) => VehicleMark): void {
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
     if (job) markOf(v.id).job = job;
@@ -61,7 +67,6 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
       markOf(v.id).gaveUp = gaveUp(v);
     }
   }
-  return marks;
 }
 
 function seenNpcJob(w: World, v: Vehicle): JobMark | null {

@@ -78,6 +78,7 @@ import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { isBrowserChord, uiRoot } from "../ui/dom";
+import { PointerPicker } from "./pointer";
 import { Travel, type Playback, type LiveVision } from "./travel";
 
 const PLAN_TURNS = 3; // turns of path preview
@@ -147,6 +148,13 @@ export class Game {
   private readonly overlay: HTMLElement;
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
+  private readonly picker = new PointerPicker({
+    world: () => this.world,
+    hit: (x, y, object) => this.rig.hitDistance(x, y, object),
+    views: this.views,
+    visible: (v) => this.isVehicleVisible(v),
+    radiusPick: (x, y) => this.pickVehicle(x, y)?.id ?? null,
+  });
   private hovered: string | null = null;
   // The pointer needs a moment to travel from a truck to its panel.
   private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
@@ -323,6 +331,11 @@ export class Game {
     return this.rig.screenOf(groundPoint(this.world.terrain, { x, y }));
   }
 
+  // Whether the pointer ray at x, y hits the player truck's model, for browser scripts.
+  debugOwnTruckHit(x: number, y: number): boolean {
+    return this.rig.hitDistance(x, y, this.views.get(playerVehicle(this.world).id)?.root ?? null) !== null;
+  }
+
   // Centers the camera on map point x, y at the given zoom and stops following, for browser scripts.
   debugView(x: number, y: number, zoom: number): void {
     this.follow.release();
@@ -425,7 +438,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
+    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered, this.picker.stopCue));
   }
 
   private readonly ignoresKey = (e: KeyboardEvent): boolean => isBrowserChord(e) || this.isEditingControl();
@@ -441,7 +454,11 @@ export class Game {
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button === 0) this.onLeftClick(e);
     });
-    window.addEventListener("pointermove", (e) => e.target === canvas && this.onHover(e));
+    window.addEventListener("pointermove", (e) => {
+      this.picker.moveTo(e.target === canvas ? e : null);
+      if (e.target === canvas) this.onHover(e);
+    });
+    canvas.addEventListener("pointerleave", () => this.picker.moveTo(null));
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.releaseTurn();
@@ -508,20 +525,32 @@ export class Game {
     screen.toggle();
   }
 
+  private updateStopCue(): void {
+    if (this.picker.updateCue(this.canClick())) this.refreshTargetMarkers();
+  }
+
+  private canClick(): boolean {
+    return !this.anim && !this.modalOpen() && playerCanAct(this.world);
+  }
+
   private onLeftClick(e: MouseEvent): void {
-    if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return;
-    const picked = this.pickVehicle(e.clientX, e.clientY);
-    const me = playerVehicle(this.world);
-    if (picked && picked.id !== me.id) return this.targetVehicle(picked);
-    const myView = this.views.get(me.id);
-    if (
-      picked &&
-      myView &&
-      this.rig.hitsObject(e.clientX, e.clientY, myView.root)
-    )
-      return this.apply(setMoveOrder(this.world, { kind: "brake" }));
-    const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
+    if (!this.canClick()) return;
+    const action = this.picker.action(e.clientX, e.clientY);
+    switch (action.kind) {
+      case "stop":
+        return this.apply(setMoveOrder(this.world, { kind: "brake" }));
+      case "own":
+        return;
+      case "vehicle":
+        return this.targetVehicle(vehicleById(this.world, action.id));
+      case "ground": {
+        const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
+        if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
+        return;
+      }
+      default:
+        throw new Error(`Unknown pointer action ${JSON.stringify(action)}`);
+    }
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -579,7 +608,7 @@ export class Game {
   private onHover(e: MouseEvent): void {
     const id = this.pickVehicle(e.clientX, e.clientY)?.id ?? null;
     this.hoverGround =
-      id || this.modalOpen()
+      id || this.picker.overOwn(e.clientX, e.clientY) || this.modalOpen()
         ? null
         : this.rig.groundUnder(e.clientX, e.clientY, this.ground);
     this.hoverHold.move(id, this.hovered);
@@ -1073,6 +1102,7 @@ export class Game {
   }
 
   private drawOverlays(): void {
+    this.updateStopCue();
     const hide =
       this.travel.isAdvancing(this.anim, this.last) || this.modalOpen();
     // Steering zones and the path preview only help a driver who can give orders.
