@@ -62,3 +62,26 @@ it('splits usage into hourly buckets for one day and daily buckets for longer ra
     expect(week[0].stages).toEqual({ design: { cost: 3, tokens: 20 }, verify: { cost: 1, tokens: 10 } });
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
+
+it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed run only for its own part', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    const usage = (input: number, cost: number) => [{ model: 'opus', input, output: 0, cacheRead: 0, cacheWrite: 0, cost }];
+    appendLedger(home, { kind: 'job', id: 'dead', stage: 'implement', issue: 3, startedAt: '2026-10-10T08:00:00Z', endedAt: '2026-10-10T09:00:00Z', outcome: 'died', agents: [
+      { model: 'opus', costUsd: 0.1 + 0.2, minutes: 60, modelUsage: usage(100, 0.1 + 0.2), sessionId: 's1', resumed: false, fromTranscript: true },
+    ] });
+    appendLedger(home, { kind: 'job', id: 'resumed', stage: 'implement', issue: 3, startedAt: '2026-10-10T09:01:00Z', endedAt: '2026-10-10T10:00:00Z', outcome: 'done', agents: [
+      { model: 'opus', costUsd: 0.3, minutes: 59, modelUsage: usage(100, 0.3), sessionId: 's1', resumed: true },
+    ] });
+    appendLedger(home, { kind: 'job', id: 'failed', stage: 'verify', issue: 4, startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T11:00:00Z', outcome: 'failed', agents: [
+      { model: 'opus', costUsd: 2, minutes: 60, modelUsage: usage(50, 2) },
+    ] });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const summary = history.summarize(now, 1);
+    expect(summary.wasted.cost).toBeCloseTo(2.3, 9);
+    expect(summary.wasted.tokens).toEqual({ input: 150, output: 0, cacheRead: 0, cacheWrite: 0 });
+    expect(summary.cost).toBeCloseTo(2.3, 9);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});

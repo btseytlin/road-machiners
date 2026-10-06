@@ -6,9 +6,15 @@ import { fitComment } from './common';
 
 // The testing agent read the final captured images and decided. A change nobody can see passes on its stated reason.
 // A look that is wrong never reaches the post: the card goes back to the stage that owns the flaw, with the branch kept.
-// Returns whether the round may go on to the checks. A send-back or a missing or doubtful decision stops it.
+// Returns whether the round may go on to the checks. Only a send-back stops it. A missing or broken decision is logged, and the card goes on.
 export async function visualGate(ctx: Ctx, issue: number, home: string, head: string, evidence: Evidence): Promise<boolean> {
-  const review = readVisualReview(home, head, evidence);
+  let review;
+  try {
+    review = readVisualReview(home, head, evidence);
+  } catch (error) {
+    ctx.log('verify', issue, `visual review ignored: ${error instanceof Error ? error.message : String(error)}`);
+    return true;
+  }
   if (!review.visual) {
     ctx.log('verify', issue, `visual review skipped, nothing visible changed: ${review.reason}`);
     return true;

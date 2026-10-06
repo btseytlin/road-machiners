@@ -7,13 +7,14 @@ it('emits only an allowed activity from the agent reporting command', () => {
   const output = execFileSync('sh', ['docker/factory-status', 'review'], { encoding: 'utf8' });
   expect(parseAgentStatus(output)).toEqual({ activity: 'review' });
 });
-it('emits a safe milestone without publishing the task or command', () => {
-  const output = execFileSync('sh', ['docker/factory-status', 'milestone', 'validating'], { encoding: 'utf8' });
-  expect(parseAgentStatus(output)).toEqual({ milestone: 'validating' });
+it('emits a milestone in the card\'s words', () => {
+  const output = execFileSync('sh', ['docker/factory-status', 'milestone', "Building the orchard's buildings, 2 of 3"], { encoding: 'utf8' });
+  expect(parseAgentStatus(output)).toEqual({ milestone: "Building the orchard's buildings, 2 of 3" });
 });
-it('rejects arbitrary notes and extra arguments', () => {
+it('rejects arbitrary notes, unsafe milestones and extra arguments', () => {
   expect(existsSync('docker/factory-status')).toBe(true);
-  for (const args of [['PRIVATE secret'], ['review', 'PRIVATE note'], ['milestone', 'PRIVATE note'], ['milestone', 'validating', 'PRIVATE note']]) {
+  const unsafe = ['PRIVATE src/game.ts', 'PRIVATE "quoted"', 'PRIVATE $HOME', 'PRIVATE <b>', 'PR', `PRIVATE ${'x'.repeat(80)}`];
+  for (const args of [['PRIVATE secret'], ['review', 'PRIVATE note'], ['milestone', 'validating', 'PRIVATE note'], ...unsafe.map((text) => ['milestone', text])]) {
     const result = spawnSync('sh', ['docker/factory-status', ...args], { encoding: 'utf8' });
     expect(result.status).not.toBe(0);
     expect(result.stdout).toBe('');

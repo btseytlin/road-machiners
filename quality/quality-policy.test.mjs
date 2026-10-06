@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkFragmentation, checkGuidance, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 function makeSource(lines) {
   return Array.from({ length: lines }, (_, index) => `export const value${index} = ${index};`).join('\n');
@@ -57,4 +57,9 @@ test('limits agent guidance files to fewer words than the ceiling', () => {
 test('matches agent files in any case and DESIGN.md exactly, in any folder', () => {
   const names = ['CLAUDE.md', 'factory/claude.md', 'game/AGENTS.md', 'game/docs/DESIGN.md', 'game/docs/CLAUDE.md.bak', 'game/MYCLAUDE.md', 'game/docs/VISUAL_DESIGN.md', 'factory/prompts/design.md'];
   assert.deepEqual(names.filter(isGuidance), names.slice(0, 4));
+});
+
+test('names each line with the middle dot separator', () => {
+  const texts = new Map([['game/src/hud.ts', `ok\nCab ${SEPARATOR} 40%\nfine`], ['README.md', 'Cab: 40%']]);
+  assert.deepEqual(checkSeparators(texts), ['game/src/hud.ts:2: middle dot separator. Use a comma or a colon.']);
 });
