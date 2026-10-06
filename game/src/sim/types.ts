@@ -374,7 +374,7 @@ export type Player = {
   knockoutTurns: number; // turns spent in the current knockout
   god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   fullLog: boolean; // debug: the log shows events the player cannot see or hear; see src/ui/format.ts
-  frozen: boolean; // debug: NPC drivers brake, hold fire, use no utilities and raise no radio calls; see src/sim/cheats.ts
+  frozen: boolean; // debug: NPC trucks have no driver: they roll free, hold fire, use no utilities and raise no radio calls; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended

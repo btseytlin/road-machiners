@@ -47,7 +47,8 @@ export type FireBlock =
   | "talking"
   | "out"
   | "unmounted"
-  | "shutDown";
+  | "shutDown"
+  | "lineOut";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
@@ -127,7 +128,13 @@ export function fireBlock(
 ): FireBlock | null {
   if (isKnockedOut(shooter)) return "out";
   if (isShutDown(world, shooter)) return "shutDown";
-  return weaponBlock(mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
+  return weaponBlock(mw) ?? lineBlock(world, shooter, mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
+}
+
+// A gun with a line holds fire while its line is still out: its rope is on the other truck.
+function lineBlock(world: World, shooter: Vehicle, mw: MountedWeapon): FireBlock | null {
+  const out = mw.def.line && world.lines.some((l) => l.from === shooter.id && l.fromPart === mw.part.id);
+  return out ? "lineOut" : null;
 }
 
 function weaponBlock(mw: MountedWeapon): FireBlock | null {

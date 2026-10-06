@@ -160,16 +160,16 @@ export function oilSlickLength(): number {
 }
 
 // The harpoon line: a one-sided spring between the two anchors once they are farther apart than the line's length.
-// Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. The peak
-// stretch pull over 3 turns: a scout fleeing at full throttle from a parked scout 15 kN, the same scout already at
-// speed when the line goes taut 26 kN, and from a parked hauler 31 kN; a hauler dragging a braking scout 38 kN and
-// more at speed. The scouts stay held over the line's 5 turns as well. So a line holds a truck of the target's own
-// size for its turns, and a much stronger truck tears it.
-// Stiffer 10000 with damping 2000 jerked a scout at speed to 72 kN, so no tear force held a fleeing truck.
+// Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. A truck must be
+// able to drag the truck it hooked, so the line holds every drag measured over its 10 turns, each truck at full
+// throttle away from a braking or fleeing scout, buggy or hauler, from rest and at speed. The peak stretch pull: about
+// 15 kN for a scout, 30 to 60 kN for a hauler, van, tractor, carrier or loader, under 100 kN for any one-sided drag,
+// and 108 kN for a bus and a fleeing scout pulling against each other. The rope stretches under a meter in most
+// drags, so it reads as a rope and not a bungee. A softer 5000 N/m rope stretched 9 m behind a hauler.
 export const HARPOON = {
-  stiffness: 5000, // N per meter of stretch
-  damping: 4000, // N·s per meter on the separating speed
-  tearForce: 36000, // N; a stretch pull above it tears the line
+  stiffness: 30000, // N per meter of stretch
+  damping: 12000, // N·s per meter on the separating speed
+  tearForce: 120000, // N; a stretch pull above it tears the line
   tearDamage: 12, // to the part the line held on the torn truck
 };
 

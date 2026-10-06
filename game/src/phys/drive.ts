@@ -248,7 +248,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false }, oil: oilInReach(oil, v, s, body), kicked: false };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planOf(w, v, s, body, mem), result: { passed: false, arrived: false }, oil: oilInReach(oil, v, s, body), kicked: false };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
@@ -565,6 +565,17 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
 // itself cannot be reached, as in far travel. A careless driver has no route and stops on the order point.
 function stopPoint(path: Vec[] | null, dest: Vec): Vec {
   return path ? path[path.length - 1] : dest;
+}
+
+// The truck's plan for the turn. A frozen NPC (the debug freeze) has no driver: no throttle and no brakes, so it rolls
+// where it is pushed or pulled.
+function planOf(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, mem: Memory): Plan {
+  const plan = planTurn(w, v, full, body, v.order, mem);
+  return isFrozenNpc(w, v) ? { ...plan, engine: false, brakeForce: 0, dest: null, route: null, stopAt: false } : plan;
+}
+
+function isFrozenNpc(w: World, v: Vehicle): boolean {
+  return w.player.frozen && v.brain !== null && v.id !== w.player.vehicleId;
 }
 
 // Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.

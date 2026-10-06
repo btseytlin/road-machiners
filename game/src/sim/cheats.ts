@@ -144,10 +144,11 @@ export function toggleFrozen(world: World): World {
   return update(world, (w) => { w.player.frozen = !w.player.frozen; });
 }
 
-// Runs on the turn draft after NPC drivers plan, so frozen drivers brake where they are.
+// Runs on the turn draft after NPC drivers plan, so frozen drivers drive nowhere. Physics then gives a frozen truck no
+// throttle and no brakes (src/phys/drive.ts), so it rolls where it is pushed or pulled.
 export function freezeDriving(world: World): void {
   if (!world.player.frozen) return;
-  for (const v of npcs(world)) v.order = { kind: 'brake' };
+  for (const v of npcs(world)) v.order = null;
 }
 
 // Runs on the turn draft after NPC gun and utility orders, so frozen drivers neither fire nor use utilities.

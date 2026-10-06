@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { partDef, type WeaponDef } from '../data/parts';
 import { HARPOON } from '../data/utilities';
-import { fightsAgainst, fireWeapons, gunOf, hitOdds } from './combat';
+import { fightsAgainst, fireBlock, fireWeapons, gunOf, hitOdds } from './combat';
+import { vehicleStats } from './stats';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { deploySmoke } from './hazards';
@@ -50,11 +51,11 @@ const hit = (gap?: number) => firstFire((s) => s.w.lines.length === 1, gap);
 const miss = (gap?: number) => firstFire((s) => shotOf(s.w).rounds[0].struck === null, gap);
 
 describe('firing the harpoon', () => {
-  it('is a gun with a one-round magazine, a five-turn reload and a five-turn line', () => {
+  it('is a gun with a one-round magazine, a five-turn reload and a ten-turn line', () => {
     const def = partDef('harpoon') as WeaponDef;
 
     expect(def.kind).toBe('weapon');
-    expect({ magazine: def.magazine, reload: def.reload, line: def.line }).toEqual({ magazine: 1, reload: 5, line: { turns: 5 } });
+    expect({ magazine: def.magazine, reload: def.reload, line: def.line }).toEqual({ magazine: 1, reload: 5, line: { turns: 10 } });
   });
 
   it('empties its magazine on a miss and makes no line', () => {
@@ -71,7 +72,7 @@ describe('firing the harpoon', () => {
 
     expect(round.struck).toBe(trader.id);
     expect(w.lines).toEqual([
-      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 5 },
+      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 10 },
     ]);
     expect(gunOf(part).ammo).toBe(0);
     expect(trader.lastHitBy).toBe(me.id);
@@ -142,10 +143,25 @@ describe('firing the harpoon', () => {
 });
 
 describe('the harpoon line', () => {
-  it('lasts 5 turns', () => {
+  it('holds fire while its line is out, reloaded or not, and fires again once the line ends', () => {
+    const s = hit();
+    s.me.weaponOrders[s.part.id] = { targetId: s.trader.id, aim: 'body' };
+    const fired: number[] = [];
+    for (let turn = 1; turn <= 11; turn++) {
+      s.w.events = [];
+      advanceUtilityEffects(s.w);
+      fireWeapons(s.w);
+      if (s.w.events.some((e) => e.t === 'shot')) fired.push(turn);
+    }
+
+    expect(fired).toEqual([10]);
+    expect(fireBlock(s.w, s.me, vehicleStats(s.w, s.me).weapons.find((m) => m.part.id === s.part.id)!, s.trader)).not.toBe('lineOut');
+  });
+
+  it('lasts 10 turns', () => {
     const { w } = hit();
 
-    for (let turn = 1; turn <= 4; turn++) advanceUtilityEffects(w);
+    for (let turn = 1; turn <= 9; turn++) advanceUtilityEffects(w);
     expect(w.lines).toHaveLength(1);
 
     advanceUtilityEffects(w);

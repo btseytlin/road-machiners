@@ -692,6 +692,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashPen: 0,
       armorShare: 1,
     },
-    line: { turns: 5 },
+    line: { turns: 10 },
   },
 };

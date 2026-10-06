@@ -132,7 +132,7 @@ export const COMMANDS: readonly Command[] = [
     const next = toggleFullLog(world);
     return changed(next, `full log ${next.player.fullLog ? "on" : "off"}`);
   }),
-  command("freeze", "Toggle frozen NPCs: they brake, hold fire, use no utilities and raise no radio calls.", { min: 0, max: 0 }, (world) => {
+  command("freeze", "Toggle frozen NPCs: no driver, so they roll free, hold fire, use no utilities and raise no radio calls.", { min: 0, max: 0 }, (world) => {
     const next = toggleFrozen(world);
     return changed(next, `NPCs ${next.player.frozen ? "frozen" : "unfrozen"}`);
   }),

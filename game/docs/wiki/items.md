@@ -52,7 +52,7 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 | grenadeLauncher | Grenade launcher | 3 | 587 | 2 x 2 | 130 | 50 | 4 | false | 12 | 1 | 4 | 3 | 180 | 5 | 3 | 2 | 1 |  |
 | tankGun | Tank gun | 3 | 604 | 2 x 3 | 210 | 90 | 8 | true | 16 | 1 | 2 | 2 | 45 | 2 | 1 | 8 | 2 |  |
 | flechette | Flechette gun | 3 | 655 | 2 x 2 | 120 | 44 | 3 | false | 18 | 1 | 4 | 2 | 180 | 1.2 | 4 | 1.5 | 1.5 |  |
-| harpoon | Harpoon | 2 | 287 | 1 x 2 | 120 | 40 | 4 | false | 8 | 1 | 1 | 5 | 180 | 4 | 1 | 0 | 1 | 5 |
+| harpoon | Harpoon | 2 | 287 | 1 x 2 | 120 | 40 | 4 | false | 8 | 1 | 1 | 5 | 180 | 4 | 1 | 0 | 1 | 10 |
 <!-- /wiki:weapons -->
 
 Each weapon's round:

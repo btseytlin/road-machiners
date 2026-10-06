@@ -182,7 +182,7 @@ describe('frozen NPCs', () => {
     expect(toggleFrozen(on).player.frozen).toBe(false);
   });
 
-  it('brakes NPC drivers and clears their gun and utility orders, and leaves the player alone', () => {
+  it('clears NPC drivers\' move, gun and utility orders, and leaves the player alone', () => {
     const { w, id } = withSpawned(toggleFrozen(emptyWorld()), 'buggy', true);
     const npc = w.vehicles.find((v) => v.id === id)!;
     const me = playerVehicle(w);
@@ -192,7 +192,7 @@ describe('frozen NPCs', () => {
     me.order = { kind: 'through', dest: npc.pos };
     freezeDriving(w);
     freezeFire(w);
-    expect(npc).toMatchObject({ order: { kind: 'brake' }, weaponOrders: {}, utilityOrders: {} });
+    expect(npc).toMatchObject({ order: null, weaponOrders: {}, utilityOrders: {} });
     expect(me.order).toEqual({ kind: 'through', dest: npc.pos });
   });
 
