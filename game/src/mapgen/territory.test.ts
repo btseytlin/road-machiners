@@ -86,7 +86,11 @@ describe('the territory layer', () => {
     const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
-    expect(full.heights).toEqual(solo.heights);
+    // Other territories seat their own pieces inside their outlines; every other corner keeps the Fallen Sun's heights.
+    const others = REGION.locations.filter((l) => l.kind === 'territory' && l.id !== 'fallen-sun');
+    const w = full.size + 1;
+    const outsideOthers = (heights: Float32Array) => Array.from(heights).filter((_, k) => others.every((o) => siteGap(o, { x: k % w, y: Math.floor(k / w) }) >= 0));
+    expect(outsideOthers(full.heights)).toEqual(outsideOthers(solo.heights));
   });
 
   it("levels the ground under every piece's low boxes to the height at its centre, less its sink", () => {
@@ -604,9 +608,10 @@ describe('the orchard farm', () => {
 });
 
 describe('a third territory', () => {
-  // A test-only wreck on open ground north-west of the orchard, where no region road runs. It has no basin under it,
-  // so no rim rocks, and holds a piece, a building group, a cache, a patch, a dirt road and fused glass.
-  const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 405, y: 378 }, radius: 22, outline: null };
+  // A test-only wreck on open ground between Bowl and Kiln Camp, where no region road runs within 32 tiles and no site
+  // within 40. It has no basin under it, so no rim rocks, and holds a piece, a building group, a cache, a patch, a dirt
+  // road and fused glass.
+  const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
   function flatsRules(): TerritoryRules {
     return {
       seed: 2,

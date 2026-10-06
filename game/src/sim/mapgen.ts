@@ -156,7 +156,7 @@ export type PropPose =
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -201,12 +201,22 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   hullTower: 'hull_tower',
   hullGantry: 'hull_gantry',
   rimRock: 'rim_rock',
+  engineNozzle: 'engine_nozzle',
+  engineFrame: 'engine_frame',
+  watchtower: 'watchtower',
+  ruinCompound: 'ruin_compound',
+  deadTruck: 'wreck',
+  glassSpire: 'glass_spire',
+  scrapWall: 'scrap_wall',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence or barrier segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The
 // orchard's buildings, army truck and clutter are built at their size against the 8.1 m army truck, and the orchard
 // poses them at about these radii, so they draw near scale 1 (each radius is stated in its tools/blender script). The
-// Fallen Sun's hull pieces are built at their real size, with half their length along +x as the radius. The building
+// Fallen Sun's hull pieces are built at their real size, with half their length along +x as the radius. The Glass
+// Flats models are built at their size measured from its concept, and Glass Flats poses them at these radii, so they
+// draw at scale 1: half the length along +x for the nozzle, the frame, the spire cluster and the wall, and half the
+// footprint's diagonal for the compound and the tower (each radius is stated in its tools/blender script). The building
 // model stretches to its footprint instead. The pole, billboard and tank stand at their real size.
 const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   crag: 1,
@@ -241,6 +251,12 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   hull_tower: 6,
   hull_gantry: 22,
   rim_rock: 8,
+  engine_nozzle: 13,
+  engine_frame: 15,
+  watchtower: 2.4,
+  ruin_compound: 9.8,
+  glass_spire: 5,
+  scrap_wall: 3.8,
 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills

@@ -37,8 +37,8 @@ describe('map file', () => {
   });
 
   it('stores prop kinds and ground types in this order, which only a new file version may change', () => {
-    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock']);
-    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete']);
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'engineNozzle', 'engineFrame', 'watchtower', 'ruinCompound', 'deadTruck', 'glassSpire', 'scrapWall']);
+    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete', 'glass']);
   });
 
   it('round-trips pool ground types', () => {

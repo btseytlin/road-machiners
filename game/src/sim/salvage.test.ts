@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { SALVAGE } from '../data/salvage';
+import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
@@ -778,10 +778,44 @@ describe('territory loot spots', () => {
     }
   }, budget(30_000));
 
+  it('gives every Glass Flats spot its own stock from the table of its look, and Glass Flats no stock of its own (IV5)', async () => {
+    const w = await realWorld();
+    const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
+    const spots = spotsOf(w).filter((o) => siteGap(flats, o.pos) < 0);
+    const tables: Record<string, LootTable> = { hullCache: SALVAGE.engineScrap, ruinCompound: SALVAGE.cityStores, deadTruck: SALVAGE.roadWreck };
+    expect(spots).toHaveLength(19);
+    for (const o of spots) {
+      const stocks = w.salvage.filter((s) => s.id === o.id);
+      expect(stocks, o.id).toHaveLength(1);
+      expect(territoryOfStock(stocks[0])?.id, o.id).toBe('glass-flats');
+      expect(o.kind === 'landmark' && spotTable(o), o.id).toBe(tables[o.kind === 'landmark' ? o.look : o.kind]);
+    }
+    expect(w.salvage.some((s) => s.id === 'glass-flats')).toBe(false);
+  }, budget(30_000));
+
+  it('keeps the stock of every other site: the landmarks and convoys without a shop (IV6)', async () => {
+    const w = await realWorld();
+    const sites = w.salvage.filter((s) => isSiteStock(s)).map((s) => s.id);
+    expect(sites.sort()).toEqual(['broken-wing', 'burnt-convoy', 'canyon-bridge', 'podfield', 'ridge-wrecks', 'south-lock']);
+  }, budget(30_000));
+
+  it('refills an emptied Glass Flats compound over days and never past its table', async () => {
+    const w = await realWorld();
+    const compounds = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'ruinCompound');
+    const stocks = compounds.map((o) => stockOf(w, o.id));
+    for (const stock of stocks) emptyStock(stock);
+    runDays(w, 365);
+    for (const [k, stock] of stocks.entries()) {
+      for (const [good, [, hi]] of Object.entries(SALVAGE.cityStores.goods)) expect(stock.goods[good], `${compounds[k].id} ${good}`).toBe(hi);
+      expect(stock.supplies, compounds[k].id).toBe(SALVAGE.cityStores.supplies[1]);
+    }
+  }, budget(30_000));
+
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    // Every cache at once, since one cache may draw a lucky full day: a day refills a share, not the table highs.
-    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache');
+    // Every Fallen Sun cache at once, since one cache may draw a lucky full day: a day refills a share, not the table
+    // highs.
+    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache' && territoryAt(spot.pos)?.id === 'fallen-sun');
     const stocks = caches.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 1);

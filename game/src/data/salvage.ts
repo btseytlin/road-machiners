@@ -83,6 +83,25 @@ export const SALVAGE = {
     fuel: [0, 2],
     supplies: [0, 2],
   } as LootTable,
+  // Engine caches of Glass Flats: the crashed engine's scrap, batteries and parts, with the best chance at an engine
+  // or armor piece. The richest spots there, in the engine's closed space.
+  engineScrap: {
+    goods: { scrap: [1, 2], batteries: [0, 1] },
+    parts: [1, 2],
+    sparePartChance: 0.2,
+    spareParts: ['stockEngine', 'flatFour', 'plates', 'cage'],
+    fuel: [0, 4],
+    supplies: [0, 1],
+  } as LootTable,
+  // Ruin compounds of Glass Flats: cloth, water, meds and scrap the townsfolk left, at farm-store scale.
+  cityStores: {
+    goods: { textiles: [0, 1], water: [0, 1], meds: [0, 1], scrap: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.05,
+    spareParts: ['rack', 'flatFour'],
+    fuel: [0, 2],
+    supplies: [0, 2],
+  } as LootTable,
   convoy: {
     goods: { scrap: [1, 3], meds: [0, 1] },
     parts: [1, 2],
