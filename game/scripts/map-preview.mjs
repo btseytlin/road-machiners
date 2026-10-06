@@ -11,7 +11,10 @@ const SITE_EDGE = 0x8a1e14;
 // Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
 // Road bridge decks are as wide as the road. Billboards are boards across their facing. Fence segments are
 // one-pixel lines along their facing, r to each side of the center. Road bridges go first, since other props never overlap them.
+// Nose's rock masses are discs of their reach and go under everything else.
 const PROP_LOOKS = {
+  noseRise: { color: 0x9d6642, shape: 'disc' },
+  noseCrag: { color: 0x9d6642, shape: 'disc' },
   rock: { color: 0x3a3028, shape: 'disc' },
   crag: { color: 0x6a5a48, shape: 'disc' },
   ruin: { color: 0x6e2a1e, shape: 'box' },

@@ -10,6 +10,9 @@
 // that stretch of it. Where the gatehouse lies wholly outside the curtain, a barbican joins it back: two neck walls
 // and an inner gate in the curtain. At a flush style the gatehouse stands in the curtain, its outer face on the
 // curtain line where the gate's bearing meets it, and the ground between it and the road gate is a forecourt.
+//
+// A site with rock leaves that stretch of outline to a rock mass: no wall or tower stands there, and the walls either
+// side end in the rock. Nose's mountain is the one, from src/sim/nose.ts.
 
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressBastions, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
 import { siteGates, type Site } from './sites';
@@ -119,8 +122,17 @@ export function fortressPieces(site: Site): FortressPiece[] {
   const laid = siteGates(site).map((gate) => layGate(site, gate, corners));
   const cuts = laid.map((l) => l.cut);
   const houses = laid.flatMap((l) => (l.standsIn === null ? [] : [l.standsIn]));
-  const walls = cutOutline(corners.map((c) => c.pos), cuts).flatMap((run) => wallRun(mergeShortEnds(run, corners)));
-  return [...laid.flatMap((l) => l.pieces), ...walls, ...cornerPieces(site, corners, houses)];
+  const outline = corners.map((c) => c.pos);
+  const walls = cutOutline(outline, cuts, (i) => onFortressRock(site, lerpVec(outline[i], outline[(i + 1) % outline.length], 0.5))).flatMap((run) => wallRun(mergeShortEnds(run, corners)));
+  const standing = cornerPieces(site, corners, houses).filter((p) => !onFortressRock(site, p.pos));
+  return [...laid.flatMap((l) => l.pieces), ...walls, ...standing];
+}
+
+// Whether a point lies on the stretch of outline the site's rock closes, by its bearing from the center.
+export function onFortressRock(site: Site, p: Vec): boolean {
+  const { rock, turn } = fortressOf(site);
+  const turned = (deg: number): number => ((deg % 360) + 360) % 360;
+  return (rock ?? []).some((r) => turned(bearing(site.pos, p) / DEG - turn - r.from) <= turned(r.to - r.from));
 }
 
 // Tiles below the rim at p for a site with a pit: 0 outside the curtain and within the pit margin of the curtain line,
@@ -348,9 +360,9 @@ function layBarbican(site: Site, spot: GateSpot): { pieces: FortressPiece[]; cut
 
 type Span = { segment: number; t0: number; t1: number };
 
-// The outline less the cut rectangles, as runs in outline order.
-function cutOutline(outline: Vec[], cuts: Rect[]): Run[] {
-  const kept = outline.flatMap((_, i) => keptSpans(outline, i, cuts));
+// The outline less the cut rectangles and the segments the rock closes, as runs in outline order.
+function cutOutline(outline: Vec[], cuts: Rect[], onRock: (segment: number) => boolean): Run[] {
+  const kept = outline.flatMap((_, i) => (onRock(i) ? [] : keptSpans(outline, i, cuts)));
   const n = outline.length;
   const first = firstCut(kept, n);
   const runs: Run[] = [];

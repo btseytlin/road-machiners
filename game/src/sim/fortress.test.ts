@@ -7,7 +7,7 @@ import { TEST_MAP } from '../test/map';
 import { FORT_MODELS, FORT_PROPS, fortressCore, fortressGates, fortressOutline, fortressPieces, pitDepth } from './fortress';
 import { PROP_KINDS } from './terrain';
 import type { Obstacle } from './types';
-import { isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
+import { boxDistance, isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
 import { isFree } from './spawn';
 import { canUseSite, isFortress, sitePads } from './sites';
 import { discoverSites } from './locations';
@@ -151,8 +151,30 @@ describe('fortress ground', () => {
     }
   });
 
-  it('leaves every pad clear of the pieces (IV6)', () => {
-    const pieces = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look.startsWith('fort'));
+  it('leaves the roads out of Nose clear of its rock', () => {
+    const nose = FORT_SITES.find((s) => s.id === 'nose')!;
+    const rock = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && (o.look === 'noseRise' || o.look === 'noseCrag'));
+    expect(rock).toHaveLength(2);
+    const boxes = rock.flatMap((o) => propBoxes(o));
+    const reach = Math.max(...rock.map((o) => o.r));
+    let checked = 0;
+    for (const road of REGION.roads) {
+      for (let i = 1; i < road.length; i++) {
+        const [a, b] = [road[i - 1], road[i]];
+        if (segmentDist(nose.pos, a, b) > reach) continue;
+        for (let k = 0; k <= 10; k++) {
+          const p = { x: a.x + ((b.x - a.x) * k) / 10, y: a.y + ((b.y - a.y) * k) / 10 };
+          if (dist(p, nose.pos) < nose.radius) continue;
+          expect(Math.min(...boxes.map((box) => boxDistance(box, p))), `road at ${p.x.toFixed(1)}, ${p.y.toFixed(1)}`).toBeGreaterThanOrEqual(REGION.roadWidth / 2);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+  });
+
+  it('leaves every pad clear of the pieces and the rock (IV6)', () => {
+    const pieces = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && (o.look.startsWith('fort') || o.look === 'noseRise' || o.look === 'noseCrag'));
     const boxes = pieces.flatMap((o) => propBoxes(o));
     const { length, width } = REGION.sites.pad;
     for (const s of FORT_SITES) {

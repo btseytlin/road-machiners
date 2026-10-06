@@ -8,7 +8,9 @@ import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { fortressGates, insideCurtain, pitDepth } from '../../sim/fortress';
-import { GATE_CLEAR, RISE } from './interiors/nose';
+import { GATE_CLEAR, riseFront } from './interiors/nose';
+import { boxDistance, propBoxes, propObstacle, propShape } from '../../sim/mapgen';
+import { noseRocks } from '../../sim/nose';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -495,7 +497,9 @@ describe('landmark scale', () => {
     const uAxis = { x: -south.out.y, y: south.out.x };
     const toFrame = (p: { x: number; y: number }) => ({ u: (p.x - nose.pos.x) * uAxis.x + (p.y - nose.pos.y) * uAxis.y, v: -((p.x - nose.pos.x) * south.out.x + (p.y - nose.pos.y) * south.out.y) });
     const discs = gates.map((g) => ({ ...toFrame(g.face), r: g.width / 2 + GATE_CLEAR }));
-    const inRise = (p: { u: number; v: number }) => p.v >= RISE.front && Math.hypot(p.u, p.v) <= RISE.clip && Math.hypot(p.u - RISE.hole.u, p.v - RISE.hole.v) > RISE.hole.r;
+    // The rise and the crag are baked props: a point is under them where their collision boxes stand.
+    const rockBoxes = noseRocks(nose).flatMap((p, k) => propBoxes(propObstacle(p, k)));
+    const inRise = (p: { x: number; y: number }) => rockBoxes.some((b) => boxDistance(b, p) === 0);
     // Interior points on a 1 tile grid, a tile in from the curtain's wall.
     const interior: { x: number; y: number; u: number; v: number }[] = [];
     for (let x = Math.floor(nose.pos.x - nose.radius); x <= nose.pos.x + nose.radius; x++) {
@@ -564,13 +568,13 @@ describe('landmark scale', () => {
       }
     });
 
-    it('covers 35 to 50% of the interior with the rise and crag, all on the far half, and tops the crag over the towers (IV29)', () => {
+    it('covers 35 to 55% of the interior with the rise and crag, all behind the front edge, and tops the crag over the towers (IV29)', () => {
       const covered = interior.filter((p) => inRise(p));
       expect(covered.length / interior.length).toBeGreaterThanOrEqual(0.35);
-      expect(covered.length / interior.length).toBeLessThanOrEqual(0.5);
-      for (const p of covered) expect(p.v).toBeGreaterThan(0);
-      const crag = new Box3().setFromObject(group.getObjectByName('nose-crag')!);
-      expect(crag.max.y).toBeGreaterThanOrEqual(1.5 * 22);
+      expect(covered.length / interior.length).toBeLessThanOrEqual(0.55);
+      // A merged box may reach a little past the rock's front edge.
+      for (const p of covered) expect(p.v, `${p.u}, ${p.v}`).toBeGreaterThan(riseFront(p.u) - 0.5);
+      expect(Math.max(...propShape('nose_crag').map((b) => b.z1))).toBeGreaterThanOrEqual(1.5 * 22);
     });
 
     it('builds the yard up: no yard point is more than 4 tiles from a structure (IV27)', () => {

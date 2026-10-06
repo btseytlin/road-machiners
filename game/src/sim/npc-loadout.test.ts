@@ -328,7 +328,9 @@ describe('spawned NPCs', () => {
     const npcs = world.vehicles.filter((v) => v.brain !== null);
     const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
     expect(parts.some((p) => p.wear > 0)).toBe(true);
-    const traders = npcs.filter((v) => v.brain!.templateId === 'trader');
+    // A world rolls about five traders, and a trader often carries no spare, so one world may roll none. Four worlds
+    // roll about twenty.
+    const traders = [1, 2, 3, 4].flatMap((seed) => newWorld(seed, START_KITS.standard, TEST_MAP).vehicles.filter((v) => v.brain?.templateId === 'trader'));
     expect(traders.some((v) => v.items.some((it) => it.kind === 'part' && !isMounted(v.chassisId, it)))).toBe(true);
   });
 });

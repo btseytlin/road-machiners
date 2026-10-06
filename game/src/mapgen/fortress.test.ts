@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FORTRESS_SITES } from '../data/fortress';
 import { REGION } from '../data/region';
 import { FORT_MODELS, fortressPieces, insideCurtain, pitDepth } from '../sim/fortress';
+import { noseFrame } from '../sim/nose';
 import { newDraft, typeCode, type MapDraft } from './bake';
 import { fortressLayer } from './fortress';
 
@@ -23,10 +24,22 @@ describe('fortress layer', () => {
   const d = fortressLayer(flatDraft());
   const n = d.size + 1;
 
-  it('bakes every fortress site piece as a prop of its style', () => {
+  it('bakes every fortress site piece as a prop of its style, and Nose its two rock masses', () => {
     const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in FORTRESS_SITES);
-    expect(d.props).toHaveLength(sites.reduce((sum, s) => sum + fortressPieces(s).length, 0));
-    for (const p of d.props) expect(FORT_MODELS.has(p.kind)).toBe(true);
+    expect(d.props).toHaveLength(sites.reduce((sum, s) => sum + fortressPieces(s).length, 0) + 2);
+    expect(d.props.filter((p) => !FORT_MODELS.has(p.kind)).map((p) => p.kind)).toEqual(['noseRise', 'noseCrag']);
+  });
+
+  it('clears the earlier props Nose rock would bury, and keeps the rest', () => {
+    const draft = flatDraft();
+    const nose = REGION.towns.find((t) => t.id === 'nose')!;
+    const { u, v } = noseFrame(nose);
+    // 40 tiles back from the center lies under the mountain. 40 tiles toward the south gate is open sand.
+    const buried = { x: nose.pos.x + v.x * 40, y: nose.pos.y + v.y * 40 };
+    const open = { x: nose.pos.x - v.x * 40 + u.x, y: nose.pos.y - v.y * 40 + u.y };
+    draft.props = [buried, open].map((pos) => ({ kind: 'rock', pos, r: 1, yaw: 0, group: 0, step: 0 }));
+    const kept = fortressLayer(draft).props.filter((p) => p.kind === 'rock');
+    expect(kept.map((p) => p.pos)).toEqual([open]);
   });
 
   it('lowers each corner inside the Bowl curtain by its pit depth and no other corner (IV17)', () => {

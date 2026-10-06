@@ -54,6 +54,8 @@ const PROP_MODELS = [
   'hull_shell',
   'hull_tower',
   'junk',
+  'nose_crag',
+  'nose_rise',
   'power_pole',
   'quonset',
   'reactor',
@@ -101,11 +103,21 @@ function splitShapeOf(triangles) {
   return [...capBoxes(low, { ...CFG, maxBoxes: lowCap }), ...capBoxes(high, { ...CFG, maxBoxes: CFG.maxBoxes - lowCap })].map(roundBox);
 }
 
+// Nose's rock masses are a few hundred meters across. At CFG's grid they give tens of thousands of cells, too many to
+// merge pair by pair. Their boxes only need to follow the footprint, so cells take a coarser grid and one height band.
+const MASS_CFG = {
+  ...CFG,
+  cell: 2, // m, the grid the footprint is traced on
+  band: 64, // m, over the 56 m mountain top, so every cell merges by footprint alone
+  maxBoxes: 96, // enough boxes to follow the curved foot and the gorge
+};
+const MASSES = new Set(['nose_rise', 'nose_crag']);
+
 const shapes = {};
 for (const name of PROP_MODELS) {
   const bytes = readFileSync(`public/models/${name}.glb`);
   const triangles = await loadTriangles(bytes);
-  const boxes = SPLIT_AT_CLEARANCE.has(name) ? splitShapeOf(triangles) : shapeOf(triangles, CFG);
+  const boxes = SPLIT_AT_CLEARANCE.has(name) ? splitShapeOf(triangles) : shapeOf(triangles, MASSES.has(name) ? MASS_CFG : CFG);
   shapes[name] = { hash: fnv1a(bytes), boxes };
   console.log(`${name}: ${boxes.length} boxes`);
 }

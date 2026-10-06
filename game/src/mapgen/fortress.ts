@@ -1,20 +1,27 @@
-// The fortress bake layer: each fortress site's layout pieces from src/sim/fortress.ts as baked props, and the pit
-// dug inside a curtain.
+// The fortress bake layer: each fortress site's layout pieces from src/sim/fortress.ts as baked props, the pit dug
+// inside a curtain, and the rock masses of Nose from src/sim/nose.ts.
 
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressStyle } from '../data/fortress';
 import { REGION } from '../data/region';
 import { along, fortProp, fortressOutline, fortressPieces, pitDepth, type FortressPiece } from '../sim/fortress';
+import { boxDistance, propBoxes, propObstacle } from '../sim/mapgen';
+import { noseRocks } from '../sim/nose';
 import type { Site } from '../sim/sites';
 import type { BakedProp } from '../sim/terrain';
 import { typeCode, type MapDraft } from './bake';
 
 // The last layer: each fortress site's pit, then its pieces as baked props, of the kind that names the site's style
-// and the piece.
+// and the piece. Nose's rock masses come last, and clear every earlier prop they would bury.
 export function fortressLayer(d: MapDraft): MapDraft {
   const sites = [...REGION.towns, ...REGION.locations].filter((site) => site.id in FORTRESS_SITES);
   for (const site of sites) if (FORTRESS_SITES[site.id].pit !== undefined) digPit(d, site);
   const props = sites.flatMap((site) => fortressPieces(site).map((piece) => bakedPiece(FORTRESS_SITES[site.id].style, piece)));
-  return { ...d, props: [...d.props, ...props] };
+  const nose = sites.find((site) => site.id === 'nose');
+  if (nose === undefined) throw new Error('Nose is no fortress site, and its rock masses stand in its frame');
+  const rocks = noseRocks(nose);
+  const rockBoxes = rocks.flatMap((p, k) => propBoxes(propObstacle(p, k)));
+  const clear = d.props.filter((p) => !rockBoxes.some((b) => boxDistance(b, p.pos) < p.r));
+  return { ...d, props: [...clear, ...props, ...rocks] };
 }
 
 // Lowers each height corner inside the curtain by its pit depth, over the outline's bounding box only, then types the

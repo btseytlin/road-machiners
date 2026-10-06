@@ -4,7 +4,8 @@ ship runs into. It rises to about 44 m, twice the 22 m ship-metal towers, so it 
 Stands in the site frame of nose_rock_kit.py: the origin is the site center at ground level, +X along the ship toward
 its nose, +Y toward the south gate. Its footprint is the part of the ring behind a diagonal front edge that runs from
 60 m back at x = -48 to 22 m back at x = -85 and then straight on, past x = -48 toward the stern and inside 120 m of
-the center. Its front is a steep cliff, and its top is a broken plateau.
+the center, or out to the mountain's foot on its arc. Its front is a steep cliff, and its top is a broken plateau that
+falls toward the foot outside the ring.
 Run: blender --background --python tools/blender/nose_crag.py -- public/models/nose_crag.glb [tmp/nose_crag.png]
 """
 
@@ -16,11 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
-from nose_rock_kit import COLORS, heightfield  # noqa: E402
+from nose_rock_kit import COLORS, heightfield, past_ring  # noqa: E402
 
 SEED = 62
 EDGE_X = -48.0  # the crag's near end, toward the nose
 TOP = 44.0
+OUT_FALL = 0.7  # share of its height the crag loses from the ring to the mountain's foot
 
 
 def front(x: float) -> float:
@@ -37,7 +39,7 @@ def height(x: float, v: float) -> float:
     depth = v - front(x)
     near = min(1.0, max(0.0, (EDGE_X + 6.0 - x) / 10.0))
     climb = min(1.0, max(0.0, depth / 12.0)) ** 0.8
-    return 10.0 + (TOP - 10.0) * climb * near
+    return (10.0 + (TOP - 10.0) * climb * near) * (1.0 - OUT_FALL * past_ring(x, -v))
 
 
 def jitter(x: float, v: float) -> float:
@@ -52,7 +54,7 @@ def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    kit.export("nose_crag", args, view_size=260)
+    kit.export("nose_crag", args, view_size=440)
 
 
 if __name__ == "__main__":

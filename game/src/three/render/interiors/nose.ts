@@ -2,11 +2,10 @@
 // torn stern running into a crag at the back right, and in front of it an open sandy yard built up with scrap shelters,
 // a two-level timber platform with stairs up the rise, a red awning, a water tower, a jib crane and a van.
 //
-// The layout is authored in the ship's frame, from the south gate: u runs along the ship toward its nose, v runs back,
-// away from that gate, and both are in tiles from the site center. The frame is derived from fortressGates(), so it
-// follows the gates wherever the site's turn puts them. nose_rise and nose_crag are authored in this frame in meters
-// (tools/blender/nose_rock_kit.py), with +x along u and +y toward the gate. The ship rests on the rise's two sockets, so
-// its pose is the rise's decision. The radar dish on its nose turns.
+// The layout is authored in noseFrame(), from the south gate: u runs along the ship toward its nose, v runs back, away
+// from that gate, and both are in tiles from the site center. The rise and the crag are baked props in the same frame
+// (src/sim/nose.ts), so the map draws them and they block trucks. The ship rests on the rise's two sockets, so its pose
+// is the rise's decision. The radar dish on its nose turns.
 //
 // Offsets are site tiles: x is map x, z is map y.
 
@@ -15,6 +14,7 @@ import { PHYSICS } from '../../../data/physics';
 import { PAL } from '../../../render/palette';
 import { hash2 } from '../../../render/noise';
 import { fortressGates, type FortGate } from '../../../sim/fortress';
+import { noseFrame } from '../../../sim/nose';
 import type { Site } from '../../../sim/sites';
 import { model, socket, type ModelName } from '../models';
 import { spin } from '../site-motion';
@@ -32,9 +32,15 @@ const SECTIONS: readonly { name: ModelName; at: number }[] = [
 ];
 const DISH_TURN = 8; // seconds per turn of the radar dish
 const DISH_SCALE = 1.5; // the 10 m dish on a 36 m hull
-// The rise stands this far back from the center, in tiles, along its straight front edge, and its hole leaves the WNW
-// gate's open ground. Both are authored in nose_rise.py, so the code checks the gate against them.
-export const RISE = { front: 1, clip: 30, hole: { u: 23, v: 20, r: 8.5 } };
+// The rise stands this far back from the center, in tiles, along its front edge, and its hole leaves the WNW gate's
+// open ground. Past bend.u the edge bends toward the gate by bend.slope tiles per tile. All are authored in
+// nose_rock_kit.py and nose_rise.py, so the code checks the gate against them and keeps the yard off the bend.
+export const RISE = { front: 1, bend: { u: -26.25, slope: 1.6 }, hole: { u: 23, v: 20, r: 8.5 } };
+
+// Where the rise's front edge lies at u, in tiles back from the center.
+export function riseFront(u: number): number {
+  return RISE.front - Math.max(0, RISE.bend.u - u) * RISE.bend.slope;
+}
 const HOLE_TOLERANCE = 1; // tiles the WNW gate may lie off the hole's center
 
 // The yard's open ground at each gate, in tiles past half the gate's width. It is the 34 m disc nose_rise leaves bare.
@@ -67,11 +73,9 @@ type Shelter = Spot & { scale: number; r: number };
 type Frame = { u: { x: number; z: number }; v: { x: number; z: number }; yaw: number; faceYaw: number; south: FortGate; wnw: FortGate };
 
 function frameOf(site: Site): Frame {
-  const gates = fortressGates(site);
-  if (gates.length !== 2) throw new Error(`Nose has ${gates.length} gates, and its interior is laid out for two`);
-  const [south, wnw] = gates[0].out.y > gates[1].out.y ? gates : [gates[1], gates[0]];
+  const { u, v, yaw, south, wnw } = noseFrame(site);
   const g = south.out;
-  return { u: { x: -g.y, z: g.x }, v: { x: -g.x, z: -g.y }, yaw: Math.atan2(-g.x, -g.y), faceYaw: -Math.atan2(g.y, g.x), south, wnw };
+  return { u: { x: u.x, z: u.y }, v: { x: v.x, z: v.y }, yaw: -yaw, faceYaw: -Math.atan2(g.y, g.x), south, wnw };
 }
 
 function placeAt(f: Frame, u: number, v: number): { x: number; z: number } {
@@ -81,7 +85,7 @@ function placeAt(f: Frame, u: number, v: number): { x: number; z: number } {
 export function buildNose(b: SiteBuilder, site: Site): void {
   const f = frameOf(site);
   checkHole(site, f);
-  addMasses(b, f);
+  addShip(b, f);
   const taken = gateDiscs(site);
   addYard(b, f, taken);
   b.root.userData.homes = addShelters(b, site, f, taken);
@@ -97,19 +101,14 @@ function checkHole(site: Site, f: Frame): void {
   if (Math.hypot(u - RISE.hole.u, v - RISE.hole.v) > HOLE_TOLERANCE) throw new Error(`Nose's WNW gate lies at u ${u.toFixed(1)}, v ${v.toFixed(1)}, not at the hole of nose_rise (${RISE.hole.u}, ${RISE.hole.v})`);
 }
 
-// The rise and the crag in the frame, and the ship resting on the rise's two sockets: its group stands at the front
+// The ship resting on the rise's two sockets, in the frame the rise prop stands in: its group stands at the front
 // socket and leans to the rear one. The sections rest in it, and the radar dish turns on the nose.
-function addMasses(b: SiteBuilder, f: Frame): void {
+function addShip(b: SiteBuilder, f: Frame): void {
   const frame = new THREE.Group();
   frame.name = 'nose-frame';
   frame.position.set(b.site.pos.x * S, b.groundAt(0, 0) * S, b.site.pos.y * S);
   frame.rotation.y = f.yaw;
   b.root.add(frame);
-  const rise = model('nose_rise');
-  rise.name = 'nose-rise';
-  const crag = model('nose_crag');
-  crag.name = 'nose-crag';
-  frame.add(rise, crag);
   const front = socket('nose_rise', 'ship_front');
   const rear = socket('nose_rise', 'ship_rear');
   const ship = new THREE.Group();
@@ -214,8 +213,8 @@ function shelterSpot(f: Frame, u: number, v: number, row: number, k: number): Sh
 function shelterFits(site: Site, spot: Shelter, taken: Disc[], f: Frame): boolean {
   if (!fitsCurtain(site, spot.x, spot.z, 2 * spot.r, 2 * spot.r)) return false;
   const v = spot.x * f.v.x + spot.z * f.v.z;
-  if (v > RISE.front - SHELTER.rowStart + 1) return false;
   const u = spot.x * f.u.x + spot.z * f.u.z;
+  if (v > riseFront(u) - SHELTER.rowStart + 1) return false;
   if (Math.abs(u) < SHELTER.lane && v < -8) return false;
   return !taken.some((d) => Math.hypot(d.x - spot.x, d.z - spot.z) < d.r + spot.r + SHELTER.gap);
 }

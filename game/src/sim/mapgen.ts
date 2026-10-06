@@ -38,7 +38,7 @@ export function mapObstacles(map: BakedMap): Obstacle[] {
   return out;
 }
 
-function propObstacle(p: BakedProp, k: number): Obstacle {
+export function propObstacle(p: BakedProp, k: number): Obstacle {
   if (p.kind === 'rock') return { id: `rock${k}`, pos: { ...p.pos }, r: p.r, kind: 'rock' };
   const id = p.kind === 'pole' ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
@@ -137,7 +137,7 @@ export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: num
 
 type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | FortModel;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'nose_rise' | 'nose_crag' | FortModel;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -182,6 +182,8 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   hullTower: 'hull_tower',
   hullGantry: 'hull_gantry',
   rimRock: 'rim_rock',
+  noseRise: 'nose_rise',
+  noseCrag: 'nose_crag',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence or barrier segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The
