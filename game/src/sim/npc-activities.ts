@@ -1206,20 +1206,22 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   finishGoal(world, vehicle, 'sold cargo');
 }
 
-// Buys what the wallet above the upkeep reserve and the free cells allow, then delivers it as the long-term goal.
+// Buys what the wallet above the upkeep reserve and the free cells allow, as planned, then fills the tank from what is left and delivers it as the long-term goal.
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
-  topUpAtPump(world, vehicle, site.id);
+  noteShop(world, vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
+    topUpAtPump(world, vehicle, site.id);
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
     replaceBase(world, vehicle, createSiteActivity('sell', activity.purchase.sellShop, 'deliver purchased cargo'));
     return;
   }
+  topUpAtPump(world, vehicle, site.id);
   finishGoal(world, vehicle, 'cannot afford trade cargo');
 }
 

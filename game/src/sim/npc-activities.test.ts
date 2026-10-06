@@ -533,15 +533,25 @@ describe('NPC activities', () => {
       expect(getResources(w, npc).money).toBe(500 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
     });
 
-    it('a trader that buys trade cargo at a town tops up its tank and keeps its upkeep reserve', () => {
+    it('a trader that buys trade cargo at a town buys the planned cargo first, then fills the tank from the rest', () => {
       const { w, npc } = createTrader();
       at(npc, 'bowl');
-      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 200);
+      const unit = getTradePrice(w, npc, 'bowl', 'grain', 'buy');
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + unit);
+      npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
+      resolveNpcActivities(w);
+      expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
+      expect(getResources(w, npc).money).toBeGreaterThanOrEqual(0);
+    });
+
+    it('a trader with plenty of money buying trade cargo also tops up its tank', () => {
+      const { w, npc } = createTrader();
+      at(npc, 'bowl');
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 5000);
       npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
       resolveNpcActivities(w);
       expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
       expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
-      expect(getResources(w, npc).money).toBeGreaterThanOrEqual(0);
     });
 
     it('a raider selling at the Salvage Yard buys no fuel there, and one selling at its camp tops up', () => {
