@@ -140,6 +140,29 @@ export function toggleFullLog(world: World): World {
   return update(world, (w) => { w.player.fullLog = !w.player.fullLog; });
 }
 
+export function toggleFrozen(world: World): World {
+  return update(world, (w) => { w.player.frozen = !w.player.frozen; });
+}
+
+// Runs on the turn draft after NPC drivers plan, so frozen drivers brake where they are.
+export function freezeDriving(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) v.order = { kind: 'brake' };
+}
+
+// Runs on the turn draft after NPC gun and utility orders, so frozen drivers neither fire nor use utilities.
+export function freezeFire(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) {
+    v.weaponOrders = {};
+    v.utilityOrders = {};
+  }
+}
+
+function npcs(world: World): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain !== null && v.id !== world.player.vehicleId);
+}
+
 // Runs on the turn draft before destruction and defeat checks, so nothing the turn did can break the truck.
 export function applyGodMode(world: World): void {
   if (!world.player.god) return;

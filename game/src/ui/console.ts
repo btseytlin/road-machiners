@@ -25,6 +25,7 @@ import {
   startBattle,
   startWeather,
   teleport,
+  toggleFrozen,
   toggleFullLog,
   toggleGod,
 } from "../sim/cheats";
@@ -130,6 +131,10 @@ export const COMMANDS: readonly Command[] = [
   command("log", "Toggle the full log with events you cannot see or hear.", { min: 0, max: 0 }, (world) => {
     const next = toggleFullLog(world);
     return changed(next, `full log ${next.player.fullLog ? "on" : "off"}`);
+  }),
+  command("freeze", "Toggle frozen NPCs: they brake, hold fire and use no utilities.", { min: 0, max: 0 }, (world) => {
+    const next = toggleFrozen(world);
+    return changed(next, `NPCs ${next.player.frozen ? "frozen" : "unfrozen"}`);
   }),
 
   command("fps", "Toggle the frame rate panel.", { min: 0, max: 0 }, () => ({ world: null, lines: [], toggleFps: true })),

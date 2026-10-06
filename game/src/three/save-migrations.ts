@@ -363,6 +363,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 15 to 16: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
   // types are the same, so a save keeps its world as it was.
   (world) => world,
+  // 16 to 17: the player gets the debug freeze switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), frozen: false } }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

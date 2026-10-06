@@ -1,5 +1,5 @@
 {
- "format": "2.16",
+ "format": "2.17",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -40,6 +40,7 @@
    "discovered": [],
    "engineHeat": "number",
    "explored": "string",
+   "frozen": "boolean",
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",

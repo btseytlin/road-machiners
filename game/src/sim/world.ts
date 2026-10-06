@@ -19,7 +19,7 @@ import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
-import { applyGodMode } from './cheats';
+import { applyGodMode, freezeDriving, freezeFire } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
@@ -118,6 +118,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       talked: {},
       god: false,
       fullLog: false,
+      frozen: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -277,6 +278,7 @@ export function endTurn(
     w.turn++;
     advanceWeather(w);
     planNpcOrders(w);
+    freezeDriving(w);
     move(w);
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
@@ -293,6 +295,7 @@ export function endTurn(
     raiseCalls(w);
     assignAutoOrders(w);
     assignUtilityOrders(w);
+    freezeFire(w);
     settleAims(w);
     activateUtilities(w);
     tickCharges(w);

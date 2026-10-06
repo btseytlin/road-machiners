@@ -11,7 +11,7 @@ import { START_KITS } from '../data/start';
 import {
   addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
+  noclipMove, startBattle, startWeather, teleport, toggleFrozen, toggleFullLog, toggleGod, freezeDriving, freezeFire,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
@@ -172,6 +172,38 @@ describe('god mode', () => {
     };
     expect(endTurn(broken(false), testDrive).player.state).toBe('knockedOut');
     expect(endTurn(broken(true), testDrive).player.state).toBe('active');
+  });
+});
+
+describe('frozen NPCs', () => {
+  it('toggles on and off', () => {
+    const on = toggleFrozen(emptyWorld());
+    expect(on.player.frozen).toBe(true);
+    expect(toggleFrozen(on).player.frozen).toBe(false);
+  });
+
+  it('brakes NPC drivers and clears their gun and utility orders, and leaves the player alone', () => {
+    const { w, id } = withSpawned(toggleFrozen(emptyWorld()), 'buggy', true);
+    const npc = w.vehicles.find((v) => v.id === id)!;
+    const me = playerVehicle(w);
+    npc.order = { kind: 'through', dest: me.pos };
+    npc.weaponOrders = { x: { targetId: me.id, aim: 'body' } };
+    npc.utilityOrders = { y: { kind: 'self' } };
+    me.order = { kind: 'through', dest: npc.pos };
+    freezeDriving(w);
+    freezeFire(w);
+    expect(npc).toMatchObject({ order: { kind: 'brake' }, weaponOrders: {}, utilityOrders: {} });
+    expect(me.order).toEqual({ kind: 'through', dest: npc.pos });
+  });
+
+  it('keeps a hostile NPC parked with no gun orders through a turn', () => {
+    const after = (frozen: boolean) => {
+      const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
+      const { w, id } = withSpawned(start, 'buggy', true);
+      return endTurn(w, testDrive).vehicles.find((v) => v.id === id)!;
+    };
+    expect(Object.keys(after(false).weaponOrders)).not.toEqual([]);
+    expect(after(true)).toMatchObject({ speed: 0, weaponOrders: {} });
   });
 });
 
