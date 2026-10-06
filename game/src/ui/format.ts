@@ -645,3 +645,57 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
   }
   throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
 }
+
+// Words for held goods and the sale estimate, shared by the town market and the truck goods trade.
+export type HeldReadout =
+  | { kind: "none" }
+  | { kind: "unrecorded"; held: number }
+  | { kind: "gain" | "loss"; held: number; perUnit: number; avgCost: number }
+  | { kind: "even"; held: number; avgCost: number };
+
+export type HeldLine = { text: string; tone: "count" | "gain" | "loss" | "even" | "dim" };
+
+export const GOODS_COLUMNS = { good: "Good", buy: "Buy price, each", sell: "Sell price, each", held: "In truck" } as const;
+
+export const ESTIMATE_HELP_TITLE = "How the estimate works";
+
+export const ESTIMATE_HELP: readonly string[] = [
+  "The estimate compares this sell price for one unit with your average cost per unit of that good. It is not a fee or a charge.",
+  // Describes the basis rules of noteCostBasis() (sim/economy.ts), addBasis()/takeBasis() (sim/salvage.ts) and loadHaul() (sim/market.ts).
+  "Your average cost is the money you paid when buying. Goods you salvaged, looted or loaded for a haul count at the good's usual value, since you paid no money for them.",
+  "At a town, each unit you sell lowers the price, so selling many earns less per unit than shown. Hover All to see the lot total. A truck pays the same price for every unit.",
+  "No cost on record means the game has no cost for these goods, so it shows no estimate.",
+];
+
+function checkReadout(held: number, sell: number, basis: number | undefined): void {
+  if (!Number.isInteger(held) || held < 0) throw new Error(`heldReadout: bad held count ${held}`);
+  if (!Number.isFinite(sell)) throw new Error(`heldReadout: bad sell price ${sell}`);
+  if (basis !== undefined) checkBasis(basis);
+}
+
+function checkBasis(basis: number): void {
+  if (!Number.isFinite(basis) || basis < 0) throw new Error(`heldReadout: bad cost basis ${basis}`);
+}
+
+export function heldReadout(held: number, sell: number, basis: number | undefined): HeldReadout {
+  checkReadout(held, sell, basis);
+  if (held === 0) return { kind: "none" };
+  if (basis === undefined) return { kind: "unrecorded", held };
+  const diff = Math.round(sell - basis);
+  const avgCost = Math.round(basis);
+  if (diff === 0) return { kind: "even", held, avgCost };
+  return { kind: diff > 0 ? "gain" : "loss", held, perUnit: Math.abs(diff), avgCost };
+}
+
+export function heldLines(r: HeldReadout): HeldLine[] {
+  if (r.kind === "none") return [{ text: "None", tone: "dim" }];
+  const count: HeldLine = { text: `${r.held} in truck`, tone: "count" };
+  if (r.kind === "unrecorded") return [count, { text: "No cost on record", tone: "dim" }];
+  const cost: HeldLine = { text: `avg cost ${r.avgCost}`, tone: "dim" };
+  if (r.kind === "even") return [count, { text: "Est. break-even", tone: "even" }, cost];
+  return [count, { text: `Est. ${r.kind} ${r.perUnit} / unit`, tone: r.kind }, cost];
+}
+
+export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
+  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
+}
