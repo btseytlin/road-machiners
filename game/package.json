@@ -15,6 +15,7 @@
     "loadouts": "vite-node scripts/loadouts.mjs",
     "traffic": "vite-node scripts/traffic.mjs",
     "stuck": "vite-node scripts/progression-record.mjs -- --archetypes trader --seeds 1,2,3 --turns 1000",
+    "income": "ROAM_NO_WATCH=1 vite-node scripts/income.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
     "progression:report": "vite-node scripts/progression-report.mjs",
     "progression:watch": "vite-node scripts/progression-watch.mjs",
