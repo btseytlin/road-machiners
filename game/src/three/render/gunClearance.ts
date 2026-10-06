@@ -56,7 +56,16 @@ export function swept(p: Flat, pivot: Flat, shape: HeadShape, sweep: readonly Fi
   if (r > shape.reach) return false;
   const widen = (Math.asin(Math.min(1, shape.halfWidth / r)) * 180) / Math.PI;
   const bearing = (Math.atan2(dz, dx) * 180) / Math.PI;
-  return sweep.some((s) => [bearing - 360, bearing, bearing + 360].some((b) => b >= s.from - widen && b <= s.to + widen));
+  return sweep.some((s) => within(bearing, s, widen));
+}
+
+// True when a bearing, or the same bearing a turn either way, lies in the span widened by widen degrees.
+function within(bearing: number, span: FireSpan, widen: number): boolean {
+  for (let turn = -360; turn <= 360; turn += 360) {
+    const b = bearing + turn;
+    if (b >= span.from - widen && b <= span.to + widen) return true;
+  }
+  return false;
 }
 
 const GRID = 0.05; // meters between the points tried inside a box
@@ -75,11 +84,14 @@ function touches(o: Obstacle, pivot: Flat, shape: HeadShape, sweep: readonly Fir
   const near = { x: Math.min(Math.max(pivot.x, o.x0), o.x1), z: Math.min(Math.max(pivot.z, o.z0), o.z1) };
   if (Math.hypot(near.x - pivot.x, near.z - pivot.z) > shape.reach) return false;
   if (swept(near, pivot, shape, sweep)) return true;
+  const point = { x: 0, z: 0 };
   const nx = Math.max(1, Math.ceil((o.x1 - o.x0) / GRID));
   const nz = Math.max(1, Math.ceil((o.z1 - o.z0) / GRID));
   for (let i = 0; i <= nx; i++) {
     for (let j = 0; j <= nz; j++) {
-      if (swept({ x: o.x0 + ((o.x1 - o.x0) * i) / nx, z: o.z0 + ((o.z1 - o.z0) * j) / nz }, pivot, shape, sweep)) return true;
+      point.x = o.x0 + ((o.x1 - o.x0) * i) / nx;
+      point.z = o.z0 + ((o.z1 - o.z0) * j) / nz;
+      if (swept(point, pivot, shape, sweep)) return true;
     }
   }
   return false;
