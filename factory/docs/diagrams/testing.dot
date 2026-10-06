@@ -19,8 +19,9 @@ digraph testing {
   XD [label="Design", fillcolor="#f3f4f6", color="#6b7280"];
   XS [label="factory-stuck", fillcolor="#f3f4f6", color="#6b7280"];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
-  PC -> PC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
-  HC -> HC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
+  PC -> PC [label="timeouts or browser crash: rerun, up to 3\nfailure: one check-fix round\nlow fps alone: passes, noted"];
+  HC -> HC [label="timeouts or browser crash: rerun, up to 3\nfailure: one check-fix round\nlow fps alone: passes, noted"];
+  XS -> HC [label="recheck", constraint=false];
   HR -> HR [label="FAIL: one review-fix round"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   PV -> XI [label="rebuild"];
