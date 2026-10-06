@@ -8,7 +8,7 @@ import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
-import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimsAt, InspectPin, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -136,7 +136,7 @@ describe("weapon readout at current positions", () => {
   });
 });
 
-describe("targeting by click", () => {
+describe("aiming the body", () => {
   it("aims at the clicked vehicle, and a second click clears the order", () => {
     const { world, target, gun } = createDuel();
     world.vehicles[0].weaponOrders = {};
@@ -151,6 +151,19 @@ describe("targeting by click", () => {
     refreshVision(world);
     const moved = toggleTarget(world, [gun], other);
     expect(moved.vehicles[0].weaponOrders[gun.part.id].targetId).toBe(other.id);
+  });
+});
+
+describe("aim query", () => {
+  it("tells whether the chosen guns aim at a target, and names them", () => {
+    const { world, target, gun } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    expect(aimsAt(world, [gun], target.id)).toBe(false);
+    expect(aimsAt(world, [], target.id)).toBe(false);
+    const aimed = toggleTarget(world, [gun], target);
+    expect(aimsAt(aimed, [gun], target.id)).toBe(true);
+    expect(gunsLabel(world, null)).toBe("all guns");
+    expect(gunsLabel(world, gun.part.id)).toBe("gun 1");
   });
 });
 
@@ -409,5 +422,40 @@ describe("weapon panel keys and the turn button", () => {
     expect(host.pressTurn).toHaveBeenCalledTimes(1);
     win.fire("pointercancel");
     expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+function make() {
+  const calls = { n: 0 };
+  return { calls, pin: new InspectPin(() => calls.n++) };
+}
+
+describe("InspectPin", () => {
+  it("pins, switches and unpins on click", () => {
+    const { pin, calls } = make();
+    pin.click("a");
+    expect(pin.id).toBe("a");
+    pin.click("b");
+    expect(pin.id).toBe("b");
+    pin.click("b");
+    expect(pin.id).toBeNull();
+    expect(calls.n).toBe(3);
+  });
+
+  it("clears, and tells only about real changes", () => {
+    const { pin, calls } = make();
+    pin.clear();
+    pin.keepIf(true);
+    expect(calls.n).toBe(0);
+    pin.click("a");
+    pin.keepIf(true);
+    expect(pin.id).toBe("a");
+    pin.keepIf(false);
+    expect(pin.id).toBeNull();
+    expect(calls.n).toBe(2);
+  });
+
+  it("rejects an empty id", () => {
+    expect(() => make().pin.click("")).toThrow();
   });
 });

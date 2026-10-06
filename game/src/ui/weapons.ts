@@ -69,10 +69,22 @@ function seenNpcJob(w: World, v: Vehicle): JobMark | null {
   return work && { label: workLabel(w, v, work), progress: workProgress(work) };
 }
 
-// A click on a vehicle aims the weapons at it. When all of them already aim at it, the click clears them.
-export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+// True when every chosen gun already has a body or part order on this target.
+export function aimsAt(w: World, weapons: MountedWeapon[], targetId: string): boolean {
   const orders = playerVehicle(w).weaponOrders;
-  const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id);
+  return weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === targetId);
+}
+
+// Names the chosen guns as the panel numbers them.
+export function gunsLabel(w: World, selected: string | null): string {
+  if (!selected) return "all guns";
+  const i = vehicleStats(w, playerVehicle(w)).weapons.findIndex((mw) => mw.part.id === selected);
+  return i < 0 ? "all guns" : `gun ${i + 1}`;
+}
+
+// The Aim button aims the weapons at a vehicle. When all of them already aim at it, the button clears them.
+export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+  const aimed = aimsAt(w, weapons, target.id);
   if (w.player.autoFire) w = setAutoFire(w, false);
   for (const mw of weapons)
     w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: "body" });
@@ -225,7 +237,7 @@ export class WeaponPanel {
         class: all ? "on" : "",
         "aria-pressed": String(all),
         disabled: locked,
-        title: "Aim all weapons with the next click [0]",
+        title: "Aim all weapons [0]",
         onclick: () => this.host.runKey("Digit0"),
       },
       "All [0]",
@@ -401,5 +413,37 @@ export class HoverHold {
   watch(panel: EventTarget): void {
     panel.addEventListener("mouseenter", () => this.cancel());
     panel.addEventListener("mouseleave", () => this.now(null));
+  }
+}
+
+// The truck whose inspection card a click pinned. Hover is transient and aim is a weapon order; the pin is only a selection.
+export class InspectPin {
+  private current: string | null = null;
+
+  constructor(private readonly onChange: () => void) {}
+
+  get id(): string | null {
+    return this.current;
+  }
+
+  // Pins a truck. A click on the pinned truck unpins it.
+  click(id: string): void {
+    if (id === "") throw new Error("InspectPin.click needs a vehicle id");
+    this.set(id === this.current ? null : id);
+  }
+
+  clear(): void {
+    this.set(null);
+  }
+
+  // Keeps the pin while its truck is seen, and drops it otherwise.
+  keepIf(seen: boolean): void {
+    if (!seen) this.set(null);
+  }
+
+  private set(id: string | null): void {
+    if (id === this.current) return;
+    this.current = id;
+    this.onChange();
   }
 }
