@@ -10,7 +10,7 @@ beforeAll(async () => {
   fixture = emptyWorld();
 });
 
-it.each(['courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader'])('%s drives upright with repeatable physics', (chassisId) => {
+it.each(['courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'niva', 'bukhanka', 'lincoln'])('%s drives upright with repeatable physics', (chassisId) => {
   const world = structuredClone(fixture);
   const vehicle = makeVehicle(world, { name: 'New chassis', faction: 'player', chassisId, parts: [{ defId: 'stockEngine', wear: 0 }, { defId: 'mg', wear: 0 }], spares: [], cargo: {}, pos: { x: 30, y: 30 }, heading: 0, brain: null });
   world.vehicles = [vehicle];

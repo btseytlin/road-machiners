@@ -1,4 +1,4 @@
-// The baked map for Node runs: tests, the economy harness and the progression recorder. Vite inlines the
+// The baked map for Node runs: tests and the progression recorder. Vite inlines the
 // file as a data URL at import, because the project carries no Node file typings. The browser fetches the
 // map at boot instead, so no game module imports this one.
 

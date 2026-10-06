@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STATE_TURNS } from '../data/npcs';
 import { wreckVehicle } from './combat';
-import { addState, advanceStates, endState, STATE_KINDS, stateOf, statesHeld, workOf } from './states';
+import { addState, advanceStates, endState, isRobberyFeud, robbing, STATE_KINDS, stateOf, statesHeld, workOf } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcState, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -171,7 +171,7 @@ describe('states', () => {
   });
 });
 
-const PATCH_DATA = { kind: 'patch', deal: 'free', parts: 1, price: 0, work: 4, workLeft: 3 } as const;
+const PATCH_DATA = { kind: 'patch', deal: 'free', parts: 1, partIds: [] as string[], price: 0, work: 4, workLeft: 3 } as const;
 
 function parkedPair(gap: number) {
   const world = emptyWorld({ x: 30, y: 30 });
@@ -206,5 +206,23 @@ describe('work of a truck', () => {
     const { world, me, npc } = parkedPair(1);
     addState(world, 'truce', npc.id, me.id, { kind: 'none' });
     expect(workOf(world, npc)).toBeNull();
+  });
+
+  it('robbing holds only for a robbery feud from the robber on the target', () => {
+    const { w, a, b } = apart();
+    expect(robbing(w, a, b)).toBe(false);
+    addState(w, 'feud', b, a, FEUD);
+    expect(robbing(w, b, a)).toBe(false);
+    addState(w, 'feud', a, b, { kind: 'feud', robbery: true });
+    expect(robbing(w, a, b)).toBe(true);
+    expect(robbing(w, b, a)).toBe(false);
+  });
+
+  it('a feud state without feud data throws in the robbery test', () => {
+    const { w, a, b } = apart();
+    const s = addState(w, 'feud', a, b, FEUD);
+    expect(isRobberyFeud(s)).toBe(false);
+    expect(() => isRobberyFeud({ ...s, data: NONE })).toThrow(/holds no feud/);
+    expect(isRobberyFeud({ ...s, kind: 'backedOff', data: NONE })).toBe(false);
   });
 });

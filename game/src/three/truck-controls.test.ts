@@ -10,6 +10,7 @@ function controls(world: World) {
   const c = new TruckControls({
     world: () => host.world,
     apply: (next) => { host.world = next; host.applied++; },
+    commit: (next) => { host.world = next; },
     refreshPlan: () => {},
     doused: () => {},
     revved: () => { host.revs++; },

@@ -1,0 +1,20 @@
+// Committee inputs: what each Telegram action queues, and the job that runs it. Yellow: people. Grey: Hermes decides.
+digraph committee {
+  rankdir=LR; nodesep=0.2; ranksep=0.7; bgcolor=white; pad=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.08", penwidth=1.3, width=1.6];
+  edge [color="#374151", penwidth=1.6, arrowsize=0.8, fontname="Helvetica", fontsize=11];
+  node [fillcolor="#fde68a", color="#b45309"];
+  approve [label="Approve"]; deny [label="Deny"]; reply [label="Other reply to\nan approval post"]; forced [label="patch: or redesign:\nreply"];
+  ship [label="Ship"]; remove [label="remove #N"]; rtask [label="Other reply to\nthe candidate post"]; change [label="/change or\nQueue as change"]; ask [label="Message\nto Hermes"];
+  node [fillcolor="#f3f4f6", color="#6b7280"];
+  hermes [label="Hermes routes"]; hermes2 [label="Hermes queues"];
+  node [fillcolor="#eef2ff", color="#6366f1"];
+  approveJob [label="approve job"]; closed [label="Issue closed\nas wont-do"]; answer [label="Answer in chat\ncard stays"];
+  patchJob [label="patch job"]; design [label="Card to Design"]; shipJob [label="ship job"]; removeJob [label="remove job"];
+  newTask [label="release-task issue\nin Design"]; changeJob [label="change job"]; adhocJob [label="adhoc job"];
+  approve -> approveJob; deny -> closed;
+  reply -> hermes; hermes -> answer [label="answer"]; hermes -> patchJob [label="patch"]; hermes -> design [label="redesign"];
+  forced -> patchJob; forced -> design;
+  ship -> shipJob; remove -> removeJob; rtask -> newTask;
+  change -> changeJob; ask -> hermes2; hermes2 -> adhocJob [label="task"]; hermes2 -> changeJob [label="factory change"];
+}
