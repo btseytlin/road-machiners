@@ -114,7 +114,8 @@ type Clipped = THREE.Material & { onBeforeCompile: THREE.Material['onBeforeCompi
 export class SightLimit {
   private readonly visible: THREE.DataTexture;
   private readonly uniforms;
-  private readonly patched = new WeakSet<THREE.Material>();
+  // Each patched material and whether its meshes carry sightAt sample points.
+  private readonly patched = new WeakMap<THREE.Material, boolean>();
 
   constructor(private readonly mapSize: number) {
     // One texel per tile, 255 where the player sees it now. Row y holds map row y.
@@ -170,24 +171,37 @@ export class SightLimit {
   }
 
   // Patches every material under obj once. Chains any shader patch the material already has. With grey,
-  // fragments on tiles out of clear sight drain to grey.
+  // fragments on tiles out of clear sight drain to grey. A mesh whose geometry has a sightAt attribute, a
+  // world XZ point in meters per vertex, greys by the tile under that point instead of under the fragment.
+  // Deck models use it, so they grey by their deck, not by the canyon floor under their rails.
   patch(obj: THREE.Object3D, grey: boolean): void {
     obj.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
+      const sampled = hasSightAt(o);
       const materials: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of materials) this.patchMaterial(m, grey);
+      for (const m of materials) this.patchMaterial(m, grey, sampled);
     });
   }
 
-  private patchMaterial(mat: Clipped, grey: boolean): void {
-    if (this.patched.has(mat)) return;
-    this.patched.add(mat);
+  private patchMaterial(mat: Clipped, grey: boolean, sampled: boolean): void {
+    const was = this.patched.get(mat);
+    if (was !== undefined) {
+      if (was !== sampled) throw new Error(`Material ${mat.name || mat.uuid} is on meshes with and without sightAt points`);
+      return;
+    }
+    this.patched.set(mat, sampled);
+    const greyAt = sampled ? 'vSightAt' : 'vSightXZ';
     const before = mat.onBeforeCompile.bind(mat);
     const key = mat.customProgramCacheKey.bind(mat);
     mat.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
       Object.assign(shader.uniforms, this.uniforms);
       shader.vertexShader = inject(shader.vertexShader, '#include <common>', 'varying vec2 vSightXZ;');
+      if (sampled) {
+        shader.vertexShader = inject(shader.vertexShader, '#include <common>', 'attribute vec2 sightAt;\nvarying vec2 vSightAt;');
+        shader.vertexShader = inject(shader.vertexShader, '#include <project_vertex>', 'vSightAt = sightAt;');
+        shader.fragmentShader = inject(shader.fragmentShader, '#include <common>', 'varying vec2 vSightAt;');
+      }
       shader.vertexShader = inject(
         shader.vertexShader,
         '#include <project_vertex>',
@@ -203,7 +217,7 @@ export class SightLimit {
         'varying vec2 vSightXZ;\nuniform vec2 sightCenter;\nuniform float sightRadius;\nuniform sampler2D sightVisible;\nuniform float sightMapMeters;\nuniform vec2 sightGrey;',
       );
       shader.fragmentShader = inject(shader.fragmentShader, '#include <clipping_planes_fragment>', 'if (distance(vSightXZ, sightCenter) > sightRadius) discard;');
-      if (grey) shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float sightSeen = texture2D(sightVisible, vSightXZ / sightMapMeters).r;
+      if (grey) shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float sightSeen = texture2D(sightVisible, ${greyAt} / sightMapMeters).r;
         float sightLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
         outgoingLight = mix(mix(outgoingLight, vec3(sightLuma), sightGrey.x) * sightGrey.y, outgoingLight, sightSeen);
         #include <opaque_fragment>`);
@@ -211,9 +225,17 @@ export class SightLimit {
     };
     // Programs are cached by this key. Without the tag, patched and unpatched materials with the same
     // hook source would share one program.
-    mat.customProgramCacheKey = () => `${key()}|sight${grey ? '-grey' : ''}`;
+    mat.customProgramCacheKey = () => `${key()}|sight${grey ? '-grey' : ''}${sampled ? '-at' : ''}`;
     mat.needsUpdate = true;
   }
+}
+
+// Whether a mesh carries sightAt sample points. Points that are not 2D are a bug.
+function hasSightAt(mesh: THREE.Mesh): boolean {
+  const sightAt = (mesh.geometry as THREE.BufferGeometry).getAttribute('sightAt');
+  if (sightAt === undefined) return false;
+  if (sightAt.itemSize !== 2) throw new Error(`Mesh ${mesh.name || mesh.id} has sightAt points of size ${sightAt.itemSize}, not 2`);
+  return true;
 }
 
 // Adds code after a shader chunk include. A missing chunk means an unsupported material, so it stops the build.
