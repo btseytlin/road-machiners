@@ -1,7 +1,7 @@
 """Spaced armor for the 'spacedArmor' armor.
 
 A front-edge row of 4 cells: 1.94 m across, 0.65 m deep, outer face at +X. An inner steel wall and an outer layer of
-four panels stand 0.2 m apart on bolted standoffs, 0.9 m tall. The outer panels take the faction paint.
+four panels stand 0.2 m apart on bolted standoffs, 0.9 m tall, on a foot with a short gusset behind each panel. The outer panels take the faction paint.
 Run: blender --background --python tools/blender/arm_spaced.py -- public/models/arm_spaced.glb [tmp/arm_spaced.png]
 """
 
@@ -35,7 +35,7 @@ def build(kit: Kit) -> None:
         for z in (0.28, 0.72):
             kit.cylinder(f"standoff{c}_{z}", 0.03, gap, (INNER_X + gap / 2, y, z), "metal_light", rot=(0, math.radians(90), 0), vertices=6)
             kit.box(f"bolt{c}_{z}", (0.03, 0.05, 0.05), (OUTER_PANEL_X + 0.025, y, z), "dark")
-        strut(kit, f"brace{c}", (INNER_X - 0.03, y, HEIGHT * 0.65), (INNER_X - 0.38, y, 0.02), 0.05, "metal")
+        strut(kit, f"gusset{c}", (INNER_X - 0.03, y, 0.32), (INNER_X - 0.12, y, 0.04), 0.05, "metal")
 
 
 if __name__ == "__main__":

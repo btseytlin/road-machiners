@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { damagePart } from './damage';
 import { corePart } from './grid';
 import { consumeVehicleSupplies } from './resources';
@@ -42,10 +42,10 @@ describe('damage practice', () => {
 });
 
 describe('toughness on cab damage', () => {
-  it('loses less health from a cab hit at level 5', () => {
+  it('loses less health from a cab hit at rank 5', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     const health = w.player.health;
     const dealt = damagePart(w, me, corePart(me, 'cab'), 20);
     const share = RULES.cabHealthShare * (1 - 5 * SKILL_EFFECTS.toughness.cabShare);

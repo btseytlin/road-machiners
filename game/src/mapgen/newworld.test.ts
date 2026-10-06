@@ -22,6 +22,7 @@ import {
   scrubGrowth,
   type Camp,
 } from './newworld';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const HALF = REGION.roadWidth / 2;
@@ -397,7 +398,7 @@ describe('new-world layer on a baked draft', () => {
     wind(base, GEOLOGY.wind, { rngState: SEED });
     dunes(base, GEOLOGY.dunes, GEOLOGY.wind.direction, SEED);
     d = oldWorldLayer(SEED, finishLayer(SEED, base));
-  }, 120_000);
+  }, budget(120_000));
 
   function clone(from: MapDraft): MapDraft {
     return { ...from, heights: from.heights.slice(), types: from.types.slice(), props: from.props.map((p) => ({ ...p, pos: { ...p.pos } })), sand: from.sand.slice(), flow: from.flow.slice(), slumped: from.slumped.slice(), built: from.built.slice() };
