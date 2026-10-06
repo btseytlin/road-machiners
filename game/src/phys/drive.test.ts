@@ -2,8 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { makeVehicle } from '../sim/factory';
-import { addGoods, removeAllGoods } from '../sim/inventory';
+import { makePart, makeVehicle } from '../sim/factory';
+import { addGoods, mountPart, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { corePart, mountedParts } from '../sim/grid';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../sim/testkit';
@@ -80,6 +80,57 @@ describe('impact geometry', () => {
       freeDrive(result.next);
       freeDrive(drive);
     }
+  });
+
+  // A truck driven nose first into the side of one parked across its path, at 7 tiles per turn.
+  function noseRam(arm: boolean): World {
+    let w = emptyWorld();
+    w.vehicles[0].speed = 7;
+    w.vehicles[0].heading = 0;
+    if (arm) {
+      w.vehicles[0].items = w.vehicles[0].items.filter((i) => !(i.kind === 'part' && i.part.defId === 'cage'));
+      const ram = makePart(w, 'claymoreRam', 0);
+      if (!mountPart(w, w.vehicles[0], ram)) throw new Error('No front mount for the claymore ram');
+      ram.charge = { reload: 0, armed: true };
+    }
+    const parked = addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2);
+    parked.brain = npcBrain('trader', parked.pos, ['trader']);
+    w = setDirect(w, true);
+    return setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
+  }
+
+  // The trucks touch through several collider pairs in one step. The first read was once a side graze at no closing
+  // speed, which hid the hit.
+  it('counts a nose ram at its full closing speed on the rammer front and the rammed side', () => {
+    const world = noseRam(false);
+    const [me, parked] = world.vehicles;
+    const drive = buildDrive(world);
+    const result = simulateTurn(drive, world);
+    try {
+      const crash = result.crashes.find((hit) => hit.a === me.id && hit.b === parked.id);
+      if (!crash) throw new Error('Expected the nose ram');
+      expect(crash.impact).toBeGreaterThan(0.8 * 7 * PHYSICS.metersPerTile);
+      expect(crash.contact.a.side).toBe('front');
+      expect(crash.contact.b?.side).toBe('right');
+    } finally {
+      freeDrive(result.next);
+      freeDrive(drive);
+    }
+  });
+
+  it('blows an armed claymore ram in a nose ram', () => {
+    let w = noseRam(true);
+    let d = buildDrive(w);
+    const blasts: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      blasts.push(...w.events.flatMap((e) => (e.t === 'claymore' ? [e.other] : [])));
+      freeDrive(d);
+      d = next!;
+    }
+    freeDrive(d);
+    expect(blasts).toEqual([w.vehicles[1].id]);
   });
 });
 

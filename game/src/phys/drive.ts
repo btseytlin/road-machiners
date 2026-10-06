@@ -357,11 +357,13 @@ function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
 }
 
 // The turn's crashes and breaks. A contact with a breakable prop at BREAKABLE.breakSpeed or faster breaks it
-// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn.
+// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn:
+// the hardest of its contacts. Two trucks touch through several collider pairs, often in one step, and the first one
+// read can be a side graze at no closing speed while another is the nose hitting at full speed.
 class Contacts {
   readonly crashes: Crash[] = [];
   readonly breaks: Break[] = [];
-  private readonly crashed = new Set<string>();
+  private readonly crashed = new Map<string, number>(); // pair key to its index in crashes
   private readonly breakable: Set<string>;
   private fresh: Break[] = [];
 
@@ -378,10 +380,16 @@ class Contacts {
       this.fresh.push(b);
       return;
     }
+    this.keepHardest(crash);
+  }
+
+  private keepHardest(crash: Crash): void {
     const key = [crash.a, crash.b].sort().join('|');
-    if (this.crashed.has(key)) return;
-    this.crashed.add(key);
-    this.crashes.push(crash);
+    const known = this.crashed.get(key);
+    if (known === undefined) {
+      this.crashed.set(key, this.crashes.length);
+      this.crashes.push(crash);
+    } else if (crash.impact > this.crashes[known].impact) this.crashes[known] = crash;
   }
 
   isBroken(id: string): boolean {
