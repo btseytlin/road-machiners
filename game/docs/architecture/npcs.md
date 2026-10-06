@@ -7,6 +7,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent and replac
 - `src/sim/npc-decisions.ts` owns trait profiles, option availability, the weighted rolls and robbery checks.
 - `holdsOffRobbery()` in `npc-decisions.ts` owns the stranded robbery rule: option availability, wanting loot, and the give-up step in `thinkNpc()` all call it.
 - `src/sim/npc-activities.ts` owns the goal stack and fires the decision points in `thinkNpc()`.
+- `onContactSpotted()` in `npc-activities.ts` ends an investigation whose driver sees its target and clears that target's `hostileSeen` notice, so the sighting rolls like any new hostile in sight.
 - `src/sim/npc-repair.ts` picks the part, the shady spot and the jobs for field repair goals.
 - A scavenge goal at a territory targets one loot spot stock, not the territory, and a trip to one ends at the road end that enters it, never a pad. Hunting grounds hold a ring inside each territory. No NPC goal destination lies in a hazard zone, since `src/sim/nav/layer.ts` blocks zones for routes and the grounds lie outside them.
 - `src/data/npcs.ts` holds traits, decision weights, state durations, thresholds and weighted spawn equipment tables.

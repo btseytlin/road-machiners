@@ -660,6 +660,18 @@ describe('stranded robbers', () => {
     }
   });
 
+  it('a stranded raider that investigates prey it sees gives the robbery up and starts no fight', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const raider = addRaider(w, { x: 10, y: 10 });
+    const target = addPrey(w, { x: 15, y: 10 });
+    raider.brain!.goals = [{ kind: 'investigate', targetId: target.id, destination: { x: 15, y: 10 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
+    strand(w, raider);
+    thinkNpc(w, raider);
+    expect(raider.brain!.goals.some((g) => g.kind === 'investigate' || (g.kind === 'fight' && g.targetId === target.id))).toBe(false);
+    expect(w.events.some((e) => JSON.stringify(e).includes('stranded, gave up the robbery'))).toBe(true);
+    expect(w.events.some((e) => JSON.stringify(e).includes('spotted the truck it heard'))).toBe(false);
+  });
+
   it('a scumbag stranded mid-robbery gives it up and backs off, unless the prey fights it', () => {
     for (const fights of [false, true]) {
       const { w, robber, target } = passing();
