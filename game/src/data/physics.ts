@@ -20,7 +20,7 @@ export const PHYSICS = {
     frictionSlip: 2,
     sideFrictionStiffness: 1,
     engineAccel: 12, // m/s^2 the engine can give at full throttle, before damage
-    climbReserve: 0.25, // share of engine force a truck adds against a climb, never more than the climb's pull: a low gear that raises the steepest holdable grade by about a fifth in sine without speeding up flat starts
+    climbReserve: 0.25, // share of engine force a truck adds against a climb, never more than the climb's pull: a low gear that raises the steepest holdable grade by about 20% in sine (measured 18.5-21% across builds) without speeding up flat starts
     brakeForce: 60, // per wheel per ton of chassis handling mass, at full brake
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn

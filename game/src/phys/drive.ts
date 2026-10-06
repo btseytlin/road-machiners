@@ -67,7 +67,7 @@ export type DeckColliders = { plates: number[]; rails: number[]; lips: number[] 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s into the ground along the contact normal, and no more than downward
+export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s: the speed into the ground along the contact normal, counted only while also moving downward
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -302,7 +302,7 @@ function landingImpact(c: Car, motion: ImpactMotion): number {
     if (!c.ctl.wheelIsInContact(i)) continue;
     const point = c.ctl.wheelContactPoint(i);
     const normal = c.ctl.wheelContactNormal(i);
-    if (!point || !normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact point`);
+    if (!point || !normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact point or normal`);
     const r = { x: point.x - com.x, y: point.y - com.y, z: point.z - com.z };
     const at = { x: v.x + w.y * r.z - w.z * r.y, y: v.y + w.z * r.x - w.x * r.z, z: v.z + w.x * r.y - w.y * r.x };
     impact = Math.max(impact, Math.min(-(at.x * normal.x + at.y * normal.y + at.z * normal.z), -at.y));
@@ -657,11 +657,9 @@ function climbForce(c: Car, target: number): number {
   return c.plan.engineForce + Math.min(T.climbReserve * c.plan.engineForce, Math.max(0, pull));
 }
 
-// Sine of the grade under the wheels along the nose, or along the tail for a sign of -1: positive uphill. The ground
-// is the mean contact normal of the wheels touching it, as of the last vehicle update. 0 when no wheel touches.
-function climbSine(c: Car, sign: number): number {
+// Sum of the contact normals of the wheels touching the ground, as of the last vehicle update.
+function contactNormals(c: Car): { x: number; y: number; z: number } {
   const n = { x: 0, y: 0, z: 0 };
-  let touching = 0;
   for (let i = 0; i < c.ctl.numWheels(); i++) {
     if (!c.ctl.wheelIsInContact(i)) continue;
     const normal = c.ctl.wheelContactNormal(i);
@@ -669,16 +667,24 @@ function climbSine(c: Car, sign: number): number {
     n.x += normal.x;
     n.y += normal.y;
     n.z += normal.z;
-    touching++;
   }
+  return n;
+}
+
+// Sine of the grade under the wheels along the nose, or along the tail for a sign of -1: positive uphill. The ground
+// is the mean contact normal of the wheels touching it. 0 when no wheel touches.
+function climbSine(c: Car, sign: number): number {
+  const n = contactNormals(c);
   const length = Math.hypot(n.x, n.y, n.z);
-  if (touching === 0 || length === 0) return 0;
+  if (length === 0) return 0;
   const heading = headingOf(c.body.rotation());
   const way = { x: Math.cos(heading) * sign, z: Math.sin(heading) * sign };
   // The travel direction laid onto the ground plane; its vertical share is the grade's sine.
   const into = (way.x * n.x + way.z * n.z) / (length * length);
   const along = { x: way.x - into * n.x, y: -into * n.y, z: way.z - into * n.z };
-  return along.y / Math.hypot(along.x, along.y, along.z);
+  const run = Math.hypot(along.x, along.y, along.z);
+  // A wall contact normal parallel to the travel direction leaves no ground direction to climb along.
+  return run === 0 ? 0 : along.y / run;
 }
 
 // No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.

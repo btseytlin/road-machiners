@@ -60,8 +60,8 @@ export const RULES = {
   // A truck body hitting the ground takes crash damage times this. Falls are slow next to driving: a roll off a 3 m
   // drop lands at about 2.7 tiles per turn, and 3 makes that as hard as a wall crash at about 4.3.
   groundCrash: 3,
-  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × landing speed into the ground² in
-  // tiles per turn × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
+  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × (landing speed into the ground in
+  // tiles per turn)² × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
   landingDamage: 0.25,
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
