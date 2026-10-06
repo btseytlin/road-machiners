@@ -128,8 +128,9 @@ export class WeatherView {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
   }
 
-  // Only the decorative clouds drift on their own; storms are repositioned by sync from sim state.
+  // Fades the storm banks and drifts the decorative clouds. Storms are repositioned by sync from sim state.
   advance(dtMs: number): void {
+    this.fade(dtMs);
     const span = this.terrain.size + WRAP_MARGIN * 2;
     for (const bank of this.clouds) {
       bank.x = ((bank.x + WEATHER.wind.x * bank.speed * dtMs / 1000 + WRAP_MARGIN) % span + span) % span - WRAP_MARGIN;
@@ -137,6 +138,11 @@ export class WeatherView {
       this.placeBank(bank);
     }
   }
+}
+
+// The screen tint of the player's storm share: hidden at none, and as strong as the share.
+export function stormTintStyle(share: number): { display: string; opacity: string } {
+  return { display: share > 0 ? "" : "none", opacity: String(share) };
 }
 
 // Moves shown toward target by at most maxStep.

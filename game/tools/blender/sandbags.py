@@ -1,4 +1,4 @@
-"""Curved sandbag wall with a steel hedgehog, the army's barricade.
+"""Curved sandbag wall, the army's barricade. It bulges toward its front, +X. Its tank traps are their own prop, tank_trap.
 
 Built to a 3.5 m reference radius: a wall arc about 5 m long and 1.1 m tall.
 Run: blender --background --python tools/blender/sandbags.py -- public/models/sandbags.glb [tmp/sandbags.png]
@@ -17,7 +17,6 @@ from kit import Kit, parse_args  # noqa: E402
 COLORS = {
     "bag": 0x7C7442,  # PAL.scrub[2]
     "bag_dark": 0x5E6038,  # PAL.nose.top, olive drab
-    "steel": 0x5E3420,  # PAL.rust.side
 }
 SEED = 59
 ARC = 2.4  # radians of wall
@@ -32,9 +31,6 @@ def build(kit: Kit) -> None:
             a = (i - (count - 1) / 2) * (ARC / 9)
             mat = "bag" if (i + course) % 2 == 0 else "bag_dark"
             kit.box(f"bag{course}_{i}", (0.9, 0.55, 0.34), (ARC_RADIUS * math.cos(a) - 1.0, ARC_RADIUS * math.sin(a), 0.17 + course * 0.34), mat, rot=(0, 0, a), dent_by=0.03)
-    # A hedgehog of three crossed girders beside the wall.
-    for k, rot in enumerate(((0, 0, 0), (0, math.radians(90), 0), (0, 0, math.radians(90)))):
-        kit.box(f"girder{k}", (1.6, 0.12, 0.12), (0.3, -0.2, 0.7), "steel", rot=(rot[0], rot[1], rot[2] + 0.4 * k))
 
 
 def main() -> None:

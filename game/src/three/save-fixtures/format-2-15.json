@@ -1,7 +1,27 @@
 {
-  "turn": 500,
-  "weather": [
-    { "id": "wx1", "kind": "storm", "pos": { "x": 120, "y": 80 }, "radius": 90, "vel": { "x": 0.5, "y": -0.3 }, "turnsLeft": 120 },
-    { "id": "wx2", "kind": "heatwave", "turnsLeft": 30 }
+  "turn": 50,
+  "events": [
+    {
+      "t": "shot",
+      "shooter": "npc1",
+      "weapon": "cannon",
+      "target": "player",
+      "aim": "body",
+      "chance": 0.5,
+      "damageChance": 0.8,
+      "side": "front",
+      "rounds": [
+        { "hit": false, "crit": false, "offset": 2.4, "struck": null, "hits": [], "blast": [] },
+        { "hit": true, "crit": false, "offset": 0.1, "struck": "player", "hits": [{ "part": "p1", "damage": 3 }], "blast": [] }
+      ]
+    },
+    {
+      "t": "guardShot",
+      "site": "nose",
+      "from": { "x": 120, "y": 80 },
+      "target": "npc1",
+      "rounds": [{ "hit": true, "crit": true, "offset": -0.2, "struck": "npc1", "hits": [], "blast": [] }]
+    },
+    { "t": "arrived", "vehicle": "npc2" }
   ]
 }

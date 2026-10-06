@@ -23,6 +23,7 @@ import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
+import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -328,10 +329,24 @@ describe('save migration 14 to 15', () => {
 });
 
 describe('save migration 15 to 16', () => {
-  const next = MIGRATIONS[15](FORMAT_2_15) as { turn: number; weather: WeatherEvent[] };
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[15](FORMAT_2_15);
+    const [shot, guard, arrived] = FORMAT_2_15.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_15,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
+  });
+});
+
+describe('save migration 16 to 17', () => {
+  const next = MIGRATIONS[16](FORMAT_2_16) as { turn: number; weather: WeatherEvent[] };
 
   it('gives a storm a birth turn past its build-up and changes nothing else', () => {
-    expect(next).toEqual({ ...FORMAT_2_15, weather: [{ ...FORMAT_2_15.weather[0], born: 470 }, FORMAT_2_15.weather[1]] });
+    expect(next).toEqual({ ...FORMAT_2_16, weather: [{ ...FORMAT_2_16.weather[0], born: 470 }, FORMAT_2_16.weather[1]] });
   });
 
   it('leaves a storm with a long way to go at full strength', () => {
@@ -341,8 +356,8 @@ describe('save migration 15 to 16', () => {
   });
 });
 
-describe('save migration 16 to 17', () => {
-  const next = MIGRATIONS[16](FORMAT_2_16) as unknown as World;
+describe('save migration 17 to 18', () => {
+  const next = MIGRATIONS[17](FORMAT_2_17) as unknown as World;
   const shares = (id: string) => next.vehicles.find((v) => v.id === id)!.stormExposure;
 
   it('gives each truck the share each storm has settled to where it stands, and nothing outside', () => {
@@ -356,7 +371,7 @@ describe('save migration 16 to 17', () => {
   it('gives a removed truck no shares and changes nothing else', () => {
     expect(next.removed[0].stormExposure).toEqual({});
     const strip = (vs: Vehicle[]) => vs.map((v) => Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stormExposure')));
-    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_16);
+    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_17);
   });
 
   it('loads every truck feeling exactly the settled weather where it stands', () => {

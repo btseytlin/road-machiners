@@ -27,6 +27,7 @@ import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
+import { digCrater } from './craters';
 import { weatherOn } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -633,7 +634,16 @@ function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
   const landing = landRound(world, s, roll, offset);
   const hit = landing.struck?.id === s.target.id;
   const blast = explode(world, s.mw.def.round, landing);
-  return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast };
+  const burst = burstPoint(world, s.mw.def.round, landing);
+  return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast, burst };
+}
+
+// An exploding round that struck no truck bursts on the ground at the point explode() splashed, and digs a crater
+// there if it is made to. Any other round has no burst point.
+function burstPoint(world: World, r: WeaponDef["round"], landing: Landing): Vec | null {
+  if (landing.struck !== null || r.splashRadius <= 0) return null;
+  if (r.craterRadius > 0) digCrater(world, landing.point, r.craterRadius);
+  return { ...landing.point };
 }
 
 // A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
