@@ -93,7 +93,7 @@ async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promi
   appendFileSync(reviewsPath(ctx.cfg.home), `## ${day}, #${issue}\n\nBottleneck: ${brief.bottleneck}\n\nProposed change: ${proposal}\n\n`);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   if (brief.change === null) return void (await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `🔎 Weekly factory review: no waste stands out.\n${link}`));
-  const text = `🔎 Weekly factory review\n\nBottleneck: ${brief.bottleneck}\n\nThe proposed change and the numbers: ${link}\nThe button queues the change as a /change pull request.`;
+  const text = `🔎 Weekly factory review\n\nBottleneck: ${brief.bottleneck}\n\nThe proposed change and the numbers: ${link}`;
   await ctx.telegram.sendButtons(ctx.cfg.committeeChat, text, [[{ text: 'Queue as change', data: `factory:waste:${issue}` }]]);
 }
 

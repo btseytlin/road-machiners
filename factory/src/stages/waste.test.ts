@@ -74,6 +74,7 @@ describe('waste review', () => {
     expect(proposalOf(seen.issues[0].body)).toBe('Set FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.');
     expect(seen.calls).toContain('close 301 completed');
     expect(seen.calls.at(-1)).toContain('Bottleneck: Cards waited 204 min for the verify queue.');
+    expect(seen.calls.at(-1)?.endsWith('The proposed change and the numbers: https://github.com/o/r/issues/301')).toBe(true);
     expect(seen.buttons).toEqual([[[{ text: 'Queue as change', data: 'factory:waste:301' }]]]);
   });
 

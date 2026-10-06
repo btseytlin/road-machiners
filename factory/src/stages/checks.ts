@@ -236,11 +236,9 @@ function warningsOf(base: string, noScreenshot: boolean, unchecked: boolean): st
 export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, noScreenshot = false, unchecked = false): string {
   const warning = warningsOf(base, noScreenshot, unchecked);
   const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
-  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
-  const tail = `${action} Deny closes the issue. Reply to this post to ask a question or ask for a change.`;
-  const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
+  const room = CAPTION_LIMIT - head.length - '\n\n'.repeat(2).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
-  return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');
+  return [head, description, `How to try: ${howToTry}`].join('\n\n');
 }
 
 // Shortens the two texts to fit the room, cutting the longer one first. The full texts are on the issue.
