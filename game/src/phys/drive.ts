@@ -652,6 +652,7 @@ function slopeThrottle(c: Car, target: number, cap: number): number {
 // the engine pushes. The reserve is at most climbReserve of the engine force and never more than gravity's pull along
 // the ground the wheels stand on, so flat ground, downhill and the air get none.
 function climbForce(c: Car, target: number): number {
+  if (target === 0) return c.plan.engineForce;
   const pull = (T.gravityScale * PHYSICS.gravity * c.s.mass * climbSine(c, Math.sign(target))) / 2;
   return c.plan.engineForce + Math.min(T.climbReserve * c.plan.engineForce, Math.max(0, pull));
 }
