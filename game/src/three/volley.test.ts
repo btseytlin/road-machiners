@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Break, Crash, Landing } from "../phys/drive";
 import { addVehicle, emptyWorld } from "../sim/testkit";
 import type { GameEvent, ShotRound } from "../sim/types";
-import type { V3 } from "../phys/frames";
+import { groundPoint, type V3 } from "../phys/frames";
+import { FLARE_LOOK, SHELL } from "./render/hazards";
 import { BreakCues, type PartBreak, type ShotLike } from "./breakCues";
 import { CollisionCues, collisionSteps, playCrashes, playUtilitySounds, playVolley, type CombatHost, type VolleyHost } from "./volley";
 
@@ -93,31 +94,49 @@ describe("CollisionCues", () => {
 });
 
 describe("playUtilitySounds", () => {
-  const use = (vehicle: string, effect: "mortar" | "flare" | "sprout" | "claymore"): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, point: null });
+  type Effect = "mortar" | "flare" | "sprout" | "caltrops" | "oil" | "claymore";
+  const use = (vehicle: string, effect: Effect, point: { x: number; y: number } | null = null): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, point });
   const pulse = (vehicle: string): GameEvent => ({ t: "pulse", vehicle, pos: { x: 0, y: 0 }, hit: [] });
   const seen: Record<string, V3> = { a: { x: 1, y: 2, z: 3 }, b: { x: 4, y: 5, z: 6 } };
+  const terrain = emptyWorld().terrain;
 
-  function played(events: GameEvent[]): { cue: string; p: V3 }[] {
-    const out: { cue: string; p: V3 }[] = [];
-    playUtilitySounds({ world: { events }, eventPoint: (id) => seen[id] ?? null, sound: { at: (cue, p) => out.push({ cue, p }) } });
+  function played(events: GameEvent[]): { cue: string; p: V3; delayMs: number }[] {
+    const out: { cue: string; p: V3; delayMs: number }[] = [];
+    playUtilitySounds({ world: { events, terrain }, eventPoint: (id) => seen[id] ?? null, sound: { at: (cue, p, delayMs) => out.push({ cue, p, delayMs }) } });
     return out;
   }
 
-  it("plays the cannon cue for a mortar or flare launch and the spark cue for a pulse, at the user", () => {
-    expect(played([use("a", "mortar"), use("b", "flare"), pulse("b")])).toEqual([
-      { cue: "cannon-fire", p: seen.a },
-      { cue: "cannon-fire", p: seen.b },
-      { cue: "part-broken", p: seen.b },
+  it("plays each utility's own cue at its user as it is used, and the pulse's crack", () => {
+    expect(played([use("a", "mortar"), use("b", "flare"), use("a", "sprout"), use("a", "caltrops"), use("b", "oil"), pulse("b")]).map((s) => [s.cue, s.p, s.delayMs])).toEqual([
+      ["mortar-fire", seen.a, 0],
+      ["flare-fire", seen.b, 0],
+      ["smoke-burst", seen.a, 0],
+      ["caltrops-drop", seen.a, 0],
+      ["oil-spill", seen.b, 0],
+      ["emitter-pulse", seen.b, 0],
     ]);
   });
 
-  it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
-    expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "claymore")])).toEqual([]);
+  it("bursts the mortar's smoke where it lands and the flare at its point, when each flight ends", () => {
+    const point = { x: 40, y: 30 };
+    const ground = groundPoint(terrain, point);
+    expect(played([use("a", "mortar", point), use("a", "flare", point)]).filter((s) => s.delayMs > 0)).toEqual([
+      { cue: "smoke-burst", p: ground, delayMs: SHELL.flightMs },
+      { cue: "flare-burst", p: ground, delayMs: FLARE_LOOK.flightMs },
+    ]);
+  });
+
+  it("bursts a tire on a truck that drives into caltrops", () => {
+    expect(played([{ t: "caltrops", vehicle: "b", field: "g1", source: "a", hits: [] }])).toEqual([{ cue: "caltrops-hit", p: seen.b, delayMs: 0 }]);
+  });
+
+  it("stays silent for unseen users and for a claymore, whose blast plays with its crash", () => {
+    expect(played([use("hidden", "mortar", { x: 40, y: 30 }), pulse("hidden"), use("a", "claymore")])).toEqual([]);
   });
 
   it("snaps a torn harpoon line at the truck it held, and stays silent when that truck is unseen", () => {
     const torn = (vehicle: string): GameEvent => ({ t: "lineTorn", line: "l1", vehicle, part: `${vehicle}-p`, damage: 12 });
-    expect(played([torn("a"), torn("hidden")])).toEqual([{ cue: "line-tear", p: seen.a }]);
+    expect(played([torn("a"), torn("hidden")])).toEqual([{ cue: "line-tear", p: seen.a, delayMs: 0 }]);
   });
 });
 

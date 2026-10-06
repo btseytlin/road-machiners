@@ -76,6 +76,18 @@ const DEFS = {
   "harpoon-hook": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["A heavy barbed steel harpoon bolt slams into a truck's steel plate: a hard punching clank and a short metallic scrape."], seconds: 0.8 },
   "line-tear": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A thick steel tow cable under huge tension snaps: a sharp loud twang and whip, then the loose cable slapping on metal."], seconds: 1.2 },
 
+  // Other utilities. A smoke shell landing and a Sprout both play smoke-burst. Generated oil takes came out as bright
+  // hiss; they are run through ffmpeg "asetrate=44100*0.8,aresample=44100,lowpass=f=3000,lowpass=f=3000,bass=g=4:f=150"
+  // before import, so they glug.
+  "mortar-fire": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A small smoke mortar fires from a truck deck: one deep hollow tube thoomp and a short metallic ring."], seconds: 1.2 },
+  "smoke-burst": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A smoke grenade canister bursts open: a short pop, then a loud rushing hiss of thick smoke pouring out."], seconds: 2 },
+  "flare-fire": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A flare cannon fires a signal flare: a sharp hollow pop, then a fizzing hiss rising quickly into the sky."], seconds: 1.5 },
+  "flare-burst": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["A magnesium illumination flare ignites high in the air: a dull crack, then a steady crackling, sizzling burn."], seconds: 2 },
+  "caltrops-drop": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["A handful of heavy steel spikes dumped from a truck clatter and bounce onto hard gravel."], seconds: 1.2 },
+  "caltrops-hit": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.06, maxVoices: 3, loop: false, prompts: ["A truck tire runs over steel spikes and bursts: a loud pop and a fast rushing hiss of escaping air."], seconds: 1.2 },
+  "oil-spill": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A valve opens under a truck and thick motor oil glugs and splashes onto dry dirt."], seconds: 2 },
+  "emitter-pulse": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["A huge electrical capacitor discharges outdoors: a violent arc crack and buzz, then nearby diesel engines sputter and die."], seconds: 2 },
+
   // Loops.
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },

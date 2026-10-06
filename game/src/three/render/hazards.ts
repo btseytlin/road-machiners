@@ -292,7 +292,7 @@ const SMOKE_LOOK = {
   cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
 };
 // The mortar's shell: a dark round with a gray smoke trail on a low arc.
-const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
+export const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
 const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
 const RIM_SAMPLES = 8; // rim points checked for sight, besides the center
 
@@ -703,7 +703,7 @@ function createSheenTexture(): THREE.CanvasTexture {
 // ---- Flares
 
 const FLARE_ORDER = 906; // above smoke (905), below contact markers
-const FLARE_LOOK = {
+export const FLARE_LOOK = {
   height: 6, // tiles above the ground the flare hangs
   sink: 1, // tiles the hanging flare sinks a turn
   flightMs: 1600, // from the cannon to the top
