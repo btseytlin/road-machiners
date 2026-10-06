@@ -610,6 +610,22 @@ describe('NPC attack records and defensive fire', () => {
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
   });
+
+  // A robber chased its victim to a town gate. The victim's return fire must not open the gate to the robber's guns.
+  it('a robber holds its fire in guard range even after its victim shoots back', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const gate = siteGates(REGION.towns[0])[0];
+    const robber = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: gate.x + 3, y: gate.y });
+    robber.brain = npcBrain('trader', robber.pos, ['scumbag']);
+    const victim = addVehicle(w, 'traders', 'scout', ['mg'], { ...gate });
+    addState(w, 'feud', robber.id, victim.id, { kind: 'feud', robbery: true });
+    robber.brain.goals = [{ kind: 'fight', targetId: victim.id, destination: { ...victim.pos }, phase: 'travel', reason: 'test robbery' }];
+    robber.brain.attackers = { [victim.id]: true };
+
+    autoOrders(w, robber);
+
+    expect(Object.values(robber.weaponOrders)).toEqual([]);
+  });
 });
 
 describe('hit practice', () => {

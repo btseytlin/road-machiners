@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RoaM factory</title>
+<link rel="stylesheet" href="/factory/dashboard.css">
+<script src="/factory/chart.js" defer></script>
+<script src="/factory/dashboard.js" defer></script>
+</head>
+<body>
+<div class="screen">
+<header><span class="brand">RoaM</span><h1>Factory</h1><nav role="tablist" aria-label="Dashboard"><button id="overview-tab" role="tab" aria-controls="overview" aria-selected="true">Overview</button><button id="analytics-tab" role="tab" aria-controls="analytics" aria-selected="false" tabindex="-1">Analytics</button></nav><div class="header-links"><a id="github-link">GitHub ↗</a><a id="play-link">Play ↗</a></div><span id="connection" role="status">Connecting</span></header>
+<div id="source-status" class="source-status" role="status">Waiting for data</div>
+<main id="overview" class="overview view" role="tabpanel" aria-labelledby="overview-tab">
+<section class="events"><h2>Event log</h2><div id="event-log" class="event-items"></div><div id="event-pages" class="pager"></div><button type="button" class="expand" data-dialog="event-dialog" aria-label="Expand event log">Expand ↗</button></section>
+<div class="workspace">
+<section class="panel workers"><div class="heading"><h2>Workers</h2><div id="worker-pages" class="pager"></div></div><div id="worker-zone" class="table-zone"><table><colgroup><col><col><col><col></colgroup><thead><tr><th>Task</th><th>Stage</th><th>Doing</th><th>Progress / elapsed</th></tr></thead><tbody id="worker-rows"></tbody></table></div><section class="capacity"><div class="heading"><h3>Free slots <span id="free-count" class="muted"></span></h3><span id="capacity-status" class="muted"></span></div><div id="free-slots" class="free-slots"></div><div class="heading"><h3>Waiting to start</h3><div id="capacity-pages" class="pager"></div></div><div id="capacity-rows" class="capacity-rows"></div></section></section>
+<div class="sidebar">
+<section class="panel"><div class="heading"><h2>Funnel</h2></div><div id="funnel" class="funnel"></div></section>
+<section class="panel release"><div class="heading"><h2>Next release <span id="release-count" class="muted"></span></h2><button type="button" class="expand" data-dialog="release-dialog" aria-label="Expand next release">Expand ↗</button><a id="release-link" hidden>Compare ↗</a></div><ul id="release-items" class="release-items"></ul><div class="release-gate"><p id="release-gate" class="clamp">Waiting for GitHub</p><div id="release-pages" class="pager"></div><a id="candidate-link" hidden>Play candidate ↗</a></div></section>
+<section class="panel"><div class="heading"><h2>Manager</h2></div><p id="manager-action" class="clamp">Activity unavailable</p></section>
+<section class="panel server"><div class="heading"><h2>Server</h2></div><div id="server-totals" class="server-totals"></div><div id="server-zone" class="table-zone"><table><colgroup><col><col><col></colgroup><thead><tr><th>Work</th><th>CPU</th><th>RAM</th></tr></thead><tbody id="server-rows"></tbody></table></div><div class="server-footer"><span id="server-note" class="muted clipped"></span><div id="server-pages" class="pager"></div></div></section>
+</div>
+</div>
+</main>
+<main id="analytics" class="analytics view" role="tabpanel" aria-labelledby="analytics-tab" hidden>
+<div class="analytics-toolbar"><div role="group" aria-label="Period" id="period"><button data-days="1" aria-pressed="false">24 hours</button><button data-days="7" aria-pressed="true">7 days</button><button data-days="30" aria-pressed="false">30 days</button></div><span id="coverage" class="muted clipped">Measurements unavailable</span></div>
+<div class="counters"><section class="panel token-counter" aria-label="Tokens"><div class="counter"><span>Total tokens</span><strong id="usage-tokens">—</strong></div><div class="counter"><span>Input incl. cache</span><strong id="usage-input">—</strong></div><div class="counter"><span>Output</span><strong id="usage-output">—</strong></div></section><section class="panel counter"><span>Worker time</span><strong id="usage-time">—</strong></section><section class="panel counter"><span>Estimated cost</span><strong id="usage-cost">—</strong></section><section class="panel counter"><span>Waiting time</span><strong id="usage-wait">—</strong></section></div>
+<div class="analytics-grid">
+<section class="panel chart-panel"><div class="heading"><h2 id="usage-title">Spend</h2><div class="chart-controls"><div role="group" aria-label="Chart grouping"><button data-grouping="stage" aria-pressed="true">Stage</button><button data-grouping="model" aria-pressed="false">Model</button></div><div role="group" aria-label="Chart metric"><button data-metric="tokens" aria-pressed="false">Tokens</button><button data-metric="cost" aria-pressed="true">Cost</button></div></div></div><div class="usage-chart"><canvas id="usage-chart" role="img" aria-label="Usage by stage or model"></canvas><p id="usage-empty" class="empty">No recorded usage</p></div></section>
+<section class="panel chart-panel"><div class="heading"><h2>Time by stage</h2><div id="stage-pages" class="pager"></div></div><div class="legend"><span class="running-color">Running</span><span class="waiting-color">Waiting</span></div><div id="stage-chart" class="stage-chart"></div></section>
+<section class="panel table-panel"><div class="heading"><h2>Repeat attempts</h2><div id="retry-pages" class="pager"></div></div><div id="retry-zone" class="table-zone"><table><thead><tr><th>Previous outcome</th><th>Runs</th><th>Time</th><th>Est. cost</th></tr></thead><tbody id="retry-rows"></tbody></table></div></section>
+<section class="panel table-panel"><div class="heading"><h2>Tokens by stage × model</h2><div id="model-column-pages" class="pager"></div></div><div id="stage-model-zone" class="table-zone"><table class="stage-model"><thead><tr id="stage-model-header"><th rowspan="2" scope="col">Stage</th></tr><tr id="stage-model-measures"></tr></thead><tbody id="stage-model-rows"></tbody></table></div><div id="stage-model-pages" class="pager"></div></section>
+</div>
+</main>
+</div>
+<dialog id="release-dialog" aria-labelledby="release-dialog-title"><div class="dialog-heading"><h2 id="release-dialog-title">Next release <span id="release-dialog-count" class="muted"></span></h2><button type="button" data-close aria-label="Close release details">Close ✕</button></div><p id="release-dialog-gate" class="muted"></p><ol id="release-dialog-rows" class="dialog-list"></ol><div id="release-dialog-pages" class="pager"></div></dialog>
+<dialog id="event-dialog" aria-labelledby="event-dialog-title"><div class="dialog-heading"><h2 id="event-dialog-title">Event log <span id="event-dialog-count" class="muted"></span></h2><button type="button" data-close aria-label="Close event log">Close ✕</button></div><p class="muted">Recorded outcomes · latest first</p><div id="event-dialog-rows" class="dialog-list"></div><div id="event-dialog-pages" class="pager"></div></dialog>
+<div id="full-text" role="tooltip" hidden></div>
+</body>
+</html>

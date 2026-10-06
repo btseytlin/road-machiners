@@ -8,6 +8,8 @@ export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
 
 export type FactoryConfig = {
+  observationHeartbeatMs: number;
+  observationMaxEventBytes: number;
   repo: string; // "owner/name" on GitHub
   projectOwner: string;
   projectNumber: number;
@@ -54,7 +56,7 @@ export type FactoryConfig = {
   cpuTest: number; // share of the server's CPUs for testing
 };
 
-export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
+export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
 // Runs a program without a shell. Tests pass a fake that records calls.
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;
@@ -73,7 +75,12 @@ export type Issue = {
   thumbsUp: string[]; // logins that reacted +1
 };
 
-export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
+export type Card = {
+  itemId: string;
+  issue: number;
+  column: Column;
+  labels: string[];
+};
 
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
@@ -81,7 +88,14 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A waste job reviews the factory itself and has no issue.
 export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
 // `id` names the job's containers, so a kill stops only its own.
-export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+export type Job = {
+  id: string;
+  stage: JobStage;
+  issue: number | null;
+  pid: number;
+  startedAt: string;
+  log: string;
+};
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
@@ -93,15 +107,23 @@ export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify']
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
   triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
+  change: 'implement',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';
 // `error` is the short summary. The full text is in `log`.
-export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
-export type ChangeRequest ={ id: number; text: string; by: string };
+export type Failure = {
+  stage: Stage;
+  issue: number | null;
+  error: string;
+  log: string | null;
+  at: string;
+};
+export type ChangeRequest = { id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
 // The open release. Its branch takes the release tasks, and Ship merges it into main.
@@ -142,7 +164,12 @@ export type FactoryState = {
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
 };
 
-export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
+export type UnroutedReply = {
+  issue: number;
+  postId: number;
+  text: string;
+  at: string;
+};
 
 // `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.
@@ -192,7 +219,19 @@ export interface Telegram {
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string };
+export type AgentRun = {
+  clone: string;
+  dir: string;
+  model: string;
+  prompt: string;
+  log: string;
+  openNetwork?: boolean;
+  mediaDir?: string;
+  readOnly?: Record<string, string>;
+  session?: AgentSession;
+  skill?: string;
+  effort?: string;
+};
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -235,7 +274,12 @@ export interface HostRepo {
 
 // A merge that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
 export class MergeConflictError extends Error {
-  constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
+  constructor(
+    readonly branch: string,
+    readonly into: string,
+    readonly files: string[],
+    reason: string,
+  ) {
     super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
   }
 }
@@ -297,6 +341,6 @@ export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
 // Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
-export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation and every testing pass run on the design (Opus) model
+export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
 export const OPEN_NETWORK_LABEL = 'open-network';

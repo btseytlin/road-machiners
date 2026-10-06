@@ -5,7 +5,7 @@ import { appendLedger, appendUsage, readLedger, takeUsage, usageFromOutput, type
 
 const HOME = resolve('tmp/factory-ledger-test');
 
-const RESULT = JSON.stringify({ type: 'result', duration_ms: 90_000, total_cost_usd: 1.25, modelUsage: { 'claude-opus-5-5': {} } });
+const RESULT = JSON.stringify({ type: 'result', duration_ms: 90_000, total_cost_usd: 1.25, modelUsage: {} });
 
 beforeEach(() => {
   rmSync(HOME, { recursive: true, force: true });
@@ -16,6 +16,15 @@ describe('usageFromOutput', () => {
   it('reads cost and minutes from the last result event', () => {
     const out = `${JSON.stringify({ type: 'assistant' })}\n${RESULT}\n`;
     expect(usageFromOutput(out, 'opus')).toEqual({ model: 'opus', costUsd: 1.25, minutes: 1.5 });
+  });
+
+  it('records whole-tree token counters and resume identity without storing the response', () => {
+    const output = JSON.stringify({ type: 'result', result: 'PRIVATE', duration_ms: 60000, total_cost_usd: 2, session_id: 'session-1', modelUsage: { sonnet: { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 30, cacheCreationInputTokens: 40, costUSD: 2 } } });
+    const usage = usageFromOutput(output, 'sonnet', true);
+    expect(usage.modelUsage).toEqual([{ model: 'sonnet', input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: 2 }]);
+    expect(usage.resumed).toBe(true);
+    expect(usage.sessionId).toBe('session-1');
+    expect(JSON.stringify(usage)).not.toContain('PRIVATE');
   });
 
   it('throws when the output has no result event', () => {

@@ -15,6 +15,9 @@
 http://{$DOMAIN} {
 	import security_headers
 	redir / {$ITCH_URL} temporary
+	handle /factory* {
+		reverse_proxy unix//opt/factory/dashboard/http.sock
+	}
 	root * /srv/www
 	file_server {
 		index index.html

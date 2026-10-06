@@ -85,12 +85,12 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
 }
 
 // The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
-// design-sonnet moves design to the build model. implementation-opus moves implementation and every verify pass (conflict merge, check fix, retry) to the design model.
+// design-sonnet moves design to the build model. implementation-opus moves implementation to the design model; verify stays on the build model.
 // Triage and patch always run on the build model. A patch is a small change on top of a reviewed build, so the label that judged the whole issue does not apply.
 // The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
 export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
   if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;
-  if (stage === 'implement' || stage === 'verify') return labels.includes(IMPLEMENTATION_OPUS_LABEL) ? cfg.designModel : cfg.buildModel;
+  if (stage === 'implement') return labels.includes(IMPLEMENTATION_OPUS_LABEL) ? cfg.designModel : cfg.buildModel;
   return cfg.buildModel;
 }
 
@@ -130,10 +130,9 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
   mkdirSync(`${home}/${OUT_DIR}`, { recursive: true });
 }
 
-// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model.
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
-export type AgentExtras = { model?: string; skill?: string; effort?: string; fresh?: boolean };
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
   const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
@@ -144,7 +143,7 @@ function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
   const { labels } = await ctx.github.issue(issue);
-  const model = extras.model ?? modelFor(ctx.cfg, stage, labels);
+  const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);

@@ -49,7 +49,7 @@ Write `.factory/evidence.json`, the ordered list of images. The first is `screen
 `{"commit": "<output of git rev-parse HEAD>", "features": [{"name": "Grid icons", "kind": "system"}], "images": [{"file": "screenshot.png", "description": "Top-down icons in the grid", "covers": ["Grid icons"], "sheet": true}]}`
 List each visible change under `features`. The kind is `location`, `item`, `system` or `other`.
 Each image has a description and `covers`, the exact feature names it shows. Keep the description under 200 characters, since the factory cuts a longer one. Every feature needs an image.
-A `location` needs three images. A `system` needs an image with `"sheet": true`.
+A `location` needs at least one real image that shows it, with no fixed count. A `system` needs an image with `"sheet": true`.
 The factory rejects the manifest when `commit` is not the final head of the branch, so write it last, after your final commit.
 
 If the change needs a major save format bump, stop.

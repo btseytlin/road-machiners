@@ -242,30 +242,30 @@ describe('testing stage', () => {
     expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('runs the test round and the check-fix retry on Opus with implementation-opus', async () => {
+  it('runs the test round and the check-fix retry on Sonnet even with implementation-opus', async () => {
     labels = ['implementation-opus'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
     await runStage(ctx, 7);
-    expect(models).toEqual(['opus', 'opus']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('honors a label removed between the test round and the fix round', async () => {
+  it('keeps verify on Sonnet when an implementation label changes between rounds', async () => {
     labels = ['implementation-opus'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); labels = []; writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
     await runStage(ctx, 7);
-    expect(models).toEqual(['opus', 'sonnet']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
-  it('keeps the selection when a conflict sends the card back to testing in a new job', async () => {
+  it('keeps verify on Sonnet when a conflict sends the card back to testing', async () => {
     labels = ['implementation-opus'];
     conflicts = ['game/src/a.ts'];
     const models: string[] = [];
     const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); });
     await runStage(ctx, 7);
     await runStage(fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }), 7);
-    expect(models).toEqual(['opus', 'opus']);
+    expect(models).toEqual(['sonnet', 'sonnet']);
   });
 
   it('reruns checks that only timed out, with no agent round, then posts', async () => {
@@ -371,11 +371,17 @@ describe('testing stage', () => {
     // The review runs in the hardening round, after the committee approved the preview.
     beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } }));
 
-    it('runs /code-review once on the design model after the hardening round and before the checks', async () => {
+    it('runs /code-review once on Sonnet after the hardening round and before the checks', async () => {
       await runStage(fakeCtx(outputs), 7);
-      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review opus /code-review']);
-      expect(calls.indexOf('review opus /code-review')).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review sonnet /code-review']);
+      expect(calls.indexOf('review sonnet /code-review')).toBeLessThan(calls.indexOf('checks'));
       expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('keeps review on Sonnet for an implementation-opus issue', async () => {
+      labels = ['implementation-opus'];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review sonnet /code-review']);
     });
 
     it('pastes the incident log and the principles of the clone into the review prompt', async () => {
@@ -566,8 +572,40 @@ describe('testing stage evidence', () => {
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
   });
 
-  it('fails the stage when a location has fewer than three views', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard'], ['Yard']])), 7)).rejects.toThrow('needs 3 different views');
+  it.each([1, 2])('posts a location shown by %i genuine image(s), with no minimum count', async (count) => {
+    await runStage(fakeCtx((run) => writeEvidence(run, [yard], Array.from({ length: count }, () => ['Yard']))), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('rejects a location no image covers and posts nothing', async () => {
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard, horn], [['Horn']])), 7)).rejects.toThrow('No evidence image covers "Yard"');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('rejects an image that claims coverage of a feature the manifest does not list', async () => {
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Salvage yard']])), 7)).rejects.toThrow('by exact name');
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+  });
+
+  it('rejects a duplicate image for a location and posts nothing', async () => {
+    const ctx = fakeCtx((run) => {
+      writeEvidence(run, [yard], [['Yard'], ['Yard']]);
+      writeFileSync(`${run.clone}/${run.dir}/.factory/view1.png`, pngBytes(0));
+    });
+    await expect(runStage(ctx, 7)).rejects.toThrow('duplicates');
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+  });
+
+  it('runs the fresh-clone checks before it posts a one-image location', async () => {
+    await runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard']])), 7);
+    expect(calls.indexOf('checks')).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf('checks')).toBeLessThan(calls.findIndex((call) => call.startsWith('photo')));
+  });
+
+  it('posts nothing when the fresh-clone checks fail twice, whatever the evidence', async () => {
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard']]), 2), 7)).rejects.toThrow('checks failed twice');
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
     expect(calls).not.toContain('move 7 Approval');
   });
 

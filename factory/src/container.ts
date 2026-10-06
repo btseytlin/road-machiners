@@ -77,7 +77,7 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. At each meaningful work milestone, run factory-status milestone with one of: understanding, planning, implementing, validating, reviewing, preparing-release. Do not send notes, paths, prompts or secrets. Report only when the milestone changes, without extra narration.`;
 }
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
@@ -94,9 +94,9 @@ function effortArgs(effort: string | undefined): string[] {
 }
 
 // A finished run must report its cost. A failed run may have died before its result event, and then it records nothing.
-function recordUsage(home: string, jobId: string, result: RunResult, model: string): void {
-  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model));
-  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model));
+function recordUsage(home: string, jobId: string, result: RunResult, model: string, resumed: boolean): void {
+  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
+  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
 }
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
@@ -118,7 +118,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
       const result = await run('docker', args, { env, input, logPath: log });
-      if (jobId !== null) recordUsage(cfg.home, jobId, result, model);
+      if (jobId !== null) recordUsage(cfg.home, jobId, result, model, session?.resume ?? false);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {

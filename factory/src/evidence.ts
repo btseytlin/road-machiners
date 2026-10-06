@@ -8,7 +8,6 @@ import { OUT_DIR } from './types';
 export const EVIDENCE_MAX = 10;
 export const PRIMARY_FILE = 'screenshot.png';
 export const MANIFEST_FILE = 'evidence.json';
-const LOCATION_VIEWS = 3;
 const DESCRIPTION_LIMIT = 200;
 const KINDS = ['location', 'item', 'system', 'other'] as const;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
@@ -101,13 +100,12 @@ function requireDistinct(images: EvidenceImage[]): void {
   }
 }
 
-// Every changed feature needs a view. A location needs several views, and a system-wide change needs a labeled sheet.
+// Every changed feature needs a view. The count of views is the agent's judgment, so there is no minimum. A system-wide change needs a labeled sheet.
 function requireCoverage(features: Feature[], images: EvidenceImage[]): void {
   for (const feature of features) requireViews(feature, images.filter((image) => image.covers.includes(feature.name)));
 }
 
 function requireViews(feature: Feature, views: EvidenceImage[]): void {
   if (views.length === 0) throw new Error(`No evidence image covers "${feature.name}"`);
-  if (feature.kind === 'location' && views.length < LOCATION_VIEWS) throw new Error(`The location "${feature.name}" needs ${LOCATION_VIEWS} different views (layout and landmarks, approach, traversal), it has ${views.length}`);
   if (feature.kind === 'system' && !views.some((image) => image.sheet)) throw new Error(`The system change "${feature.name}" needs one labeled contact sheet ("sheet": true) built from real screenshots`);
 }
