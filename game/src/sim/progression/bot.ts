@@ -602,9 +602,15 @@ function scavenge(o: Orders, stripping: boolean): boolean {
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
-  else if (hasCargo(o.world, o.me)) driveToSite(o, nearestTown(o.world));
+  else if (cargoToTown(o)) driveToSite(o, nearestTown(o.world));
   else return findSalvageSite(o);
   return true;
+}
+
+// Cargo still to take to town. In town the sale already sold what the bot would sell, and a field repairer keeps its
+// repair parts.
+function cargoToTown(o: Orders): boolean {
+  return hasCargo(o.world, o.me) && !townAt(o.world);
 }
 
 function findSalvageSite(o: Orders): boolean {

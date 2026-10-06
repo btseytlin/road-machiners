@@ -431,6 +431,14 @@ describe('botOrders', () => {
     expect(order(withPrey(parkedAt('bowl')), 'hunter')).not.toEqual(order(parkedAt('bowl'), 'scavenger'));
   });
 
+  it('has a scavenging hunter in town with more repair parts than it needs drive on', () => {
+    const w = parkedAt('bowl');
+    w.player.discovered = [];
+    addGoods(w, playerVehicle(w), 'parts', 1);
+
+    expect(playerVehicle(botOrders(w, 'hunter').world).order).not.toBeNull();
+  });
+
   it('has a broke hunter with no gun scavenge instead of patrol', () => {
     const armed = withPrey(parkedAt('bowl'));
     armed.player.money = 0;
