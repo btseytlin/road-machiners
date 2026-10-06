@@ -346,7 +346,7 @@ export function powerChip(steps: SpeedStep[], v: Vehicle): PowerChip {
   const balance = over ? `over by ${powerNumber(draw - capacity)}` : `${powerNumber(capacity - draw)} spare`;
   const cost = gunCost(steps);
   const detail = `Guns draw ${powerNumber(draw)} of ${powerNumber(capacity)} power, ${balance}. Cost: ${cost.long}.`;
-  const text = `${powerNumber(draw)} / ${powerNumber(capacity)} power${over ? ` · ${balance}` : ''} · ${cost.short}`;
+  const text = `${powerNumber(draw)} / ${powerNumber(capacity)} power${over ? `, ${balance}` : ''}, ${cost.short}`;
   return { text, detail, over };
 }
 

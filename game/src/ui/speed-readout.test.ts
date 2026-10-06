@@ -72,7 +72,7 @@ describe('power chip', () => {
   };
 
   it('shows no speed cost without guns', () => {
-    expect(chip(CASES.plain).text).toMatch(/^0 \/ \d+(\.\d)? power · no speed cost$/);
+    expect(chip(CASES.plain).text).toMatch(/^0 \/ \d+(\.\d)? power, no speed cost$/);
   });
 
   it('shows draw, capacity and the speed cost with guns', () => {
@@ -80,7 +80,7 @@ describe('power chip', () => {
       mountPart(w, v, makePart(w, 'mg', 0));
       mountPart(w, v, makePart(w, 'mg', 0));
     });
-    expect(c.text).toMatch(/power · −\d+% speed$/);
+    expect(c.text).toMatch(/power, −\d+% speed$/);
     expect(c.over).toBe(false);
     expect(c.detail).toContain('Cost: −');
   });
