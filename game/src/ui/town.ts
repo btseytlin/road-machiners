@@ -397,8 +397,7 @@ export class TownScreen {
 
 // What a held bounty pays for. A raider that gives up counts only with Bounty talk.
 function bountyPays(w: World): string {
-  const talk = vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? ", or one gives up to you" : "";
-  return `Pays when you knock one out or wreck it${talk}`;
+  return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
 const STOCK_FILTER_LABEL: Record<StockFilter, string> = {

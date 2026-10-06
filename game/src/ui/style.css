@@ -1940,6 +1940,10 @@ canvas.view {
   width: 24px;
   height: 24px;
 }
+/* A note in place of an action wraps, so it never squeezes the contract summary. */
+.job > .dim {
+  max-width: 11em;
+}
 #ui .job button {
   padding: 3px 12px;
   font-size: 12px;
