@@ -8,8 +8,9 @@ import type { JobOutcome } from './ledger';
 
 export const ACTIVITIES = ['starting', 'model', 'reading', 'editing', 'command', 'tests', 'typecheck', 'playtest', 'build', 'publish', 'install', 'git', 'lock', 'review', 'design', 'investigate', 'waiting', 'finished'] as const;
 export type Activity = typeof ACTIVITIES[number];
-export const MILESTONES = ['understanding', 'planning', 'implementing', 'validating', 'reviewing', 'preparing-release'] as const;
-export type Milestone = typeof MILESTONES[number];
+// An agent names its milestone in the card's words, like "Building orchard buildings". The public dashboard shows it, so the text cannot carry paths, commands or markup, and fits one table cell.
+export const MILESTONE_PATTERN = /^[A-Za-z0-9 ,.'-]{3,80}$/;
+export type Milestone = string;
 export type ActivityData = { type: 'activity'; activity: Activity; phase: 'running' | 'completed' | 'failed'; source: 'runner' | 'agent'; milestone?: Milestone | null; progressAt?: string | null; ownerPid?: number | null };
 export type SchedulerData = { type: 'scheduler'; status: 'checking' | 'ready' | 'paused' | 'disk-low' | 'failed'; report: ScheduleReport | null; counts: Partial<Record<Column, number>> };
 export type ManagerData = { type: 'manager'; activity: Activity; intent?: Activity | null; phase: 'running' | 'completed' | 'failed'; issue: number | null };
@@ -45,7 +46,7 @@ function validateActivitySource(data: ActivityData | ManagerData): void {
   if (data.progressAt != null && !Number.isFinite(Date.parse(data.progressAt))) throw new Error('Invalid progress time');
 }
 function validateMilestone(milestone: Milestone | null | undefined): void {
-  if (milestone != null && !MILESTONES.includes(milestone)) throw new Error('Invalid activity milestone');
+  if (milestone != null && !MILESTONE_PATTERN.test(milestone)) throw new Error('Invalid activity milestone');
 }
 function validateManagerIntent(data: ManagerData): void {
   if (data.intent != null && !ACTIVITIES.includes(data.intent)) throw new Error('Invalid manager intent');
@@ -150,8 +151,8 @@ function readReportedActivity(value: unknown): { activity: Activity } | null {
   return { activity: value as Activity };
 }
 function readReportedMilestone(value: unknown): { milestone: Milestone } | null {
-  if (typeof value !== 'string' || !MILESTONES.includes(value as Milestone)) return null;
-  return { milestone: value as Milestone };
+  if (typeof value !== 'string' || !MILESTONE_PATTERN.test(value)) return null;
+  return { milestone: value };
 }
 export function parseAgentStatus(line: string): { activity: Activity } | { milestone: Milestone } | null {
   let value: unknown;

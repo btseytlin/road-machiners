@@ -19,7 +19,7 @@ const CHANGE_BASE = 'main';
 // The change agent's task file, in the gitignored task folder of its clone, like a game issue's.
 export const CHANGE_TASK_FILE = (id: number): string => `${TASK_DIR}/change-${id}.md`;
 
-// Runs one committee request to change the factory itself through up:make and opens a pull request that only a human merges.
+// Runs one committee request to change the factory, or anything else in the repo, through up:make and opens a pull request that only a human merges.
 export async function change(ctx: Ctx, id: number): Promise<void> {
   const request = readState(ctx.statePath).pendingChanges.find((item) => item.id === id);
   if (!request) throw new Error(`no pending factory change ${id}`);
@@ -36,8 +36,6 @@ export async function change(ctx: Ctx, id: number): Promise<void> {
   const head = await ctx.repo.fetchFromWork(dir, branch);
   if (!(await ctx.repo.hasNewCommits(CHANGE_BASE, head))) throw new Error(`change ${id} made no commits`);
   const paths = diffPaths(await ctx.repo.diff(CHANGE_BASE, head));
-  const outside = paths.filter((path) => !path.startsWith(`${FACTORY_DIR}/`));
-  if (outside.length > 0) throw new Error(`change ${id} touches files outside factory/: ${outside.join(', ')}`);
   await ctx.repo.push(head, branch);
   const title = prTitle(readOutput(home, 'pr-title.txt'), id);
   const body = prBody(readOutput(home, 'pr-body.md'), request.by, request.text, paths);

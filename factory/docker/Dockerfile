@@ -19,6 +19,7 @@ RUN npm install -g @anthropic-ai/claude-code
 
 COPY --chmod=755 factory-agent /usr/local/bin/factory-agent
 COPY --chmod=755 factory-status /usr/local/bin/factory-status
+COPY --chmod=755 factory-job /usr/local/bin/factory-job
 
 # Everything below runs as the image's non-root user.
 # Claude Code reaches only the Anthropic API, so the egress allowlist needs no telemetry hosts.
