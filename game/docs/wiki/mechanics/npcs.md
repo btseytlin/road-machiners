@@ -19,6 +19,12 @@ NPCs spawn with equipment sampled from weighted tables for their role: a chassis
 
 Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. A shot at a driver or a nearby faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. A driver counts as weak when its cab or its truck as a whole is badly broken, or when it cannot drive. One broken wheel is not enough. A weak driver mostly flees or begs. A driver judges force by the target's nearby visible group against its own nearby visible group.
 
+A raider camp's gate guns shoot every driver outside the raiders. A driver the guns shoot at, hit or miss, flees from the camp with no roll, since it cannot win. It keeps running until it is a few tiles past the gun range. No driver outside the raiders starts a repair, a tow or a loot stop inside a camp's gun range. A driver that stands inside it with no shade to drive to waits with its repair until it is out.
+
+A driver with no room for any good, by cells or by mass, takes no detour to salvage and rolls no scavenge or haul. It sells its cargo instead.
+
+A started refit on a knocked-out truck finishes before a repair or service trip takes the driver off the loot goal. Only urgent supplies interrupt it.
+
 Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits.
 
 Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock, shaped as their own burnt chassis. One truck at a time searches a wreck or a pile, and any other truck waits or leaves, while a site stays open to everyone. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
@@ -66,6 +72,7 @@ States are timed relations between two trucks. Each ends as expired, fulfilled o
 - A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
 - A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses, unhitches or drives away from an offer, or when the tower meets danger or the trucks turn hostile.
 - A tower the player turned down rarely offers again.
+- A tower with a client on the rope ignores a hostile it only hears. A hostile in sight or a shot at it still makes it drop the tow.
 - A tower that dropped a tow for danger comes back with the same deal, until the truck drives again. It waits ten turns beside the truck before it hitches or offers again, so a hostile at the edge of sight does not make it hitch and drop on every turn.
 - A driver with no working engine is serviced in a town, never at a stall, since a stall cannot refit it.
 - Only one driver answers a stranded player at a time. Near a town gate, fewer drivers offer a tow.

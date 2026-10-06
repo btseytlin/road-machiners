@@ -4,6 +4,7 @@
 import { NPC_BEHAVIOR, NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
+import { campGunning } from './camp-guns';
 import { inCombat } from './combat';
 import { bodyCondition } from './npc-decisions';
 import { startJob } from './jobs';
@@ -46,6 +47,7 @@ function canSearchForShade(world: World, vehicle: Vehicle): boolean {
 function isRepairCandidate(world: World, vehicle: Vehicle, point: Vec): boolean {
   if (point.x < 1 || point.y < 1) return false;
   if (point.x >= world.size - 1 || point.y >= world.size - 1) return false;
+  if (campGunning(vehicle, point)) return false;
   return dist(vehicle.pos, point) <= NPC_UPKEEP.shadeSearchRadius;
 }
 
@@ -76,12 +78,14 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
   return shaded ?? null;
 }
 
-// A repair goal when the most damaged part carried parts can patch is at or below `condition`. Null otherwise.
+// A repair goal when the most damaged part carried parts can patch is at or below `condition`. Null otherwise, and
+// always inside a camp's gun range with no spot outside it to drive to.
 export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: number): NpcActivity | null {
   const part = chooseRepairPart(world, vehicle);
   if (!part) return null;
   if (part.hp / maxHp(part) > condition) return null;
   const destination = chooseRepairSpot(world, vehicle);
+  if (!destination && campGunning(vehicle, vehicle.pos)) return null;
   return {
     kind: 'repair',
     targetId: null,

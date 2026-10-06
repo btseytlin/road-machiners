@@ -7,6 +7,7 @@ import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
+import { campById, campGunning, nearestGate } from './camp-guns';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -409,6 +410,8 @@ function fightGoal(world: World, vehicle: Vehicle, target: Vehicle, reason: stri
 }
 
 function fleeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
+  const camp = campById(goal.targetId);
+  if (camp) return campGunning(vehicle, vehicle.pos, NPC_BEHAVIOR.campGunMargin)?.id === camp.id ? null : 'out of the camp gun range';
   if (visibleHostiles(world, vehicle).length > 0 || contacts.some((c) => c.vehicleId === goal.targetId)) return null;
   return 'no hostile in sight';
 }
@@ -604,7 +607,21 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
   }
 }
 
+// A shot from a camp gate gun makes the driver run from the camp. It cannot win against a gun it cannot hit, so there is
+// no roll. A driver already running from that camp keeps on.
+function onGunned(world: World, vehicle: Vehicle, profile: NpcProfile, campId: string | undefined): void {
+  const camp = campById(campId ?? null);
+  if (!camp) return;
+  const top = topGoal(vehicle);
+  if (top?.kind === 'flee' && top.targetId === camp.id) return;
+  const goal = createActivity('flee', camp.id, fleeDestination(world, vehicle, profile, nearestGate(camp, vehicle.pos)), 'shot by camp guns');
+  interrupt(world, vehicle, goal);
+}
+
+// A tower with a client on the rope ignores a hostile it only hears. A flee from it ends the next turn, as soon as the
+// contact drops out, and would cost the tow for nothing. A hostile in sight or a shot still makes it drop the tow.
 function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
+  if (heldTow(world, vehicle)) return;
   for (const contact of hostileContacts(world, vehicle, contacts)) {
     const option = react(world, vehicle, 'contactHeard', contact.vehicleId);
     if (option === null || option === 'keep') continue;
@@ -737,7 +754,7 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const clients = world.vehicles
     .filter((client) => client.id !== world.player.vehicleId || !inCombat(world, client))
     .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
-    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null)
+    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null && !campGunning(vehicle, c.at))
     .sort((a, b) => dist(vehicle.pos, a.at) - dist(vehicle.pos, b.at));
   const chosen = clients.find((c) => react(world, vehicle, 'strandedSeen', c.client.id) === 'tow');
   if (chosen) startTow(world, vehicle, chosen.client, chosen.at);
@@ -840,7 +857,8 @@ function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): voi
 }
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
-  const threat = fleeThreat(world, vehicle, contacts, goal);
+  const camp = campById(goal.targetId);
+  const threat = camp ? nearestGate(camp, vehicle.pos) : fleeThreat(world, vehicle, contacts, goal);
   if (!threat) throw new Error(`${vehicle.id} flees with no threat perceived`);
   goal.destination = fleeDestination(world, vehicle, profile, threat);
 }
@@ -862,6 +880,8 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   const contacts = usefulContacts(world, vehicle);
   forget(world, vehicle, contacts);
   pruneAttackers(world, vehicle);
+  const gunnedBy = brain.gunnedBy;
+  delete brain.gunnedBy;
   breakOffDeals(world, vehicle);
   giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
@@ -873,6 +893,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   // A truce ends hostility, so goals that held only against the truce partner end here.
   dropInvalidGoals(world, vehicle, contacts);
   onAttacked(world, vehicle, profile);
+  onGunned(world, vehicle, profile, gunnedBy);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
@@ -930,8 +951,15 @@ function keepTowGoal(world: World, vehicle: Vehicle): void {
 function pushService(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   const service = serviceGoal(world, vehicle, profile);
   const urgent = service !== null && needsUrgentSupplies(world, vehicle, profile);
-  if (!urgent && keepRepairing(world, vehicle)) return;
+  if (!urgent && staysOnWork(world, vehicle)) return;
   if (service && !vehicle.brain!.goals.some((g) => g.kind === service.kind)) pushGoal(world, vehicle, service);
+}
+
+// A refit on a looted truck runs on the loot goal on top. Any new goal would cancel it, so only urgent supplies may
+// interrupt it. A repair or a service trip waits until the refit ends.
+function staysOnWork(world: World, vehicle: Vehicle): boolean {
+  if (vehicle.job?.kind === 'refit' && jobBelongs(vehicle.job, vehicle)) return true;
+  return keepRepairing(world, vehicle);
 }
 
 // Low supplies, or a low tank that still has fuel to reach service.
@@ -988,6 +1016,17 @@ export function noteHurt(world: World): void {
   const hits = turnPartHits(world);
   for (const v of world.vehicles) {
     if (v.brain) v.brain.hurt = (hits.get(v.id) ?? []).reduce((sum, hit) => sum + hit.damage, 0);
+  }
+  noteGunned(world);
+}
+
+// A camp gate gun's shot, hit or miss, at a driver marks the camp on the driver's brain for its next decision.
+function noteGunned(world: World): void {
+  for (const e of world.events) {
+    if (e.t !== 'guardShot') continue;
+    // A truck the volley destroyed is already off the map.
+    const target = world.vehicles.find((v) => v.id === e.target);
+    if (target?.brain && campById(e.site)) target.brain.gunnedBy = e.site;
   }
 }
 

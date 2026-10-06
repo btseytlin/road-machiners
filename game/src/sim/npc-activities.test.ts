@@ -13,7 +13,7 @@ import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './n
 import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
-import { addGoods } from './inventory';
+import { addGoods, hasCargoRoom } from './inventory';
 import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { beginSearch } from './search';
 import { knockOutNpc } from './defeat';
@@ -32,7 +32,7 @@ import { addState } from './states';
 import { inCombat } from './combat';
 import { getTradePrice } from './economy';
 import { getUpkeepReserve } from './npc-decisions';
-import { ECONOMY } from '../data/goods';
+import { ECONOMY, GOODS } from '../data/goods';
 import { refreshVision } from './vision';
 import { recall } from './memory';
 
@@ -1181,5 +1181,83 @@ describe('parking beside a truck', () => {
     const spot = stop();
     expect(dist(spot, blocker.pos)).toBeGreaterThanOrEqual(chassisDef(blocker.chassisId).radius + vehicleStats(w, tower).radius);
     expect(dist(spot, client.pos)).toBeCloseTo(dist(taken, client.pos));
+  });
+});
+
+describe('a full hold', () => {
+  // A hauler with free cells but no mass room for any good.
+  function heavyLoaded() {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'scavengers', 'hauler', ['mg', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    for (const good of Object.keys(GOODS).sort((a, b) => GOODS[b].mass - GOODS[a].mass)) addGoods(w, npc, good, 1000);
+    expect(freeCells(npc)).toBeGreaterThan(0);
+    expect(hasCargoRoom(npc)).toBe(false);
+    return { w, npc };
+  }
+
+  it('sends no driver to salvage on the way, and goes on selling its cargo', () => {
+    forceOption('salvageSeen', 'loot');
+    forceOption('idle', 'scavenge');
+    const { w, npc } = heavyLoaded();
+    w.salvage = [{ id: 'wreck-on-road', pos: { x: 18, y: 10 }, radius: 0.6, goods: { scrap: 3 }, parts: [] }];
+    npc.speed = 3;
+    npc.brain!.goals = [{ kind: 'sell', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'sell carried cargo' }];
+    refreshVision(w);
+    expect(visibleSalvage(w, npc).map((s) => s.id)).toContain('wreck-on-road');
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['sell']);
+    expect(`salvageSeen:wreck-on-road` in npc.brain!.noticed).toBe(false);
+  });
+
+  it('picks no scavenge goal when idle, and sells instead', () => {
+    forceOption('idle', 'scavenge');
+    const { w, npc } = heavyLoaded();
+    w.salvage = [{ id: 'wreck-in-sight', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 3 }, parts: [] }];
+    refreshVision(w);
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('sell');
+  });
+});
+
+describe('a loot refit under way', () => {
+  function strippingLooter() {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 20, y: 10 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    corePart(buggy, 'cab').hp = 0;
+    knockOutNpc(w, buggy);
+    const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 20 - gap, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    npc.brain.goals = [{ kind: 'loot', targetId: buggy.id, destination: { ...buggy.pos }, phase: 'travel', reason: 'test loot' }];
+    refreshVision(w);
+    resolveNpcActivities(w);
+    expect(npc.job?.kind).toBe('refit');
+    return { w, npc, buggy };
+  }
+
+  function needsRepair(w: World, npc: Vehicle): void {
+    addGoods(w, npc, 'parts', 4);
+    corePart(npc, 'cab').hp = 1;
+  }
+
+  it('is not cancelled by a repair, and the loot goal stays on top', () => {
+    const { w, npc, buggy } = strippingLooter();
+    needsRepair(w, npc);
+    thinkNpc(w, npc);
+    expect(npc.job?.kind).toBe('refit');
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', targetId: buggy.id });
+    expect(npc.brain!.goals.some((g) => g.kind === 'repair')).toBe(false);
+  });
+
+  it('gives way to a repair once the refit ends', () => {
+    const { w, npc } = strippingLooter();
+    needsRepair(w, npc);
+    npc.job = null;
+    npc.brain!.goals = [];
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.some((g) => g.kind === 'repair')).toBe(true);
   });
 });

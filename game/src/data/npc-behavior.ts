@@ -72,6 +72,9 @@ export const NPC_BEHAVIOR = {
   // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
   // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.
   fightSearchTurns: 6,
+  // Tiles past a camp gate gun's range that a driver shot by it keeps running, so it does not stop on the line and
+  // drift back into the next volley.
+  campGunMargin: 4,
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
