@@ -57,8 +57,13 @@ export function deckAt(x: number, y: number): DeckPoint | null {
   return null;
 }
 
+// True for a point on the deck or on the road straight before either end of it, within the deck's width.
+export function inLineWith(deck: Deck, p: Vec): boolean {
+  return Math.abs(acrossOf(deck, p.x, p.y)) <= deck.width / 2;
+}
+
 // For a point between a deck's two ends, however far to the side, that deck and the distance along it,
-// or null past the ends of every deck. Of several decks, the nearest across wins.
+// or null past the ends of every deck. Marks beside a deck use it. Of several decks, the nearest across wins.
 export function spanAt(x: number, y: number): DeckPoint | null {
   let best: DeckPoint | null = null;
   let bestAcross = Infinity;

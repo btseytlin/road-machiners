@@ -4,7 +4,7 @@
 // The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { deckAt, spanAt, type Deck } from './bridge';
+import { deckAt, inLineWith, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
 
 export type Terrain = {
@@ -37,16 +37,14 @@ export function heightAt(t: Terrain, x: number, y: number): number {
 }
 
 // Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside a deck,
-// a mark stays level with the deck where the truck is nearer the deck than the ground below, so it does
-// not hang down into a canyon like Canyon Bridge's.
+// a mark stays level with the deck only for a truck on it or in line with it, so it does not hang down
+// into a canyon like Canyon Bridge's. Every other truck's marks lie on the ground, never as walls.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
-  const h = heightAt(t, x, y);
   const span = spanAt(x, y);
-  if (span === null) return h;
-  const deck = deckHeight(t, span.deck, span.along);
-  if (h >= deck) return h;
-  const from = heightAt(t, origin.x, origin.y);
-  return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
+  if (span === null) return heightAt(t, x, y);
+  const ground = groundAt(t, x, y);
+  if (!inLineWith(span.deck, origin)) return ground;
+  return Math.max(ground, deckHeight(t, span.deck, span.along));
 }
 
 // Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.

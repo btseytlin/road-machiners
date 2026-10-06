@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
-import { bridgeCut, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
+import { bridgeCut, crossesRail, deckAt, deckById, DECKS, inLineWith, nearRail, spanAt } from './bridge';
 import { route, routeLength } from './path';
 import { segmentDist } from './vec';
 import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
@@ -124,6 +124,47 @@ describe('Canyon Bridge', () => {
     // Past the deck ends a mark lies on the ground.
     const past = at(-3, 0);
     expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
+  });
+
+  it('lays marks on the ground for a truck far from every deck, even inside a deck stripe', () => {
+    const far = { x: 344, y: 264 };
+    for (let r = 0.5; r <= 10; r += 0.5) {
+      for (let a = 0; a < 360; a += 15) {
+        const x = far.x + r * Math.cos((a * Math.PI) / 180);
+        const y = far.y + r * Math.sin((a * Math.PI) / 180);
+        expect(markHeightAt(t, far, x, y)).toBe(groundAt(t, x, y));
+      }
+    }
+  });
+
+  it('lays a canyon-floor truck marks on the floor under the deck outline', () => {
+    const floor = at(B.length / 2, B.width + 4);
+    const under = at(B.length / 2, 1);
+    expect(markHeightAt(t, floor, under.x, under.y)).toBe(groundAt(t, under.x, under.y));
+  });
+
+  it('keeps marks level with the deck for a truck on the road in line before its end', () => {
+    const road = at(-2, 0);
+    const beside = at(2, B.width / 2 + 2);
+    const deck = heightAt(t, at(2, 0).x, at(2, 0).y);
+    expect(markHeightAt(t, road, beside.x, beside.y)).toBeGreaterThanOrEqual(deck);
+  });
+
+  it('differs from the ground only for an origin in line with the deck spanning the point', () => {
+    for (let ox = 0; ox < t.size; ox += 12) {
+      for (let oy = 0; oy < t.size; oy += 12) {
+        const origin = { x: ox, y: oy };
+        for (let r = 0.5; r <= 20; r += 4.5) {
+          for (let a = 0; a < 360; a += 45) {
+            const x = ox + r * Math.cos((a * Math.PI) / 180);
+            const y = oy + r * Math.sin((a * Math.PI) / 180);
+            const span = spanAt(x, y);
+            if (span !== null && inLineWith(span.deck, origin)) continue;
+            expect(markHeightAt(t, origin, x, y)).toBe(span === null ? heightAt(t, x, y) : groundAt(t, x, y));
+          }
+        }
+      }
+    }
   });
 
   it('makes deck tiles drivable road', () => {
