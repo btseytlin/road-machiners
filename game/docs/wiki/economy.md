@@ -34,7 +34,7 @@ Repair costs `ECONOMY.repairShare` of a part's value per share of HP restored. A
 
 ## Contracts
 
-The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.valueShare` of the target's worth.
+The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.valueShare` of the target's worth when the player claims it at the shop that posted it, after a knockout or kill of any truck of its type.
 
 ## Upkeep
 

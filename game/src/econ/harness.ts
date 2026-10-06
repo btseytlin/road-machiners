@@ -160,7 +160,6 @@ function stepOneTurn(world: World, telemetry: Telemetry, tilesPerTurn: number): 
   advanceContracts(world);
   renewSalvage(world);
   telemetry.debtEvents += world.events.filter((e) => e.t === 'money' && e.amount < 0 && e.reason === 'failed haul contract').length;
-  telemetry.contractsDone += world.events.filter((e) => e.t === 'contract' && e.outcome === 'done' && e.contract.kind === 'bounty').length;
   const v = playerVehicle(world);
   consumeVehicleSupplies(world, v);
   // A strip job only advances on a turn the truck is not driving (tilesPerTurn <= 0 marks a
@@ -236,8 +235,8 @@ function fight(world: World, telemetry: Telemetry): void {
 }
 
 // Resolves one abstract fight. With a `target` (a bounty's named raider), a win removes it from
-// world.vehicles and pushes the `destroyed` event advanceContracts reads to pay the bounty
-// (src/sim/market.ts bountyFulfilled). With no target, a win loots a sampled raider template
+// world.vehicles and pushes the `destroyed` event advanceContracts reads to fulfil the bounty
+// (src/sim/market.ts beatenTemplates); the bot then claims it at the bounty's shop. With no target, a win loots a sampled raider template
 // instead, same as a random road encounter.
 function resolveEncounter(world: World, telemetry: Telemetry, target: Vehicle | null): void {
   telemetry.fights++;
@@ -509,15 +508,21 @@ function contractsOnlyAction(world: World, mem: Memory): Action {
 
 function contractIsActionable(world: World, mem: Memory, c: Contract): boolean {
   if (c.kind === 'haul') return true;
-  if (c.kind === 'bounty') return world.vehicles.some((v) => v.brain?.templateId === c.template);
+  if (c.kind === 'bounty') return bountyIsActionable(world, c);
   const v = playerVehicle(world);
   if (hasSpare(v, c) || hasStored(world, c)) return true;
   if (knownStockShop(world, mem, c)) return true;
   return unvisitedShop(world, mem) !== null;
 }
 
+// A met bounty waits for its claim. An unmet one needs a truck of its template left to beat.
+function bountyIsActionable(world: World, c: Extract<Contract, { kind: 'bounty' }>): boolean {
+  return c.fulfilled || world.vehicles.some((v) => v.brain?.templateId === c.template);
+}
+
 function contractAction(c: Contract): Action {
   if (c.kind === 'haul') return { site: c.to, run: (w, t, m) => runDeliver(w, t, m, c.id) };
+  if (c.kind === 'bounty' && c.fulfilled) return { site: c.shop, run: (w, t, m) => runDeliver(w, t, m, c.id) };
   if (c.kind === 'bounty') return { site: null, run: (w, t) => { pursueBounty(w, t, c); return w; } };
   return fetchAction(c);
 }
@@ -585,8 +590,9 @@ function buyFetchPart(world: World, c: Fetch): World {
   }
 }
 
-// Drives to a raider of the bounty's template, if one is still in the world, and fights it. With
-// none left, advanceContracts lapses the contract on its own; the bot does nothing then.
+// Drives to a raider of the bounty's template, if one is still in the world, and fights it. A win
+// fulfils the bounty, which pays when claimed at its shop (contractAction). With none left,
+// advanceContracts lapses the contract on its own; the bot does nothing then.
 function pursueBounty(world: World, telemetry: Telemetry, c: Extract<Contract, { kind: 'bounty' }>): void {
   const target = world.vehicles.find((v) => v.brain?.templateId === c.template);
   if (!target) return;
@@ -638,7 +644,7 @@ function runAccept(world: World, telemetry: Telemetry, shopId: string): World {
 
 function runDeliver(world: World, telemetry: Telemetry, mem: Memory, contractId: string): World {
   recordShopVisit(world, mem, shopAt(world) ?? SHOP_IDS[0]);
-  // Travel to get here can expire or fulfil the contract along the way (advanceContracts), so it
+  // Travel to get here can expire or lapse the contract along the way (advanceContracts), so it
   // may already be gone from world.player.contracts by the time the trip arrives.
   if (!world.player.contracts.some((c) => c.id === contractId)) return world;
   const before = world.player.contracts.length;
