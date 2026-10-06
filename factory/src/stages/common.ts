@@ -132,7 +132,8 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
-export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean };
+// `evidenceCheck` gives the agent the command that runs the factory's evidence checks on its clone.
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
   const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
@@ -150,7 +151,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort });
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
