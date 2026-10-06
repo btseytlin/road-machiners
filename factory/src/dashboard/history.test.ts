@@ -85,3 +85,14 @@ it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed
     expect(summary.cost).toBeCloseTo(2.3, 9);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
+
+it('reads a waiver line and keeps its member and reason out of public history', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'waiver', event: 'used', check: 'fps', issue: 168, by: 'PRIVATE member', reason: 'PRIVATE reason', build: 'abc123', at: '2026-10-10T11:00:00Z', fps: 43 });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    expect(JSON.stringify(history.summarize(now, 1))).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
