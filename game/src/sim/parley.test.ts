@@ -436,7 +436,7 @@ describe('warning a looter off', () => {
 });
 
 describe('bounty talk', () => {
-  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2 };
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false };
 
   function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
     const w = quietWorld();
@@ -450,12 +450,12 @@ describe('bounty talk', () => {
     return { w, npc };
   }
 
-  it('a driver of the bounty template that gives up to the player pays the bounty', () => {
+  it('a driver of the bounty template that gives up to the player fulfils the bounty, which pays on claim', () => {
     const { w: start } = beggar(['bountyTalk']);
     const w = pick(start, 'Dump your cargo and drive off.');
-    expect(w.player.contracts).toEqual([]);
-    expect(w.player.money).toBe(bounty.reward);
-    expect(w.events).toContainEqual({ t: 'contract', contract: bounty, outcome: 'done' });
+    expect(w.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    expect(w.player.money).toBe(0);
+    expect(w.events).toContainEqual({ t: 'contract', contract: { ...bounty, fulfilled: true }, outcome: 'fulfilled' });
   });
 
   it('pays nothing without the perk', () => {

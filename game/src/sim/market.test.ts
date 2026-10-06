@@ -212,7 +212,7 @@ describe('market', () => {
 });
 
 describe('creditBounty', () => {
-  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, window: 900, tier: 2 });
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
   function withTarget(): { w: World; npc: Vehicle } {
     const w = emptyWorld();
@@ -222,12 +222,20 @@ describe('creditBounty', () => {
     return { w, npc };
   }
 
-  it('finishes one held bounty on the template, as a knockout does', () => {
+  const fulfilled = (w: World) => w.player.contracts.map((c) => c.kind === 'bounty' && c.fulfilled);
+
+  it('fulfils one held bounty on the template, as a knockout does, and pays nothing', () => {
     const { w, npc } = withTarget();
     w.player.contracts = [bounty('a', 'buggy'), bounty('b', 'buggy'), bounty('c', 'truck')];
     creditBounty(w, npc);
-    expect(w.player.contracts.map((c) => c.id)).toEqual(['b', 'c']);
-    expect(w.player.money).toBe(300);
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+    expect(fulfilled(w)).toEqual([true, false, false]);
+    expect(w.player.money).toBe(0);
+    creditBounty(w, npc);
+    expect(fulfilled(w)).toEqual([true, true, false]);
+    creditBounty(w, npc);
+    expect(fulfilled(w)).toEqual([true, true, false]);
+    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'fulfilled')).toHaveLength(2);
   });
 
   it('does nothing without a bounty on the template', () => {

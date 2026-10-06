@@ -8,7 +8,7 @@ import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
+import { contractDue, heldContractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -66,15 +66,28 @@ describe("conditionStatus", () => {
 });
 
 describe("contract text", () => {
-  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, window: 100, tier: 1 };
+  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, window: 100, tier: 1, fulfilled: false };
   const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, window: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
     expect(contractDue(bounty)).toBe("by Day 1 12:19");
   });
 
-  it("names any truck of the bounty's type", () => {
-    expect(contractSummary(bounty)).toBe("Defeat any Raider outrider");
+  it("names any truck of the bounty's type and the shop that pays it", () => {
+    expect(contractSummary(bounty)).toBe("Defeat any Raider outrider, claim at Bowl");
+  });
+
+  it("reads a met bounty as beaten and ready to claim", () => {
+    const met: Contract = { ...bounty, fulfilled: true };
+    expect(contractSummary(met)).toBe("Raider outrider beaten, claim at Bowl");
+    expect(heldContractDue(met)).toBe("Ready");
+    expect(heldContractDue(bounty)).toBe(contractDue(bounty));
+    expect(heldContractDue(fetch)).toBe(contractDue(fetch));
+  });
+
+  it("logs a met bounty with its reward and where to claim it", () => {
+    const line = eventText(emptyWorld(), { t: "contract", contract: { ...bounty, fulfilled: true }, outcome: "fulfilled" });
+    expect(line).toEqual({ text: "Bounty met: Raider outrider beaten, claim 100 at Bowl", cls: "good" });
   });
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {

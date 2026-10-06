@@ -16,7 +16,7 @@ import {
   acceptContract,
   advanceContracts,
   advanceShops,
-  bountyFulfilled,
+  beatenTemplates,
   bountyReward,
   deliverContract,
   goodValue,
@@ -284,31 +284,29 @@ describe('isExpired', () => {
   });
 });
 
-describe('bountyFulfilled', () => {
-  it('is true for the player\'s kill of any truck of the template', () => {
+describe('beatenTemplates', () => {
+  it('holds the template of any truck the player destroyed this turn', () => {
     const w = emptyWorld();
     const outrider = addRaider(w, 'buggy');
     const other = addRaider(w, 'warband');
-    const c = { kind: 'bounty', template: 'buggy' } as Contract;
     const kill = (v: Vehicle, by: string) => {
       w.removed = [v];
       w.events = [{ t: 'destroyed', vehicle: v.id, by }];
-      return bountyFulfilled(w, c);
+      return [...beatenTemplates(w)];
     };
-    expect(kill(outrider, w.player.vehicleId)).toBe(true);
-    expect(kill(outrider, 'other-npc')).toBe(false);
-    expect(kill(other, w.player.vehicleId)).toBe(false);
+    expect(kill(outrider, w.player.vehicleId)).toEqual(['buggy']);
+    expect(kill(outrider, 'other-npc')).toEqual([]);
+    expect(kill(other, w.player.vehicleId)).toEqual(['warband']);
   });
 
-  it('is true for the player\'s knockout of a truck of the template, which stays in the world', () => {
+  it('holds the template of a truck the player knocked out, which stays in the world', () => {
     const w = emptyWorld();
     const outrider = addRaider(w, 'buggy');
-    const c = { kind: 'bounty', template: 'buggy' } as Contract;
     w.removed = [];
     w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: 'other-npc' }];
-    expect(bountyFulfilled(w, c)).toBe(false);
+    expect([...beatenTemplates(w)]).toEqual([]);
     w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: w.player.vehicleId }];
-    expect(bountyFulfilled(w, c)).toBe(true);
+    expect([...beatenTemplates(w)]).toEqual(['buggy']);
   });
 });
 
@@ -466,19 +464,38 @@ describe('contract boards and delivery', () => {
     expect(warned(deadline - CONTRACTS.warnTurns + 1)).toHaveLength(0);
   });
 
-  it('pays a bounty on the player kill and lapses when the target leaves', () => {
-    const base = emptyWorld();
-    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, window: 900, tier: 2 };
-    const paid = update(base, (d) => {
-      d.player.contracts = [bounty];
-      d.removed = [raider];
-      d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
-      advanceContracts(d);
-    });
-    expect(paid.player.money).toBe(base.player.money + 400);
+  const bounty = (id: string, targetName = 'Target'): Contract =>
+    ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName, reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false });
+
+  // The player at bowl holding the given bounties, with one buggy raider far away.
+  function holding(...held: Contract[]): { w: World; raider: Vehicle } {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const raider = addRaider(w, 'buggy', { x: 50, y: 50 });
+    w.player.contracts = held;
+    return { w, raider };
+  }
+
+  const kill = (raider: Vehicle, gone = true) => (d: World) => {
+    if (gone) d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
+    d.removed = gone ? [raider] : [];
+    d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
+    advanceContracts(d);
+  };
+
+  const fulfilledOf = (w: World) => w.player.contracts.map((c) => c.kind === 'bounty' && c.fulfilled);
+
+  it('marks a bounty fulfilled on the player kill, pays nothing yet, and keeps it though the target is gone', () => {
+    const { w: base, raider } = holding(bounty('ct-b'));
+    const w = update(base, kill(raider));
+    expect(w.player.money).toBe(base.player.money);
+    expect(practiceOf(w, 'contract')).toEqual([]);
+    expect(fulfilledOf(w)).toEqual([true]);
+    expect(w.events).toContainEqual({ t: 'contract', contract: { ...bounty('ct-b'), fulfilled: true }, outcome: 'fulfilled' });
+  });
+
+  it('lapses an unfulfilled bounty when the target leaves', () => {
+    const { w: base, raider } = holding(bounty('ct-b'));
     const lapsed = update(base, (d) => {
-      d.player.contracts = [bounty];
       d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
       advanceContracts(d);
     });
@@ -486,20 +503,61 @@ describe('contract boards and delivery', () => {
     expect(lapsed.player.contracts).toHaveLength(0);
   });
 
-  it('pays out at most one held bounty per kill of the same template', () => {
-    const base = emptyWorld();
-    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, window: 900, tier: 2 });
-    const bounties = [held('ct-b1', 400), held('ct-b2', 400), held('ct-b3', 400)];
-    const result = update(base, (d) => {
-      d.player.contracts = bounties;
-      d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
-      d.removed = [raider];
-      d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
-      advanceContracts(d);
-    });
-    expect(result.player.money).toBe(base.player.money + 400);
-    expect(result.player.contracts).toHaveLength(0); // the other two lapse, the target is gone
+  it('marks at most one held bounty per kill of the same template', () => {
+    const { w: base, raider } = holding(bounty('ct-b1'), bounty('ct-b2'), bounty('ct-b3'));
+    const w = update(base, kill(raider));
+    expect(w.player.money).toBe(base.player.money);
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['ct-b1']); // the other two lapse, the target is gone
+    expect(fulfilledOf(w)).toEqual([true]);
+  });
+
+  it('marks the next same-template bounty on a later kill, never the fulfilled one again', () => {
+    const { w: base, raider } = holding(bounty('ct-b1'), bounty('ct-b2'));
+    const once = update(base, kill(raider, false));
+    expect(fulfilledOf(once)).toEqual([true, false]);
+    const twice = update(once, kill(raider, false));
+    expect(fulfilledOf(twice)).toEqual([true, true]);
+    expect(twice.events.filter((e) => e.t === 'contract' && e.outcome === 'fulfilled')).toHaveLength(1);
+  });
+
+  it('pays the reward and contract XP once when a fulfilled bounty is claimed at the shop that posted it', () => {
+    const { w: base, raider } = holding(bounty('ct-b'));
+    const met = update(base, kill(raider));
+    const w = deliverContract(met, 'ct-b');
+    expect(w.player.money).toBe(base.player.money + 400);
+    expect(practiceOf(w, 'contract')).toMatchObject([{ amount: contractXp(bounty('ct-b')), target: 'bowl' }]);
+    expect(w.player.contracts).toHaveLength(0);
+    expect(() => deliverContract(w, 'ct-b')).toThrow(/No active contract/);
+  });
+
+  it('refuses a claim away from the shop that posted the bounty', () => {
+    const { w: base, raider } = holding({ ...bounty('ct-b'), shop: 'nose' });
+    const met = update(base, kill(raider));
+    expect(() => deliverContract(met, 'ct-b')).toThrow(/Not parked at nose/);
+  });
+
+  it('refuses a claim on a bounty not met yet', () => {
+    const { w } = holding(bounty('ct-b'));
+    expect(() => deliverContract(w, 'ct-b')).toThrow(/not met/);
+  });
+
+  it('keeps a bounty fulfilled on its deadline claimable long after, with no warning or failure', () => {
+    const { w: base, raider } = holding(bounty('ct-b'));
+    let w = update(base, (d) => { d.turn = 900; });
+    w = update(w, kill(raider));
+    for (const turn of [900 - CONTRACTS.warnTurns, 901, 950]) {
+      w = update(w, (d) => { d.turn = turn; d.events = []; advanceContracts(d); });
+      expect(w.events.filter((e) => e.t === 'contract')).toEqual([]);
+    }
+    expect(deliverContract(w, 'ct-b').player.money).toBe(base.player.money + 400);
+  });
+
+  it('fails an unfulfilled bounty past its deadline and pays nothing', () => {
+    const { w: base } = holding(bounty('ct-b'));
+    const w = update(base, (d) => { d.turn = 901; advanceContracts(d); });
+    expect(w.player.contracts).toHaveLength(0);
+    expect(w.player.money).toBe(base.player.money);
+    expect(w.events.some((e) => e.t === 'contract' && e.outcome === 'failed')).toBe(true);
   });
 
   it('never posts two bounties for the same template on one board', () => {

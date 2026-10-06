@@ -494,10 +494,11 @@ function searchedText(stock: string): { text: string; cls: string } {
   return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
-const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], fulfilled: ['Bounty met', 'good'], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
   const [label, cls] = CONTRACT_OUTCOME[outcome];
+  if (outcome === 'fulfilled' && c.kind === 'bounty') return { text: `${label}: ${c.targetName} beaten, claim ${c.reward} at ${siteName(c.shop)}`, cls };
   const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${c.reward}`;
   return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
@@ -509,7 +510,8 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
-  return `Defeat any ${c.targetName}`;
+  if (c.fulfilled) return `${c.targetName} beaten, claim at ${siteName(c.shop)}`;
+  return `Defeat any ${c.targetName}, claim at ${siteName(c.shop)}`;
 }
 
 // How long a contract allows from acceptance, in whole game hours.
@@ -520,6 +522,11 @@ export function contractWindow(c: Contract): string {
 // The game time a contract is due. It fails at the end of its deadline turn.
 export function contractDue(c: Contract): string {
   return `by ${clockLabel(c.deadline + 1)}`;
+}
+
+// The due time of a held contract. A met bounty no longer runs against its deadline.
+export function heldContractDue(c: Contract): string {
+  return c.kind === 'bounty' && c.fulfilled ? 'Ready' : contractDue(c);
 }
 
 export function clockLabel(turn: number): string {

@@ -7,7 +7,7 @@ import { isAutoPatch } from "../sim/jobs";
 import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -328,7 +328,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );
