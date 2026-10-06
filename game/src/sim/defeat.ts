@@ -17,7 +17,7 @@ import { maxHealthOf } from "./health";
 import { PERK_NUMBERS } from "../data/skills";
 import { addState, endState, stateOf } from "./states";
 import { makeVehicle } from "./factory";
-import { generateNpcLoadout } from "./npc-loadout";
+import { generateNpcLoadout, lowestGearLevel } from "./npc-loadout";
 import { getResources } from "./resources";
 import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
@@ -250,11 +250,12 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
 }
 
 // At the end of a lie-up, the truck at its site gets a fresh loadout for its template on the same chassis, and spawn
-// fuel, supplies and health. The old items are scrapped. The driver keeps its money, name, traits and goals. Any
-// defeat ends.
+// fuel, supplies and health. The old items are scrapped. The driver keeps its money, name, traits and goals. A
+// beaten driver rebuilds from scraps at its template's lowest gear level, so a camp never refills a stripped truck
+// with good loot. Any defeat ends.
 export function refitAtHome(world: World, v: Vehicle): void {
   const template = NPCS[v.brain!.templateId];
-  const loadout = generateNpcLoadout(world, template, v.chassisId);
+  const loadout = generateNpcLoadout(world, template, v.chassisId, isDefeated(v) ? lowestGearLevel(template) : null);
   const fresh = makeVehicle(world, { name: v.name, faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
   v.items = fresh.items;
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };

@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { advanceNpcKnockouts, isDefeated } from './defeat';
+import { partDef } from '../data/parts';
+import type { GearLevel } from '../data/npcs';
+import { advanceNpcKnockouts, isDefeated, refitAtHome } from './defeat';
 import { corePart, mountedParts } from './grid';
+import { generateNpcLoadout } from './npc-loadout';
 import { fitToHunt } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { liesUp } from './npc-service';
@@ -238,6 +241,30 @@ describe('a defeated raider', () => {
     for (let turn = 0; turn < RULES.retreatTeleportTurns * 2; turn++) advanceNpcKnockouts(w);
     expect(v.pos).toEqual(at);
     expect(itemIds(v)).toEqual(items);
+  });
+
+  it('refits from scraps at its lowest gear level, while a driver that was only stranded rolls its usual level', () => {
+    const gearAfterRefit = (w: World, v: Vehicle): string[] => {
+      refitAtHome(w, v);
+      return mountedParts(v).filter((p) => partDef(p.defId).kind !== 'core').map((p) => `${p.defId}@${p.wear}`).sort();
+    };
+    const expected = (w: World, level: GearLevel | null): string[] =>
+      generateNpcLoadout(cloneWorld(w), NPCS.buggy, 'buggy', level).parts.map((p) => `${p.defId}@${p.wear}`).sort();
+    let differs = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const beaten = retreating();
+      beaten.w.rngState = seed;
+      const lowest = expected(beaten.w, 'light');
+      expect(gearAfterRefit(beaten.w, beaten.v)).toEqual(lowest);
+      expect(isDefeated(beaten.v)).toBe(false);
+      const stranded = retreating();
+      delete stranded.v.defeat;
+      stranded.w.rngState = seed;
+      const rolled = expected(stranded.w, null);
+      expect(gearAfterRefit(stranded.w, stranded.v)).toEqual(rolled);
+      if (rolled.join() !== lowest.join()) differs++;
+    }
+    expect(differs).toBeGreaterThan(0);
   });
 
   it('mints at most one fresh loadout per camp refill time however often it is knocked out and stripped', () => {

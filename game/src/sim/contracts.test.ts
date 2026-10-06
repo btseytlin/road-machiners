@@ -117,18 +117,13 @@ describe('vehicleValue', () => {
 });
 
 describe('bountyReward', () => {
-  it('pays a share of the target\'s total worth', () => {
-    const w = emptyWorld();
-    const raider = addRaider(w, 'buggy');
-    expect(bountyReward(raider)).toBe(Math.round(vehicleValue(raider) * CONTRACTS.bounty.valueShare));
+  it('pays turns of tier 1 wage set per raider template, more for a gunwagon than an outrider', () => {
+    expect(bountyReward('buggy')).toBe(Math.round(CONTRACTS.bounty.rewardTurns.buggy * EFFORT.wage[1]));
+    expect(bountyReward('gunwagon')).toBeGreaterThan(bountyReward('buggy'));
   });
 
-  it('pays more for a stronger, better-equipped target', () => {
-    const w = emptyWorld();
-    const bare = addRaider(w, 'buggy', { x: 1, y: 1 });
-    const armed = addRaider(w, 'buggy', { x: 2, y: 2 });
-    stowPart(w, armed, makePart(w, 'plates', 0));
-    expect(bountyReward(armed)).toBeGreaterThan(bountyReward(bare));
+  it('throws for a template with no bounty reward', () => {
+    expect(() => bountyReward('trader')).toThrow(/trader/);
   });
 });
 

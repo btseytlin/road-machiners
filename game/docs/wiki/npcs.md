@@ -152,8 +152,8 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 | poor | 0 | 0.5 | 0.6 | 1 | 0.5 |
 | light | 0.1 | 0.75 | 0.85 | 0 | 0.75 |
 | standard | 0.25 | 1 | 1.15 | 0 | 1 |
-| heavy | 0.45 | 1 | 1.6 | -1 | 1 |
-| loaded | 0.8 | 1 | 2.4 | -2 | 1.5 |
+| heavy | 0.45 | 1 | 1.6 | 0 | 1 |
+| loaded | 0.8 | 1 | 2.4 | 0 | 1.5 |
 <!-- /wiki:gear-levels -->
 
 ## Numbers

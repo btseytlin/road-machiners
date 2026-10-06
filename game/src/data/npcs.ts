@@ -58,8 +58,8 @@ export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budge
   poor: { fill: 0, armor: 0.5, budget: 0.6, wearShift: 1, cargo: 0.5 },
   light: { fill: 0.1, armor: 0.75, budget: 0.85, wearShift: 0, cargo: 0.75 },
   standard: { fill: 0.25, armor: 1, budget: 1.15, wearShift: 0, cargo: 1 },
-  heavy: { fill: 0.45, armor: 1, budget: 1.6, wearShift: -1, cargo: 1 },
-  loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: -2, cargo: 1.5 },
+  heavy: { fill: 0.45, armor: 1, budget: 1.6, wearShift: 0, cargo: 1 },
+  loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: 0, cargo: 1.5 },
 };
 
 // Light guns for the extra gun pass.
@@ -78,19 +78,16 @@ const LONG_GUNS: Weighted<string>[] = [
   { value: "battleRifle", weight: 1 },
 ];
 
-// The wear step of every part an NPC spawns with, mounted or spare, before its gear level's shift. Each step is twice
-// as likely as the one before, so about 3% of parts are pristine and about half are one step from junk. Most loot off
-// a beaten truck is worn, and good gear is mostly bought. Values stay within CONDITION.maxWear, so a freshly spawned
-// NPC never carries junk.
+// The wear step of every part an NPC spawns with, mounted or spare, before its gear level's shift. Three parts in four
+// are one step from junk and none are better than two steps worn, so loot off a beaten truck sells near scrap and good
+// gear is bought. Values stay within CONDITION.maxWear, so a freshly spawned NPC never carries junk.
 // The armor any driver can bolt on, one cell at a time. It covers the edge cells a template's own armor leaves bare.
 export const SCRAP_ARMOR = 'scrapSheet';
 
 export const NPC_WEAR: Weighted<number>[] = [
-  { value: 0, weight: 1 },
-  { value: 1, weight: 2 },
-  { value: 2, weight: 4 },
-  { value: 3, weight: 8 },
-  { value: 4, weight: 16 },
+  { value: 2, weight: 1 },
+  { value: 3, weight: 3 },
+  { value: 4, weight: 12 },
 ];
 
 // A trader's spare stock: mostly nothing, sometimes a gun, some armor plate or a rack it picked up cheap.
@@ -166,7 +163,7 @@ const MOSTLY_NO_CARGO_PART: Weighted<string | null>[] = [
 const LOADOUTS: Record<string, NpcLoadoutTable> = {
   outrider: {
     budget: 4100,
-    levels: [{ value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
+    levels: [{ value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }],
     chassis: [
       { value: "buggy", weight: 6 },
       { value: "courier", weight: 3 },
@@ -215,7 +212,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
   gunwagon: {
     budget: 6900,
-    levels: [{ value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
+    levels: [{ value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }],
     chassis: [
       { value: "wagon", weight: 6 },
       { value: "carrier", weight: 2 },
