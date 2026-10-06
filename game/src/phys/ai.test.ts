@@ -143,6 +143,10 @@ describe('NPC driving', () => {
       b.brain = npcBrain('roamer', b.pos, ['roamer']);
       a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
       b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      // Each has already weighed robbing the other and let it pass. This is traffic: on some world random states the
+      // scavenger rolls a robbery, and the fight that follows closes to contact by design, not by a driving fault.
+      a.brain.noticed[`preySeen:${b.id}`] = w.turn;
+      b.brain.noticed[`preySeen:${a.id}`] = w.turn;
       let d = buildDrive(w);
       let touches = 0;
       for (let i = 0; i < 10; i++) {
