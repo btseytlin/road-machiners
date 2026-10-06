@@ -73,6 +73,7 @@ Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
 - "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the test CPUs. Retry once the load falls. When it happens again within a day, post it to the committee with what held the CPUs.
+- A member waives the FPS minimum of an approved card: follow the FPS waiver section of `docs/operations.md`. Never waive it on your own.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action: edit `/factory/home/state/state.json` with `jq`, as Changing factory state says.

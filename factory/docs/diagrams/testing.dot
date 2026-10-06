@@ -22,6 +22,7 @@ digraph testing {
   PC -> PC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
   HC -> HC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
   HR -> HR [label="FAIL: one review-fix round"];
+  XS -> HC [label="member waives FPS: checks again\nonly a low frame rate may pass"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   PV -> XI [label="rebuild"];
   PV -> XD [label="plan wrong"];

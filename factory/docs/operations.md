@@ -50,6 +50,19 @@ Hermes manages the factory. Its incident watch wakes it on a stuck issue, a fail
 
 While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. A paused tick also skips its job checks, so a dead job stays in `jobs` until the pause ends. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
 
+## FPS waiver
+
+A busy GPU can drag the playtest under its frame rate minimum when nothing else is wrong. Only a committee member can waive that minimum, for one approved card at a time. Hermes records the waiver only on a member's explicit word, with the member's name and reason:
+
+`npm run factory -- waive-fps <N> <member> <reason>`
+
+- The member is a committee name, GitHub login or Telegram id. The card must be approved, in hardening, with no job running. The host must run the GPU playtest, since the CPU playtest checks no frame rate.
+- The waiver holds for the branch head at that moment. A later push needs a new waiver.
+- A card with no test phase, or one waiting for its fix round, goes straight to the checks as `checks-after-fix`. So no agent runs again, and any failure the waiver does not cover stops the card again.
+- Then remove `factory-stuck`. The checks run in full, with the full GPU playtest. They pass a failure only when the playtest step was reached and its one problem is `fps X under M`. Then the build runs alone, and the card queues its merge as usual.
+- A waived pass comments `⚠️ FPS gate waived` on the issue with the frame rate, the member and the reason. It is never reported as a plain pass.
+- The waiver goes after the next checks verdict, pass or fail. Checks that only timed out reach no verdict and keep it. Every other issue and every later run stays gated.
+
 ## Activity and status
 
 Each job reports a heartbeat every `FACTORY_OBSERVATION_HEARTBEAT_MS`. Agents report their phase with `factory-status`, and Hermes with its hooks and `factory_report_activity`, with no free text. The tick reports why each job waits. The public [dashboard](../dashboard/README.md) shows all of it, and Hermes's `factory_status` tool reads the same snapshot.
@@ -64,7 +77,7 @@ Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, st
 
 A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died or timed out as wasted.
 
-Every routed approval reply adds a line too.
+Every routed approval reply adds a line too. So does each FPS waiver, once with `event: 'granted'` and once with `event: 'used'` and the measured frame rate.
 
 Every `FACTORY_WASTE_REVIEW_DAYS`, the tick starts a waste review in the triage queue. `wasteNumbers()` in `src/waste.ts` computes the cost per stage and model, the wait per queue, the stages that ran more than once on one issue, the routes and the most expensive issues. A Sonnet agent reads those numbers and the records, and writes `.factory/brief.md` with one bottleneck and one change request. The job records them in a closed issue labeled `factory-review`. The committee chat gets the bottleneck and a "Queue as change" button. The first review waits one full period after the deploy.
 
