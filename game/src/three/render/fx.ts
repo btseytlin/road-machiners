@@ -256,6 +256,7 @@ class MuzzleFlashes {
 // perMeter: puffs per meter driven from one rear wheel on ground with dust 1; front wheels throw half.
 // Puffs close together per meter read as one stream at any speed.
 const AMMO_BLAST_RADIUS = 0.8; // meters, a small pop of a broken weapon's ammo
+const CLAYMORE_FX_RADIUS = 10; // meters, the look of a claymore blast; its damage radius is in CLAYMORE
 const DUST = { perMeter: 2.5, life: 1.1, color: 0xd8c098 };
 
 export class Fx3D {
@@ -378,11 +379,9 @@ export class Fx3D {
     this.puff(p, 0xffc060, 1, { speed: 0, life: 0.4, scale: 3.2, grow: 1.6, additive: true });
   }
 
-  // A claymore ram's charge: a fireball well wider than a truck, a hot core and a tall smoke cloud that lingers.
+  // A claymore ram's charge: a shell's blast at CLAYMORE_FX_RADIUS, well wider than a truck.
   claymoreBlast(p: V3): void {
-    this.puff(p, 0xffa040, 60, { speed: 12, life: 0.6, scale: 0.9, grow: 0.6, additive: true });
-    this.puff(p, 0x3a3028, 30, { speed: 5, life: 2.6, scale: 2.2, grow: 3.2 });
-    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.6, scale: 8, grow: 2.4, additive: true });
+    this.blast(p, CLAYMORE_FX_RADIUS);
   }
 
   crash(p: V3): void {
