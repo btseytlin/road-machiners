@@ -18,7 +18,7 @@ import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
-  huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
+  huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -183,8 +183,9 @@ function isDamaged(vehicle: Vehicle): boolean {
   return isStrandedForGood(vehicle) || drivingPartWorn || bodyCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition;
 }
 
-function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
-  return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
+// A raider unfit to hunt needs camp service.
+function unfitHunter(world: World, vehicle: Vehicle): boolean {
+  return huntsPrey(vehicle) && !fitToHunt(world, vehicle);
 }
 
 // The sites that serve a stranded driver: its bases if it has any, else any town.
@@ -222,14 +223,18 @@ export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfi
 
 const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
-// Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
+// Low fuel, low supplies, a damaged cab or part, or a raider unfit to hunt needs service, in that order of reason.
+// Null when none is needed.
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
-  const resources = getResources(world, vehicle);
-  const lowFuel = isLowOnFuel(world, vehicle, profile);
-  const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
-  const damaged = isDamaged(vehicle);
-  if (!lowFuel && !lowSupplies && !damaged) return null;
-  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged };
+  const needs: [string, boolean][] = [
+    ['low fuel', isLowOnFuel(world, vehicle, profile)],
+    ['low supplies', getResources(world, vehicle).supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies],
+    ['needs repairs', isDamaged(vehicle)],
+    ['unfit to hunt', unfitHunter(world, vehicle)],
+  ];
+  const held = needs.filter(([, need]) => need).map(([reason]) => reason);
+  if (held.length === 0) return null;
+  return { reason: held[0], suppliesOnly: held.length === 1 && held[0] === 'low supplies' };
 }
 
 function isBroke(world: World, vehicle: Vehicle): boolean {
@@ -238,7 +243,8 @@ function isBroke(world: World, vehicle: Vehicle): boolean {
 
 // The fixed survival rule. Null when no service is needed. An oasis refills supplies for free. A broke driver sells
 // its cargo first. With nothing to sell, it works on while its tank holds, low on fuel it heads for a town or its camp
-// for scrap fuel, and once stranded it heads for service anyway, where serveStranded gives it a fresh loadout.
+// for scrap fuel, and once stranded it heads for service anyway, where serveStranded gives it a fresh loadout. A broke
+// raider unfit to hunt heads for its camp too, rather than raid crippled.
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
@@ -250,7 +256,8 @@ function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcAc
 
 function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity | null {
   if (hasSaleCargo(vehicle)) return saleGoal(world, vehicle, profile);
-  return isStranded(world, vehicle) || isLowOnFuel(world, vehicle, profile) ? serviceTrip(world, vehicle, profile, need) : null;
+  const trip = isStranded(world, vehicle) || isLowOnFuel(world, vehicle, profile) || unfitHunter(world, vehicle);
+  return trip ? serviceTrip(world, vehicle, profile, need) : null;
 }
 
 function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {

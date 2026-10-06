@@ -163,6 +163,19 @@ export function isWeak(world: World, vehicle: Vehicle): boolean {
   return getCombatCondition(world, vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
 }
 
+// Raiders hunt prey. Only they hold the raid goal, so only they must be fit to hunt.
+export function huntsPrey(vehicle: Vehicle): boolean {
+  return vehicle.faction === 'raiders';
+}
+
+// A truck that can drive, with a working gun, a body and a driver both above the recover condition. A raider
+// below it stays out of raids until camp service or a lie-up for fresh gear makes it fit.
+export function fitToHunt(world: World, vehicle: Vehicle): boolean {
+  if (isStranded(world, vehicle) || firepower(world, vehicle) <= 0) return false;
+  const line = NPC_BEHAVIOR.recoverCondition;
+  return bodyCondition(vehicle) > line && getResources(world, vehicle).health / RULES.maxHealth > line;
+}
+
 // Hostile vehicles in sight, nearest first.
 export function visibleHostiles(world: World, vehicle: Vehicle): Vehicle[] {
   const enemies = world.vehicles.filter((other) => other.id !== vehicle.id && isHostile(world, vehicle, other) && canVehicleSee(world, vehicle, other.pos));
@@ -517,7 +530,7 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
 
 // Only raiders are hostile to trucks with loot, so only they have prey to hunt, on the grounds of their own camp.
 function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return vehicle.faction === 'raiders' && raiderGroundsAway(vehicle).length > 0;
+  return huntsPrey(vehicle) && raiderGroundsAway(vehicle).length > 0;
 }
 
 // Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
