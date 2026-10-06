@@ -13,6 +13,8 @@ export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
   projectOwner: string;
   projectNumber: number;
+  githubRetries: number; // retries of a rate-limited GitHub call
+  githubRetryBaseSeconds: number; // wait before the first retry, doubled for each next one
   home: string; // $FACTORY_HOME: host clone, work clones, logs, state
   webRoot: string;
   publicUrl: string; // base of play links, no trailing slash

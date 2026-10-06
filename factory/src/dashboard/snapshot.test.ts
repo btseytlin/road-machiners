@@ -31,7 +31,7 @@ it('only publishes a candidate link while the current candidate is valid', () =>
 });
 
 function createConfig(home: string): DashboardConfig {
-  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, observationHeartbeatMs: 10000, tickIntervalMs: 60000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
+  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, githubRetries: 3, githubRetryBaseSeconds: 15, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, observationHeartbeatMs: 10000, tickIntervalMs: 60000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
 }
 class FixtureGithub extends PublicGitHub {
   failed = false;
