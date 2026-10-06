@@ -9,3 +9,14 @@ jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/hom
 jq -r '.devFailed // empty | "dev build failed at " + .' /factory/home/state/state.json
 # factory-update could not deploy main. Its log is logs/update.log.
 if [ -f /factory/home/update-failed ]; then echo "update failed: $(cat /factory/home/update-failed)"; fi
+# Every tick, paused or not, writes the health file. A tick waits up to 15 minutes on the repo lock and the timer runs every minute, so 20 minutes without one means ticks stopped.
+if [ -f /factory/home/health ]; then
+  jq -r 'select(.freeGb < .minFreeGb) | "disk low: under \(.minFreeGb) GB free"' /factory/home/health
+  # availableGb is null where the host has no /proc/meminfo, and then no memory incident opens.
+  jq -r 'select(.availableGb != null and .availableGb < .minAvailableGb) | "memory low: under \(.minAvailableGb) GB available"' /factory/home/health
+  jq -r 'select(now - (.at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) > 1200) | "tick stalled: no tick since \(.at)"' /factory/home/health
+else
+  echo "tick stalled: no health file, so no tick ran on this code"
+fi
+# Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.
+if [ -n "$(find /factory/home/paused -mmin +60 2>/dev/null)" ]; then echo "paused over an hour: $(cat /factory/home/paused)"; fi

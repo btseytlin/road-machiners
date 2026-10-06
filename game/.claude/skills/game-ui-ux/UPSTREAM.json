@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/gamedev-skills/awesome-gamedev-agent-skills",
+  "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+  "files": [
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "6f82dcfeb95a1c0a0452180a3b16f21bf82111780018fed59d95a052b5b75f6c"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/game-ui-ux/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "8a094c84a377503aa8f4c40df676d1c6b6fc07d36ff95554ce06467f1614397e"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/game-ui-ux/references/layout-and-flow.md",
+      "local": "references/layout-and-flow.md",
+      "sha256": "000d944db77155ebf97fde035a3d4fbe69ef0ae348e9dbcaff48c5ea134d7d69"
+    }
+  ]
+}

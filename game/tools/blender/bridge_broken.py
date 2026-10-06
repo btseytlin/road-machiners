@@ -22,7 +22,7 @@ COLORS = {
     "concrete": 0x9A8A78,  # PAL.rock.top
     "concrete_side": 0x6E6254,  # PAL.rock.side
     "concrete_dark": 0x4E453C,  # PAL.rock.dark
-    "asphalt": 0x86684A,  # PAL.roadCrack
+    "asphalt": 0x9C6C4C,  # PAL.roadCrack
     "line": 0xF0E0B8,  # PAL.plan
     "rebar": 0x3A2418,  # PAL.rust.dark
     "rust": 0x8A4A2A,  # PAL.rust.top

@@ -18,6 +18,10 @@ from kit import CELL_ACROSS, CELL_ALONG, Kit, parse_args
 OUTER_X = CELL_ALONG / 2  # The outer edge of the row.
 PREVIEW_M = 2.6  # Default preview width, wide enough for a 4-cell row.
 FIT_TOLERANCE = 0.01  # Seeded dents may push a vertex this far past the footprint.
+# How far behind the outer edge a model may reach. The deepest wanted piece is the spaced armor's foot, 0.400 m
+# behind the edge in arm_spaced.py (the ram and plow ram feet reach 0.330 and 0.360 m). Rear braces and bracket
+# stems reached 0.48 to 0.65 m and drew as thin stems in top-down icons and on front, back and spare plates (#131).
+BACK_DEPTH = 0.4
 
 # Colors from src/render/palette.ts. The view swaps `paint` for the faction color.
 COLORS = {
@@ -61,15 +65,15 @@ def spread(n: int, half: float) -> list[float]:
     return [-half + 2 * half * i / (n - 1) for i in range(n)]
 
 
-def check_fit(name: str, n: int, reach: float) -> None:
-    """Raises if any vertex leaves the row's footprint, the deck top, or the reach past the outer edge."""
+def check_fit(name: str, n: int, reach: float, back: float = BACK_DEPTH) -> None:
+    """Raises if any vertex leaves the row's footprint, the deck top, the reach past the outer edge, or lies more than back behind it."""
     pts = [o.matrix_world @ v.co for o in bpy.context.scene.objects if o.type == "MESH" for v in o.data.vertices]
     lo = [min(p[i] for p in pts) for i in range(3)]
     hi = [max(p[i] for p in pts) for i in range(3)]
     half = half_span(n)
     t = FIT_TOLERANCE
-    if lo[0] < -OUTER_X - t or hi[0] > reach + t or lo[1] < -half - t or hi[1] > half + t or lo[2] < -t:
-        raise RuntimeError(f"{name} leaves its {n}-cell row: X {lo[0]:.3f}..{hi[0]:.3f} (max {reach}), Y {lo[1]:.3f}..{hi[1]:.3f} (half {half}), Z from {lo[2]:.3f}")
+    if lo[0] < OUTER_X - back - t or hi[0] > reach + t or lo[1] < -half - t or hi[1] > half + t or lo[2] < -t:
+        raise RuntimeError(f"{name} leaves its {n}-cell row: X {lo[0]:.3f}..{hi[0]:.3f} (min {OUTER_X - back:.3f}, max {reach}), Y {lo[1]:.3f}..{hi[1]:.3f} (half {half}), Z from {lo[2]:.3f}")
 
 
 def run(name: str, build: Callable[[Kit], None], seed: int, n: int, reach: float = OUTER_X, preview_m: float = PREVIEW_M) -> None:
@@ -80,5 +84,5 @@ def run(name: str, build: Callable[[Kit], None], seed: int, n: int, reach: float
     args = parse_args()
     kit = Kit(COLORS, seed)
     build(kit)
-    check_fit(name, n, reach)
+    check_fit(name, n, reach, BACK_DEPTH)
     kit.export(name, args, view_size=preview_m)

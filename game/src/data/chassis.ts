@@ -62,7 +62,7 @@ export type ChassisDef = {
   value: number; // money value of a new chassis, base plus a stat modifier
   showsCores: boolean; // true when the view draws the transmission and the fuel tank, see the header
   tier: Tier;
-  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader';
+  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader' | 'niva' | 'bukhanka' | 'lincoln';
 };
 
 // Money per unit of each priced stat. See partModifier() in src/data/parts.ts for the value rule.
@@ -358,6 +358,57 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 130, fuelPerTile: 0.65, base: 2460, showsCores: false, tier: 3, look: 'loader',
   },
+  // A Lada Niva 4x4: a nimble, frugal two-box off-roader with a small deck and tank.
+  niva: {
+    id: 'niva', name: 'Niva', maxSpeed: 7.6, accel: 2.2, brake: 3, turnSlow: 115, turnFast: 40, reverseTurn: 80,
+    mass: 520, handlingMass: 1700, radius: 0.55,
+    // The engine sits under the front hood. The transmission and the tank lie inside the body, and the open seat takes the cab cells.
+    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LXXXXR', 'LXXXXR', ' BBBB '],
+    core: [
+      { defId: 'cab', x: 2, y: 3 },
+      { defId: 'transmissionMid', x: 2, y: 7 },
+      { defId: 'tank', x: 2, y: 5 },
+      { defId: 'wheelMid', x: 1, y: 1 },
+      { defId: 'wheelMid', x: 4, y: 1 },
+      { defId: 'wheelMid', x: 1, y: 7 },
+      { defId: 'wheelMid', x: 4, y: 7 },
+    ],
+    fuelCap: 42, fuelPerTile: 0.21, base: 1100, showsCores: false, tier: 2, look: 'niva',
+  },
+  // A UAZ-452 Bukhanka: a cab-over loaf van with a big roof deck. The cab sits right behind the front armor row.
+  bukhanka: {
+    id: 'bukhanka', name: 'Bukhanka', maxSpeed: 6.0, accel: 1.4, brake: 2.5, turnSlow: 95, turnFast: 30, reverseTurn: 60,
+    mass: 1250, handlingMass: 3300, radius: 0.65,
+    // The engine bay lies behind the cab, in a hatch in the roof. The transmission and the tank lie under the rear box.
+    layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDEEDDR', 'LDEEDDR', 'LDDDDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],
+    core: [
+      { defId: 'cabPickup', x: 2, y: 1 },
+      { defId: 'transmissionMid', x: 2, y: 6 },
+      { defId: 'tankMid', x: 4, y: 6 },
+      { defId: 'wheelMid', x: 1, y: 1 },
+      { defId: 'wheelMid', x: 5, y: 1 },
+      { defId: 'wheelMid', x: 1, y: 7 },
+      { defId: 'wheelMid', x: 5, y: 7 },
+    ],
+    fuelCap: 78, fuelPerTile: 0.30, base: 1230, showsCores: false, tier: 2, look: 'bukhanka',
+  },
+  // A Lincoln Continental Mark III: the fast, light tier 3 gunboat with a long hood and a long thirsty body.
+  lincoln: {
+    id: 'lincoln', name: 'Lincoln', maxSpeed: 8.6, accel: 2.0, brake: 2.2, turnSlow: 80, turnFast: 26, reverseTurn: 45,
+    mass: 900, handlingMass: 2400, radius: 0.85,
+    // The engine sits under the long hood. The hardtop cab stands two across between the seats, and the transmission and the tank lie in the trunk.
+    layout: [' FFFFF ', 'LXDDDXR', 'LXEEDXR', 'LDEEDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],
+    core: [
+      { defId: 'cabHardtop', x: 2, y: 4, rot: 1 },
+      { defId: 'transmission', x: 2, y: 7 },
+      { defId: 'tankLong', x: 4, y: 7 },
+      { defId: 'wheel', x: 1, y: 1 },
+      { defId: 'wheel', x: 5, y: 1 },
+      { defId: 'wheel', x: 1, y: 8 },
+      { defId: 'wheel', x: 5, y: 8 },
+    ],
+    fuelCap: 85, fuelPerTile: 0.36, base: 1500, showsCores: false, tier: 3, look: 'lincoln',
+  },
 };
 
 export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
@@ -365,7 +416,7 @@ export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
 );
 
 // Chassis the player can buy in towns.
-export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'buggy', 'wagon'];
+export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'niva', 'bukhanka', 'lincoln', 'buggy', 'wagon'];
 
 export function chassisDef(id: string): ChassisDef {
   const def = CHASSIS[id];

@@ -2,7 +2,8 @@ import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { must } from './exec';
 import { withLock } from './lock';
-import { MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Run } from './types';
+import { createLockWaitReporter } from './observability';
+import { MEDIA_DIR, MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
 // The identity names the factory on its merge commits, the same one the agent image uses.
@@ -26,7 +27,7 @@ const lines = (text: string): string[] => text.split('\n').filter(Boolean);
 
 // GitHub holds every branch. The host clone is a cache of it: it keeps GitHub's branches as origin/* refs and no local branch.
 // A write merges in a throwaway worktree and pushes the result. A failed merge or push leaves nothing behind, so a retry starts from GitHub.
-export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
+export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = null): HostRepo {
   const path = `${cfg.home}/repo`;
   const landDir = join(cfg.home, 'work', 'land');
   const gitIn = async (cwd: string, args: string[]): Promise<string> => must(await run('git', [...NO_HOOKS, ...args], { cwd }), `git ${args.join(' ')}`);
@@ -84,7 +85,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     await gitIn(dir, ['checkout', '-B', branch, `origin/${start}`]);
   }
 
-  return lockEach(join(cfg.home, 'locks', 'repo'), {
+  return lockEach(cfg, jobId, {
     path,
     async fetch() {
       if (!existsSync(path)) {
@@ -128,11 +129,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       await gitIn(dir, ['config', 'remote.origin.fetch', '+refs/remotes/origin/*:refs/remotes/origin/*']);
       await gitIn(dir, ['fetch', '--quiet', 'origin']);
       // The clone ignores the factory's own files, whatever the branch's .gitignore says.
-      appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n`);
+      appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n${MEDIA_DIR}/\n`);
       await checkoutBranch(dir, branch, base);
     },
     async untrackFactoryFiles(dir) {
-      const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`]));
+      const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`, `:(glob)**/${MEDIA_DIR}/**`]));
       if (tracked.length === 0) return [];
       await gitIn(dir, ['rm', '-r', '-q', '--cached', '--', ...tracked]);
       // A path list would commit the file from disk again, so the commit takes the index.
@@ -165,6 +166,9 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       return (await git(['rev-parse', '--short', await ref(branch)])).trim();
     },
     diff: async (base, branch) => git(['diff', `${await ref(base)}...${await ref(branch)}`]),
+    async readFile(branch, path) {
+      return git(['show', `${await ref(branch)}:${path}`]);
+    },
     async changedFiles(base, branch) {
       return lines(await git(['diff', '--name-only', `${await ref(base)}...${await ref(branch)}`]));
     },
@@ -189,11 +193,12 @@ const REPO_LOCK_MS = 15 * 60_000;
 
 // Parallel jobs share the host clone and its one merge worktree, so each method runs whole under one lock.
 // A job's steps may interleave with another job's, which is safe: no method leaves state behind except GitHub's refs.
-function lockEach(dir: string, repo: HostRepo): HostRepo {
+function lockEach(cfg: FactoryConfig, jobId: string | null, repo: HostRepo): HostRepo {
+  const dir = join(cfg.home, 'locks', 'repo');
   const entries = Object.entries(repo).map(([key, value]) => {
     if (typeof value !== 'function') return [key, value];
     const method = value as (...args: unknown[]) => Promise<unknown>;
-    return [key, (...args: unknown[]) => withLock(dir, REPO_LOCK_MS, () => method(...args))];
+    return [key, (...args: unknown[]) => withLock(dir, REPO_LOCK_MS, () => method(...args), createLockWaitReporter(cfg.home, jobId, cfg.observationHeartbeatMs))];
   });
   return Object.fromEntries(entries) as HostRepo;
 }

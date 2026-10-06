@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+if [ "$#" -eq 2 ] && [ "$1" = milestone ]; then
+    case "$2" in
+        understanding|planning|implementing|validating|reviewing|preparing-release)
+            printf '{"type":"factory_status","milestone":"%s"}\n' "$2"
+            exit 0
+            ;;
+        *) printf '%s\n' 'Unknown milestone' >&2; exit 2 ;;
+    esac
+fi
+if [ "$#" -ne 1 ]; then
+    printf '%s\n' 'Usage: factory-status <activity> | factory-status milestone <milestone>' >&2
+    exit 2
+fi
+case "$1" in
+    reading|editing|tests|typecheck|playtest|build|publish|install|git|review|design|investigate|waiting)
+        printf '{"type":"factory_status","activity":"%s"}\n' "$1"
+        ;;
+    *) printf '%s\n' 'Unknown activity' >&2; exit 2 ;;
+esac

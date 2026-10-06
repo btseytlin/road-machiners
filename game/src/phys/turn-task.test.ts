@@ -68,7 +68,7 @@ it("computes the same world and physics as a foreground turn without advancing t
     if (expectedDrive) freeDrive(expectedDrive);
     if (restored) freeDrive(restored);
   }
-});
+}, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
 // The game restores the playback snapshot for the main thread and posts the same snapshot to the worker.
 function handoff(rockStays: boolean) {
