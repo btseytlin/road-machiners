@@ -121,7 +121,11 @@ function playedBuild(state: FactoryState, issue: number): string {
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
-  const comment = `Denied by ${by} in the committee chat.`;
+  await closeCard(ctx, issue, `Denied by ${by} in the committee chat.`);
+}
+
+// Drops the card from the pipeline for good: closed as not planned, in Done, with its bundle sent back to triage.
+export async function closeCard(ctx: Ctx, issue: number, comment: string): Promise<void> {
   await ctx.github.comment(issue, comment);
   if ((await ctx.github.pullRequestFor(BRANCH(issue))) !== null) await ctx.github.closePullRequest(BRANCH(issue), comment);
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
