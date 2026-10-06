@@ -8,8 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
-import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
-import { isJunk, maxHp } from './wear';
+import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
@@ -17,11 +16,11 @@ import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
-  tradeOffers, tradeSpend, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
 } from './npc-decisions';
-import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
+import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { standingPressures } from './market';
 import { remember } from './memory';
@@ -43,6 +42,7 @@ import { canVehicleSee } from './vision';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
+
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -171,20 +171,6 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 
 // Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
 type ServiceNeed = { reason: string; suppliesOnly: boolean };
-
-// A truck with no engine or a junk one stays stranded for good. No patch fixes it, only a refit. See serveStranded.
-function isStrandedForGood(vehicle: Vehicle): boolean {
-  const engine = mountedParts(vehicle, 'engine')[0];
-  return !engine || isJunk(engine);
-}
-
-// A part that keeps the truck driving, or a truck broken up all around, needs service. Worn armor, guns and cargo do
-// not. Junk parts do not count, since no service rebuilds them.
-function isDamaged(vehicle: Vehicle): boolean {
-  const drivingPartWorn = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'engine')]
-    .some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
-  return isStrandedForGood(vehicle) || drivingPartWorn || bodyCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition;
-}
 
 // A raider unfit to hunt needs camp service.
 function unfitHunter(world: World, vehicle: Vehicle): boolean {
@@ -1204,16 +1190,23 @@ export function noteShop(world: World, vehicle: Vehicle, siteId: string): void {
   if (siteId in SHOPS) remember(world, vehicle, { kind: 'prices', shop: siteId, pressure: standingPressures(world, siteId) });
 }
 
+// A driver notes the shop's prices and fills its tank where it already does business, so it does not leave a pump on a half-speed tank. The
+// distance rule in isLowOnFuel still decides when it makes a trip just for fuel.
+function topUpAtPump(world: World, vehicle: Vehicle, siteId: string): void {
+  noteShop(world, vehicle, siteId);
+  if (pumpsOf(vehicle, npcProfile(vehicle), isBroke(world, vehicle)).includes(siteId)) buyFuel(world, vehicle);
+}
+
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  noteShop(world, vehicle, site.id);
+  topUpAtPump(world, vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }
 
-// Buys what the trade spend and the free cells allow, then delivers it as the long-term goal.
+// Buys what the trade spend and the free cells allow, as planned, then fills the tank from what is left and delivers it as the long-term goal.
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
@@ -1222,10 +1215,12 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), tradeSpend(world, vehicle));
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
+    topUpAtPump(world, vehicle, site.id);
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
     replaceBase(world, vehicle, createSiteActivity('sell', activity.purchase.sellShop, 'deliver purchased cargo'));
     return;
   }
+  topUpAtPump(world, vehicle, site.id);
   finishGoal(world, vehicle, 'cannot afford trade cargo');
 }
 

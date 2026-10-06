@@ -54,3 +54,8 @@ The factory rejects the manifest when `commit` is not the final head of the bran
 
 If the change needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+
+Your very last step, after your last commit, is the factory's evidence check. Run `node /opt/factory-check/check.mjs patch` from your folder.
+It runs the checks the factory runs after you, on your clone as it is now, and prints each failure with the factory's message.
+Fix every failure before you end. A fix needs a commit, new captures and a new manifest, and then you run the check again.
+Run it again after any later commit. Do not end while it fails.

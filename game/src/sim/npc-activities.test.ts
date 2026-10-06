@@ -607,6 +607,87 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).not.toBe('resupply');
   });
 
+  describe('fuel at a business stop', () => {
+    const at = (npc: Vehicle, siteId: string) => {
+      const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === siteId)!;
+      npc.pos = { ...sitePads(site)[0] };
+      npc.speed = 0;
+    };
+    const goal = (kind: NpcActivity['kind'], siteId: string, over: Partial<NpcActivity> = {}): NpcActivity =>
+      ({ kind, targetId: siteId, destination: { x: 0, y: 0 }, phase: 'travel', reason: 'test activity', ...over });
+    const tankAt = (w: World, npc: Vehicle, share: number, money: number) => {
+      getResources(w, npc).fuel = Math.floor(share * fuelCap(npc));
+      getResources(w, npc).money = money;
+    };
+
+    it('a trader that sells cargo at a town leaves with a full tank and pays the fuel price', () => {
+      const { w, npc } = createTrader();
+      at(npc, 'bowl');
+      addGoods(w, npc, 'salt', 2);
+      tankAt(w, npc, 0.1, 500);
+      npc.brain!.goals = [goal('sell', 'bowl')];
+      const fuel = getResources(w, npc).fuel;
+      const salt = getTradePrice(w, npc, 'bowl', 'salt', 'sell') * 2;
+      resolveNpcActivities(w);
+      expect(goodsCount(npc).salt ?? 0).toBe(0);
+      expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
+      expect(getResources(w, npc).money).toBe(500 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
+    });
+
+    it('a trader that buys trade cargo at a town buys the planned cargo first, then fills the tank from the rest', () => {
+      const { w, npc } = createTrader();
+      at(npc, 'bowl');
+      const unit = getTradePrice(w, npc, 'bowl', 'grain', 'buy');
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + unit);
+      npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
+      resolveNpcActivities(w);
+      expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
+      expect(getResources(w, npc).money).toBeGreaterThanOrEqual(0);
+    });
+
+    it('a trader with plenty of money buying trade cargo also tops up its tank', () => {
+      const { w, npc } = createTrader();
+      at(npc, 'bowl');
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 5000);
+      npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
+      resolveNpcActivities(w);
+      expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
+      expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
+    });
+
+    it('a raider selling at the Salvage Yard buys no fuel there, and one selling at its camp tops up', () => {
+      const raider = () => {
+        const w = emptyWorld({ x: 50, y: 50 });
+        const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
+        npc.brain = npcBrain('raider', npc.pos, ['raider']);
+        addGoods(w, npc, 'scrap', 2);
+        tankAt(w, npc, 0.1, 500);
+        return { w, npc };
+      };
+      for (const [site, full] of [['salvage-yard', false], ['scrapjaw', true]] as const) {
+        const { w, npc } = raider();
+        at(npc, site);
+        const fuel = getResources(w, npc).fuel;
+        npc.brain!.goals = [goal('sell', site)];
+        resolveNpcActivities(w);
+        expect(goodsCount(npc).scrap ?? 0).toBe(0);
+        expect(getResources(w, npc).fuel).toBe(full ? Math.floor(fuelCap(npc)) : fuel);
+      }
+    });
+
+    it('a driver in debt sells but buys no fuel', () => {
+      const { w, npc } = createTrader();
+      at(npc, 'bowl');
+      addGoods(w, npc, 'salt', 1);
+      tankAt(w, npc, 0.1, -10_000);
+      const fuel = getResources(w, npc).fuel;
+      npc.brain!.goals = [goal('sell', 'bowl')];
+      resolveNpcActivities(w);
+      expect(goodsCount(npc).salt ?? 0).toBe(0);
+      expect(getResources(w, npc).fuel).toBe(fuel);
+    });
+  });
+
   it('turns a coward back for fuel with a tank a trader drives on with', () => {
     withFuelSense(0, () => {
       const fuel = reserveOfTrader() * 1.05;

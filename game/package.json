@@ -13,6 +13,7 @@
     "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
     "combat": "vite-node scripts/combat.mjs",
     "loadouts": "vite-node scripts/loadouts.mjs",
+    "traffic": "vite-node scripts/traffic.mjs",
     "stuck": "vite-node scripts/progression-record.mjs -- --archetypes trader --seeds 1,2,3 --turns 1000",
     "income": "ROAM_NO_WATCH=1 vite-node scripts/income.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
