@@ -11,6 +11,7 @@
     "sfx:import": "vite-node scripts/sfx-import.mjs",
     "sfx:board": "vite --open /sound.html",
     "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
+    "sfx:report": "vite-node scripts/sfx-report.mjs",
     "combat": "vite-node scripts/combat.mjs",
     "loadouts": "vite-node scripts/loadouts.mjs",
     "stuck": "vite-node scripts/progression-record.mjs -- --archetypes trader --seeds 1,2,3 --turns 1000",

@@ -141,6 +141,14 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | harpoon-fire | sfx | false | 0.8 | 2 | 2 |
 | harpoon-hook | sfx | false | 0.7 | 2 | 2 |
 | line-tear | sfx | false | 0.8 | 2 | 2 |
+| mortar-fire | sfx | false | 0.8 | 2 | 2 |
+| smoke-burst | sfx | false | 0.6 | 2 | 2 |
+| flare-fire | sfx | false | 0.7 | 2 | 2 |
+| flare-burst | sfx | false | 0.6 | 2 | 2 |
+| caltrops-drop | sfx | false | 0.6 | 2 | 2 |
+| caltrops-hit | sfx | false | 0.7 | 3 | 1 |
+| oil-spill | sfx | false | 0.6 | 2 | 2 |
+| emitter-pulse | sfx | false | 0.8 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
 | wind | ambient | true | 1 | 1 | 3 |
 | music-calm | music | true | 1 | 1 | 3 |

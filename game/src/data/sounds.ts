@@ -260,4 +260,8 @@ export const MIX = {
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
   anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,
+  // Tone of the sfx anchor, in dB against its mids: low below 250 Hz, high above 4 kHz. Import shelves a world
+  // one-shot back to within spread of it; `npm run sfx:report` measures it. A spread of 10 dB leaves the guns, hits
+  // and explosions as they are and catches the hissy and tinny takes.
+  tone: { low: 8, high: -17, spread: 10 },
 } as const;

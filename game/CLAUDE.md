@@ -36,7 +36,7 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
 - `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
-- `npm run sfx:board`, `sfx:import`, `sfx:reimport` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
+- `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 
 Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound generation and publishing keys.

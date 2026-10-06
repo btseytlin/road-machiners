@@ -6,11 +6,12 @@
 // 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
 //    Then one EQ for all: rumble and harsh top cut.
 // 4. Tone matched to the cue's first file, so variants sound like one sound. Families of different sounds skip it.
-// 5. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
+// 5. World one-shots are heard from one distance and sit near the anchor's tone; see fieldTone.
+// 6. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
 // Output is 48 kHz Ogg Opus with the source path in its comment tag.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { beatLoopSeconds } from '../src/data/sounds.ts';
+import { beatLoopSeconds, MIX } from '../src/data/sounds.ts';
 
 export const SFX_DIR = 'public/sfx';
 const PEAK_DB = -1; // limiter ceiling
@@ -50,18 +51,25 @@ export function importFile(source, id, cue, level) {
   const out = `${SFX_DIR}/${name}`;
   if (existsSync(out)) throw new Error(`${out} exists`);
   const src = playable(source, name, cue);
-  const base = [...shapeFilters(src, cue), channels(src, cue), EQ];
-  const family = (cue.prompts?.length ?? 0) > 1;
-  const shaped = [...base, ...(family ? [] : toneMatch(src, base.join(','), id))].join(',');
+  const shaped = toneChain(src, source, id, cue);
   const rawPeak = measure(src, 'anull').peak;
   if (rawPeak < SILENT_PEAK_DB) throw new Error(`${src} peaks at ${rawPeak} dB; it is near silence. Skip it.`);
   const { loudness, peak } = measure(src, shaped);
   const gain = Math.min(level - loudness, PEAK_DB + MAX_LIMIT_DB - peak);
   const limiter = `alimiter=limit=${dbToLinear(PEAK_DB)}:attack=1:release=50:level=false:latency=true`;
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB,${limiter}`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-metadata', `comment=${source}`, out]);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB,${limiter}`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-map_metadata', '-1', '-metadata', `comment=${source}`, out]);
   const short = level - loudness - gain > 0.05 ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
   console.log(`${source} -> ${out}  ${loudness.toFixed(1)} LUFS, gain ${gain.toFixed(1)} dB${short}`);
   return name;
+}
+
+// Steps 1 to 5 of the header as one ffmpeg filter chain.
+function toneChain(src, source, id, cue) {
+  const field = isField(cue);
+  const base = [...shapeFilters(src, cue), channels(src, cue), EQ, ...(field ? [DISTANCE] : [])];
+  const family = (cue.prompts?.length ?? 0) > 1;
+  const matched = [...base, ...(family ? [] : toneMatch(src, base.join(','), id))];
+  return [...matched, ...(field ? fieldTone(src, matched.join(','), source) : [])].join(',');
 }
 
 // Free music loops through a crossfade first; other sources are used as they are.
@@ -122,19 +130,66 @@ function toneMatch(src, shaped, id) {
   return [`bass=g=${low.toFixed(2)}:f=250`, `treble=g=${high.toFixed(2)}:f=4000`];
 }
 
+// World one-shots: sounds in the world, not the cab, the music or a loop.
+export function isField(cue) {
+  return cue.bus === 'sfx' && cue.setup === 'field' && !cue.loop;
+}
+
+// Generated field takes sound close-miked and bright, though the prompt asks for 10 m. A gentle cut above 8 kHz
+// puts them all at that distance.
+const DISTANCE = 'lowpass=f=8000:p=1';
+
+// A band further than MIX.tone.spread from the anchor's balance is moved back to the edge of that spread. A cut
+// only takes away hiss, so it may go further than a boost, which also raises the noise in the band. A take that
+// stays outside is listed by sfx:report and fixed by hand with ffmpeg.
+// A shelf moves its band by only part of its gain, since the two overlap in part, so the shelves are re-measured
+// and corrected over FIT_PASSES.
+const MAX_FIELD_CUT_DB = 12;
+const MAX_FIELD_BOOST_DB = 6;
+const FIT_PASSES = 3;
+const MAX_SHELF_DB = 24; // the bass shelf moves the low band by about a third of its gain
+
+function fieldTone(src, shaped, source) {
+  const start = bandBalance(src, shaped);
+  const goal = { low: start.low + backToSpread(start, 'low'), high: start.high + backToSpread(start, 'high') };
+  if (goal.low === start.low && goal.high === start.high) return [];
+  const gain = { low: 0, high: 0 };
+  let have = start;
+  for (let i = 0; i < FIT_PASSES; i++) {
+    for (const band of ['low', 'high']) gain[band] = clampDb(gain[band] + goal[band] - have[band], MAX_SHELF_DB);
+    have = bandBalance(src, [shaped, ...shelves(gain)].join(','));
+  }
+  console.log(`  ${source} toward the anchor: low ${(have.low - start.low).toFixed(1)} dB, high ${(have.high - start.high).toFixed(1)} dB`);
+  return shelves(gain);
+}
+
+function backToSpread(balance, band) {
+  const off = balance[band] - MIX.tone[band];
+  const over = Math.sign(off) * Math.max(0, Math.abs(off) - MIX.tone.spread);
+  return Math.max(-MAX_FIELD_CUT_DB, Math.min(MAX_FIELD_BOOST_DB, -over));
+}
+
+function clampDb(db, max) {
+  return Math.max(-max, Math.min(max, db));
+}
+
+function shelves(gain) {
+  return [`bass=g=${gain.low.toFixed(2)}:f=250`, `treble=g=${gain.high.toFixed(2)}:f=4000`];
+}
+
 function variantNumber(file) {
   return Number(file.match(/-(\d+)\.ogg$/)[1]);
 }
 
 // Low and high band RMS relative to the mid band, in dB.
-function bandBalance(src, shaped) {
+export function bandBalance(src, shaped) {
   const rms = (band) => statValue(ffmpegLog(src, `${shaped},${band},astats=measure_perchannel=0:measure_overall=RMS_level`), 'RMS level dB');
   const mid = rms(MID);
   return { low: rms(BANDS.low) - mid, high: rms(BANDS.high) - mid };
 }
 
 // Loudest 400 ms momentary loudness, which tracks how loud a sound feels, and sample peak.
-function measure(src, shaped) {
+export function measure(src, shaped) {
   const log = ffmpegLog(src, `${shaped},apad=whole_dur=${METER_S},ebur128=peak=sample`);
   const momentary = [...log.matchAll(/ M: *(-?[\d.]+)/g)].map((m) => Number(m[1]));
   if (momentary.length === 0) throw new Error(`Could not meter ${src}`);
