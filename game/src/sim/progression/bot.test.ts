@@ -5,12 +5,13 @@ import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
 import { partDef } from '../../data/parts';
 import { SHOPS } from '../../data/market';
-import { CONDITION } from '../../data/wear';
+import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
-import { goodsCount, mountedParts } from '../grid';
+import { freeCells, goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
+import { playerSees } from '../vision';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway } from '../vec';
@@ -18,7 +19,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive }
 import { NPCS } from '../../data/npcs';
 import { playerTow } from '../tow';
 import { towData } from '../states';
-import { endTurn } from '../world';
+import { endTurn, hostileToPlayer } from '../world';
 import { partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
@@ -163,6 +164,24 @@ describe('botOrders', () => {
     const after = playerVehicle(turn.world);
     expect(after.order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestTown(w), me.pos) });
     expect(turn.world.player.beacon).toBe(true);
+  });
+
+  it('has a stranded truck keep its beacon off in combat and turn it on once the fight is over', () => {
+    const beaconIn = (fight: boolean) => {
+      const w = withoutEngine(parkedAt('bowl'));
+      w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
+      const me = playerVehicle(w);
+      me.pos = { x: me.pos.x + 20, y: me.pos.y - 20 };
+      if (fight) {
+        const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 6, y: me.pos.y });
+        raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+        startCombat(w, raider, me);
+      }
+      return botOrders(w, 'trader').world.player.beacon;
+    };
+
+    expect(beaconIn(true)).toBe(false);
+    expect(beaconIn(false)).toBe(true);
   });
 
   // A broken transmission strands the truck, and it still crawls. A tow helps only when the money and the gear for
@@ -521,12 +540,51 @@ describe('the hunter', () => {
   it('has a hunter take the bounty on the board it is parked at, and a trader leave it', () => {
     const heldAfter = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
+      const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 300, y: 300 });
+      target.brain = npcBrain('buggy', target.pos, ['raider']);
       w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
       return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
     };
 
     expect(heldAfter('hunter')).toEqual(['ct-bounty']);
     expect(heldAfter('trader')).toEqual([]);
+  });
+
+  it('has a hunter take a bounty only on a raider type it would fight', () => {
+    const heldWith = (template: string, chassis: string, parts: string[]) => {
+      const w = parkedAt('bowl');
+      const target = addVehicle(w, 'raiders', chassis, parts, { x: 300, y: 300 });
+      target.brain = npcBrain(template, target.pos, ['raider']);
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template, targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      return botOrders(w, 'hunter').world.player.contracts.length;
+    };
+
+    expect(heldWith('buggy', 'buggy', ['stockEngine'])).toBe(1);
+    expect(heldWith('gunwagon', 'wagon', ['cannon', 'heavyDiesel'])).toBe(0);
+  });
+
+  it('has a hunter take no bounty when no truck of the type is left', () => {
+    const w = parkedAt('bowl');
+    w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+
+    expect(botOrders(w, 'hunter').world.player.contracts).toEqual([]);
+  });
+
+  it('has a hunter hold its chase of a heard raider it would refuse on sight', () => {
+    const orderFacing = (parts: string[]) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      playerVehicle(w).speed = 0;
+      const raider = addVehicle(w, 'raiders', 'buggy', [...parts, 'stockEngine'], { x: 120, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      w.player.contacts = [{ vehicleId: raider.id, center: { ...raider.pos }, radius: 10, sources: ['sound'], loudness: 1 }];
+      expect(playerSees(w, raider.pos)).toBe(false);
+      return { w, order: playerVehicle(botOrders(w, 'hunter').world).order };
+    };
+    const weak = orderFacing([]);
+    const strong = orderFacing(['mg', 'mg', 'mg', 'mg']);
+
+    expect(weak.order).toEqual({ kind: 'stopAt', dest: { x: 120, y: 30 } });
+    expect(strong.order?.kind === 'stopAt' && strong.order.dest.x === 120).toBe(false);
   });
 
   it('has a hunter strip a spare part for repair parts where a trader sells it', () => {
@@ -601,6 +659,58 @@ describe('the hunter', () => {
 
     expect(hotAt(false)).toBeNull();
     expect(hotAt(true)).not.toBeNull();
+  });
+
+  it('keeps a truck parked for heat until the engine is well below the warning', () => {
+    const orderAt = (heat: number, driving: boolean) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      playerVehicle(w).order = driving ? { kind: 'stopAt', dest: { x: 200, y: 30 } } : null;
+      w.player.engineHeat = heat;
+      return playerVehicle(botOrders(w, 'trader').world).order;
+    };
+    const justBelowWarning = ENGINE_HEAT.warnAt - 0.02;
+
+    expect(orderAt(justBelowWarning, false)).toBeNull();
+    expect(orderAt(justBelowWarning, true)).not.toBeNull();
+    expect(orderAt(ENGINE_HEAT.warnAt / 4, false)).not.toBeNull();
+  });
+
+  it('has a bot with a hot engine drive on while a hostile is in sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).order = { kind: 'stopAt', dest: { x: 200, y: 30 } };
+    w.player.engineHeat = ENGINE_HEAT.warnAt + 0.05;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    expect(hostileToPlayer(w, raider) && playerSees(w, raider.pos)).toBe(true);
+
+    expect(playerVehicle(botOrders(w, 'trader').world).order).not.toBeNull();
+  });
+
+  // The truck is faster than the raider on paper, but a dry tank leaves it a crawl, so it hands the cargo over.
+  it('has a truck with a dry tank hand its cargo to a stronger raider it cannot outrun', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    addGoods(w, me, 'salt', 2);
+    w.player.fuel = 0;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['autocannon', 'ram', 'stockEngine'], { x: 36, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    expect(vehicleStats(w, me).maxSpeed).toBeGreaterThan(vehicleStats(w, raider).maxSpeed);
+    startCombat(w, raider, me);
+    w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { text: 'Dump your cargo and roll on.', vars: {} } };
+
+    expect(goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0).toBe(0);
+  });
+
+  // The grid is full of a haul's goods the hunter may not sell, and it stands in town with nothing to sell.
+  it('has a hunter with a full grid in town go on patrol instead of idling', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    addGoods(w, me, 'scrap', 100);
+    const units = goodsCount(me).scrap;
+    w.player.contracts = [{ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 }];
+    expect(freeCells(me)).toBe(0);
+
+    expect(playerVehicle(botOrders(w, 'hunter').world).order).not.toBeNull();
   });
 
   // A raider demands the cargo. A trader too slow to get away hands it to a stronger raider and refuses a weaker one.
