@@ -45,9 +45,21 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
+// The build alone, for a card a control move put in Approval. No test, typecheck or playtest runs.
+const buildScript = `set -e
+step() { echo "[checks] $(date -u +%T) $1"; }
+mkdir -p tmp
+step "npm ci"
+npm ci
+step "build"
+SAVE_SCOPE="$BUILD_SCOPE" npm run build
+step "done"
+`;
+
 // The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
 // It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
 // A first failure hands the card to verify for one fix round. A failure after that fix stops the card.
+// The phase `post` builds and posts the head with no checks and no fix round. A failed build throws.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const phase = checksPhase(ctx, issue);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
@@ -58,11 +70,11 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approver = approvedAlready(ctx, issue, item.labels);
   const approval = approver === null ? readApproval(home) : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
-  const failure = await checkPatiently(ctx, issue, base, build);
+  const failure = await checkOrBuild(ctx, issue, phase, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base);
+  if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base, phase === 'post');
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
@@ -70,8 +82,16 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 
 function checksPhase(ctx: Ctx, issue: number): TestPhase {
   const phase = readState(ctx.statePath).testPhase[String(issue)];
-  if (phase !== 'checks' && phase !== 'checks-after-fix') throw new Error(`Issue #${issue} is not ready for checks, its test phase is ${phase ?? 'none'}`);
+  if (phase !== 'checks' && phase !== 'checks-after-fix' && phase !== 'post') throw new Error(`Issue #${issue} is not ready for checks, its test phase is ${phase ?? 'none'}`);
   return phase;
+}
+
+// The post phase builds once. A failed build throws with the phase kept, so a retry builds again.
+async function checkOrBuild(ctx: Ctx, issue: number, phase: TestPhase, base: string, build: string): Promise<string | null> {
+  if (phase !== 'post') return checkPatiently(ctx, issue, base, build);
+  const failure = await runScript(ctx, issue, base, build, buildScript);
+  if (failure !== null) throw new Error(`The build failed, no factory checks ran.\n${failure}`);
+  return null;
 }
 
 // The phase goes on a second failure too, so a retry after Hermes clears the stuck label starts again from verify.
@@ -109,6 +129,10 @@ function checkDir(ctx: Ctx, issue: number): string {
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
 // Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
 async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg)));
+}
+
+async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
@@ -116,7 +140,7 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build });
     return null;
   } catch (error) {
     return checkFailure(log, error);
@@ -162,14 +186,14 @@ const TRIM_MARK = '…';
 // The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
 // Further evidence images follow as a reply photo or album, which no command acts on.
 // A post with no screenshot is a text message with the same buttons, mapping and reply routing. It says up front that it has no screenshot.
-export async function post(ctx: Ctx, issue: number, approval: Approval, shown: Shown, url: string, base: string): Promise<void> {
+export async function post(ctx: Ctx, issue: number, approval: Approval, shown: Shown, url: string, base: string, unchecked = false): Promise<void> {
   const { evidence, problem } = shown;
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
-  const notice = problem === null ? '' : `⚠️ ${problem}\n\n`;
+  const notice = `${problem === null ? '' : `⚠️ ${problem}\n\n`}${unchecked ? `${UNCHECKED_NOTICE}\n\n` : ''}`;
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${notice}${approval.description}\n\nHow to try: ${approval.howToTry}`);
-  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence === null);
+  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence === null, unchecked);
   const track = {
     add: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption }, textPosts: evidence === null ? [...state.textPosts, String(id)] : state.textPosts })),
     drop: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id), textPosts: state.textPosts.filter((name) => name !== String(id)) })),
@@ -199,11 +223,18 @@ export function approvalButtons(issue: number, base: string): InlineButton[][] {
   return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
 }
 
-export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, noScreenshot = false): string {
-  // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
+const UNCHECKED_NOTICE = '⚠️ No factory checks ran on this build.';
+
+// A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
+function warningsOf(base: string, noScreenshot: boolean, unchecked: boolean): string {
   const hotfix = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
   const unseen = noScreenshot ? '⚠️ No screenshot. Judge it by playing.\n\n' : '';
-  const warning = `${hotfix}${unseen}`;
+  const unverified = unchecked ? `${UNCHECKED_NOTICE}\n\n` : '';
+  return `${hotfix}${unseen}${unverified}`;
+}
+
+export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string, noScreenshot = false, unchecked = false): string {
+  const warning = warningsOf(base, noScreenshot, unchecked);
   const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
   const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. Reply to this post to ask a question or ask for a change.`;

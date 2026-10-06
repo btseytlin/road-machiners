@@ -67,7 +67,7 @@ function cardStage(state: FactoryState, card: Card): JobStage {
 // A Testing card runs the factory checks once verify or a patch set its phase, and verify otherwise.
 function testingStage(state: FactoryState, issue: number): JobStage {
   const phase = state.testPhase[String(issue)];
-  return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
+  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post' ? 'checks' : 'verify';
 }
 
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);

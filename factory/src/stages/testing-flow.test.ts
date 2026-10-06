@@ -321,6 +321,62 @@ describe('testing stage', () => {
     await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('not ready for checks, its test phase is none');
   });
 
+  describe('post phase', () => {
+    const outDir = (): string => `${home}/work/issue-7/game/.factory`;
+    const leaveOutputs = (approval: string | null): void => {
+      mkdirSync(outDir(), { recursive: true });
+      if (approval !== null) writeFileSync(`${outDir()}/approval.json`, approval);
+      writeFileSync(`${outDir()}/screenshot.png`, 'png');
+    };
+    const setPost = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), testPhase: { 7: 'post' } });
+
+    it('builds once with no test, no playtest and no agent, posts, and moves to Approval', async () => {
+      leaveOutputs(JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' }));
+      setPost();
+      const agents: string[] = [];
+      const ctx = fakeCtx((run) => agents.push(run.prompt));
+      await runChecks(ctx, 7);
+      expect(agents).toEqual([]);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('npm ci');
+      expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('playtest');
+      expect(shellEnv).toEqual({ BUILD_SCOPE: 'abc123' });
+      expect(calls.find((call) => call.startsWith('photo'))).toContain('No factory checks ran on this build.');
+      expect(commentBodies[0]).toContain('No factory checks ran on this build.');
+      expect(readState(ctx.statePath).approvalPosts).toEqual({ 100: 7 });
+      expect(readState(ctx.statePath).testPhase).toEqual({});
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('throws on a failed build, runs it once and keeps the phase', async () => {
+      leaveOutputs(JSON.stringify({ description: 'd', howToTry: 'h' }));
+      setPost();
+      await expect(runChecks(fakeCtx(() => undefined, 1, 'vite build failed'), 7)).rejects.toThrow('The build failed, no factory checks ran');
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(calls).not.toContain('move 7 Approval');
+      expect(readState(`${home}/state.json`).testPhase).toEqual({ 7: 'post' });
+    });
+
+    it('fails naming approval.json when the card has none', async () => {
+      leaveOutputs(null);
+      setPost();
+      await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('approval.json');
+      expect(calls).toEqual([]);
+    });
+
+    it('queues the merge of an already approved card and posts nothing', async () => {
+      leaveOutputs(null);
+      setPost();
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      await runChecks(fakeCtx(() => undefined), 7);
+      expect(calls.some((call) => call.startsWith('photo') || call.startsWith('buttons'))).toBe(false);
+      expect(queued()).toEqual({ 7: 'Ann' });
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+  });
+
   describe('test modes', () => {
     // The first line of each agent prompt names its round.
     let rounds: string[] = [];
