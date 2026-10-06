@@ -99,15 +99,24 @@ const SNAP = 1e-9;
 // Moves every truck's share of every live storm toward that storm's depth where the truck stands, by at most
 // 1/stormExposeTurns, and drops shares that reach 0 or belong to storms that have ended. Runs once a turn.
 export function advanceExposure(world: World): void {
+  const storms = world.weather.filter((e): e is Storm => e.kind === 'storm');
   for (const v of world.vehicles) {
-    const next: Record<string, number> = {};
-    for (const e of world.weather) {
-      if (e.kind !== 'storm') continue;
-      const moved = stepToward(v.stormExposure[e.id] ?? 0, stormDepth(world, e, v.pos));
-      if (moved > 0) next[e.id] = moved;
-    }
-    v.stormExposure = next;
+    if (storms.length > 0 || !isExposureEmpty(v)) v.stormExposure = steppedExposure(world, storms, v);
   }
+}
+
+function steppedExposure(world: World, storms: Storm[], v: Vehicle): Record<string, number> {
+  const next: Record<string, number> = {};
+  for (const e of storms) {
+    const moved = stepToward(v.stormExposure[e.id] ?? 0, stormDepth(world, e, v.pos));
+    if (moved > 0) next[e.id] = moved;
+  }
+  return next;
+}
+
+function isExposureEmpty(v: Vehicle): boolean {
+  for (const _id in v.stormExposure) return false;
+  return true;
 }
 
 // Within a step of the target (with float slack, so ten steps of 0.1 land on it), a share takes the target.
@@ -119,7 +128,8 @@ function stepToward(share: number, target: number): number {
 // What a truck feels: each storm by its own share of the truck's exposure, and the region's heat events.
 export function weatherOn(world: World, v: Vehicle): WeatherEffects {
   const fx = { sight: 1, spread: 0, speed: 1, wear: 1, heat: regionHeat(world) };
-  for (const [id, share] of Object.entries(v.stormExposure)) {
+  for (const id in v.stormExposure) {
+    const share = v.stormExposure[id];
     if (!Number.isFinite(share) || share <= 0 || share > 1) throw new Error(`Truck ${v.id} has storm ${id} share ${share}`);
     addStorm(fx, share);
   }
@@ -129,7 +139,7 @@ export function weatherOn(world: World, v: Vehicle): WeatherEffects {
 // The largest share of any storm in a truck, 0 with none. The player's tint and wind read it.
 export function stormShare(v: Vehicle): number {
   let most = 0;
-  for (const share of Object.values(v.stormExposure)) most = Math.max(most, share);
+  for (const id in v.stormExposure) most = Math.max(most, v.stormExposure[id]);
   return most;
 }
 
