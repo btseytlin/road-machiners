@@ -141,14 +141,17 @@ export const CALTROPS = {
 // about 12° and 1.0 only 15-27° by where the streak lay. Kick 1.2 turns it 27-49° at 10 and 25-30° at 9; the cap of
 // 1.6 is reached from 9.3 tiles per turn. Grip 0.3 barely let the swing grow, and grip 0.06 moved a 3 tiles per turn
 // crossing 1 m off its line, against 0.38 m at 0.12. No kick rolled a truck: its up vector stayed level.
+// That spin read as too weak in play. Kick 2.4 with a cap of 3.2 turns the scout 26° at 5 tiles per turn, 46° at 6,
+// 82° at 8, 112° at 10 and 131° at 12, still with no truck rolled. Grip 0.06 on top let a crossing at 4 tiles per
+// turn slide 1 m and swing its tail, so grip stays 0.12.
 export const OIL = {
   blobs: 6, // oil fields per spill
   blobR: 0.9, // tiles, the radius of each field
   spacing: 0.8, // tiles along the path between field centers
   grip: 0.12, // share of friction slip and side friction stiffness left to a wheel on oil
   safeSpeed: 4, // tiles per turn; at or below it oil gives no tail kick
-  kick: 1.2, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
-  maxKick: 1.6, // rad/s, the cap on one tail kick
+  kick: 2.4, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
+  maxKick: 3.2, // rad/s, the cap on one tail kick
 };
 
 // Tiles from one end of a spill's streak to the other, on a straight path.

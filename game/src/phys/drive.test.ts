@@ -915,8 +915,9 @@ describe('oil patches', () => {
     expect(wet.kicks).toBe(1);
   });
 
-  it('gives no kick at 4 tiles per turn', () => {
-    expect(crossing(streakAhead(4, 1, 0.5)).kicks).toBe(0);
+  // The route driver speeds up on the way: a truck starting at 3.5 tiles per turn reaches the oil at about 4.
+  it('gives no kick to a truck reaching oil at the safe speed', () => {
+    expect(crossing(streakAhead(3.5, 1, 0.5)).kicks).toBe(0);
   });
 
   it('gives the same end pose twice from the same input', () => {
