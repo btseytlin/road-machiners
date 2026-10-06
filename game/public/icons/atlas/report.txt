@@ -1,0 +1,25 @@
+Closest item pairs at 36 px by mean RGB difference (0-255), each over its tone.
+
+top:
+    0.0  cabPickup / cabHardtop
+    0.0  transmission / transmissionMid
+    0.0  transmission / transmissionHeavy
+    0.0  transmissionMid / transmissionHeavy
+    0.0  wheel / wheelMid
+    0.0  wheel / wheelHeavy
+    0.0  wheelMid / wheelHeavy
+    0.0  tank / tankLong
+    0.0  tank / tankMid
+    0.0  tank / tankHeavy
+
+diagonal:
+    0.0  transmission / transmissionMid
+    0.0  transmission / transmissionHeavy
+    0.0  transmissionMid / transmissionHeavy
+    0.0  wheel / wheelMid
+    0.0  wheel / wheelHeavy
+    0.0  wheelMid / wheelHeavy
+    0.0  tank / tankLong
+    0.0  tank / tankMid
+    0.0  tank / tankHeavy
+    0.0  tankLong / tankMid

@@ -1,12 +1,6 @@
-import { inject } from 'vitest';
+import { timeoutsOff } from './timeouts';
 
-declare module 'vitest' {
-  export interface ProvidedContext {
-    hostSlowdown: number;
-  }
-}
-
-// A test's time budget on a free machine, scaled by the host load that vitest.config.ts measured, as the default test timeout is.
+// A test's own time limit. Where test time limits are off, it returns 0, which vitest reads as no limit.
 export function budget(ms: number): number {
-  return ms * inject('hostSlowdown');
+  return timeoutsOff() ? 0 : ms;
 }

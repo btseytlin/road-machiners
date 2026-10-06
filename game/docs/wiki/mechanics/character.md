@@ -22,5 +22,5 @@ At rank 2 and rank 4 of each skill the player picks one of two perks. The bought
 - Machining 4, pristine hunter or hired mechanic. Rebuild: a town garage can repair a junk part back to its last wear step, once per part. Road mechanic: stranded drivers radio you for patches and pay double.
 - Toughness 2, heat runner or storm runner. Desert rat: noon sun heats your engine like morning sun. Storm rider: dust storms do not cut your sight or aim.
 - Toughness 4, brawler or long hauler. Fight through: a broken cab, or a hit on a cab below half, does not knock you out while health is above half. Hits on any part then hurt you. Long haul: you heal while driving, not only while parked.
-- Social 2, trader or explorer. Market ears: a trader you call tells you the prices of the last town it left. Rumor mill: a driver you call marks a wreck or site it passed on your map.
+- Social 2, trader or explorer. Market ears: a trader you call tells you the prices of the last town it left, as they were then, for a day after it left. Rumor mill: a driver you call marks a wreck or site it passed on your map.
 - Social 4, peacemaker or bounty hunter. Paid truce: you can pay a hostile driver a tenth of its truck's value to end its feud with you. Bounty talk: a raider that gives up to your demand counts for bounty contracts.

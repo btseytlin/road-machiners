@@ -267,17 +267,31 @@ describe('far travel contact', () => {
     return { w, mover };
   }
 
-  it('stops just short of a moving truck in the way', () => {
+  it('holds just short of a faster truck in the way and keeps its speed', () => {
     const { w, mover } = far();
-    const parked = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
-    parked.speed = 2; // moving, so the route planner does not steer around it
+    const ahead = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
+    ahead.speed = 2 * vehicleStats(w, mover).maxSpeed; // faster, so the route planner does not steer around it
     mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, mover);
-    const contact = vehicleStats(w, mover).radius + vehicleStats(w, parked).radius;
-    expect(dist(mover.pos, parked.pos)).toBeGreaterThanOrEqual(contact);
+    const contact = vehicleStats(w, mover).radius + vehicleStats(w, ahead).radius;
+    expect(dist(mover.pos, ahead.pos)).toBeGreaterThanOrEqual(contact);
     expect(mover.pos.x).toBeGreaterThan(120);
-    expect(mover.speed).toBe(0);
+    expect(mover.speed).toBeGreaterThan(0);
     expect(mover.order).not.toBeNull();
+  });
+
+  it('overtakes a slower truck in the way', () => {
+    const { w, mover } = far();
+    const slow = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 124, y: 120 });
+    slow.speed = 1;
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    const contact = vehicleStats(w, mover).radius + vehicleStats(w, slow).radius;
+    for (let turn = 0; turn < 4; turn++) {
+      advanceFar(w, mover);
+      expect(dist(mover.pos, slow.pos)).toBeGreaterThanOrEqual(contact);
+    }
+    expect(mover.pos.x).toBeGreaterThan(slow.pos.x + contact);
+    expect(mover.speed).toBeGreaterThan(slow.speed);
   });
 
   it('arrives next to a truck parked on its stop point', () => {

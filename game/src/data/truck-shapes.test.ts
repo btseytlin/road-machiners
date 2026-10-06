@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from './chassis';
+import { PHYSICS } from './physics';
 import SHAPES from './truck-shapes.json';
 
 const FILES = import.meta.glob<string>('/public/models/base_*.glb', { query: '?url&inline', import: 'default' });
@@ -52,5 +53,72 @@ describe('truck shapes', () => {
       const j = Math.floor((b.y0 + b.y1) / 2 / heights.cell) - heights.j0;
       expect(heights.top[i]?.[j], `${name} box center`).toEqual(expect.any(Number));
     }
+  });
+});
+
+// The profile is the highest top across |y| <= 0.6 m at each x, which ignores the hood hole and the engine hatch.
+type Profile = { x: number; top: number }[];
+
+function profileOf(name: keyof typeof SHAPES): Profile {
+  const { heights } = SHAPES[name];
+  const columns = heights.top.map((row, i) => {
+    let top = -Infinity;
+    row.forEach((cm, j) => {
+      const y = ((heights.j0 + j + 0.5) * heights.cell);
+      if (cm !== null && Math.abs(y) <= 0.6) top = Math.max(top, cm / 100);
+    });
+    return { x: (heights.i0 + i + 0.5) * heights.cell, top };
+  });
+  return columns.filter((c) => c.top > -Infinity).sort((a, b) => b.x - a.x);
+}
+
+const NEAR = 0.05; // m, how far from a level still counts as on it
+
+// Stations of a nose-first profile: height above ground, and the lengths that the photos give as fractions of L.
+function stationsOf(profile: Profile, ground: number) {
+  const nose = profile[0].x;
+  const tail = profile[profile.length - 1].x;
+  const length = nose - tail;
+  const top = Math.max(...profile.map((p) => p.top));
+  const at = (x: number) => profile.reduce((best, p) => (Math.abs(p.x - x) < Math.abs(best.x - x) ? p : best)).top;
+  const hoodLevel = at(nose - 0.15 * length);
+  const hoodEnd = profile.find((p) => Math.abs(p.top - hoodLevel) > NEAR && p.x < nose - 0.15 * length)?.x ?? tail;
+  const roofCols = profile.filter((p) => top - p.top <= NEAR);
+  const deckLevel = at(tail + 0.1 * length);
+  const deckEnd = [...profile].reverse().find((p) => p.top - deckLevel > NEAR && p.x > tail + 0.1 * length)?.x ?? nose;
+  return {
+    height: top - ground,
+    hood: (nose - hoodEnd) / length,
+    roof: (roofCols[0].x - roofCols[roofCols.length - 1].x) / length,
+    deck: (deckEnd - tail) / length,
+    roofStart: (nose - roofCols[0].x) / length,
+    noseDrop: top - at(nose - 0.02 * length),
+    tailDrop: top - at(tail + 0.03 * length),
+  };
+}
+
+type Band = [number, number];
+type Reference = { height: Band; hood?: Band; roof: Band; deck?: Band; roofStart?: Band; noseDrop?: Band; tailDrop?: Band };
+
+// Each band is 0.95-1.10 x the real height at the model's length scale, and the rest come from the reference photos.
+const REFERENCE: Record<'lincoln' | 'niva' | 'bukhanka', Reference> = {
+  // 1969 Lincoln Continental Mark III: 5.89 x 2.03 x 1.35 m, long hood, formal roof, long trunk.
+  lincoln: { height: [1.56, 1.8], hood: [0.34, 0.42], roof: [0.14, 0.24], deck: [0.22, 0.3] },
+  // Lada Niva 4x4: 3.74 x 1.68 x 1.64 m, short hood, tall flat greenhouse, upright tailgate.
+  niva: { height: [1.89, 2.19], hood: [0.22, 0.28], roof: [0.55, 1], tailDrop: [0, 0.1] },
+  // UAZ-452: 4.36 x 1.94 x 2.06 m, a loaf with a level roof and a rounded low nose.
+  bukhanka: { height: [2.34, 2.7], roof: [0.75, 1], roofStart: [0, 0.12], noseDrop: [0.15, 9], tailDrop: [0, 0.15] },
+};
+
+describe('issue 149 trucks keep their reference proportions', () => {
+  it.each(['lincoln', 'niva', 'bukhanka'] as const)('%s', (id) => {
+    const body = PHYSICS.bodies[id];
+    const ground = body.wheelY - PHYSICS.truck.suspensionRest - body.wheelRadius;
+    const got = stationsOf(profileOf(`base_${id}` as const), ground);
+    const misses: string[] = [];
+    for (const [key, band] of Object.entries(REFERENCE[id]) as [keyof Reference, Band][]) {
+      if (got[key] < band[0] || got[key] > band[1]) misses.push(`${key} ${got[key].toFixed(3)} outside ${band[0]}..${band[1]}`);
+    }
+    expect(misses).toEqual([]);
   });
 });

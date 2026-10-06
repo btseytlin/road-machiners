@@ -27,8 +27,8 @@ COLORS = {
     "rust": 0x8A4A2A,  # PAL.rust.top
     "rust_side": 0x5E3420,  # PAL.rust.side
     "rust_dark": 0x3A2418,  # PAL.rust.dark
-    "road": 0xA8865A,  # PAL.road
-    "road_rut": 0x937450,  # PAL.roadRut
+    "road": 0xA8865A,  # packed dirt, its own color rather than PAL.road
+    "road_rut": 0x937450,  # ruts a shade darker than the road
 }
 SEED = 114
 
