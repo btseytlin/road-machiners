@@ -566,6 +566,36 @@ describe('hunting grounds', () => {
     for (const p of grounds) for (const z of hazardZones()) expect(dist(p, z.pos)).toBeGreaterThan(z.radius);
   });
 
+  describe('in Old Orchard', () => {
+    const orchard = territories.find((t) => t.id === 'orchard')!;
+    const orchardGrounds = territoryGrounds(orchard);
+    const isOrchardGround = (p: Vec) => orchardGrounds.some((q) => q.x === p.x && q.y === p.y);
+
+    it('hold every orchard ground', () => {
+      expect(orchardGrounds.length).toBeGreaterThan(0);
+      for (const p of orchardGrounds) expect(grounds).toContainEqual(p);
+    });
+
+    it('send a prowling vulture to an orchard ground', () => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const npc = addNpc(w, 'vultures', 'vulture', ['vulture'], { x: 30, y: 30 }, ['longRifle', 'stockEngine']);
+      forceOption('idle', 'prowl');
+      const goals = Array.from({ length: 40 }, (_, seed) => {
+        const x = cloneWorld(w);
+        x.rngState = Math.imul(seed + 1, 2654435761);
+        return thinkNpc(x, find(x, npc.id));
+      }).filter((g) => g.kind === 'prowl');
+      expect(goals.filter((g) => isOrchardGround(g.destination!)).length).toBeGreaterThan(0);
+    });
+
+    // Which camps' raiders wait in the orchard, and at how many of its grounds. Each ground belongs to its nearest camp.
+    it('are shared by the raiders of Scrapjaw and Kiln', () => {
+      const camps = REGION.locations.filter((l) => l.kind === 'camp');
+      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(c).filter(isOrchardGround).length]).filter(([, n]) => n > 0));
+      expect(covering).toEqual({ kiln: 3, scrapjaw: 6 });
+    });
+  });
+
   it('keeps road grounds far from every site, and none at a town or camp', () => {
     const sites = [...REGION.towns, ...REGION.locations];
     for (const p of grounds.filter(onRoad)) for (const site of sites) expect(siteGap(site, p)).toBeGreaterThanOrEqual(HUNT.siteDistance);
