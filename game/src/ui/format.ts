@@ -629,6 +629,14 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
 }
 
+// An armed claymore ram that broke and blew up on its own truck, with the damage it did there.
+function cookOffText(world: World, e: Extract<GameEvent, { t: 'claymoreCookOff' }>): LogLine {
+  const me = world.player.vehicleId;
+  const hitByMe = world.vehicles.find((v) => v.id === e.vehicle)?.lastHitBy === me;
+  const [text, cls] = e.vehicle === me ? ['Your claymore ram breaks and blows up', 'bad'] : [`${vehicleName(world, e.vehicle)}'s claymore ram breaks and blows up`, hitByMe ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
+}
+
 const OBSTACLE_NAMES: Record<Obstacle['kind'], string> = { rock: 'a rock', wreck: 'a wreck', building: 'a building', water: 'the water', site: 'a structure', landmark: 'a landmark' };
 
 // A claymore ram blast the player set off, one that hit the player, or a seen one between other trucks. The line
@@ -663,6 +671,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   lineTorn: lineTornText,
   pulse: pulseText,
   claymore: claymoreText,
+  claymoreCookOff: cookOffText,
   found: foundText,
   say: sayText,
   job: jobText,

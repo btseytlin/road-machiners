@@ -111,6 +111,16 @@ function playBlast(host: CombatHost, e: ClaymoreEvent): void {
 
 const BLAST_HEIGHT = 1; // meters above the ground the claymore's fireball centers, about a ram's middle
 
+// A broken armed claymore ram cooks off as its break plays: the round that broke it lands, or the shot band ends.
+export function playCookOff(host: Pick<VolleyHost, "world" | "fx" | "sound">, brk: PartBreak): void {
+  const e = host.world.events.find((x) => x.t === "claymoreCookOff" && x.vehicle === brk.vehicle && x.part === brk.part);
+  if (!e || e.t !== "claymoreCookOff") return;
+  const g = groundPoint(host.world.terrain, e.pos);
+  const p = { x: g.x, y: g.y + BLAST_HEIGHT, z: g.z };
+  host.fx.claymoreBlast(p);
+  host.sound.at("explosion", p, 0);
+}
+
 // A seen gun that fired its last round with no volley shown clunks as the band ends. Played guns clunk with their last round.
 export function playDryGuns(host: CombatHost, played: Set<string>): void {
   for (const e of host.world.events) {

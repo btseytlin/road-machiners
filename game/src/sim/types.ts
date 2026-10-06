@@ -454,6 +454,8 @@ export type GameEvent =
   | { t: 'pulse'; vehicle: string; pos: Vec; hit: string[] } // an emitter pulse and the trucks it shut down
   // A claymore ram on vehicle blasted other at pos. hits are other's parts, selfHits vehicle's own struck side.
   | { t: 'claymore'; vehicle: string; other: string; pos: Vec; hits: PartHit[]; selfHits: PartHit[] }
+  // An armed claymore ram broke on vehicle and its charge blasted vehicle around pos. hits are vehicle's parts.
+  | { t: 'claymoreCookOff'; vehicle: string; part: string; pos: Vec; hits: PartHit[] }
   | { t: 'caltrops'; vehicle: string; field: string; source: string; hits: PartHit[] } // vehicle drove into source's caltrop field; hits are its wheels
   // A search turn revealed loot in a stock.
   | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };

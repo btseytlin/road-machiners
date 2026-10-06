@@ -47,7 +47,7 @@ import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear
 import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
 import { searchStream } from './search';
-import { settleClaymores } from './claymore';
+import { cookOffClaymores, settleClaymores } from './claymore';
 import { activateUtilities, advanceUtilityEffects, settleShutdowns, tickCharges, utilityOrderError } from './utility';
 import { caltropHits } from './hazards';
 import { advanceJobs, startAutoRepair } from './jobs';
@@ -301,6 +301,7 @@ export function endTurn(
     tickCharges(w);
     fireWeapons(w);
     fireGuards(w);
+    cookOffClaymores(w);
     consumeSupplies(w);
     applyHazards(w);
     scrapPatch(w);

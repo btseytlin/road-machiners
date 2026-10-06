@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CLAYMORE } from '../data/utilities';
 import type { Side } from './armor';
-import { settleClaymores } from './claymore';
+import { cookOffClaymores, settleClaymores } from './claymore';
 import { isHostile, turnPartHits } from './combat';
 import { applyContactCrash, type CrashGeometry } from './crash-contact';
 import { mountedParts, sideOf } from './grid';
 import { stowSpot } from './inventory';
 import { addState } from './states';
 import { makePart } from './factory';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { PartInstance, Vehicle, World } from './types';
 import { activateUtilities, tickCharges, utilityOrderError } from './utility';
+import { endTurn } from './world';
 
 const SIDE: Record<string, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };
 
@@ -264,5 +265,48 @@ describe('disarming a claymore ram', () => {
     settleClaymores(w);
 
     expect([stored.charge, looted.charge]).toEqual([{ reload: 0 }, { reload: 0 }]);
+  });
+});
+
+describe('a claymore ram broken while armed', () => {
+  it('cooks off: its blast hits its own truck through the ram, and the reload starts', () => {
+    const { w, user, claymore } = setup();
+    arm(w, user, claymore);
+    claymore.hp = 0;
+    const hp = hpOf(user);
+
+    cookOffClaymores(w);
+
+    const [e] = w.events.filter((x) => x.t === 'claymoreCookOff');
+    expect(e).toMatchObject({ vehicle: user.id, part: claymore.id });
+    expect(e && e.t === 'claymoreCookOff' && e.hits.length).toBeGreaterThan(0);
+    expect(hpOf(user)).toBeLessThan(hp);
+    expect(claymore.charge?.armed).toBeUndefined();
+    expect(claymore.charge?.reload).toBeGreaterThan(0);
+  });
+
+  it('leaves an unarmed broken ram and an armed working one alone', () => {
+    const broken = setup();
+    broken.claymore.hp = 0;
+    cookOffClaymores(broken.w);
+    const armed = setup();
+    arm(armed.w, armed.user, armed.claymore);
+    cookOffClaymores(armed.w);
+
+    expect([...broken.w.events, ...armed.w.events].filter((x) => x.t === 'claymoreCookOff')).toEqual([]);
+    expect(armed.claymore.charge).toEqual({ reload: 0, armed: true });
+  });
+
+  it('cooks off in the turn it is found broken, and is no longer armed after', () => {
+    const { w, user, other, claymore } = setup();
+    for (const v of [user, other]) v.brain = npcBrain('trader', v.pos, ['trader']);
+    arm(w, user, claymore);
+    claymore.hp = 0;
+
+    const next = endTurn(w, testDrive);
+    const ram = mountedParts(next.vehicles.find((v) => v.id === user.id)!).find((p) => p.id === claymore.id);
+
+    expect(next.events.filter((x) => x.t === 'claymoreCookOff').map((x) => x.t === 'claymoreCookOff' && x.vehicle)).toEqual([user.id]);
+    expect(ram?.charge?.armed).toBeUndefined();
   });
 });

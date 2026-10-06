@@ -3,12 +3,14 @@
 // charge state and the reload belong to utility.ts.
 
 import { partDef, type ClaymoreDef } from '../data/parts';
-import { coversSide, lanePoint, walkLane, type PartHit, type Round } from './armor';
+import { coversSide, lanePoint, walkLane, type PartHit, type Round, type Side } from './armor';
 import { blastTruck, isHostile, noteAttack } from './combat';
 import type { CrashContact } from './crash-contact';
-import { isMounted, mountedParts } from './grid';
+import { isMounted, itemCells, mountedItems, mountedParts, sideOf, type SideLetter } from './grid';
 import { towsClient } from './tow';
-import type { PartInstance, Vehicle, World } from './types';
+import type { GridItem, PartInstance, Vehicle, World } from './types';
+
+type PartItem = Extract<GridItem, { kind: 'part' }>;
 import type { Vec } from './vec';
 import { chargeOf, wornReload } from './utility';
 
@@ -95,6 +97,31 @@ function contactPoint(v: Vehicle, contact: CrashContact): Vec {
   if (contact.lanes.length === 0) throw new Error('Crash has no touched lanes');
   return lanePoint(v, contact.side, (Math.min(...contact.lanes) + Math.max(...contact.lanes)) / 2);
 }
+
+// After the guns fire: an armed claymore ram broken on its mount, by gunfire or by a crash that did not set it off,
+// cooks off. Its full blast enters its own truck through the ram's lanes, and its reload starts. The truck's last
+// hitter keeps the kill credit.
+export function cookOffClaymores(world: World): void {
+  for (const v of world.vehicles) {
+    for (const item of mountedItems(v, 'armor')) if (item.part.charge?.armed && item.part.hp <= 0) cookOff(world, v, item);
+  }
+}
+
+function cookOff(world: World, v: Vehicle, item: PartItem): void {
+  const letter = sideOf(v, item.part);
+  if (!letter) throw new Error(`Claymore ram ${item.part.id} on ${v.id} covers no side`);
+  const side = SIDES[letter];
+  const lanes = itemCells(item).map((c) => (side === 'front' || side === 'rear' ? c.x : c.y));
+  const pos = lanePoint(v, side, (Math.min(...lanes) + Math.max(...lanes)) / 2);
+  const c = claymoreOf(item.part);
+  const charge = chargeOf(item.part);
+  delete charge.armed;
+  charge.reload = wornReload(item.part);
+  const hits = blastTruck(world, v, pos, c.blast.radius, blastRound(c.blast), null);
+  world.events.push({ t: 'claymoreCookOff', vehicle: v.id, part: item.part.id, pos, hits });
+}
+
+const SIDES: Record<SideLetter, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };
 
 // Once per turn after all damage: a claymore ram that broke or left its mount loses its charge, on a truck, in the
 // player's storage or in a salvage stock. Parts leave trucks in many places, so this sweep is the one place that

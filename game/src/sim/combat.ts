@@ -655,6 +655,7 @@ function eventHits(e: GameEvent): [string, PartHit[]][] {
   if (e.t === "shot" || e.t === "guardShot") return [...shotDamage(e)];
   if (e.t === "collision") return [[e.a, e.hitsA], [e.b, e.hitsB]];
   if (e.t === "claymore") return [[e.other, e.hits], [e.vehicle, e.selfHits]];
+  if (e.t === "claymoreCookOff") return [[e.vehicle, e.hits]];
   return [];
 }
 

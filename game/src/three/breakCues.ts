@@ -14,7 +14,7 @@ const damageTo = (r: ShotRound, brk: PartBreak): number => {
 };
 
 // Events that deal part damage. The sim pushes each once its damage is dealt, after the partDisabled events it caused.
-const DAMAGING = new Set<GameEvent["t"]>(["shot", "guardShot", "collision", "claymore", "caltrops", "lineTorn"]);
+const DAMAGING = new Set<GameEvent["t"]>(["shot", "guardShot", "collision", "claymore", "claymoreCookOff", "caltrops", "lineTorn"]);
 
 // Pairs each partDisabled with the first damaging event after it. For a shot the round is the last that dealt
 // positive damage to the part. Any other owner, like a crash or a claymore blast, gives the break no round.

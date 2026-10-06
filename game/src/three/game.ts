@@ -49,7 +49,7 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
+import { CollisionCues, collisionSteps, playCookOff, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { playBreak } from "./render/partDebris";
@@ -879,6 +879,7 @@ export class Game {
     if (this.eventPoint(b.vehicle) === null) return;
     const p = playBreak(this.world, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
     if (p) this.sound.at("part-broken", p, 0);
+    playCookOff(this.combatHost(), b);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
