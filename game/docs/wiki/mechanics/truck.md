@@ -14,7 +14,7 @@ Cargo parts add full-width rows to the grid while mounted. A roof rack adds one 
 
 Goods take one cell per unit and can be moved or dumped anywhere. Dragging an item onto another swaps them if both fit. Spare parts ride in the grid or wait in garage storage.
 
-Garage equipment changes are instant. Outside town, a change is a refit job:
+Equipment changes at a shop are instant. Away from a shop, a change is a refit job:
 
 - Installing or removing a part takes 3 turns.
 - Replacing an installed part with a spare takes 5 turns.

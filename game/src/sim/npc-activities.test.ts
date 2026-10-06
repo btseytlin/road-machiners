@@ -433,7 +433,7 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('sends a driver with no engine to a town for service, since a stall cannot refit it', () => {
+  it('sends a driver with no engine to a town for service, since only a town gives it a fresh loadout', () => {
     const { w, npc } = createTrader();
     const stall = Object.values(SHOPS).find((s) => s.kind === 'stall');
     const site = REGION.locations.find((l) => l.id === stall?.id);
