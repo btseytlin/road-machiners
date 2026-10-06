@@ -7,6 +7,7 @@ import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
+import type { ShapeBox } from './mapgen';
 
 // One collider box: its center and half extents in body meters.
 export type BodyBox = { at: { x: number; y: number; z: number }; half: { x: number; y: number; z: number } };
@@ -27,7 +28,6 @@ export type Body = {
 // A footprint in body meters, x0 < x1 along the truck and z0 < z1 across it.
 export type CellRect = { x0: number; x1: number; z0: number; z1: number };
 
-type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 // The top surface of a model: top[i][j] is the highest point in centimeters over the sample cell that spans model x from
 // (i0 + i) * cell to (i0 + i + 1) * cell and model y from (j0 + j) * cell, or null where the model has no geometry.
 type HeightMap = { cell: number; i0: number; j0: number; top: (number | null)[][] };
@@ -77,6 +77,23 @@ function collisionBoxes(chassisId: string, halfHeight: number, top: number): Bod
       half: { x: (b.x1 - b.x0) / 2, y: (y1 - y0) / 2, z: (b.y1 - b.y0) / 2 },
     };
   });
+}
+
+const hulks = new Map<string, readonly ShapeBox[]>();
+
+// The model's boxes for the hulk a dead truck leaves, in model meters with z up from the ground. The hulk lies on its
+// chassis bottom, so the skirt below it sinks into the ground and is cut away.
+export function hulkBoxes(chassisId: string): readonly ShapeBox[] {
+  const cached = hulks.get(chassisId);
+  if (cached) return cached;
+  const bottom = -bodyOf(chassisId).half.y;
+  const boxes = truckShape(chassisId).boxes.map((b) => {
+    const z0 = Math.max(b.z0, bottom);
+    if (!(b.z1 > z0)) throw new Error(`A ${chassisId} hulk box has no height above the chassis bottom`);
+    return { ...b, z0: z0 - bottom, z1: b.z1 - bottom };
+  });
+  hulks.set(chassisId, boxes);
+  return boxes;
 }
 
 // The projection of the grid onto the model. Rows spread evenly over the model's length and the inner columns over its

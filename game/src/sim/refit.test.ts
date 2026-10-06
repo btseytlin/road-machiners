@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { moveItem, dumpItem, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
 import { emptyWorld, practiceOf } from './testkit';
@@ -168,9 +168,9 @@ describe('field refits', () => {
 });
 
 describe('machining on refits', () => {
-  it('takes fewer refit turns for the player at level 5', () => {
+  it('takes fewer refit turns for the player at rank 5', () => {
     const w = emptyWorld();
-    w.player.skills.machining = XP_TO_REACH[5];
+    w.player.ranks.machining = 5;
     const weapon = getWeapon(w);
     const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
     const turns = Math.ceil(RULES.refitTurnsPerPart * (1 - 5 * SKILL_EFFECTS.machining.refit));

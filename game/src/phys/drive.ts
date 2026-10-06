@@ -16,8 +16,8 @@ import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { backsToDestination, throughSpeed } from '../sim/steering';
 import { routeBlockers } from '../sim/ai';
-import { DECKS, type Deck } from '../sim/bridge';
-import { deckEnds, groundAt, heightAt, tileAt, type Terrain } from '../sim/terrain';
+import { DECKS, propBase, railOffset, type Deck } from '../sim/bridge';
+import { deckSegments, groundAt, heightAt, tileAt, type DeckSegment, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from '../sim/types';
 import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
@@ -61,8 +61,8 @@ export type Drive = {
   decks: DeckColliders[]; // one per deck in DECKS, in order
 };
 
-// Collider handles of one deck and its two rails.
-export type DeckColliders = { deck: number; rails: number[] };
+// Collider handles of one deck: a plate and two rails per straight piece, and its lips.
+export type DeckColliders = { plates: number[]; rails: number[]; lips: number[] };
 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
@@ -152,16 +152,16 @@ function syncObstacles(d: Drive, w: World): void {
 }
 
 // A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
-// draws it: turned by yaw and scaled on the ground height at its position. Boxes that start above truck roofs are
-// left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far below the
-// ground, so slopes leave no gap under it.
+// draws it: turned by yaw and scaled, standing at propBase() in src/sim/bridge.ts. Boxes that start above truck
+// roofs are left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far
+// below the ground, so slopes leave no gap under it.
 export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
-  const ground = heightAt(t, o.pos.x, o.pos.y) * S;
+  const ground = propBase(t, o) * S;
   if (o.kind === 'site') {
     const half = PHYSICS.rockHeight / 2;
     return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];
   }
-  return blockingBoxes(o).map((b) => {
+  return blockingBoxes(o, t).map((b) => {
     const bottom = b.z0 < PHYSICS.rockSink ? Math.min(b.z0, -PHYSICS.rockSink) : b.z0;
     const desc = RAPIER.ColliderDesc.cuboid(b.half.x * S, (b.z1 - bottom) / 2, b.half.y * S);
     desc.setTranslation(b.center.x * S, ground + (b.z1 + bottom) / 2, b.center.y * S);
@@ -356,13 +356,13 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   const [first, other] = owner.get(h1) === a ? [h1, h2] : [h2, h1];
   const va = before.get(a)!;
   // A deck is ground, like the terrain.
-  if (other === d.terrain || d.decks.some((c) => c.deck === other)) return captureGroundCrash(physics, state, a, first, other, va);
+  if (other === d.terrain || d.decks.some((c) => c.plates.includes(other))) return captureGroundCrash(physics, state, a, first, other, va);
   return captureCrash(physics, state, before, { a, b: crashTarget(other, owner, obstacleOf, d), first, other }, va);
 }
 
 // The name of what a truck hit: a vehicle id, an obstacle id, a rail or the map edge.
 function crashTarget(other: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive): string {
-  return owner.get(other) ?? obstacleOf.get(other) ?? (d.decks.some((c) => c.rails.includes(other)) ? RAIL : EDGE);
+  return owner.get(other) ?? obstacleOf.get(other) ?? (d.decks.some((c) => c.rails.includes(other) || c.lips.includes(other)) ? RAIL : EDGE);
 }
 
 function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Omit<Crash, 'step'> | null {
@@ -833,40 +833,69 @@ function addDecks(world: RAPIER.World, w: World): DeckColliders[] {
   return DECKS.map((deck) => addDeck(world, w, deck));
 }
 
-// A deck, its top on the deck line from sim/terrain.ts, and a rail along each edge. A skirted deck's
-// rails reach down past the lowest ground along them, so a truck on the ground cannot get under the deck.
+// A deck, its top on the deck line from sim/terrain.ts, and a rail along each edge, one plate and two rail boxes per
+// straight piece (deckSegments()). A skirted deck's rails reach down past the lowest ground along them, so a truck on
+// the ground cannot get under the deck. Each lip is a skirt wall across its end, from the deck line down past the
+// lowest ground along it: nothing stands over the deck line there, so a truck drives off the lip and flies, and
+// nothing drives in under it.
 function addDeck(world: RAPIER.World, w: World, deck: Deck): DeckColliders {
   const B = PHYSICS.bridge;
-  const { from, axis } = deck;
-  const [h0, h1] = deckEnds(w.terrain, deck);
-  const length = deck.length * S;
-  const pitch = Math.atan2((h1 - h0) * S, length);
-  // Yaw turns local +x onto the deck axis, then pitch about local z raises the to end.
+  const halfWidth = (deck.width * S) / 2;
+  const segments = deckSegments(w.terrain, deck);
+  const plates: number[] = [];
+  const rails: number[] = [];
+  for (const seg of segments) {
+    const box = segmentBox(world, deck, seg);
+    const length = seg.length * S;
+    plates.push(box({ along: length / 2, up: B.deckThickness / 2, across: halfWidth }, { along: 0, lift: 0, side: 0 }));
+    for (const [i, side] of [-1, 1].entries()) {
+      const off = railOffset(deck.axis, deck.width, side);
+      const a = { x: seg.from.x + off.x, y: seg.from.y + off.y };
+      const b = { x: seg.to.x + off.x, y: seg.to.y + off.y };
+      const depth = deck.skirt ? skirtDepth(w.terrain, a, b, seg.h0, seg.h1) : 0;
+      rails.push(box({ along: length / 2, up: (B.railHeight + depth) / 2, across: B.railThickness / 2 }, { along: 0, lift: B.railHeight, side: (i === 0 ? -1 : 1) * halfWidth }));
+    }
+  }
+  const lips = deck.lips.map(([a, b]) => {
+    // The lip lies at the from or the to end; its wall stands just inside the end, on the end piece.
+    const atTo = (a.x - deck.from.x) * deck.axis.x + (a.y - deck.from.y) * deck.axis.y > deck.length / 2;
+    const seg = atTo ? segments[segments.length - 1] : segments[0];
+    const h = atTo ? seg.h1 : seg.h0;
+    const depth = skirtDepth(w.terrain, a, b, h, h);
+    const end = (atTo ? 1 : -1) * ((seg.length * S) / 2 - B.railThickness / 2);
+    return segmentBox(world, deck, seg)({ along: B.railThickness / 2, up: depth / 2, across: halfWidth }, { along: end, lift: 0, side: 0 });
+  });
+  return { plates, rails, lips };
+}
+
+// A box half.along, half.up and half.across meters each way in a deck piece's frame, whose top face center sits
+// at.lift meters along the piece's up from the deck line, at.side meters across and at.along meters along from
+// the piece's middle.
+function segmentBox(world: RAPIER.World, deck: Deck, seg: DeckSegment) {
+  const { axis } = deck;
+  const pitch = Math.atan2((seg.h1 - seg.h0) * S, seg.length * S);
+  // Yaw turns local +x onto the deck axis, then pitch about local z raises the piece's to end.
   const yaw = headingQuat(Math.atan2(axis.y, axis.x));
   const rot = { x: yaw.y * Math.sin(pitch / 2), y: yaw.y * Math.cos(pitch / 2), z: yaw.w * Math.sin(pitch / 2), w: yaw.w * Math.cos(pitch / 2) };
+  const along = { x: Math.cos(pitch) * axis.x, y: Math.sin(pitch), z: Math.cos(pitch) * axis.y };
   const up = { x: -Math.sin(pitch) * axis.x, y: Math.cos(pitch), z: -Math.sin(pitch) * axis.y };
   const across = { x: -axis.y, z: axis.x };
   const mid = {
-    x: (from.x + (axis.x * deck.length) / 2) * S,
-    y: ((h0 + h1) / 2) * S,
-    z: (from.y + (axis.y * deck.length) / 2) * S,
+    x: (seg.from.x + (axis.x * seg.length) / 2) * S,
+    y: ((seg.h0 + seg.h1) / 2) * S,
+    z: (seg.from.y + (axis.y * seg.length) / 2) * S,
   };
-  // A box whose top face center sits `lift` meters along the deck's up from the deck line, `side` meters across.
-  const box = (halfWidth: number, halfHeight: number, side: number, lift: number) => {
-    const c = lift - halfHeight;
-    const desc = RAPIER.ColliderDesc.cuboid(length / 2, halfHeight, halfWidth)
-      .setTranslation(mid.x + up.x * c + across.x * side, mid.y + up.y * c, mid.z + up.z * c + across.z * side)
+  return (half: { along: number; up: number; across: number }, at: { along: number; lift: number; side: number }): number => {
+    const c = at.lift - half.up;
+    const desc = RAPIER.ColliderDesc.cuboid(half.along, half.up, half.across)
+      .setTranslation(
+        mid.x + along.x * at.along + up.x * c + across.x * at.side,
+        mid.y + along.y * at.along + up.y * c,
+        mid.z + along.z * at.along + up.z * c + across.z * at.side,
+      )
       .setRotation(rot);
     return world.createCollider(desc).handle;
   };
-  const halfWidth = (deck.width * S) / 2;
-  const deckBox = box(halfWidth, B.deckThickness / 2, 0, 0);
-  const rails = deck.rails.map(([a, b], i) => {
-    const side = (i === 0 ? -1 : 1) * halfWidth;
-    const depth = deck.skirt ? skirtDepth(w.terrain, a, b, h0, h1) : 0;
-    return box(B.railThickness / 2, (B.railHeight + depth) / 2, side, B.railHeight);
-  });
-  return { deck: deckBox, rails };
 }
 
 // Meters a skirted rail reaches below the deck line: down to PHYSICS.rockSink under the lowest ground

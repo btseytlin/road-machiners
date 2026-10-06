@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { baseGrid, corePart, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
+import { corePart, mountedItems, itemSize } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -137,20 +137,6 @@ function getConditionState(ratio: number): string {
   return ratio < 1 ? "damaged" : "healthy";
 }
 
-// Armor edge cells with no armor mounted on them: the stripped spots of a truck.
-export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
-  const covered = new Set<string>();
-  for (const item of mountedItems(vehicle, "armor")) {
-    const { w, h } = itemSize(item);
-    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) covered.add(`${item.x + dx},${item.y + dy}`);
-  }
-  const open: { x: number; y: number }[] = [];
-  baseGrid(vehicle.chassisId).cells.forEach((row, y) =>
-    row.forEach((cell, x) => {
-      if (cell && MOUNT_CELLS.armor.includes(cell) && !covered.has(`${x},${y}`)) open.push({ x, y });
-    }));
-  return open;
-}
 
 // The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
@@ -180,6 +166,7 @@ export class TruckConditionReadout {
           id: item.part.id,
           name: def.name,
           icon: getConditionIcon(def),
+          defId: def.id,
           x: item.x,
           y: item.y,
           ...itemSize(item),

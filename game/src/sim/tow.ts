@@ -209,6 +209,13 @@ export function releaseNpc(world: World, npc: Vehicle): void {
   endState(world, tow, 'broken');
 }
 
+// A tow promise covers one breakdown. It breaks once the client drives again, so its next breakdown gets terms for
+// where it stands then, not the old fee.
+export function checkTowPromise(world: World, s: NpcState): StateEnding | null {
+  const client = world.vehicles.find((v) => v.id === s.other);
+  return client && !isStranded(world, client) ? 'broken' : null;
+}
+
 // The player's tow ends at the NPC's destination, and breaks when the two turn hostile.
 export function checkPlayerTow(world: World, s: NpcState): StateEnding | null {
   const me = world.vehicles.find((v) => v.id === s.holder);
@@ -305,10 +312,16 @@ function towerTerms(world: World, tower: Vehicle, client: Vehicle): { site: stri
   return { site: site.id, fee: towFee(world, tower, client, site) };
 }
 
+// A tower that left this client for danger a few turns ago still waits.
+function leftForDanger(world: World, tower: Vehicle, client: Vehicle): boolean {
+  const promise = stateOf(world, 'towPromise', tower.id, client.id);
+  return promise !== null && world.turn - promise.born < TOW.dangerWait;
+}
+
 // The tower can hitch or offer now. When another driver got there first this turn, this one's tow goal pops next
 // turn. A player in combat gets the offer once the fight ends, and the tower waits beside the truck.
 function readyToTow(world: World, tower: Vehicle, client: Vehicle): boolean {
-  if (towOf(world, client.id) || !inTowReach(tower, client)) return false;
+  if (towOf(world, client.id) || !inTowReach(tower, client) || leftForDanger(world, tower, client)) return false;
   return !isPlayer(world, client) || !inCombat(world, client);
 }
 
