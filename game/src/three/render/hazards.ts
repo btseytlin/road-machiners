@@ -76,7 +76,7 @@ export class HazardViews {
     this.fields.update(world, terrain, clock, nowMs);
     this.flares.update(world, terrain, views, nowMs, clock);
     const fresh = new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
-    this.lines.update(world, views, nowMs, { fresh, moved: clock === null || clock.moved });
+    this.lines.update(world, views, nowMs, { fresh, playing: turnClock !== null });
     this.pulses.update(world, terrain, views, nowMs, clock);
   }
 

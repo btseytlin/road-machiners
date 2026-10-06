@@ -68,7 +68,7 @@ describe("CollisionCues", () => {
 });
 
 describe("playUtilitySounds", () => {
-  const use = (vehicle: string, effect: "mortar" | "flare" | "sprout" | "harpoon" | "claymore"): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, target: null, point: null });
+  const use = (vehicle: string, effect: "mortar" | "flare" | "sprout" | "claymore"): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, point: null });
   const pulse = (vehicle: string): GameEvent => ({ t: "pulse", vehicle, pos: { x: 0, y: 0 }, hit: [] });
   const seen: Record<string, V3> = { a: { x: 1, y: 2, z: 3 }, b: { x: 4, y: 5, z: 6 } };
 
@@ -87,7 +87,7 @@ describe("playUtilitySounds", () => {
   });
 
   it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
-    expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "harpoon"), use("a", "claymore")])).toEqual([]);
+    expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "claymore")])).toEqual([]);
   });
 
   it("snaps a torn harpoon line at the truck it held, and stays silent when that truck is unseen", () => {

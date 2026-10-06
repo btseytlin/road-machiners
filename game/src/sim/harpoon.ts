@@ -1,21 +1,16 @@
-// Harpoon lines. The harpoon fires one light round as a shot, aimed and rolled like a gun's. A round that lands on
-// the target walks its lane, and the line holds the first part it touches. The line is a world object that ends
-// after its turns (advanceUtilityEffects ages it), when it tears, or when either anchor part leaves its truck or the
-// harpoon breaks. Physics reads the holding lines at turn start through lineAnchors() and pulls the two trucks
-// together while the line is stretched. A pull above HARPOON.tearForce tears it, and physics reports the tear for
-// tearLine().
+// Harpoon lines. The harpoon is a gun of one round (WeaponDef.line). A round of it that strikes its target ties a line
+// to the part it hit first; the fire phase calls attachLine(). The line is a world object that ends after its turns
+// (advanceUtilityEffects ages it), when it tears, or when either anchor part leaves its truck or the harpoon breaks.
+// Physics reads the holding lines at turn start through lineAnchors() and pulls the two trucks together while the line
+// is stretched. A stretch pull above HARPOON.tearForce tears it, and physics reports the tear for tearLine().
 
 import { PHYSICS } from '../data/physics';
-import type { UtilityDef } from '../data/parts';
 import { HARPOON } from '../data/utilities';
-import { openSides } from './armor';
 import { cellRect } from './body';
-import { isHostile, landSingleRound, noteAttack, shotDamage, targetBlock, type FireBlock } from './combat';
 import { damagePart } from './damage';
 import { newId } from './factory';
 import { itemCells, mountedItems } from './grid';
-import type { GridItem, HarpoonLine, PartInstance, UtilityOrder, Vehicle, World } from './types';
-import { wornDef } from './wear';
+import type { GridItem, HarpoonLine, Vehicle, World } from './types';
 
 const S = PHYSICS.metersPerTile;
 
@@ -27,33 +22,12 @@ export type BodyPoint = { x: number; y: number; z: number };
 export type LineAnchor = { id: string; from: string; to: string; fromAt: BodyPoint; toAt: BodyPoint; length: number };
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
-type TruckOrder = Extract<UtilityOrder, { kind: 'truck' }>;
 
-// Why the harpoon cannot reach the target right now, or null: the gun rules of sight, cover, range and arc.
-export function harpoonBlock(world: World, v: Vehicle, part: PartInstance, target: Vehicle): FireBlock | null {
-  const item = mountedItem(v, part.id);
-  if (!item) throw new Error(`${v.name} has no mounted part ${part.id}`);
-  return targetBlock(world, v, { def: wornDef<UtilityDef>(part), sides: openSides(v, item) }, target);
-}
+export type Ends = { from: Vehicle; fromPart: string; to: Vehicle; toPart: string };
 
-// Fires the harpoon at the order's target. Hit or miss, the shot is an attack on the target, and it logs as a shot.
-export function fireHarpoon(world: World, v: Vehicle, part: PartInstance, order: TruckOrder): void {
-  const target = world.vehicles.find((x) => x.id === order.targetId);
-  if (!target) throw new Error(`Harpoon target ${order.targetId} is gone`);
-  const def = wornDef<UtilityDef>(part);
-  if (def.effect.type !== 'harpoon') throw new Error(`${def.name} is not a harpoon`);
-  const { odds, side, round } = landSingleRound(world, v, { def }, target, order.aim);
-  noteAttack(world, v, target, !isHostile(world, target, v));
-  const event = { t: 'shot' as const, shooter: v.id, weapon: part.id, target: target.id, aim: order.aim, chance: odds.chance, damageChance: odds.damageChance, side, rounds: [round] };
-  if (shotDamage(event).has(target.id)) target.lastHitBy = v.id;
-  const held = round.hits[0];
-  if (held) attach(world, { from: v, fromPart: part.id, to: target, toPart: held.part }, def.effect.turns);
-  world.events.push(event);
-}
-
-type Ends = { from: Vehicle; fromPart: string; to: Vehicle; toPart: string };
-
-function attach(world: World, ends: Ends, turns: number): void {
+// Ties a line from the harpoon on the shooter to the part its round hit on the target, for `turns` turns. The line is
+// as long as its anchors stand apart now.
+export function attachLine(world: World, ends: Ends, turns: number): void {
   const length = anchorGap(ends);
   world.lines.push({ id: newId(world, 'l'), from: ends.from.id, fromPart: ends.fromPart, to: ends.to.id, toPart: ends.toPart, length, turnsLeft: turns });
 }

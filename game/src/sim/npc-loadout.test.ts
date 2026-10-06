@@ -469,9 +469,10 @@ describe('NPC utility parts', () => {
     expect(emitters('loaded')).toBeGreaterThan(0);
   }, 120_000);
 
+  // Small neighboring seeds roll alike at first, so the sample spans 200 of them.
   it('mounts the claymore ram on some gunwagons', () => {
     let rams = 0;
-    for (let seed = 1; seed <= 40; seed++) rams += generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.gunwagon).parts.filter((p) => p.defId === 'claymoreRam').length;
+    for (let seed = 1; seed <= 200; seed++) rams += generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.gunwagon).parts.filter((p) => p.defId === 'claymoreRam').length;
 
     expect(rams).toBeGreaterThan(0);
   }, 120_000);
@@ -485,8 +486,9 @@ type TemplateCensus = { shares: UtilityShares; byLevel: Partial<Record<GearLevel
 const CENSUS_SPAWNS = 300;
 const COMBAT_TEMPLATES = ['buggy', 'gunwagon', 'vulture', 'merc', 'bowlFarmer', 'noseArmy', 'convoyGuard'];
 
-function mountedUtilities(parts: { defId: string }[]): UtilityDef[] {
-  return parts.map((p) => partDef(p.defId)).filter((def): def is UtilityDef => def.kind === 'utility');
+// The gear a utility roll mounts: utilities, and the harpoon, the gun that ties a line.
+function mountedUtilities(parts: { defId: string }[]): (UtilityDef | WeaponDef)[] {
+  return parts.map((p) => partDef(p.defId)).filter((def): def is UtilityDef | WeaponDef => def.kind === 'utility' || (def.kind === 'weapon' && def.line !== undefined));
 }
 
 function levelShares(template: NpcTemplate, level: GearLevel, census: TemplateCensus): UtilityShares {
@@ -494,7 +496,7 @@ function levelShares(template: NpcTemplate, level: GearLevel, census: TemplateCe
   for (let seed = 1; seed <= CENSUS_SPAWNS; seed++) {
     const utilities = mountedUtilities(generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts);
     if (utilities.length > 0) shares.any += 1 / CENSUS_SPAWNS;
-    if (utilities.some((def) => def.reload !== null)) shares.active += 1 / CENSUS_SPAWNS;
+    if (utilities.some((def) => def.kind === 'weapon' || def.reload !== null)) shares.active += 1 / CENSUS_SPAWNS;
     if (utilities.some((def) => def.id === 'emitter')) {
       shares.emitter += 1 / CENSUS_SPAWNS;
       if (level !== 'heavy' && level !== 'loaded') census.emitterBelowHeavy++;

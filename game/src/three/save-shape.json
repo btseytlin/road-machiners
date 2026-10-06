@@ -1,5 +1,5 @@
 {
- "format": "2.17",
+ "format": "2.18",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -1259,6 +1259,22 @@
       "good": "string",
       "id": "string",
       "kind": "string",
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      },
       "rot": "number",
       "x": "number",
       "y": "number"

@@ -155,7 +155,7 @@ describe('HazardViews', () => {
     const before = cloneWorld(world);
     const pos = { x: me.pos.x + 12, y: me.pos.y };
     world.flares.push({ id: 'f1', source: me.id, pos, r: 10, turnsLeft: 6 });
-    world.events = [{ t: 'utility', vehicle: me.id, part: 'p1', effect: 'flare', target: null, point: { ...pos } }];
+    world.events = [{ t: 'utility', vehicle: me.id, part: 'p1', effect: 'flare', point: { ...pos } }];
     const views = new HazardViews();
     const camera = new THREE.PerspectiveCamera();
 

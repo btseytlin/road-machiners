@@ -302,7 +302,7 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
-      aimPart: (vehicleId, partId) => this.anim === null && !this.utilityAim.aimPart(vehicleById(this.world, vehicleId), partId) && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
+      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
@@ -560,12 +560,10 @@ export class Game {
     if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
   }
 
-  // A selected truck or point utility takes the click as its target instead of a move or a gun order.
+  // A selected point utility takes the click as its target instead of a move or a gun order.
   private clickUtility(e: MouseEvent): boolean {
     if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return false;
-    const picked = this.pickVehicle(e.clientX, e.clientY);
-    const other = picked && picked.id !== playerVehicle(this.world).id ? picked : null;
-    return this.utilityAim.click(other, this.rig.groundUnder(e.clientX, e.clientY, this.ground));
+    return this.utilityAim.click(this.rig.groundUnder(e.clientX, e.clientY, this.ground));
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -754,6 +752,7 @@ export class Game {
 
   private finishPlayback(): void {
     this.anim = null;
+    this.fx.releaseRopes();
     this.crashCues = null;
     this.breakCues = new BreakCues([]);
     this.phase = null;
@@ -1107,7 +1106,6 @@ export class Game {
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
-    this.utilityAim.cursor(this.renderer.domElement, this.pickRing.visible);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     this.hazards.update(this.world, this.world.terrain, this.views, performance.now(), this.turnClock(), this.rig.camera);

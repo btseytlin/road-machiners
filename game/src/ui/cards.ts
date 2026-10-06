@@ -493,7 +493,6 @@ function utilityStats(part: PartInstance): Stat[] {
 function utilityReach(d: UtilityDef): Stat[] {
   const e = d.effect;
   if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
-  if (d.shot) return [stat("range", "Range", meters(d.shot.range), "m", "more")];
   if (e.type === "oil") return [stat("range", "Slick length", meters(oilSlickLength()), "m", "more")];
   return "radius" in e ? [stat("range", "Radius", meters(e.radius), "m", "more")] : [];
 }
@@ -538,6 +537,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
     stat("power", "Power draw", d.draw, "", "less", 1),
+    ...(d.line ? [stat("clock", "Turns the line holds", d.line.turns, "t", "more")] : []),
   ];
 }
 

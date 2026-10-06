@@ -32,6 +32,7 @@ COLORS = {
     "brass": 0xF0D060,  # PAL.select
     "warhead": 0xE05030,  # PAL.dest
     "lens": 0x6AAAA0,  # PAL.waterLight
+    "rope": 0xC9B98A,  # PAL.rope
 }
 
 

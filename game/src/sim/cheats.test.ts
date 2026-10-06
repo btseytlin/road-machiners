@@ -196,6 +196,16 @@ describe('frozen NPCs', () => {
     expect(me.order).toEqual({ kind: 'through', dest: npc.pos });
   });
 
+  it('keeps a hostile NPC from raising a radio call', () => {
+    const called = (frozen: boolean): boolean => {
+      const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
+      const { w } = withSpawned(start, 'buggy', true);
+      return endTurn(w, testDrive).player.call !== null;
+    };
+    expect(called(false)).toBe(true);
+    expect(called(true)).toBe(false);
+  });
+
   it('keeps a hostile NPC parked with no gun orders through a turn', () => {
     const after = (frozen: boolean) => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();

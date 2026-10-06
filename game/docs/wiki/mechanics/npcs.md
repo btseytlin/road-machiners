@@ -24,12 +24,11 @@ NPCs carry and use utilities by the player's rules. At spawn each truck may roll
 - Sprout: an attacker is in sight, and the driver flees a fight or its cab is below half.
 - Caltrops and Oil spiller: the driver flees with a hostile in sight behind it within 10 tiles.
 - Smoke mortar: a fleeing driver shells the midpoint between itself and its nearest attacker in sight.
-- Harpoon: its fight target drives away from it. The order stands like the player's, and the driver drops it once its top goal is no longer a fight with that target.
 - Flare cannon: at night, a driver investigating a contact lights the contact.
 - Emitter: in combat, every truck it sees in range is hostile, and there is at least one.
 - Claymore ram: the driver has chosen to ram.
 
-The harpoon and the emitter, like an opening shot, are never used inside a town's guard.
+The harpoon rolls with the utilities, but it is a gun, so a driver fires it at its fight target like its other guns. The emitter, like an opening shot, is never used inside a town's guard.
 
 Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what still lies hidden there, with a progress bar. Each turn turns up some of the hidden loot, see [Economy](economy.md). A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take the revealed loot that fits.
 

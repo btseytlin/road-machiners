@@ -86,10 +86,9 @@ function sites(): Site[] {
   return [...REGION.towns, ...REGION.locations];
 }
 
-// A harpoon's order shows the utility icon, in the utility row's mustard.
 function weaponChip(mark: WeaponMark): HTMLElement {
-  return el('div', { class: `marker-weapon ${mark.look} ${mark.ready ? 'ready' : 'blocked'}`, title: mark.status },
-    createIcon(mark.look === 'harpoon' ? 'utility' : mark.look),
+  return el('div', { class: `marker-weapon ${mark.ready ? 'ready' : 'blocked'}`, title: mark.status },
+    createIcon(mark.look),
     el('span', { class: 'marker-slot' }, String(mark.slot)),
     el('span', { class: 'marker-status' }, mark.status),
   );

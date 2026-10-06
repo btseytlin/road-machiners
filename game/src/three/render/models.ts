@@ -99,7 +99,6 @@ const NAMES = [
   'util_caltrops',
   'util_oil',
   'util_crane',
-  'util_harpoon',
   'util_mortar',
   'util_flare',
   'util_scraper',
@@ -159,6 +158,7 @@ const NAMES = [
   'wrec_tank',
   'wrec_rocket_pod',
   'wrec_sniper',
+  'wrec_harpoon',
 
   'wbar_mg_short',
   'wbar_mg_long',
@@ -169,6 +169,7 @@ const NAMES = [
   'wbar_tank',
   'wbar_sniper',
   'wbar_rocket_tubes',
+  'wbar_harpoon',
 
   'wext_scope',
   'wext_shield',

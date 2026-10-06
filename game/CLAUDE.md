@@ -63,7 +63,7 @@ One owner per concept. Use these and do not decide the same thing elsewhere:
 - `talkOf()` in `src/sim/dialogue.ts` is the one place talk reads traits.
 - `propPose()` in `src/sim/mapgen.ts` gives each prop's turn and scale.
 - `src/sim/body.ts` is the only conversion between grid cells and meters.
-- `src/sim/utility.ts` owns utility charge, orders, the activation step and the emitter shutdown. Each utility effect's world object has one owner: `hazards.ts` for smoke, ground fields and flares, `harpoon.ts` and `claymore.ts`.
+- `src/sim/utility.ts` owns utility charge, orders, the activation step and the emitter shutdown. Each utility effect's world object has one owner: `hazards.ts` for smoke, ground fields and flares, and `claymore.ts`. `harpoon.ts` owns the lines of the harpoon, which is a gun.
 - Timed deals between two trucks are states in `src/sim/states.ts`. New group work adds a state kind, not a goal.
 - A `stall` event is always a bug.
 - Truck meshes own stencil bit `TRUCK_BIT` and props `PROP_BIT`. Other views must not write them.

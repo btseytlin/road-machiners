@@ -312,6 +312,11 @@ export class Fx3D {
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
+  // Drops the ropes of harpoon rounds that struck, when the turn's playback ends and the lines show.
+  releaseRopes(): void {
+    this.projectiles.releaseRopes();
+  }
+
   // A bullet or shell landing: sparks on metal, dust in the dirt. Shells throw more.
   private impact(plan: RoundPlan, big: boolean): void {
     if (plan.struck) this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });

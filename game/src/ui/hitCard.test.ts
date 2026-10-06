@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { partDef, type UtilityDef } from '../data/parts';
+import { partDef, type WeaponDef } from '../data/parts';
 import { hitOdds } from '../sim/combat';
 import { makePart } from '../sim/factory';
 import { mountPart } from '../sim/inventory';
@@ -155,21 +155,21 @@ describe('hover card harpoon row', () => {
     return { world, me, harpoon, them };
   }
 
-  it('shows the harpoon on its utility key with its chance from hitOdds', () => {
+  it('shows the harpoon as a gun row with its round and its chance from hitOdds', () => {
     const { world, me, them } = harpoonDuel();
-    const odds = hitOdds(world, me, { def: partDef('harpoon') as UtilityDef }, them, 'body');
+    const odds = hitOdds(world, me, { def: partDef('harpoon') as WeaponDef }, them, 'body');
 
-    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label === '[5] Harpoon');
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 1/1'));
 
-    expect(row).toMatchObject({ odds, text: `${Math.round(odds.chance * 100)}%` });
+    expect(row).toMatchObject({ odds, text: `${Math.round(odds.damageChance * 100)}%` });
   });
 
-  it('shows a recharging harpoon with its turns left and no odds', () => {
+  it('shows a reloading harpoon with no odds', () => {
     const { world, harpoon, them } = harpoonDuel();
-    harpoon.charge = { reload: 3 };
+    harpoon.gun = { cooldown: 0, ammo: 0, reloadWork: 2 };
 
-    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label === '[5] Harpoon');
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 0/1'));
 
-    expect(row).toMatchObject({ odds: null, text: 'recharging 3 turns' });
+    expect(row).toMatchObject({ odds: null, text: 'reloading 3 turns' });
   });
 });

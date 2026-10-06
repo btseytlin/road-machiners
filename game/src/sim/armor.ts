@@ -172,6 +172,26 @@ export function planLane(v: Vehicle, side: Side, lane: number, round: Round): { 
   return hits;
 }
 
+// Where a harpoon bolt that struck the truck in this lane holds: the first working part in the lane from its side,
+// whatever pen it would take to reach it. A lane with none, as an outer lane of empty armor slots, passes the hold to
+// the nearest lane that has one. Null only for a truck with no working part.
+export function heldPart(v: Vehicle, side: Side, lane: number): PartInstance | null {
+  const owner = cellOwners(v);
+  const g = gridOf(v);
+  const working = (at: number) => laneCells(g, side, at).map((c) => owner.get(cellKey(c.x, c.y))).find((p) => p !== undefined && p.hp > 0);
+  for (const at of lanesOutFrom(lane, laneCount(v, side))) {
+    const part = working(at);
+    if (part) return part;
+  }
+  return null;
+}
+
+// Every lane from `lane` outward, nearest first and the lower one first at equal distance.
+function lanesOutFrom(lane: number, lanes: number): number[] {
+  const all = Array.from({ length: lanes }, (_, at) => at);
+  return all.sort((a, b) => Math.abs(a - lane) - Math.abs(b - lane) || a - b);
+}
+
 function cellOwners(v: Vehicle): Map<number, PartInstance> {
   const owner = new Map<number, PartInstance>();
   for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(cellKey(c.x, c.y), it.part);

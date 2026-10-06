@@ -22,6 +22,7 @@ import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
+import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -390,5 +391,38 @@ describe('save migration 16 to 17', () => {
     const next = MIGRATIONS[16](FORMAT_2_16);
 
     expect(next).toEqual({ ...FORMAT_2_16, player: { ...FORMAT_2_16.player, frozen: false } });
+  });
+});
+
+describe('save migration 17 to 18', () => {
+  const before = structuredClone(FORMAT_2_17);
+  const next = MIGRATIONS[17](FORMAT_2_17) as typeof FORMAT_2_17 & { vehicles: { weaponOrders: object; utilityOrders: object }[] };
+  const part = (p: object) => p as { charge?: unknown; gun?: unknown };
+
+  it('gives a mounted ready harpoon a loaded gun and no charge', () => {
+    expect(part(next.vehicles[0].items[0].part)).toEqual({ id: 'p11', defId: 'harpoon', hp: 40, wear: 0, gun: { cooldown: 0, ammo: 1, reloadWork: 0 } });
+  });
+
+  it('turns a recharging harpoon in storage into a gun reloading for the turns it worked', () => {
+    expect(part(next.vehicles[0].storage[0]).gun).toEqual({ cooldown: 0, ammo: 0, reloadWork: 2 });
+  });
+
+  it('converts a harpoon lying in a salvage stock', () => {
+    expect(part(next.salvage[0].parts[0])).toMatchObject({ gun: { cooldown: 0, ammo: 1, reloadWork: 0 } });
+    expect(part(next.salvage[0].parts[0]).charge).toBeUndefined();
+  });
+
+  it('keeps other utilities and their orders, and makes the standing harpoon order a gun target', () => {
+    expect(next.vehicles[0].items[1]).toEqual(FORMAT_2_17.vehicles[0].items[1]);
+    expect(next.vehicles[0].utilityOrders).toEqual({ p12: { kind: 'self' } });
+    expect(next.vehicles[0].weaponOrders).toEqual({ p20: { targetId: 'npc4', aim: 'body' }, p11: { targetId: 'npc4', aim: 'p30' } });
+  });
+
+  it('drops the target of utility events', () => {
+    expect(next.events).toEqual([{ t: 'utility', vehicle: 'player', part: 'p12', effect: 'sprout', point: null }]);
+  });
+
+  it('does not change its input', () => {
+    expect(FORMAT_2_17).toEqual(before);
   });
 });

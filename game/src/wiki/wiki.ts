@@ -150,7 +150,7 @@ const TABLES: WikiTable[] = [
       c.core.map((k) => k.defId),
     ]),
   },
-  partTable('weapons', 'weapon', ['range (tiles)', 'cooldown (turns)', 'magazine (shots)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake'], (p) => [p.range, p.cooldown, p.magazine, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake]),
+  partTable('weapons', 'weapon', ['range (tiles)', 'cooldown (turns)', 'magazine (shots)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake', 'line (turns)'], (p) => [p.range, p.cooldown, p.magazine, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake, p.line?.turns ?? null]),
   {
     id: 'weapon-rounds',
     headers: ['id', 'damage', 'pen', 'blast', 'speed (m/s)', 'splash radius (m)', 'splash damage', 'splash pen'],
@@ -161,10 +161,10 @@ const TABLES: WikiTable[] = [
   partTable('cargo', 'cargo', ['extra rows'], (p) => [p.extraRows]),
   partTable('scanners', 'scanner', ['range (tiles)'], (p) => [p.range]),
   partTable('stores', 'store', ['holds', 'amount (units)'], (p) => [p.holds, p.amount]),
-  partTable('utilities', 'utility', ['effect', 'reload (turns)', 'effect numbers', 'shot range (tiles)'], (p) => {
+  partTable('utilities', 'utility', ['effect', 'reload (turns)', 'effect numbers'], (p) => {
     const { type, ...numbers } = p.effect;
     const shown = type === 'oil' ? { slick: oilSlickLength(), ...numbers } : numbers;
-    return [type, p.reload, shown, p.shot ? p.shot.range : null];
+    return [type, p.reload, shown];
   }),
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {

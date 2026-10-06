@@ -1,7 +1,7 @@
 import { CONFIG } from "../config";
 import { PHYSICS } from "../data/physics";
 import { REGION } from "../data/region";
-import { partDef, type UtilityEffectType } from "../data/parts";
+import type { UtilityEffectType } from "../data/parts";
 import type { CueId } from "../data/sounds";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
@@ -118,8 +118,8 @@ export function playDryGuns(host: CombatHost, played: Set<string>): void {
 const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
 
 // Utilities have no cues of their own and borrow the gun cues: a mortar or flare round leaves with the cannon's boom,
-// and an emitter pulse crackles with the sparks of a breaking part. The harpoon sounds as a shot with its own cues, and a claymore
-// blast as an explosion with its crash. Other utilities play silent.
+// and an emitter pulse crackles with the sparks of a breaking part. A claymore blast sounds as an explosion with its
+// crash. Other utilities play silent.
 const UTILITY_CUES: Partial<Record<UtilityEffectType | "claymore", CueId>> = { mortar: "cannon-fire", flare: "cannon-fire" };
 const PULSE_CUE: CueId = "part-broken";
 
@@ -165,9 +165,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const gun = shotPart(host.world, e);
   const view = viewOf(host.views, e.shooter);
   const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);
-  // A utility that fires a shot, the harpoon, has no turret: its bolt leaves from the part toward the target.
-  const muzzle = partDef(gun.defId).kind === "weapon" ? () => view.muzzle(e.weapon) : () => towardFrom(view.partPoint(e.weapon), b);
-  return playVolley(host, a, muzzle, b, e, breaks, gun.defId, e.target, rows, dry);
+  return playVolley(host, a, () => view.muzzle(e.weapon), b, e, breaks, gun.defId, e.target, rows, dry);
 }
 
 function shotPart(w: World, e: Extract<GameEvent, { t: "shot" }>): PartInstance {

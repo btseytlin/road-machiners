@@ -64,29 +64,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     reload: null,
     effect: { type: 'crane' }, // refits and roadside patches go faster, see WORK
   },
-  harpoon: {
-    id: 'harpoon',
-    kind: 'utility',
-    name: 'Harpoon',
-    hp: 40,
-    base: 269,
-    tier: 2,
-    w: 1,
-    h: 2,
-    mass: 120,
-    armor: 4,
-    tall: false,
-    reload: 5,
-    effect: { type: 'harpoon', turns: 3 }, // the line holds this many turns
-    shot: {
-      range: 8,
-      arc: 180,
-      spread: 4,
-      shake: 1,
-      recoil: 0,
-      round: { damage: 6, pen: 3, blast: false, speed: 120, splashRadius: 0, splashDamage: 0, splashPen: 0, armorShare: 1 },
-    },
-  },
   smokeMortar: {
     id: 'smokeMortar',
     kind: 'utility',
@@ -180,14 +157,15 @@ export function oilSlickLength(): number {
 }
 
 // The harpoon line: a one-sided spring between the two anchors once they are farther apart than the line's length.
-// Settled in src/phys/line.test.ts at 60 steps per second, with a parked hauler holding a 1.3 t scout: the spring is
-// stable without jitter, and the damping makes a held scout settle without bouncing, 0.77 m past the length at half
-// throttle. At full throttle the scout's lunge overshoots its 15.7 kN engine pull and tears the line in under a turn.
-// Stiffness 5000 with damping 4000 held even that lunge; 20000 tore it faster. Both were kept at the design values.
+// Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. The peak
+// stretch pull over 3 turns: a scout fleeing at full throttle from a parked scout 15 kN, the same scout already at
+// speed when the line goes taut 26 kN, and from a parked hauler 31 kN; a hauler dragging a braking scout 38 kN and
+// more at speed. So a line holds a truck of the target's own size for its turns, and a much stronger truck tears it.
+// Stiffer 10000 with damping 2000 jerked a scout at speed to 72 kN, so no tear force held a fleeing truck.
 export const HARPOON = {
-  stiffness: 10000, // N per meter of stretch
-  damping: 2000, // N·s per meter on the separating speed
-  tearForce: 20000, // N; a pull above it tears the line
+  stiffness: 5000, // N per meter of stretch
+  damping: 4000, // N·s per meter on the separating speed
+  tearForce: 36000, // N; a stretch pull above it tears the line
   tearDamage: 12, // to the part the line held on the torn truck
 };
 

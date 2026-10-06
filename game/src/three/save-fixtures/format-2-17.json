@@ -1,0 +1,20 @@
+{
+  "turn": 430,
+  "vehicles": [
+    {
+      "id": "player",
+      "items": [
+        { "kind": "part", "id": "i1", "x": 1, "y": 2, "rot": 0, "part": { "id": "p11", "defId": "harpoon", "hp": 40, "wear": 0, "charge": { "reload": 0 } } },
+        { "kind": "part", "id": "i2", "x": 0, "y": 0, "rot": 0, "part": { "id": "p12", "defId": "sprout", "hp": 25, "wear": 0, "charge": { "reload": 2 } } }
+      ],
+      "storage": [{ "id": "p13", "defId": "harpoon", "hp": 30, "wear": 1, "charge": { "reload": 3 } }],
+      "weaponOrders": { "p20": { "targetId": "npc4", "aim": "body" } },
+      "utilityOrders": { "p11": { "kind": "truck", "targetId": "npc4", "aim": "p30" }, "p12": { "kind": "self" } }
+    }
+  ],
+  "removed": [],
+  "salvage": [{ "id": "wreck3", "parts": [{ "id": "p14", "defId": "harpoon", "hp": 20, "wear": 2, "charge": { "reload": 0 } }] }],
+  "events": [
+    { "t": "utility", "vehicle": "player", "part": "p12", "effect": "sprout", "target": null, "point": null }
+  ]
+}

@@ -63,11 +63,10 @@ export type GridItem =
 // 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
 export type Aim = "body" | string;
 export type WeaponOrder = { targetId: string; aim: Aim };
-// An order to use a utility this turn: on the truck itself, at a truck, or at a ground point in tiles. It acts once
-// and is then cleared. See src/sim/utility.ts.
+// An order to use a utility this turn: on the truck itself, or at a ground point in tiles. It acts once and is then
+// cleared. See src/sim/utility.ts.
 export type UtilityOrder =
   | { kind: 'self' }
-  | { kind: 'truck'; targetId: string; aim: Aim }
   | { kind: 'point'; pos: Vec };
 
 export type Pose = { x: number; y: number; heading: number };
@@ -254,7 +253,7 @@ export type Vehicle = {
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
-  utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses; a harpoon target stands until it fires
+  utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses
   shutDown?: { from: number; until: number }; // the turns an emitter pulse shuts the truck down, both included; set at the end of the pulse turn and cleared after until; see settleShutdowns in src/sim/utility.ts
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
@@ -375,7 +374,7 @@ export type Player = {
   knockoutTurns: number; // turns spent in the current knockout
   god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   fullLog: boolean; // debug: the log shows events the player cannot see or hear; see src/ui/format.ts
-  frozen: boolean; // debug: NPC drivers brake, hold fire and use no utilities; see src/sim/cheats.ts
+  frozen: boolean; // debug: NPC drivers brake, hold fire, use no utilities and raise no radio calls; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
@@ -450,7 +449,7 @@ export type GameEvent =
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true } // a debug line shows only with the full log flag
   // A utility acted: at a truck, at a point, or on its own truck. effect 'claymore' arms a claymore ram.
-  | { t: 'utility'; vehicle: string; part: string; effect: UtilityEffectType | 'claymore'; target: string | null; point: Vec | null }
+  | { t: 'utility'; vehicle: string; part: string; effect: UtilityEffectType | 'claymore'; point: Vec | null }
   | { t: 'lineTorn'; line: string; vehicle: string; part: string; damage: number } // the harpoon line tore; part on vehicle took damage
   | { t: 'pulse'; vehicle: string; pos: Vec; hit: string[] } // an emitter pulse and the trucks it shut down
   // A claymore ram on vehicle blasted other at pos. hits are other's parts, selfHits vehicle's own struck side.

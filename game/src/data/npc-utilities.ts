@@ -1,5 +1,6 @@
-// The utility part each NPC template may roll at spawn, one roll per truck after its cargo part. See chooseVehicle()
-// in src/sim/npc-loadout.ts. Every template has an entry, and every pool has an empty outcome.
+// The utility part each NPC template may roll at spawn, one roll per truck after its cargo part. The harpoon is a gun,
+// but drivers carry it as gear, so it rolls here and not with the guns. See chooseVehicle() in src/sim/npc-loadout.ts.
+// Every template has an entry, and every pool has an empty outcome.
 
 import type { GearLevel, Weighted } from './npcs';
 

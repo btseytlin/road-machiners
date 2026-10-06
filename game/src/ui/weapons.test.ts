@@ -11,7 +11,6 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { UtilityAim } from "../three/utility-aim";
 import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
 
 function createDuel() {
@@ -530,63 +529,32 @@ function harpoonDuel(gap = 5) {
   return { w, me, harpoon, target };
 }
 
-describe("the harpoon's standing order", () => {
-  it("aims while recharging, since its order waits for the charge", () => {
-    const { w, harpoon } = harpoonDuel();
-    harpoon.charge = { reload: 2 };
-    expect(utilityStatus(w, harpoon, true)).toEqual({ state: "aiming", text: "aim: click a truck" });
-  });
+describe("the harpoon on the weapon panel", () => {
+  const harpoonGun = (s: ReturnType<typeof harpoonDuel>) => {
+    const mw = vehicleStats(s.w, s.me).weapons.find((m) => m.part.id === s.harpoon.id);
+    if (!mw) throw new Error("The harpoon is not a mounted gun");
+    return mw;
+  };
 
-  it("shows its waiting reason on the slot, or that it fires this turn", () => {
-    const near = harpoonDuel(5);
-    const far = harpoonDuel(9);
-    for (const s of [near, far]) s.me.utilityOrders[s.harpoon.id] = { kind: "truck", targetId: s.target.id, aim: "body" };
-    expect(utilityStatus(near.w, near.harpoon, false)).toEqual({ state: "set", text: "fires this turn" });
-    expect(utilityStatus(far.w, far.harpoon, true)).toEqual({ state: "set", text: "out of range" });
-    near.harpoon.charge = { reload: 2 };
-    expect(utilityStatus(near.w, near.harpoon, false)).toEqual({ state: "set", text: "recharging 2 turns" });
-  });
-
-  it("marks its target with the harpoon's key, look and waiting reason", () => {
-    const far = harpoonDuel(9);
-    far.me.utilityOrders[far.harpoon.id] = { kind: "truck", targetId: far.target.id, aim: "body" };
-    const key = utilitySlots(far.w).indexOf(far.harpoon) + 5;
-    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot: key, look: "harpoon", status: "out of range", ready: false }]);
-    far.target.pos = { x: far.me.pos.x + 5, y: far.me.pos.y };
-    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot: key, look: "harpoon", status: "ready", ready: true }]);
-  });
-
-  function aimAt(s: ReturnType<typeof harpoonDuel>) {
-    const world = { w: s.w };
-    const note = vi.fn();
-    const aim = new UtilityAim({ world: () => world.w, apply: (next) => { world.w = next; }, note });
-    aim.select(s.harpoon.id);
-    return { world, note, aim };
-  }
-
-  it("a truck click out of range sets a waiting order, not a refusal, and keeps the harpoon aimed", () => {
-    const s = harpoonDuel(9);
-    const { world, note, aim } = aimAt(s);
-    expect(aim.click(s.target, null)).toBe(true);
-    expect(note).not.toHaveBeenCalled();
-    expect(world.w.vehicles[0].utilityOrders[s.harpoon.id]).toEqual({ kind: "truck", targetId: s.target.id, aim: "body" });
-    expect(aim.selectedId).toBe(s.harpoon.id);
-  });
-
-  it("a second click on the target clears the order", () => {
+  it("is a gun slot and not a utility slot", () => {
     const s = harpoonDuel();
-    const { world, aim } = aimAt(s);
-    aim.click(s.target, null);
-    aim.click(world.w.vehicles.find((v) => v.id === s.target.id) ?? null, null);
-    expect(world.w.vehicles[0].utilityOrders).toEqual({});
+    expect(harpoonGun(s).def.name).toBe("Harpoon");
+    expect(utilitySlots(s.w)).not.toContain(s.harpoon);
   });
 
-  it("a click on a truck it cannot take notes the reason and sets nothing", () => {
-    const s = harpoonDuel(80);
-    const { world, note, aim } = aimAt(s);
-    aim.click(s.target, null);
-    expect(note).toHaveBeenCalledWith(expect.stringMatching(/unseen/));
-    expect(world.w.vehicles[0].utilityOrders).toEqual({});
+  it("reads ready only with its round loaded, and reloading with the turns left after a shot", () => {
+    const s = harpoonDuel();
+    s.me.weaponOrders[s.harpoon.id] = { targetId: s.target.id, aim: "body" };
+    expect(getWeaponReadout(s.w, harpoonGun(s))).toMatchObject({ status: "ready", canFire: true });
+    s.harpoon.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
+    expect(getWeaponReadout(s.w, harpoonGun(s))).toMatchObject({ status: "reloading 4 turns", canFire: false, chance: null });
+  });
+
+  it("marks its target like a gun, with why it waits", () => {
+    const far = harpoonDuel(9);
+    far.me.weaponOrders[far.harpoon.id] = { targetId: far.target.id, aim: "body" };
+    const slot = vehicleStats(far.w, far.me).weapons.findIndex((m) => m.part.id === far.harpoon.id) + 1;
+    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot, look: "cannon", status: "out of range", ready: false }]);
   });
 });
 

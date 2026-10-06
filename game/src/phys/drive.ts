@@ -281,8 +281,9 @@ function run(d: Drive, w: World, steps: number): TurnResult {
 
 // Harpoon lines between two trucks with bodies. A line is a one-sided spring on the ground plane between its anchors:
 // past its length it pulls both trucks toward each other with HARPOON.stiffness per meter of stretch plus
-// HARPOON.damping on the separating speed, and never pushes. A pull above HARPOON.tearForce tears it for the rest of
-// the turn. A line with a far truck does nothing.
+// HARPOON.damping on the separating speed, and never pushes. A stretch pull above HARPOON.tearForce tears it for the
+// rest of the turn. The damping share does not count toward the tear, so the jerk of a line going taut on a truck
+// that is already driving away does not snap it. A line with a far truck does nothing.
 class Lines {
   readonly tears: Tear[] = [];
   private readonly held: { line: LineAnchor; a: Car; b: Car }[];
@@ -299,28 +300,28 @@ class Lines {
   pull(step: number): void {
     for (const h of this.held) {
       if (this.tears.some((t) => t.line === h.line.id)) continue;
-      const force = pullLine(h.line, h.a.body, h.b.body);
-      if (force > HARPOON.tearForce) this.tears.push({ line: h.line.id, step });
+      if (!pullLine(h.line, h.a.body, h.b.body)) this.tears.push({ line: h.line.id, step });
     }
   }
 }
 
-// Pulls the two bodies together when the line is stretched, unless the pull tears it. Returns the pull in newtons.
-function pullLine(line: LineAnchor, a: RAPIER.RigidBody, b: RAPIER.RigidBody): number {
+// Pulls the two bodies together when the line is stretched. Returns false when the stretch tears it instead.
+function pullLine(line: LineAnchor, a: RAPIER.RigidBody, b: RAPIER.RigidBody): boolean {
   const pa = worldPoint(a, line.fromAt);
   const pb = worldPoint(b, line.toAt);
   const gap = Math.hypot(pb.x - pa.x, pb.z - pa.z);
-  if (gap <= line.length) return 0;
+  if (gap <= line.length) return true;
+  const stretch = HARPOON.stiffness * (gap - line.length);
+  if (stretch > HARPOON.tearForce) return false;
   const n = { x: (pb.x - pa.x) / gap, z: (pb.z - pa.z) / gap };
   const va = a.velocityAtPoint(pa);
   const vb = b.velocityAtPoint(pb);
   const separating = (vb.x - va.x) * n.x + (vb.z - va.z) * n.z;
-  const force = Math.max(0, HARPOON.stiffness * (gap - line.length) + HARPOON.damping * separating);
-  if (force > HARPOON.tearForce) return force;
+  const force = Math.max(0, stretch + HARPOON.damping * separating);
   const j = force * DT;
   a.applyImpulseAtPoint({ x: n.x * j, y: 0, z: n.z * j }, pa, true);
   b.applyImpulseAtPoint({ x: -n.x * j, y: 0, z: -n.z * j }, pb, true);
-  return force;
+  return true;
 }
 
 // A body-space point of a body in physics space.

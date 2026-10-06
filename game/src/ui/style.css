@@ -520,10 +520,6 @@ body {
   height: 100%;
   background: #b39a3a;
 }
-/* A truck utility waiting for its target turns the pointer over a truck into a crosshair. */
-canvas.view.aim-truck {
-  cursor: crosshair;
-}
 #ui .weapon-pick {
   position: relative;
   width: 100%;

@@ -286,7 +286,7 @@ function spanLine(cls: string, spans: LogSpan[]): LogLine {
 }
 
 function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
-  return firedByUtility(world, e) ? harpoonText(world, e) : gunShotText(world, e);
+  return firedWithLine(world, e) ? harpoonText(world, e) : gunShotText(world, e);
 }
 
 // A shot by or at the player, or one whose stray rounds or blast hit the player. Trucks hit that the shot was not
@@ -302,10 +302,12 @@ function gunShotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLin
   return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
 }
 
-function firedByUtility(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
+// Whether the shot came from a gun that ties a line, the harpoon.
+function firedWithLine(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
   const shooter = findAny(world, e.shooter);
   const part = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
-  return part !== undefined && partDef(part.defId).kind === 'utility';
+  const def = part && partDef(part.defId);
+  return def?.kind === 'weapon' && def.line !== undefined;
 }
 
 // A harpoon shot by or at the player: "Harpoon → Buggy · line on Engine (40%)", or "missed", then the damage per
