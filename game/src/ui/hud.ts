@@ -102,18 +102,15 @@ export class MaxSpeedView {
     'span',
     { class: 'speed-max', tabindex: 0, 'aria-describedby': 'speed-breakdown' },
     this.text,
-    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, el('strong', {}, 'Max speed'), this.rows, this.notes),
+    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.rows, this.notes),
   );
 
   render(maxSpeed: string, rows: SpeedRow[], notes: string[]): void {
     this.text.textContent = `max ${maxSpeed}`;
-    const last = rows.length - 1;
     this.rows.replaceChildren(
-      ...rows.map((row, i) =>
-        el('div', { class: i === last ? 'speed-row total' : 'speed-row' }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, `${row.kph}`)),
-      ),
+      ...rows.map((row) => el('div', { class: 'speed-row' }, row.text)),
     );
-    this.notes.replaceChildren(...notes.map((note) => el('p', {}, note)));
+    this.notes.replaceChildren(...(rows.length + notes.length === 0 ? ['No speed penalties'] : notes).map((note) => el('p', {}, note)));
   }
 }
 

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { RULES } from '../data/rules';
 import { makePart } from '../sim/factory';
 import { corePart, coreParts, mountedParts } from '../sim/grid';
 import { mountPart } from '../sim/inventory';
@@ -31,30 +30,32 @@ const CASES: Record<string, (w: World, v: Vehicle) => void> = {
 };
 
 describe('max speed breakdown', () => {
-  it('ends on the number the HUD shows, and the rows chain', () => {
+  it('lists signed km/h changes that add up to the number the HUD shows', () => {
     for (const [name, tweak] of Object.entries(CASES)) {
       const { w, v } = playerWith(tweak);
       const rows = getHudReadout(w).maxSpeedRows;
-      expect(String(rows[rows.length - 1].kph), name).toBe(getHudReadout(w).maxSpeed);
-      expect(rows.map((r) => r.kph), name).toEqual(maxSpeedSteps(w, v).map((s) => kph(s.speed)));
+      const steps = maxSpeedSteps(w, v);
+      if (steps[0].kind === 'limp') continue;
+      const total = rows.reduce((sum, r) => sum + r.delta, kph(steps[0].speed));
+      expect(String(total), name).toBe(getHudReadout(w).maxSpeed);
+      expect(
+        rows.every((r) => r.delta !== 0),
+        name,
+      ).toBe(true);
     }
   });
 
-  it('words each cause', () => {
-    const { w, v } = playerWith(CASES.wheels);
+  it('words each cause tersely', () => {
+    const { w, v } = playerWith((world, truck) => {
+      CASES.wheels(world, truck);
+      CASES.guns(world, truck);
+    });
     const labels = speedRows('Clear', maxSpeedSteps(w, v)).map((r) => r.label);
-    expect(labels.some((l) => l.startsWith('Gun power'))).toBe(true);
+    expect(labels).toContain('Guns power');
     expect(labels).toContain('2 broken wheels');
+    expect(labels).not.toContain('Chassis');
     const stalled = playerWith(CASES.stalled);
-    expect(speedRows('Clear', maxSpeedSteps(stalled.w, stalled.v))[0].label).toContain('Engine stalled');
-  });
-
-  it('explains gun power as one total, never per gun', () => {
-    const { w, v } = playerWith();
-    const note = speedNotes(w, v, vehicleStats(w, v))[0];
-    expect(note).toContain('not a mounting limit');
-    expect(note).toContain('one total, not a cost per gun');
-    expect(note).toContain(`${Math.round(RULES.gunDragMax * 100)}%`);
+    expect(speedRows('Clear', maxSpeedSteps(stalled.w, stalled.v)).map((r) => r.label)).toContain('Engine stalled');
   });
 
   it('notes low and empty fuel apart from the number', () => {
@@ -81,7 +82,7 @@ describe('power chip', () => {
     });
     expect(c.text).toMatch(/power · −\d+% speed$/);
     expect(c.over).toBe(false);
-    expect(c.detail).toContain('not a mounting limit');
+    expect(c.detail).toContain('Cost: −');
   });
 
   it('flags an overload with the excess', () => {

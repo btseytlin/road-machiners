@@ -169,7 +169,8 @@ body {
   left: 0;
   bottom: calc(100% + 8px);
   z-index: 5;
-  width: min(300px, calc(100vw - 24px));
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
   padding: 8px 10px;
   background: var(--metal);
   border: 1px solid #838a8d;
@@ -184,24 +185,10 @@ body {
   display: block;
 }
 .speed-row {
-  display: grid;
-  grid-template-columns: 1fr auto 3.5em;
-  gap: 8px;
   padding: 2px 0;
-  border-bottom: 1px solid #ffffff1a;
-}
-.speed-row span:nth-child(2),
-.speed-row span:nth-child(3) {
-  text-align: right;
-}
-.speed-row.total {
-  border-bottom: 0;
-  font-weight: bold;
 }
 .speed-notes p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 11px;
+  margin: 2px 0 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -2064,8 +2051,10 @@ canvas.view {
   border-bottom: 1px solid #3b454b;
   font: 13px var(--font-mono);
 }
-.town-repair .bad,
-.town-repair .dim {
+.town-repair > button:first-of-type {
+  margin-left: auto;
+}
+.town-repair .bad {
   flex: 1;
 }
 #ui .town-repair button {
