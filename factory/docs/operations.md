@@ -61,7 +61,7 @@ A busy GPU can drag the playtest under its frame rate minimum when nothing else 
 - A card with no test phase, or one waiting for its fix round, goes straight to the checks as `checks-after-fix`. So no agent runs again, and any failure the waiver does not cover stops the card again.
 - Then remove `factory-stuck`. The checks run in full, with the full GPU playtest. They pass a failure only when the playtest step was reached and its one problem is `fps X under M`. Then the build runs alone, and the card queues its merge as usual.
 - A waived pass comments `⚠️ FPS gate waived` on the issue with the frame rate, the member and the reason. It is never reported as a plain pass.
-- The waiver goes after the next checks verdict, pass or fail. Checks that only timed out reach no verdict and keep it. Every other issue and every later run stays gated.
+- The waiver goes after the next checks verdict, pass or fail, and with the approval when the card loses it. Checks that only timed out reach no verdict and keep it. Every other issue and every later run stays gated.
 
 ## Activity and status
 

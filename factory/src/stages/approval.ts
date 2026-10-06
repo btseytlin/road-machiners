@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
+import { withoutWaiver } from '../fps-waiver';
 import { appendLedger } from '../ledger';
 import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, QUESTION_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
@@ -25,7 +26,7 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     delete testPhase[String(issue)];
     // A reply to a closed post can no longer be routed, so it must not turn into a failure later.
     const unroutedReplies = Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.issue !== issue));
-    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase, unroutedReplies };
+    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase, unroutedReplies, fpsWaivers: withoutWaiver(state.fpsWaivers, issue) };
   });
 }
 

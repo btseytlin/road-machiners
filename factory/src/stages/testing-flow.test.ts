@@ -412,7 +412,9 @@ describe('testing stage', () => {
 
     it('sends the card back to Design with the review when the second review fails again', async () => {
       reviews = [failed('First review.'), failed('Hot scan in far.ts. Principle 3.')];
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), fpsWaivers: { 7: { by: 'Ann', reason: 'busy GPU', build: 'abc123', at: '' } } });
       await runStage(fakeCtx(outputs), 7);
+      expect(readState(`${home}/state.json`).fpsWaivers).toEqual({});
       expect(commentBodies).toHaveLength(1);
       expect(commentBodies[0]).toContain('## Review findings');
       expect(commentBodies[0]).toContain('Hot scan in far.ts. Principle 3.');

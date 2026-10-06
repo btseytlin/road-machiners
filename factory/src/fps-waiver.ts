@@ -87,7 +87,12 @@ export function matchingWaiver(ctx: Ctx, issue: number, build: string): FpsWaive
 // A waiver serves one checks verdict, whatever it was.
 export function dropWaiver(ctx: Ctx, issue: number): void {
   if (!(String(issue) in readState(ctx.statePath).fpsWaivers)) return;
-  updateState(ctx.statePath, (state) => ({ ...state, fpsWaivers: Object.fromEntries(Object.entries(state.fpsWaivers).filter(([name]) => name !== String(issue))) }));
+  updateState(ctx.statePath, (state) => ({ ...state, fpsWaivers: withoutWaiver(state.fpsWaivers, issue) }));
+}
+
+// A waiver lives only as long as the approval it was granted under, so whatever drops the approval drops the waiver too.
+export function withoutWaiver(waivers: Record<string, FpsWaiver>, issue: number): Record<string, FpsWaiver> {
+  return Object.fromEntries(Object.entries(waivers).filter(([name]) => name !== String(issue)));
 }
 
 // A waived playtest never reads as a pass. The issue, the ledger and the log say what was waived, by whom and at what frame rate.
