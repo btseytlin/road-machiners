@@ -32,8 +32,8 @@ export const TOW = {
   // ended about two thirds of those hitch and drop pairs in the progression runs.
   dangerWait: 10,
   // Tiles between the tower's center and the towed truck's center when the tow bar is straight. Two tiles is 8 m,
-  // about one and a half truck
-  // lengths, and more than the two largest chassis radii together, so the two trucks never overlap on a straight.
+  // about one and a half truck lengths, and more than the two largest chassis radii together, so the two trucks never overlap
+  // on a straight.
   gap: 2,
   // The most the towed truck's front axle moves per substep, as a multiple of the hitch's own move. It closes the
   // slack at hitching smoothly instead of in one jump.
