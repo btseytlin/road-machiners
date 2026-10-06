@@ -106,6 +106,14 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
 };
+// A heavy job runs an agent, the machine checks, a build or a playtest, and loads the host. The tick runs one heavy job at a time
+// across all queues, so a playtest measures the game and not its neighbours. A new stage must be classed here, or tsc fails.
+export const HEAVY_OF: Record<JobStage, boolean> = {
+  triage: true, design: true, implement: true, patch: true, verify: true, adhoc: true, change: true, waste: true, incident: true, candidate: true,
+  checks: true, approve: true, remove: true, ship: true, dev: true,
+  // The release cut only merges main into dev with git and opens issues on GitHub.
+  release: false,
+};
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';
 // `error` is the short summary. The full text is in `log`.

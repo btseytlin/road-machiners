@@ -105,11 +105,19 @@ A timer runs one tick at a time. A tick never waits for a job. Each job runs as 
 
 ![One tick](diagrams/tick.svg)
 
-Jobs pick in this order. A job starts when its queue has a free worker and no other job works on its issue.
+Jobs pick in this order. A job starts when its queue has a free worker, no other job works on its issue and, for a heavy job, no other heavy job runs.
 
 1. Branch jobs: queued approve, remove, ship, incident, then a stale `/dev/`, the release cut and the candidate.
 2. The waste review, when due.
 3. Card jobs: hotfixes, ad hoc tasks, factory changes, release tasks, then other cards. Within each, the card furthest along goes first.
+
+One heavy job runs at a time across all queues, so a playtest does not share the host with other work. `HEAVY_OF` in `src/types.ts` classes every stage, and tsc refuses a new stage without a class.
+
+- Heavy: triage, design, implementation, patch, verify, ad hoc, change, waste, incident and candidate run agents. Checks runs the machine checks and the playtest. Approve, remove, ship and dev build or deploy the game.
+- Light: the release cut. It merges `main` into `dev` with git and opens issues.
+- Inbox commands, intake, status and health run in the tick itself, so they never wait for the slot.
+
+Checks gets a free heavy slot first, ahead of every other heavy job, since its card already passed the long stages. A Checks job that cannot start, for the daily cap, a label or a full queue, leaves the slot to the next job in the order above. A running job is never stopped for the slot. Heavy work that waits shows `heavy-busy` in the scheduler report and the dashboard.
 
 Queues:
 
