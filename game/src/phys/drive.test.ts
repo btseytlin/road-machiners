@@ -218,7 +218,7 @@ describe('physics turns', () => {
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, 90_000); // three physics runs share this hook, and take over 30s when the whole suite shares a loaded machine's cores
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // eight physics turns take over 30s when the whole suite shares a loaded machine's cores
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();

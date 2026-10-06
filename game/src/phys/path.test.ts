@@ -80,4 +80,4 @@ it('a truck following a road into a blocking rock stops on the corner without a 
   });
   expect(damage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
-});
+}, 120_000); // like the drive above, it takes over 30s when the whole suite shares a loaded machine's cores
