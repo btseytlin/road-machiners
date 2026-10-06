@@ -9,7 +9,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | buggy | Raider outrider | Raider | raiders | raider | brave (0.15) | circle | 11 | 3 | 6 | 50 | {"kind":"camp"} |
 | gunwagon | Gunwagon | Raider | raiders | raider | brave (0.15) | hold | 12 | 6 | 2 | 150 | {"kind":"camp"} |
-| trader | Trader caravan | Trader | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 5 | 12 | {"kind":"town"} |
+| trader | Trader caravan | Trader | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 8 | 12 | {"kind":"town"} |
 | scavenger | Scavenger | Scavenger | scavengers | scavenger | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 4 | 12 | {"kind":"town"} |
 | bowlFarmer | Bowl Farmers patrol | Bowl Farmer | bowl | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl"]} |
 | noseArmy | Nose Army patrol | Nose soldier | nose | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
