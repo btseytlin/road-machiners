@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
@@ -8,7 +8,7 @@ import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
-import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimsAt, InspectPin, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimsAt, InspectPin, aimRow, pinHead, type AimState, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -342,7 +342,8 @@ class FakeNode {
   constructor(readonly tag: string) {}
   append(...c: (FakeNode | string)[]) { this.children.push(...c); }
   replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
-  setAttribute() {}
+  attrs: Record<string, string> = {};
+  setAttribute(k: string, v: string) { this.attrs[k] = v; }
   addEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
   removeEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, (this.listeners.get(type) ?? []).filter((f) => f !== fn)); }
   text(): string { return this.children.map((c) => (typeof c === "string" ? c : c.text())).join(""); }
@@ -457,5 +458,34 @@ describe("InspectPin", () => {
 
   it("rejects an empty id", () => {
     expect(() => make().pin.click("")).toThrow();
+  });
+});
+
+describe("inspection card controls", () => {
+  beforeEach(() => vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the pinned head, and its x unpins", () => {
+    const unpin = vi.fn();
+    const head = pinHead(unpin) as unknown as FakeNode;
+    expect(head.text()).toBe("Pinned×");
+    head.find((n) => n.tag === "button")?.fire("click");
+    expect(unpin).toHaveBeenCalledOnce();
+  });
+
+  it("labels the Aim button by the chosen guns and whether they aim already", () => {
+    const aim = vi.fn();
+    const at = (state: Partial<AimState>) => aimRow({ guns: "all guns", aimed: false, locked: false, hasGuns: true, ...state }, aim) as unknown as FakeNode;
+    expect(at({}).text()).toBe("Aim all guns");
+    expect(at({ guns: "gun 2" }).text()).toBe("Aim gun 2");
+    expect(at({ aimed: true }).text()).toBe("Stop aiming");
+    at({}).fire("click");
+    expect(aim).toHaveBeenCalledOnce();
+  });
+
+  it("disables the button while locked, and is missing without guns", () => {
+    const locked = aimRow({ guns: "all guns", aimed: false, locked: true, hasGuns: true }, vi.fn()) as unknown as FakeNode;
+    expect(locked.attrs.disabled).toBe("");
+    expect(aimRow({ guns: "all guns", aimed: false, locked: false, hasGuns: false }, vi.fn())).toBeNull();
   });
 });

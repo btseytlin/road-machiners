@@ -21,7 +21,7 @@ import {
 } from "./format";
 import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimMarks } from "./weapons";
+import { aimMarks, aimRow, pinHead, type AimState } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph } from "./units";
@@ -71,6 +71,9 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
+  aimBody: (vehicleId: string) => void;
+  unpin: () => void;
+  aimState: (vehicleId: string) => AimState;
 };
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
@@ -502,10 +505,21 @@ export class Hud {
   // Parts of another truck take clicks that aim the guns.
   private aimOf(w: World, v: Vehicle): ConditionAim | undefined {
     if (v.id === playerVehicle(w).id) return undefined;
+    if (this.actions.aimState(v.id).locked) return undefined;
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
   }
 
-  showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
+  // The Aim button and the part hint, for another truck only.
+  private aimControls(w: World, v: Vehicle): HTMLElement[] {
+    const aim = this.actions.aimState(v.id);
+    if (v.id === playerVehicle(w).id || !aim.hasGuns) return [];
+    return [
+      aimRow(aim, () => this.actions.aimBody(v.id))!,
+      el("div", { class: "dim" }, `Click a part to aim ${aim.guns} at it`),
+    ];
+  }
+
+  showInfo(w: World, v: Vehicle | null, hostile: boolean, pinned: boolean): void {
     if (!v) {
       this.info.style.display = "none";
       return;
@@ -514,7 +528,9 @@ export class Hud {
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
+    this.info.classList.toggle("pinned", pinned);
     this.infoBody.replaceChildren(
+      ...(pinned ? [pinHead(() => this.actions.unpin())] : []),
       ...infoHeading(w, v),
       el(
         "div",
@@ -524,7 +540,7 @@ export class Hud {
       el("div", {}, `Speed ${kph(v.speed)} km/h`),
       ...npcLines(w, v),
       this.inspected.root,
-      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, "Click a part to aim the selected gun at it")] : []),
+      ...this.aimControls(w, v),
     );
   }
 }

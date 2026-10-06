@@ -680,6 +680,25 @@ body {
   overflow: auto;
   font-size: 12px;
 }
+.info.pinned {
+  border-color: #f0d060;
+}
+.info .pin-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #f0d060;
+  margin-bottom: 4px;
+}
+.info .pin-close {
+  padding: 0 6px;
+  line-height: 1.2;
+}
+.info .aim-row {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+}
 .info .bar {
   height: 4px;
   background: #454d50;

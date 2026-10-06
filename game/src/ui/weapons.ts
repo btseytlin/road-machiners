@@ -82,6 +82,25 @@ export function gunsLabel(w: World, selected: string | null): string {
   return i < 0 ? "all guns" : `gun ${i + 1}`;
 }
 
+export type AimState = { guns: string; aimed: boolean; locked: boolean; hasGuns: boolean };
+
+// The card's first row for a pinned truck, with the way to unpin it.
+export function pinHead(unpin: () => void): HTMLElement {
+  return el(
+    "div",
+    { class: "pin-head" },
+    el("span", {}, "Pinned"),
+    el("button", { class: "pin-close", "aria-label": "Unpin", title: "Unpin [Esc]", onclick: unpin }, "×"),
+  );
+}
+
+// The card's button that aims the chosen guns at its truck. It is missing for a player without guns.
+export function aimRow(state: AimState, aim: () => void): HTMLElement | null {
+  if (!state.hasGuns) return null;
+  const label = state.aimed ? "Stop aiming" : `Aim ${state.guns}`;
+  return el("button", { class: "aim-row", disabled: state.locked, onclick: aim }, label);
+}
+
 // The Aim button aims the weapons at a vehicle. When all of them already aim at it, the button clears them.
 export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
   const aimed = aimsAt(w, weapons, target.id);

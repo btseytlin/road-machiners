@@ -44,7 +44,8 @@ import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
-import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { PickRings } from "./render/pickRings";
+import { aimAtPart, aimsAt, gunsLabel, HoverHold, InspectPin, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -85,8 +86,6 @@ const PLAN_TURNS = 3; // turns of path preview
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
-// The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
-const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 
@@ -150,16 +149,10 @@ export class Game {
   private hovered: string | null = null;
   // The pointer needs a moment to travel from a truck to its panel.
   private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
-  private readonly pickRing = new THREE.Mesh(
-    new THREE.RingGeometry(1, 1, 48).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({
-      color: PAL.select,
-      transparent: true,
-      opacity: PICK_RING.alpha,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
+  private readonly pin = new InspectPin(() => this.onInspectChange());
+  // The pinned truck and its frame, found by the vehicle pass.
+  private pinned: { v: Vehicle; f: VehicleFrame } | null = null;
+  private readonly rings: PickRings;
   private selected: string | null = null;
   private readonly sightLimit: SightLimit;
   readonly follow: TruckFollow;
@@ -204,8 +197,7 @@ export class Game {
     this.renderer.domElement.classList.add("view");
     this.scene.add(this.sky);
     this.scene.add(this.sun, this.sun.target);
-    this.pickRing.renderOrder = 5;
-    this.scene.add(this.pickRing);
+    this.rings = new PickRings(this.scene);
 
     // Ground and props cull separately, so ground picking only hits terrain and the decks.
     this.sightLimit = new SightLimit(this.world.size);
@@ -286,9 +278,17 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
-      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
+      aimBody: (id) => this.canAim() && this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, id))),
+      unpin: () => this.pin.clear(),
+      aimState: (id) => ({
+        guns: gunsLabel(this.world, this.selected),
+        aimed: aimsAt(this.world, weaponsForClick(this.world, this.selected), id),
+        locked: !this.canAim(),
+        hasGuns: weaponsForClick(this.world, this.selected).length > 0,
+      }),
+      aimPart: (vehicleId, partId) => this.canAim() && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
@@ -404,14 +404,15 @@ export class Game {
 
   private refreshInfo(): void {
     const w = this.displayWorld();
-    const v = w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null;
-    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
+    const v = w.vehicles.find((x) => x.id === this.inspected() && playerSees(w, x.pos)) ?? null;
+    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false, v !== null && v.id === this.pin.id);
     this.hitCard.render(w, v ? v.id : null);
   }
 
   // Combat details stay in the fixed inspection panel and hide during playback.
   private placeHitCard(): void {
-    const f = this.hovered ? this.frames[this.hovered] : undefined;
+    const id = this.inspected();
+    const f = id ? this.frames[id] : undefined;
     if (this.anim !== null || this.modalOpen() || !f)
       return this.hitCard.hide();
     this.hitCard.show();
@@ -425,7 +426,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
+    this.markers.refresh(vehicleMarks(this.displayWorld(), this.inspected()));
   }
 
   private readonly ignoresKey = (e: KeyboardEvent): boolean => isBrowserChord(e) || this.isEditingControl();
@@ -434,7 +435,7 @@ export class Game {
     return document.activeElement?.matches("input, select, textarea") ?? false;
   }
 
-  // Input: left click orders or targets, wheel zooms, keys like the 2D game.
+  // Input: left click orders or pins, wheel zooms, keys like the 2D game.
   private bindInput(): void {
     const canvas = this.renderer.domElement;
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -492,10 +493,10 @@ export class Game {
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
     KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },
     KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
-    KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
+    KeyN: { run: () => this.inspected() && !markError(this.world, this.inspected()!) && this.apply(markVehicle(this.world, this.inspected()!)), noModal: true, idle: true },
     KeyC: { run: () => this.toggleScreen(this.character), idle: true },
     KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
-    Escape: { run: () => this.closeScreens(null) },
+    Escape: { run: () => (this.modalOpen() ? this.closeScreens(null) : this.pin.clear()) },
   };
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
@@ -509,10 +510,12 @@ export class Game {
   }
 
   private onLeftClick(e: MouseEvent): void {
-    if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return;
+    if (this.modalOpen()) return;
     const picked = this.pickVehicle(e.clientX, e.clientY);
     const me = playerVehicle(this.world);
-    if (picked && picked.id !== me.id) return this.targetVehicle(picked);
+    // Pinning only reads the world, so it needs no turn gate.
+    if (picked && picked.id !== me.id) return this.pin.click(picked.id);
+    if (this.anim || !playerCanAct(this.world)) return;
     const myView = this.views.get(me.id);
     if (
       picked &&
@@ -524,8 +527,19 @@ export class Game {
     if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
   }
 
-  private targetVehicle(target: Vehicle): void {
-    this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), target));
+  // The truck the card, keys and arcs follow: the pinned one, else the one under the pointer.
+  private inspected(): string | null {
+    return this.pin.id ?? this.hovered;
+  }
+
+  private onInspectChange(): void {
+    this.refreshInfo();
+    this.refreshTargetMarkers();
+  }
+
+  // Aim orders wait for a turn that is not playing and a player who can act.
+  private canAim(): boolean {
+    return this.anim === null && playerCanAct(this.world);
   }
 
   // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
@@ -588,8 +602,7 @@ export class Game {
   private setHovered(id: string | null): void {
     if (id === this.hovered) return;
     this.hovered = id;
-    this.refreshInfo();
-    this.refreshTargetMarkers();
+    if (this.pin.id === null) this.onInspectChange();
   }
 
   endTurn(): void {
@@ -997,6 +1010,7 @@ export class Game {
     const glass = daylightAt(this.lightTurn()).glass;
     const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
+    this.pinned = null;
     for (const v of shown) {
       const kept = this.frames[v.id];
       // Between turns, a vehicle moved outside a turn, such as by a debug script, jumps to its new spot.
@@ -1023,7 +1037,9 @@ export class Game {
       view.pose(f, dt);
       view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt);
+      this.trackPin(v, f);
     }
+    this.settlePin();
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
       this.scene.remove(view.root);
@@ -1048,28 +1064,23 @@ export class Game {
       : null;
   }
 
-  // The ring is rebuilt only when the hovered vehicle's radius changes.
   private placePickRing(hide: boolean): void {
     const v =
-      this.hovered && this.hovered !== playerVehicle(this.world).id
+      this.hovered && this.hovered !== playerVehicle(this.world).id && this.hovered !== this.pin.id
         ? this.world.vehicles.find((x) => x.id === this.hovered)
         : undefined;
-    const f = v && this.frames[v.id];
-    this.pickRing.visible = !hide && !!f;
-    if (!v || !f || hide) return;
-    const S = PHYSICS.metersPerTile;
-    const r = vehicleStats(this.world, v).radius + PICK_RING.gap;
-    const geo = this.pickRing.geometry;
-    if (geo.parameters.outerRadius !== (r + PICK_RING.width / 2) * S) {
-      geo.dispose();
-      this.pickRing.geometry = new THREE.RingGeometry(
-        (r - PICK_RING.width / 2) * S,
-        (r + PICK_RING.width / 2) * S,
-        48,
-      ).rotateX(-Math.PI / 2);
-    }
-    const p = groundPoint(this.world.terrain, toMap(f.pos));
-    this.pickRing.position.set(p.x, p.y + PICK_RING.lift * S, p.z);
+    this.rings.placePick(this.world, v, v && this.frames[v.id], hide);
+  }
+
+  // Notes the pinned truck when it is in the world and in sight now.
+  private trackPin(v: Vehicle, f: VehicleFrame): void {
+    if (v.id === this.pin.id && this.world.vehicles.includes(v) && this.isVehicleVisible(v)) this.pinned = { v, f };
+  }
+
+  // The pin ends with its truck's sight. The ring shows even while the overlays hide.
+  private settlePin(): void {
+    this.pin.keepIf(this.pinned !== null || this.pin.id === null);
+    this.rings.placePin(this.world, this.pinned);
   }
 
   private drawOverlays(): void {
@@ -1080,7 +1091,7 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
-    this.hoverArcs.follow(this.displayWorld(), this.hovered, this.frames, this.modalOpen());
+    this.hoverArcs.follow(this.displayWorld(), this.inspected(), this.frames, this.modalOpen());
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
@@ -1118,4 +1129,3 @@ export class Game {
     this.zones.hover(this.world.terrain, hover, color);
   }
 }
-
