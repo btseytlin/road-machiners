@@ -18,7 +18,13 @@ Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_
 - implement: implementation, patch, ad hoc, change and verify jobs.
 - test: checks.
 
-On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the checks always get their CPUs. Docker pins containers with `--cpuset-cpus`, which the game's test runner sees. A step run by hand is not pinned.
+On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the checks always get their CPUs. Docker pins containers with `--cpuset-cpus`. A step run by hand is not pinned.
+
+`FACTORY_VITEST_WORKERS_IMPLEMENT` and `FACTORY_VITEST_WORKERS_TEST` set how many workers the game's test runner starts in a container of each pool. The factory passes the count as `TEST_WORKERS`. Light containers get none and keep the game's rule of one worker per CPU.
+
+## Memory
+
+Memory, not CPU, limits how many jobs fit on the host. Each container prints its cgroup's peak memory when it ends. The job keeps the highest peak of its containers and writes it to its ledger line as `peakGb`. A container killed before its end prints none.
 
 `FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest checks the frame rate. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check.
 

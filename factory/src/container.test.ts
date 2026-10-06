@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EVIDENCE_CHECK_COMMAND, dockerContainer } from './container';
-import { takeUsage } from './ledger';
+import { EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb } from './container';
+import { recordJob, takeUsage } from './ledger';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
@@ -15,11 +15,11 @@ const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
 
 // Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
-function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}): { run: Run; calls: Call[] } {
+function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}, stderr = 'boom'): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
-    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr: 'boom' };
+    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr };
     const stdout = args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '';
     const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout };
     return { code: answer.code, stdout: answer.stdout ?? '', stderr: 'setup failed' };
@@ -59,7 +59,7 @@ describe('dockerContainer', () => {
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
     expect(call.args.filter((a) => a === '-e')).toHaveLength(11);
-    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
+    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'bash', '-c', expect.stringMatching(/memory\.peak.*; factory-agent "\$@"$/), 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
   it('mounts the folders the stage names read only', async () => {
@@ -172,6 +172,28 @@ describe('dockerContainer', () => {
     expect(runCall(calls).args.slice(0, 6)).toEqual(['run', '--rm', '--label', 'factory=1', '--label', 'factory-job=testing-8-x']);
   });
 
+  it('passes the pool test worker count, and none for a pool without one', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, 'testing-8-x', '2-3', 2).shell('/c', 'x', '/l');
+    expect(runCall(calls).args.join(' ')).toContain('-e TEST_WORKERS=2');
+    const light = fakeRun();
+    await dockerContainer(light.run, cfg, 'testing-8-x', '0').shell('/c', 'x', '/l');
+    expect(runCall(light.calls).args.join(' ')).not.toContain('TEST_WORKERS');
+  });
+
+  it('records the highest container peak of a job on its ledger line, also from a failed run', async () => {
+    rmSync(HOME, { recursive: true, force: true });
+    const peak = (gib: number): string => `log line\nFACTORY_MEMORY_PEAK ${gib * 1024 ** 3}\n`;
+    await dockerContainer(fakeRun(0, {}, peak(2.5)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    await expect(dockerContainer(fakeRun(1, {}, peak(3)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l')).rejects.toThrow('exit 1');
+    await dockerContainer(fakeRun(0, {}, peak(1)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    await dockerContainer(fakeRun(0, {}, 'killed, no mark').run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    recordJob(HOME, tokenPrices, new Date('2026-10-06T12:00:00Z'), { id: 'checks-8-x', stage: 'checks', issue: 8, startedAt: '2026-10-06T11:50:00Z' }, 'done');
+    const lines = readFileSync(`${HOME}/ledger.jsonl`, 'utf8').trim().split('\n').map((text) => JSON.parse(text) as { kind: string; peakGb?: number });
+    expect(lines.find((line) => line.kind === 'job')?.peakGb).toBe(3);
+    expect(readPeakGb('no mark')).toBeUndefined();
+  });
+
   it('takes the time limits off the game tests in every container', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).shell('/c', 'x', '/l');
@@ -223,7 +245,7 @@ describe('dockerContainer', () => {
     expect(call.args).toContain('SAVE_SCOPE=dev');
     expect(call.args).toContain('/work/game');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
-    expect(call.args.slice(-3)).toEqual(['bash', '-lc', 'npm ci']);
+    expect(call.args.slice(-3)).toEqual(['bash', '-lc', expect.stringMatching(/memory\.peak.*\nnpm ci$/)]);
     expect(call.opts?.env).toBeUndefined();
     expect(call.args).toContain('roam-factory-agents');
     expect(call.args).toContain('HTTPS_PROXY=http://roam-factory-proxy:8888');

@@ -58,6 +58,8 @@ export type FactoryConfig = {
   cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
+  vitestWorkersImplement: number; // workers the game's test runner starts in an implement pool container
+  vitestWorkersTest: number; // workers the game's test runner starts in a test pool container
 };
 
 // Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.

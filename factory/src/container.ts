@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
-import { closeRun, closeRunFromTranscript, openRun, runProjectsDir, usageFromOutput } from './ledger';
+import { closeRun, closeRunFromTranscript, openRun, recordPeak, runProjectsDir, usageFromOutput } from './ledger';
 import { withLock } from './lock';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
 
@@ -16,11 +16,29 @@ const FACTORY_LABEL = 'factory=1';
 // A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
 // TEST_TIMEOUTS=off takes the time limits off the game's tests and playtest. On this shared server they measure load, not hangs, and the job's own time limit stops a hung run.
 // With the GPU on, every container gets the card. The graphics capability gives Chromium the NVIDIA Vulkan and GL drivers for WebGL.
-function baseArgs(jobId: string | null, cpus: string | null, gpu: boolean): string[] {
+// TEST_WORKERS sets how many workers the game's test runner starts, so a pool's memory holds its jobs' test runs.
+function baseArgs(jobId: string | null, cpus: string | null, testWorkers: number | null, gpu: boolean): string[] {
   const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
   const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
+  const workers = testWorkers === null ? [] : ['-e', `TEST_WORKERS=${testWorkers}`];
   const card = gpu ? ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=all'] : [];
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...card, '-e', 'TEST_TIMEOUTS=off'];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...workers, ...card, '-e', 'TEST_TIMEOUTS=off'];
+}
+
+// Each container prints its cgroup's peak memory on stderr when it ends, so the job can record it.
+const PEAK_MARK = 'FACTORY_MEMORY_PEAK';
+const PEAK_TRAP = `trap 'echo "${PEAK_MARK} $(cat /sys/fs/cgroup/memory.peak)" >&2' EXIT`;
+const GB = 1024 ** 3;
+
+export function readPeakGb(stderr: string): number | undefined {
+  const bytes = [...stderr.matchAll(new RegExp(`^${PEAK_MARK} (\\d+)$`, 'gm'))].at(-1)?.[1];
+  return bytes === undefined ? undefined : Math.round((Number(bytes) / GB) * 100) / 100;
+}
+
+// A container killed before its end prints no peak, and its job records none.
+function recordContainerPeak(cfg: FactoryConfig, jobId: string | null, result: RunResult): void {
+  const peak = readPeakGb(result.stderr);
+  if (jobId !== null && peak !== undefined) recordPeak(cfg.home, jobId, peak);
 }
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
@@ -147,7 +165,7 @@ function recordedSession(cfg: FactoryConfig, jobId: string | null, session: Agen
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
-export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
+export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null, testWorkers: number | null = null): Container {
   return {
     async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, evidenceCheck, session: issueSession, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
@@ -160,19 +178,21 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       };
       const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly, evidenceCheck === true);
       const args = [
-        ...baseArgs(jobId, cpus, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
+        ...baseArgs(jobId, cpus, testWorkers, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
       openRecordedRun(cfg, jobId, model, session);
       const result = await run('docker', args, { env, input, logPath: log });
       recordUsage(cfg, jobId, result, model, session);
+      recordContainerPeak(cfg, jobId, result);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId, cpus, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
+      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
       const result = await run('docker', args, { logPath: log });
+      recordContainerPeak(cfg, jobId, result);
       must(result, `shell in ${clone}`);
     },
   };
