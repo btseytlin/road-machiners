@@ -177,8 +177,9 @@ export function highestUnder(chassisId: string, rect: CellRect): number {
   return topOver(map, xa, xb, ya, yb);
 }
 
-// How far a surface may stand above a resting part before the part would cut into it, in meters.
-const CLIP_TOLERANCE = 0.05;
+// How far a surface may stand above a resting part before the part would cut into it, in meters. A gap within it also
+// counts as touching, so a part or a gun mount that far above the surface under it stands on it.
+export const CLIP_TOLERANCE = 0.05;
 // A part never shrinks below this share of its footprint along either axis to clear taller surfaces. A small part
 // standing on something reads better than a full one floating.
 const MIN_KEEP = 0.3;
