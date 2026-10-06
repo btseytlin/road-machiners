@@ -406,9 +406,16 @@ body {
   padding: 0;
   min-width: 0;
 }
-.weapons fieldset > .switch {
+#ui .weapons fieldset > .switch {
+  min-width: 0;
+  padding-inline: 4px;
+  box-sizing: border-box;
   flex: 0 0 var(--weapon-auto);
   white-space: normal;
+}
+.weapons fieldset > .switch .switch-option {
+  white-space: normal;
+  text-align: center;
 }
 .weapons .weapon-slots {
   display: flex;
