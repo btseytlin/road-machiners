@@ -37,7 +37,7 @@ import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleS
 import { inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
 import type { Call, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
-import { dist, type Vec } from '../vec';
+import { clamp, dist, pointsAway, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
 import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
@@ -673,17 +673,31 @@ function dangerOf(world: World, foe: Vehicle): number {
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
-// stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
-// fight still costs repairs, and broken wheels leave the truck for the next raider. A foe that drops out of sight
-// for a turn is still on its tail, so the bot keeps running until the combat ends. The hunter instead follows its
-// goal, which chases the foe it hears. True when the turn's command went to the fight.
+// stronger foe it runs as an NPC runs: for the nearest town away from the threat, where guards cover it. Only the
+// hunter fights a foe it can outrun: a won fight still costs repairs, and broken wheels leave the truck for the next
+// raider. A foe that drops out of sight for a turn is still on its tail, so the bot keeps running until the combat
+// ends. The hunter instead follows its goal, which chases the foe it hears. True when the turn's command went to the
+// fight.
 function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
   if (!foe && goal === 'hunter') return false;
   if (foe && fights(o, foe, goal)) charge(o, foe, goal);
-  else driveToSite(o, nearestTown(o.world));
+  else flee(o);
   return true;
+}
+
+// The nearest town whose direction is more than 90 degrees off the threat's, else straight away from the threat, as
+// fleeDestination() in npc-activities.ts picks for an NPC. The threat is the nearest hostile in sight, else the nearest
+// one heard. With no threat placed at all, the nearest town.
+function flee(o: Orders): void {
+  const seen = nearestVehicle(o.me.pos, o.world.vehicles.filter((v) => v.id !== o.me.id && hostileToPlayer(o.world, v) && !isKnockedOut(v) && playerSees(o.world, v.pos)));
+  const threat = seen?.pos ?? heardFoe(o.world);
+  if (!threat) return driveToSite(o, nearestTown(o.world));
+  const safe = REGION.towns.filter((town) => pointsAway(o.me.pos, town.pos, threat)).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
+  if (safe[0]) return driveToSite(o, safe[0]);
+  const away = { x: o.me.pos.x + (o.me.pos.x - threat.x), y: o.me.pos.y + (o.me.pos.y - threat.y) };
+  driveTo(o, { x: clamp(away.x, 1, o.world.size - 1), y: clamp(away.y, 1, o.world.size - 1) });
 }
 
 // Drives at the foe. A hunter also aims its guns at the foe's critical parts.

@@ -13,7 +13,7 @@ import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
-import { dist } from '../vec';
+import { dist, pointsAway } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
 import { NPCS } from '../../data/npcs';
 import { playerTow } from '../tow';
@@ -443,8 +443,8 @@ describe('the hunter', () => {
       startCombat(w, raider, me);
       const faster = vehicleStats(w, raider).maxSpeed >= vehicleStats(w, me).maxSpeed;
       const order = playerVehicle(botOrders(w, 'trader').world).order;
-      const toTown = nearestPad(nearestTown(w), me.pos);
-      return { faster, turned: order?.kind === 'stopAt' && dist(order.dest, raider.pos) < 1, ran: order?.kind === 'stopAt' && dist(order.dest, toTown) < 1 };
+      const ran = order?.kind === 'stopAt' && pointsAway(me.pos, order.dest, raider.pos);
+      return { faster, turned: order?.kind === 'stopAt' && dist(order.dest, raider.pos) < 1, ran };
     };
     const runs = Object.keys(CHASSIS).map(attackedBy);
 
@@ -467,6 +467,26 @@ describe('the hunter', () => {
     const order = playerVehicle(botOrders(w, 'trader').world).order;
 
     expect(order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestTown(w), me.pos) });
+  });
+
+  // The nearest town lies past the raider. Running there drives into its guns, so the bot runs away from it, as an NPC does.
+  it('has a bot run from a stronger raider that blocks the nearest town to a town away from it', () => {
+    const bowl = town('bowl');
+    const pad = nearestPad(bowl, bowl.pos);
+    const w = emptyWorld({ x: pad.x + 40, y: pad.y });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    const toBowl = dist(me.pos, bowl.pos);
+    const between = { x: me.pos.x + ((bowl.pos.x - me.pos.x) / toBowl) * 8, y: me.pos.y + ((bowl.pos.y - me.pos.y) / toBowl) * 8 };
+    const raider = addVehicle(w, 'raiders', 'wagon', ['cannon', 'heavyDiesel'], between);
+    raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+
+    const order = playerVehicle(botOrders(w, 'trader').world).order;
+
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(dist(order.dest, nearestPad(bowl, me.pos))).toBeGreaterThan(50);
+    expect(pointsAway(me.pos, order.dest, raider.pos)).toBe(true);
   });
 
   // A merc camps at the gate. Firing from town makes the guard shoot the bot, so it holds fire and repairs instead.
