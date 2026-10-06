@@ -773,11 +773,12 @@ function defend(o: Orders, goal: Goal): boolean {
 
 // The nearest town whose direction is more than 90 degrees off the threat's, else straight away from the threat, as
 // fleeDestination() in npc-activities.ts picks for an NPC. The threat is the nearest hostile in sight, else the nearest
-// one heard. With no threat placed at all, the nearest town.
+// one heard. With no threat placed, it keeps running where it runs, since the nearest town may lie behind the foe it
+// lost sight of. With no run under way either, the nearest town.
 function flee(o: Orders): void {
   const seen = nearestVehicle(o.me.pos, seenHostiles(o.world));
   const threat = seen?.pos ?? heardFoe(o.world);
-  if (!threat) return driveToSite(o, nearestTown(o.world));
+  if (!threat) return o.me.order ? undefined : driveToSite(o, nearestTown(o.world));
   const safe = REGION.towns.filter((town) => pointsAway(o.me.pos, town.pos, threat)).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
   if (safe[0]) return driveToSite(o, safe[0]);
   const away = { x: o.me.pos.x + (o.me.pos.x - threat.x), y: o.me.pos.y + (o.me.pos.y - threat.y) };

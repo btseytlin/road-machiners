@@ -731,6 +731,18 @@ describe('the hunter', () => {
     expect(goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0).toBe(0);
   });
 
+  it('has a fleeing bot that loses sight of its foe keep running the same way', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['autocannon', 'ram', 'stockEngine'], { x: 300, y: 300 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+    expect(playerSees(w, raider.pos)).toBe(false);
+    me.order = { kind: 'stopAt', dest: { x: 5, y: 5 } };
+
+    expect(playerVehicle(botOrders(w, 'trader').world).order).toEqual({ kind: 'stopAt', dest: { x: 5, y: 5 } });
+  });
+
   // The grid is full of a haul's goods the hunter may not sell, and it stands in town with nothing to sell.
   it('has a hunter with a full grid in town go on patrol instead of idling', () => {
     const w = parkedAt('bowl');
