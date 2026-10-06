@@ -80,6 +80,11 @@ export function cargoRoom(v: Vehicle, good: string): number {
   return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / GOODS[good].mass));
 }
 
+// Whether the hold takes a unit of any good. A truck full by cells or by mass has no room for salvage.
+export function hasCargoRoom(v: Vehicle): boolean {
+  return Object.keys(GOODS).some((good) => cargoRoom(v, good) > 0);
+}
+
 export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
   if (itemMass(item) > cargoMassRoom(v)) return false;

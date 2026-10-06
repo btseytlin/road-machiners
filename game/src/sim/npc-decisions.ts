@@ -25,7 +25,9 @@ import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
-import { corePart, freeCells, hasLoot, mountedParts } from './grid';
+import { corePart, hasLoot, mountedParts } from './grid';
+import { hasCargoRoom } from './inventory';
+import { campGunning } from './camp-guns';
 import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
@@ -260,12 +262,17 @@ export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
 
 // Loot another truck is looting is not the driver's to take. The claim is checked after sight, since it scans every truck.
 function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  if (target.id === vehicle.id || !isKnockedOut(target) || !canVehicleSee(world, vehicle, target.pos)) return false;
+  if (target.id === vehicle.id || !isKnockedOut(target) || !seesSafely(world, vehicle, target.pos)) return false;
   return (!inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target)) && lootTaken(world, vehicle, target.id) === null;
 }
 
+// A point in sight and outside every camp gun range that fires on the driver.
+function seesSafely(world: World, vehicle: Vehicle, pos: Vec): boolean {
+  return canVehicleSee(world, vehicle, pos) && campGunning(vehicle, pos) === null;
+}
+
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  if (backedOff(stock, vehicle.id) || !canVehicleSee(world, vehicle, stock.pos)) return false;
+  if (backedOff(stock, vehicle.id) || !seesSafely(world, vehicle, stock.pos)) return false;
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
@@ -285,7 +292,7 @@ export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
 export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
-  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? 'cargo cannot hold the loot' : null;
   if (!hasSalvage(stock)) return 'nothing left to loot';
   return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
 }
@@ -514,14 +521,14 @@ function canTrade(world: World, vehicle: Vehicle): boolean {
 }
 
 function canScavenge(world: World, vehicle: Vehicle): boolean {
-  if (freeCells(vehicle) === 0) return false;
+  if (!hasCargoRoom(vehicle)) return false;
   return visibleSalvage(world, vehicle).length > 0 || visibleDowned(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
 }
 
 // Looting salvage or a knocked-out truck on the way needs cargo room and the loot in sight.
 function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   if (subject === null) throw new Error(`${decision} needs a subject`);
-  if (freeCells(vehicle) === 0) return false;
+  if (!hasCargoRoom(vehicle)) return false;
   const stock = world.salvage.find((entry) => entry.id === subject);
   if (stock) return seesSalvage(world, vehicle, stock);
   const truck = world.vehicles.find((v) => v.id === subject);
@@ -549,7 +556,7 @@ function canTravel(_world: World, vehicle: Vehicle): boolean {
 
 // A haul needs cargo room and a known source.
 function canHaul(_world: World, vehicle: Vehicle): boolean {
-  return freeCells(vehicle) > 0 && npcProfile(vehicle).haulSites.length > 0;
+  return hasCargoRoom(vehicle) && npcProfile(vehicle).haulSites.length > 0;
 }
 
 // An idle guard takes up an escort of a leader no escort guards yet.

@@ -13,7 +13,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
 import { resolveNpcActivities, startTow, thinkNpc, topGoal } from './npc-activities';
-import { optionChances, optionWeights } from './npc-decisions';
+import { optionChances, optionWeights, usefulContacts } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
 import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
@@ -333,6 +333,29 @@ describe('towing', () => {
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'danger' });
     expect(topGoal(find(w, s.trader.id))?.kind).toBe('flee');
+  });
+
+  it('a tower keeps its tow when it only hears a hostile beyond sight', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(w, testDrive);
+    const tower = find(w, s.trader.id);
+    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
+    raider.speed = 8;
+    for (let d = 20; d <= 120; d += 2) {
+      raider.pos = { x: tower.pos.x + d, y: tower.pos.y };
+      refreshVision(w);
+      if (usefulContacts(w, tower).length > 0 && !canVehicleSee(w, tower, raider.pos)) break;
+    }
+    expect(usefulContacts(w, tower).map((c) => c.vehicleId)).toEqual([raider.id]);
+    expect(canVehicleSee(w, tower, raider.pos)).toBe(false);
+    forceOption('contactHeard', 'flee');
+    w.events = [];
+    thinkNpc(w, tower);
+    expect(playerTow(w)).not.toBeNull();
+    expect(topGoal(tower)?.kind).toBe('tow');
+    expect(w.events.some((e) => e.t === 'towDropped')).toBe(false);
+    expect(tower.brain!.goals.some((g) => g.kind === 'flee')).toBe(false);
   });
 
   it('a tower that can no longer drive drops the tow', () => {
