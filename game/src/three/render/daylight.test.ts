@@ -1,9 +1,10 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { TIME } from '../../data/time';
 import { playerVehicle } from '../../sim/damage';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
 import { setHeadlights } from '../../sim/world';
-import { daylightAt, lampsOn, nightLightsWanted, vehicleLampsOn } from './daylight';
+import { daylightAt, lampsOn, lightScene, nightLightsWanted, snapToShadowTexels, sunLight, vehicleLampsOn } from './daylight';
 
 const turnAt = (hour: number) => 1 + ((hour - TIME.startHour + 24) % 24) * (TIME.turnsPerDay / 24);
 
@@ -52,5 +53,46 @@ describe('nightLightsWanted', () => {
 
   it('keeps them at night with every lamp off', () => {
     expect(nightLightsWanted(turnAt(23), [{ player: true, on: false }])).toBe(true);
+  });
+});
+
+describe('lightScene shadow box', () => {
+  const light = daylightAt(turnAt(17));
+  const sky = new THREE.HemisphereLight();
+  const texel = 160 / 2048;
+  const place = (x: number, z: number) => {
+    const sun = sunLight();
+    lightScene(sun, sky, { x, y: 1.2, z }, light);
+    sun.updateMatrixWorld();
+    sun.target.updateMatrixWorld();
+    sun.shadow.updateMatrices(sun);
+    return sun;
+  };
+  const texelOf = (sun: THREE.DirectionalLight, p: THREE.Vector3) => {
+    const c = p.clone().applyMatrix4(sun.shadow.matrix);
+    return [c.x * 2048, c.y * 2048];
+  };
+
+  it('keeps one texel grid on the ground wherever the truck is', () => {
+    const point = new THREE.Vector3(105.3, 2, 291.7);
+    const a = texelOf(place(100.013, 290.02), point);
+    const b = texelOf(place(117.3, 285.77), point);
+    for (let i = 0; i < 2; i++) {
+      const d = a[i] - b[i];
+      expect(Math.abs(d - Math.round(d))).toBeLessThan(1e-3);
+    }
+  });
+
+  it('moves the focus by at most half a texel and not along the light', () => {
+    const sun = place(100.013, 290.02);
+    const t = sun.target.position;
+    const toLight = sun.position.clone().sub(t).normalize();
+    const moved = t.clone().sub(new THREE.Vector3(100.013, 1.2, 290.02));
+    expect(Math.abs(moved.dot(toLight))).toBeLessThan(1e-6);
+    expect(moved.length()).toBeLessThan(texel * Math.SQRT1_2 + 1e-6);
+  });
+
+  it('rejects a bad texel size', () => {
+    expect(() => snapToShadowTexels({ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 1 }, 0)).toThrow();
   });
 });

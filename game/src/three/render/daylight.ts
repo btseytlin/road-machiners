@@ -174,11 +174,33 @@ export function daylightAt(turn: number): Daylight {
 
 const SUN_RADIUS = 150; // meters from the focus to the sun light
 
+// Moves focus along the shadow camera's right and up axes to the nearest whole texel, so the shadow map's
+// sampling grid stays fixed on the ground while the focus travels. The light axis is untouched.
+export function snapToShadowTexels(focus: V3, toLight: V3, texel: number): V3 {
+  if (!(texel > 0) || !Number.isFinite(texel)) throw new Error(`Shadow texel must be positive, got ${texel}`);
+  const values = [focus.x, focus.y, focus.z, toLight.x, toLight.y, toLight.z];
+  if (!values.every(Number.isFinite)) throw new Error("Shadow snap needs finite vectors");
+  const z = new THREE.Vector3(toLight.x, toLight.y, toLight.z).normalize();
+  // Same basis as Matrix4.lookAt() with up = (0, 1, 0).
+  const x = new THREE.Vector3(0, 1, 0).cross(z).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  const f = new THREE.Vector3(focus.x, focus.y, focus.z);
+  const dx = Math.round(f.dot(x) / texel) * texel - f.dot(x);
+  const dy = Math.round(f.dot(y) / texel) * texel - f.dot(y);
+  f.addScaledVector(x, dx).addScaledVector(y, dy);
+  return { x: f.x, y: f.y, z: f.z };
+}
+
 // Puts the sun above focus in the light's direction and colors both lights.
-export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, focus: V3, light: Daylight): void {
-  const horiz = Math.cos(light.elevation) * SUN_RADIUS;
+export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, drawn: V3, light: Daylight): void {
+  const flat = Math.cos(light.elevation);
+  const horiz = flat * SUN_RADIUS;
+  const lift = Math.sin(light.elevation);
+  const { camera, mapSize } = sun.shadow;
+  const texel = (camera.right - camera.left) / mapSize.x;
+  const focus = snapToShadowTexels(drawn, { x: light.dir.x * flat, y: lift, z: light.dir.y * flat }, texel);
   sun.target.position.set(focus.x, focus.y, focus.z);
-  sun.position.set(focus.x + light.dir.x * horiz, focus.y + Math.sin(light.elevation) * SUN_RADIUS, focus.z + light.dir.y * horiz);
+  sun.position.set(focus.x + light.dir.x * horiz, focus.y + lift * SUN_RADIUS, focus.z + light.dir.y * horiz);
   sun.color.copy(light.sun);
   sun.intensity = light.sunIntensity;
   sky.color.copy(light.sky);
@@ -186,7 +208,7 @@ export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLig
   sky.intensity = light.skyIntensity;
 }
 
-// The sun light with its shadow box. The box follows the player, so shadows draw near the truck.
+// The sun light with its shadow box. The box follows the player, snapped to whole texels so static shadows hold still.
 export function sunLight(): THREE.DirectionalLight {
   const sun = new THREE.DirectionalLight();
   sun.castShadow = true;
