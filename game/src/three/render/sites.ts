@@ -16,7 +16,7 @@ import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../si
 import { angleDiff, segmentDist, type Vec } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
-import type { Motion, SiteMotion } from './site-motion';
+import { SiteMotion, type Motion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
 import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
 import { buildNose } from './interiors/nose';
@@ -545,15 +545,22 @@ export function buildSites(t: Terrain): BuiltSite {
   return { root, movers };
 }
 
-// Registers every site model with the scope at its site, and its moving parts with motion. Each site's parts run at
-// their own time offset.
-export function addSites(t: Terrain, scope: RenderScope, motion: SiteMotion): void {
+// Registers every site model with the scope at its site, and moves its moving parts on real time, once per drawn frame.
+// Each site's parts run at their own time offset.
+export function addSites(t: Terrain, scope: RenderScope): void {
+  const motion = new SiteMotion();
   for (const site of SITES) {
     const built = buildSite(t, site);
     scope.add(built.root, site.pos, site.radius);
     const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
     for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
   }
+  let last = performance.now();
+  scope.onFrame(() => {
+    const now = performance.now();
+    motion.tick((now - last) / 1000);
+    last = now;
+  });
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }

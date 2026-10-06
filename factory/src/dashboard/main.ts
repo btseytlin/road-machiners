@@ -17,7 +17,13 @@ async function fetchChannelUsername(chat: string, token: string): Promise<string
     return reply.result.username;
   } catch { throw new Error('Could not resolve public Telegram channel'); }
 }
+function requireDistinctChannel(env: NodeJS.ProcessEnv): void {
+  if (env.FACTORY_PUBLIC_CHANNEL === env.FACTORY_COMMITTEE_CHAT) throw new Error('Public channel must differ from committee chat');
+}
+function readHiddenChannelUrl(env: NodeJS.ProcessEnv): string { return env.DASHBOARD_CHANNEL_URL ?? ''; }
 async function resolveChannelUrl(env: NodeJS.ProcessEnv): Promise<string> {
+  if (env.DASHBOARD_HIDE_TELEGRAM === '1') return readHiddenChannelUrl(env);
+  requireDistinctChannel(env);
   if (env.DASHBOARD_CHANNEL_URL?.trim()) return env.DASHBOARD_CHANNEL_URL;
   if (!env.FACTORY_PUBLIC_CHANNEL || !env.TELEGRAM_BOT_TOKEN) throw new Error('Public channel and Telegram token are required');
   return `https://t.me/${await fetchChannelUsername(env.FACTORY_PUBLIC_CHANNEL, env.TELEGRAM_BOT_TOKEN)}`;

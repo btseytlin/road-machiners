@@ -1,7 +1,8 @@
 {
- "format": "2.14",
+ "format": "2.17",
  "shape": {
   "broken": [],
+  "craters": [],
   "dustClouds": [],
   "events": [],
   "mapHash": "string",

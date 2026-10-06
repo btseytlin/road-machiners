@@ -1,94 +1,18 @@
 {
- "obstacles": [
-  {
-   "id": "site-bowl",
-   "pos": {
-    "x": 100,
-    "y": 450
-   },
-   "r": 28,
-   "kind": "site"
-  },
-  {
-   "id": "bld-bowl-3",
-   "pos": {
-    "x": 96,
-    "y": 440
-   },
-   "r": 1.6,
-   "kind": "building"
-  },
-  {
-   "id": "site-nose",
-   "pos": {
-    "x": 300,
-    "y": 200
-   },
-   "r": 24,
-   "kind": "site"
-  },
-  {
-   "id": "bld-nose-0",
-   "pos": {
-    "x": 295,
-    "y": 205
-   },
-   "r": 1.5,
-   "kind": "building"
-  },
-  {
-   "id": "site-kiln",
-   "pos": {
-    "x": 60,
-    "y": 60
-   },
-   "r": 20,
-   "kind": "site"
-  },
-  {
-   "id": "site-old-mill",
-   "pos": {
-    "x": 400,
-    "y": 100
-   },
-   "r": 12,
-   "kind": "site"
-  },
-  {
-   "id": "bld-dustwell-1",
-   "pos": {
-    "x": 10,
-    "y": 10
-   },
-   "r": 1.5,
-   "kind": "building"
-  },
-  {
-   "id": "pond-dustwell",
-   "pos": {
-    "x": 10,
-    "y": 12
-   },
-   "r": 1.1,
-   "kind": "water"
-  },
-  {
-   "id": "cw-convoy-0",
-   "pos": {
-    "x": 200,
-    "y": 300
-   },
-   "r": 0.65,
-   "kind": "wreck"
-  },
-  {
-   "id": "wreck4",
-   "pos": {
-    "x": 210,
-    "y": 310
-   },
-   "r": 0.7,
-   "kind": "wreck"
-  }
- ]
+  "states": [
+    { "id": "s1", "kind": "patch", "holder": "player", "other": "npc1", "data": { "kind": "patch", "deal": "paid", "parts": 2, "price": 30, "work": 4, "workLeft": 3 } },
+    { "id": "s2", "kind": "patch", "holder": "player", "other": "npc9", "data": { "kind": "patch", "deal": "free", "parts": 1, "price": 0, "work": 2, "workLeft": 2 } },
+    { "id": "s3", "kind": "aid", "holder": "npc1", "other": "player", "data": { "kind": "aid", "giver": "npc", "fuel": 1, "supplies": 0, "price": 0, "free": true, "agreed": true, "started": false, "work": 1, "workLeft": 1 } }
+  ],
+  "vehicles": [
+    {
+      "id": "npc1",
+      "items": [
+        { "id": "i1", "x": 0, "y": 0, "rot": 0, "kind": "part", "part": { "id": "p1", "defId": "stockEngine", "hp": 0, "wear": 0 } },
+        { "id": "i2", "x": 1, "y": 0, "rot": 0, "kind": "good", "good": "parts" },
+        { "id": "i3", "x": 2, "y": 0, "rot": 0, "kind": "part", "part": { "id": "p2", "defId": "stockTank", "hp": 0, "wear": 0 } },
+        { "id": "i4", "x": 3, "y": 0, "rot": 0, "kind": "part", "part": { "id": "p3", "defId": "stockTransmission", "hp": 20, "wear": 0 } }
+      ]
+    }
+  ]
 }

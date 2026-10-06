@@ -5,7 +5,7 @@ import { elevationAt } from './elevation';
 import { ROAD_INDEX } from './road-index';
 import { bridgeCut, deckById } from './bridge';
 import { deckSegments, heightFromElevation } from './terrain';
-import { gradeRoads } from './road-grade';
+import { gradePaths, gradeRoads } from './road-grade';
 import { TEST_MAP } from '../test/map';
 import { dist, type Vec } from './vec';
 import { insideCurtain } from './fortress';
@@ -90,5 +90,44 @@ describe('road grades', () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(1000);
+  });
+});
+
+describe('path grades', () => {
+  // A hump across a straight path: 2 units high, rising up to 0.24 per tile, flat across the path.
+  const SIZE = 40;
+  const ROW = SIZE + 1;
+  const hump = (x: number) => 2 * Math.exp(-((x - 20) ** 2) / (2 * 5 ** 2));
+  const raw = { size: SIZE, heights: Array.from({ length: ROW * ROW }, (_, k) => hump(k % ROW)), types: [] };
+  const path = { points: [{ x: 2, y: 20 }, { x: 38, y: 20 }], width: 2, grade: TERRAIN.roadGrade };
+  const [GRADE, MARGIN] = [TERRAIN.roadGrade, 4];
+  const graded = gradePaths(raw, [path], MARGIN);
+  const at = (h: readonly number[], x: number, y: number) => h[y * ROW + x];
+
+  it('holds the grade along the path where the ground is steeper', () => {
+    const rawSteepest = Math.max(...Array.from({ length: 36 }, (_, i) => Math.abs(at(raw.heights, i + 3, 20) - at(raw.heights, i + 2, 20))));
+    expect(rawSteepest).toBeGreaterThan(GRADE);
+    for (let x = 2; x < 38; x++) expect(Math.abs(at(graded, x + 1, 20) - at(graded, x, 20)), `${x}`).toBeLessThanOrEqual(GRADE + 1e-9);
+  });
+
+  it('holds the bank grade beside the path', () => {
+    for (let x = 2; x <= 38; x++) for (let y = 21; y <= 25; y++) {
+      for (const side of [1, -1]) {
+        const [inner, outer] = [20 + side * (y - 21), 20 + side * (y - 20)];
+        expect(Math.abs(at(graded, x, outer) - at(graded, x, inner)), `${x},${outer}`).toBeLessThanOrEqual(TERRAIN.bankGrade + 1e-9);
+      }
+    }
+  });
+
+  it('leaves corners past the margin untouched', () => {
+    let checked = 0;
+    for (let y = 0; y <= SIZE; y++) for (let x = 0; x <= SIZE; x++) {
+      const gap = Math.hypot(Math.max(0, 2 - x, x - 38), y - 20) - path.width / 2;
+      if (gap < MARGIN) continue;
+      expect(at(graded, x, y), `${x},${y}`).toBe(at(raw.heights, x, y));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(1000);
+    expect(at(graded, 20, 20)).not.toBe(at(raw.heights, 20, 20));
   });
 });

@@ -160,7 +160,11 @@ describe('world from the baked map', () => {
       if (lb) return segmentDist(a.pos, lb[0], lb[1]) < a.r - 1e-6;
       return dist(a.pos, b.pos) < a.r + b.r - 1e-6;
     };
-    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
+    // The sandbag arcs of one emplacement stand an arc step apart and overlap at their ends, so they read as one wall.
+    // Sandbags may overlap each other and nothing else.
+    const sandbags = (o: Obstacle) => o.kind === 'landmark' && o.look === 'sandbags';
+    const joined = (a: Obstacle, b: Obstacle) => sandbags(a) && sandbags(b);
+    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other) && !joined(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
 

@@ -27,6 +27,7 @@ import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
+import { digCrater } from './craters';
 import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -460,7 +461,7 @@ function offTruckChance(o: Spread, a: Aiming, sign: number, x0: number, x1: numb
 
 // A miss off the truck explodes where it lands, or strays into another truck and explodes on one of its lanes.
 function missReach(c: Reach, offset: number): number {
-  const miss = missPoint(c.shooter, c.target, offset);
+  const miss = missPoint(c.shooter.pos, c.target.pos, offset);
   const own = Number(splashReaches(c, miss, null));
   const candidates = strayCandidates(c.world, c.shooter, c.target, miss);
   if (candidates.length === 0) return own;
@@ -633,14 +634,23 @@ function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
   const landing = landRound(world, s, roll, offset);
   const hit = landing.struck?.id === s.target.id;
   const blast = explode(world, s.mw.def.round, landing);
-  return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast };
+  const burst = burstPoint(world, s.mw.def.round, landing);
+  return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast, burst };
+}
+
+// An exploding round that struck no truck bursts on the ground at the point explode() splashed, and digs a crater
+// there if it is made to. Any other round has no burst point.
+function burstPoint(world: World, r: WeaponDef["round"], landing: Landing): Vec | null {
+  if (landing.struck !== null || r.splashRadius <= 0) return null;
+  if (r.craterRadius > 0) digCrater(world, landing.point, r.craterRadius);
+  return { ...landing.point };
 }
 
 // A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
 // the lane under its offset. A miss off the truck may stray into another truck near the line of fire.
 function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const { side, lanes, body } = s.aiming;
-  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
+  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter.pos, s.target.pos, offset));
   const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
   const hits = walkLane(world, s.target, side, lane, directRound(s.mw.def.round, roll.crit));
   return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
@@ -668,9 +678,10 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
 }
 
 // Where a round that missed the truck lands: beside the target, at its offset across the line of fire.
-function missPoint(shooter: Vehicle, target: Vehicle, offset: number): Vec {
-  const n = across(shooter, target);
-  return { x: target.pos.x + (n.x * offset) / M, y: target.pos.y + (n.y * offset) / M };
+export function missPoint(from: Vec, target: Vec, offset: number): Vec {
+  if (from.x === target.x && from.y === target.y) throw new Error('missPoint needs a shooter apart from its target');
+  const b = bearing(from, target);
+  return { x: target.x - (Math.sin(b) * offset) / M, y: target.y + (Math.cos(b) * offset) / M };
 }
 
 // Trucks other than shooter and target whose center lies within reach of the line of fire, which runs from the
