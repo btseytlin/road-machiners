@@ -17,6 +17,7 @@ import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
+import type { VehicleFrame } from './frames';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
@@ -260,8 +261,41 @@ describe('physics turns', () => {
     }
 
     it('only glass has less than full grip', () => {
-      const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1).map((t) => t.id);
+      const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1 || t.sideGrip !== 1).map((t) => t.id);
       expect(slippery).toEqual(['glass']);
+    });
+
+    // The mean angle in degrees between where the truck moves and where its nose points, over the moving steps of
+    // a turn: how far it skids sideways.
+    function meanSkid(type: 'sand' | 'glass'): number {
+      let w = emptyWorld({ x: 20, y: 40 });
+      editableTerrain(w).types.fill(type);
+      w.vehicles[0].speed = SPEED;
+      w = setMoveOrder(w, { kind: 'through', dest: { x: 30, y: 70 } });
+      let d = buildDrive(w);
+      const frames: VehicleFrame[] = [];
+      for (let i = 0; i < 3; i++) {
+        let next: Drive | null = null;
+        w = endTurn(w, physicsMove(d, (r) => {
+          next = r.next;
+          frames.push(...r.frames[w.vehicles[0].id]);
+        }));
+        freeDrive(d);
+        d = next!;
+      }
+      freeDrive(d);
+      const skids = frames.slice(1).flatMap((f, i) => {
+        const [a, b, q] = [frames[i].pos, f.pos, f.rot];
+        if (Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond < 2) return [];
+        const nose = Math.atan2(2 * (q.x * q.z - q.w * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+        return [Math.abs(angleDiff(Math.atan2(b.z - a.z, b.x - a.x), nose)) * (180 / Math.PI)];
+      });
+      return skids.reduce((s, x) => s + x, 0) / skids.length;
+    }
+
+    it('a turning truck skids sideways on glass and holds its line on sand', () => {
+      expect(meanSkid('sand')).toBeLessThan(3);
+      expect(meanSkid('glass')).toBeGreaterThan(10);
     });
 
     it('a braking truck slides further on glass than on sand', () => {

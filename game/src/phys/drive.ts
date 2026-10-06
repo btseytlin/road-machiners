@@ -501,14 +501,19 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield. Slippery ground, like glass, cuts the tires' hold on top of that, for every truck and skill.
-// Drivers plan their braking and corners with the same grip, so they slow down early instead of sliding past.
+// the heightfield. Slippery ground, like glass, cuts the tires' hold on top of that, for every truck and skill:
+// grip along the wheel, for speeding up and braking, and side grip across it, so a turning truck slides sideways.
+// Drivers plan their braking with the same grip, so they still stop on a point. They corner as on any ground, so
+// the truck skids through its turns.
 function applyTerrainGrip(c: Car, terrain: Terrain): void {
   const p = c.body.translation();
   const ground = TERRAIN_TYPES[terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })]];
   c.grip = ground.grip;
   const grip = T.frictionSlip * groundSpeed(c.s, ground.speed) * ground.grip;
-  for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
+  for (let i = 0; i < 4; i++) {
+    c.ctl.setWheelFrictionSlip(i, grip);
+    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * ground.sideGrip);
+  }
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
@@ -551,7 +556,7 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
     const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
     return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
-  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang, D.cornerAccel * c.grip), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel * c.grip, D.cornerAccel * c.grip));
+  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel * c.grip));
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
 }
 
@@ -661,9 +666,9 @@ function samePoint(a: Vec | null, b: Vec): boolean {
 // The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
 // that leaves along the nose and ends on the point has radius aimDist / (2 sin ang). Without this cap a
 // fast truck circles a point inside its turning circle forever.
-function cornerSpeed(aimDist: number, ang: number, cornerAccel: number): number {
+function cornerSpeed(aimDist: number, ang: number): number {
   const sin = Math.abs(Math.sin(ang));
-  return sin === 0 ? Infinity : Math.sqrt((cornerAccel * aimDist) / (2 * sin));
+  return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
 }
 
 // The fastest speed now that still brakes in time for every route corner ahead. A corner turned by
@@ -671,7 +676,7 @@ function cornerSpeed(aimDist: number, ang: number, cornerAccel: number): number 
 // Theta runs to the route point cornerCut past the corner, so a sharp turn split into small steps counts whole.
 // Corners past the braking distance at the current speed cannot limit it, so the scan stops there.
 // A driver without a route drives straight and has no corners.
-function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number, cornerAccel: number): number {
+function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number): number {
   if (!route) return Infinity;
   const reach = (speed * speed) / (2 * decel) + D.cornerCut;
   let limit = Infinity;
@@ -680,7 +685,7 @@ function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: nu
   for (let k = 0; k + 1 < route.length && along <= reach; k++) {
     const theta = Math.abs(angleDiff(bearing(prev, route[k]), bearing(route[k], pointAfter(route, k, D.cornerCut / S))));
     if (theta > 0) {
-      const corner = Math.sqrt((cornerAccel * D.cornerCut) / Math.tan(theta / 2));
+      const corner = Math.sqrt((D.cornerAccel * D.cornerCut) / Math.tan(theta / 2));
       limit = Math.min(limit, Math.sqrt(corner * corner + 2 * decel * Math.max(0, along - D.cornerCut)));
     }
     along += dist(route[k], route[k + 1]) * S;
