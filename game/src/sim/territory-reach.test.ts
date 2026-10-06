@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
-import { TERRITORIES } from '../data/territory';
+import { PERIMETER, TERRITORIES, type Run } from '../data/territory';
 import { TEST_MAP } from '../test/map';
 import { propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
@@ -10,7 +10,7 @@ import { CELL, CLEARANCE, componentOf, navLayer } from './nav/layer';
 import { siteGap } from './sites';
 import { isLootSpot, territoryEntries, territoryGrounds } from './territory';
 import type { Obstacle } from './types';
-import { dist, type Vec } from './vec';
+import { dist, lerp, type Vec } from './vec';
 import { newWorld } from './world';
 
 // Reach through Old Orchard on the committed map, measured on the same nav layer routes search.
@@ -70,9 +70,28 @@ function reachableNear(p: Vec): boolean {
   return nearestFreeCell(layer, overlay, cellOf(p), southComponent, NEAR / CELL) !== null;
 }
 
-// Where trucks drive into the orchard: both ends of the old highway and the outer ends of the other main roads.
+// The authored openings of the perimeter: between two polylines of one side, the ends within 15 tiles of each other.
+// Each gives a point BREACH tiles outside its middle, toward the outline, and one as far inside.
+const BREACH = 2.5;
+function breaches(): { outside: Vec; inside: Vec }[] {
+  const isPerimeter = (run: Run): boolean => run.look === PERIMETER.look && run.broken === PERIMETER.broken && run.knocked.share === PERIMETER.knocked.share;
+  const lines = farm.runs.filter(isPerimeter).map((run) => run.points.map(abs));
+  const out: { outside: Vec; inside: Vec }[] = [];
+  for (let k = 1; k < lines.length; k++) {
+    const [a, b] = [lines[k - 1].at(-1)!, lines[k][0]];
+    if (dist(a, b) > 15) continue;
+    const mid = { x: lerp(a.x, b.x, 0.5), y: lerp(a.y, b.y, 0.5) };
+    const normal = { x: -(b.y - a.y) / dist(a, b), y: (b.x - a.x) / dist(a, b) };
+    const [p, q] = [1, -1].map((side) => ({ x: mid.x + normal.x * BREACH * side, y: mid.y + normal.y * BREACH * side }));
+    out.push(siteGap(orchard, p) > siteGap(orchard, q) ? { outside: p, inside: q } : { outside: q, inside: p });
+  }
+  return out;
+}
+
+// Where trucks drive into the orchard: both ends of the old highway, the outer ends of the other main roads and the
+// perimeter's authored openings.
 function entryPoints(): Vec[] {
-  return [abs(R1.points[0]), ...MAIN_ROADS.map((road) => abs(road.points.at(-1)!))];
+  return [abs(R1.points[0]), ...MAIN_ROADS.map((road) => abs(road.points.at(-1)!)), ...breaches().map((b) => b.outside)];
 }
 
 describe('reach through Old Orchard', () => {
@@ -94,8 +113,21 @@ describe('reach through Old Orchard', () => {
     for (const p of territoryGrounds(orchard)) expect(reachableNear(p), `${p.x.toFixed(1)},${p.y.toFixed(1)}`).toBe(true);
   });
 
-  it('lets trucks in by at least four entries', () => {
+  it('lets trucks in by at least four entries, and by every authored opening in the perimeter', () => {
     const entries = entryPoints().filter(reachableNear);
-    expect(entries.length).toBeGreaterThanOrEqual(4);
+    expect(breaches().length).toBeGreaterThan(0);
+    expect(entries.length).toBeGreaterThanOrEqual(4 + breaches().length);
+  });
+
+  it('lets a truck straight through each authored opening in the perimeter, not round it', () => {
+    for (const { outside, inside } of breaches()) {
+      const [from, to] = [outside, inside].map((p) => nearestFreeCell(layer, overlay, cellOf(p), southComponent, NEAR / CELL));
+      const where = `opening at ${outside.x.toFixed(1)},${outside.y.toFixed(1)}`;
+      expect(from, where).not.toBeNull();
+      expect(to, where).not.toBeNull();
+      const cells = findCells(layer, overlay, from!, to!, null);
+      expect(cells, where).not.toBeNull();
+      expect(pathLength(cells!), where).toBeLessThanOrEqual(2 * BREACH * 2);
+    }
   });
 });

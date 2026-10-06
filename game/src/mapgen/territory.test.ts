@@ -3,7 +3,7 @@ import { ECONOMY } from '../data/goods';
 import { ORCHARD_HEADING, REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
 import { MAPGEN, TERRAIN } from '../data/terrain';
-import { onOrchardRoad, TERRITORIES } from '../data/territory';
+import { EMPLACEMENT, onOrchardRoad, PERIMETER, TERRITORIES, type Run } from '../data/territory';
 import { bayPoints, deckAlongAt, deckPlane, hullDecks, isLootSpot, ribPoses, territoryEntries, type HullDeck } from '../sim/territory';
 import { propBoxes, propPose, propReach } from '../sim/mapgen';
 import { PHYSICS } from '../data/physics';
@@ -264,6 +264,14 @@ describe('the orchard farm', () => {
   const loose = props.filter((p) => (clutterLooks.has(p.kind) || debrisLooks.has(p.kind)) && !(runRadius.has(p.kind) && p.r === runRadius.get(p.kind)));
   const segments = props.filter((p) => runRadius.has(p.kind) && p.r === runRadius.get(p.kind));
 
+  // The army's works: sandbag arcs, steel hedgehogs and every concrete barrier, in runs, the perimeter or loose.
+  const arcs = props.filter((p) => p.kind === 'sandbags');
+  const traps = props.filter((p) => p.kind === 'tankTrap');
+  const barriers = props.filter((p) => p.kind === 'barrier');
+  // Tiles from an arc's chord out toward its convex front, the way it faces.
+  const ahead = (arc: BakedProp, p: Vec): number => (p.x - arc.pos.x) * Math.cos(arc.yaw) + (p.y - arc.pos.y) * Math.sin(arc.yaw);
+  const isPerimeter = (run: Run): boolean => run.look === PERIMETER.look && run.broken === PERIMETER.broken && run.knocked.share === PERIMETER.knocked.share;
+
   it('bakes the same farm for the same seed', () => {
     const again = territoryLayer(7, groundDraft());
     expect(again.props).toEqual(baked.props);
@@ -495,6 +503,100 @@ describe('the orchard farm', () => {
     for (const p of [...loose.filter((q) => clutterLooks.has(q.kind)), ...segments]) {
       expect(footprintRelief(baked.heights, baked.size, p, segments.includes(p)), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeLessThanOrEqual(rules.relief!);
     }
+  });
+
+  it('digs about 30 emplacements of sandbag arcs, sets 20 tank traps and stands 60 barriers', () => {
+    // Arcs within 1.5 tiles of each other belong to one emplacement.
+    const group = arcs.map((_, i) => i);
+    const root = (i: number): number => (group[i] === i ? i : root(group[i]));
+    arcs.forEach((a, i) => arcs.forEach((b, j) => {
+      if (j > i && dist(a.pos, b.pos) <= 1.5) group[root(j)] = root(i);
+    }));
+    expect(new Set(arcs.map((_, i) => root(i))).size).toBeGreaterThanOrEqual(28);
+    expect(arcs.length).toBeGreaterThanOrEqual(55);
+    expect(traps.length).toBeGreaterThanOrEqual(20);
+    expect(barriers.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it('stands every tank trap out ahead of its nearest sandbag arc and never behind one', () => {
+    for (const trap of traps) {
+      const where = `tankTrap at ${frameOf(trap.pos).s.toFixed(1)},${frameOf(trap.pos).c.toFixed(1)}`;
+      const nearest = arcs.reduce((a, b) => (dist(b.pos, trap.pos) < dist(a.pos, trap.pos) ? b : a));
+      expect(ahead(nearest, trap.pos), where).toBeGreaterThan(EMPLACEMENT.arcRadius);
+      // No hedgehog stands within 2 tiles of an arc's concave side, where the guards crouch.
+      expect(EMPLACEMENT.behindClear).toBe(2);
+      for (const arc of arcs) if (ahead(arc, trap.pos) <= 0) expect(dist(arc.pos, trap.pos), where).toBeGreaterThanOrEqual(EMPLACEMENT.behindClear);
+    }
+  });
+
+  it("keeps every arc, trap and barrier off roads, tracks, canals and pads and out of every spot's parking gap", () => {
+    const marks = [BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL, BUILT_PAD];
+    for (const p of [...arcs, ...traps]) {
+      const where = `${p.kind} at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`;
+      for (const tile of footprint(baked, p)) expect(marks, where).not.toContain(baked.built[tile]);
+      for (const spot of spots) expect(dist(p.pos, spot.pos), `${where} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + p.r + rules.debrisGap);
+    }
+    for (const p of barriers) {
+      const where = `barrier at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`;
+      // A run segment is a line; a loose barrier keeps its whole footprint clear.
+      const [a, b] = [-1, 1].map((k) => ({ x: p.pos.x + k * p.r * Math.cos(p.yaw), y: p.pos.y + k * p.r * Math.sin(p.yaw) }));
+      const reach = segments.includes(p) ? 0 : p.r;
+      for (const spot of spots) expect(segmentDist(spot.pos, a, b), `${where} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + reach + rules.debrisGap - 1e-9);
+    }
+  });
+
+  it('leaves the perimeter open at every main road and at least every 25 tiles along it', () => {
+    // A point of the perimeter's line is closed where a placed barrier lies within a tile of it.
+    const COVER = 1;
+    const closed = (p: Vec) => barriers.some((b) => segmentDist(p, ...([-1, 1].map((k) => ({ x: b.pos.x + k * b.r * Math.cos(b.yaw), y: b.pos.y + k * b.r * Math.sin(b.yaw) })) as [Vec, Vec])) < COVER);
+    // Each side is its polylines in list order, joined across the authored gaps between them.
+    const lines = farm.runs.filter(isPerimeter).map((run) => run.points.map(abs));
+    expect(lines.length).toBeGreaterThan(0);
+    const sides: Vec[][] = [];
+    for (const line of lines) {
+      const last = sides.at(-1);
+      if (last && dist(last.at(-1)!, line[0]) <= 15) last.push(...line);
+      else sides.push([...line]);
+    }
+    const roads = farm.roads.slice(0, MAIN_ROADS).map((road) => road.points.map(abs));
+    for (const side of sides) {
+      // Walk the side in half-tile steps, noting each step's point and whether a main road crosses there.
+      const walk: { p: Vec; open: boolean }[] = [];
+      for (let k = 1; k < side.length; k++) {
+        const steps = Math.ceil(dist(side[k - 1], side[k]) / 0.5);
+        for (let i = 0; i < steps; i++) {
+          const p = { x: lerp(side[k - 1].x, side[k].x, i / steps), y: lerp(side[k - 1].y, side[k].y, i / steps) };
+          walk.push({ p, open: !closed(p) });
+        }
+      }
+      const where = (i: number) => `perimeter at ${frameOf(walk[i].p).s.toFixed(1)},${frameOf(walk[i].p).c.toFixed(1)}`;
+      // Every main road crossing the side leaves a 3-tile opening round its crossing.
+      walk.forEach(({ p }, i) => {
+        const onRoad = roads.some((road) => road.slice(1).some((b, k) => segmentDist(p, road[k], b) < 1.5));
+        if (onRoad) expect(walk.slice(Math.max(0, i - 3), i + 4).every((w) => w.open), where(i)).toBe(true);
+      });
+      // Each 25 tiles of the side hold an opening of 3 tiles or more.
+      let since = 0;
+      let run = 0;
+      walk.forEach(({ open }, i) => {
+        run = open ? run + 0.5 : 0;
+        since = run >= 3 ? 0 : since + 0.5;
+        expect(since, where(i)).toBeLessThanOrEqual(25);
+      });
+    }
+  });
+
+  it("draws the same values for every run segment, so knocking one run's segments shifts no other's", () => {
+    const last = farm.runs.length - 1;
+    const moved = structuredClone(rules);
+    moved.farm!.runs[last].knocked = { share: 1, turn: 0.5, shift: 0.5 };
+    const d = groundDraft();
+    fillFarm(d, orchard, moved, moved.farm!, ruleRng(7, TERRITORY_SEED_OFFSET + rules.seed));
+    // Props away from the knocked run's line stand exactly where they did.
+    const line = farm.runs[last].points.map(abs);
+    const far = (p: BakedProp) => line.slice(1).every((b, k) => segmentDist(p.pos, line[k], b) > 5);
+    const before = territoryLayer(7, groundDraft()).props.filter((p) => siteGap(orchard, p.pos) < 0 && far(p) && !debrisLooks.has(p.kind));
+    expect(d.props.filter((p) => far(p) && !debrisLooks.has(p.kind))).toEqual(before);
   });
 
   it('throws on a building whose ring cannot level its ground', () => {
