@@ -12,7 +12,7 @@ import { groundAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
 import { instancedModel } from './models';
 import type { RenderScope } from './scope';
-import { TERRAIN_CHUNK } from './terrain';
+import { deckFloorCap, TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
 const ROAD_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of scatter
@@ -42,10 +42,10 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       const isPebble = h < pebbleChance(type);
       const isScrub = h > 1 - scrubChance(type);
       if (!isPebble && !isScrub) continue;
-      const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
-      if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP) < ROAD_GAP) continue;
+      const spot = scatterSpot(t, x, y);
+      if (spot === null) continue;
       const size = hash2(x * 11 + 1, y * 17 + 9);
-      place.position.set(p.x * S, groundAt(t, p.x, p.y) * S, p.y * S);
+      place.position.copy(spot);
       place.rotation.y = hash2(x * 19, y * 23 + 1) * Math.PI * 2;
       place.scale.setScalar(lerp(isPebble ? PEBBLE_RADIUS : SCRUB_RADIUS, size) * S);
       place.updateMatrix();
@@ -60,6 +60,23 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       scope.add(group, center, reach);
     }
   }
+}
+
+// Where a tile's scatter would stand, in world meters, or null near a road or on a tile whose drawn ground
+// terrain.ts lowers under a deck, since a tuft there would float over the drawn ground or poke through the deck.
+export function scatterSpot(t: Terrain, x: number, y: number): THREE.Vector3 | null {
+  const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
+  if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP) < ROAD_GAP) return null;
+  const ground = groundAt(t, p.x, p.y);
+  if (lowered(t, p.x, p.y, ground)) return null;
+  for (const [i, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (lowered(t, x + i, y + j, t.heights[(y + j) * (t.size + 1) + x + i])) return null;
+  return new THREE.Vector3(p.x * S, ground * S, p.y * S);
+}
+
+// Whether ground at this height is drawn lower here, under a deck.
+function lowered(t: Terrain, x: number, y: number, ground: number): boolean {
+  const cap = deckFloorCap(t, x, y);
+  return cap !== null && ground > cap;
 }
 
 // Share of tiles of a ground type with a scrub tuft. Nothing grows on hull plating.
