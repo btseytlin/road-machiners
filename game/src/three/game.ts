@@ -1052,7 +1052,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(vehicleLampsOn(this.world, v, this.lightTurn()));
-      view.radio(this.radioLights.lit(this.world, v.id, now));
+      view.radio(this.radioLights.lit(v.id, now));
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);

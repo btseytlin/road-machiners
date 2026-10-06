@@ -199,13 +199,10 @@ export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
   return pair.includes(call.with) && pair.includes(world.player.vehicleId);
 }
 
-// The vehicle ids on the radio now: both trucks of the open call, and the player's truck while its beacon is on.
-export function onAir(world: World): string[] {
-  const ids = new Set<string>();
+// The vehicle ids on the open call: both trucks of it, or none. The beacon is not a call.
+export function callTrucks(world: World): string[] {
   const call = world.player.call;
-  if (call) ids.add(world.player.vehicleId).add(call.with);
-  if (world.player.beacon) ids.add(world.player.vehicleId);
-  return [...ids];
+  return call ? [world.player.vehicleId, call.with] : [];
 }
 
 // The vehicle ids each kind of event puts on the radio. A honk, aid and patch work are not radio talk.

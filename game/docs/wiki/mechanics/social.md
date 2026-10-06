@@ -4,7 +4,7 @@ Radio calls, topics, the horn and Waste Of Time Radio. The principles behind the
 
 Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other. A driver in combat with another truck answers a call with a short refusal in the call panel, and the player can only hang up. It does not honk back. Other drivers do not rob it, tow it or hire it until that combat ends. A driver that only flees, with nobody attacking or hunting it, takes calls. A hostile driver is part of the player's fight, so it takes calls even while it fights another truck. While the player is in combat, only the foe calls, with a cargo demand, a truce or a plea for mercy. Tow offers and patch requests wait until the fight ends.
 
-A truck on the radio blinks a red light on its antenna tip: both trucks on a call, a truck sending the beacon, and drivers that just talked to each other.
+A truck on a call flashes the red antenna light twice, glows while the call stays open and flashes once when it ends. Drivers that just talked over the radio play the same cue in short, and so does the player's truck when its beacon switches on.
 
 Talk is built from topics. A topic is lines and replies in data, and its logic is named conditions and effects in code. The player's call opens on a menu of the topics that truck can take up. A driver's traits decide its voice and its topics. A topic can be once per driver: that driver remembers how it ended.
 
