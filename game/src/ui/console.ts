@@ -143,8 +143,8 @@ export const COMMANDS: readonly Command[] = [
     const hour = parseNumber(text, usage);
     return changed(skipToHour(world, hour), `skipped to hour ${hour}`);
   }),
-  command("weather <storm|heatwave|overcast> [turns]", "Start that weather, for that many turns if given.", { min: 1, max: 2 }, (world, [kind, turns], usage) =>
-    changed(startWeather(world, kind, turns === undefined ? null : parseNumber(turns, usage)), `${kind} started`),
+  command("weather <storm|heatwave|overcast> [turns] [offset]", "Start that weather, for that many turns if given. A storm with an offset starts that many tiles east of the truck, still and at full strength.", { min: 1, max: 3 }, (world, [kind, turns, offset], usage) =>
+    changed(startWeather(world, kind, turns === undefined ? null : parseNumber(turns, usage), offset === undefined ? 0 : parseNumber(offset, usage)), `${kind} started`),
   ),
   command("reveal", "Mark the whole map explored.", { min: 0, max: 0 }, (world) =>
     changed(revealMap(world), "map revealed"),
