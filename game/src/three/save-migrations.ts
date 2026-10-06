@@ -233,6 +233,110 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
+// Step 13 to 14: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
+// 3 money, so every money number grows by 100 / 3. Balances, rewards, fees and prices round to a cent. Cost bases and
+// the money a profit, free tow or aid practice counted are averages or XP inputs, so they scale exactly.
+export const CENTS_PER_MONEY_13_14 = 100 / 3;
+const MONEY_PRACTICE_13_14 = ['profit', 'freeTow', 'aid'];
+
+function scaled_13_14(value: unknown, what: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Saved ${what} is ${String(value)}, not a number`);
+  return value * CENTS_PER_MONEY_13_14;
+}
+
+function cents_13_14(value: unknown, what: string): number {
+  return Math.round(scaled_13_14(value, what));
+}
+
+function scaledRecord_13_14(record: SavedJson, what: string): SavedJson {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_13_14(v, `${what} ${k}`)]));
+}
+
+function contractCents_13_14(c: SavedJson): SavedJson {
+  return { ...c, reward: cents_13_14(c.reward, `contract ${String(c.id)} reward`) };
+}
+
+function callVarsCents_13_14(vars: SavedJson): SavedJson {
+  const centsVar = (v: SavedJson): SavedJson => {
+    if (v.kind === 'money') return { ...v, amount: cents_13_14(v.amount, 'call money') };
+    if (v.kind === 'deal') return { ...v, price: cents_13_14(v.price, 'call deal price') };
+    if (v.kind === 'prices') {
+      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_13_14(g.buy, 'call buy price'), sell: cents_13_14(g.sell, 'call sell price') }));
+      return { ...v, goods };
+    }
+    return v;
+  };
+  return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, centsVar(v as SavedJson)]));
+}
+
+function callCents_13_14(call: SavedJson): SavedJson {
+  const line = call.line as SavedJson;
+  return { ...call, vars: callVarsCents_13_14(call.vars as SavedJson), line: { ...line, vars: callVarsCents_13_14(line.vars as SavedJson) } };
+}
+
+function stateCents_13_14(state: SavedJson): SavedJson {
+  const data = state.data as SavedJson;
+  const what = `${String(data.kind)} state ${String(state.id)}`;
+  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_13_14(data.fee, `${what} fee`), waived: cents_13_14(data.waived, `${what} waived fee`) } };
+  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_13_14(data.fee, `${what} fee`) } };
+  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_13_14(data.price, `${what} price`) } };
+  return state;
+}
+
+function feeCents_13_14(e: SavedJson): SavedJson {
+  return { ...e, fee: cents_13_14(e.fee, `${String(e.t)} fee`) };
+}
+
+const EVENT_CENTS_13_14: Record<string, (e: SavedJson) => SavedJson> = {
+  money: (e) => ({ ...e, amount: cents_13_14(e.amount, 'money event') }),
+  practice: (e) => (MONEY_PRACTICE_13_14.includes(e.source as string) ? { ...e, amount: scaled_13_14(e.amount, `${String(e.source)} practice`) } : e),
+  contract: (e) => ({ ...e, contract: contractCents_13_14(e.contract as SavedJson) }),
+  towOffer: feeCents_13_14,
+  towDone: feeCents_13_14,
+  escortPaid: feeCents_13_14,
+  escortHired: feeCents_13_14,
+  aid: (e) => ({ ...e, paid: cents_13_14(e.paid, 'aid paid') }),
+  stateEnded: (e) => ({ ...e, state: stateCents_13_14(e.state as SavedJson) }),
+  say: (e) => ({ ...e, vars: callVarsCents_13_14(e.vars as SavedJson) }),
+};
+
+function eventCents_13_14(e: SavedJson): SavedJson {
+  const convert = EVENT_CENTS_13_14[e.t as string];
+  return convert ? convert(e) : e;
+}
+
+function vehicleCents_13_14(v: SavedJson): SavedJson {
+  const resources = v.resources as SavedJson | null;
+  if (!resources) return v;
+  return { ...v, resources: { ...resources, money: cents_13_14(resources.money, `vehicle ${String(v.id)} money`) } };
+}
+
+function withCents_13_14(world: SavedJson): SavedJson {
+  const player = world.player as SavedJson;
+  const call = player.call as SavedJson | null;
+  return {
+    ...world,
+    player: {
+      ...player,
+      money: cents_13_14(player.money, 'player money'),
+      costBasis: scaledRecord_13_14(player.costBasis as SavedJson, 'cost basis'),
+      contracts: (player.contracts as SavedJson[]).map(contractCents_13_14),
+      call: call ? callCents_13_14(call) : null,
+    },
+    shops: Object.fromEntries(
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_13_14) }]),
+    ),
+    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_13_14),
+    removed: (world.removed as SavedJson[]).map(vehicleCents_13_14),
+    salvage: (world.salvage as SavedJson[]).map((stock) => {
+      const pile = stock.pile as SavedJson | undefined;
+      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_13_14(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
+    }),
+    states: (world.states as SavedJson[]).map(stateCents_13_14),
+    events: (world.events as SavedJson[]).map(eventCents_13_14),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -298,6 +402,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: money becomes integer cents of M, 1 M per 5 L of fuel.
+  withCents_13_14,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
