@@ -20,7 +20,7 @@ Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_
 
 On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the checks always get their CPUs. Docker pins containers with `--cpuset-cpus`, which the game's test runner sees. A step run by hand is not pinned.
 
-`FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest checks the frame rate. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check.
+`FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest checks the frame rate. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check. The `fps-waived` label waives the frame rate gate for one issue, as [stages.md](stages.md#fps-waiver) says.
 
 ## Daily cap
 

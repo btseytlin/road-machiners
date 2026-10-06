@@ -40,7 +40,20 @@ Implementation runs Sonnet with up:uexecute on the task file. For a change a pla
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
 - Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
+- The `fps-waived` label waives the GPU playtest's frame rate gate for one issue. See [FPS waiver](#fps-waiver).
 - The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
+
+## FPS waiver
+
+The GPU playtest fails under 50 fps, and a busy host can push a good build under it. The committee can waive that gate for one issue, and only that gate.
+
+- To enable it, a collaborator adds the label `fps-waived` to the issue on GitHub, then removes `factory-stuck` if the card is stuck. The issue's timeline records who added it. Remove the label to end the waiver.
+- Checks reads the issue's labels when it starts and logs whether the waiver is on. The label never applies to another issue or to the release candidate.
+- Checks still runs the full 12-turn GPU playtest and keeps its output and measured frame rate in the check log.
+- A failed playtest passes only when its whole output shows 12 turns and one problem, `fps <n> under 50`. Any other problem, like a page error, the crash screen, a blank canvas or a timeout, or output it cannot read, is a real failure and takes the normal fix round.
+- The tests, the typecheck, the build, the evidence rules and the fix round stay the same.
+- A waived pass opens the approval post and the "Ready for approval" comment with a warning that names the label and the measured frame rate. An approved card, which merges with no post, gets the warning as an issue comment.
+- On a host with no GPU the playtest checks no frame rate, so the label changes nothing.
 
 ## Approval
 

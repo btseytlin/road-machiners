@@ -6,13 +6,13 @@ digraph testing {
   subgraph cluster_preview {
     label="Preview: new card"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
     PM [label="Merge the base\ninto the branch"]; PT [label="Test round\nplay, fix, capture"]; PV [label="Visual review"];
-    PC [label="Checks\ntests, playtest, build"]; PP [label="Post to\ncommittee", fillcolor="#fde68a", color="#b45309"];
+    PC [label="Checks\ntests, playtest, build\nfps-waived: frame rate\nalone may fail"]; PP [label="Post to\ncommittee", fillcolor="#fde68a", color="#b45309"];
     PM -> PT -> PV -> PC -> PP [weight=100];
   }
   subgraph cluster_harden {
     label="Harden: approved card"; labelloc=b; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
     HM [label="Merge the base\ninto the branch"]; HH [label="Harden round\nverify, review, cost"]; HR [label="/code-review\non Sonnet"];
-    HC [label="Checks\ntests, playtest, build"]; HQ [label="Queue merge\nno post"];
+    HC [label="Checks\ntests, playtest, build\nfps-waived: frame rate\nalone may fail"]; HQ [label="Queue merge\nno post"];
     HM -> HH -> HR -> HC -> HQ [weight=100];
   }
   XI [label="Implementation", fillcolor="#f3f4f6", color="#6b7280"];
