@@ -405,6 +405,15 @@ describe('tick', () => {
     expect(h.sent).toHaveLength(2);
   });
 
+  it('posts the cap notice when the cap holds Checks back and a change takes the heavy slot', async () => {
+    const h = harness(null, false, [card(8, 'Testing')]);
+    delete (h.ctx.cfg as { heavySlots?: number }).heavySlots;
+    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1), testPhase: { 8: 'checks' }, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([['change', '2']]);
+    expect(h.sent).toHaveLength(1);
+  });
+
   it('posts no cap notice when nothing waits', async () => {
     const h = harness(null, false, []);
     writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));

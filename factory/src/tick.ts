@@ -344,8 +344,8 @@ async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise
     if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
     return;
   }
-  // Work waits when more jobs would start without the cap.
-  const waiting = chooseJobs(state, cards, now, { ...ctx.cfg, maxJobsPerDay: Infinity }, devHead).length > chooseJobs(state, cards, now, ctx.cfg, devHead).length;
+  // Work waits when a job would start but for the cap. A count of picks misses it when an uncapped job takes the heavy slot instead.
+  const waiting = evaluateSchedule(state, cards, now, ctx.cfg, devHead).decisions.some((decision) => decision.reasons.length === 1 && decision.reasons[0] === 'daily-cap');
   if (state.capNoticed || !waiting) return;
   const starts = recentStarts(state, now);
   const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
