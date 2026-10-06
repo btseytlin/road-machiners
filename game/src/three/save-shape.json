@@ -1,5 +1,5 @@
 {
- "format": "2.15",
+ "format": "2.16",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -785,6 +785,7 @@
     },
     "resources": "null",
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    },
@@ -868,6 +869,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    },
@@ -943,6 +945,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    },
@@ -1037,6 +1040,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    }
