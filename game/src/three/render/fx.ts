@@ -297,7 +297,7 @@ export class Fx3D {
 
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
-  // where it lands. Any other lands with sparks when it struck something, else with dust.
+  // where it lands, unless it ends unseen. Any other lands with sparks on a truck, dust on the ground and nothing unseen.
   shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
@@ -305,16 +305,20 @@ export class Fx3D {
       cues.fired(m);
     };
     const onLand = () => {
-      if (blastRadius > 0) this.blast(plan.land, blastRadius);
-      else this.impact(plan, spec.look === 'shell');
+      if (plan.impact !== 'none') this.landing(plan, blastRadius, spec.look === 'shell');
       cues.landed();
     };
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
+  private landing(plan: RoundPlan, blastRadius: number, big: boolean): void {
+    if (blastRadius > 0) this.blast(plan.land, blastRadius);
+    else this.impact(plan, big);
+  }
+
   // A bullet or shell landing: sparks on metal, dust in the dirt. Shells throw more.
   private impact(plan: RoundPlan, big: boolean): void {
-    if (plan.struck) this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+    if (plan.impact === 'truck') this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
     else this.puff(plan.land, DUST.color, big ? 10 : 4, { speed: big ? 3 : 1.5, life: 0.9, scale: big ? 0.8 : 0.5, grow: 1.4 });
   }
 
