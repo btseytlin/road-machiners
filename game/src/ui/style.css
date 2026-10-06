@@ -680,7 +680,7 @@ body {
   overflow: auto;
   font-size: 12px;
 }
-.info.pinned {
+#ui .info.pinned {
   border-color: #f0d060;
 }
 .info .pin-head {

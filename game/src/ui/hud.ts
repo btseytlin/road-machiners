@@ -539,8 +539,8 @@ export class Hud {
       ),
       el("div", {}, `Speed ${kph(v.speed)} km/h`),
       ...npcLines(w, v),
-      this.inspected.root,
       ...this.aimControls(w, v),
+      this.inspected.root,
     );
   }
 }
