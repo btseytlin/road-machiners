@@ -726,9 +726,10 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 0,
     fightStyle: 'hold',
     // Traders start with working capital, so a load is worth robbing. Their trade stake keeps a reserve, so one
-    // robbery does not ruin them.
-    money: 3000,
-    cap: 5,
+    // robbery does not ruin them. Eight traders keep the roads busy enough that a robber meets a target every few
+    // hours.
+    money: 4000,
+    cap: 8,
     interval: 12,
     spawn: { kind: "town" },
   },

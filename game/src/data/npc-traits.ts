@@ -51,11 +51,11 @@ export const TRAITS: Record<TraitId, Trait> = {
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened or warned off a wreck, they mostly give way.
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
   // a quarter less fuel for the way to a pump. A trader too poor for any trade hauls free cargo to earn a stake: a
-  // haul weight of 1 loses to trade 30 whenever a trade is affordable. One load costs at most the trade stake of 1500,
-  // half the starting wallet. About one trader in five gives fuel or supplies
+  // haul weight of 1 loses to trade 30 whenever a trade is affordable. One load costs at most the trade stake of 2500,
+  // under two thirds of the starting wallet. About one trader in five gives fuel or supplies
   // when asked, and about one in 35 offers it unprompted to a poor, low player.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty', tradeStake: 1500,
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty', tradeStake: 2500,
     weights: {
       idle: { trade: { add: 30 }, haul: { add: 1 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
