@@ -787,14 +787,25 @@ function defend(o: Orders, goal: Goal): boolean {
 }
 
 // Out of combat, the bot runs before the guns reach it when it would not fight even the weakest hostile in sight, as
-// an NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. A truck in
-// town, parked on a job or stranded does not run. True when the turn's command went to the run.
+// an NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. With none in
+// sight, a heard hostile it would not fight keeps the run going: the goal turned the bot back into the foe each time
+// it dropped behind a ridge. A truck in town, parked on a job or stranded does not run. True when the turn's command
+// went to the run.
 function avoid(o: Orders, goal: Goal): boolean {
-  if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me)) return false;
-  const foe = weakestFoe(o.world);
-  if (!foe || fights(o, foe, goal)) return false;
+  if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me) || !runsFrom(o, goal)) return false;
   flee(o);
   return true;
+}
+
+function runsFrom(o: Orders, goal: Goal): boolean {
+  const foe = weakestFoe(o.world);
+  if (foe) return !fights(o, foe, goal);
+  return heardHostiles(o.world).some((v) => !fights(o, v, goal));
+}
+
+function heardHostiles(world: World): Vehicle[] {
+  const heard = new Set(world.player.contacts.map((c) => c.vehicleId));
+  return world.vehicles.filter((v) => heard.has(v.id) && hostileToPlayer(world, v) && !isKnockedOut(v));
 }
 
 // The nearest town whose direction is more than 90 degrees off every threat's, else straight away from the threats, as
@@ -809,8 +820,7 @@ function flee(o: Orders): void {
   if (threats.length === 0) return driveToSite(o, nearestTown(o.world));
   const safe = REGION.towns.filter((town) => threats.every((foe) => pointsAway(o.me.pos, town.pos, foe))).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
   if (safe[0]) return driveToSite(o, safe[0]);
-  const away = awayFrom(o.me.pos, threats);
-  driveTo(o, { x: clamp(away.x, 1, o.world.size - 1), y: clamp(away.y, 1, o.world.size - 1) });
+  driveTo(o, awayFrom(o.me.pos, threats, o.world.size));
 }
 
 function keepsCourse(me: Vehicle, seen: Vec[]): boolean {
@@ -828,16 +838,23 @@ function closesOn(from: Vec, to: Vec, foe: Vec): boolean {
   return (to.x - from.x) * (foe.x - from.x) + (to.y - from.y) * (foe.y - from.y) > 0;
 }
 
-// A point straight away from the threats, as far off as the nearest one: along the sum of the directions away from
-// each. Two threats on opposite sides cancel out, and the way is then square to them.
-function awayFrom(pos: Vec, threats: Vec[]): Vec {
+// The map edge straight away from the threats: along the sum of the directions away from each. Two threats on
+// opposite sides cancel out, and the way is then square to them. The point only sets the way, since the run ends when
+// the bot loses its foes. A point as far off as the nearest foe made the bot brake inside the foe's guns.
+function awayFrom(pos: Vec, threats: Vec[], size: number): Vec {
   const unit = (foe: Vec) => ({ x: (pos.x - foe.x) / Math.max(dist(pos, foe), 1e-6), y: (pos.y - foe.y) / Math.max(dist(pos, foe), 1e-6) });
   const sum = threats.map(unit).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }));
   const near = nearest(pos, threats)!;
   const len = Math.hypot(sum.x, sum.y);
   const way = len > 1e-6 ? { x: sum.x / len, y: sum.y / len } : { x: -unit(near).y, y: unit(near).x };
-  const reach = dist(pos, near);
-  return { x: pos.x + way.x * reach, y: pos.y + way.y * reach };
+  return edgeAlong(pos, way, size);
+}
+
+// Where a ray from pos along the unit vector way meets the map's edge, one tile in.
+function edgeAlong(pos: Vec, way: Vec, size: number): Vec {
+  const reach = (p: number, d: number) => (d > 1e-6 ? (size - 1 - p) / d : d < -1e-6 ? (1 - p) / d : Infinity);
+  const t = Math.max(0, Math.min(reach(pos.x, way.x), reach(pos.y, way.y)));
+  return { x: pos.x + way.x * t, y: pos.y + way.y * t };
 }
 
 // Drives at the foe. A hunter also aims its guns at the foe's critical parts.

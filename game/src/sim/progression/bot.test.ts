@@ -15,6 +15,7 @@ import { siteOf } from '../market';
 import { playerSees } from '../vision';
 import { nearestPad, nearestTown, siteGates } from '../sites';
 import { RULES } from '../../data/rules';
+import { TERRAIN } from '../../data/terrain';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
@@ -642,6 +643,39 @@ describe('the hunter', () => {
       if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
       expect(pointsAway(me.pos, order.dest, raider.pos)).toBe(true);
     }
+  });
+
+  // The gunwagon dropped out of sight for a turn, and the trade route turned the bot back into its guns.
+  it('has a bot keep running while it hears a stronger raider it no longer sees', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    addGoods(w, me, 'electronics', 2);
+    const raider = addVehicle(w, 'raiders', 'wagon', ['cannon', 'heavyDiesel'], { x: me.pos.x + 40, y: me.pos.y });
+    raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
+    w.player.contacts = [{ vehicleId: raider.id, center: { ...raider.pos }, radius: 5, sources: ['sound'], loudness: 1 }];
+    const run = { kind: 'stopAt' as const, dest: { x: 1, y: me.pos.y } };
+    me.order = run;
+    expect(playerSees(w, raider.pos)).toBe(false);
+
+    const turn = botOrders(w, 'trader');
+
+    expect(playerVehicle(turn.world).order).toEqual(run);
+  });
+
+  // With no town away from it, the bot ran only as far as the foe stood and braked inside its guns.
+  it('has a bot with no town away from a stronger raider run on past its guns', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    const raider = addVehicle(w, 'raiders', 'wagon', ['cannon', 'heavyDiesel'], { x: me.pos.x + 6, y: me.pos.y + 6 });
+    raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+
+    const order = playerVehicle(botOrders(w, 'trader').world).order;
+
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(pointsAway(me.pos, order.dest, raider.pos)).toBe(true);
+    expect(dist(order.dest, raider.pos)).toBeGreaterThan(TERRAIN.vision.radius);
   });
 
   // A merc camps at the gate. Firing from town makes the guard shoot the bot, so it holds fire and repairs instead.
