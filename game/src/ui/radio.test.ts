@@ -187,6 +187,37 @@ describe('RadioStation', () => {
     expect(s.next()).toBeNull();
   });
 
+  it('varies the gap and never dumps a backlog in one turn', () => {
+    // Ident picks a line, then the next random number schedules the gap.
+    const values = [0, 0.99, 0, 0, 0, 0.99];
+    const s = new RadioStation(() => values.shift() ?? 0);
+    const w = world(1);
+    s.hear(w);
+    expect(s.next()?.topic).toBe('ident');
+    const queued = later(w, RADIO.minGapTurns, [heatwave('started'), heatwave('ended')]);
+    s.hear(queued);
+    expect(s.queued).toBe(2);
+    expect(s.next()).toBeNull();
+    s.hear(later(queued, RADIO.gapJitterTurns - 1));
+    expect(s.next()).toBeNull();
+    s.hear(later(queued, RADIO.gapJitterTurns));
+    expect(s.next()?.rank).toBe('news');
+    expect(s.next()).toBeNull();
+    s.hear(later(queued, RADIO.gapJitterTurns + RADIO.minGapTurns));
+    expect(s.next()).toBeNull(); // the second report expired instead of dumping late
+    expect(s.queued).toBe(0);
+  });
+
+  it('resets its randomized schedule on a new game', () => {
+    const s = new RadioStation(() => 0.99);
+    const w = world(100);
+    s.hear(w);
+    expect(s.next()?.topic).toBe('ident');
+    const fresh = world(2);
+    s.hear(fresh);
+    expect(s.next()?.topic).toBe('ident');
+  });
+
   it('drops stale news', () => {
     const w = world(10);
     const s = tuned(w);
@@ -196,9 +227,11 @@ describe('RadioStation', () => {
   });
 
   it('fills a quiet stretch with road wisdom', () => {
-    // Turn 1 is early morning, so no clock call falls in the stretch.
+    // Skipped clock calls leave room for occasional banter.
     const w = world(1);
-    const s = tuned(w);
+    const s = new RadioStation(() => 0.99);
+    s.hear(w);
+    expect(s.next()?.topic).toBe('ident');
     s.hear(later(w, RADIO.idleTurns - 1));
     expect(s.next()).toBeNull();
     s.hear(later(w, RADIO.idleTurns));
@@ -211,9 +244,9 @@ describe('RadioStation', () => {
     const before = Math.round(1 + (24 - TIME.startHour + TIME.sunrise - 0.5) * perHour);
     const w = world(before);
     const s = tuned(w);
-    s.hear(later(w, RADIO.minGapTurns));
-    expect(s.next()).toBeNull();
     s.hear(later(w, Math.ceil(perHour)));
+    expect(s.next()).toBeNull();
+    s.hear(later(w, RADIO.minGapTurns));
     expect(s.next()).toMatchObject({ topic: 'dawn', rank: 'time' });
   });
 });

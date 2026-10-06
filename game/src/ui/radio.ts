@@ -49,6 +49,7 @@ export class RadioStation {
   private board = new Set<string>();
   private queue: Broadcast[] = [];
   private lastSent: number | null = null; // turn of the last broadcast sent
+  private nextAir = 0; // randomized earliest turn for the next broadcast
   private lastAir = 0; // turn of the last broadcast queued or sent, for the idle filler
   private placeHeard = new Map<string, number>(); // raid place word -> turn it was last reported
   private lastText = new Map<RadioTopic, string>();
@@ -81,7 +82,7 @@ export class RadioStation {
   next(): Broadcast | null {
     if (this.turn === null) return null;
     const now = this.turn;
-    if (this.lastSent !== null && now - this.lastSent < RADIO.minGapTurns) return null;
+    if (now < this.nextAir) return null;
     this.queue = this.queue.filter((b) => b.rank === 'filler' || now - b.turn <= RADIO.staleTurns);
     for (const rank of RANKS) {
       const newest = this.queue.filter((b) => b.rank === rank).at(-1);
@@ -89,6 +90,7 @@ export class RadioStation {
       this.queue.splice(this.queue.indexOf(newest), 1);
       this.lastSent = now;
       this.lastAir = now;
+      this.nextAir = now + RADIO.minGapTurns + Math.floor(this.random() * (RADIO.gapJitterTurns + 1));
       return newest;
     }
     return null;
@@ -101,6 +103,7 @@ export class RadioStation {
     this.board = boardIds(world);
     this.queue = [];
     this.lastSent = null;
+    this.nextAir = world.turn;
     this.placeHeard.clear();
     this.push('ident', {}, 'time');
   }
@@ -156,7 +159,7 @@ export class RadioStation {
     // Calls fall on whole hours, so none lies between two times in the same hour.
     if (Math.floor(from) === Math.floor(to)) return;
     const latest = clockCalls(from, to).filter((c) => c.at > from && c.at <= to).at(-1);
-    if (latest) this.push(latest.topic, {}, 'time');
+    if (latest && this.random() < RADIO.clockChance) this.push(latest.topic, {}, 'time');
   }
 
   private push(topic: RadioTopic, vars: Record<string, string>, rank: Broadcast['rank']): void {
@@ -247,6 +250,8 @@ export function revealed(text: string, elapsedMs: number, charsPerSecond: number
 export class RadioPanel {
   readonly root = panel('radio', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
+  // The transport keys sit in a strip above the screen.
+  readonly keys = el('div', { class: 'radio-keys' });
   // Screen readers wait for aria-busy to clear, so they read a broadcast once, whole.
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
   private streaming: { text: string; start: number } | null = null;
@@ -254,7 +259,7 @@ export class RadioPanel {
   constructor(private station: RadioStation) {
     const band = el('div', { class: 'radio-band' }, el('span', {}, 'WOT RADIO'), el('span', {}, 'FM 66.6'));
     const ghost = el('div', { class: 'radio-ghost', 'aria-hidden': 'true' }, '\u2588'.repeat(3 * 30));
-    this.root.append(el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
+    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
   }
 
   hear(world: World): void {

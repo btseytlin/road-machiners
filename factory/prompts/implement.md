@@ -19,7 +19,7 @@ The issue and its comments are in `.factory/issue.md`.
 Every task with a change a player can see needs this, with or without a reference image. That covers effects, UI, locations, models and animation.
 1. Build and run the affected gameplay, as a player meets it. Capture real in-game screenshots with a Playwright script in `tmp/`, without GPU flags. Take representative states and camera angles, like the start, the active state, the end and the view from the side.
 2. Read every screenshot with the Read tool. Look at the pixels.
-3. Compare them with the issue, the plan in {{taskFile}}, `game/docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
+3. Compare them with the issue, the plan in {{taskFile}}, `docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
 4. Write down every obvious mismatch in plain words. Look for placeholder shapes that should not ship, like a perfect circle or a plain box, wrong direction or placement, like ahead of the truck when the issue says behind it, wrong proportion or scale, poor readability against the ground, and missing states.
 5. Fix each mismatch, capture again, read the new images and compare again. Do this until nothing obvious differs. Do not claim you are done before that.
 A look that a still cannot show needs a short playback in a real browser, or frames at successive simulation points. Examples are a flare that launches and rises, and oil that drops behind a moving truck. Read those frames too.
@@ -60,7 +60,7 @@ The next stage does that.
 
 This machine is slow. Keep checks focused.
 While you work, run only the tests near your change with `npx vitest run <files>`.
-Prove the feature works with a targeted test, or a short Playwright check of that one behavior.
+Prove the feature works with a targeted test. Playtest game behavior with the progression recorder, and use a short Playwright check only for what the screen shows.
 Do not run the playtest. The testing stage and the factory run it.
 Before you finish, run `npm test` and `npm run typecheck` once.
 Every test must pass, not only the tests for this issue.

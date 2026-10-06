@@ -175,12 +175,15 @@ export const PERK_NUMBERS = {
 // ---- Progression targets, checked by the progression band test and printed by npm run progression:report.
 // Edit these days to change the curve, then tune XP_SOURCES until the report passes.
 
-// The skill each archetype mostly practices. The mixed bot has none; all its skills count as off skills.
+// The skill each archetype mostly practices. The markov bot has none; all its skills count as off skills.
 export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
   trader: 'social',
   scavenger: 'machining',
-  fighter: 'perception',
-  mixed: null,
+  hunter: 'perception',
+  fastTrader: 'driving',
+  hauler: 'social',
+  climber: 'social',
+  markov: null,
 };
 
 // In-game day by which a skill reaches a level, keyed by level. A level missing from a table is not checked.

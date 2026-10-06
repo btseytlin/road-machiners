@@ -168,14 +168,29 @@ describe('the retreat home', () => {
     expect(thinkNpc(w, buggy)).toMatchObject({ kind: 'retreat', targetId: home.id });
   });
 
-  it('appears at a home pad after enough turns beyond the player\'s gray vision, refitted on the same chassis', () => {
+  it('appears at a home pad after enough turns beyond the player\'s gray vision, and lies up there still defeated', () => {
     const { w, buggy } = retreating();
     const home = npcHomeSite(buggy)!;
-    const money = getResources(w, buggy).money;
     for (let turn = 1; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
     expect(buggy.defeat?.unseen).toBe(RULES.retreatTeleportTurns - 1);
     advanceNpcKnockouts(w);
     expect(sitePads(home).some((pad) => dist(pad, buggy.pos) < 0.01)).toBe(true);
+    expect(buggy.defeat).toBeDefined();
+    expect(vehicleStats(w, buggy).weapons).toHaveLength(0);
+    thinkNpc(w, buggy);
+    resolveNpcActivities(w);
+    expect(topGoal(buggy)).toMatchObject({ kind: 'rearm', targetId: home.id });
+  });
+
+  it('refits on the same chassis and keeps its money when its lie-up at home ends', () => {
+    const { w, buggy } = retreating();
+    buggy.pos = { ...sitePads(npcHomeSite(buggy)!)[0] };
+    const money = getResources(w, buggy).money;
+    thinkNpc(w, buggy);
+    resolveNpcActivities(w);
+    w.turn = topGoal(buggy)!.until!;
+    thinkNpc(w, buggy);
+    resolveNpcActivities(w);
     expect(buggy.defeat).toBeUndefined();
     expect(buggy.chassisId).toBe('buggy');
     expect(vehicleStats(w, buggy).weapons.length).toBeGreaterThan(0);
@@ -198,13 +213,14 @@ describe('the retreat home', () => {
     expect(buggy.pos).toEqual({ x: 150, y: 150 });
   });
 
-  it('refits when it drives up to its home pad', () => {
+  it('lies up when it drives up to its home pad, without a refit yet', () => {
     const { w, buggy } = retreating();
     buggy.pos = { ...sitePads(npcHomeSite(buggy)!)[0] };
     thinkNpc(w, buggy);
     resolveNpcActivities(w);
-    expect(buggy.defeat).toBeUndefined();
-    expect(topGoal(buggy)?.kind).not.toBe('retreat');
+    expect(buggy.defeat).toBeDefined();
+    expect(topGoal(buggy)?.kind).toBe('rearm');
+    expect(buggy.brain!.goals.some((g) => g.kind === 'retreat')).toBe(false);
   });
 });
 
@@ -297,5 +313,35 @@ describe('cab knock', () => {
     cabHitFromHalf(w, buggy, (roll) => roll >= miss);
     resolveDestroyed(w);
     expect(buggy.defeat).toBeUndefined();
+  });
+});
+
+describe('winners strip the trucks they knock out', () => {
+  function duel(): { w: World; winner: Vehicle; loser: Vehicle } {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const winner = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    winner.brain = npcBrain('buggy', winner.pos, ['raider']);
+    const loser = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    loser.brain = npcBrain('trader', loser.pos, ['trader']);
+    loser.lastHitBy = winner.id;
+    loser.brain.attackers[winner.id] = true;
+    return { w, winner, loser };
+  }
+
+  it('sends a raider that knocked out another driver to loot the truck', () => {
+    const { w, winner, loser } = duel();
+
+    knockOutNpc(w, loser);
+
+    expect(topGoal(winner)).toMatchObject({ kind: 'loot', targetId: loser.id });
+  });
+
+  it('leaves a hurt raider out of the looting', () => {
+    const { w, winner, loser } = duel();
+    corePart(winner, 'cab').hp = 1;
+
+    knockOutNpc(w, loser);
+
+    expect(topGoal(winner)?.kind).not.toBe('loot');
   });
 });

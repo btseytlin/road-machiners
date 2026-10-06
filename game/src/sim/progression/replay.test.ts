@@ -79,6 +79,11 @@ describe('parseRunEnd', () => {
     expect(parseRunEnd(search(10, 1))).toBeNull();
   });
 
+  it('reads an error marker with its message', () => {
+    expect(parseRunEnd({ end: 'error', turn: 57, message: 'No free engine mount' })).toEqual({ end: 'error', turn: 57, message: 'No free engine mount' });
+    expect(() => parseRunEnd({ end: 'error', turn: 57 })).toThrow(/Bad run end/);
+  });
+
   it('rejects a malformed marker', () => {
     expect(() => parseRunEnd({ end: 'stall', turn: 57 })).toThrow(/Bad run end/);
   });

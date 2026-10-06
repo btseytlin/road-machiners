@@ -33,7 +33,7 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
-import { canUseSite, isTerritory, siteGates, sitePads, siteUnder, type Site } from './sites';
+import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -161,6 +161,19 @@ function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
 export function isWeak(world: World, vehicle: Vehicle): boolean {
   const threshold = topGoal(vehicle)?.kind === 'flee' ? NPC_BEHAVIOR.recoverCondition : NPC_BEHAVIOR.fleeCondition;
   return getCombatCondition(world, vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
+}
+
+// Raiders hunt prey. Only they hold the raid goal, so only they must be fit to hunt.
+export function huntsPrey(vehicle: Vehicle): boolean {
+  return vehicle.faction === 'raiders';
+}
+
+// A truck that can drive, with a working gun, a body and a driver both above the recover condition. A raider
+// below it stays out of raids until camp service or a lie-up for fresh gear makes it fit.
+export function fitToHunt(world: World, vehicle: Vehicle): boolean {
+  if (isStranded(world, vehicle) || firepower(world, vehicle) <= 0) return false;
+  const line = NPC_BEHAVIOR.recoverCondition;
+  return bodyCondition(vehicle) > line && getResources(world, vehicle).health / RULES.maxHealth > line;
 }
 
 // Hostile vehicles in sight, nearest first.
@@ -301,7 +314,7 @@ let grounds: readonly Vec[] | null = null;
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
-  const lonely = (p: Vec) => sites.every((site) => dist(p, site.pos) - site.radius >= HUNT.siteDistance);
+  const lonely = (p: Vec) => sites.every((site) => siteGap(site, p) >= HUNT.siteDistance);
   const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
   const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
   const inTerritories = REGION.locations.filter(isTerritory).flatMap(territoryGrounds);
@@ -517,7 +530,7 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
 
 // Only raiders are hostile to trucks with loot, so only they have prey to hunt, on the grounds of their own camp.
 function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return vehicle.faction === 'raiders' && raiderGroundsAway(vehicle).length > 0;
+  return huntsPrey(vehicle) && raiderGroundsAway(vehicle).length > 0;
 }
 
 // Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
