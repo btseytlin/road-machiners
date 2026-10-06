@@ -61,19 +61,19 @@ const longbedAtBowl = () => {
 describe("trade", () => {
   it("buying moves money into cargo", () => {
     const start = startAtBowl();
-    const price = buyPrice(start, "bowl", "scrap");
+    const price = getLotTradePrice(start, start.vehicles[0], "bowl", "scrap", 3, "buy");
     const w = buyGood(start, "scrap", 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(1000 - 3 * price);
+    expect(w.player.money).toBe(start.player.money - price);
   });
 
   it("enforces cargo capacity and money", () => {
     const w = startAtBowl();
-    w.player.money = 10000;
+    w.player.money = 333333;
     expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow(
       /cargo space/,
     );
-    w.player.money = 300;
+    w.player.money = 10000;
     expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
   });
 
@@ -191,13 +191,13 @@ describe("garage", () => {
 
   it.each(STALLS)("sells fuel and supplies at the %s at the town prices", (id) => {
     const w = atSite(id);
-    w.player.money = 1000;
+    w.player.money = 33333;
     w.player.fuel = 0;
     w.player.supplies = 0;
     for (const kind of ["fuel", "supplies"] as const) {
       const r = buySupply(w, kind, 3);
       expect(r.player[kind]).toBe(3);
-      expect(r.player.money).toBe(1000 - 3 * ECONOMY.supplyPrice[kind]);
+      expect(r.player.money).toBe(33333 - 3 * ECONOMY.supplyPrice[kind]);
     }
   });
 
@@ -265,7 +265,7 @@ describe("garage", () => {
     const r = repairAll(w);
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
-    expect(r.player.money).toBeLessThan(1000);
+    expect(r.player.money).toBeLessThan(w.player.money);
   });
 
   it("repairs only the built-in parts with repair basics, for the shown price", () => {
@@ -415,7 +415,7 @@ describe("garage", () => {
 
   it("chassis swap keeps fitting parts and stores the rest", () => {
     let w = startAtBowl();
-    w.player.money = 2000;
+    w.player.money = 66667;
     w = buyChassis(w, "hauler");
     const me = w.vehicles[0];
     expect(me.chassisId).toBe("hauler");
@@ -427,7 +427,7 @@ describe("garage", () => {
     ).toEqual(["cage", "mg", "panniers", "stockEngine"]);
     expect(goodsCount(me)).toEqual({ scrap: 2, parts: 2 });
     expect(w.player.money).toBe(
-      2000 -
+      66667 -
         (CHASSIS.hauler.value -
           Math.floor(CHASSIS.scout.value * (1 - ECONOMY.spread))),
     );
@@ -437,7 +437,7 @@ describe("garage", () => {
 
   it("refunds the difference when the trade-in beats the new chassis price", () => {
     let w = startAtBowl();
-    w.player.money = 5000;
+    w.player.money = 166667;
     w = buyChassis(w, "carrier");
     const tradeIn = chassisTradeIn(w);
     expect(tradeIn).toBeGreaterThan(CHASSIS.scout.value);
@@ -684,7 +684,7 @@ describe("locations", () => {
 describe("debt", () => {
   it("a player in debt cannot buy anything", () => {
     const w = startAtBowl();
-    w.player.money = -100;
+    w.player.money = -3333;
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
     expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
@@ -697,21 +697,21 @@ describe("debt", () => {
 
   it("sales pay the debt down", () => {
     const w = startAtBowl();
-    w.player.money = -100;
+    w.player.money = -3333;
     const after = sellGood(w, "scrap", 2);
-    expect(after.player.money).toBe(-100 + 2 * sellPrice(w, "bowl", "scrap"));
+    expect(after.player.money).toBe(-3333 + getLotTradePrice(w, w.vehicles[0], "bowl", "scrap", 2, "sell"));
   });
 
   it("an NPC in debt gets no fuel, supplies or repairs in town", () => {
     const w = startAtBowl();
     const npc = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...sitePads(bowl)[0] });
-    npc.resources!.money = -50;
+    npc.resources!.money = -1667;
     npc.resources!.fuel = 1;
     npc.resources!.supplies = 1;
     const engine = mountedParts(npc, "engine")[0];
     engine.hp = 1;
     serviceVehicle(w, npc, "bowl", 0);
-    expect(npc.resources).toMatchObject({ money: -50, fuel: 1, supplies: 1 });
+    expect(npc.resources).toMatchObject({ money: -1667, fuel: 1, supplies: 1 });
     expect(engine.hp).toBe(1);
   });
 });

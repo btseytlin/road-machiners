@@ -76,7 +76,7 @@ describe('botOrders', () => {
     w.shops.nose.pressure.electronics = PRESSURE_MAX;
     w.shops.bowl.pressure.electronics = PRESSURE_MAX;
     addGoods(w, playerVehicle(w), 'electronics', 6);
-    w.player.costBasis.electronics = 1;
+    w.player.costBasis.electronics = 33;
     w.player.money = 0;
     for (const part of mountedParts(playerVehicle(w))) part.hp = Math.floor(maxHp(part) / 4);
     expect(repairCost(w)).toBeGreaterThan(getUpkeepReserve(playerVehicle(w)));
@@ -100,7 +100,7 @@ describe('botOrders', () => {
   it('has a trader carry its cargo to the known town that pays more for it', () => {
     const w = parkedAt('bowl');
     addGoods(w, playerVehicle(w), 'electronics', 2);
-    w.player.costBasis.electronics = 100;
+    w.player.costBasis.electronics = 3333;
 
     const turn = botOrders(w, 'trader');
 
@@ -179,7 +179,7 @@ describe('botOrders', () => {
       return botOrders(w, 'trader').world;
     };
 
-    expect(stranded(2000).player.beacon).toBe(true);
+    expect(stranded(66667).player.beacon).toBe(true);
     expect(stranded(0).player.beacon).toBe(false);
   });
 
@@ -195,7 +195,7 @@ describe('botOrders', () => {
       return botOrders(w, 'trader').world;
     };
 
-    expect(dry(500).player.beacon).toBe(true);
+    expect(dry(16667).player.beacon).toBe(true);
     expect(dry(0).player.beacon).toBe(false);
   });
 
@@ -220,8 +220,8 @@ describe('botOrders', () => {
     };
 
     expect(offerTo(0, 'there')).toBeNull();
-    expect(offerTo(2000, 'elsewhere')).toBeNull();
-    expect(offerTo(2000, 'there')).toMatchObject({ data: { hitched: true } });
+    expect(offerTo(66667, 'elsewhere')).toBeNull();
+    expect(offerTo(66667, 'there')).toMatchObject({ data: { hitched: true } });
   });
 
   it('has a stranded truck without an engine buy and mount one in town', () => {
@@ -241,10 +241,10 @@ describe('botOrders', () => {
       const w = withoutEngine(parkedAt('bowl'));
       const me = playerVehicle(w);
       me.pos = { x: me.pos.x + 8, y: me.pos.y };
-      w.player.money = 2000;
+      w.player.money = 66667;
       for (const shop of Object.values(w.shops)) shop.stock = shop.stock.filter((p) => partDef(p.defId).kind !== 'engine');
       if (engineInStock) w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
-      w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+      w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward: 10000, deadline: 5000, window: 5000, rush: false, tier: 1 });
       addGoods(w, me, 'salt', 1);
       return botOrders(w, 'trader').world;
     };
@@ -261,7 +261,7 @@ describe('botOrders', () => {
   // A raider took the haul's goods, so the haul can never be handed in.
   it('has a trader whose haul goods are gone trade on', () => {
     const w = saltGlut(parkedAt('nose'));
-    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'fuel', units: 12, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'fuel', units: 12, to: 'nose', reward: 10000, deadline: 5000, window: 5000, rush: false, tier: 1 });
 
     const turn = botOrders(w, 'trader');
 
@@ -270,7 +270,7 @@ describe('botOrders', () => {
 
   it('has a bot in debt in town sell gear to clear it', () => {
     const w = parkedAt('bowl');
-    w.player.money = -60;
+    w.player.money = -2000;
 
     const turn = botOrders(w, 'trader');
 
@@ -299,7 +299,7 @@ describe('botOrders', () => {
     const me = playerVehicle(w);
     expect(mountPart(w, me, makePart(w, 'rack', 0))).toBe(true);
     const units = addGoods(w, me, 'tools', 99);
-    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'tools', units, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'tools', units, to: 'nose', reward: 10000, deadline: 5000, window: 5000, rush: false, tier: 1 });
     for (const p of mountedParts(me, 'core')) if (partDef(p.defId).id === 'transmission') p.hp = 0;
     w.player.money = 0;
 
@@ -324,7 +324,7 @@ describe('botOrders', () => {
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     me.items = me.items.filter((it) => it.kind !== 'part' || !mountedParts(me, 'weapon').includes(it.part));
-    w.player.money = 600;
+    w.player.money = 20000;
     w.shops.bowl.stock = [makePart(w, 'mg', 0), makePart(w, 'heavyMg', 0)];
 
     const turn = botOrders(w, 'hunter');
@@ -459,7 +459,7 @@ describe('the hunter', () => {
     const me = playerVehicle(w);
     me.pos = { x: me.pos.x + 10, y: me.pos.y };
     addGoods(w, me, 'electronics', 2);
-    w.player.costBasis.electronics = 100;
+    w.player.costBasis.electronics = 3333;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 300, y: 300 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     startCombat(w, raider, me);
@@ -474,7 +474,7 @@ describe('the hunter', () => {
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     for (const part of mountedParts(me)) part.hp = Math.floor(maxHp(part) / 4);
-    w.player.money = 2000;
+    w.player.money = 66667;
     const merc = addVehicle(w, 'mercs', 'van', ['mg', 'stockEngine'], { x: me.pos.x + 8, y: me.pos.y });
     merc.brain = npcBrain('merc', merc.pos, NPCS.merc.traits);
     startCombat(w, merc, me);
@@ -501,7 +501,7 @@ describe('the hunter', () => {
   it('has a hunter take the bounty on the board it is parked at, and a trader leave it', () => {
     const heldAfter = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1 }];
       return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
     };
 
@@ -550,7 +550,7 @@ describe('the hunter', () => {
 
   it('has a hauler take the haul on the board it is parked at before it trades', () => {
     const w = parkedAt('bowl');
-    w.shops.bowl.contracts = [{ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 }];
+    w.shops.bowl.contracts = [{ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 20000, deadline: 5000, window: 600, rush: false, tier: 2 }];
 
     expect(botOrders(w, 'hauler').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
   });
@@ -558,8 +558,8 @@ describe('the hunter', () => {
   it('has a climber with fewer than three guns haul, and take no bounty', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [
-      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
-      { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
+      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1 },
+      { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 20000, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 
     expect(botOrders(w, 'climber').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
@@ -653,7 +653,7 @@ describe('the markov bot', () => {
 describe('the fast trader', () => {
   it('buys a faster chassis and no armor with money to spare', () => {
     const w = parkedAt('bowl');
-    w.player.money = 200_000;
+    w.player.money = 6_666_667;
     const before = playerVehicle(w);
     const armor = mountedParts(before, 'armor').length;
 

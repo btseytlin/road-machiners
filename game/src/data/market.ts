@@ -15,16 +15,17 @@ export type Tier = 1 | 2 | 3;
 export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
 
 export const EFFORT = {
-  // Net money per turn at each tier. Tier 1 is the salvage wage of the deleted econ harness. Tiers 2 and 3 are a
-  // guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the measure that replaces them.
+  // Net money per turn at each tier, in cents (100 cents is 1 M). Tier 1 is the salvage wage of the deleted econ
+  // harness. Tiers 2 and 3 are a guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the
+  // measure that replaces them.
   wage: {
-    1: 0.37,
-    2: 1,
-    3: 2.2,
+    1: 12.33,
+    2: 33.33,
+    3: 73.33,
   } as Record<Tier, number>,
 
   // Target effort in turns per tier and item kind: value / wage[tier] should land in this range.
-  // They hold chassis from 2000, 3000 and 4500 money per tier, and parts from 100, 200 and 450.
+  // They hold chassis from about 667, 1000 and 1500 M per tier, and parts from about 33, 67 and 150 M.
   // Goods are priced far below parts, since a haul is many units, not one purchase.
   bands: {
     1: {
@@ -102,8 +103,8 @@ export const CONTRACTS = {
     units: [3, 12] as [number, number],
     // Owed share of the hauled goods' value if the deadline passes (Design > Contract terms).
     penaltyShare: 1,
-    // Social XP per money of the reward, all of which pays for the trip.
-    xpPerEffort: 0.1,
+    // Social XP per cent of the reward, all of which pays for the trip.
+    xpPerEffort: 0.003,
     // A rush haul is a standard haul with a short window and a premium.
     rush: {
       // Share of rolled hauls that are rush jobs.
@@ -125,8 +126,8 @@ export const CONTRACTS = {
     // Worst wear a hand-in part may carry. One rebuild keeps the fetch honest: the client wants a
     // part that still does its job, not a part on its last legs.
     maxWear: 1,
-    // Social XP per money of the search fee. The part's own price is a purchase, not work, so it teaches nothing.
-    xpPerEffort: 0.15,
+    // Social XP per cent of the search fee. The part's own price is a purchase, not work, so it teaches nothing.
+    xpPerEffort: 0.0045,
   },
 
   bounty: {
@@ -136,8 +137,8 @@ export const CONTRACTS = {
     // Share of the target's own total worth, chassis plus every part, paid for the kill. A fifth of
     // its worth pays for the risk of the fight without outpricing the wreck's own salvage.
     valueShare: 0.2,
-    // Social XP per money of the reward, all of which pays for the fight.
-    xpPerEffort: 0.25,
+    // Social XP per cent of the reward, all of which pays for the fight.
+    xpPerEffort: 0.0075,
   },
 };
 

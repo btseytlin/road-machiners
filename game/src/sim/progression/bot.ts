@@ -610,7 +610,7 @@ function engageFoe(o: Orders): boolean {
 }
 
 // A hunter picks a fight only against a foe this many times less dangerous than itself. In the snowball runs, fights
-// below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost next to nothing. A foe it will not
+// below a ratio of 2 cost about 233 M of net worth each, and fights at 4 or more cost next to nothing. A foe it will not
 // fight it outruns, as a player does.
 const HUNT_MARGIN = 4;
 

@@ -171,7 +171,7 @@ const MOSTLY_NO_CARGO_PART: Weighted<string | null>[] = [
 
 const LOADOUTS: Record<string, NpcLoadoutTable> = {
   outrider: {
-    budget: 4100,
+    budget: 136700,
     levels: [{ value: "light", weight: 4 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }, { value: "loaded", weight: 0.3 }],
     chassis: [
       { value: "buggy", weight: 6 },
@@ -221,7 +221,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
   gunwagon: {
-    budget: 6900,
+    budget: 230000,
     levels: [{ value: "light", weight: 2 }, { value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],
     chassis: [
       { value: "wagon", weight: 6 },
@@ -273,7 +273,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     spares: null,
   },
   trader: {
-    budget: 7300,
+    budget: 243300,
     levels: [{ value: "poor", weight: 1 }, { value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }],
     chassis: [
       { value: "hauler", weight: 6 },
@@ -329,7 +329,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     spares: TRADER_SPARES,
   },
   scavenger: {
-    budget: 4700,
+    budget: 156700,
     levels: [{ value: "poor", weight: 2 }, { value: "light", weight: 4 }, { value: "standard", weight: 2 }, { value: "heavy", weight: 1 }],
     chassis: [
       { value: "scout", weight: 6 },
@@ -382,7 +382,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // Bowl Farmers drive farm chassis.
   bowlPatrol: {
-    budget: 7700,
+    budget: 256700,
     levels: [{ value: "standard", weight: 3 }, { value: "heavy", weight: 4 }, { value: "loaded", weight: 1 }],
     chassis: [
       { value: "tractor", weight: 5 },
@@ -403,7 +403,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // The Nose Army drives wagons and carriers.
   nosePatrol: {
-    budget: 7900,
+    budget: 263300,
     levels: [{ value: "standard", weight: 3 }, { value: "heavy", weight: 4 }, { value: "loaded", weight: 1 }],
     chassis: [
       { value: "wagon", weight: 5 },
@@ -423,7 +423,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // Light and fast. A courier carries a few small valuables and little armor.
   courier: {
-    budget: 4000,
+    budget: 133300,
     levels: [{ value: "poor", weight: 3 }, { value: "light", weight: 4 }, { value: "standard", weight: 2 }],
     chassis: [
       { value: "courier", weight: 5 },
@@ -465,7 +465,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // A roamer's rig is a scavenger's, a bit better kept.
   roamer: {
-    budget: 4600,
+    budget: 153300,
     levels: [{ value: "poor", weight: 2 }, { value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }, { value: "loaded", weight: 0.5 }],
     chassis: [
       { value: "scout", weight: 5 },
@@ -514,7 +514,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   // A vulture picks its way along lonely roads with a long gun, plates and cargo packs, and never rolls without a
   // cargo part. Its guns all reach 15 tiles or more, so it shoots from beyond most drivers' range.
   vulture: {
-    budget: 7500,
+    budget: 250000,
     levels: [{ value: "poor", weight: 1 }, { value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }],
     chassis: [
       { value: "scout", weight: 4 },
@@ -565,7 +565,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
   // fighting, so its own gun stays light.
   convoy: {
-    budget: 7500,
+    budget: 250000,
     levels: [{ value: "light", weight: 2 }, { value: "standard", weight: 4 }, { value: "heavy", weight: 2 }],
     chassis: [
       { value: "hauler", weight: 6 },
@@ -607,7 +607,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // A guard is quick enough to keep up with its convoy and armed to fight for it.
   convoyGuard: {
-    budget: 5200,
+    budget: 173300,
     levels: [{ value: "standard", weight: 3 }, { value: "heavy", weight: 3 }, { value: "loaded", weight: 1 }],
     chassis: [
       { value: "scout", weight: 4 },
@@ -647,7 +647,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
   merc: {
-    budget: 6900,
+    budget: 230000,
     levels: [{ value: "standard", weight: 3 }, { value: "heavy", weight: 4 }, { value: "loaded", weight: 2 }],
     chassis: [
       { value: "wagon", weight: 4 },

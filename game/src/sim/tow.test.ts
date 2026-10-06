@@ -369,14 +369,14 @@ describe('towing', () => {
     forceOption('strandedSeen', 'tow');
     let w = offered(s);
     const fee = feeOf(w);
-    w.player.money = 10;
+    w.player.money = 333;
     const traderMoney = find(w, s.trader.id).resources!.money;
     w = acceptTow(w);
     const r = runUntil(w, 120, (x) => playerTow(x) === null);
     w = r.w;
     expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, client: w.player.vehicleId, fee }]);
     expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toEqual(['fulfilled']);
-    expect(w.player.money).toBe(10 - fee);
+    expect(w.player.money).toBe(333 - fee);
     expect(w.player.money).toBeLessThan(0);
     expect(find(w, s.trader.id).resources!.money).toBe(traderMoney + fee);
     expect(canUseSite(find(w, s.trader.id).pos, town)).toBe(true);
@@ -392,7 +392,7 @@ describe('towing', () => {
     expect(autoRuns(w)).toBe(false);
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);
-    expect(after.w.player.money).toBe(10 - fee);
+    expect(after.w.player.money).toBe(333 - fee);
   });
 });
 
@@ -647,13 +647,13 @@ describe('free tow for a broke player', () => {
   });
 
   it('offers a player in debt a free tow', () => {
-    const w = offered(broke(-50), 'towFree');
+    const w = offered(broke(-1667), 'towFree');
     expect(feeOf(w)).toBe(0);
-    expect(w.player.money).toBe(-50);
+    expect(w.player.money).toBe(-1667);
   });
 
   it('charges a funded player the route fee under the tow topic', () => {
-    const w = offered(broke(500));
+    const w = offered(broke(16667));
     expect(feeOf(w)).toBeGreaterThan(0);
   });
 
@@ -662,7 +662,7 @@ describe('free tow for a broke player', () => {
     let w = acceptTow(offered(s, 'towFree'));
     for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
     dropTow(w, playerTow(w)!, 'danger');
-    w.player.money = 500;
+    w.player.money = 16667;
     w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
     thinkNpc(w, find(w, s.trader.id));
     const r = runUntil(w, 30, (x) => playerTow(x) !== null);
@@ -670,7 +670,7 @@ describe('free tow for a broke player', () => {
   });
 
   it('gives a paid promise free to a player who is broke when it is offered again', () => {
-    const s = broke(500);
+    const s = broke(16667);
     let w = acceptTow(offered(s));
     for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
     dropTow(w, playerTow(w)!, 'danger');
@@ -882,9 +882,9 @@ describe('the player towing an NPC', () => {
 
   it('the driver names its nearest town and a fee it can pay', () => {
     const { w: start, npc } = strandedNpc();
-    npc.resources!.money = 30;
+    npc.resources!.money = 1000;
     const w = pick(callVehicle(start, npc.id), OFFER);
-    expect(w.player.call?.vars).toEqual({ site: { kind: 'site', id: 'bowl' }, fee: { kind: 'money', amount: 30 } });
+    expect(w.player.call?.vars).toEqual({ site: { kind: 'site', id: 'bowl' }, fee: { kind: 'money', amount: 1000 } });
   });
 
   it('hitching takes the driver out of physics, and it trails the player', () => {
@@ -1034,7 +1034,7 @@ describe('NPCs towing each other', () => {
     forceOption('strandedSeen', 'tow');
     const c = withTower(w, ...client, outFrom(site, 30));
     c.resources!.fuel = 0;
-    c.resources!.money = 1000;
+    c.resources!.money = 33333;
     return { w, client: c, tower: withTower(w, ...tower, outFrom(site, 38)) };
   }
 
@@ -1256,12 +1256,12 @@ describe('a broke driver', () => {
 
   it('with money on a town pad pays for its repair and keeps its loadout', () => {
     const { w, npc } = broke(nearestPad(bowl, far));
-    getResources(w, npc).money = 5000;
+    getResources(w, npc).money = 166667;
     const engine = mountedParts(npc, 'engine')[0];
     engine.hp = 0;
     thinkNpc(w, npc);
     expect(mountedParts(npc, 'engine')[0].id).toBe(engine.id);
-    expect(getResources(w, npc).money).toBeLessThan(5000);
+    expect(getResources(w, npc).money).toBeLessThan(166667);
     expect(isStranded(w, npc)).toBe(false);
   });
 });

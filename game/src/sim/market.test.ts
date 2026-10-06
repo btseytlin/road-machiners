@@ -212,7 +212,7 @@ describe('market', () => {
 });
 
 describe('creditBounty', () => {
-  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, window: 900, tier: 2 });
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 10000, deadline: 900, window: 900, tier: 2 });
 
   function withTarget(): { w: World; npc: Vehicle } {
     const w = emptyWorld();
@@ -227,7 +227,7 @@ describe('creditBounty', () => {
     w.player.contracts = [bounty('a', 'buggy'), bounty('b', 'buggy'), bounty('c', 'truck')];
     creditBounty(w, npc);
     expect(w.player.contracts.map((c) => c.id)).toEqual(['b', 'c']);
-    expect(w.player.money).toBe(300);
+    expect(w.player.money).toBe(10000);
   });
 
   it('does nothing without a bounty on the template', () => {

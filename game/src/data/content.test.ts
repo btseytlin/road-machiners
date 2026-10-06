@@ -23,7 +23,7 @@ import { sitePads } from "../sim/sites";
 let world: World;
 beforeAll(() => {
   world = emptyWorld(sitePads(REGION.towns[0])[0]);
-  world.player.money = 100000;
+  world.player.money = 3333333;
 });
 
 const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {

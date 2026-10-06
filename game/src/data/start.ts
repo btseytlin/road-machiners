@@ -22,11 +22,11 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'scout',
     parts: ['panniers', 'mg', 'stockEngine', 'cage'],
     storage: [],
-    money: 1000,
+    money: 33300,
     fuel: CHASSIS.scout.fuelCap,
     supplies: RULES.baseSupplies,
     cargo: { scrap: 2, parts: 2 },
-    costBasis: { scrap: 10 },
+    costBasis: { scrap: 333 },
   },
   // For testing combat: both weapons, a front ram and armor, with spares in the town garage.
   combat: {
@@ -34,11 +34,11 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'hauler',
     parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
     storage: ['plates', 'cage', 'mg'],
-    money: 1500,
+    money: 50000,
     fuel: 60,
     supplies: RULES.baseSupplies,
     cargo: { scrap: 2 },
-    costBasis: { scrap: 10 },
+    costBasis: { scrap: 333 },
   },
   // The gear of a player who snowballed on raiders: a convertible with two machine guns, a slug cannon, a shotgun, a
   // ram and plates. Measures what that truck earns, not how it is earned.
@@ -47,7 +47,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'convertible',
     parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
     storage: [],
-    money: 2500,
+    money: 83300,
     fuel: CHASSIS.convertible.fuelCap,
     supplies: RULES.baseSupplies,
     cargo: {},

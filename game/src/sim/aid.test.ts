@@ -32,7 +32,7 @@ function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc:
   npc.brain = npcBrain('trader', npc.pos, traits);
   npc.resources!.fuel = fuelCap(npc);
   npc.resources!.supplies = suppliesCap(npc);
-  npc.resources!.money = 500;
+  npc.resources!.money = 16667;
   return { w, npc };
 }
 
@@ -110,7 +110,7 @@ describe('aid deal', () => {
     const money0 = start.player.money;
     const run = runUntil(agreed(start, npc.id, playerGift(5, price)), 3, (x) => !aidOpen(x, npc.id));
     expect(run.w.player.money).toBe(money0 + price);
-    expect(find(run.w, npc.id).resources!.money).toBe(500 - price);
+    expect(find(run.w, npc.id).resources!.money).toBe(16667 - price);
     expect(run.events.some((e) => e.t === 'practice' && e.source === 'aid')).toBe(false);
   });
 
