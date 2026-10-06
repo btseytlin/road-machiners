@@ -13,7 +13,7 @@ import { CHASSIS_PRICE_MODIFIERS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { PARTS, PART_PRICE_MODIFIERS } from '../data/parts';
 import type { PartDef, PartKind } from '../data/parts';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { SALVAGE, STRIP } from '../data/salvage';
 import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
 import { SOUNDS } from '../data/sounds';
@@ -27,7 +27,7 @@ import { STATE_KINDS } from '../sim/states';
 export type Cell = string | number | boolean | null | readonly unknown[] | object;
 export type WikiTable = { id: string; headers: string[]; rows: () => Cell[][] };
 
-const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content'];
+const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content', 'world-settings'];
 
 export const PAGES: readonly string[] = [
   'README.md', 'items.md', 'combat.md', 'economy.md', 'npcs.md', 'skills.md', 'assets.md',
@@ -235,5 +235,5 @@ export const WIKI_ROOTS: Record<string, unknown> = {
   RULES, ECONOMY, EFFORT, CONTRACTS, PRICE_FACTOR, DISTANCE_PREMIUM, PRESSURE_MAX,
   PART_PRICE_MODIFIERS, CHASSIS_PRICE_MODIFIERS, CONDITION, WEAR, REPAIR, PATCH, SALVAGE, STRIP,
   NPC_BEHAVIOR, NPC_UPKEEP, HUNT, SPAWN, MIN_CHANCE, DETECT, TOW, XP_RULES, PERK_NUMBERS,
-  UNITS, TIME, PHYSICS,
+  UNITS, TIME, PHYSICS, BREAKABLE,
 };

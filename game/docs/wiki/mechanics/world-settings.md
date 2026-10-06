@@ -26,7 +26,7 @@ The `?` menu shows the world's mode and settings under the version, and a bug re
 
 ## Which rules are settings
 
-Every `RULES` field, the `CONFIG` new-game fields and the nearby data tables, with what each is and why.
+Every `RULES` field, the new-game fields of `src/config.ts` and the nearby data tables, with what each is and why.
 
 Exposed now:
 
@@ -36,7 +36,7 @@ Exposed now:
 
 Safe to vary per run later. Each needs its own NPC and economy work, so each is a follow-up:
 
-- Start: `CONFIG.startKit`, the start money in `src/data/start.ts` and a fixed seed (`CONFIG.seed`).
+- Start: the start kit and a fixed seed in `src/config.ts`, and the start money in `src/data/start.ts`.
 - Traffic: the NPC spawn timers and template weights in `src/data/`.
 - Recovery: `healPerTurn`, `healSupplies`, `townHealMult` and `starveDamage`.
 - Town aid: `townPatch`, `scrapPatch` and `defeatPatch`. These give value for free, so a higher setting would mint value.
@@ -44,10 +44,10 @@ Safe to vary per run later. Each needs its own NPC and economy work, so each is 
 
 Fixed:
 
-- Driving and physics. Changing these breaks routes, unsticking, the no-stall guarantee or the physics step: `substeps`, `crawlSpeed`, `arriveRadius`, `throttleZones`, `reclickRadius`, `passRadius`, `minAimDistance`, `cornerSlack`, `parkedSpeed`, `yieldDistance`, `maxBulge`, `meetStep`, `reverse`, `stranded`, `unstick`, `npcStuckTurns`, `npcRecoveryTurns` and `BREAKABLE.breakSpeed`, `slowdown` and `routeCost`.
+- Driving and physics. Changing these breaks routes, unsticking, the no-stall guarantee or the physics step: `substeps`, `crawlSpeed`, `arriveRadius`, `throttleZones`, `reclickRadius`, `passRadius`, `minAimDistance`, `cornerSlack`, `parkedSpeed`, `yieldDistance`, `maxBulge`, `meetStep`, `reverse`, `stranded`, `unstick`, `npcStuckTurns`, `npcRecoveryTurns` and `BREAKABLE.breakSpeed`, `BREAKABLE.slowdown` and `BREAKABLE.routeCost`.
 - Truck balance. Every part has one job, and a per-run value would reprice every part: `accelScale`, `overdriveBoost`, `overloadExponent`, `gunDragMax`, `gunDragCurve`, `minSpeedCap`, `limpSpeed`, `wheelLoss`, `lowFuelThreshold`, `lowFuelSpeedFactor`, `refitTurnsPerPart`, `baseSupplies` and `tankLeak`.
 - The shape of combat. These decide who wins a fight, not how fast it goes, and Damage already sets the pace: `ramDamage`, `hardCrashSpeed`, `cellPen`, `crashPen`, `groundCrash`, `landingDamage`, `collisionMinImpact`, the `crit` fields, `rangeFalloff`, `leadError`, `shake`, `stillSpeed`, `stillSpread`, `cellMeters`, `minHit`, `maxHit`, `stray`, `guards` and `BREAKABLE.damage`.
 - Life is valued. Death is rare and comes only from injury: `npcDeathChance`, `cabKnock`, `cabHealthShare`, `starveFloor`, `maxHealth`, `knockoutMaxTurns` and `surrenderParts`.
 - Progression. XP comes only from use, and grinding must not pay: `killXp`.
 - World bookkeeping, which is not gameplay: `wreckRadiusScale`, `maxKillWrecks`, `retreatTeleportTurns` and `suppliesLow`.
-- Device and playback preferences. These are not world rules and stay out of the save: the debug console's `CHEATS`, the `CONFIG` playback and timing fields, `saveTurns` and `saveSlots`.
+- Device and playback preferences. These are not world rules and stay out of the save: the debug console's `CHEATS`, the playback and timing fields of `src/config.ts`, and its save interval and slot count.
