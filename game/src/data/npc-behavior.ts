@@ -141,6 +141,9 @@ export const NPC_BEHAVIOR = {
   winningTruce: 0.01,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
+  // Comply weight times this when the driver's escort is in sight and awake. A threatened or warned-off driver then
+  // hands over its cargo a tenth as often, so a demand on a guarded convoy mostly starts a fight with its guard.
+  guardedComply: 0.1,
 };
 
 export const NPC_UPKEEP = {

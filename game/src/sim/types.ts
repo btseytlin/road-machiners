@@ -361,7 +361,8 @@ export type Player = {
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
 // hit: the round landed on its target. struck: the truck it landed on, or null for the ground. hits: its direct
-// hits on that truck. blast: the part hits its explosion dealt, per truck.
+// hits on that truck. blast: the part hits its explosion dealt, per truck. burst: the ground point in tiles where an
+// exploding round burst, or null for a round that struck a truck or does not explode. Guard rounds never burst.
 export type ShotRound = {
   hit: boolean;
   crit: boolean;
@@ -369,6 +370,7 @@ export type ShotRound = {
   struck: string | null;
   hits: PartHit[];
   blast: VehicleHits[];
+  burst: Vec | null;
 };
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
@@ -420,6 +422,10 @@ export type GameEvent =
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
+// A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
+// dug again. See src/sim/craters.ts.
+export type Crater = { id: string; pos: Vec; radius: number; turn: number };
+
 export type World = {
   seed: number;
   rngState: number;
@@ -431,6 +437,7 @@ export type World = {
   vehicles: Vehicle[];
   obstacles: Obstacle[];
   broken: BrokenProp[]; // props out of obstacles until they grow back; a prop is in one list or the other
+  craters: Crater[]; // blast craters until they fade out of sight; see src/sim/craters.ts
   salvage: SalvageStock[];
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file

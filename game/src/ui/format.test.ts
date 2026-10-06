@@ -168,7 +168,7 @@ describe("shot log", () => {
     const cab = mountedParts(me).find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
     const e: GameEvent = {
       t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, damageChance: 0.5, side: "front",
-      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
+      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [], burst: null }],
     };
     const line = eventText(w, e);
     expect(line?.text).toContain(", stray fire hits ");
@@ -184,7 +184,7 @@ describe("shot log", () => {
     const armor = parts.find((p) => partDef(p.defId).kind === "armor");
     const shot = (hits: { part: string; damage: number }[], rounds = 2): GameEvent => ({
       t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, damageChance: 0.4, side: "front",
-      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [] })),
+      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [], burst: null })),
     });
     return { w, raider, cab, armor, shot };
   }

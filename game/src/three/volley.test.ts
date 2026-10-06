@@ -54,7 +54,7 @@ describe("CollisionCues", () => {
 });
 
 describe("playVolley breaks", () => {
-  const rd = (hits: { part: string; damage: number }[]): ShotRound => ({ hit: hits.length > 0, crit: false, offset: 0, struck: hits.length ? "t" : null, hits, blast: [] });
+  const rd = (hits: { part: string; damage: number }[]): ShotRound => ({ hit: hits.length > 0, crit: false, offset: 0, struck: hits.length ? "t" : null, hits, blast: [], burst: null });
   const GUN = (() => { const w = emptyWorld(); const v = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], { x: 33, y: 30 }, 0); const it = v.items.find((i) => i.kind === "part" && i.part.defId === "mg"); return it && it.kind === "part" ? it.part.id : ""; })();
   const event = { t: "shot", shooter: "s", weapon: "mg", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds: [rd([]), rd([{ part: GUN, damage: 2 }]), rd([{ part: GUN, damage: 3 }])] } as ShotLike;
   const partOff: GameEvent = { t: "partDisabled", vehicle: "t", part: GUN };
@@ -96,7 +96,7 @@ describe("playVolley breaks", () => {
     played.landed.forEach((l) => l());
     return played.sounds;
   };
-  const plain = (struck: string | null, blast: ShotRound["blast"] = []): ShotRound => ({ hit: struck === "t", crit: false, offset: 3, struck, hits: [], blast });
+  const plain = (struck: string | null, blast: ShotRound["blast"] = []): ShotRound => ({ hit: struck === "t", crit: false, offset: 3, struck, hits: [], blast, burst: null });
 
   it("sounds a ground miss as a miss and a hit as metal", () => {
     expect(volley([plain(null)])).toEqual(["miss"]);
