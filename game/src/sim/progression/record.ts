@@ -28,7 +28,7 @@ import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
-import { defaultSetup } from '../settings';
+import { defaultSetup, parseSetup } from '../settings';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
@@ -45,7 +45,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, options), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
@@ -61,7 +61,7 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, options), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
@@ -106,8 +106,9 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-function startWorld(seed: number, kit = 'standard'): World {
-  return update(newWorld(seed, startKit(kit), TEST_MAP, defaultSetup('roaming')), (w) => {
+function startWorld(seed: number, { kit = 'standard', settings = {} }: BotOptions): World {
+  const setup = parseSetup({ mode: 'roaming', settings: { ...defaultSetup('roaming').settings, ...settings } });
+  return update(newWorld(seed, startKit(kit), TEST_MAP, setup), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {

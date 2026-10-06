@@ -68,7 +68,8 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string };
+// settings are world settings for the run's Roaming world, each missing one at its default.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; settings?: Record<string, number> };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
