@@ -2,7 +2,31 @@
 
 Values, prices, shops, contracts, the effort model, fuel and supplies. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
-Every good, part and chassis has one value and a tier from 1 to 3. A part or chassis value is a hand-set base plus a bonus from the stats its kind is bought for, so better stats cost more. Chassis start at about 2000, 3000 and 4500 per tier. Tier 1 parts cost about 100 to 250. Every price is a formula from the value. Buying adds a spread and selling cuts it. Social narrows the spread to at most half. A truck on the road trades with a much wider spread than a town, since its driver answers to no market. At Trade 0 it sells at 1.5 times the value and buys at half of it. A part's value falls with each wear step, most at the first one, so pristine parts carry a premium. Its buy and sell prices also scale with its HP, but never drop below its scrap value from mass. Repair and rebuild cost a little more than the value they restore, so repairing a part to sell it never pays. A chassis trade-in pays the chassis sell price, scaled by the health and wear of its built-in parts.
+Money is M. One M is the price of 5 L of fuel at any town or stall, and every price reads against it. The sim and data keep money as whole cents, 100 to an M, so every price, fee and balance is exact to a cent. The UI shows M with up to two decimals.
+
+- Fair price: every town garage and stall sells 5 L of fuel for 1 M with no spread. The scrap patch charges the same 1 M per 5 L it spares, and aid is priced the same.
+- Roadside: a truck selling fuel adds the spread and the road spread, so 5 L costs 1.50 M at Trade 0.
+- Fuel drums are a trade good, priced by distance like any good. They are cargo, not tank fuel, so the anchor does not hold for them.
+- Fuel is bought in whole 5 L units. The smallest purchase is 5 L for 1 M. Nothing rounds a fuel amount up for free or a fuel price down to zero.
+
+Before the anchor, 5 L of fuel cost 3 money, so every money number grew by 100/3. The start money and NPC budgets are rounded to whole M.
+
+| Thing | Old money | M |
+| --- | --- | --- |
+| 5 L fuel at a town | 3 | 1 |
+| 5 L fuel from a truck, Trade 0 | 5 | 1.50 |
+| Supplies, one unit | 5 | 1.67 |
+| Scout full tank, 200 L | 120 | 40 |
+| Standard start cash | 1000 | 333 |
+| Tier 1 part | 100 to 250 | 33.33 to 83.33 |
+| Chassis by tier | about 2000, 3000, 4500 | about 667, 1000, 1500 |
+| Tier 1 wage | 0.37 a turn, about 110 a day | 0.1233 a turn, about 36.7 a day |
+| Tow | 18.5 base, at most 166.5 | 6.17 base, at most 55.50 |
+| Water, electronics base value | 18, 155 | 6, 51.67 |
+
+1 M buys 5 L of fuel. 100 M buys 500 L, two and a half scout tanks, or one or two tier 1 parts, and is about 2.7 days of tier 1 salvage.
+
+Every good, part and chassis has one value and a tier from 1 to 3. A part or chassis value is a hand-set base plus a bonus from the stats its kind is bought for, so better stats cost more. Chassis start at about 667, 1000 and 1500 M per tier. Tier 1 parts cost about 33 to 83 M. Every price is a formula from the value. Buying adds a spread and selling cuts it. Social narrows the spread to at most half. A truck on the road trades with a much wider spread than a town, since its driver answers to no market. At Trade 0 it sells at 1.5 times the value and buys at half of it. A part's value falls with each wear step, most at the first one, so pristine parts carry a premium. Its buy and sell prices also scale with its HP, but never drop below its scrap value from mass. Repair and rebuild cost a little more than the value they restore, so repairing a part to sell it never pays. A chassis trade-in pays the chassis sell price, scaled by the health and wear of its built-in parts.
 
 Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Granary and the Pump Station. A good is cheap where it is made. Elsewhere its price rises with the distance to the nearest shop that makes it, so a long haul pays for the miles. Each unit bought raises the local price, and each unit sold lowers it. Garages absorb a full hauler load, and stalls move after a few units. Prices drift back over about two days. Every shop sells fuel and food at the same prices and repairs parts at the same prices. NPC traders trade through the same prices, so they move them too. NPCs sell cargo at whichever shop pays most, stall or town. Raiders sell only at their camps and the Salvage Yard. Every town and stall repairs NPC trucks, and only a camp repairs raiders. Profit comes from knowing routes, as in Dustland Delivery.
 
@@ -10,6 +34,6 @@ Each shop holds a random, finite part stock with rolled wear, and restocks on a 
 
 Shops post contracts, and each offer shows how long it gives. The clock starts when the player takes it, so a stale offer on the board never shortens the window. A held contract shows the game time it is due. The log warns once when a held contract is two game hours from its deadline. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A standard haul pays well above salvage over the round trip. Some hauls are rush jobs: they give a much shorter window and pay a premium. A player in debt cannot take a haul. A fetch asks for a working part of one type, rebuilt at most once, that the shop does not stock. It pays the part's price plus a search fee. A bounty names a raider type, and any truck of that type counts. It pays a fifth of the target's value, and one knockout or kill fulfils one bounty. Contracts pay money, and a finished one trains Social from the work, not from a part's price. The player holds a few at once.
 
-The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. The tier 1 wage is what salvage earns, about 110 a day. Loot spots in the Fallen Sun add many small stocks of salvage, so more of the map pays at tier 1. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times a few wages, so contracts pay better than salvage. `npm run progression:record` plays bots through the real turn pipeline, and `progression:report` prints wages and the day each upgrade is reached.
+The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. The tier 1 wage is what salvage earns, about 36.7 M a day. Loot spots in the Fallen Sun add many small stocks of salvage, so more of the map pays at tier 1. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times a few wages, so contracts pay better than salvage. `npm run progression:record` plays bots through the real turn pipeline, and `progression:report` prints wages and the day each upgrade is reached.
 
 Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn per turn, times heat. A full load lasts about 920 daytime turns. Without supplies the character loses health down to 30. Oases refill supplies.
