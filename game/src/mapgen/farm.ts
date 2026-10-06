@@ -1,12 +1,13 @@
 // Farm layout of a territory, from its FarmRules in TERRITORIES: an old asphalt road, dirt roads and tracks, concrete
 // pads, irrigation canals, buildings that are loot spots, runs of segment props, sandbag emplacements with tank traps
 // ahead of them, clutter round the buildings, and blocks of dead trees in rows with strays between them. The skeleton
-// is authored in the road's frame: roads, pads, canals, building poses, run lines, emplacements and blocks. Everything on it is jittered, broken or scattered from the territory's
-// seed, so no detail stands in a ruled line. The roads are graded into the ground together with a levelled pad under
-// each building. Authored buildings, pads, road and canal points, run points and block corners fail loudly off the
-// outline or on bad ground, and so do emplacement points. Trees, strays, run segments, sandbag arcs, tank traps and
-// clutter that land on bad ground are dropped, all but trees also on ground that lies off their seat past the
-// territory's relief, but a block that keeps too few of its trees fails loudly too.
+// is authored in the road's frame: roads, pads, canals, building poses, run lines, emplacements and blocks. Everything
+// on it is jittered, broken or scattered from the territory's seed, so no detail stands in a ruled line. The roads are
+// graded into the ground together with a levelled pad under each building. Authored buildings, pads, road and canal
+// points, run points and block corners fail loudly off the outline or on bad ground, and so do emplacement points.
+// Trees, strays, run segments, sandbag arcs, tank traps and clutter that land on bad ground are dropped, all but trees
+// also on ground that lies off their seat past the territory's relief, but a block that keeps too few of its trees
+// fails loudly too.
 
 import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
@@ -299,7 +300,7 @@ function placeEmplacements(d: MapDraft, t: TerritoryDef, frame: Frame, farm: Far
   for (const group of drawn) arcs.push(...group.arcs.filter((arc) => fits(arc) && clearOf(arcs, arc.pos, arc.r, 0)));
   const traps: BakedProp[] = [];
   for (const trap of drawn.flatMap((group) => group.traps)) {
-    if (fits(trap) && [...arcs, ...traps].every((o) => dist(o.pos, trap.pos) >= EMPLACEMENT.trapGap) && coveredBy(arcs, trap.pos)) traps.push(trap);
+    if (fits(trap) && [arcs, traps].every((placed) => placed.every((o) => dist(o.pos, trap.pos) >= EMPLACEMENT.trapGap)) && coveredBy(arcs, trap.pos)) traps.push(trap);
   }
   return [...arcs, ...traps];
 }
