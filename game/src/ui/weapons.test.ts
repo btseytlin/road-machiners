@@ -330,6 +330,10 @@ class FakeNode {
   append(...c: (FakeNode | string)[]) { this.children.push(...c); }
   replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
   setAttribute() {}
+  querySelector(selector: string): FakeNode | null {
+    const cls = selector.replace(":scope > .", "");
+    return this.children.find((c): c is FakeNode => typeof c !== "string" && c.className.split(" ").includes(cls)) ?? null;
+  }
   addEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
   removeEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, (this.listeners.get(type) ?? []).filter((f) => f !== fn)); }
   text(): string { return this.children.map((c) => (typeof c === "string" ? c : c.text())).join(""); }
