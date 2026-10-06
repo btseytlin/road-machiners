@@ -14,7 +14,8 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { backOffLoot, finishGoal, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { CANNOT_HOLD } from './salvage';
 import { beginSearch } from './search';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
@@ -840,6 +841,18 @@ describe('salvage on the way', () => {
     thinkNpc(w, npc);
     expect(npc.brain!.fullAt).toBeUndefined();
     expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).toHaveProperty('loot');
+  });
+
+  it('a driver with nothing to sell passes up only the loot it could not take', () => {
+    const { w, npc } = passingWreck();
+    w.salvage.push({ id: 'wreck901', pos: { x: 12, y: 10 }, radius: 0.6, goods: { scrap: 1 }, parts: [] });
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 12, y: 10 }, phase: 'travel', reason: 'loot salvage on the way' });
+    finishGoal(w, npc, CANNOT_HOLD);
+    expect(npc.brain!.fullAt).toBeUndefined();
+    expect(visibleSalvage(w, npc).map((s) => s.id)).toEqual(['wreck900']);
+    w.salvage = w.salvage.filter((s) => s.id !== 'wreck901');
+    thinkNpc(w, npc);
+    expect(npc.brain!.unfit).toBeUndefined();
   });
 
   it('rolls once per sighting', () => {

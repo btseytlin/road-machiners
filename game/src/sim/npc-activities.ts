@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteFullHold,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -354,10 +354,10 @@ function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
 // ---- Popping goals.
 
 // Pops the top goal. An interruption that uncovers the long-term goal fires the resume decision, and `new` drops
-// that goal too, so the empty stack rolls idle. A loot that ends on a full hold marks the hold full.
+// that goal too, so the empty stack rolls idle. A loot that ends on a full hold is remembered.
 export function finishGoal(world: World, vehicle: Vehicle, reason: string): void {
   const done = popGoal(world, vehicle, reason);
-  if (reason === CANNOT_HOLD) noteFullHold(vehicle);
+  if (reason === CANNOT_HOLD) noteCannotHold(vehicle, done.targetId, hasSaleCargo(vehicle));
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
   if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
@@ -883,7 +883,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   pruneAttackers(world, vehicle);
   const gunnedBy = brain.gunnedBy;
   delete brain.gunnedBy;
-  forgetFullHold(vehicle);
+  forgetFullHold(world, vehicle);
   breakOffDeals(world, vehicle);
   giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);

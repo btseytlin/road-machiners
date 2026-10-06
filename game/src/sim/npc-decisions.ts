@@ -262,7 +262,7 @@ export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
 
 // Loot another truck is looting is not the driver's to take. The claim is checked after sight, since it scans every truck.
 function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  if (target.id === vehicle.id || !isKnockedOut(target) || !seesSafely(world, vehicle, target.pos)) return false;
+  if (target.id === vehicle.id || !isKnockedOut(target) || !seesLoot(world, vehicle, target.id, target.pos)) return false;
   return (!inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target)) && lootTaken(world, vehicle, target.id) === null;
 }
 
@@ -271,8 +271,13 @@ function seesSafely(world: World, vehicle: Vehicle, pos: Vec): boolean {
   return canVehicleSee(world, vehicle, pos) && campGunning(vehicle, pos) === null;
 }
 
+// Loot in safe sight that the driver does not know to be out of its hold's reach.
+function seesLoot(world: World, vehicle: Vehicle, id: string, pos: Vec): boolean {
+  return !knownUnfit(vehicle, id) && seesSafely(world, vehicle, pos);
+}
+
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  if (backedOff(stock, vehicle.id) || !seesSafely(world, vehicle, stock.pos)) return false;
+  if (backedOff(stock, vehicle.id) || !seesLoot(world, vehicle, stock.id, stock.pos)) return false;
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
@@ -288,20 +293,35 @@ export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
   return jobTarget(vehicle) === targetId;
 }
 
-// A driver whose hold could not take a loot passes up loot until its hold frees cells, as a sale does. It learns what
-// a wreck holds only on arrival, so without this a loaded driver would detour to every wreck on its way to sell.
+// A driver learns what a loot holds only when it reaches it. When nothing there fits, it remembers its free cells
+// then. With cargo to sell, its hold counts as full: it passes up all loot until the hold frees cells, as a sale does,
+// so a loaded driver does not detour to every wreck on its way to sell. With nothing to sell, only that loot is out
+// of reach: the driver passes it up until its hold frees cells.
 export function holdFull(vehicle: Vehicle): boolean {
   const fullAt = vehicle.brain!.fullAt;
   return fullAt !== undefined && freeCells(vehicle) <= fullAt;
 }
 
-export function noteFullHold(vehicle: Vehicle): void {
-  vehicle.brain!.fullAt = freeCells(vehicle);
+function knownUnfit(vehicle: Vehicle, targetId: string): boolean {
+  const cells = vehicle.brain!.unfit?.[targetId];
+  return cells !== undefined && freeCells(vehicle) <= cells;
 }
 
-// A hold that freed cells since it was full takes loot again.
-export function forgetFullHold(vehicle: Vehicle): void {
-  if (!holdFull(vehicle)) delete vehicle.brain!.fullAt;
+export function noteCannotHold(vehicle: Vehicle, targetId: string | null, saleCargo: boolean): void {
+  const brain = vehicle.brain!;
+  if (saleCargo || targetId === null) brain.fullAt = freeCells(vehicle);
+  else brain.unfit = { ...brain.unfit, [targetId]: freeCells(vehicle) };
+}
+
+// A hold that freed cells takes loot again. Loot that is gone is forgotten.
+export function forgetFullHold(world: World, vehicle: Vehicle): void {
+  const brain = vehicle.brain!;
+  if (!holdFull(vehicle)) delete brain.fullAt;
+  if (!brain.unfit) return;
+  const exists = (id: string) => world.salvage.some((s) => s.id === id) || world.vehicles.some((v) => v.id === id);
+  const kept = Object.entries(brain.unfit).filter(([id]) => exists(id) && knownUnfit(vehicle, id));
+  if (kept.length > 0) brain.unfit = Object.fromEntries(kept);
+  else delete brain.unfit;
 }
 
 // Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
