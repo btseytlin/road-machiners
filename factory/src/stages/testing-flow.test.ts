@@ -571,6 +571,7 @@ describe('playtest frame rate and browser crashes', () => {
   it('reads a crash, a functional failure or a failure before the playtest as no frame-rate failure', () => {
     expect(playtestVerdict(CRASH_LOG).kind).toBe('browser-crash');
     expect(playtestVerdict(TURN_LOG).kind).toBe('other');
+    expect(playtestVerdict(checkLog('turns 12, fps 43\nFAIL\n\nfps 43 under 50')).kind).toBe('other');
     expect(playtestVerdict(PAGE_ERROR_LOG).kind).toBe('other');
     expect(playtestVerdict(checkLog('turns 12, fps 43\nFAIL\ncrash screen shown\nfps 43 under 50')).kind).toBe('other');
     expect(playtestVerdict(checkLog('Error: Turn 3 did not finish playing within 10000 ms')).kind).toBe('other');

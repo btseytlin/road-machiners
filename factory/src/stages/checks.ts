@@ -197,9 +197,16 @@ function lowFpsOnly(played: string[], host: string): PlaytestVerdict {
   const after = played.slice(fail + 1);
   const end = after.findIndex((line) => PLAYTEST_END.test(line));
   // The summary goes to stdout and the problems to stderr, so the summary can land among them.
-  const problems = (end < 0 ? after : after.slice(0, end)).filter((line) => line !== '' && !SUMMARY.test(line));
+  // Only blank lines at the end are dropped. A blank line among the problems is an empty console error, which blocks.
+  const problems = trimEnd(end < 0 ? after : after.slice(0, end)).filter((line) => !SUMMARY.test(line));
   const low = problems.length === 1 ? LOW_FPS.exec(problems[0]) : null;
   return low === null ? OTHER : { kind: 'low-fps', lowFps: { fps: Number(low[1]), min: Number(low[2]), host } };
+}
+
+function trimEnd(lines: string[]): string[] {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === '') end -= 1;
+  return lines.slice(0, end);
 }
 
 function lowFpsOf(failure: string): LowFps | null {
