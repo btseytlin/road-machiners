@@ -762,29 +762,60 @@ function dangerOf(world: World, foe: Vehicle): number {
 // stronger foe it runs as an NPC runs: for the nearest town away from the threat, where guards cover it. Only the
 // hunter fights a foe it can outrun: a won fight still costs repairs, and broken wheels leave the truck for the next
 // raider. A foe that drops out of sight for a turn is still on its tail, so the bot keeps running until the combat
-// ends. The hunter instead follows its goal, which chases the foe it hears. True when the turn's command went to the
-// fight.
+// ends. The hunter chases instead when it hears a foe it would hunt. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
-  if (!foe && goal === 'hunter') return false;
-  if (foe && fights(o, foe, goal)) charge(o, foe, goal);
+  if (!foe) {
+    if (!(goal === 'hunter' && engageFoe(o))) flee(o);
+    return true;
+  }
+  if (fights(o, foe, goal)) charge(o, foe, goal);
   else flee(o);
   return true;
 }
 
-// The nearest town whose direction is more than 90 degrees off the threat's, else straight away from the threat, as
-// fleeDestination() in npc-activities.ts picks for an NPC. The threat is the nearest hostile in sight, else the nearest
-// one heard. With no threat placed, it keeps running where it runs, since the nearest town may lie behind the foe it
-// lost sight of. With no run under way either, the nearest town.
+// The nearest town whose direction is more than 90 degrees off every threat's, else straight away from the threats, as
+// fleeDestination() in npc-activities.ts picks for an NPC from one threat. The threats are the hostiles in sight, else
+// the nearest one heard. A run under way keeps its course while it closes on no foe in sight. A heard foe only starts
+// a run, since it may be a truck that is not after the bot. Running from one threat at a time reversed a bot caught
+// between two every turn until its engine burned out. With no threat placed and no run under way, the nearest town.
 function flee(o: Orders): void {
-  const seen = nearestVehicle(o.me.pos, seenHostiles(o.world));
-  const threat = seen?.pos ?? heardFoe(o.world);
-  if (!threat) return o.me.order ? undefined : driveToSite(o, nearestTown(o.world));
-  const safe = REGION.towns.filter((town) => pointsAway(o.me.pos, town.pos, threat)).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
+  const seen = seenHostiles(o.world).map((v) => v.pos);
+  if (keepsCourse(o.me, seen)) return;
+  const threats = seen.length > 0 ? seen : heardThreat(o.world);
+  if (threats.length === 0) return driveToSite(o, nearestTown(o.world));
+  const safe = REGION.towns.filter((town) => threats.every((foe) => pointsAway(o.me.pos, town.pos, foe))).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
   if (safe[0]) return driveToSite(o, safe[0]);
-  const away = { x: o.me.pos.x + (o.me.pos.x - threat.x), y: o.me.pos.y + (o.me.pos.y - threat.y) };
+  const away = awayFrom(o.me.pos, threats);
   driveTo(o, { x: clamp(away.x, 1, o.world.size - 1), y: clamp(away.y, 1, o.world.size - 1) });
+}
+
+function keepsCourse(me: Vehicle, seen: Vec[]): boolean {
+  const order = me.order;
+  return order !== null && order.kind !== 'brake' && !seen.some((foe) => closesOn(me.pos, order.dest, foe));
+}
+
+function heardThreat(world: World): Vec[] {
+  const heard = heardFoe(world);
+  return heard ? [heard] : [];
+}
+
+// Whether driving from `from` to `to` brings the truck nearer to `foe` at first.
+function closesOn(from: Vec, to: Vec, foe: Vec): boolean {
+  return (to.x - from.x) * (foe.x - from.x) + (to.y - from.y) * (foe.y - from.y) > 0;
+}
+
+// A point straight away from the threats, as far off as the nearest one: along the sum of the directions away from
+// each. Two threats on opposite sides cancel out, and the way is then square to them.
+function awayFrom(pos: Vec, threats: Vec[]): Vec {
+  const unit = (foe: Vec) => ({ x: (pos.x - foe.x) / Math.max(dist(pos, foe), 1e-6), y: (pos.y - foe.y) / Math.max(dist(pos, foe), 1e-6) });
+  const sum = threats.map(unit).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }));
+  const near = nearest(pos, threats)!;
+  const len = Math.hypot(sum.x, sum.y);
+  const way = len > 1e-6 ? { x: sum.x / len, y: sum.y / len } : { x: -unit(near).y, y: unit(near).x };
+  const reach = dist(pos, near);
+  return { x: pos.x + way.x * reach, y: pos.y + way.y * reach };
 }
 
 // Drives at the foe. A hunter also aims its guns at the foe's critical parts.

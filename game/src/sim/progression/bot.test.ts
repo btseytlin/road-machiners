@@ -537,6 +537,24 @@ describe('the hunter', () => {
     for (const r of runs) expect([r.turned, r.ran]).toEqual([r.faster, !r.faster]);
   });
 
+  it('has a trader caught between two raiders run square to them, closing on neither', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    const raiders = [24, 36].map((x) => {
+      const raider = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      return raider;
+    });
+    startCombat(w, raiders[1], me);
+
+    const order = playerVehicle(botOrders(w, 'trader').world).order;
+
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(order.dest.x).toBeCloseTo(30);
+    expect(dist(order.dest, me.pos)).toBeGreaterThan(1);
+  });
+
   // The raider dropped behind a ridge for a turn. Turning back to the trade route would drive into it again.
   // Its cargo sells better at Nose, so its goal leads away from Bowl, the nearest town.
   it('has a trader keep running for town while the combat lasts with the raider out of sight', () => {
@@ -777,6 +795,18 @@ describe('the hunter', () => {
     me.order = { kind: 'stopAt', dest: { x: 5, y: 5 } };
 
     expect(playerVehicle(botOrders(w, 'trader').world).order).toEqual({ kind: 'stopAt', dest: { x: 5, y: 5 } });
+  });
+
+  it('has a hunter that loses sight of a foe it would not hunt keep running the same way', () => {
+    const w = withPrey(emptyWorld({ x: 30, y: 30 }));
+    const me = playerVehicle(w);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['autocannon', 'ram', 'stockEngine'], { x: 300, y: 300 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+    expect(playerSees(w, raider.pos)).toBe(false);
+    me.order = { kind: 'stopAt', dest: { x: 5, y: 5 } };
+
+    expect(playerVehicle(botOrders(w, 'hunter').world).order).toEqual({ kind: 'stopAt', dest: { x: 5, y: 5 } });
   });
 
   // The grid is full of a haul's goods the hunter may not sell, and it stands in town with nothing to sell.
