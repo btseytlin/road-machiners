@@ -30,8 +30,9 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run dev` starts the game at <http://localhost:5173>.
 - `npm test` runs every Vitest test in `src/`. `npm run typecheck` runs tsc.
 - `npm run playtest` plays turns in headless Chromium and fails on errors or low FPS. It needs the dev server. Use `--cpu` on machines without a GPU.
-- `npm run stuck` plays a world of NPCs and fails on any stall. Run it after changes to NPC goals, services or tows.
-- `npm run econ`, `npm run combat`, `npm run loadouts` and `npm run progression:record` / `progression:report` measure balance.
+- `npm run stuck` records a trader bot for 3 seeds of 1000 turns and fails on any stall from any truck. Run it after changes to NPC goals, services or tows.
+- `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level.
+- `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
 - `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
@@ -93,7 +94,8 @@ Read the project-local skills before related work:
 - Tests check the side effects of a change, not only the behavior you asked for.
 - Every sim rule change gets a Vitest test.
 - After render or game changes, run `npm run playtest`.
-- For behavior checks, drive the game with a Playwright script in `tmp/` on the real GPU, as [Tools](docs/tools.md#browser-checks) describes. The game is on `window.__ROAM__` in dev.
+- Playtest game behavior with the progression recorder, not by hand or in the browser. Record the bots that meet the change, then read the report and the analyzer before you draw a conclusion. A 3-seed 5-day batch takes about 10 minutes per bot, so run it in the background with a log. [Tools](docs/tools.md) has the flags.
+- Use a Playwright script in `tmp/` on the real GPU only for what the screen shows: UI, rendering and screenshots. [Tools](docs/tools.md#browser-checks) describes it. The game is on `window.__ROAM__` in dev.
 - Look at screenshots after visual changes. The user confirms small visual details.
 
 ## Art

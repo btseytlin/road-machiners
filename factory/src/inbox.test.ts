@@ -89,20 +89,77 @@ describe('drainInbox', () => {
     expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
   });
 
-  it('sends feedback back to design at once', async () => {
+  it('sends a redesign back to design at once', async () => {
     const calls: string[] = [];
-    put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
+    put('1.json', { kind: 'redesign', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
-    expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design', 'edit -5 42 Post\n\n💬 Feedback from Ann. Back to design.']);
+    expect(calls).toEqual([expect.stringContaining('routed as redesign:\n\ntoo loud'), 'move 4 Design', 'edit -5 42 Post\n\n💬 Feedback from Ann. Back to design.']);
   });
 
-  it('drops an approval queued before the feedback, with the status line as the only answer', async () => {
+  it('drops an approval queued before a redesign, with the status line as the only answer', async () => {
     const sent: string[] = [];
     writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), pendingApprovals: { 4: 'Ann' } }));
-    put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
+    put('1.json', { kind: 'redesign', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
     expect(readState(statePath).pendingApprovals).toEqual({});
     expect(sent).toEqual([]);
+  });
+
+  it('holds a plain reply for Hermes to route, with no answer and no status line', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'reply', issue: 4, text: 'show the atlas', messageId: 3 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, calls));
+    expect(readState(statePath).unroutedReplies).toEqual({ 3: { issue: 4, postId: POST, text: 'show the atlas', at: new Date(5000).toISOString() } });
+    expect(sent).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it('turns a Hermes route into a patch, settles the waiting replies of that post and marks the post', async () => {
+    const calls: string[] = [];
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), builds: { 4: 'abc1234' }, unroutedReplies: { 3: { issue: 4, postId: POST, text: 'x', at: 'a' }, 8: { issue: 5, postId: 77, text: 'y', at: 'a' } } }));
+    put('1.json', { kind: 'route', route: 'patch', issue: 4, text: 'Use top-down icons in the grid.', messageId: 6 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    const state = readState(statePath);
+    expect(state.unroutedReplies).toEqual({ 8: { issue: 5, postId: 77, text: 'y', at: 'a' } });
+    expect(state.patching).toEqual({ 4: 'abc1234' });
+    expect(calls).toEqual([expect.stringContaining('routed as patch:\n\nUse top-down icons in the grid.'), 'move 4 Implementation', 'edit -5 42 Post\n\n🔧 Patch from Ann. Sonnet fixes the build, then the checks run again.']);
+  });
+
+  it('records an answer on the issue and leaves the post open and silent', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), unroutedReplies: { 3: { issue: 4, postId: POST, text: 'x', at: 'a' } } }));
+    put('1.json', { kind: 'route', route: 'answer', issue: 4, text: 'Is there a top-down atlas?' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, calls));
+    expect(calls).toEqual([expect.stringContaining('routed as answer')]);
+    expect(sent).toEqual([]);
+    expect(readState(statePath).unroutedReplies).toEqual({});
+  });
+
+  it('queues the change of a waste review from its button, and answers with a reply', async () => {
+    const sent: string[] = [];
+    const ctx = fakeCtx([], sent, []);
+    const body = 'Numbers.\n\n## Bottleneck\n\nSlow verify.\n\n## Proposed change\n\nSet FACTORY_VERIFY_WORKERS to 2.';
+    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 301, title: 'Factory review', body, labels: ['factory-review'] });
+    put('1.json', { kind: 'waste-change', issue: 301 });
+    await drainInbox(ctx);
+    expect(readState(statePath).pendingChanges).toEqual([{ id: 5000, text: 'Set FACTORY_VERIFY_WORKERS to 2.\n\nProposed by the factory review #301.', by: 'Ann' }]);
+    expect(sent).toEqual(['Change request 5000 is queued. The factory answers with a pull request.']);
+  });
+
+  it('refuses the review button on an issue that is no review', async () => {
+    const sent: string[] = [];
+    const ctx = fakeCtx([], sent, []);
+    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 4, title: 't', body: '## Proposed change\n\nx', labels: [] });
+    put('1.json', { kind: 'waste-change', issue: 4 });
+    await drainInbox(ctx);
+    expect(readState(statePath).pendingChanges).toEqual([]);
+    expect(sent[0]).toContain('no factory review');
+  });
+
+  it('refuses a route it does not know', () => {
+    expect(() => parseCommand(JSON.stringify({ kind: 'route', route: 'ship', by: '1', chat: 'c', messageId: 1, postId: 2 }))).toThrow('Unknown route ship');
   });
 
   it('answers a /change with one reply, since it acts on no post', async () => {

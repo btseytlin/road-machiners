@@ -8,11 +8,12 @@
 // clutter that land on bad ground are dropped, all but trees also on ground that lies off their seat past the
 // territory's relief, but a block that keeps too few of its trees fails loudly too.
 
+import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
 import { EMPLACEMENT, type BuildingGroup, type ClutterRule, type Emplacement, type FarmRoad, type FarmRules, type GroveBlock, type GroveRule, type Pad, type Run, type TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { flattenFalloff } from '../sim/elevation';
-import { blockingBoxes } from '../sim/mapgen';
+import { propBoxes } from '../sim/mapgen';
 import { gradePaths, type GradedPad } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randInt, randRange, type Rng } from '../sim/rng';
@@ -20,8 +21,9 @@ import { siteGap } from '../sim/sites';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from '../sim/vec';
 import { footprintRelief, tileSteepness, type MapDraft } from './bake';
+import { at, mark, markLine, markRoads, onNewRoad, steep, type Touch } from './marks';
 import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
-import { BUILT_FIELD, BUILT_NONE, BUILT_OLD_ROAD, facing, prop, RoadLine, tileCenter, tileOf, tilesWithin } from './oldworld';
+import { BUILT_FIELD, BUILT_OLD_ROAD, facing, prop, RoadLine, tileCenter, tileOf, tilesWithin } from './oldworld';
 
 const LENGTH_SLACK = 1e-6; // share of a segment a run's length may miss by rounding and still count it whole
 const LINE_SAMPLE = 0.25; // tiles between the points of a run segment tested against roads and marks
@@ -36,23 +38,19 @@ const ROW_TURN = 0.02;
 const ROW_NUDGE = 0.06;
 const SEGMENT_CLEAR = 0.05; // tiles two segment props must keep apart unless their ends meet
 
-// Whether a circle at pos with radius r touches something.
-type Touch = (pos: Vec, r: number) => boolean;
 // The road's frame: its heading, and the unit vectors along it and across it toward the map's west.
 type Frame = { yaw: number; along: Vec; across: Vec };
-// A polyline on the map, width in tiles.
-type Line = { points: Vec[]; width: number };
 
 // Lays out the farm and returns its buildings, the loot spots. Roads, pads and canals go down first, so nothing drawn
 // stands on them and blocks mark field only on bare ground. Once the buildings stand, the roads are graded with the
 // buildings' levelled pads, so everything drawn after is checked on the ground it stands on. Buildings come before the
 // runs, emplacements, clutter and trees, which keep a parking gap round them.
 export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, farm: FarmRules, rng: Rng): BakedProp[] {
-  const frame = frameOf(rules.spine);
-  const onRoad = markRoads(d, t, farm.roads);
+  const frame = frameOf(farm.spine);
+  const onRoad = markRoads(d, t, farm.roads.map((road) => ({ ...road, points: road.points.map((p) => shift(t, p)) })), 'inside');
   markPads(d, t, frame, farm.pads);
   const canals = farm.canals.map((c) => ({ points: c.points.map((p) => inside(t, shift(t, p), 0, 'canal point')), width: c.width }));
-  for (const canal of canals) markLine(d, t, canal, BUILT_CANAL);
+  for (const canal of canals) markLine(d, t, canal, BUILT_CANAL, 'inside');
   const spots = placeBuildings(d, t, frame, farm, onRoad, rng);
   d.props.push(...spots);
   gradeFarmRoads(d, t, farm.roads, spots);
@@ -100,27 +98,9 @@ export function touchesMarks(d: MapDraft, pos: Vec, r: number): boolean {
   return touchedTiles(d.size, pos, r).some((tile) => d.built[tile] === BUILT_OLD_ROAD || d.built[tile] === BUILT_TRACK || d.built[tile] === BUILT_CANAL || d.built[tile] === BUILT_PAD);
 }
 
-function frameOf(spine: TerritoryRules['spine']): Frame {
+function frameOf(spine: FarmRules['spine']): Frame {
   const yaw = bearing(spine.from, spine.to);
   return { yaw, along: { x: Math.cos(yaw), y: Math.sin(yaw) }, across: { x: Math.sin(yaw), y: -Math.cos(yaw) } };
-}
-
-// Marks each road in list order: old road as asphalt, the rest as dirt track. A road's points lie inside the
-// territory, or at most a tile past its edge where the road leaves it. Returns whether a circle touches any road.
-function markRoads(d: MapDraft, t: TerritoryDef, roads: readonly FarmRoad[]): Touch {
-  const lines = roads.map((road) => {
-    const line = { points: road.points.map((p) => roadPoint(d, t, shift(t, p))), width: road.width };
-    markLine(d, t, line, road.surface === 'oldRoad' ? BUILT_OLD_ROAD : BUILT_TRACK);
-    return line;
-  });
-  return (pos, r) => lines.some((line) => line.points.slice(1).some((b, k) => segmentDist(pos, line.points[k], b) < line.width / 2 + r));
-}
-
-function roadPoint(d: MapDraft, t: TerritoryDef, p: Vec): Vec {
-  const gap = siteGap(t, p);
-  if (gap > ROAD_END_SLACK) throw new Error(`${t.id} road point at ${at(p)} lies outside the territory`);
-  if (gap < 0 && steep(d, tileOf(d.size, p))) throw new Error(`${t.id} road point at ${at(p)} lies on a cliff`);
-  return p;
 }
 
 // Concrete on every tile of each pad. A pad lies wholly inside the territory on drivable ground off the roads.
@@ -138,19 +118,6 @@ function markPadTile(d: MapDraft, t: TerritoryDef, tile: number, centre: Vec): v
   if (steep(d, tile)) throw new Error(`${t.id} pad at ${at(centre)} lies on a cliff at ${at(c)}`);
   if (onNewRoad(c, 0)) throw new Error(`${t.id} pad at ${at(centre)} lies on a road at ${at(c)}`);
   mark(d, tile, BUILT_PAD);
-}
-
-// Marks code on every unmarked tile inside the territory whose centre lies within width / 2 of the line.
-function markLine(d: MapDraft, t: TerritoryDef, line: Line, code: number): void {
-  for (let k = 1; k < line.points.length; k++) markLeg(d, t, line.points[k - 1], line.points[k], line.width, code);
-}
-
-function markLeg(d: MapDraft, t: TerritoryDef, a: Vec, b: Vec, width: number, code: number): void {
-  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  for (const tile of tilesWithin(d.size, mid, dist(a, b) / 2 + width)) {
-    const c = tileCenter(d.size, tile);
-    if (segmentDist(c, a, b) <= width / 2 && siteGap(t, c) < 0) mark(d, tile, code);
-  }
 }
 
 // One loot spot at each pose, turned from the road's heading and jittered by its group. A pose that falls outside
@@ -206,7 +173,7 @@ function padCorners(d: MapDraft, p: BakedProp): number[] {
 function gradeFarmRoads(d: MapDraft, t: TerritoryDef, roads: readonly FarmRoad[], buildings: readonly BakedProp[]): void {
   const pads = levelPads(d, buildings);
   const before = Float32Array.from(d.heights);
-  const paths = roads.map((road) => ({ points: road.points.map((p) => shift(t, p)), width: road.width, grade: road.grade }));
+  const paths = roads.map((road) => ({ points: road.points.map((p) => shift(t, p)), width: road.width, grade: road.grade ?? TERRAIN.roadGrade }));
   const graded = gradePaths({ size: d.size, heights: Array.from(d.heights), types: [] }, paths, TERRAIN.farmGradeMargin, pads);
   const reach = Math.max(ROAD_END_SLACK + Math.max(...roads.map((road) => road.width / 2)) + TERRAIN.farmGradeMargin, Math.SQRT2 + TERRAIN.levelMargin);
   graded.forEach((h, k) => {
@@ -509,7 +476,7 @@ function cornerRelief(d: MapDraft, p: BakedProp): number {
   const seat = groundAt(ground, p.pos.x, p.pos.y);
   const look = p.kind;
   if (look === 'rock') throw new Error('A farm never places a rock');
-  const boxes = blockingBoxes({ id: `${look}-farm`, pos: p.pos, r: p.r, kind: 'landmark', look, yaw: p.yaw });
+  const boxes = propBoxes({ id: `${look}-farm`, pos: p.pos, r: p.r, kind: 'landmark', look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
   let worst = 0;
   for (const b of boxes) {
     for (const [i, j] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
@@ -519,15 +486,6 @@ function cornerRelief(d: MapDraft, p: BakedProp): number {
     }
   }
   return worst;
-}
-
-function onNewRoad(pos: Vec, r: number): boolean {
-  const reach = REGION.roadWidth / 2 + r;
-  return ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach;
-}
-
-function steep(d: MapDraft, tile: number): boolean {
-  return tileSteepness(d.heights, d.size, tile) > TERRAIN.drive.maxSlope;
 }
 
 // Whether no prop of the list stands within gap tiles of a circle at pos with radius r.
@@ -545,11 +503,6 @@ function lineTouches(seg: BakedProp, touch: Touch): boolean {
 // Whether a circle keeps the obstacle gap from a run segment.
 function clearOfSegment(seg: BakedProp, pos: Vec, r: number): boolean {
   return lineDist(seg, pos) >= r + REGION.obstacles.gap;
-}
-
-// A mark goes only on a tile no earlier mark took, so the old road wins over tracks, tracks over pads and so on.
-function mark(d: MapDraft, tile: number, code: number): void {
-  if (d.built[tile] === BUILT_NONE) d.built[tile] = code;
 }
 
 // Tiles whose centre lies in a rectangle of size (along yaw, across it) around centre.
@@ -575,8 +528,4 @@ function inside(t: TerritoryDef, p: Vec, r: number, what: string): Vec {
 
 function shift(t: TerritoryDef, offset: Vec): Vec {
   return { x: t.pos.x + offset.x, y: t.pos.y + offset.y };
-}
-
-function at(p: Vec): string {
-  return `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`;
 }

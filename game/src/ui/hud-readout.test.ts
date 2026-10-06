@@ -7,7 +7,6 @@ import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
 import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
-import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clockLabel } from "./format";
@@ -252,7 +251,7 @@ describe("critical vehicle readout", () => {
   });
   it("shows driver health against the raised max health and warns below it", () => {
     const w = emptyWorld();
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     w.player.health = RULES.maxHealth;
     const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
     expect(driver).toEqual({ label: "Driver", value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });

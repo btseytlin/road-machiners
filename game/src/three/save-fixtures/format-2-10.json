@@ -1,0 +1,10 @@
+{
+  "turn": 52,
+  "obstacles": [
+    { "id": "wreck-npc7", "pos": { "x": 100, "y": 100 }, "r": 0.9, "kind": "wreck" },
+    { "id": "wreck3", "pos": { "x": 120, "y": 90 }, "r": 0.8, "kind": "wreck" }
+  ],
+  "salvage": [
+    { "id": "wreck-npc7", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 2 }, "parts": [] }
+  ]
+}

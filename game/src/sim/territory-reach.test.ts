@@ -96,7 +96,7 @@ function entryPoints(): Vec[] {
 
 describe('reach through Old Orchard', () => {
   it('routes from the south entry to every loot spot within 1.5 times the straight line', () => {
-    expect(spots.length).toBe(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + TERRITORIES.orchard.spots.reduce((n, s) => n + s.count, 0));
+    expect(spots.length).toBe(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
     for (const spot of spots) expect(bestRingRatio(south, spot), spot.id).toBeLessThanOrEqual(ROUTE_RATIO);
   });
 

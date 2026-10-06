@@ -28,6 +28,7 @@ import { isLootSpot, spotTable, territoryAt, territoryOfStock } from './territor
 import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 describe('player piles', () => {
   it('goods the player dumps and takes back keep their cost basis', () => {
@@ -328,7 +329,7 @@ describe('road wreck salvage', () => {
       expect(stock).toBeDefined();
       expect(hasSalvage(stock!)).toBe(true);
     }
-  }, 30_000);
+  }, budget(30_000));
 });
 
 describe('loot piles', () => {
@@ -745,14 +746,14 @@ describe('territory loot spots', () => {
     const ids = new Set(w.obstacles.map((o) => o.id));
     for (const s of w.salvage.filter((entry) => territoryOfStock(entry))) expect(ids.has(s.id), s.id).toBe(true);
     expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
   it('gives every orchard spot its own stock from the table of its look, and the orchard no stock of its own', async () => {
     const w = await realWorld();
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
     const spots = spotsOf(w).filter((o) => siteGap(orchard, o.pos) < 0);
     const farm = TERRITORIES.orchard.farm!;
-    expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + TERRITORIES.orchard.spots.reduce((n, s) => n + s.count, 0));
+    expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
     for (const o of spots) {
       const stocks = w.salvage.filter((s) => s.id === o.id);
       expect(stocks, o.id).toHaveLength(1);
@@ -762,38 +763,38 @@ describe('territory loot spots', () => {
       expect(stocks[0].goods.parts ?? 0, o.id).toBeLessThanOrEqual(table.parts[1]);
     }
     expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
-  it('rolls deck bays from the landmark table and field spots from the hull scrap table', async () => {
+  it('rolls caches from the landmark table and field spots from the hull scrap table', async () => {
     const w = await realWorld();
     for (const o of spotsOf(w).filter((spot) => territoryAt(spot.pos)?.id === 'fallen-sun')) {
       const table = spotTable(o);
       const stock = stockOf(w, o.id);
-      expect(table).toBe(o.kind === 'landmark' && o.look === 'deckBay' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      expect(table).toBe(o.kind === 'landmark' && o.look === 'hullCache' ? SALVAGE.landmark : SALVAGE.hullScrap);
       expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
       expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
       expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
       expect(stock.radius).toBeCloseTo(propReach(o), 6);
     }
-  }, 30_000);
+  }, budget(30_000));
 
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    // Every deck bay at once, since one bay may draw a lucky full day: a day refills a share, not the table highs.
-    const bays = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'deckBay');
-    const stocks = bays.map((o) => stockOf(w, o.id));
+    // Every cache at once, since one cache may draw a lucky full day: a day refills a share, not the table highs.
+    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache');
+    const stocks = caches.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 1);
     const scrap = () => stocks.reduce((n, stock) => n + (stock.goods.scrap ?? 0), 0);
     expect(scrap()).toBeLessThan(stocks.length * SALVAGE.landmark.goods.scrap[1]);
     runDays(w, 365);
     for (const [k, stock] of stocks.entries()) {
-      expect(stock.goods.scrap, bays[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
-      expect(stock.goods.parts, bays[k].id).toBe(SALVAGE.landmark.parts[1]);
-      expect(stock.fuel, bays[k].id).toBe(SALVAGE.landmark.fuel[1]);
-      expect(stockOf(w, bays[k].id).parts.length, bays[k].id).toBeLessThanOrEqual(1);
+      expect(stock.goods.scrap, caches[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
+      expect(stock.goods.parts, caches[k].id).toBe(SALVAGE.landmark.parts[1]);
+      expect(stock.fuel, caches[k].id).toBe(SALVAGE.landmark.fuel[1]);
+      expect(stockOf(w, caches[k].id).parts.length, caches[k].id).toBeLessThanOrEqual(1);
     }
-  }, 30_000);
+  }, budget(30_000));
 
   it('lets a parked player beside a spot search it, and not a moving one', async () => {
     const w = await realWorld();
@@ -804,13 +805,13 @@ describe('territory loot spots', () => {
     expect(canScavenge(w, o.id)).toBe(true);
     me.speed = RULES.parkedSpeed + 1;
     expect(canScavenge(w, o.id)).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
   it('leaves road wreck and site stock alone', async () => {
     const w = await realWorld();
     expect(w.salvage.filter((s) => isSiteStock(s)).length).toBeGreaterThan(0);
     for (const o of spotsOf(w)) expect(isSiteStock(stockOf(w, o.id))).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 });
 
 describe('salvage place', () => {
@@ -848,11 +849,11 @@ describe('salvage place', () => {
     expect(salvagePlace(stockOf(w, `wreck-${npc.id}`))).toBe('wreck');
   }, 30_000);
 
-  it('calls army trucks, ship caches and deck bays wrecks, and other loot spots spots', async () => {
+  it('calls army trucks, ship caches and hull caches wrecks, and other loot spots spots', async () => {
     const w = await realWorld();
     expect(salvagePlace(spotStock(w, 'orchard', 'armyTruck'))).toBe('wreck');
     expect(salvagePlace(spotStock(w, 'fallen-sun', 'shipCache'))).toBe('wreck');
-    expect(salvagePlace(spotStock(w, 'fallen-sun', 'deckBay'))).toBe('wreck');
+    expect(salvagePlace(spotStock(w, 'fallen-sun', 'hullCache'))).toBe('wreck');
     expect(salvagePlace(spotStock(w, 'orchard', 'farmhouse'))).toBe('spot');
     expect(salvagePlace(spotStock(w, 'orchard', 'quonset'))).toBe('spot');
   }, 30_000);

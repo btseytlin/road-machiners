@@ -19,7 +19,7 @@ const props = world.obstacles.filter((o) => o.kind === 'landmark' && o.look !== 
 
 // The four ground corners of each box that blocks a truck, in map tiles.
 function groundCorners(o: Obstacle): Vec[] {
-  return blockingBoxes(o).flatMap((b) =>
+  return blockingBoxes(o, world.terrain).flatMap((b) =>
     [-1, 1].flatMap((i) =>
       [-1, 1].map((j) => ({
         x: b.center.x + b.axis.x * b.half.x * i - b.axis.y * b.half.y * j,

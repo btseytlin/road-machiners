@@ -17,7 +17,7 @@ import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
 import { STATE_TURNS } from '../data/npcs';
-import { addState, boundTo, endState, stateOf, strayData } from './states';
+import { addState, boundTo, endState, feudData, stateOf, strayData } from './states';
 import { isOnRope, towHeldBy } from './tow';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
@@ -460,7 +460,7 @@ function offTruckChance(o: Spread, a: Aiming, sign: number, x0: number, x1: numb
 
 // A miss off the truck explodes where it lands, or strays into another truck and explodes on one of its lanes.
 function missReach(c: Reach, offset: number): number {
-  const miss = missPoint(c.shooter, c.target, offset);
+  const miss = missPoint(c.shooter.pos, c.target.pos, offset);
   const own = Number(splashReaches(c, miss, null));
   const candidates = strayCandidates(c.world, c.shooter, c.target, miss);
   if (candidates.length === 0) return own;
@@ -640,7 +640,7 @@ function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
 // the lane under its offset. A miss off the truck may stray into another truck near the line of fire.
 function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const { side, lanes, body } = s.aiming;
-  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
+  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter.pos, s.target.pos, offset));
   const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
   const hits = walkLane(world, s.target, side, lane, directRound(s.mw.def.round, roll.crit));
   return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
@@ -668,9 +668,10 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
 }
 
 // Where a round that missed the truck lands: beside the target, at its offset across the line of fire.
-function missPoint(shooter: Vehicle, target: Vehicle, offset: number): Vec {
-  const n = across(shooter, target);
-  return { x: target.pos.x + (n.x * offset) / M, y: target.pos.y + (n.y * offset) / M };
+export function missPoint(from: Vec, target: Vec, offset: number): Vec {
+  if (from.x === target.x && from.y === target.y) throw new Error('missPoint needs a shooter apart from its target');
+  const b = bearing(from, target);
+  return { x: target.x - (Math.sin(b) * offset) / M, y: target.y + (Math.cos(b) * offset) / M };
 }
 
 // Trucks other than shooter and target whose center lies within reach of the line of fire, which runs from the
@@ -945,7 +946,8 @@ function damagedByShots(world: World): Set<string> {
   return hurt;
 }
 
-// The truck leaves the world as a wreck obstacle with a stock of what it carried.
+// The truck leaves the world as a wreck obstacle with a stock of what it carried. The wreck is the truck's chassis as a
+// hulk, where and how it lay when it died.
 export function wreckVehicle(world: World, v: Vehicle): void {
   createWreckSalvage(world, v);
   world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
@@ -955,6 +957,7 @@ export function wreckVehicle(world: World, v: Vehicle): void {
     pos: { ...v.pos },
     r: vehicleStats(world, v).radius * RULES.wreckRadiusScale,
     kind: "wreck",
+    hulk: { chassisId: v.chassisId, yaw: v.heading },
   });
   world.events.push({
     t: "destroyed",
@@ -978,10 +981,17 @@ function clearOldWrecks(world: World): void {
 }
 
 // An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
-// goals, and not while either stands in guard range of a town gate.
-function canNpcEngage(v: Vehicle, target: Vehicle): boolean {
+// goals, and not while either stands in guard range of a town gate. A robber is no defender: its victim's return fire
+// does not let it shoot into guard range.
+function canNpcEngage(world: World, v: Vehicle, target: Vehicle): boolean {
   if (!v.brain) return true;
-  return target.id in v.brain.attackers || opensFireOn(v, v.brain.goals, target);
+  if (target.id in v.brain.attackers && !robs(world, v, target)) return true;
+  return opensFireOn(v, v.brain.goals, target);
+}
+
+function robs(world: World, v: Vehicle, target: Vehicle): boolean {
+  const feud = stateOf(world, "feud", v.id, target.id);
+  return feud !== null && feudData(feud).robbery;
 }
 
 function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
@@ -996,7 +1006,7 @@ export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles
-    .filter((x) => isHostile(world, v, x) && seen(x) && canNpcEngage(v, x))
+    .filter((x) => isHostile(world, v, x) && seen(x) && canNpcEngage(world, v, x))
     .sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target =

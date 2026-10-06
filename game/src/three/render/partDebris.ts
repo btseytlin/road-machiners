@@ -12,6 +12,7 @@ import type { Terrain } from '../../sim/terrain';
 import { dist } from '../../sim/vec';
 import type { Obstacle, PartInstance, World } from '../../sim/types';
 import { DebrisSim, disposeTree, FLY_REACH, piecesOf, type TruckBox } from './debris';
+import type { PartBreak } from '../breakCues';
 import type { Fx3D } from './fx';
 import type { RenderScope } from './scope';
 import type { VehicleView } from './vehicle';
@@ -99,20 +100,15 @@ const SIGNATURE_FX: Record<BreakSignature, (fx: Fx3D, at: V3) => void> = {
   fire: (fx, at) => fx.fireBurst(at),
 };
 
-// A part a hit broke throws scrap where it is drawn, and a weapon, wheel or fuel part adds its own effect. Only trucks
-// the player may see (eventPoint is not null) play. Call it once, as the turn's hits land.
-export function playBreaks(world: World, debris: PartDebris, fx: Fx3D, views: ReadonlyMap<string, VehicleView>, eventPoint: (id: string) => V3 | null): void {
-  for (const e of world.events) {
-    if (e.t === 'partDisabled' && eventPoint(e.vehicle) !== null) breakAt(world, debris, fx, views.get(e.vehicle), e.vehicle, e.part);
-  }
-}
-
-function breakAt(world: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, vehicleId: string, partId: string): void {
-  if (!view) return;
-  const at = view.partPoint(partId);
-  debris.burst(`${vehicleId}:${partId}:${world.turn}`, at, view.center(), world.obstacles);
-  const sig = breakSignature(partDef(partOf(world, vehicleId, partId).defId));
+// A part a hit broke throws scrap where it is drawn, and a weapon, wheel or fuel part adds its own effect. Call it once
+// per break, as the round that broke the part lands. Returns the point the part was drawn at, or null with no view.
+export function playBreak(world: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, brk: PartBreak): V3 | null {
+  if (!view) return null;
+  const at = view.partPoint(brk.part);
+  debris.burst(`${brk.vehicle}:${brk.part}:${world.turn}`, at, view.center(), world.obstacles);
+  const sig = breakSignature(partDef(partOf(world, brk.vehicle, brk.part).defId));
   if (sig) SIGNATURE_FX[sig](fx, at);
+  return at;
 }
 
 function partOf(world: World, vehicleId: string, partId: string): PartInstance {
