@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_BYTES, detectType, imageSize, validSize, type MediaEntry } from './media';
+import { MAX_BYTES, MAX_FILES, detectType, imageSize, validSize, type MediaEntry } from './media';
 
 // Images a member sent with a Telegram reply to an approval post. They never block a route, and they never reach GitHub.
 // The Hermes plugin copies them, best effort, into the inbox's media folder under the post. A file it could not copy is a `.skipped` note with the reason.
@@ -16,16 +16,46 @@ export function replyMediaDir(home: string, post: number): string {
 }
 
 // Moves the post's files into the issue's media folder and records each one. Returns what the route brought, in order.
+// It never throws, since a lost image must not lose the route: a file it cannot read is a failed entry, and a folder it cannot read brings nothing.
 export function adoptReplyMedia(home: string, post: number, issueDir: string, by: string): MediaEntry[] {
   const from = replyMediaDir(home, post);
-  if (!existsSync(from)) return [];
   const source = `committee reply in Telegram by ${by}`;
-  mkdirSync(join(issueDir, FOLDER), { recursive: true });
-  const names = readdirSync(from).filter((name) => !name.endsWith('.tmp')).sort(byMessage);
-  const entries = names.map((name) => adopt(join(from, name), `post-${post}-${name}`, issueDir, source));
-  writeFileSync(join(issueDir, MANIFEST), JSON.stringify([...readCommitteeMedia(issueDir), ...entries], null, 2));
+  let names: string[];
+  try {
+    names = existsSync(from) ? readdirSync(from).filter((name) => !name.endsWith('.tmp')).sort(byMessage) : [];
+    if (names.length > 0) mkdirSync(join(issueDir, FOLDER), { recursive: true });
+  } catch (error) {
+    return [{ url: `telegram:post-${post}`, source, status: 'failed', reason: `the factory could not read the files: ${messageOf(error)}` }];
+  }
+  if (names.length === 0) return [];
+  const entries = names.map((name) => safeAdopt(join(from, name), `post-${post}-${name}`, issueDir, source));
+  writeFileSync(join(issueDir, MANIFEST), JSON.stringify(merged(readCommitteeMedia(issueDir), entries), null, 2));
   rmSync(from, { recursive: true, force: true });
   return entries;
+}
+
+// One copy of each image, and the newest MAX_FILES, so a picture sent twice is listed once and the list stays as short as the issue's own.
+function merged(earlier: MediaEntry[], added: MediaEntry[]): MediaEntry[] {
+  const seen = new Set<string>();
+  const unique = [...added].reverse().concat([...earlier].reverse()).filter((entry) => {
+    if (entry.sha256 === undefined) return true;
+    if (seen.has(entry.sha256)) return false;
+    seen.add(entry.sha256);
+    return true;
+  });
+  return unique.slice(0, MAX_FILES).reverse();
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeAdopt(path: string, name: string, issueDir: string, source: string): MediaEntry {
+  try {
+    return adopt(path, name, issueDir, source);
+  } catch (error) {
+    return { url: `telegram:${name}`, source, status: 'failed', reason: `the factory could not read it: ${messageOf(error)}` };
+  }
 }
 
 // Files are named `<message>-<n>`, so the message ids sort as numbers.
@@ -51,8 +81,13 @@ function adopt(path: string, name: string, issueDir: string, source: string): Me
 // The committee images of every earlier route of the issue, which later stages read too. A file that is gone shows as not available.
 export function readCommitteeMedia(issueDir: string): MediaEntry[] {
   const path = join(issueDir, MANIFEST);
-  if (!existsSync(path)) return [];
-  return (JSON.parse(readFileSync(path, 'utf8')) as MediaEntry[]).map((entry) => entry.status === 'ok' && !existsSync(join(issueDir, entry.file ?? ''))
+  let entries: MediaEntry[];
+  try {
+    entries = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as MediaEntry[]) : [];
+  } catch {
+    return [];
+  }
+  return entries.map((entry) => entry.status === 'ok' && !existsSync(join(issueDir, entry.file ?? ''))
     ? { url: entry.url, source: entry.source, status: 'failed', reason: 'its file is gone from the media folder' }
     : entry);
 }

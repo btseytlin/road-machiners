@@ -59,6 +59,35 @@ describe('adoptReplyMedia', () => {
   });
 });
 
+describe('adoptReplyMedia limits', () => {
+  it('lists an image sent twice once, and keeps the newest MAX_FILES', () => {
+    const same = solidPng(1, 1, [5, 5, 5]);
+    reply(55, { '5-1.png': same });
+    adoptReplyMedia(home, 55, issueDir, 'ann');
+    reply(56, { '6-1.png': same });
+    adoptReplyMedia(home, 56, issueDir, 'ann');
+    expect(readCommitteeMedia(issueDir).map((e) => e.url)).toEqual(['telegram:post-56-6-1.png']);
+    reply(57, Object.fromEntries(Array.from({ length: 13 }, (_, n) => [`7-${n + 1}.png`, solidPng(1, n + 1, [1, 1, 1])])));
+    const entries = adoptReplyMedia(home, 57, issueDir, 'ann');
+    expect(entries).toHaveLength(13);
+    expect(readCommitteeMedia(issueDir).map((e) => e.url)).toEqual(entries.slice(1).map((e) => e.url));
+  });
+
+  it('turns a file it cannot read into a failed entry, so the route still goes on', () => {
+    reply(55, { '5-1.png': solidPng(1, 1, [1, 1, 1]) });
+    mkdirSync(join(replyMediaDir(home, 55), '5-2.png'));
+    const entries = adoptReplyMedia(home, 55, issueDir, 'ann');
+    expect(entries.map((e) => e.status)).toEqual(['ok', 'failed']);
+    expect(entries[1].reason).toMatch(/^the factory could not read it: /);
+  });
+
+  it('reads a broken manifest as empty', () => {
+    mkdirSync(issueDir, { recursive: true });
+    writeFileSync(join(issueDir, 'committee.json'), '{oops');
+    expect(readCommitteeMedia(issueDir)).toEqual([]);
+  });
+});
+
 describe('dropReplyMedia', () => {
   it('removes the files of closed posts only', () => {
     reply(55, { '5-1.png': 'x' });
