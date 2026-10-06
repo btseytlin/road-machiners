@@ -3,7 +3,7 @@
 // checked here too.
 
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import type { TerrainTypeId } from '../../data/terrain';
 import { wheelMounts } from '../../phys/body';
@@ -12,6 +12,8 @@ import { bodyOf } from '../../sim/body';
 import { DECKS } from '../../sim/bridge';
 import { editableTerrain, emptyWorld } from '../../sim/testkit';
 import type { Vehicle, World } from '../../sim/types';
+import type { CameraRig } from './camera';
+import { Fx3D, TruckFx } from './fx';
 import { RUT, Ruts, tirePoints } from './ruts';
 
 const S = PHYSICS.metersPerTile;
@@ -34,13 +36,16 @@ function frameAt(v: Vehicle, x: number, ground = true, y = Y * S): VehicleFrame 
   return { pos: { x, y: 1, z: y }, rot: headingQuat(0), acc: { x: 0, y: 0, z: 0 }, wheels };
 }
 
-const PLAYING = { seen: true, playing: true }; // a seen truck in a playing turn
 const FRAME_MOVE = 0.125; // meters per frame; exact in binary, so steps land on frames without rounding
+
+function track(ruts: Ruts, w: World, v: Vehicle, f: VehicleFrame): void {
+  ruts.layTracks(w, v, f, tirePoints(w.terrain, v.chassisId, f));
+}
 
 // Drives the truck from x0 to x1 meters in small frame moves, as playback does.
 function drive(ruts: Ruts, w: World, x0: number, x1: number, ground = true): void {
   const v = truckOf(w);
-  for (let i = 0; x0 + i * FRAME_MOVE <= x1; i++) ruts.track(w, v, frameAt(v, x0 + i * FRAME_MOVE, ground), PLAYING);
+  for (let i = 0; x0 + i * FRAME_MOVE <= x1; i++) track(ruts, w, v, frameAt(v, x0 + i * FRAME_MOVE, ground));
 }
 
 // The wheels that mark: a pair, however many wheels the truck has.
@@ -64,7 +69,7 @@ describe('Ruts', () => {
     const centre = { x: 100, z: Y * S + radius };
     for (let a = 0; a < 1.2; a += 0.01) {
       const f = frameAt(v, centre.x + radius * Math.sin(a), true, centre.z - radius * Math.cos(a));
-      ruts.track(w, v, { ...f, rot: headingQuat(a) }, PLAYING);
+      track(ruts, w, v, { ...f, rot: headingQuat(a) });
     }
 
     const stepsOfArc = Math.ceil((radius * 1.2) / RUT.step);
@@ -108,7 +113,7 @@ describe('Ruts', () => {
 
     for (let k = deck.length * 0.4; k <= deck.length * 0.6; k += 0.02) {
       const p = along(k);
-      ruts.track(w, v, { ...frameAt(v, p.x, true, p.z), rot: headingQuat(Math.atan2(deck.axis.y, deck.axis.x)) }, PLAYING);
+      track(ruts, w, v, { ...frameAt(v, p.x, true, p.z), rot: headingQuat(Math.atan2(deck.axis.y, deck.axis.x)) });
     }
 
     expect(ruts.mesh.count).toBe(0);
@@ -119,8 +124,8 @@ describe('Ruts', () => {
     const v = truckOf(w);
     const ruts = new Ruts(new THREE.Scene());
 
-    ruts.track(w, v, frameAt(v, 100), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + 3 * RUT.step), PLAYING);
+    track(ruts, w, v, frameAt(v, 100));
+    track(ruts, w, v, frameAt(v, 100 + 3 * RUT.step));
 
     expect(ruts.mesh.count).toBe(marking);
   });
@@ -130,9 +135,9 @@ describe('Ruts', () => {
     const v = truckOf(w);
     const ruts = new Ruts(new THREE.Scene());
 
-    ruts.track(w, v, frameAt(v, 100), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + RUT.gap + RUT.step), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + RUT.gap + 2 * RUT.step), PLAYING);
+    track(ruts, w, v, frameAt(v, 100));
+    track(ruts, w, v, frameAt(v, 100 + RUT.gap + RUT.step));
+    track(ruts, w, v, frameAt(v, 100 + RUT.gap + 2 * RUT.step));
 
     expect(ruts.mesh.count).toBe(marking);
   });
@@ -142,9 +147,9 @@ describe('Ruts', () => {
     const v = truckOf(w);
     const ruts = new Ruts(new THREE.Scene());
 
-    ruts.track(w, v, frameAt(v, 100), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + RUT.step, false), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + 2 * RUT.step), PLAYING);
+    track(ruts, w, v, frameAt(v, 100));
+    track(ruts, w, v, frameAt(v, 100 + RUT.step, false));
+    track(ruts, w, v, frameAt(v, 100 + 2 * RUT.step));
 
     expect(ruts.mesh.count).toBe(0);
   });
@@ -164,8 +169,8 @@ describe('Ruts', () => {
     const v = truckOf(w);
     const ruts = new Ruts(new THREE.Scene());
 
-    ruts.track(w, v, frameAt(v, 100), PLAYING);
-    ruts.track(w, v, frameAt(v, 100 + RUT.step), PLAYING);
+    track(ruts, w, v, frameAt(v, 100));
+    track(ruts, w, v, frameAt(v, 100 + RUT.step));
 
     const m = new THREE.Matrix4();
     ruts.mesh.getMatrixAt(0, m);
@@ -199,14 +204,20 @@ describe('Ruts', () => {
   it('never marks from a truck the player does not see, or between turns', () => {
     const w = worldOn('sand');
     const v = truckOf(w);
-    const ruts = new Ruts(new THREE.Scene());
+    const element = { style: {}, appendChild: () => undefined };
+    vi.stubGlobal('document', { createElement: () => element });
+    const fx = new Fx3D(new THREE.Scene(), element as unknown as HTMLElement, {} as CameraRig);
+    const truckFx = new TruckFx(fx);
 
     for (let i = 0; i <= 16; i++) {
-      ruts.track(w, v, frameAt(v, 100 + i * FRAME_MOVE), { seen: false, playing: true });
-      ruts.track(w, v, frameAt(v, 100 + i * FRAME_MOVE), { seen: true, playing: false });
+      truckFx.emit(w, v, frameAt(v, 100 + i * FRAME_MOVE), true, 1 / 60, false);
+      truckFx.emit(w, v, frameAt(v, 100 + i * FRAME_MOVE), false, 1 / 60, true);
     }
+    expect(fx.ruts.mesh.count).toBe(0);
 
-    expect(ruts.mesh.count).toBe(0);
+    for (let i = 0; i <= 16; i++) truckFx.emit(w, v, frameAt(v, 100 + i * FRAME_MOVE), true, 1 / 60, true);
+    expect(fx.ruts.mesh.count).toBeGreaterThan(0);
+    vi.unstubAllGlobals();
   });
 });
 

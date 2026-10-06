@@ -25,9 +25,6 @@ export const RUT = {
   color: 0x5a4632, // what a full-darkness rut multiplies the ground by
 } as const;
 
-// seen: the player sees the truck this frame. playing: a turn plays, so the truck drives.
-export type RutSight = { seen: boolean; playing: boolean };
-
 const WHITE = new THREE.Color(1, 1, 1);
 const DARK = new THREE.Color(RUT.color);
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -63,13 +60,8 @@ export class Ruts {
     scene.add(this.mesh);
   }
 
-  // Extends each grounded rear wheel's strip by the frame's pose. Only a seen truck in a playing turn marks the ground, so
-  // ruts never give away a truck the player cannot see.
-  track(world: World, v: Vehicle, f: VehicleFrame, sight: RutSight): void {
-    if (sight.seen && sight.playing) this.layTracks(world, v, f, tirePoints(world.terrain, v.chassisId, f));
-  }
-
-  // Extends the strips of a truck known to be seen and driving. tires are the frame's tirePoints().
+  // Extends the strips of a truck the caller knows is seen and driving: ruts never give away a truck the player cannot
+  // see. tires are the frame's tirePoints().
   layTracks(world: World, v: Vehicle, f: VehicleFrame, tires: V3[]): void {
     if (tires.length !== f.wheels.length) throw new Error(`Vehicle ${v.id} has ${f.wheels.length} wheel frames for ${tires.length} wheels`);
     const ends = this.endsOf(v.id, tires.length);
