@@ -232,12 +232,10 @@ export class InventoryView {
     const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
-    const inspect = () => this.showItem(w, it, mounted);
     const click = () => this.clickItem(this.clicked("grid", it.id, it));
     node.addEventListener("click", (e) => {
       if (core || e.detail === 0) click();
     });
-    node.addEventListener("focus", inspect);
     node.addEventListener("keydown", (e) => {
       if (e.key === "Enter") click();
     });
@@ -662,9 +660,12 @@ export class InventoryView {
     const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
-    node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
+    const select = () => this.clickItem(this.clicked("truck", it.id, it));
+    node.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") select();
+    });
     if (it.kind === "part" && partDef(it.part.defId).kind === "core") {
-      node.addEventListener("click", () => this.clickItem(this.clicked("truck", it.id, it)));
+      node.addEventListener("click", select);
       return node;
     }
     node.addEventListener("pointerdown", (e) => {
@@ -955,8 +956,8 @@ export class InventoryScreen {
   }
 }
 
-// Header chips for the player's truck: chassis, money, free cells and load.
-export function truckChips(w: World): HTMLElement {
+// Header chips for the player's truck: chassis, money, free cells (unless left out) and load.
+export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells: true }): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
   const rated = chassisDef(me.chassisId).ratedMass;
@@ -965,7 +966,7 @@ export function truckChips(w: World): HTMLElement {
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
     el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
-    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
+    opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",
       { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
