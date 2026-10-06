@@ -11,7 +11,6 @@ import { goodsCount, isMounted } from '../grid';
 import type { GameEvent, PartInstance, Vehicle, World } from '../types';
 import { getTradePrice } from '../economy';
 import { isDefeated } from '../defeat';
-import { topGoal } from '../npc-activities';
 import { npcProfile } from '../npc-decisions';
 import { escortsOf } from '../tow';
 import { SHOPS } from '../../data/market';
@@ -47,7 +46,7 @@ export type Attempt = {
 };
 
 // One awake trader or convoy at a sample. qualifies: the robber would demand from it, sight aside. cargoValue: what its
-// loose goods and spares sell for to the player. boughtGoods: units of the good its trade goal bought that it carries.
+// loose goods and spares sell for to the player. boughtGoods: units of goods it carries while it delivers a load it bought.
 export type TargetSample = { kind: TargetKind; guarded: boolean; qualifies: boolean; cargoValue: number; wallet: number; boughtGoods: number };
 
 // The world every SAMPLE_TURNS turns. haulIndex: the hauling margin at INDEX_SPEND and INDEX_ROOM. salvageIndex: the
@@ -154,8 +153,7 @@ function templateKind(v: Vehicle): TargetKind | null {
 
 function targetSample(world: World, v: Vehicle, kind: TargetKind): TargetSample {
   const guarded = escortsOf(world, v.id).some((e) => !isDefeated(e));
-  const bought = topGoal(v)?.purchase?.good;
-  const boughtGoods = bought ? (goodsCount(v)[bought] ?? 0) : 0;
+  const boughtGoods = v.brain!.goals[0]?.reason === DELIVER_REASON ? cargoUnits(v) : 0;
   return { kind, guarded, qualifies: wouldRob(world, v), cargoValue: saleValue(world, goodsCount(v), spareParts(v)), wallet: v.resources!.money, boughtGoods };
 }
 
@@ -169,6 +167,14 @@ export function largestTraderLoad(world: World): number {
   const ratios = shops.flatMap((source) => shops.filter((b) => b.id !== source.id).flatMap((buyer) =>
     source.goods.filter((good) => buyer.goods.includes(good)).map((good) => getTradePrice(world, me, buyer.id, good, 'sell') / getTradePrice(world, trader, source.id, good, 'buy'))));
   return npcProfile(trader).tradeStake * Math.max(...ratios);
+}
+
+// The goal line of a trader's base goal while it carries the load it bought, from src/sim/npc-activities.ts.
+const DELIVER_REASON = 'deliver purchased cargo';
+
+// Units of goods on the truck, but the parts it keeps for field repairs.
+function cargoUnits(v: Vehicle): number {
+  return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + (good === 'parts' ? 0 : n), 0);
 }
 
 // Part prices do not depend on the town, so only goods move this index.
