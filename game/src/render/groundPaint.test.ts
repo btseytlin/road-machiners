@@ -87,13 +87,15 @@ class RecordingContext {
   lineWidth = 1;
   lineCap = 'butt';
   lineJoin = 'miter';
+  image: { data: Uint8ClampedArray } | null = null;
   private path: Shape[] = [];
   private open: Vec[] | null = null;
 
   createImageData(width: number, height: number) {
     return { width, height, data: new Uint8ClampedArray(width * height * 4) };
   }
-  putImageData() {
+  putImageData(image: { data: Uint8ClampedArray }) {
+    this.image = image;
     this.ops.push({ kind: 'image' });
   }
   createRadialGradient() {
@@ -213,5 +215,39 @@ describe('ground paint over the Fallen Sun', () => {
   it("keeps the Bowl's scorched crater floor", () => {
     const bowl = TERRAIN.features.craters[0];
     expect(paintOver(painted, bowl.center).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// The ground image painted over a small map at 8 pixels per tile, as RGB per pixel.
+function paintedImage(t: Terrain): { res: number; size: number; data: Uint8ClampedArray } {
+  const res = 8;
+  const ctx = new RecordingContext();
+  const size = t.size * res;
+  const canvas: PaintCanvas = { ctx: ctx as unknown as CanvasRenderingContext2D, size, res, from: 0, toPx: (tiles) => tiles * res };
+  paintGroundCanvas(canvas, t);
+  if (!ctx.image) throw new Error('The painter put no ground image');
+  return { res, size, data: ctx.image.data };
+}
+
+describe('ground paint over fused glass', () => {
+  // A 12x12 flat map, glass on its left half and sand on its right, and the same map all sand and all glass.
+  const size = 12;
+  const flat = new Array<number>((size + 1) ** 2).fill(0);
+  const map = (type: (x: number) => TerrainTypeId): Terrain => ({ size, heights: flat, types: Array.from({ length: size * size }, (_, i) => type(i % size)) });
+  const split = paintedImage(map((x) => (x < 6 ? 'glass' : 'sand')));
+  const sand = paintedImage(map(() => 'sand'));
+  const glass = paintedImage(map(() => 'glass'));
+
+  it('keeps the glass edge crisp: no blend of glass into sand or sand into glass across it', () => {
+    const { res, data } = split;
+    let checked = 0;
+    for (let py = 2 * res; py < (size - 2) * res; py++)
+      for (let px = 4 * res; px < 8 * res; px++) {
+        const want = px < 6 * res ? glass.data : sand.data;
+        const i = (py * split.size + px) * 4;
+        expect([data[i], data[i + 1], data[i + 2]], `${px},${py}`).toEqual([want[i], want[i + 1], want[i + 2]]);
+        checked++;
+      }
+    expect(checked).toBeGreaterThan(2000);
   });
 });

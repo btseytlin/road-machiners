@@ -828,9 +828,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       landing: 0,
     },
     farm: null,
-    // Glass is thinnest in the town core and thickest toward the edge, as in both concepts. Cells of 8 tiles give fields
-    // wide enough to hold the spires, as the concept's fields hold its pyramids; about a third of the ground turns.
-    glass: { cell: 8, cover: [0.3, 0.6], clear: 1.5, spires: { look: 'glassSpire', count: 30, radius: [1, 1.25] } },
+    // Glass is thinnest in the town core, where the tracks and the clear yards round the compounds and the engine leave
+    // little open ground, and covers about two fifths of the territory. The cover share is highest at the centre so
+    // that the core keeps about a quarter of its tiles glass, a third of its ground off the tracks, as concept 1 shows
+    // (V1 measured 25% after an earlier 0.3-to-0.6 share gave 8%). Cells of 6 tiles give fields as wide as the
+    // concept's. Spires of 0.6 to 1.2 tiles stand big and small as its pyramids do; 85 put 8 in the zoom-1 core view.
+    glass: { cell: 6, cover: [0.72, 0.6], clear: 1, spires: { look: 'glassSpire', count: 85, radius: [0.6, 1.2] } },
     spotGap: 6,
     debrisGap: 1.5,
     reactor: null,

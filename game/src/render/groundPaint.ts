@@ -234,6 +234,7 @@ type TileLook = {
   color: Int32Array;
   desert: Float32Array;
   shade: Float64Array;
+  glass: Uint8Array; // 1 on fused glass tiles
   broad: CellNoise;
   fine: CellNoise;
   patch: CellNoise;
@@ -245,13 +246,15 @@ function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const color = new Int32Array(count);
   const desert = new Float32Array(count);
   const shadeBy = new Float64Array(count);
+  const glass = new Uint8Array(count);
   const look = lookTypes(t);
   for (let i = 0; i < count; i++) {
+    glass[i] = t.types[i] === "glass" ? 1 : 0;
     color[i] = paintColor(t.types[i]);
     desert[i] = desertWeight(look[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
-  return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
+  return { t, color, desert, shade: shadeBy, glass, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
 }
 
 // valueNoise that keeps the corner hashes of the last lattice cell. Neighbouring pixels share a cell, so most
@@ -304,7 +307,8 @@ function tileIndex(size: number, x: number, y: number): number {
   return j * size + i;
 }
 
-// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
+// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled. Glass edges stay ruled,
+// see keepGlassEdge().
 function typeColor(look: TileLook, cell: Cell): number {
   const a = look.color[cell.a];
   const b = look.color[cell.b];
@@ -353,7 +357,19 @@ function jittered(look: TileLook, x: number, y: number): Cell {
   cell.d = tileIndex(size, i + 1.5, j + 1.5);
   cell.fx = jx - i;
   cell.fy = jy - j;
+  keepGlassEdge(look, cell, tileIndex(size, x, y));
   return cell;
+}
+
+// Fused glass takes no type jitter or blend: plates have hard edges. A corner on the other side of a glass edge from
+// the pixel's own tile takes the own tile's place, so glass never bleeds into the ground beside it, nor that ground
+// into the glass. The ground shader draws its plates over the same tile edges, see three/render/roads.ts.
+function keepGlassEdge(look: TileLook, cell: Cell, own: number): void {
+  const g = look.glass[own];
+  if (look.glass[cell.a] !== g) cell.a = own;
+  if (look.glass[cell.b] !== g) cell.b = own;
+  if (look.glass[cell.c] !== g) cell.c = own;
+  if (look.glass[cell.d] !== g) cell.d = own;
 }
 
 // Warm sand with slow deep and light patches over open desert. Patch noise near 0.5 leaves the sand as it is.

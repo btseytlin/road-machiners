@@ -468,7 +468,6 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   dustwell: (b) => buildOasis(b, true),
   'green-pit': (b) => buildOasis(b, false),
   'broken-wing': (b) => buildWingSalvage(b),
-  'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: settlement,
   bowl: settlement,
   'burnt-convoy': wrecks,

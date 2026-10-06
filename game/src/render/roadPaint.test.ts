@@ -1,23 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
+import { TEST_MAP } from '../test/map';
 import { deckAt } from '../sim/bridge';
 import { siteGap } from '../sim/sites';
 import { isTerritory, territoryRoads } from '../sim/territory';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { TERRAIN_MARGIN, type PaintCanvas } from './groundPaint';
-import { DIRT_ROAD_STYLE, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
+import { DIRT_ROAD_STYLE, GLASS_STYLE, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
 
 const sun = REGION.locations.filter(isTerritory).find((l) => l.id === 'fallen-sun')!;
 const SPUR_FADE = TERRITORIES['fallen-sun'].wreck!.spurFade;
 
 // One stroke of the mask painter in canvas pixels, with the paint it laid.
 type Stroke = { style: unknown; alpha: number; width: number; lines: Vec[][] };
+// One filled rectangle in canvas pixels, with its style and the filter it was drawn under.
+type Rect = { style: unknown; filter: string; x: number; y: number; w: number; h: number };
 
 // The part of a 2D context the road mask painter uses. It keeps each stroke as geometry, so a test can ask which
 // paint lands on a point. Node has no canvas, and the painted pixels follow from that geometry.
 class RecordingContext {
   strokes: Stroke[] = [];
+  rects: Rect[] = [];
   fillStyle: unknown = null;
   strokeStyle: unknown = null;
   globalAlpha = 1;
@@ -29,7 +33,9 @@ class RecordingContext {
   canvas = {};
   private lines: Vec[][] = [];
 
-  fillRect() {}
+  fillRect(x: number, y: number, w: number, h: number) {
+    this.rects.push({ style: this.fillStyle, filter: this.filter, x, y, w, h });
+  }
   drawImage() {}
   beginPath() {
     this.lines = [];
@@ -45,7 +51,7 @@ class RecordingContext {
   }
 }
 
-function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
+function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[]; rects: Rect[] } {
   const res = 2;
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
@@ -57,8 +63,8 @@ function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
     from,
     toPx: (tiles) => (tiles - from) * res,
   };
-  paintRoadMask(canvas);
-  return { canvas, strokes: ctx.strokes };
+  paintRoadMask(canvas, TEST_MAP.terrain);
+  return { canvas, strokes: ctx.strokes, rects: ctx.rects };
 }
 
 // The strongest paint of one channel's strokes over a map point, 0 to 1.
@@ -133,5 +139,22 @@ describe('road mask', () => {
       .find((m) => deckAt(m.x, m.y) === null && [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, m) > 2))!;
     expect(channelAt(mask, RED, p)).toBe(1);
     expect(channelAt(mask, GREEN, p)).toBe(0);
+  });
+
+  it('fills every fused glass tile blue, unblurred, and nothing else', () => {
+    const t = TEST_MAP.terrain;
+    const glass = mask.rects.filter((r) => r.style === GLASS_STYLE);
+    const res = mask.canvas.res;
+    const blue = new Set<number>();
+    for (const r of glass) {
+      expect(r.filter).toBe('none');
+      expect(r.h).toBeCloseTo(res);
+      const y = Math.round(r.y / res + mask.canvas.from);
+      const x0 = Math.round(r.x / res + mask.canvas.from);
+      for (let x = x0; x < x0 + Math.round(r.w / res); x++) blue.add(y * t.size + x);
+    }
+    const tiles = t.types.flatMap((type, i) => (type === 'glass' ? [i] : []));
+    expect(tiles.length).toBeGreaterThan(500);
+    expect([...blue].sort((a, b) => a - b)).toEqual(tiles);
   });
 });

@@ -58,7 +58,6 @@ const NAMES = [
   'bridge',
   'pump_station',
   'lock_gate',
-  'glass_flats',
   'power_pole',
   'billboard',
   'crag',

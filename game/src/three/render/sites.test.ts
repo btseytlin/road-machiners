@@ -54,6 +54,12 @@ describe('landmark scale', () => {
     }
   });
 
+  it('builds no site model for a territory, whose props are baked', () => {
+    const territories = REGION.locations.filter((l) => l.kind === 'territory');
+    expect(territories.map((l) => l.id)).toContain('glass-flats');
+    for (const site of territories) expect(sites.getObjectByName(`landmark-${site.id}`), site.id).toBeUndefined();
+  });
+
   it('draws each edge on the collision edge, at most 1.5 tiles thick', () => {
     for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
