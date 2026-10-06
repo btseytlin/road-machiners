@@ -719,7 +719,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         tower(-14.5, 1.5, -0.2), // (187,116), moved 4 tiles north from (115,175) off the west road
         tower(-12.5, 7.3, 0.3), // (79,232), moved from (255,200) to compound A's north-west corner, off the west road
         tower(-14.5, -4.2, 0), // (349,36), moved 5 tiles west from (440,120) to the back compound's north-west corner, off the north-west lane
-        tower(-1, -14.3, 0.15), // (1016,84), moved from (1100,100) off the north compound to its corner
+        tower(-1.6, -14.1, 0.15), // (994,78), moved from (1100,100) off the north compound to its corner
         tower(8.8, -12.5, -0.1), // (1242,248), moved from (1005,250) off the north road to the east compound's north-west corner
         tower(8.4, 4.9, 0.2), // (739,488), moved from (925,370) to compound B's south-west corner, south of the east road
         tower(-0.8, 13.9, -0.15), // (224,492), moved from (640,550) west across the south road to the south compound's corner
@@ -770,8 +770,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
             compound(-3.5, 10.5, ALONG_X),
             // Top left (400,40), moved 3.3 tiles south from (-13.4,-4.9) between the ring road and the north-west lane.
             compound(-12.8, -8.2, ALONG_Y),
-            // Top right (1110,120): the concept's (1.9,-14.7) touches the frame's east feet, so it stands 2 tiles north.
-            compound(2.5, -16.6, ALONG_X),
+            // Top right (1110,120): the concept's (1.9,-14.7) touches the frame's east feet, so it stands 2 tiles north,
+            // off the north road.
+            compound(2.1, -16.6, ALONG_X),
             // Right of the frame (1000,260), moved 6.6 tiles east from (4.9,-7.8) off the frame's feet and the north road.
             compound(11.5, -8.5, ALONG_Y),
             // B (940,430), moved 3.7 tiles south-east from (9.9,-0.7) across the east road, clear of the pit's steep sides

@@ -53,6 +53,13 @@ const PROP_LOOKS = {
   barrier: { color: 0x8aa0b0, shape: 'rail' },
   drums: { color: 0xc04820, shape: 'disc' },
   woodpile: { color: 0xa07040, shape: 'box' },
+  engineNozzle: { color: 0x8a4a2a, shape: 'long' },
+  engineFrame: { color: 0xb0603a, shape: 'long' },
+  watchtower: { color: 0x3a2818, shape: 'disc' },
+  ruinCompound: { color: 0xe0d8c0, shape: 'box' },
+  deadTruck: { color: 0x7040a0, shape: 'long' },
+  glassSpire: { color: 0x2f8f88, shape: 'disc' },
+  scrapWall: { color: 0xa8a090, shape: 'rail' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
