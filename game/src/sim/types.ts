@@ -222,6 +222,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  stormExposure: Record<string, number>; // storm id to how far that storm has got into this truck, in (0, 1]; see advanceExposure()
   strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
   stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading

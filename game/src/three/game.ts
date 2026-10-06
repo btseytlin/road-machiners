@@ -953,7 +953,7 @@ export class Game {
     const truck = this.frames[playerVehicle(this.world).id].pos;
     // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
     // camera cannot pan past it.
-    const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
+    const sightRadius = grayRadius(this.world) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);

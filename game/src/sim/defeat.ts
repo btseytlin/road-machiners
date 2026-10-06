@@ -218,7 +218,7 @@ function answered(world: World, v: Vehicle): boolean {
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 // A free pad of the home site beyond the player's gray vision, nearest the truck first, or null.

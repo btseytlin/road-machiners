@@ -472,7 +472,7 @@ describe('road wreck turnover', () => {
     const wrecks = w.obstacles.filter(isRoadWreck);
     expect(wrecks).toHaveLength(1);
     expect(wrecks[0].id).not.toBe('wreck0');
-    expect(dist(wrecks[0].pos, near)).toBeGreaterThan(grayRadius(w, wrecks[0].pos));
+    expect(dist(wrecks[0].pos, near)).toBeGreaterThan(grayRadius(w));
     expect(stockOf(w, wrecks[0].id).goods.scrap).toBeGreaterThan(0);
   });
 
@@ -571,7 +571,7 @@ describe('breakable props', () => {
 
   it('stays broken while any part of the prop reaches into gray vision', () => {
     const w = emptyWorld(near);
-    const pos = { x: near.x + grayRadius(w, near) + propReach(fenceAt(near)) / 2, y: near.y };
+    const pos = { x: near.x + grayRadius(w) + propReach(fenceAt(near)) / 2, y: near.y };
     w.obstacles = [fenceAt(pos)];
     breakProp(w, 'fence-7', w.vehicles[0].id);
 

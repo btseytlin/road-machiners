@@ -27,7 +27,7 @@ import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
@@ -494,7 +494,7 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
-    weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
+    weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherOn(world, shooter).spread,
   };
   const sum = Object.values(base).reduce((a, cause) => a + cause, 0);
   const still = Math.abs(target.speed) < RULES.stillSpeed ? -sum * (1 - RULES.stillSpread) : 0;

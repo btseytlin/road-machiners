@@ -11,7 +11,7 @@ import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, settleStorms, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn, update } from './world';
@@ -687,6 +687,7 @@ describe('aim perks', () => {
   // A storm over both trucks.
   const storm = (w: World) => {
     w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
+    settleStorms(w);
   };
 
   it('storm rider takes the storm scatter away from the player', () => {

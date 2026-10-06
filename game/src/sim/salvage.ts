@@ -425,11 +425,11 @@ function regrowBroken(world: World): void {
 
 function canRegrow(world: World, o: Obstacle): boolean {
   const reach = propReach(o);
-  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world, o.pos) + reach && clearOfVehicles(world, o.pos, reach);
+  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world) + reach && clearOfVehicles(world, o.pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {

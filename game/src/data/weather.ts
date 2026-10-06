@@ -17,6 +17,8 @@ export const WEATHER = {
     stormSpeed: [0.4, 1.0] as [number, number], // tiles per turn
     stormEdge: 25, // tiles; a storm's effects fade in linearly over this depth inside its radius
     stormFadeTurns: 30, // turns a storm takes to build to full strength, and to clear before it ends
+    // Turns a truck takes to feel a storm in full after entering, and to shake it off after leaving; at most stormFadeTurns.
+    stormExposeTurns: 10,
     effects: {
       // Multipliers on sight, top speed and wear, and extra scatter in radians, inside a storm.
       storm: { sight: 0.4, spread: 0.15, speed: 0.6, wear: 1.5 },
