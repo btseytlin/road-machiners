@@ -14,7 +14,7 @@ import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
 import { siteGap } from '../sites';
 import { dist, type Vec } from '../vec';
-import { ObstacleBuckets, type Blocker } from './buckets';
+import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './buckets';
 
 export const CELL = 0.5; // tiles per grid cell
 export const CLEARANCE = 0.4; // extra gap from obstacles on top of the vehicle radius; covers RULES.maxBulge
@@ -134,16 +134,23 @@ export function nearCliff(nav: TerrainNav, x: number, y: number, reach: number):
   return c[tileIndex(s, x, y)] === 1 || c[tileIndex(s, x + reach, y)] === 1 || c[tileIndex(s, x - reach, y)] === 1 || c[tileIndex(s, x, y + reach)] === 1 || c[tileIndex(s, x, y - reach)] === 1;
 }
 
-// Built once per obstacles array and its content. Props break and grow back in place during a turn, so a hit
-// needs the same obstacle objects in the same order.
-const staticSets = new WeakMap<Obstacle[], { items: Obstacle[]; set: StaticSet }>();
+// Built once per obstacle list and terrain. The world is cloned every turn, so the list is keyed by each obstacle's
+// id and place in order, not by identity. Props break and grow back during play, which changes the list and rebuilds
+// the set. A live world and a preview world can alternate, so a few sets stay.
+const STATIC_SETS_KEPT = 4;
+const staticSets: { marks: ObstacleMark[]; terrain: Terrain; set: StaticSet }[] = [];
 
-export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
-  const hit = staticSets.get(obstacles);
-  if (hit && sameItems(hit.items, obstacles)) return hit.set;
+export function staticSet(obstacles: Obstacle[], terrain: Terrain): StaticSet {
+  const at = staticSets.findIndex((e) => e.terrain === terrain && sameMarks(e.marks, obstacles));
+  if (at === 0) return staticSets[0].set;
+  if (at > 0) {
+    const [hit] = staticSets.splice(at, 1);
+    staticSets.unshift(hit);
+    return hit.set;
+  }
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
   // A hazard zone blocks routes like a rock, but not driving: the player may still go in by hand.
-  const all = [...statics.map(driveBlocker), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
+  const all = [...statics.map((o) => driveBlocker(o, terrain)), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
   const breakable = statics.map(isBreakable);
   const solid = all.filter((_, i) => !breakable[i]);
   const set = {
@@ -151,28 +158,23 @@ export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
     solidKey: blockerKey(solid),
     solid,
     costly: all.filter((_, i) => breakable[i]),
-    buckets: new ObstacleBuckets(all, size),
+    buckets: new ObstacleBuckets(all, terrain.size),
   };
-  staticSets.set(obstacles, { items: obstacles.slice(), set });
+  staticSets.unshift({ marks: marksOf(obstacles), terrain, set });
+  staticSets.length = Math.min(staticSets.length, STATIC_SETS_KEPT);
   return set;
 }
 
-function sameItems(a: readonly Obstacle[], b: readonly Obstacle[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
 // Blockers that change during play: road and kill wrecks and the caller's extra circles.
-export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocker[] {
-  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map(driveBlocker), ...extra];
+export function dynamicBlockers(obstacles: Obstacle[], terrain: Terrain, extra: Blocker[]): Blocker[] {
+  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map((o) => driveBlocker(o, terrain)), ...extra];
 }
 
-// A site's edge blocks as a circle. A prop blocks with its boxes that start below truck roofs, so trucks pass
-// under canopies.
-function driveBlocker(o: Obstacle): Blocker {
+// A site's edge blocks as a circle. A prop blocks with its blocking boxes, so trucks pass under canopies and over
+// whatever lies under a deck.
+function driveBlocker(o: Obstacle, terrain: Terrain): Blocker {
   if (o.kind === 'site') return { pos: o.pos, r: o.r };
-  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o) } };
+  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o, terrain) } };
 }
 
 // Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.
@@ -182,7 +184,7 @@ export function blockerKey(blockers: Blocker[]): string {
 
 export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number): NavLayer {
   const e = terrainEntry(terrain);
-  const statics = staticSet(obstacles, terrain.size);
+  const statics = staticSet(obstacles, terrain);
   const key = `${radius}:${statics.key}`;
   const hit = e.layers.get(key);
   if (hit) return hit;

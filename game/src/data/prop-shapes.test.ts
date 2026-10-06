@@ -147,4 +147,18 @@ describe('prop shapes', () => {
     expect(sign.y0).toBeGreaterThan(2.5);
     expect(boxes.some((b) => b.x0 < -6 && b.x1 < -2 && b.z1 > 2.5)).toBe(true);
   });
+
+  // A truck drives through the cage and the shells along their length, so no box low enough to hit it crosses a
+  // lane along the axis, even after the boxes merge down to the cap. Lane half-widths are in model meters.
+  it.each([
+    ['ship_cage', 5],
+    ['hull_shell', 10],
+  ] as const)('keeps a lane open through %s', (name, half) => {
+    const boxes = SHAPES[name].boxes;
+    const low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
+    expect(low.length).toBeGreaterThan(0);
+    for (const b of low) expect(b.y1 <= -half || b.y0 >= half, JSON.stringify(b)).toBe(true);
+    // The roof spans the lane.
+    expect(boxes.some((b) => b.y0 < 0 && b.y1 > 0 && b.z0 >= PHYSICS.truckClearance)).toBe(true);
+  });
 });

@@ -100,7 +100,7 @@ describe('hitched tower traffic', () => {
     const r = runUntil(w, 20, () => false);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(dist(find(r.w, tower.id).pos, parked.pos)).toBeGreaterThan(10);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('a hitched tower and a truck meeting it head-on both get past without a collision', () => {
     const { w, tower, along, progress } = underWay();

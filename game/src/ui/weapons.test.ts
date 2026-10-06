@@ -185,7 +185,7 @@ describe("vehicle marks", () => {
     target.pos = { x: me.pos.x + 1, y: me.pos.y };
     target.speed = 0;
     me.speed = 0;
-    addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, price: 0, work: 4, workLeft: 3 });
+    addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 3 });
     expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
   });
 
@@ -195,7 +195,7 @@ describe("vehicle marks", () => {
     target.pos = { x: me.pos.x + 1, y: me.pos.y };
     target.speed = 0;
     me.speed = 0;
-    addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, price: 0, work: 4, workLeft: 1 });
+    addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 1 });
     expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
   });
 
@@ -356,6 +356,7 @@ describe("weapon panel keys and the turn button", () => {
     const host = {
       world: () => world,
       apply: vi.fn(),
+      announce: vi.fn(),
       selectedWeapon: vi.fn<() => string | null>(() => null),
       selectWeapon: vi.fn(),
       pressTurn: vi.fn(),

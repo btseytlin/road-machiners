@@ -104,11 +104,16 @@ export function goodBasePrice(shopId: string, good: string): number {
   return goodValue(good) * priceFactorFor(def, good);
 }
 
+// A good's price at a shop at a given standing pressure, before spread.
+export function standingPrice(shopId: string, good: string, pressure: number): number {
+  return goodBasePrice(shopId, good) * (1 + pressure);
+}
+
 // The buy or sell price of one unit at a given standing pressure, from the good's base price and a
 // spread fraction applied on top (buy up, sell down). Sell always rounds to strictly below buy (IV4).
-function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
+export function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
   if (!(spread >= 0)) throw new Error(`Bad spread ${spread}`);
-  const pressured = goodBasePrice(shopId, good) * (1 + pressure);
+  const pressured = standingPrice(shopId, good, pressure);
   const buy = Math.max(1, Math.ceil(pressured * (1 + spread)));
   const sell = Math.min(buy - 1, Math.floor(pressured * (1 - spread)));
   return direction === 'buy' ? buy : Math.max(0, sell);
@@ -364,6 +369,12 @@ export function shopState(world: World, shopId: string): ShopState {
   const state = world.shops[shopId];
   if (!state) throw new Error(`Unknown shop ${shopId}`);
   return state;
+}
+
+// A copy of a shop's standing pressure for every good it trades, read as goodPrice() reads it.
+export function standingPressures(world: World, shopId: string): Record<string, number> {
+  const live = shopState(world, shopId).pressure;
+  return Object.fromEntries(shopDef(shopId).goods.map((good) => [good, live[good] ?? 0]));
 }
 
 // Tops a shop's board up to its contract slots. Haul targets are the other shops that trade the good.

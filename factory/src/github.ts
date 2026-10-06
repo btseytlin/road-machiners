@@ -38,7 +38,7 @@ type ItemsPage = {
 
 const NOT_THIS_KIND = /Could not resolve to an? (User|Organization)/;
 
-export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
+export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwner' | 'projectNumber'>): GitHub {
   const repo = cfg.repo;
   let board: Board | null = null;
 
