@@ -196,7 +196,7 @@ function addWaiting(summary: Summary, records: LedgerLine[], now: Date, days: nu
 
 function parseHistoryRecord(text: string): LedgerLine {
   const line = JSON.parse(text) as LedgerLine;
-  if (!['job', 'route', 'post', 'observation'].includes(line.kind)) throw new Error('Invalid ledger line');
+  if (!['job', 'route', 'post', 'observation', 'waiver'].includes(line.kind)) throw new Error('Invalid ledger line');
   if (!Number.isFinite(Date.parse(lineTime(line)))) throw new Error('Invalid ledger timestamp');
   return line;
 }
