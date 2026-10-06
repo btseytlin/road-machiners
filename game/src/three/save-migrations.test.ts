@@ -19,6 +19,7 @@ import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
+import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -314,5 +315,11 @@ describe('save migration 13 to 14', () => {
   it('leaves other states alone and does not mutate its input', () => {
     expect(next.states[2]).toEqual(FORMAT_2_13.states[2]);
     expect(FORMAT_2_13).toEqual(before);
+  });
+});
+
+describe('save migration 14 to 15', () => {
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
   });
 });
