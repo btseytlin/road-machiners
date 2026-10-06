@@ -95,10 +95,9 @@ async function changelogInput(ctx: Ctx, features: Feature[]): Promise<string> {
   return `${lines.join('\n')}\n`;
 }
 
-// The candidate post. Commands act on it alone, so it says to reply to it, not to the changelog under it.
+// The candidate post. The changelog follows in a message under it.
 export function candidateCaption(day: string, url: string, link: string, pr: string, count: number): string {
   const head = `ROAM release candidate ${day}\n\nPlay: ${url}\nPR: ${pr}\nIssue: ${link}`;
   const changes = count === 0 ? 'No changes in this candidate.' : `${count} changes, listed in the message under this post.`;
-  const tail = 'Ship publishes it. Reply to this post with "remove #N" to take a change out. Any other reply to it asks for a change and holds the release.';
-  return [head, changes, tail].join('\n\n');
+  return [head, changes].join('\n\n');
 }

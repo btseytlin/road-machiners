@@ -154,7 +154,9 @@ describe('candidateCaption', () => {
     const caption = candidateCaption('2026-09-29', 'https://p/rc/', 'https://i', 'https://pr', 33);
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('33 changes, listed in the message under this post.');
-    expect(caption).toContain('Reply to this post with "remove #N"');
+    expect(caption).toContain('Play: https://p/rc/\nPR: https://pr\nIssue: https://i');
+    expect(caption.endsWith('33 changes, listed in the message under this post.')).toBe(true);
+    for (const tail of ['Ship publishes it', 'remove #N', 'Reply to this post', 'holds the release']) expect(caption).not.toContain(tail);
   });
 
   it('says so when no change is left', () => {

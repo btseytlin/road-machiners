@@ -42,6 +42,8 @@ let merged = true;
 let reviews: (string | null)[] = [];
 const PASSED = 'No blocking issue.\n\nREVIEW_VERDICT: PASS\n';
 const failed = (finding: string): string => `${finding}\n\nREVIEW_VERDICT: FAIL\n`;
+// How-to sentences the posts no longer carry. The buttons and the docs explain them.
+const BOILERPLATE = ['Approve runs the review', 'Deny closes the issue', 'Reply to this post'];
 // The prompt of every review round, in order.
 let reviewPrompts: string[] = [];
 
@@ -193,6 +195,8 @@ describe('testing stage', () => {
     expect(photo).toContain('#7 Big horn\n\nPlay: https://play.test/abc123/');
     expect(photo).toContain('How to try: Press H.');
     expect(photo).toContain('Issue: https://github.com/o/r/issues/7\nPR: https://github.com/o/r/pull/50');
+    expect(photo.trimEnd().endsWith('How to try: Press H.')).toBe(true);
+    for (const tail of BOILERPLATE) expect(photo).not.toContain(tail);
     expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(calls.some((call) => call.startsWith('message'))).toBe(false);
     expect(calls).toContain('comment 7');
@@ -204,13 +208,22 @@ describe('testing stage', () => {
     const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) }, 'dev');
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('…');
-    expect(caption).toContain('Deny closes the issue');
+    expect(caption).toContain('How to try: h');
+    expect(caption).not.toContain('Deny closes the issue');
+  });
+
+  it('uses the room of the dropped tail for the notes', () => {
+    const description = 'd'.repeat(800);
+    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description, howToTry: 'Press H.' }, 'dev');
+    expect(caption).toContain(description);
+    expect(caption.endsWith('How to try: Press H.')).toBe(true);
   });
 
   it('says a hotfix approval ships to main and itch.io', () => {
     const caption = approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'main');
     expect(caption.startsWith('⚠️ HOTFIX. Approve merges into main and ships to players at once.')).toBe(true);
-    expect(caption).toContain('Approve ships this hotfix to main and itch.io at once.');
+    for (const tail of BOILERPLATE) expect(caption).not.toContain(tail);
+    expect(caption).not.toContain('Approve ships this hotfix');
     expect(approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'dev')).not.toContain('HOTFIX');
     expect(approvalButtons(7, 'main')[0][0]).toEqual({ text: 'Approve and ship to players', data: 'factory:approve:7' });
   });
@@ -516,7 +529,8 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'fetch','merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
-    expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve runs the review and full testing, then merges into release/2026-09-29.');
+    expect(calls.find((call) => call.startsWith('photo'))).not.toContain('Approve runs the review');
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(queued()).toEqual({});
   });
 
@@ -871,7 +885,8 @@ describe('a round with no screenshot', () => {
     const text = calls.find((call) => call.startsWith('buttons')) ?? '';
     expect(text).toContain('No screenshot. Judge it by playing.');
     expect(text).toContain('Play: https://play.test/abc123/');
-    expect(text).toContain('Reply to this post to ask a question or ask for a change.');
+    expect(text).toContain('How to try: Drive to the yard.');
+    for (const tail of BOILERPLATE) expect(text).not.toContain(tail);
     expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(commentBodies[0]).toContain('The testing agent wrote no .factory/screenshot.png.');
     const state = readState(`${home}/state.json`);
