@@ -546,7 +546,7 @@ function scavengerGoal(o: Orders): void {
   if (!scavenge(o, false) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
 }
 
-type Purchase = { town: TownDef; good: string; count: number; profit: number };
+type Purchase = { town: TownDef; good: string; count: number; perTurn: number };
 
 // The trader sells what it carries in the known town that pays most for it, then buys the good with the most profit
 // between known towns that it can afford above its upkeep reserve and repair bill. With no such trade it drives to find a new town.
@@ -586,12 +586,14 @@ function bestMarket(world: World): TownDef {
   return byDistance(world, knownTowns(world)).reduce((best, town) => (profit(town) > profit(best) ? town : best));
 }
 
-// The money for a full repair stays out of the load, so a trader leaves town with a sound truck.
+// The money for a full repair stays out of the load, so a trader leaves town with a sound truck. The best trade pays
+// most per turn of the whole trip, from where the truck stands to the source and on to the market, so a trader does
+// not cross the map empty for a trade it could run the other way.
 function bestPurchase(world: World): Purchase | null {
   const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
   const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend }))));
-  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
+  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.perTurn > (best?.perTurn ?? 0) ? p : best), null);
 }
 
 // Buying as much of a good at the source as fits and the money allows, to sell at the market.
@@ -599,7 +601,8 @@ function purchase(world: World, { source, market, good, spend }: { source: TownD
   const me = playerVehicle(world);
   const buy = getTradePrice(world, me, source.id, good, 'buy');
   const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
-  return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
+  const trip = estimateTurns(me.pos, source.pos) + estimateTurns(source.pos, market.pos);
+  return { town: source, good, count, perTurn: ((sellAt(world, market, good) - buy) * count) / trip };
 }
 
 function sellAt(world: World, town: TownDef, good: string): number {

@@ -85,11 +85,21 @@ describe('botOrders', () => {
     expect(turn.world.player.money).toBeLessThan(w.player.money);
   });
 
+  it('has a trader take the trade from the town it stands at over a richer one that needs an empty trip back', () => {
+    const w = saltGlut(parkedAt('nose'));
+    w.shops.bowl.pressure.textiles = -PRESSURE_MAX;
+    w.shops.nose.pressure.textiles = PRESSURE_MAX;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(loadOf(playerVehicle(turn.world))).toEqual(['salt']);
+  });
+
   // It arrives broke with a damaged truck and electronics both towns pay well for, so service repairs nothing before
   // the sale here, and salt is the load to buy after it.
   it('has a trader keep the repair bill out of the load it buys after a sale', () => {
     const w = saltGlut(parkedAt('nose'));
-    w.shops.nose.pressure.electronics = PRESSURE_MAX;
+    w.shops.nose.pressure.textiles = PRESSURE_MAX;
     w.shops.bowl.pressure.electronics = PRESSURE_MAX;
     addGoods(w, playerVehicle(w), 'electronics', 6);
     w.player.costBasis.electronics = 1;
