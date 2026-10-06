@@ -132,7 +132,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const w = host.world;
   const shooter = vehicleOf(w, e.shooter);
   const target = vehicleOf(w, e.target);
-  const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+  const gun = mountedParts(shooter).find((p) => p.id === e.weapon);
   if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
   const view = viewOf(host.views, e.shooter);
   const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);
