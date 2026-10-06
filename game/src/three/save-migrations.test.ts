@@ -20,6 +20,7 @@ import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -321,5 +322,19 @@ describe('save migration 13 to 14', () => {
 describe('save migration 14 to 15', () => {
   it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
     expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[15](FORMAT_2_15);
+    const [shot, guard, arrived] = FORMAT_2_15.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_15,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
   });
 });

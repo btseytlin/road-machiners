@@ -138,7 +138,8 @@ function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boo
   return null;
 }
 
-// Adds a template's vehicle with a sampled loadout at pos. The caller checks that pos is free.
+// Adds a template's vehicle with a sampled loadout and its template's wallet at pos. The caller checks that pos is
+// free.
 export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos: Vec): Vehicle {
   const v = makeVehicle(world, {
     name: tpl.name,
@@ -160,6 +161,8 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       memories: [],
     },
   });
+  if (!v.resources) throw new Error(`${tpl.id} spawned without resources`);
+  v.resources.money = tpl.money;
   world.vehicles.push(v);
   world.events.push({ t: "spawn", vehicle: v.id });
   return v;

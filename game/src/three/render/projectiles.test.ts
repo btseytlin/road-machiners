@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PARTS } from '../../data/parts';
 import { CONFIG } from '../../config';
-import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, roundAims, type RoundAim } from './projectiles';
+import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, roundAims, roundSpec, type RoundAim } from './projectiles';
 
 const A = { x: 0, y: 2, z: 0 };
 const B = { x: 40, y: 2, z: 0 };
@@ -117,5 +117,13 @@ describe('roundAims', () => {
     expect(aims[1]).toEqual({ impact: 'ground', land: missAt(2) });
     expect(aims[2]).toEqual({ impact: 'truck', b: other, offset: 0 });
     expect(aims[3]).toEqual({ impact: 'none', land: missAt(2) });
+  });
+});
+
+describe('roundSpec', () => {
+  it('throws one casing per shotgun shell and one per round of other guns', () => {
+    const casings = (id: string) => [0, 1, 2].map((k) => roundSpec(PROJECTILES[id], k).casing);
+    expect(casings('shotgun')).toEqual(['small', null, null]);
+    expect(casings('mg')).toEqual(['small', 'small', 'small']);
   });
 });

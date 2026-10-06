@@ -90,6 +90,15 @@ describe('lightScene shadow box', () => {
     }
   });
 
+  it('aims the sun by the held direction while the colors follow the glide', () => {
+    const sun = sunLight();
+    const glide = daylightAt(turnAt(17.5));
+    lightScene(sun, sky, { x: 0, y: 0, z: 0 }, glide, light);
+    const held = sun.position.clone().sub(sun.target.position).normalize();
+    expect(held.y).toBeCloseTo(Math.sin(light.elevation), 5);
+    expect(sun.color.getHex()).toBe(glide.sun.getHex());
+  });
+
   it('moves the focus by at most half a texel and not along the light', () => {
     const sun = place(100.013, 290.02);
     const t = sun.target.position;

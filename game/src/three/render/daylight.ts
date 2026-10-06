@@ -193,16 +193,24 @@ export function snapToShadowTexels(focus: V3, toLight: V3, texel: number): V3 {
   return { x: f.x, y: f.y, z: f.z };
 }
 
-// Puts the sun above focus in the light's direction and colors both lights.
-export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, drawn: V3, light: Daylight): void {
-  const flat = Math.cos(light.elevation);
+// Puts the sun above focus and colors both lights. The sun's direction comes from held, which the caller keeps
+// fixed for a whole turn while the colors glide. A gliding direction makes every shadow slide a little each frame,
+// and the shadow map redraws that slide in whole texels, which reads as jitter.
+export function lightScene(
+  sun: THREE.DirectionalLight,
+  sky: THREE.HemisphereLight,
+  drawn: V3,
+  light: Daylight,
+  held: Pick<Daylight, "dir" | "elevation"> = light,
+): void {
+  const flat = Math.cos(held.elevation);
   const horiz = flat * SUN_RADIUS;
-  const lift = Math.sin(light.elevation);
+  const lift = Math.sin(held.elevation);
   const { camera, mapSize } = sun.shadow;
   const texel = (camera.right - camera.left) / mapSize.x;
-  const focus = snapToShadowTexels(drawn, { x: light.dir.x * flat, y: lift, z: light.dir.y * flat }, texel);
+  const focus = snapToShadowTexels(drawn, { x: held.dir.x * flat, y: lift, z: held.dir.y * flat }, texel);
   sun.target.position.set(focus.x, focus.y, focus.z);
-  sun.position.set(focus.x + light.dir.x * horiz, focus.y + lift * SUN_RADIUS, focus.z + light.dir.y * horiz);
+  sun.position.set(focus.x + held.dir.x * horiz, focus.y + lift * SUN_RADIUS, focus.z + held.dir.y * horiz);
   sun.color.copy(light.sun);
   sun.intensity = light.sunIntensity;
   sky.color.copy(light.sky);
@@ -277,6 +285,19 @@ export class NightLights {
   private glow: THREE.PointLight | null = null;
 
   constructor(private readonly scene: THREE.Scene) {}
+
+  // Lights the vehicles within gray vision. truck: the drawn player truck position.
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
+    const lit = world.vehicles
+      .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
+      .map((v) => ({
+        chassisId: v.chassisId,
+        frame: frames[v.id],
+        on: vehicleLampsOn(world, v, lightTurn),
+        player: v.id === world.player.vehicleId,
+      }));
+    this.update(nightLightsWanted(world.turn, lit), truck, lit);
+  }
 
   // truck: the drawn player truck position. lit: vehicles within gray vision.
   update(night: boolean, truck: V3, lit: LitVehicle[]): void {
