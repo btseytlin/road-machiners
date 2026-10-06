@@ -6,7 +6,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
+const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly, playtestVerdict } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
 const { runStage: runPatch } = await import('./patch');
 
@@ -28,6 +28,8 @@ let commentBodies: string[] = [];
 let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
+// The log of each check script run in order, before the shellFailures count applies. A null passes.
+let checkOutcomes: (string | null)[] = [];
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -48,6 +50,8 @@ let reviewPrompts: string[] = [];
 beforeEach(() => {
   albums = [];
   albumFails = false;
+  shellScript = '';
+  checkOutcomes = [];
   reviews = [];
   reviewPrompts = [];
   conflicts = [];
@@ -100,11 +104,15 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         const output = reviews.length > 0 ? reviews.shift() : PASSED;
         if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
       },
+      // The check script runs first and the build script after it, in each checks run. Only the check script fails here.
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
-        shellScript = script;
+        shellScript = `${shellScript}${script}`;
         shellEnv = env;
+        if (script.includes('npm run build')) return void calls.push('build');
         calls.push('checks');
-        if (failuresLeft-- > 0) throw new Error(failureText);
+        const planned = checkOutcomes.shift();
+        if (planned !== undefined && planned !== null) throw new Error(planned);
+        if (planned === undefined && failuresLeft-- > 0) throw new Error(failureText);
       },
     },
     repo: {
@@ -521,6 +529,120 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
     expect(queued()).toEqual({});
+  });
+});
+
+// The end of a check log the way the check script and the game's playtest print it, with `played` as the playtest's own output.
+const checkLog = (played: string): string => [
+  '[checks] 10:00:00 npm ci', 'added 300 packages', '[checks] 10:01:00 tests and typecheck', ' Test Files  80 passed (80)', '[checks] 10:03:00 tests done',
+  '[checks] 10:03:01 dev server', '[checks] 10:03:05 host: 4 cpus, load 7.80 6.10 5.02, 2100 MB memory available', '[checks] 10:03:05 playtest',
+  '> roam@0.0.0 playtest', '> node scripts/playtest.mjs', played,
+  'npm error Lifecycle script `playtest` failed with error:', 'npm error code 1',
+].join('\n');
+const LOW_FPS_LOG = checkLog('turns 12, fps 43\nFAIL\nfps 43 under 50');
+const CRASH_LOG = checkLog('file:///work/game/scripts/playtest.mjs:32\n  await page.evaluate((i) => {\n             ^\npage.evaluate: Target crashed\n    at file:///work/game/scripts/playtest.mjs:32:14');
+const TURN_LOG = checkLog('turns 9, fps 44.5\nFAIL\nexpected turn 13, got 10\nfps 44.5 under 50');
+const PAGE_ERROR_LOG = checkLog('turns 12, fps 60\nFAIL\nTypeError: cannot read x of undefined');
+
+describe('playtest frame rate and browser crashes', () => {
+  const approval = JSON.stringify({ description: 'd', howToTry: 'h' });
+  const agentPrompts: string[] = [];
+  const ctxWith = (...outcomes: (string | null)[]): Ctx => {
+    checkOutcomes = outcomes;
+    agentPrompts.length = 0;
+    const ctx = fakeCtx((run) => { agentPrompts.push(run.prompt); writeOutputs(run, approval); });
+    ctx.cfg.gpu = true;
+    return ctx;
+  };
+
+  it('reads a finished playtest whose only problem is the frame rate as advisory, with the host line', () => {
+    expect(playtestVerdict(LOW_FPS_LOG)).toEqual({ kind: 'low-fps', lowFps: { fps: 43, min: 50, host: '4 cpus, load 7.80 6.10 5.02, 2100 MB memory available' } });
+    expect(playtestVerdict(checkLog('turns 12, fps 49\nFAIL\nfps 49 under 50')).kind).toBe('low-fps');
+  });
+
+  it('reads a crash, a functional failure or a failure before the playtest as no frame-rate failure', () => {
+    expect(playtestVerdict(CRASH_LOG).kind).toBe('browser-crash');
+    expect(playtestVerdict(TURN_LOG).kind).toBe('other');
+    expect(playtestVerdict(PAGE_ERROR_LOG).kind).toBe('other');
+    expect(playtestVerdict(checkLog('turns 12, fps 43\nFAIL\ncrash screen shown\nfps 43 under 50')).kind).toBe('other');
+    expect(playtestVerdict(checkLog('Error: Turn 3 did not finish playing within 10000 ms')).kind).toBe('other');
+    expect(playtestVerdict('[checks] 10:00:00 npm ci\n[checks] 10:01:00 tests and typecheck\nAssertionError: expected 3 to be 4').kind).toBe('other');
+  });
+
+  it('reads only the last run of a log that holds an earlier one', () => {
+    expect(playtestVerdict(`${LOW_FPS_LOG}\n[checks] 11:00:00 npm ci\n[checks] 11:01:00 tests and typecheck\nAssertionError: expected 3 to be 4`).kind).toBe('other');
+  });
+
+  it('passes a low frame rate, builds and records the fps, the host load and the waiver on the issue', async () => {
+    const ctx = ctxWith(LOW_FPS_LOG);
+    await runStage(ctx, 7);
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    const note = commentBodies.find((body) => body.startsWith('Playtest frame rate')) ?? '';
+    expect(note).toContain('43 fps, under the 50 fps minimum');
+    expect(note).toContain('build abc123 finished every turn');
+    expect(note).toContain('Host during the playtest: 4 cpus, load 7.80 6.10 5.02, 2100 MB memory available.');
+    expect(note).toContain('The committee waived the frame-rate minimum');
+  });
+
+  it('queues the recorded merge of an approved card that hardened with a low frame rate', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+    await runStage(ctxWith(LOW_FPS_LOG), 7);
+    expect(queued()).toEqual({ 7: 'Ann' });
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(true);
+  });
+
+  it('reruns the unchanged build after a browser crash, with no agent round, and passes only a finished run', async () => {
+    const ctx = ctxWith(CRASH_LOG, null);
+    await runStage(ctx, 7);
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'checks', 'build']);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+  });
+
+  it('never passes a browser that crashes on every run, and keeps the phase for a retry', async () => {
+    const ctx = ctxWith(CRASH_LOG, CRASH_LOG, CRASH_LOG);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The playtest browser crashed before the playtest finished, after 3 runs');
+    expect(agentPrompts).toHaveLength(1);
+    expect(calls).not.toContain('build');
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks' });
+  });
+
+  it('blocks a playtest that missed turns, even with a low frame rate, and hands it to the fix round', async () => {
+    const ctx = ctxWith(TURN_LOG, TURN_LOG);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(agentPrompts.at(-1)).toContain('second round');
+    expect(calls).not.toContain('build');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('blocks a page error and a failed test as before', async () => {
+    await expect(runStage(ctxWith(PAGE_ERROR_LOG, PAGE_ERROR_LOG), 7)).rejects.toThrow('The factory checks failed twice');
+    await expect(runStage(ctxWith('npm test failed: 1 failed', 'npm test failed: 1 failed'), 8)).rejects.toThrow('The factory checks failed twice');
+    expect(calls).not.toContain('build');
+  });
+
+  it('still blocks the card when the build fails after a low frame rate', async () => {
+    const ctx = ctxWith(LOW_FPS_LOG, LOW_FPS_LOG);
+    ctx.container.shell = async (_dir, script) => {
+      calls.push(script.includes('npm run build') ? 'build' : 'checks');
+      if (script.includes('npm run build')) throw new Error('vite build failed');
+      throw new Error(LOW_FPS_LOG);
+    };
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+  });
+
+  it('leaves a passing card as before: one run, a build and no frame-rate note', async () => {
+    const ctx = ctxWith(null);
+    await runStage(ctx, 7);
+    expect(calls.filter((call) => call === 'checks' || call === 'build')).toEqual(['checks', 'build']);
+    expect(commentBodies.some((body) => body.startsWith('Playtest frame rate'))).toBe(false);
+    expect(shellScript).toContain('\nnpm run playtest\n');
+    expect(shellScript).toContain('host: $(nproc) cpus');
   });
 });
 
