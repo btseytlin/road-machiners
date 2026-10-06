@@ -786,11 +786,11 @@ function defend(o: Orders, goal: Goal): boolean {
   return true;
 }
 
-// Out of combat, the bot runs before the guns reach it when it would not fight even the weakest hostile in sight, as
-// an NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. With none in
-// sight, a heard hostile it would not fight keeps the run going: the goal turned the bot back into the foe each time
-// it dropped behind a ridge. A truck in town, parked on a job or stranded does not run. True when the turn's command
-// went to the run.
+// Out of combat, the bot runs before the guns reach it when it cannot beat even the weakest hostile in sight, as an
+// NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. A foe it can
+// beat is no reason to run, even one it would rather outrun in a fight. With none in sight, a heard hostile it cannot
+// beat keeps the run going: the goal turned the bot back into the foe each time it dropped behind a ridge. A truck in
+// town, parked on a job or stranded does not run. True when the turn's command went to the run.
 function avoid(o: Orders, goal: Goal): boolean {
   if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me) || !runsFrom(o, goal)) return false;
   flee(o);
@@ -799,8 +799,8 @@ function avoid(o: Orders, goal: Goal): boolean {
 
 function runsFrom(o: Orders, goal: Goal): boolean {
   const foe = weakestFoe(o.world);
-  if (foe) return !fights(o, foe, goal);
-  return heardHostiles(o.world).some((v) => !fights(o, v, goal));
+  if (foe) return !beats(o, foe, goal);
+  return heardHostiles(o.world).some((v) => !beats(o, v, goal));
 }
 
 function heardHostiles(world: World): Vehicle[] {
@@ -865,9 +865,14 @@ function charge(o: Orders, foe: Vehicle, goal: Goal): void {
 
 // A foe under a camp's gate guns is never fought: the guns join the fight on its side.
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  return beats(o, foe, goal) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+}
+
+// A foe the bot judges it can beat, by the hunter's margin for a hunter.
+function beats(o: Orders, foe: Vehicle, goal: Goal): boolean {
   if (campGunning(o.me, foe.pos)) return false;
   const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
-  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me);
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.

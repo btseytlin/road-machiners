@@ -645,6 +645,24 @@ describe('the hunter', () => {
     }
   });
 
+  // A hauler ran back and forth for 40 turns from a crawling raider with no gun.
+  it('has a bot drive on past a hostile it can beat', () => {
+    const ordersWith = (raider: boolean) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
+      if (raider) {
+        const unarmed = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: me.pos.x + 12, y: me.pos.y });
+        unarmed.brain = npcBrain('buggy', unarmed.pos, ['raider']);
+        for (const p of mountedParts(unarmed, 'core')) if (p.defId.includes('transmission')) p.hp = 0;
+        expect([hostileToPlayer(w, unarmed), playerSees(w, unarmed.pos), isStranded(w, unarmed)]).toEqual([true, true, true]);
+      }
+      return playerVehicle(botOrders(w, 'trader').world).order;
+    };
+
+    expect(ordersWith(true)).toEqual(ordersWith(false));
+  });
+
   // The gunwagon dropped out of sight for a turn, and the trade route turned the bot back into its guns.
   it('has a bot keep running while it hears a stronger raider it no longer sees', () => {
     const w = emptyWorld({ x: 30, y: 30 });
