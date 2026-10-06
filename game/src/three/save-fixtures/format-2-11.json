@@ -1,0 +1,15 @@
+{
+  "turn": 900,
+  "shops": {
+    "nose": { "contracts": [], "pressure": { "salt": -0.2, "scrap": 0.1 }, "stock": [], "restockAt": 1000 }
+  },
+  "vehicles": [
+    { "id": "player", "brain": null },
+    { "id": "npc1", "brain": { "templateId": "trader", "goals": [], "lastTown": "nose" } },
+    { "id": "npc2", "brain": { "templateId": "scavenger", "goals": [] } },
+    { "id": "npc3", "brain": { "templateId": "trader", "goals": [], "lastTown": "atlantis" } }
+  ],
+  "removed": [
+    { "id": "npc4", "brain": { "templateId": "courier", "goals": [], "lastTown": "nose" } }
+  ]
+}

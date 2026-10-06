@@ -285,3 +285,13 @@ describe("aid handover text", () => {
     expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
   });
 });
+
+describe("wake-up log", () => {
+  it("says an NPC regains consciousness, so the line does not read as cut off", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "npcWake", vehicle: npc.id });
+    expect(line?.text).toBe(`${vehicleName(w, npc.id)} regains consciousness`);
+    expect(line?.cls).toBe("dim");
+  });
+});

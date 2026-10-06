@@ -203,8 +203,14 @@ export type NpcBrain = {
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    lastTown?: string; // id of the last town where this driver finished a service or trade
+    // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
+    memories: Memory[];
 };
+
+// A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
+// prices: a shop's standing pressure for each good it trades, when the driver did business there.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
   id: string;
@@ -237,8 +243,13 @@ export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; 
 // Every baked prop but a rock is a landmark of its prop kind.
 export type LandmarkLook = Exclude<PropKind, "rock">;
 
+// The chassis a dead truck leaves as its wreck. yaw is the truck's heading when it died, in radians from map +x toward +y.
+export type Hulk = { chassisId: string; yaw: number };
+
 export type Obstacle =
-  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // Only a kill wreck has a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
@@ -268,7 +279,7 @@ export type StateData =
   | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'escort'; site: string | null; fee: number }
-  | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
+  | { kind: 'patch'; deal: PatchDeal; parts: number; partIds: string[]; price: number; work: number; workLeft: number } // holder patches other; partIds are the client parts it lifts, fixed at agreement
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
   | { kind: 'none' };
@@ -293,6 +304,7 @@ export type CallVar =
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
+  | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null } // a trading tip, or none
   | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 
@@ -307,8 +319,9 @@ export type TopicOutcome = "agreed" | "refused" | "done";
 export type Player = {
   vehicleId: string;
   money: number;
-  skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
-  xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
+  xp: number; // unspent XP, earned by any activity; see src/sim/progress.ts
+  ranks: Record<SkillId, number>; // bought ranks per skill, from 0 to MAX_RANK
+  xpToday: Record<SkillId, number>; // XP per activity family earned on day xpDay, for the daily soft cap
   xpDay: number;
   repeats: Record<string, Repeat>; // "source:target" to the earlier practice on that target; see XP_SOURCES
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
@@ -321,6 +334,7 @@ export type Player = {
   townPatched: boolean; // this visit to a town already got its free critical repair; leaving the town clears it
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
+  headlights: boolean; // the player's headlight switch; NPC lamps follow the clock, see src/three/render/daylight.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
@@ -374,7 +388,7 @@ export type GameEvent =
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
-  | { t: 'skillUp'; skill: SkillId; level: number }
+  | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'fulfilled' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }

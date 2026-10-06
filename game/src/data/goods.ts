@@ -2,23 +2,24 @@
 
 import type { Tier } from './market';
 
-// mass in kilograms per unit. value is the base money value of one unit; shop prices derive from it.
-export type GoodDef = { id: string; name: string; mass: number; value: number; tier: Tier };
+// mass in kilograms per unit. value is the base money value of one unit; shop prices derive from it. plural marks a
+// name that takes "were" in talk.
+export type GoodDef = { id: string; name: string; mass: number; value: number; tier: Tier; plural?: true };
 
 export const GOODS: Record<string, GoodDef> = {
   scrap: { id: 'scrap', name: 'Scrap metal', mass: 100, value: 19, tier: 1 },
   salt: { id: 'salt', name: 'Salt', mass: 75, value: 26, tier: 1 },
-  meds: { id: 'meds', name: 'Meds', mass: 50, value: 70, tier: 2 },
+  meds: { id: 'meds', name: 'Meds', mass: 50, value: 70, tier: 2, plural: true },
   grain: { id: 'grain', name: 'Grain', mass: 90, value: 21, tier: 1 },
-  textiles: { id: 'textiles', name: 'Textiles', mass: 25, value: 35, tier: 1 },
-  tools: { id: 'tools', name: 'Machine tools', mass: 160, value: 110, tier: 3 },
-  batteries: { id: 'batteries', name: 'Batteries', mass: 120, value: 76, tier: 2 },
-  electronics: { id: 'electronics', name: 'Electronics', mass: 15, value: 155, tier: 3 },
-  parts: { id: 'parts', name: 'Parts', mass: 20, value: 20, tier: 1 }, // spent by field repair
+  textiles: { id: 'textiles', name: 'Textiles', mass: 25, value: 35, tier: 1, plural: true },
+  tools: { id: 'tools', name: 'Machine tools', mass: 160, value: 110, tier: 3, plural: true },
+  batteries: { id: 'batteries', name: 'Batteries', mass: 120, value: 76, tier: 2, plural: true },
+  electronics: { id: 'electronics', name: 'Electronics', mass: 15, value: 155, tier: 3, plural: true },
+  parts: { id: 'parts', name: 'Parts', mass: 20, value: 20, tier: 1, plural: true }, // spent by field repair
   // Supply convoys load these free at the Pump Station and the oases. Both are heavier than grain and
   // salt per unit, so a load pays by volume, not margin. Fuel is worth more than salt, since only one
   // pump fills it. Water is worth less than grain, since two oases give it away.
-  fuelDrums: { id: 'fuelDrums', name: 'Fuel drums', mass: 140, value: 28, tier: 1 },
+  fuelDrums: { id: 'fuelDrums', name: 'Fuel drums', mass: 140, value: 28, tier: 1, plural: true },
   water: { id: 'water', name: 'Water', mass: 110, value: 18, tier: 1 },
 };
 
