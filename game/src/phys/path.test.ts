@@ -80,4 +80,4 @@ it('a truck following a road into a blocking rock stops on the corner without a 
   });
   expect(damage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
-});
+}, 90_000); // up to forty physics turns take 40 to 60s alone on a 3-core machine
