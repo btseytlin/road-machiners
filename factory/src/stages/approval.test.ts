@@ -1,4 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { solidPng } from '../media-fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeState, readState, EMPTY_STATE } from '../state';
 import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
@@ -185,7 +187,7 @@ describe('approve', () => {
 
 describe('routeFeedback', () => {
   it('redesign comments with the route, moves to Design, drops the posts and the queued approval', async () => {
-    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign')).toBe(true);
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign', 100)).toBe(true);
     expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as redesign:\n\nMake it louder', 'move 7 Design']);
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 200: 8 });
@@ -195,7 +197,7 @@ describe('routeFeedback', () => {
   });
 
   it('patch keeps the played build for the patch, moves to Implementation and drops the posts', async () => {
-    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch', 100);
     expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Implementation']);
     const state = readState(`${home}/state.json`);
     expect(state.patching).toEqual({ 7: 'aaa1111' });
@@ -203,7 +205,7 @@ describe('routeFeedback', () => {
   });
 
   it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
-    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer')).toBe(false);
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer', 100)).toBe(false);
     expect(calls).toEqual(['comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 100: 7, 101: 7, 200: 8 });
@@ -211,8 +213,8 @@ describe('routeFeedback', () => {
   });
 
   it('records every route in the ledger', async () => {
-    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer');
-    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer', 100);
+    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100);
     expect(readLedger(home, new Date(0))).toEqual([
       { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
       { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
@@ -221,7 +223,7 @@ describe('routeFeedback', () => {
 
   it('refuses a patch for a card with no recorded build before it comments or records anything', async () => {
     writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
-    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('no recorded build');
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100)).rejects.toThrow('no recorded build');
     expect(calls).toEqual([]);
     expect(readLedger(home, new Date(0))).toEqual([]);
   });
@@ -232,9 +234,31 @@ describe('routeFeedback', () => {
     expect(readState(`${home}/state.json`).unroutedReplies).toEqual({ 6: { issue: 8, postId: 200, text: 'y', at: 'a' } });
   });
 
+  it('a patch takes the Telegram images of its post into the issue media and lists only their type, size and hash', async () => {
+    const png = solidPng(4, 3, [1, 2, 3]);
+    mkdirSync(`${home}/inbox/media/post-100`, { recursive: true });
+    writeFileSync(`${home}/inbox/media/post-100/5-1.png`, png);
+    writeFileSync(`${home}/inbox/media/post-100/5-2.skipped`, 'the file is no longer in the cache');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Delete the middle dot', 'patch', 100);
+    const sha = createHash('sha256').update(png).digest('hex');
+    expect(calls[0]).toBe(`comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nDelete the middle dot\n\nThe reply came with 2 file(s) in Telegram. They stay private: the agent sees them in its media folder, and they are not posted here.\n- png, 4x3, ${png.length} bytes, sha256 ${sha}\n- not available: the chat bot could not keep it: the file is no longer in the cache`);
+    expect(readFileSync(`${home}/media/issue-7/committee/${sha.slice(0, 16)}.png`)).toEqual(png);
+    expect(existsSync(`${home}/inbox/media/post-100`)).toBe(false);
+  });
+
+  it('an answer leaves the Telegram images for a later route, and approve drops them', async () => {
+    mkdirSync(`${home}/inbox/media/post-101`, { recursive: true });
+    writeFileSync(`${home}/inbox/media/post-101/5-1.png`, solidPng(1, 1, [0, 0, 0]));
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer', 101);
+    expect(calls[0]).toBe('comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nq');
+    expect(existsSync(`${home}/inbox/media/post-101/5-1.png`)).toBe(true);
+    await approve(fakeCtx(), 7, 'bob');
+    expect(existsSync(`${home}/inbox/media/post-101`)).toBe(false);
+  });
+
   it('throws when the card is not in Approval', async () => {
     column = 'Design';
-    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('not in Approval');
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100)).rejects.toThrow('not in Approval');
     expect(calls).toEqual([]);
   });
 });

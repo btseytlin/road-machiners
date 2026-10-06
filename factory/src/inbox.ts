@@ -143,7 +143,7 @@ async function routed(ctx: Ctx, command: InboxCommand, issue: number, by: string
   const route = command.kind as Route;
   const postId = requirePost(command);
   updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.postId !== postId)) }));
-  const dropped = await routeFeedback(ctx, issue, by, requireText(command), route);
+  const dropped = await routeFeedback(ctx, issue, by, requireText(command), route, postId);
   return `${ROUTE_ANSWERS[route](issue)}${dropped ? ' The queued approval is dropped.' : ''}`;
 }
 

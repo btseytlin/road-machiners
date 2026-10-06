@@ -5,6 +5,7 @@ import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
+import { readCommitteeMedia } from '../reply-media';
 import { readState } from '../state';
 import { bundleOf } from './bundle';
 import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
@@ -104,15 +105,16 @@ async function githubToken(ctx: Ctx): Promise<string | undefined> {
   return out !== null && out.code === 0 && out.stdout.trim() !== '' ? out.stdout.trim() : undefined;
 }
 
-// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder.
-// A failed image throws before the agent starts. Returns the prompt part that lists the images.
+// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder, and adds the committee's Telegram images.
+// A failed issue image throws before the agent starts, except in a patch. A patch acts on committee text about a build they played,
+// so a dead image only shows as NOT AVAILABLE. Returns the prompt part that lists the images.
 export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
   const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
   const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
   for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
-  requireMedia(issue, entries);
-  return mediaSection(entries);
+  if (stage !== 'patch') requireMedia(issue, entries);
+  return mediaSection([...entries, ...readCommitteeMedia(mediaDir(ctx, issue))]);
 }
 
 // A resumed round continues its own conversation, so it needs no prompt but this note. A round that had finished ends at once.
