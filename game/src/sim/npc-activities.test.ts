@@ -15,6 +15,7 @@ import { makePart } from './factory';
 import { addGoods } from './inventory';
 import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { beginSearch } from './search';
+import { salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
@@ -302,21 +303,21 @@ describe('NPC activities', () => {
   });
 
   describe('in a territory', () => {
-    // A scavenger that knows only the Fallen Sun, with the player far away.
-    function fallenSunScavenger(at: { x: number; y: number }) {
+    // A scavenger that knows only the given territory, with the player far away.
+    function territoryScavenger(territoryId: string, at: { x: number; y: number }) {
       const { w, npc } = createScavenger();
       npc.pos = { ...at };
       npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
       const traits = TRAITS.scavenger as { salvageSites: string[] };
       const saved = traits.salvageSites;
-      traits.salvageSites = ['fallen-sun'];
+      traits.salvageSites = [territoryId];
       return { w, npc, restore: () => void (traits.salvageSites = saved) };
     }
     const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
     const entry = () => territoryEntries(sun as never)[0];
 
     it('targets one of its loot spots, and keeps the goal while the spot is out of sight', () => {
-      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      const { w, npc, restore } = territoryScavenger('fallen-sun', { x: 10, y: 10 });
       try {
         planNpcOrders(w);
         const goal = topGoal(npc)!;
@@ -332,7 +333,7 @@ describe('NPC activities', () => {
     });
 
     it('parks beside the spot, searches it and takes its loot', () => {
-      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      const { w, npc, restore } = territoryScavenger('fallen-sun', { x: 10, y: 10 });
       try {
         planNpcOrders(w);
         const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === topGoal(npc)!.targetId)!;
@@ -392,6 +393,53 @@ describe('NPC activities', () => {
       const { w, npc } = createScavenger();
       const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'make a trip to another site' };
       expect(getActivityDestination(w, npc, goal)).toEqual(entry());
+    });
+
+    describe('Old Orchard', () => {
+      it('targets one of its loot spots', () => {
+        const { w, npc, restore } = territoryScavenger('orchard', { x: 10, y: 10 });
+        try {
+          planNpcOrders(w);
+          const goal = topGoal(npc)!;
+          expect(goal.kind).toBe('scavenge');
+          const spot = territorySpots(w, 'orchard').find((s) => s.id === goal.targetId);
+          expect(spot).toBeDefined();
+          expect(goal.destination).toEqual(spot!.pos);
+        } finally {
+          restore();
+        }
+      });
+
+      it('keeps its goal on the spot until it searches it from the parking ring, then takes its loot', () => {
+        const { w, npc, restore } = territoryScavenger('orchard', { x: 10, y: 10 });
+        try {
+          planNpcOrders(w);
+          const spotId = topGoal(npc)!.targetId!;
+          const spot = territorySpots(w, 'orchard').find((s) => s.id === spotId)!;
+          npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+          // The orchard's spots stand close together, and one in sight would pull the driver off this one.
+          forceOption('salvageSeen', 'keep');
+          const unitsBefore = salvageUnits(spot);
+          const carriedBefore = npc.items.length;
+          let next = w;
+          let searching = false;
+          let took = false;
+          for (let turn = 0; turn < 80 && !took; turn++) {
+            next = endTurn(next, testDrive);
+            const me = next.vehicles.find((v) => v.id === npc.id)!;
+            searching ||= me.job?.kind === 'search' && me.job.stockId === spotId;
+            took = me.items.length > carriedBefore;
+            if (!searching && !took) expect(topGoal(me)?.targetId, `turn ${turn}`).toBe(spotId);
+          }
+          expect(searching).toBe(true);
+          expect(took).toBe(true);
+          // A searched-out stock leaves the world.
+          const after = next.salvage.find((s) => s.id === spotId);
+          expect(after ? salvageUnits(after) : 0).toBeLessThan(unitsBefore);
+        } finally {
+          restore();
+        }
+      });
     });
   });
 
