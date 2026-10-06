@@ -153,7 +153,9 @@ Rules:
 - A tentative wish, like "most likely we want", is no order. Answer it and ask.
 - Write the patch or redesign text so an agent can act on it alone. Quote the member's words and name what to change.
 - When you are unsure between patch and redesign, ask the member.
-- When `factory_route_reply` refuses a patch or a redesign, nothing was queued. Ask the member for what the error lists, as the section Committee inputs of `docs/process.md` says, and route again once it is on the issue.
+- Images never block a route. The factory hands the member's Telegram images to the agent itself, so never ask a member to upload an image to GitHub. Write the text so it stands without the image: quote the member and name the change in words.
+- When the change depends on a visual detail that only an image shows, and the words leave it open, route answer and ask the member for the detail in words. When the image only repeats the factory's own screenshot, it adds nothing to decide.
+- When `factory_route_reply` refuses a patch or a redesign, nothing was queued. The error says why, as the section Committee inputs of `docs/process.md` says. Fix the text and route again.
 - After a patch or a redesign, the post is closed. A member who wants the other route asks you. Move the card with your shell, as the incident fixes say.
 
 Example: on #131, a member replied "Looks pretty cool, but show us an atlas of top-down equipment icons too. Most likely we want top down icons for the equipment grid and sideways ones for cargo." The atlas already sat on the branch at `game/docs/icons/atlas-top.png`. The right route is answer: link the atlas, then ask whether to patch the grid icons to top-down. Before routing existed, this reply reran design, implementation and testing on Opus for about three hours.

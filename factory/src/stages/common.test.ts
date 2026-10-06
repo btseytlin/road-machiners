@@ -213,6 +213,13 @@ describe('runAgent reference images', () => {
 
 describe('stage prompts for reference images', () => {
   const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '', playtest: 'npm run playtest' };
+  it('tell the patch to act on the words, never on an image it lacks, and to ask when only that image decides', () => {
+    const text = fillPrompt('patch', { ...vars, played: 'abc' });
+    expect(text).toContain('act on the words, even when an image is NOT AVAILABLE');
+    expect(text).toContain('never describe what it shows');
+    expect(text).toContain('Write the question to `.factory/needs-committee.md`');
+  });
+
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
       const text = fillPrompt(name, vars);

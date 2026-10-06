@@ -114,4 +114,5 @@ Before every agent stage, the host fetches the images of the issue body and ever
 - It takes PNG, JPEG, GIF and WebP from GitHub's attachment hosts, and first-party images at `https://roam-game.online/<name>` or `/concepts/<name>`.
 - It follows redirects only to GitHub's storage hosts, or from a first-party image to another one.
 - Each file is at most 10 MB, and an issue has at most 12.
-- An image that fails to fetch or decode fails the stage before any agent runs. An image on another host is listed as not seen.
+- An image that fails to fetch or decode fails the stage before any agent runs, except in a patch. A patch acts on committee text about a build they played, so it lists the image as not available and goes on. An image on another host is listed as not seen.
+- The images a member sent in Telegram with a patch or redesign reply are listed too, from `$FACTORY_HOME/media/issue-N/committee/`. They stay private: the issue gets only their type, size and sha256. [process.md](process.md) says how they arrive.

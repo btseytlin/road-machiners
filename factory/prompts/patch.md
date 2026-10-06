@@ -32,8 +32,13 @@ Commit on the current branch.
 Never push.
 Add one line under "Patches" in the Conclusion of {{taskFile}}: what the committee asked and what you changed.
 
-Reference images from the issue are listed at the end of this prompt.
+Reference images from the issue, and any the committee sent with the reply in Telegram, are listed at the end of this prompt.
 If the feedback is about a look, read the images and the feedback, take a screenshot of the finished game and compare.
+The feedback text is your task. When it names the change in words, like a copy fix, act on the words, even when an image is NOT AVAILABLE.
+An image that only shows the build again, like the factory's own screenshot, is context, not a new request.
+Never say you looked at an image marked NOT AVAILABLE, and never describe what it shows.
+If the change depends on a visual detail that only a missing image shows, and the text leaves it open, do not guess.
+Write the question to `.factory/needs-committee.md` and commit nothing.
 
 Write `.factory/approval.json` again: `{"description": "...", "howToTry": "..."}`.
 Lead the description with what this patch changed. The committee played the build before, so tell them where to look.
