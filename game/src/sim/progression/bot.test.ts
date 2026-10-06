@@ -350,22 +350,23 @@ describe('botOrders', () => {
     expect(turn.world.player.supplies).toBeGreaterThan(0);
   });
 
-  // A stall buys spares but takes no part off the truck, so the mounted gear stays. It hands a bought engine over
-  // loose, and the scout has no free cargo spot that holds one.
-  it('has a broke truck without an engine at a stall keep its mounted gear', () => {
+  // Every shop does garage work, so a stall mounts a bought engine that does not fit the cargo cells. The spare
+  // covers the price, so the mounted gear stays.
+  it('has a broke truck without an engine at a stall sell a spare and mount a bought engine', () => {
     const yard = siteOf('salvage-yard');
     const w = withoutEngine(parkedAt('bowl'));
     const me = playerVehicle(w);
     me.pos = nearestPad(yard, yard.pos);
     w.player.money = 0;
-    w.shops['salvage-yard'].stock = [makePart(w, 'stockEngine', 0)];
+    const engine = makePart(w, 'stockEngine', 0);
+    w.shops['salvage-yard'].stock = [engine];
     expect(stowPart(w, me, makePart(w, 'heavyMg', 0))).toBe(true);
-    expect(partTradePrice(w, me, makePart(w, 'heavyMg', 0), 'sell')).toBeGreaterThan(partTradePrice(w, me, w.shops['salvage-yard'].stock[0], 'buy'));
+    expect(partTradePrice(w, me, makePart(w, 'heavyMg', 0), 'sell')).toBeGreaterThan(partTradePrice(w, me, engine, 'buy'));
     const mountedBefore = mountedParts(me).map((p) => p.id);
 
     const turn = botOrders(w, 'trader');
 
-    expect(mountedParts(playerVehicle(turn.world)).map((p) => p.id)).toEqual(mountedBefore);
+    expect(mountedParts(playerVehicle(turn.world)).map((p) => p.id).sort()).toEqual([...mountedBefore, engine.id].sort());
   });
 
   it('has a broke stranded truck crawl on with its goal instead of waiting in town', () => {
