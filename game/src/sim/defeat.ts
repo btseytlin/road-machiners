@@ -7,7 +7,7 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
-import { isHostile } from "./combat";
+import { beatenBy, isHostile } from "./combat";
 import { rollCabKnock } from "./cab-knock";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
@@ -119,8 +119,9 @@ export function standDown(world: World, v: Vehicle, winnerId: string): void {
 
 export function knockOutNpc(world: World, v: Vehicle): void {
   layDown(world, v, foesOf(world, v), false);
-  world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
-  if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
+  const by = beatenBy(world, v);
+  world.events.push({ t: "npcKnockout", vehicle: v.id, by });
+  if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
 }
 

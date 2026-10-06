@@ -26,7 +26,7 @@ import { sampleWeighted } from './npc-loadout';
 import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
-import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
+import type { Aim, GameEvent, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -619,6 +619,57 @@ export function turnPartHits(world: World): Map<string, PartHit[]> {
   return out;
 }
 
+// The truck that beat v: the source that dealt v the most part damage this turn, the earliest first on a tie. A shot
+// counts for its shooter, a guard shot for `guard-<site>` and a crash for the other truck. With no damage this turn,
+// as when wear broke the cab, it is the last damage source. The one rule for kill credit.
+export function beatenBy(world: World, v: Vehicle): string {
+  vehicleById(world, v.id);
+  let best: string | null = null;
+  let most = 0;
+  for (const [source, damage] of damageBySource(world, v.id)) {
+    if (damage > most) {
+      best = source;
+      most = damage;
+    }
+  }
+  return best ?? v.lastHitBy ?? "unknown";
+}
+
+// Part damage dealt to one truck this turn per source, in the order each source first damaged it.
+function damageBySource(world: World, id: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const e of world.events) {
+    const blow = blowOn(world, e, id);
+    const damage = blow ? blow.hits.reduce((sum, h) => sum + h.damage, 0) : 0;
+    if (blow && damage > 0) out.set(blow.source, (out.get(blow.source) ?? 0) + damage);
+  }
+  return out;
+}
+
+type Blow = { source: string; hits: PartHit[] };
+
+// The source and part hits of one event on a truck.
+function blowOn(world: World, e: GameEvent, id: string): Blow | null {
+  if (e.t === "shot") return { source: e.shooter, hits: hitsOn(e, id) };
+  if (e.t === "guardShot") return { source: `guard-${e.site}`, hits: hitsOn(e, id) };
+  return e.t === "collision" ? crashBlowOn(world, e, id) : null;
+}
+
+function hitsOn(e: { rounds: ShotRound[] }, id: string): PartHit[] {
+  return shotDamage(e).get(id) ?? [];
+}
+
+// A crash counts for the other truck. A crash into the ground or an obstacle has no source.
+function crashBlowOn(world: World, e: Extract<GameEvent, { t: "collision" }>, id: string): Blow | null {
+  if (e.b === id) return { source: e.a, hits: e.hitsB };
+  if (e.a !== id || !isTruckId(world, e.b)) return null;
+  return { source: e.b, hits: e.hitsA };
+}
+
+function isTruckId(world: World, id: string): boolean {
+  return world.vehicles.some((o) => o.id === id) || world.removed.some((o) => o.id === id);
+}
+
 function vehicleById(world: World, id: string): Vehicle {
   const v = world.vehicles.find((x) => x.id === id);
   if (!v) throw new Error(`No vehicle ${id}`);
@@ -947,6 +998,7 @@ function damagedByShots(world: World): Set<string> {
 
 // The truck leaves the world as a wreck obstacle with a stock of what it carried.
 export function wreckVehicle(world: World, v: Vehicle): void {
+  const by = beatenBy(world, v);
   createWreckSalvage(world, v);
   world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
   world.removed.push(v);
@@ -959,7 +1011,7 @@ export function wreckVehicle(world: World, v: Vehicle): void {
   world.events.push({
     t: "destroyed",
     vehicle: v.id,
-    by: v.lastHitBy ?? "unknown",
+    by,
   });
 }
 
