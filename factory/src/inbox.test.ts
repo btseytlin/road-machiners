@@ -28,6 +28,7 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
     telegram: {
       sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; },
       editCaption: async (chat: string, id: number, caption: string) => { calls.push(`edit ${chat} ${id} ${caption}`); },
+      editText: async (chat: string, id: number, text: string) => { calls.push(`editText ${chat} ${id} ${text}`); },
     },
   } as unknown as Ctx;
 }
@@ -87,6 +88,15 @@ describe('drainInbox', () => {
     put('2.json', { kind: 'change', text: 'y', by: '11' });
     await drainInbox(fakeCtx([], [], []));
     expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
+  });
+
+  it('shows the status of a button press on a text post by editing its text', async () => {
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), postCaptions: { [POST]: 'Post' }, textPosts: [String(POST)] });
+    put('1.json', { kind: 'redesign', issue: 4, text: 'too loud' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(calls.at(-1)).toBe('editText -5 42 Post\n\n💬 Feedback from Ann. Back to design.');
+    expect(calls.some((call) => call.startsWith('edit -5'))).toBe(false);
   });
 
   it('sends a redesign back to design at once', async () => {

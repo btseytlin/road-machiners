@@ -2,7 +2,7 @@
 
 This file is the spec of how the factory works. Each diagram matches the code, and a change to the process updates its diagram in the same commit. The rules behind each step are in [stages.md](stages.md), [evidence.md](evidence.md) and [operations.md](operations.md).
 
-The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot` source. People see the `.svg` render. After you edit a `.dot` file, run `npm run diagrams` from `factory/`, or a test fails. The colors mean the same in every diagram:
+The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot` source. People see the `.svg` render. After you edit a `.dot` file, run `npm run diagrams` from `factory/`, or a test fails. It needs Graphviz installed. The colors mean the same in every diagram:
 
 - Black arrows are the normal path, from left to right.
 - Red dashed arrows are loops back.
@@ -17,17 +17,18 @@ The public files and votes on GitHub issues. Agents design, build and test the t
 
 ## Card lifecycle
 
-A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it.
+A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it. Hardening is slow, so it runs only on work the committee wants.
 
 ![Card lifecycle](diagrams/lifecycle.svg)
 
-- A hotfix skips Triage. It runs harden and then the preview test round before its post, and Approve ships it at once.
+- A bug a collaborator labels `hotfix` skips Triage. Triage can also label a bug `hotfix`. Approve ships a hotfix at once.
 - A merged issue stays open with the label `release-candidate`. It closes when its release ships.
 
 The loops:
 
 - unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, and triage runs again.
-- rebuild and plan wrong: the visual review found the look wrong. The card keeps its branch.
+- rebuild: the visual review found a shape, state or behavior that needs new code. The card keeps its branch.
+- plan wrong: the visual review found the plan contradicts the issue or the game docs. The card keeps its branch.
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
 - redesign: the committee reply changes the plan.
 - review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
@@ -40,20 +41,20 @@ The early ends:
 - bundled: triage folds the issue into a lead, and it closes when the lead ships.
 - Deny: the committee rejects the build, and the issue closes.
 
+Screenshots never block a card. A card with no screenshot still runs verify and the checks, and its approval post is text that says it has no screenshot. [evidence.md](evidence.md) has the rules.
+
 A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
 
 ## Testing column
 
-Testing is two jobs. Verify runs the testing agent in the verify queue. Checks runs the machine checks with no agent in the test queue. The `testPhase` entry of the card in the state file says which job runs next.
+Testing is two jobs. Verify runs the testing agent. Checks runs the machine checks with no agent.
 
 ![Testing column](diagrams/testing.svg)
 
-Limits:
-
-- A card gets one review-fix round per hardening, and one trip back to Design for the review. A second review redesign fails the stage.
-- A card gets two visual send-backs. A third fails the stage.
-- A check failure gets one fix round. A second failure fails the stage.
-- Checks that fail only on timeouts run up to 3 times with no agent.
+- A hotfix runs the harden line and then the preview test round before its post, since Approve ships it at once.
+- A release cleanup task runs only the harden line, since it merges with no post.
+- The visual review sends a card back at most twice. A third send-back fails the stage.
+- A card that the review already sent to Design once fails the stage on its next second FAIL.
 
 ## Committee inputs
 
@@ -62,6 +63,14 @@ Members talk to the bot in the committee chat. The Hermes plugin turns commands 
 ![Committee inputs](diagrams/committee.svg)
 
 A reply that gets no route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a failure, so Hermes sees it.
+
+A patch or a redesign queues only when the issue has what the next stage reads. The plugin checks this in code, for Hermes's route and for a member's `patch:` or `redesign:` reply. If anything is missing it queues nothing and tells Hermes or the member what to get.
+
+- Every image the member sent in Telegram is on the issue. Telegram files stay in Hermes's cache and no tool can attach them, so the member uploads them as a comment on the issue.
+- Every image the issue shows, and every image the reply links, downloads under the fetch rules of `src/media.ts`. A link on another host, or one that fails, is refused.
+- The text has at least `FACTORY_ROUTE_MIN_WORDS` words, so it names what to change.
+
+A reference that arrives while the card is in Design waits. The running design already read its images, so nothing interrupts it. The next stage reads every image on the issue again, and a member who needs the design to see it replies `redesign:` at the approval post.
 
 ## Branches
 
@@ -78,13 +87,13 @@ Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes
 
 ![Release](diagrams/release.svg)
 
-Every merge into the release drops the Ship button of the current post. A build that finds a new release task is not posted.
+Every merge into the release drops the Ship button of the current post. A reply can open a release task while a candidate builds. That candidate lacks the task, so it is not posted.
 
 ## Side jobs
 
 These jobs run beside the cards.
 
-- change: a factory change from `/change`, Hermes or the waste review. The agent runs up:make in hands-off mode on a clone of `main`, edits only `factory/` and the factory opens a pull request. A member merges it.
+- change: a factory change from `/change`, Hermes or the waste review. The agent runs up:make in hands-off mode on a clone of `main`, may edit any file in the repo and the factory opens a pull request. A member merges it.
 - adhoc: one-off work a member asks Hermes for. The agent runs in a clone of `dev`, pushes nothing and replies with a report and files.
 - incident: after a shipped fix of a `bug` issue or a hotfix. The agent judges the bug against the bar in `docs/incident-log.md` and may add an entry to `dev`.
 - waste: every `FACTORY_WASTE_REVIEW_DAYS`. The agent reads the ledger numbers and posts one bottleneck with a "Queue as change" button.
