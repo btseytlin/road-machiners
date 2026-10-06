@@ -3,12 +3,12 @@
 
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
-import { SHOPS, shopDef } from '../data/market';
+import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
-import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -39,7 +39,8 @@ import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
-import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
+import { isDefeated, isKnockedOut } from './defeat';
+import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -48,7 +49,7 @@ import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
 // A follow is listed too. It resumes after an interruption without the resume roll, and a follower stops for no
 // salvage.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'follow'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'rearm', 'follow'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -104,7 +105,7 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
 }
 
 // Takes one goal out of the stack, wherever it sits.
-function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
+export function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
   const previous = topGoal(v);
   v.brain!.goals = goalsOf(v).filter((g) => g !== goal);
   logChange(w, v, previous, reason);
@@ -188,11 +189,6 @@ function unfitHunter(world: World, vehicle: Vehicle): boolean {
   return huntsPrey(vehicle) && !fitToHunt(world, vehicle);
 }
 
-// The sites that serve a stranded driver: its bases if it has any, else any town.
-function servingSiteIds(profile: NpcProfile): string[] {
-  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
-}
-
 // Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a service stall. A broke driver
 // counts only the sites that serve it, since a stall gives it nothing.
 function pumpsOf(vehicle: Vehicle, profile: NpcProfile, broke: boolean): string[] {
@@ -224,8 +220,9 @@ export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfi
 const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 // Low fuel, low supplies, a damaged cab or part, or a raider unfit to hunt needs service, in that order of reason.
-// Null when none is needed.
+// Null when none is needed. A lie-up was served when it began, so it needs no service trip.
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
+  if (holdsRearm(vehicle)) return null;
   const needs: [string, boolean][] = [
     ['low fuel', isLowOnFuel(world, vehicle, profile)],
     ['low supplies', getResources(world, vehicle).supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies],
@@ -237,7 +234,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   return { reason: held[0], suppliesOnly: held.length === 1 && held[0] === 'low supplies' };
 }
 
-function isBroke(world: World, vehicle: Vehicle): boolean {
+export function isBroke(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies);
 }
 
@@ -482,6 +479,7 @@ export function meetGoal(world: World, npc: Vehicle, other: Vehicle, reason: str
 
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   fight: fightInvalid,
+  rearm: rearmInvalid,
   flee: fleeInvalid,
   investigate: investigateInvalid,
   scavenge: scavengeInvalid,
@@ -903,26 +901,10 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   return currentActivity(world, vehicle, profile);
 }
 
-// A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
-// for. If that leaves it stranded, it gets a fresh loadout from its pool.
-function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
-  if (!isStranded(world, vehicle) || isOnRope(world, vehicle.id) || vehicle.speed > RULES.parkedSpeed) return;
-  const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
-  if (!site) return;
-  serviceAt(world, vehicle, site);
-  scrapFuelIfBroke(world, vehicle, profile, site.id);
-  if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
-}
-
-// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank. A stall
-// is no serving site.
-function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string): void {
-  if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
-}
-
-// A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
+// A defeated driver makes no decisions. It heads home, or waits for a tower on its way. At home it lies up.
 function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
-  if (topGoal(vehicle)?.kind !== 'retreat') {
+  const top = topGoal(vehicle)?.kind;
+  if (top !== 'retreat' && top !== 'rearm') {
     const home = npcHomeSite(vehicle);
     if (!home) throw new Error(`${vehicle.id} knows no home to retreat to`);
     pushGoal(world, vehicle, createSiteActivity('retreat', home.id, 'retreat home after a defeat'));
@@ -1035,10 +1017,10 @@ export function watchStalls(world: World): void {
   }
 }
 
-// A driver waiting on a timed state, knocked out, towed or with a tower on its way, counts as making progress:
-// the state ends the wait.
+// A driver waiting on a timed state, knocked out, towed, with a tower on its way or lying up at its site, counts as
+// making progress: the state ends the wait.
 function madeProgress(world: World, v: Vehicle): boolean {
-  if (isKnockedOut(v) || isOnRope(world, v.id) || awaitsTower(world, v)) return true;
+  if (isKnockedOut(v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v)) return true;
   return v.brain!.progress?.key !== progressKey(v);
 }
 
@@ -1206,7 +1188,7 @@ function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivit
 }
 
 // The site of a site goal once the NPC can use it, which starts the act phase. Null while it cannot.
-function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof getKnownSite> | null {
+export function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof getKnownSite> | null {
   const site = getKnownSite(activity.targetId!);
   if (!canUseSite(vehicle.pos, site)) return null;
   activity.phase = 'act';
@@ -1214,26 +1196,8 @@ function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof g
 }
 
 // A driver remembers the last town it did business in, and tells its prices on the radio.
-function noteTown(vehicle: Vehicle, siteId: string): void {
+export function noteTown(vehicle: Vehicle, siteId: string): void {
   if (REGION.towns.some((t) => t.id === siteId)) vehicle.brain!.lastTown = siteId;
-}
-
-function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const site = reachSite(vehicle, activity);
-  if (!site) return;
-  noteTown(vehicle, site.id);
-  serviceAt(world, vehicle, site);
-  scrapFuelIfBroke(world, vehicle, npcProfile(vehicle), site.id);
-  finishGoal(world, vehicle, 'finished service');
-}
-
-// An oasis fills supplies, a camp serves raiders, a stall and a town garage serve in full.
-function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
-  const kind = 'kind' in site ? site.kind : null;
-  if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
@@ -1288,9 +1252,8 @@ function arrivalResolver(reason: string): Resolver {
 }
 
 function resolveRetreat(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (!reachSite(vehicle, activity)) return;
-  refitAtHome(world, vehicle);
-  finishGoal(world, vehicle, 'refitted at home');
+  const site = reachSite(vehicle, activity);
+  if (site) beginRearm(world, vehicle, site);
 }
 
 function resolveRepair(world: World, vehicle: Vehicle, activity: NpcActivity): void {
@@ -1301,6 +1264,7 @@ const RESOLVERS: Partial<Record<NpcActivity['kind'], Resolver>> = {
   tow: resolveTow,
   repair: resolveRepair,
   retreat: resolveRetreat,
+  rearm: resolveRearm,
   scavenge: resolveSearch,
   loot: resolveSearch,
   raid: resolveRaid,
