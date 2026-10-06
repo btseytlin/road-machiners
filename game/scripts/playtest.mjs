@@ -80,12 +80,16 @@ const findDeadCorners = () => {
 const hit = await page.evaluate(findDeadCorners);
 hitProblems.push(...hit.failures);
 if (hit.found < 4) hitProblems.push(`found ${hit.found} one-control panels, expected at least 4`);
-const helpOpen = () => page.locator('.help details[open]').count();
-const helpBox = await page.locator('#ui .help').boundingBox();
-await page.mouse.click(helpBox.x + 2, helpBox.y + 2);
-if (!(await helpOpen())) hitProblems.push('help did not open from a click in its corner');
+const menuBox = await page.locator('#ui .game-menu').boundingBox();
+await page.mouse.click(menuBox.x + 2, menuBox.y + 2);
+if (!(await page.locator('.game-menu [role=menu]').isVisible())) hitProblems.push('menu did not open from a click in its corner');
 await page.keyboard.press('Escape');
-if (await helpOpen()) hitProblems.push('help did not close on Escape');
+if (await page.locator('.game-menu [role=menu]').isVisible()) hitProblems.push('menu did not close on Escape');
+await page.locator('.game-menu .menu-button').click();
+await page.locator('.game-menu [role=menuitem]', { hasText: 'Help' }).click();
+if (!(await page.locator('#ui .help').isVisible())) hitProblems.push('help did not open from the menu');
+await page.keyboard.press('Escape');
+if (await page.locator('#ui .help').count()) hitProblems.push('help did not close on Escape');
 
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {

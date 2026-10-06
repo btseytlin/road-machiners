@@ -3,8 +3,8 @@
 ## Slots and boot
 
 - `src/three/save.ts` stores the whole world except the terrain in a save envelope `{ format, savedAt, world }` and restores it on boot.
-- `src/three/save-slots.ts` owns the slots: `CONFIG.saveSlots` manual slots, the Autosave (every `CONFIG.saveTurns` completed turns and after each command in town, at the pre-slots key) and the Day start autosave (the first turn of each game day), each in its own local storage key. The Save and Load panels in `src/ui/save-panel.ts` pick a slot. The Save button in the top right opens the Save panel.
-- Load and New game leave a boot request in session storage and reload. Boot reads the request and removes it. Without one, it loads the newest save by `savedAt`.
+- `src/three/save-slots.ts` owns the slots: `CONFIG.saveSlots` manual slots, the Autosave (every `CONFIG.saveTurns` completed turns and after each command in town, at the pre-slots key) and the Day start autosave (the first turn of each game day), each in its own local storage key. The Save and Load panels in `src/ui/save-panel.ts` pick a slot. The Save and Load entries of the Menu button in the top right open the panels.
+- Load and a confirmed New game leave a boot request in session storage and reload. Boot reads the request and removes it. Without one, it loads the newest save by `savedAt`.
 - Boot's New game runs `clearGame()`, which deletes the autosaves and everything else the run keeps in storage but not the manual slots or sound settings, then writes the Autosave at once. Later unsaved changes are lost on reload.
 - `player.explored` is saved as a base64 bitset, so every slot fits the local storage quota.
 - The terrain comes from the map file on load. A save records the map file's hash and does not load on another map.
@@ -13,11 +13,11 @@
 
 ## Versions
 
-A save records its format, `SAVE_FORMAT` in `src/three/save-migrations.ts`. The `?` menu shows the game version, which `src/version.ts` builds from the save format and git as `SAVE_MAJOR.minor.commits+hash`, so nobody edits it by hand. Load migrates an old save to the current format, as Save migrations in `CLAUDE.md` describes.
+A save records its format, `SAVE_FORMAT` in `src/three/save-migrations.ts`. The Help entry of the Menu shows the game version, which `src/version.ts` builds from the save format and git as `SAVE_MAJOR.minor.commits+hash`, so nobody edits it by hand. Load migrates an old save to the current format, as Save migrations in `CLAUDE.md` describes.
 
 ## Rescue
 
-A save that cannot load, from another map, another major format, a newer minor format or with an invalid shape, shows the save screen: Migrate save or New game behind a confirm. `src/three/save-rescue.ts` reads the raw JSON defensively, `carriedWorld()` in `src/sim/world.ts` rebuilds the world on the current map from a new game and carries the skill ranks, XP, perks, money, truck, parts with wear, garage storage, cargo, fuel, supplies and discovered places, parks the truck on a town pad and refunds what no longer fits, and `src/ui/save-screen.ts` shows the choice and the report. Unknown ids are lost and listed. The rescue writes the new save at once.
+A save that cannot load, from another map, another major format, a newer minor format or with an invalid shape, shows the save screen: Migrate save or New game, which opens the setup screen in `src/ui/new-game.ts` like every New game route (the Menu, the death screen and this one). `src/three/save-rescue.ts` reads the raw JSON defensively, `carriedWorld()` in `src/sim/world.ts` rebuilds the world on the current map from a new game and carries the skill ranks, XP, perks, money, truck, parts with wear, garage storage, cargo, fuel, supplies and discovered places, parks the truck on a town pad and refunds what no longer fits, and `src/ui/save-screen.ts` shows the choice and the report. Unknown ids are lost and listed. The rescue writes the new save at once.
 
 ## Migration details
 

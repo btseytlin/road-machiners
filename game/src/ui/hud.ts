@@ -99,7 +99,6 @@ export class Hud {
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
-  private help = panel("help", topLeft());
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
@@ -142,12 +141,6 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    const guide = el(
-      "details",
-      {},
-      el("summary", { title: "Driving and combat controls" }, "?"),
-    );
-    this.help.append(guide);
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: string) =>
       el(
@@ -172,20 +165,8 @@ export class Hud {
     this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
       if (e.code !== "Escape") return;
-      guide.removeAttribute("open");
       feedbackMenu.removeAttribute("open");
     });
-    guide.append(
-      el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
-      el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual driving, straight at the point."),
-      el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
-      el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
-      el("div", { class: "version" }, versionLabel()),
-    );
   }
 
   private toggleCameraMode(): void {
