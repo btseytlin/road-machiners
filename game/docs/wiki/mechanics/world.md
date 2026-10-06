@@ -37,7 +37,7 @@ Old Orchard is a territory too: a ruined farm under military occupation, in a wi
 
 Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired at anyone but a raider, whatever its own faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
-Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. The player cannot use camp services.
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. Gate guns, at towns and camps, never shoot a knocked-out truck or a defeated NPC in any phase. A driver a gun knocked out wakes by the normal rule and retreats unharmed. The player cannot use camp services.
 
 ## Sun, time and weather
 

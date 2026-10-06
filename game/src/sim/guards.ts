@@ -5,7 +5,7 @@
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { laneCount, sideToward, walkLane } from './armor';
-import { isKnockedOut } from './defeat';
+import { isDefeated } from './defeat';
 import { corePart } from './grid';
 import { chance, randInt, randRange } from './rng';
 import { siteGates, type Site } from './sites';
@@ -28,10 +28,11 @@ export function fireGuards(world: World): void {
   for (const camp of REGION.locations) if (camp.kind === 'camp') fireSite(world, camp, (v) => v.faction !== 'raiders');
 }
 
-// Guards spare a knocked-out driver, whatever its cab. A player fighting through on a broken cab is still awake.
+// Guards spare a knocked-out driver and a defeated NPC in any phase, whatever its cab. A player fighting through on a
+// broken cab is still awake.
 function isAwake(world: World, v: Vehicle): boolean {
   if (v.id === world.player.vehicleId) return world.player.state === 'active';
-  return !isKnockedOut(v) && corePart(v, 'cab').hp > 0;
+  return !isDefeated(v) && corePart(v, 'cab').hp > 0;
 }
 
 function fireSite(world: World, site: Site, isTarget: (v: Vehicle) => boolean): void {
