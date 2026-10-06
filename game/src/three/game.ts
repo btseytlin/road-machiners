@@ -60,7 +60,7 @@ import { addHullDecks } from "./render/hull-decks";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
-import { WeatherView } from "./render/weather";
+import { nearestStorm, stormTintAt, WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
@@ -780,7 +780,8 @@ export class Game {
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
-    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), inCombat: inCombat(this.world, me), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    const storm = nearestStorm(this.world, at);
+    this.loops.update({ stormTiles: storm.tiles, stormStrength: storm.strength, inCombat: inCombat(this.world, me), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
@@ -934,14 +935,15 @@ export class Game {
       .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: lampsOn(v.id, this.lightTurn()) }));
     // At dawn lamps switch off one by one, so the night lights stay until the last one is off.
     this.nightLights.update(!sunAt(this.world.turn) || lit.some((v) => v.on), truck, lit);
-    const at = playerVehicle(this.world).pos;
-    const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
-    this.stormTint.style.display = stormy ? "" : "none";
+    const tint = stormTintAt(this.world, playerVehicle(this.world).pos);
+    this.stormTint.style.display = tint > 0 ? "" : "none";
+    this.stormTint.style.opacity = String(tint);
     this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);
     this.weather.sync(this.world);
+    this.weather.fade(dt);
     this.labels.update(this.world, this.rig, this.sightLimit);
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);

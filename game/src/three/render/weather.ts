@@ -1,16 +1,22 @@
 // Traveling dust. Small clouds are decoration, driven by wind alone. Storm banks sit on the sim's
 // own storms in world.weather, so what the player sees matches the sight, speed and wear penalty.
+// A bank's haze follows its storm's stormStrength, eased per frame, and fades out after the storm ends.
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { WEATHER } from '../../data/weather';
 import { hash2 } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { World } from '../../sim/types';
+import { dist, type Vec } from '../../sim/vec';
+import { stormStrength } from '../../sim/weather';
 
 const S = PHYSICS.metersPerTile;
 const WRAP_MARGIN = WEATHER.cloud.spread + WEATHER.cloud.diameter;
 
-type Bank = { group: THREE.Group; x: number; y: number; speed: number; height: number };
+// Every puff of a bank shares one material, so a fade is one opacity write.
+type Bank = { group: THREE.Group; material: THREE.SpriteMaterial; x: number; y: number; speed: number; height: number };
+// shown is the haze share on screen now, target the sim strength it eases toward, 0 once the storm has ended.
+type StormBank = Bank & { shown: number; target: number };
 type Look = { puffs: number; spread: number; diameter: number; height: number; opacity: number; color: number };
 
 function createDustTexture(): THREE.CanvasTexture {
@@ -37,7 +43,7 @@ function idHash(id: string): number {
 export class WeatherView {
   readonly root = new THREE.Group();
   private readonly clouds: Bank[] = [];
-  private readonly storms = new Map<string, Bank>();
+  private readonly storms = new Map<string, StormBank>();
   private readonly terrain: Terrain;
   private readonly texture: THREE.CanvasTexture;
 
@@ -52,55 +58,74 @@ export class WeatherView {
       this.clouds.push(this.createBank(WEATHER.cloud, x, y, i, false));
     }
     this.sync(world);
+    // A loaded storm shows at its true strength at once, with no full-strength flash and no fade from nothing.
+    for (const bank of this.storms.values()) this.show(bank, bank.target);
   }
 
-  // Adds a bank for each new sim storm, removes one for each that ended, and moves the rest to
-  // their storm's current position and size. Cheap: world.weather holds only a few events.
+  // Adds a bank for each new sim storm, aims each bank at its storm's strength, or at 0 for one that ended,
+  // and moves the live ones to their storm's current position. Cheap: world.weather holds only a few events.
   sync(world: World): void {
-    const active = new Set(world.weather.filter((e) => e.kind === 'storm').map((e) => e.id));
-    for (const [id, bank] of this.storms) {
-      if (active.has(id)) continue;
-      this.root.remove(bank.group);
-      this.storms.delete(id);
-    }
+    for (const bank of this.storms.values()) bank.target = 0;
     for (const e of world.weather) {
       if (e.kind !== 'storm') continue;
       let bank = this.storms.get(e.id);
       if (!bank) {
         const puffs = Math.ceil((Math.PI * e.radius * e.radius) / WEATHER.storm.tilesPerPuff);
-        bank = this.createBank({ ...WEATHER.storm, puffs, spread: e.radius }, e.pos.x, e.pos.y, idHash(e.id), true);
+        bank = { ...this.createBank({ ...WEATHER.storm, puffs, spread: e.radius }, e.pos.x, e.pos.y, idHash(e.id), true), shown: 0, target: 0 };
+        this.show(bank, 0);
         this.storms.set(e.id, bank);
       }
+      bank.target = stormStrength(world, e);
       bank.x = e.pos.x;
       bank.y = e.pos.y;
       this.placeBank(bank);
     }
   }
 
+  // Eases each storm bank's haze toward its target, and drops a bank whose storm ended once its haze is gone.
+  fade(dtMs: number): void {
+    const step = (WEATHER.storm.fadePerSecond * dtMs) / 1000;
+    for (const [id, bank] of this.storms) {
+      this.show(bank, stepFade(bank.shown, bank.target, step));
+      if (bank.shown > 0 || bank.target > 0) continue;
+      this.root.remove(bank.group);
+      bank.material.dispose();
+      this.storms.delete(id);
+    }
+  }
+
+  // The haze share a storm's bank shows now, or null with no bank for it. For checks.
+  shownOf(id: string): number | null {
+    return this.storms.get(id)?.shown ?? null;
+  }
+
+  private show(bank: StormBank, shown: number): void {
+    if (!(shown >= 0 && shown <= 1)) throw new Error(`Storm haze share ${shown} is outside 0 to 1`);
+    bank.shown = shown;
+    bank.material.opacity = WEATHER.storm.opacity * shown;
+    bank.group.visible = shown > 0;
+  }
+
   private createBank(shape: Look, x: number, y: number, index: number, storm: boolean): Bank {
     const group = new THREE.Group();
     group.name = storm ? 'dust-storm' : 'dust-cloud';
+    const material = new THREE.SpriteMaterial({ map: this.texture, color: shape.color, transparent: true, opacity: shape.opacity, depthWrite: false });
     for (let i = 0; i < shape.puffs; i++) {
       const angle = hash2(index * 97 + i, storm ? 31 : 17) * Math.PI * 2;
       const radius = Math.sqrt(hash2(index * 47 + i, storm ? 59 : 41)) * shape.spread * S;
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: shape.color, transparent: true, opacity: shape.opacity, depthWrite: false }));
+      const sprite = new THREE.Sprite(material);
       sprite.position.set(Math.cos(angle) * radius, hash2(index * 31 + i, 73) * S, Math.sin(angle) * radius);
       sprite.scale.setScalar(shape.diameter * S * (0.7 + hash2(i, index + 83) * 0.6));
       group.add(sprite);
     }
     this.root.add(group);
-    const bank = { group, x, y, speed: storm ? 0 : 1, height: shape.height };
+    const bank = { group, material, x, y, speed: storm ? 0 : 1, height: shape.height };
     this.placeBank(bank);
     return bank;
   }
 
   private placeBank(bank: Bank): void {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
-  }
-
-  // Map tiles from a point to the nearest dust storm's center; Infinity with no storm.
-  stormTilesFrom(x: number, y: number): number {
-    return Math.min(...[...this.storms.values()].map((b) => Math.hypot(b.x - x, b.y - y)));
   }
 
   // Only the decorative clouds drift on their own; storms are repositioned by sync from sim state.
@@ -112,4 +137,29 @@ export class WeatherView {
       this.placeBank(bank);
     }
   }
+}
+
+// Moves shown toward target by at most maxStep.
+export function stepFade(shown: number, target: number, maxStep: number): number {
+  return shown < target ? Math.min(target, shown + maxStep) : Math.max(target, shown - maxStep);
+}
+
+// Map tiles from a point to the nearest live storm's center and that storm's strength; Infinity and 0 with no storm.
+export function nearestStorm(world: World, at: Vec): { tiles: number; strength: number } {
+  let nearest = { tiles: Infinity, strength: 0 };
+  for (const e of world.weather) {
+    if (e.kind !== 'storm') continue;
+    const tiles = dist(at, e.pos);
+    if (tiles < nearest.tiles) nearest = { tiles, strength: stormStrength(world, e) };
+  }
+  return nearest;
+}
+
+// The screen tint's share at a point: the strongest storm whose radius holds it, or 0 outside every storm.
+export function stormTintAt(world: World, at: Vec): number {
+  let tint = 0;
+  for (const e of world.weather) {
+    if (e.kind === 'storm' && dist(at, e.pos) <= e.radius) tint = Math.max(tint, stormStrength(world, e));
+  }
+  return tint;
 }

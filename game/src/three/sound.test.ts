@@ -29,10 +29,14 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, inCombat: false, paused: false };
+  const calm = { stormTiles: 100, stormStrength: 1, inCombat: false, paused: false };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
+  });
+  it("scales the storm's share of the wind by its strength", () => {
+    expect(loopLevels({ ...calm, stormTiles: 0, stormStrength: 0 }, MIX).windGain).toBe(MIX.wind.baseGain);
+    expect(loopLevels({ ...calm, stormTiles: 0, stormStrength: 0.5 }, MIX).windGain).toBeCloseTo((MIX.wind.baseGain + MIX.wind.stormGain) / 2);
   });
   it("switches music to combat while in combat", () => {
     const fight = loopLevels({ ...calm, inCombat: true }, MIX);

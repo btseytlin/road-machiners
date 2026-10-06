@@ -237,7 +237,8 @@ export class SoundDirector {
 }
 
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
+// stormStrength is the nearest storm's strength in [0, 1], which scales its share of the wind.
+export type LoopState = { stormTiles: number; stormStrength: number; inCombat: boolean; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
@@ -249,7 +250,7 @@ export type LoopLevels = {
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
-  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles) * s.stormStrength;
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
     calmGain: s.inCombat ? 0 : 1,
