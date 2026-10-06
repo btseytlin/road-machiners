@@ -1,7 +1,7 @@
 import { EMPTY_STATE, writeState } from '../state';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { agentHome } from './common';
 import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from '../types';
 
@@ -10,10 +10,11 @@ export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
 export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r' } as FactoryConfig;
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
-export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; created: { title: string; body: string; labels: string[] }[] };
+export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
+export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[] };
 
 export function fake(): Fake {
-  const f: Fake = { ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], created: [] };
+  const f: Fake = { ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [] };
   const note = (text: string) => { f.calls.push(text); };
   f.ctx = {
     cfg,
@@ -34,19 +35,30 @@ export function fake(): Fake {
       removeLabel: async (n: number, label: string) => note(`removeLabel ${n} ${label}`),
       createRelease: async (tag: string, target: string, title: string, notes: string) => note(`release ${tag} ${target} ${title}\n${notes}`),
       addCard: async (_n: number, column: string) => note(`addCard ${column}`),
-      openPullRequest: async (branch: string, base: string, title: string) => { note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
+      openPullRequest: async (branch: string, base: string, title: string, body: string) => { f.prBodies.push(body); note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
     },
     telegram: {
       sendMessage: async (chat: string, text: string, replyTo?: number) => { note(`message ${chat} ${replyTo ?? '-'} ${text}`); return 1; },
       sendPhoto: async (chat: string, path: string, caption: string, buttons?: InlineButton[][]) => { note(`photo ${chat}`); f.photos.push({ chat, path, caption, buttons }); return 42; },
+      sendDocument: async (chat: string, path: string, replyTo?: number) => { note(`document ${chat} ${replyTo ?? '-'} ${path}`); return 43; },
+      sendPhotos: async (chat: string, photos: { path: string; caption: string }[], replyTo?: number) => {
+        note(`album ${chat} ${photos.length} ${replyTo ?? '-'}`);
+        if (f.albumFails) throw new Error('Telegram sendMediaGroup failed: boom');
+        f.albums.push({ chat, paths: photos.map((p) => p.path), captions: photos.map((p) => p.caption), replyTo });
+        return photos.map((_, i) => 60 + i);
+      },
+      editCaption: async (_chat: string, id: number, caption: string) => { note(`editCaption ${id} ${caption}`); },
     },
     container: {
       shell: async () => note('shell'),
       agent: async (run: AgentRun) => {
-        note('agent');
+        note(run.readOnly ? `agent ro ${JSON.stringify(run.readOnly)}` : 'agent');
         const home = agentHome(run.clone, run.dir);
         mkdirSync(join(home, '.factory'), { recursive: true });
-        for (const [name, text] of Object.entries(f.agentWrites)) writeFileSync(join(home, '.factory', name), text);
+        for (const [name, text] of Object.entries(f.agentWrites)) {
+          mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
+          writeFileSync(join(home, '.factory', name), text, 'latin1');
+        }
       },
     },
     repo: {

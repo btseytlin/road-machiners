@@ -27,6 +27,10 @@ export const TOW = {
   perTile: TURNS_PER_TILE * TURN_PRICE,
   // The most a tow costs before the Social cut.
   maxFee: CAP_TURNS * TURN_PRICE,
+  // Turns a tower that left a hitched truck for danger waits before it hitches again. A hostile at the edge of sight
+  // comes and goes within a few turns, and a tower that hitched at once dropped the tow again the next turn. Ten turns
+  // ended about two thirds of those hitch and drop pairs in the progression runs.
+  dangerWait: 10,
   // Tiles between the tower's center and the towed truck's center. Two tiles is 8 m, about one and a half truck
   // lengths, and more than the two largest chassis radii together, so the two trucks never overlap on a straight.
   gap: 2,

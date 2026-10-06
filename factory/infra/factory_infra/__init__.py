@@ -17,7 +17,12 @@ FACTORY_USER = "factory"
 # Hermes runs as this uid too, since it edits the factory home.
 FACTORY_UID = 1001
 FACTORY_ROOT = "/opt/factory"
+# repo is the git clone and releases holds one worktree per deployed commit. code is a link to the current release.
+REPO_DIR = f"{FACTORY_ROOT}/repo"
+RELEASES_DIR = f"{FACTORY_ROOT}/releases"
 CODE_DIR = f"{FACTORY_ROOT}/code"
+# The server-only env lives outside every release. Each release links factory/.env to it.
+FACTORY_ENV = f"{FACTORY_ROOT}/factory.env"
 HOME_DIR = f"{FACTORY_ROOT}/home"
 WWW_DIR = f"{FACTORY_ROOT}/www"
 HERMES_DIR = f"{FACTORY_ROOT}/hermes"
@@ -32,7 +37,7 @@ class Settings(BaseSettings):
     factory_ssh_user: str = "root"
     factory_ssh_key: str | None = None
     factory_domain: str
-    factory_acme_email: str
+    factory_tunnel_token: str
     factory_env_file: str
     factory_gh_token: str
 

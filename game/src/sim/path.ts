@@ -26,8 +26,8 @@ export function route(world: World, from: Vec, dest: Vec, radius: number, extra:
     const to = insideMap(world, dest, radius);
     const taste = tasteOf(world, driver);
     const nav = terrainNav(world.terrain);
-    const statics = staticSet(world.obstacles, world.terrain.size);
-    const dynamic = dynamicBlockers(world.obstacles, extra);
+    const statics = staticSet(world.obstacles, world.terrain);
+    const dynamic = dynamicBlockers(world.obstacles, world.terrain, extra);
     const reach = radius + CLEARANCE;
     // An unobstructed line all on road is already the shortest, cheapest route.
     if (lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
@@ -97,9 +97,9 @@ function exitCell(layer: NavLayer, overlay: Overlay, start: number, target: numb
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
-  const statics = staticSet(world.obstacles, world.terrain.size);
+  const statics = staticSet(world.obstacles, world.terrain);
   const nav = terrainNav(world.terrain);
-  return lineCost(nav, statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
+  return lineCost(nav, statics, dynamicBlockers(world.obstacles, world.terrain, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
 }
 
 // A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that
@@ -107,7 +107,7 @@ export function straightClear(world: World, a: Vec, b: Vec, radius: number, extr
 export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[] };
 
 export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[]): KeptRoute {
-  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, extra).map((o) => blockerKey([o])) };
+  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, world.terrain, extra).map((o) => blockerKey([o])) };
 }
 
 // The rest of a kept route toward nearly the same point, or null when it no longer holds. Points the
@@ -135,10 +135,10 @@ function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius:
 type LegCheck = { nav: TerrainNav; statics: StaticSet; dynamic: Blocker[]; fresh: Blocker[]; radius: number; reach: number };
 
 function legCheck(world: World, kept: KeptRoute, radius: number, extra: Blocker[]): LegCheck {
-  const dynamic = dynamicBlockers(world.obstacles, extra);
+  const dynamic = dynamicBlockers(world.obstacles, world.terrain, extra);
   const known = new Set(kept.blockers);
   const fresh = dynamic.filter((o) => !known.has(blockerKey([o])));
-  return { nav: terrainNav(world.terrain), statics: staticSet(world.obstacles, world.terrain.size), dynamic, fresh, radius, reach: radius + CLEARANCE };
+  return { nav: terrainNav(world.terrain), statics: staticSet(world.obstacles, world.terrain), dynamic, fresh, radius, reach: radius + CLEARANCE };
 }
 
 // The kept points still ahead of the vehicle. A route that ended on its old point now ends on `to`,
