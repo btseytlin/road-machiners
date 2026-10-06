@@ -11,6 +11,7 @@ import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -198,5 +199,11 @@ describe('save migration 8 to 9', () => {
   it('ends a search of the old stock and keeps other searches', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[9](structuredClone(FORMAT_2_9))).toEqual(FORMAT_2_9);
   });
 });
