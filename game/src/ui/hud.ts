@@ -219,7 +219,7 @@ export class Hud {
       el(
         "span",
         { class: "job-label" },
-        `${label} · ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
+        `${label}, ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
       ),
       el(
         "span",
@@ -372,7 +372,7 @@ export class Hud {
         },
         createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
         el("span", { class: "speed-value" }, readout.speed),
-        el("span", { class: "speed-unit" }, `km/h · max ${readout.maxSpeed}`),
+        el("span", { class: "speed-unit" }, `km/h, max ${readout.maxSpeed}`),
         createIcon("truck"),
       ),
       el(

@@ -27,7 +27,7 @@ describe('hover card rows', () => {
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
     expect(o.causes.recoil).toBeGreaterThan(0);
-    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim · ${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
   });
 
   it('names the biggest reasons in plain words and keeps at most two', () => {

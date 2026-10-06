@@ -58,16 +58,16 @@ describe("truck condition", () => {
 
 describe("condition tooltip", () => {
   it("names the part with its condition", () => {
-    expect(conditionLabel({ name: "Stock engine", percent: 40 })).toBe("Stock engine · 40%");
+    expect(conditionLabel({ name: "Stock engine", percent: 40 })).toBe("Stock engine: 40%");
   });
 
   it("marks a broken part", () => {
-    expect(conditionLabel({ name: "Cab", percent: 0 })).toBe("Cab · broken");
+    expect(conditionLabel({ name: "Cab", percent: 0 })).toBe("Cab: broken");
   });
 
   it("gives every tile of a truck a name", () => {
     const parts = new TruckConditionReadout().update(emptyWorld().vehicles[0]);
-    for (const part of parts) expect(conditionLabel(part).startsWith(`${part.name} · `)).toBe(true);
+    for (const part of parts) expect(conditionLabel(part).startsWith(`${part.name}: `)).toBe(true);
   });
 });
 

@@ -258,7 +258,7 @@ export class WeaponPanel {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
     const chance =
-      readout.chance === null ? "" : ` · ${Math.round(readout.chance * 100)}%`;
+      readout.chance === null ? "" : `, ${Math.round(readout.chance * 100)}%`;
     const target =
       readout.target?.name ??
       (playerVehicle(w).weaponOrders[mw.part.id]

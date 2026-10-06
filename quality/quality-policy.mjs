@@ -44,3 +44,13 @@ export function checkFragmentation(current, previous, limit) {
     return [`${name}: fragmentation ${ratio.toFixed(2)} files/1,000 code lines exceeds ${ceiling.toFixed(2)}. Keep related behavior together.`];
   });
 }
+
+// The middle dot is a mark of machine-written text. Every text file in the repo is checked, with no debt allowance.
+export const SEPARATOR = String.fromCharCode(0xb7);
+
+export function checkSeparators(texts) {
+  return [...texts].flatMap(([file, text]) => text.split('\n').flatMap((line, index) => {
+    if (!line.includes(SEPARATOR)) return [];
+    return [`${file}:${index + 1}: middle dot separator. Use a comma or a colon.`];
+  }));
+}

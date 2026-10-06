@@ -90,7 +90,7 @@ async function checkReleaseAndManager(page) {
   waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
   waiting.live.value.workers[0].milestone = 'Building orchard buildings';
   await sendSnapshot(page, waiting);
-  assert.match(await page.locator('#manager-action').textContent(), /Waiting for model · 16m in phase/);
+  assert.match(await page.locator('#manager-action').textContent(), /Waiting for model, 16m in phase/);
   assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /^Building orchard buildings: /);
   waiting.live.value.workers[0].status = 'stale';
   await sendSnapshot(page, waiting);
@@ -163,7 +163,7 @@ async function checkCounters(page) {
   assert.equal(await page.locator('#usage-output').getAttribute('data-exact'), '300000');
   assert.deepEqual(await page.locator('#stage-model-header th').allTextContents(), ['Stage', 'claude-opus-5-5', 'claude-sonnet-5-5']);
   assert.deepEqual(await page.locator('#stage-model-measures th').allTextContents(), ['Input + cache', 'Output', 'Input + cache', 'Output']);
-  assert.ok(!(await page.locator('#analytics').textContent()).includes('Input incl. cache / output · measured runs'));
+  assert.ok(!(await page.locator('#analytics').textContent()).includes('Input incl. cache / output, measured runs'));
   const verify = page.locator('#stage-model-rows tr').filter({ has: page.locator('td:first-child', { hasText: 'Verify' }) });
   assert.deepEqual(await verify.locator('td').allTextContents(), ['Verify + review', '130K', '100K', '380K', '80K']);
   const extra = structuredClone(fixture);

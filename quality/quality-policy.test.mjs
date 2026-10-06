@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkFragmentation, collectComponents, inspectSource } from './quality-policy.mjs';
+import { SEPARATOR, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
 
 function makeSource(lines) {
   return Array.from({ length: lines }, (_, index) => `export const value${index} = ${index};`).join('\n');
@@ -45,4 +45,9 @@ test('finds suppression comments but not strings that quote them', () => {
 test('rejects invalid syntax and invalid policy limits', () => {
   assert.throws(() => inspectSource('game/src/example.ts', 'const = ;'), /game\/src\/example.ts/);
   assert.throws(() => checkFragmentation(new Map(), new Map(), 0), /must be positive/);
+});
+
+test('names each line with the middle dot separator', () => {
+  const texts = new Map([['game/src/hud.ts', `ok\nCab ${SEPARATOR} 40%\nfine`], ['README.md', 'Cab: 40%']]);
+  assert.deepEqual(checkSeparators(texts), ['game/src/hud.ts:2: middle dot separator. Use a comma or a colon.']);
 });
