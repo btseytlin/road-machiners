@@ -14,6 +14,8 @@ import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
+import { addState } from './states';
+import { REGION } from '../data/region';
 
 beforeAll(async () => {
   await initPhysics();
@@ -346,5 +348,33 @@ describe('far NPCs and breakable props', () => {
 
     expect(w.obstacles).toEqual([fence]);
     expect(w.broken).toEqual([]);
+  });
+});
+
+describe('far tower and its rope', () => {
+  // A tower boxed in by parked trucks on three sides, with its hitched client parked behind it on the fourth.
+  function boxedTower() {
+    const w = emptyWorld();
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    const client = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 118, y: 120 });
+    for (const pos of [{ x: 122, y: 120 }, { x: 120, y: 122 }, { x: 120, y: 118 }]) addVehicle(w, 'traders', 'scout', ['stockEngine'], pos);
+    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: REGION.towns[0].id, fee: 0, waived: 0, hitched: true });
+    tower.order = { kind: 'stopAt', dest: { x: 60, y: 120 } };
+    return { w, tower, client };
+  }
+
+  it('drives out past the truck on its own rope instead of arriving where it stands', () => {
+    const { w, tower } = boxedTower();
+    advanceFar(w, tower);
+    expect(tower.pos.x).toBeLessThan(119);
+    expect(tower.order).not.toBeNull();
+  });
+
+  it('still counts a parked truck on another tower rope as a blocker', () => {
+    const { w, tower, client } = boxedTower();
+    const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 200, y: 200 });
+    w.states = w.states.map((s) => (s.kind === 'tow' ? { ...s, holder: other.id } : s));
+    advanceFar(w, tower);
+    expect(dist(tower.pos, { x: 120, y: 120 })).toBeLessThan(dist(client.pos, { x: 120, y: 120 }) - 1);
   });
 });

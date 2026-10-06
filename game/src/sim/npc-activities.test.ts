@@ -9,7 +9,10 @@ import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { partDef } from '../data/parts';
-import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
+import { getKnownSite, getUpkeepReserve, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
+import { affordableBuyCount, getTradePrice } from './economy';
+import { cargoRoom } from './inventory';
+import { ECONOMY } from '../data/goods';
 import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
@@ -31,9 +34,6 @@ import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
 import { inCombat } from './combat';
-import { getTradePrice } from './economy';
-import { getUpkeepReserve } from './npc-decisions';
-import { ECONOMY } from '../data/goods';
 import { refreshVision } from './vision';
 import { recall } from './memory';
 
@@ -281,6 +281,107 @@ describe('NPC activities', () => {
     expect(npc.resources!.money).toBeGreaterThan(0);
     expect(Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0)).toBeGreaterThan(0);
     expect(topGoal(npc)?.kind).toBe('sell');
+  });
+
+  it('spends at most the trade stake on one load', () => {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.resources!.money = 5000;
+    forceOption('idle', 'trade');
+    planNpcOrders(w);
+    const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
+    npc.pos = { ...sitePads(source)[0] };
+    resolveNpcActivities(w);
+    expect(topGoal(npc)?.kind).toBe('sell');
+    expect(5000 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
+  });
+
+  it('gives a trade the wallet above the upkeep reserve, capped by the stake', () => {
+    const { w, npc } = createTrader();
+    const reserve = getUpkeepReserve(npc);
+    npc.resources!.money = reserve + 200;
+    expect(tradeSpend(w, npc)).toBe(200);
+    npc.resources!.money = reserve + 10_000;
+    expect(tradeSpend(w, npc)).toBe(TRAITS.trader.tradeStake);
+  });
+
+  describe('a trade run pays its trip fuel', () => {
+    function hauler(money: number) {
+      const w = emptyWorld({ x: 50, y: 50 });
+      const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
+      npc.brain = npcBrain('trader', npc.pos, ['trader']);
+      npc.resources!.money = getUpkeepReserve(npc) + money;
+      return { w, npc };
+    }
+
+    // Every pair the driver could buy a unit of at a unit profit, with the load it can afford and fit.
+    function pairs(w: World, npc: Vehicle) {
+      const spend = tradeSpend(w, npc);
+      const shops = Object.values(SHOPS);
+      return shops.flatMap((source) => shops.filter((b) => b.id !== source.id).flatMap((buyer) =>
+        source.goods.filter((good) => buyer.goods.includes(good)).flatMap((good) => {
+          const buy = getTradePrice(w, npc, source.id, good, 'buy');
+          const profit = getTradePrice(w, npc, buyer.id, good, 'sell') - buy;
+          if (spend < buy || profit <= 0) return [];
+          const sourcePos = getKnownSite(source.id).pos;
+          const trip = dist(npc.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
+          const loadProfit = affordableBuyCount(w, npc, source.id, good, cargoRoom(npc, good), spend) * profit;
+          return [{ source: source.id, good, sellShop: buyer.id, trip, loadProfit, fuel: tripFuelCost(w, npc, trip) }];
+        })));
+    }
+
+    it('drops a run whose load profit does not cover the trip fuel', () => {
+      const { w, npc } = hauler(50);
+      const losing = pairs(w, npc).filter((p) => p.loadProfit <= p.fuel);
+      expect(losing.length).toBeGreaterThan(0);
+      const offers = tradeOffers(w, npc).map((o) => `${o.value.source}:${o.value.good}:${o.value.sellShop}`);
+      for (const p of losing) expect(offers).not.toContain(`${p.source}:${p.good}:${p.sellShop}`);
+    });
+
+    it('weighs a paying run by its net profit per tile', () => {
+      const { w, npc } = hauler(TRAITS.trader.tradeStake);
+      const paying = pairs(w, npc).filter((p) => p.loadProfit > p.fuel);
+      expect(paying.length).toBeGreaterThan(0);
+      const offers = tradeOffers(w, npc);
+      expect(offers).toHaveLength(paying.length);
+      for (const p of paying) {
+        const offer = offers.find((o) => o.value.source === p.source && o.value.good === p.good && o.value.sellShop === p.sellShop)!;
+        expect(offer.weight).toBeCloseTo((p.loadProfit - p.fuel) / p.trip, 9);
+      }
+    });
+
+    it('costs the trip tiles times the fuel per tile at the fuel price, and fails loud on a bad trip', () => {
+      const { w, npc } = hauler(0);
+      expect(tripFuelCost(w, npc, 100)).toBeCloseTo(100 * vehicleStats(w, npc).fuelPerTile * ECONOMY.supplyPrice.fuel, 9);
+      expect(() => tripFuelCost(w, npc, NaN)).toThrow(/trip/);
+      expect(() => tripFuelCost(w, npc, -1)).toThrow(/trip/);
+    });
+
+    it('sends a driver with no paying run to other idle work without a stall', () => {
+      const { w, npc } = hauler(50);
+      expect(tradeOffers(w, npc)).toHaveLength(0);
+      expect(optionChances(optionWeights(w, npc, 'idle', null, null)).trade).toBeUndefined();
+      let world = w;
+      const stalls: string[] = [];
+      for (let i = 0; i < 50; i++) {
+        world = endTurn(world, testDrive);
+        stalls.push(...world.events.filter((e) => e.t === 'stall').map((e) => (e.t === 'stall' ? e.reason : '')));
+      }
+      expect(stalls).toEqual([]);
+      expect(topGoal(world.vehicles.find((v) => v.id === npc.id)!)).not.toBeNull();
+    });
+  });
+
+  it('fails loud when a driver with no trade stake weighs a trade', () => {
+    const { w, npc } = createScavenger();
+    const stake = TRAITS.scavenger.tradeStake;
+    TRAITS.scavenger.tradeStake = 0;
+    try {
+      expect(() => tradeSpend(w, npc)).toThrow(/trade stake/);
+    } finally {
+      TRAITS.scavenger.tradeStake = stake;
+    }
   });
 
   it('a raider can knock out an NPC, strip its cargo and sell it', () => {
