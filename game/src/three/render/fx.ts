@@ -378,6 +378,13 @@ export class Fx3D {
     this.puff(p, 0xffc060, 1, { speed: 0, life: 0.4, scale: 3.2, grow: 1.6, additive: true });
   }
 
+  // A claymore ram's charge: a fireball well wider than a truck, a hot core and a tall smoke cloud that lingers.
+  claymoreBlast(p: V3): void {
+    this.puff(p, 0xffa040, 60, { speed: 12, life: 0.6, scale: 0.9, grow: 0.6, additive: true });
+    this.puff(p, 0x3a3028, 30, { speed: 5, life: 2.6, scale: 2.2, grow: 3.2 });
+    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.6, scale: 8, grow: 2.4, additive: true });
+  }
+
   crash(p: V3): void {
     this.puff(p, 0xffa040, 10, { speed: 5, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
     this.dust(p);

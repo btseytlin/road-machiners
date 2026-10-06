@@ -150,11 +150,31 @@ describe('claymore detonation', () => {
     expect(claymore.charge).toEqual({ reload: 0, armed: true });
   });
 
-  it('keeps the charge in an obstacle crash', () => {
+  it('blows against an obstacle on its side, hurting only its own truck, and starts the reload', () => {
     const { w, user, claymore, side } = setup();
+    w.obstacles = [{ id: 'rock1', pos: { x: 42, y: 30 }, r: 0.8, kind: 'rock' }];
+    arm(w, user, claymore);
+    const hp = hpOf(user);
+
+    applyContactCrash(w, user, null, 'rock1', CLAYMORE.minImpact, { a: { side, lanes: [0, 1] }, b: null });
+
+    expect(blasts(w)).toMatchObject([{ vehicle: user.id, other: 'rock1', hits: [] }]);
+    expect(blasts(w)[0]).toHaveProperty('selfHits', expect.arrayContaining([expect.objectContaining({ part: expect.any(String) })]));
+    expect(hpOf(user)).toBeLessThan(hp);
+    expect(claymore.charge?.armed).toBeUndefined();
+    expect(claymore.charge?.reload).toBeGreaterThan(0);
+    expect(w.obstacles.map((o) => o.id)).toEqual(['rock1']);
+  });
+
+  it('keeps the charge against an obstacle below the threshold, on another side, or at a rail or the map edge', () => {
+    const { w, user, claymore, side } = setup();
+    w.obstacles = [{ id: 'rock1', pos: { x: 42, y: 30 }, r: 0.8, kind: 'rock' }];
     arm(w, user, claymore);
 
-    applyContactCrash(w, user, null, 'rock', 6, { a: { side, lanes: [0, 1] }, b: null });
+    applyContactCrash(w, user, null, 'rock1', 2.9, { a: { side, lanes: [0, 1] }, b: null });
+    applyContactCrash(w, user, null, 'rock1', 6, { a: { side: side === 'rear' ? 'front' : 'rear', lanes: [0, 1] }, b: null });
+    applyContactCrash(w, user, null, 'rail', 6, { a: { side, lanes: [0, 1] }, b: null });
+    applyContactCrash(w, user, null, 'edge', 6, { a: { side, lanes: [0, 1] }, b: null });
 
     expect(blasts(w)).toEqual([]);
     expect(claymore.charge).toEqual({ reload: 0, armed: true });

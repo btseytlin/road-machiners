@@ -27,6 +27,7 @@ import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../
 import { headingOf, headingQuat, noseRise, rotateBy, toPhysCircle, upOf, type Circle, type TurnFrames, type V3, type VehicleFrame } from './frames';
 import { oilPatches } from '../sim/hazards';
 import { lineAnchors, type BodyPoint, type LineAnchor } from '../sim/harpoon';
+import { claymoreOf, claymoresSetOff, type ClaymoreCrash } from '../sim/claymore';
 import { HARPOON, OIL } from '../data/utilities';
 
 const S = PHYSICS.metersPerTile;
@@ -256,6 +257,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const contacts = new Contacts(w);
+  const throws = new ClaymoreThrows(w, cars);
   const landings = new Landings();
   // Harpoon lines are fixed for the turn too: their anchors come in body space, so the steps only read the bodies.
   const lines = new Lines(lineAnchors(w), cars);
@@ -270,6 +272,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
       if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w), i);
     });
     smash(world, d, contacts.takeNewBreaks(), cars, before);
+    throws.apply(contacts.takeNewCrashes());
     for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body, before.get(c.v.id)!.velocity));
   }
   for (const c of cars) world.removeVehicleController(c.ctl);
@@ -366,6 +369,7 @@ class Contacts {
   private readonly crashed = new Map<string, number>(); // pair key to its index in crashes
   private readonly breakable: Set<string>;
   private fresh: Break[] = [];
+  private freshCrashes: Crash[] = [];
 
   constructor(w: World) {
     this.breakable = new Set(w.obstacles.filter(isBreakable).map((o) => o.id));
@@ -390,6 +394,15 @@ class Contacts {
       this.crashed.set(key, this.crashes.length);
       this.crashes.push(crash);
     } else if (crash.impact > this.crashes[known].impact) this.crashes[known] = crash;
+    else return;
+    this.freshCrashes.push(crash);
+  }
+
+  // Crashes that became their pair's hardest since the last call.
+  takeNewCrashes(): Crash[] {
+    const out = this.freshCrashes;
+    this.freshCrashes = [];
+    return out;
   }
 
   isBroken(id: string): boolean {
@@ -402,6 +415,61 @@ class Contacts {
     this.fresh = [];
     return out;
   }
+}
+
+// A crash that sets off a claymore ram, as claymore.ts decides, throws the user back from what it hit and the other
+// truck away from the user, each by the ram's throw impulse, at the step of the crash. Each truck blows once a turn,
+// as its charge goes with the blast. Rails and the map edge are no obstacle and set off nothing.
+class ClaymoreThrows {
+  private readonly blown = new Set<string>();
+
+  constructor(private readonly w: World, private readonly cars: Car[]) {}
+
+  apply(crashes: Crash[]): void {
+    for (const crash of crashes) {
+      const impact = toTilesPerTurn(crash.impact);
+      this.tryBlast(crash.a, crash.b, { impact, own: crash.contact.a, theirs: crash.contact.b });
+      if (crash.contact.b) this.tryBlast(crash.b, crash.a, { impact, own: crash.contact.b, theirs: crash.contact.a });
+    }
+  }
+
+  private tryBlast(userId: string, hitId: string, crash: ClaymoreCrash): void {
+    const user = this.cars.find((c) => c.v.id === userId);
+    const target = this.targetOf(hitId);
+    if (user && target && !this.blown.has(userId)) this.blast(user, target, crash);
+  }
+
+  // What a truck hit: another truck's car and its center, an obstacle's center, or null for a rail or the map edge.
+  private targetOf(id: string): BlastTarget | null {
+    const car = this.cars.find((c) => c.v.id === id);
+    if (car) return { car, at: car.body.translation() };
+    const obstacle = this.w.obstacles.find((o) => o.id === id);
+    return obstacle ? { car: null, at: { x: obstacle.pos.x * S, z: obstacle.pos.y * S } } : null;
+  }
+
+  private blast(user: Car, target: BlastTarget, crash: ClaymoreCrash): void {
+    const rams = claymoresSetOff(this.w, user.v, target.car?.v ?? null, crash);
+    if (rams.length === 0) return;
+    this.blown.add(user.v.id);
+    const away = awayFrom(user.body.translation(), target.at);
+    const { impulse, lift } = claymoreOf(rams[0]).throw;
+    throwBody(user.body, away, impulse, lift);
+    if (target.car) throwBody(target.car.body, { x: -away.x, z: -away.z }, impulse, lift);
+  }
+}
+
+type BlastTarget = { car: Car | null; at: { x: number; z: number } };
+
+// The flat unit direction from `at` to `from`.
+function awayFrom(from: { x: number; z: number }, at: { x: number; z: number }): { x: number; z: number } {
+  const length = Math.hypot(from.x - at.x, from.z - at.z);
+  if (length === 0) throw new Error('A claymore blast between two points in one place has no direction');
+  return { x: (from.x - at.x) / length, z: (from.z - at.z) / length };
+}
+
+function throwBody(body: RAPIER.RigidBody, dir: { x: number; z: number }, impulse: number, lift: number): void {
+  const flat = impulse * Math.sqrt(1 - lift * lift);
+  body.applyImpulse({ x: dir.x * flat, y: impulse * lift, z: dir.z * flat }, true);
 }
 
 // Removes each broken prop's colliders and gives the truck that broke it back its motion from before the hit, less

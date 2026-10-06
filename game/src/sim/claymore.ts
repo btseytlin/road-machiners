@@ -1,21 +1,22 @@
-// The claymore ram: arming it, its blast in a hard truck crash on its side, and disarming it once it breaks or
-// leaves its mount. utility.ts hands it the arming order and crash-contact.ts each truck crash. The charge state and
-// the reload belong to utility.ts.
+// The claymore ram: arming it, its blast in a hard crash on its side into a truck or an obstacle, and disarming it
+// once it breaks or leaves its mount. utility.ts hands it the arming order and crash-contact.ts each crash. The
+// charge state and the reload belong to utility.ts.
 
 import { partDef, type ClaymoreDef } from '../data/parts';
-import { coversSide, lanePoint, walkLane, type Round } from './armor';
+import { coversSide, lanePoint, walkLane, type PartHit, type Round } from './armor';
 import { blastTruck, isHostile, noteAttack } from './combat';
 import type { CrashContact } from './crash-contact';
 import { isMounted, mountedParts } from './grid';
+import { towsClient } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { chargeOf, wornReload } from './utility';
 
-// One truck's view of a crash with another truck: the closing speed in tiles per turn, its own touched side and
-// lanes, and the other truck's.
-export type ClaymoreCrash = { impact: number; own: CrashContact; theirs: CrashContact };
+// One truck's view of a crash with another truck or an obstacle: the closing speed in tiles per turn, its own touched
+// side and lanes, and the other truck's, or null for an obstacle.
+export type ClaymoreCrash = { impact: number; own: CrashContact; theirs: CrashContact | null };
 
-function claymoreOf(part: PartInstance): ClaymoreDef {
+export function claymoreOf(part: PartInstance): ClaymoreDef {
   const def = partDef(part.defId);
   if (def.kind !== 'armor' || !def.claymore) throw new Error(`${def.name} is not a claymore ram`);
   return def.claymore;
@@ -35,10 +36,26 @@ export function disarm(part: PartInstance): void {
   delete part.charge?.armed;
 }
 
-// Each armed, working claymore ram on the user's struck side blasts when the crash is hard enough. Slower crashes
-// and crashes on other sides leave it armed.
-export function detonateOnCrash(world: World, user: Vehicle, other: Vehicle, crash: ClaymoreCrash): void {
-  for (const part of armedOn(user, crash)) if (crash.impact >= claymoreOf(part).minImpact) detonate(world, user, other, part, crash);
+// The user's claymore rams this crash sets off: armed, working, on the user's struck side, and the crash hard enough.
+// Slower crashes and crashes on other sides leave them armed. A tower and the truck it tows set off none, as their
+// crash deals no damage. other is the other truck, or null for an obstacle. Physics reads this too, to throw the trucks.
+export function claymoresSetOff(world: World, user: Vehicle, other: Vehicle | null, crash: ClaymoreCrash): PartInstance[] {
+  if (other && (towsClient(world, user, other) || towsClient(world, other, user))) return [];
+  return armedOn(user, crash).filter((part) => crash.impact >= claymoreOf(part).minImpact);
+}
+
+// rams are what claymoresSetOff gave at the moment of impact, before the crash damage. A ram the crash breaks still
+// goes off, as physics already threw the trucks for it.
+export function detonateOnCrash(world: World, user: Vehicle, other: Vehicle, rams: PartInstance[], crash: ClaymoreCrash): void {
+  for (const part of rams) detonate(world, user, other, part, crash);
+}
+
+// A ram into an obstacle blasts only its own truck. The obstacle stands.
+export function detonateOnObstacle(world: World, user: Vehicle, obstacle: string, rams: PartInstance[], crash: ClaymoreCrash): void {
+  for (const part of rams) {
+    const selfHits = spend(world, user, part, crash);
+    world.events.push({ t: 'claymore', vehicle: user.id, other: obstacle, pos: contactPoint(user, crash.own), hits: [], selfHits });
+  }
 }
 
 function armedOn(v: Vehicle, crash: ClaymoreCrash): PartInstance[] {
@@ -48,17 +65,24 @@ function armedOn(v: Vehicle, crash: ClaymoreCrash): PartInstance[] {
 // The blast hits the other truck around the contact point and the user's struck lanes, where the ram soaks first.
 // The blast on the other truck is the user's attack and carries kill credit. The self damage is owned by nobody.
 function detonate(world: World, user: Vehicle, other: Vehicle, part: PartInstance, crash: ClaymoreCrash): void {
+  if (!crash.theirs) throw new Error('A truck crash has no contact on the other truck');
   const c = claymoreOf(part);
-  const charge = chargeOf(part);
-  delete charge.armed;
-  charge.reload = wornReload(part);
   const calm = !isHostile(world, other, user);
   const pos = contactPoint(other, crash.theirs);
   const hits = blastTruck(world, other, pos, c.blast.radius, blastRound(c.blast), null);
-  const selfHits = crash.own.lanes.flatMap((lane) => walkLane(world, user, crash.own.side, lane, blastRound(c.selfBlast)));
+  const selfHits = spend(world, user, part, crash);
   if (hits.length > 0) other.lastHitBy = user.id;
   noteAttack(world, user, other, calm);
   world.events.push({ t: 'claymore', vehicle: user.id, other: other.id, pos, hits, selfHits });
+}
+
+// The charge goes off: the ram starts its reload, and the blast walks the user's struck lanes.
+function spend(world: World, user: Vehicle, part: PartInstance, crash: ClaymoreCrash): PartHit[] {
+  const charge = chargeOf(part);
+  delete charge.armed;
+  charge.reload = wornReload(part);
+  const self = blastRound(claymoreOf(part).selfBlast);
+  return crash.own.lanes.flatMap((lane) => walkLane(world, user, crash.own.side, lane, self));
 }
 
 function blastRound(b: { damage: number; pen: number }): Round {

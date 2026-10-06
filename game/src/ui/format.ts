@@ -25,7 +25,7 @@ import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -629,10 +629,17 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
 }
 
+const OBSTACLE_NAMES: Record<Obstacle['kind'], string> = { rock: 'a rock', wreck: 'a wreck', building: 'a building', water: 'the water', site: 'a structure', landmark: 'a landmark' };
+
 // A claymore ram blast the player set off, one that hit the player, or a seen one between other trucks. The line
 // lists the blasted truck's damage. The ram's owner sees its own damage on its truck.
 function claymoreText(world: World, e: Extract<GameEvent, { t: 'claymore' }>): LogLine {
   const me = world.player.vehicleId;
+  const obstacle = world.obstacles.find((o) => o.id === e.other);
+  if (obstacle) {
+    const who = e.vehicle === me ? 'Your' : `${vehicleName(world, e.vehicle)}'s`;
+    return spanLine(e.vehicle === me ? 'bad' : 'dim', [{ text: `${who} claymore ram blows up against ${OBSTACLE_NAMES[obstacle.kind]}`, cls: '' }, ...damageSpans(world, e.vehicle, e.selfHits)]);
+  }
   const [who, whom, cls] =
     e.vehicle === me ? ['Your', vehicleName(world, e.other), 'good']
     : e.other === me ? [`${vehicleName(world, e.vehicle)}'s`, 'your truck', 'bad']

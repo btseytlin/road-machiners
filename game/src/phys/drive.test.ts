@@ -82,21 +82,35 @@ describe('impact geometry', () => {
     }
   });
 
-  // A truck driven nose first into the side of one parked across its path, at 7 tiles per turn.
-  function noseRam(arm: boolean): World {
+  // A truck with a claymore ram on its front, armed or not, driven nose first at 7 tiles per turn into the side of a
+  // truck parked across its path, or into a rock.
+  function noseRam(arm: boolean, into: 'truck' | 'rock' = 'truck'): World {
     let w = emptyWorld();
     w.vehicles[0].speed = 7;
     w.vehicles[0].heading = 0;
-    if (arm) {
-      w.vehicles[0].items = w.vehicles[0].items.filter((i) => !(i.kind === 'part' && i.part.defId === 'cage'));
-      const ram = makePart(w, 'claymoreRam', 0);
-      if (!mountPart(w, w.vehicles[0], ram)) throw new Error('No front mount for the claymore ram');
-      ram.charge = { reload: 0, armed: true };
-    }
-    const parked = addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2);
-    parked.brain = npcBrain('trader', parked.pos, ['trader']);
+    w.vehicles[0].items = w.vehicles[0].items.filter((i) => !(i.kind === 'part' && i.part.defId === 'cage'));
+    const ram = makePart(w, 'claymoreRam', 0);
+    if (!mountPart(w, w.vehicles[0], ram)) throw new Error('No front mount for the claymore ram');
+    ram.charge = arm ? { reload: 0, armed: true } : { reload: 0 };
+    if (into === 'rock') w.obstacles = [{ id: 'rock1', pos: { x: 37, y: 30 }, r: 0.8, kind: 'rock' }];
+    else addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2).brain = npcBrain('trader', { x: 37, y: 30 }, ['trader']);
     w = setDirect(w, true);
     return setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
+  }
+
+  // n turns of w through the real pipeline: the world after them and the ids each claymore blast went off against.
+  function ramTurns(w: World, n: number): { w: World; blasts: string[] } {
+    let d = buildDrive(w);
+    const blasts: string[] = [];
+    for (let i = 0; i < n; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      blasts.push(...w.events.flatMap((e) => (e.t === 'claymore' ? [e.other] : [])));
+      freeDrive(d);
+      d = next!;
+    }
+    freeDrive(d);
+    return { w, blasts };
   }
 
   // The trucks touch through several collider pairs in one step. The first read was once a side graze at no closing
@@ -119,18 +133,44 @@ describe('impact geometry', () => {
   });
 
   it('blows an armed claymore ram in a nose ram', () => {
-    let w = noseRam(true);
-    let d = buildDrive(w);
-    const blasts: string[] = [];
-    for (let i = 0; i < 2; i++) {
-      let next: Drive | null = null;
-      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
-      blasts.push(...w.events.flatMap((e) => (e.t === 'claymore' ? [e.other] : [])));
-      freeDrive(d);
-      d = next!;
-    }
-    freeDrive(d);
+    const { w, blasts } = ramTurns(noseRam(true), 2);
     expect(blasts).toEqual([w.vehicles[1].id]);
+  });
+
+  // The ram's gap to the truck it hit 12 steps after the crash, and the lowest up vector y of both trucks over the turn.
+  function afterRam(arm: boolean): { gap: number; lowestUp: number } {
+    const w = noseRam(arm);
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    try {
+      const [a, b] = w.vehicles.map((v) => r.frames[v.id]);
+      const i = Math.min(a.length - 1, r.crashes[0].step + 12);
+      return { gap: Math.hypot(a[i].pos.x - b[i].pos.x, a[i].pos.z - b[i].pos.z), lowestUp: Math.min(...[...a, ...b].map((f) => upOf(f.rot))) };
+    } finally {
+      freeDrive(r.next);
+      freeDrive(d);
+    }
+  }
+
+  it('throws both trucks apart in a claymore blast, without rolling either', () => {
+    const plain = afterRam(false);
+    const blown = afterRam(true);
+    expect(blown.gap).toBeGreaterThan(plain.gap + 3);
+    expect(blown.lowestUp).toBeGreaterThan(0.5);
+  });
+
+  it('throws each truck back from the other over the next turns', () => {
+    const plain = ramTurns(noseRam(false), 2).w;
+    const blown = ramTurns(noseRam(true), 2).w;
+    expect(blown.vehicles[0].pos.x).toBeLessThan(plain.vehicles[0].pos.x - 1.5);
+    expect(blown.vehicles[1].pos.x).toBeGreaterThan(plain.vehicles[1].pos.x + 1);
+  });
+
+  it('blows an armed claymore ram against a rock, even when the crash breaks the ram, and throws the truck back', () => {
+    const plain = ramTurns(noseRam(false, 'rock'), 2).w;
+    const blown = ramTurns(noseRam(true, 'rock'), 2);
+    expect(blown.blasts).toEqual(['rock1']);
+    expect(blown.w.vehicles[0].pos.x).toBeLessThan(plain.vehicles[0].pos.x - 1.5);
   });
 });
 

@@ -4,7 +4,7 @@ import { addVehicle, emptyWorld } from "../sim/testkit";
 import type { GameEvent, ShotRound } from "../sim/types";
 import type { V3 } from "../phys/frames";
 import { BreakCues, type PartBreak, type ShotLike } from "./breakCues";
-import { CollisionCues, collisionSteps, playUtilitySounds, playVolley, type VolleyHost } from "./volley";
+import { CollisionCues, collisionSteps, playCrashes, playUtilitySounds, playVolley, type CombatHost, type VolleyHost } from "./volley";
 
 const hit = (a: string, b: string): GameEvent => ({ t: "collision", a, b, hitsA: [], hitsB: [] });
 const crash = (a: string, b: string, step: number) => ({ a, b, impact: 5, step }) as Crash;
@@ -48,6 +48,31 @@ describe("collisionSteps with claymore blasts", () => {
 
   it("throws on a blast that follows no crash of its trucks", () => {
     expect(() => collisionSteps([hit("a", "c"), blast("a", "b")], { ...none, crashes: [crash("a", "c", 3)] })).toThrow(/follows no crash/);
+  });
+});
+
+describe("playCrashes with claymore blasts", () => {
+  const blast = (other: string): GameEvent => ({ t: "claymore", vehicle: "a", other, pos: { x: 30, y: 30 }, hits: [], selfHits: [] });
+
+  // The fx and sounds one blast plays, with these trucks seen.
+  function played(e: GameEvent, seen: string[]): string[] {
+    const out: string[] = [];
+    const host = {
+      world: emptyWorld(),
+      fx: { claymoreBlast: () => out.push("fx"), crash: () => out.push("crash") },
+      sound: { at: (cue: string) => out.push(cue) },
+      eventPoint: (id: string) => (seen.includes(id) ? { x: 0, y: 0, z: 0 } : null),
+    } as unknown as CombatHost;
+    playCrashes(host, new CollisionCues([{ event: e as never, step: null }]), null);
+    return out;
+  }
+
+  it("shows a blast against an obstacle when its truck is seen", () => {
+    expect(played(blast("rock1"), ["a"])).toEqual(["fx", "explosion"]);
+  });
+
+  it("shows no blast when neither truck in it is seen", () => {
+    expect(played(blast("b"), [])).toEqual([]);
   });
 });
 

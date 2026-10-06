@@ -100,12 +100,16 @@ function playCrash(host: CombatHost, e: CollisionEvent): void {
   host.sound.at("crash", p, 0);
 }
 
+// The blast shows at its point when either truck in it is seen, also when it went off against an obstacle.
 function playBlast(host: CombatHost, e: ClaymoreEvent): void {
-  const p = host.eventPoint(e.other);
-  if (!p) return;
-  host.fx.explode(p);
+  if (!host.eventPoint(e.vehicle) && !host.eventPoint(e.other)) return;
+  const g = groundPoint(host.world.terrain, e.pos);
+  const p = { x: g.x, y: g.y + BLAST_HEIGHT, z: g.z };
+  host.fx.claymoreBlast(p);
   host.sound.at("explosion", p, 0);
 }
+
+const BLAST_HEIGHT = 1; // meters above the ground the claymore's fireball centers, about a ram's middle
 
 // A seen gun that fired its last round with no volley shown clunks as the band ends. Played guns clunk with their last round.
 export function playDryGuns(host: CombatHost, played: Set<string>): void {

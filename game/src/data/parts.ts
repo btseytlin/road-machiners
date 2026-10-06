@@ -86,6 +86,9 @@ export type ClaymoreDef = {
   minImpact: number;
   blast: { damage: number; pen: number; radius: number };
   selfBlast: { damage: number; pen: number };
+  // The blast throws the two trucks apart, or the user back off an obstacle: impulse in N·s on each truck, and the
+  // share of it that points up.
+  throw: { impulse: number; lift: number };
   reload: number;
 };
 

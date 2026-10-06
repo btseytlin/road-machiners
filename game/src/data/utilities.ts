@@ -186,6 +186,7 @@ export const CLAYMORE: ClaymoreDef = {
   minImpact: 3, // tiles per turn
   blast: { damage: 60, pen: 12, radius: 2 }, // radius in meters
   selfBlast: { damage: 25, pen: 6 },
+  throw: { impulse: 40000, lift: 0.35 },
   reload: 20,
 };
 
