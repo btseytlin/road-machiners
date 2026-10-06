@@ -12,7 +12,7 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 - `npm run wiki` regenerates the tables in `docs/wiki/` from the code. A test fails when a table is stale or wiki prose names a data path or source file that no longer exists.
 - `npm run loadouts -- --rolls 60 [--template merc] [--level heavy]` rolls many NPC loadouts per template and prints the gear level mix, guns, armor cover, cab cover, gear value, mass and cargo value. It writes `tmp/loadouts.md`. A test keeps each template's averages inside the `targets` bands of its loadout table.
 - `npm run map:bake` builds the map from `MAPGEN.seed` in `src/data/terrain.ts` and writes `public/maps/icarus.bin`. It also writes a whole-map picture and close-ups to `tmp/map/`. A save made on another map does not load. Boot then offers to carry the player over, as [Saves](architecture/saves.md) describes, so a new map file needs no major save bump.
-- `npm run perf -- --url <dev server>` boots the game in Chromium with the Metal GPU and times boot, turns, move previews, frames and the per-frame work of automatic travel. It fails on any miss against `scripts/perf-budgets.json`.
+- `npm run perf -- --url <dev server>` boots the game in Chromium with the Metal GPU and times boot, turns, move previews, frames over the towns by day and at night, and the per-frame work of automatic travel. It fails on any miss against `scripts/perf-budgets.json`.
 - `npm run sfx:board` opens the dev sound board for auditioning every cue.
 - `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
 - `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits.
