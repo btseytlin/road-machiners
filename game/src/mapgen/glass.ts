@@ -8,7 +8,8 @@ import type { BuildingGroup, GlassRules, TerritoryRules, WreckRules } from '../d
 import { noiseAt } from '../sim/elevation';
 import { randInt, randRange, type Rng } from '../sim/rng';
 import { siteGap } from '../sim/sites';
-import type { BakedProp, PropKind } from '../sim/terrain';
+import { tableOfKind } from '../sim/territory';
+import type { BakedProp } from '../sim/terrain';
 import { dist, lerp, type Vec } from '../sim/vec';
 import type { MapDraft } from './bake';
 import { touchedTiles } from './farm';
@@ -66,8 +67,7 @@ function buildingGroups(rules: TerritoryRules): BuildingGroup[] {
 // Spires drawn inside the territory, each wholly on glass tiles, clear of every prop, and the debris gap from every
 // loot spot so a truck can still park beside one.
 function placeSpires(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, glass: GlassRules, rng: Rng): void {
-  const looks = spotLooks(rules);
-  const spots = d.props.filter((p) => looks.has(p.kind) && siteGap(t, p.pos) < 0);
+  const spots = d.props.filter((p) => tableOfKind(rules, p.kind) !== null && siteGap(t, p.pos) < 0);
   const pick = (): Vec => {
     const a = randRange(rng, 0, Math.PI * 2);
     const r = t.radius * Math.sqrt(randRange(rng, 0, 1));
@@ -76,15 +76,4 @@ function placeSpires(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, glass:
   const onGlass = (pos: Vec, r: number): boolean => touchedTiles(d.size, pos, r).every((tile) => d.built[tile] === BUILT_GLASS);
   const ok = (pos: Vec, r: number): boolean => siteGap(t, pos) < -r && onGlass(pos, r) && clearOf(d.props, pos, r, 0) && clearOf(spots, pos, r, rules.debrisGap);
   for (let i = 0; i < glass.spires.count; i++) d.props.push(draw({ d, t, rules, rng }, glass.spires.look, 'on its glass', pick, glass.spires.radius, ok));
-}
-
-// The looks whose props inside the territory are its loot spots, as src/sim/territory.ts reads them: a wreck's caches
-// and field spots when it has any, and every building group's look.
-function spotLooks(rules: TerritoryRules): Set<PropKind> {
-  return new Set([...(rules.wreck ? wreckSpotLooks(rules.wreck) : []), ...buildingGroups(rules).map((g) => g.look)]);
-}
-
-function wreckSpotLooks(wreck: WreckRules): PropKind[] {
-  const caches = wreck.caches.length > 0 ? [wreck.cacheLook] : [];
-  return wreck.patches.some((p) => p.spots > 0) ? [...caches, wreck.spotLook] : caches;
 }

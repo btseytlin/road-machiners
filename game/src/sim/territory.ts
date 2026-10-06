@@ -37,7 +37,8 @@ function spotTableAt(kind: string, pos: Vec): SpotTable | null {
   return t ? tableOfKind(TERRITORIES[t.id], kind) : null;
 }
 
-function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
+// The table a prop of this kind rolls as a loot spot under these rules, or null when it is none.
+export function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
   const fromWreck = rules.wreck ? wreckTableOfKind(rules.wreck, kind) : null;
   return fromWreck ?? rules.farm?.buildings.find((b) => b.look === kind)?.table ?? null;
 }
