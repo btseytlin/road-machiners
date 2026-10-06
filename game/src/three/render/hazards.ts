@@ -293,7 +293,7 @@ const SMOKE_LOOK = {
 };
 // The mortar's shell: a dark round with a gray smoke trail on a low arc.
 const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
-const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.5, radius: 0.15, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
+const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
 const RIM_SAMPLES = 8; // rim points checked for sight, besides the center
 
 type Puff = { sprite: THREE.Sprite; home: THREE.Vector3; size: number; opacity: number; seed: number };
