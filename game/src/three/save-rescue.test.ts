@@ -117,6 +117,39 @@ describe('rescueSave', () => {
     expect(storage.getItem('roam.save')).toBeNull();
   });
 
+  it('carries valid world settings over to the new world and its save', () => {
+    const storage = makeStorage();
+    const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
+    save.world.mapHash = 'other';
+    save.world.setup = { mode: 'roaming', settings: { damage: 1.5, fuelUse: 2, supplyUse: 0.75 } };
+    storage.setItem('roam.save', JSON.stringify(save));
+    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
+
+    expect(rescued.report.settingsReset).toEqual([]);
+    expect(loadWorld(storage, 'auto', TEST_MAP)!.setup).toEqual(save.world.setup);
+  });
+
+  it('resets bad world settings to their defaults, keeps the good ones and reports each reset', () => {
+    const storage = makeStorage();
+    const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
+    save.world.setup = { mode: 'roaming', settings: { damage: null, fuelUse: 1.5, supplyUse: 40 } };
+    storage.setItem('roam.save', JSON.stringify(save));
+    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
+
+    expect(rescued.report.settingsReset).toEqual(['damage', 'supplyUse']);
+    expect(loadWorld(storage, 'auto', TEST_MAP)!.setup.settings).toEqual({ damage: 1, fuelUse: 1.5, supplyUse: 1 });
+  });
+
+  it('gives a save from before world settings the default Roaming setup and reports no reset', () => {
+    const storage = makeStorage();
+    storage.setItem('roam.save', JSON.stringify({ format: { major: 2, minor: 1 }, world: FORMAT_2_1 }));
+    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
+
+    expect(rescued.world.setup).toEqual(defaultSetup('roaming'));
+    expect(rescued.report.settingsReset).toEqual([]);
+  });
+
   it('gives nothing for an unparsable or non-object save', () => {
     const storage = makeStorage();
     expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();

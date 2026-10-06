@@ -3,6 +3,7 @@
 import { CONFIRM_NEW_GAME } from "./save-screen";
 import type { BootRequest } from "../three/save-slots";
 import { el, panel, topRight } from "./dom";
+import { defaultSetup } from "../sim/settings";
 import { SavePanel, type SavePanelActions } from "./save-panel";
 
 export type GameMenuActions = SavePanelActions & {
@@ -11,8 +12,8 @@ export type GameMenuActions = SavePanelActions & {
 };
 
 // A new game is a page reload with a boot request. Boot deletes the autosaves and keeps the manual slots.
-export function startNewGame(requestBoot: (request: "new") => void): void {
-  requestBoot("new");
+export function startNewGame(requestBoot: (request: BootRequest) => void): void {
+  requestBoot({ new: defaultSetup("roaming") });
   window.location.reload();
 }
 

@@ -15,7 +15,7 @@ import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
 import { newGameShape } from '../test/save-shape';
-import { defaultSetup } from '../sim/settings';
+import { defaultSetup, parseSetup } from '../sim/settings';
 
 const SLOTS = allSlots(3);
 
@@ -329,6 +329,51 @@ describe('local game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     storage.setItem('roam.save', JSON.stringify(saveOf(world)));
     expect(loadWorld(storage, 'auto', TEST_MAP)).toEqual(world);
+  });
+});
+
+describe('saved world settings', () => {
+  const tuned = (damage: number, fuelUse: number) => parseSetup({ mode: 'roaming', settings: { damage, fuelUse, supplyUse: 1 } });
+
+  // A current save of a new world whose setup is replaced by `setup` as stored JSON.
+  function storedWith(setup: unknown): Storage {
+    const storage = makeStorage();
+    const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')))));
+    save.world.setup = setup;
+    if (setup === undefined) delete save.world.setup;
+    storage.setItem('roam.save', JSON.stringify(save));
+    return storage;
+  }
+
+  it('keeps each slot its own setup across a save and a load', () => {
+    const storage = makeStorage();
+    writeSave(storage, 'slot1', newWorld(1337, startKit('standard'), TEST_MAP, tuned(1.5, 2)), 1000);
+    writeSave(storage, 'slot2', newWorld(1337, startKit('standard'), TEST_MAP, tuned(0.5, 1)), 1000);
+
+    expect(loadWorld(storage, 'slot1', TEST_MAP)?.setup).toEqual(tuned(1.5, 2));
+    expect(loadWorld(storage, 'slot2', TEST_MAP)?.setup).toEqual(tuned(0.5, 1));
+  });
+
+  it('gives a save from format 2.13 the default Roaming setup, once', () => {
+    const storage = makeStorage();
+    const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)))));
+    delete save.world.setup;
+    storage.setItem('roam.save', JSON.stringify({ ...save, format: { major: SAVE_MAJOR, minor: 13 } }));
+    writeSave(storage, 'slot1', newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)), 1000);
+
+    expect(loadWorld(storage, 'auto', TEST_MAP)?.setup).toEqual(defaultSetup('roaming'));
+    expect(loadWorld(storage, 'slot1', TEST_MAP)?.setup).toEqual(tuned(2, 2));
+  });
+
+  it.each([
+    ['NaN, which JSON stores as null', { mode: 'roaming', settings: { damage: NaN, fuelUse: 1, supplyUse: 1 } }],
+    ['zero', { mode: 'roaming', settings: { damage: 1, fuelUse: 0, supplyUse: 1 } }],
+    ['a runaway value', { mode: 'roaming', settings: { damage: 10, fuelUse: 1, supplyUse: 1 } }],
+    ['an unknown mode', { mode: 'campaign', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } }],
+    ['no setup at the current format', undefined],
+  ])('rejects a save with %s as a save error', (_, setup) => {
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
   });
 });
 

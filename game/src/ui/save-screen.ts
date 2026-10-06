@@ -4,6 +4,8 @@
 import type { CarryReport } from '../sim/world';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
+import { WORLD_SETTINGS } from '../data/modes';
+import { percent } from '../sim/settings';
 import { el, panel } from './dom';
 
 export type SaveFate = 'migrate' | 'new';
@@ -62,5 +64,6 @@ function reportLines(report: CarryReport): string[] {
     ...(garage.length > 0 ? [`Moved to the garage: ${garage.join(', ')}`] : []),
     ...sold,
     ...(report.lost.length > 0 ? [`Lost, no longer in the game: ${report.lost.join(', ')}`] : []),
+    ...report.settingsReset.map((id) => `${WORLD_SETTINGS[id].name} was reset to ${percent(WORLD_SETTINGS[id].default)}`),
   ];
 }

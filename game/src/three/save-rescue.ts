@@ -79,7 +79,7 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
 
 const NO_CARRIED: Carried = {
   seed: null, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
-  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
+  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined,
 };
 
 // What a save holds of the player's progression. Never throws: anything of the wrong type reads as missing.
@@ -102,6 +102,7 @@ export function readCarried(raw: unknown): Carried {
     costBasis: countsOf(player.costBasis),
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
+    setup: world.setup, // carriedWorld() checks and repairs it
   };
 }
 

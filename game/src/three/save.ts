@@ -1,7 +1,8 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { BrokenProp, Obstacle, World } from '../sim/types';
+import type { BrokenProp, Obstacle, World, WorldSetup } from '../sim/types';
+import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
@@ -89,7 +90,16 @@ function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[]
 function savedWorld(save: unknown): Omit<World, 'terrain'> {
   const world = migratedWorld(save);
   if (!isWorld(world)) throw new SaveError('Invalid saved world');
-  return world;
+  return { ...world, setup: savedSetup(world.setup) };
+}
+
+// A save with bad world settings does not load, so a world never plays on NaN or runaway values. Rescue repairs them.
+function savedSetup(setup: unknown): WorldSetup {
+  try {
+    return parseSetup(setup);
+  } catch (err) {
+    throw new SaveError(`Invalid world settings: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // The saved world carried through every step from the save's minor format to the current one.

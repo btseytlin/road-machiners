@@ -34,7 +34,7 @@ function carriedOf(over: Partial<Carried> = {}): Carried {
   return {
     seed: 99, money: 777, xp: 340, ranks: { driving: 2, social: 1 }, xpBySource: { ram: 12 }, perks: [], discovered: [],
     knockouts: 2, autoFire: true, autoRepair: false, fuel: 5, supplies: 3, costBasis: { scrap: 8 },
-    truck: { chassisId: 'scout', name: 'Rusty', items: kitItems() }, storage: [], ...over,
+    truck: { chassisId: 'scout', name: 'Rusty', items: kitItems() }, storage: [], setup: undefined, ...over,
   };
 }
 
@@ -60,7 +60,7 @@ describe('carriedWorld', () => {
     expect(truck.items.filter((it) => it.kind === 'good').length).toBe(4);
     expect(world.player.costBasis).toEqual({ scrap: 8 });
     expect(getLayoutError(truck, truck.items)).toBeNull();
-    expect(report).toEqual({ toGarage: [], sold: [], lost: [] });
+    expect(report).toEqual({ toGarage: [], sold: [], lost: [], settingsReset: [] });
   });
 
   it('sends a part with an invalid spot to the garage', () => {
