@@ -16,6 +16,7 @@ function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
   return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+    wasted: { cost: 4.25, tokens: { input: 400000, output: 50000, cacheRead: 0, cacheWrite: 0 } },
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
     buckets: [...(days > 1 ? [{ start: yesterday, cost: 2, tokens: null, stages: { design: { cost: 2, tokens: 0 } }, models: { unattributed: { cost: 2, tokens: 0 } } }] : []),
       { start: now.slice(0, days > 1 ? 10 : 13), cost: 14.5, tokens, stages: { design: { cost: 9.5, tokens: 1000000 }, verify: { cost: 5, tokens: 600000 } }, models: { 'claude-opus-5-5': { cost: 7.25, tokens: 850000 }, 'claude-sonnet-5-5': { cost: 7.25, tokens: 750000 } } }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
@@ -87,10 +88,10 @@ async function checkReleaseAndManager(page) {
   assert.equal(await page.locator('#connection').textContent(), 'Live');
   const waiting = structuredClone(fixture);
   waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
-  waiting.live.value.workers[0].milestone = 'validating';
+  waiting.live.value.workers[0].milestone = 'Building orchard buildings';
   await sendSnapshot(page, waiting);
   assert.match(await page.locator('#manager-action').textContent(), /Waiting for model, 16m in phase/);
-  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /Checking changes/);
+  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /^Building orchard buildings: /);
   waiting.live.value.workers[0].status = 'stale';
   await sendSnapshot(page, waiting);
   assert.equal(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), 'Activity stale');
@@ -154,6 +155,8 @@ async function checkCounters(page) {
   assert.equal(await page.locator('.token-counter.panel').count(), 1);
   assert.equal(await page.locator('.token-counter .panel').count(), 0);
   assert.deepEqual(await page.locator('.token-counter .counter span').allTextContents(), ['Total tokens', 'Input incl. cache', 'Output']);
+  assert.equal(await page.locator('#usage-wasted-cost').textContent(), '$4.25');
+  assert.equal(await page.locator('#usage-wasted-tokens').textContent(), '450K tokens');
   assert.equal(await page.locator('#usage-input').textContent(), '1.3M');
   assert.equal(await page.locator('#usage-input').getAttribute('data-exact'), '1300000');
   assert.equal(await page.locator('#usage-output').textContent(), '300K');
@@ -273,6 +276,7 @@ async function checkUntrustedAndMissingData(page) {
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
+  assert.equal(await page.locator('#usage-wasted-cost').textContent(), '—');
   assert.equal(await page.locator('#usage-wait').textContent(), '—');
   assert.equal(await page.locator('#usage-input').textContent(), '—');
   assert.equal(await page.locator('#usage-output').textContent(), '—');

@@ -90,6 +90,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         return photos.map((_, i) => 110 + i);
       },
       editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
+      sendButtons: async (chat: string, text: string, buttons: unknown) => { calls.push(`buttons ${chat} ${text}`); photoButtons = buttons; return 120; },
     },
     container: {
       agent: async (run: AgentRun) => {
@@ -567,34 +568,26 @@ describe('testing stage evidence', () => {
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
   });
 
-  it('fails the stage on more than ten images and posts nothing', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, items(11), each(11))), 7)).rejects.toThrow('limit is 10');
-    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+  it.each<[string, (run: AgentRun) => void, string]>([
+    ['more than ten images', (run) => writeEvidence(run, items(11), each(11)), 'limit is 10'],
+    ['a location no image covers', (run) => writeEvidence(run, [yard, horn], [['Horn']]), 'No evidence image covers "Yard"'],
+    ['coverage of a feature the manifest does not list', (run) => writeEvidence(run, [yard], [['Salvage yard']]), 'by exact name'],
+    ['a duplicate image', (run) => { writeEvidence(run, [yard], [['Yard'], ['Yard']]); writeFileSync(`${run.clone}/${run.dir}/.factory/view1.png`, pngBytes(0)); }, 'duplicates'],
+    ['a missing image file', (run) => { writeEvidence(run, items(2), each(2)); rmSync(`${run.clone}/${run.dir}/.factory/view1.png`); }, 'does not exist'],
+    ['a manifest from an older commit', (run) => writeEvidence(run, [horn], [['Horn']], 'deadbee'), 'Capture the views again'],
+  ])('drops a manifest with %s, posts the one screenshot and says why on the issue', async (_name, write, reason) => {
+    await runStage(fakeCtx(write), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(albums).toEqual([]);
+    expect(commentBodies[0]).toContain('The evidence manifest was dropped');
+    expect(commentBodies[0]).toContain(reason);
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
   it.each([1, 2])('posts a location shown by %i genuine image(s), with no minimum count', async (count) => {
     await runStage(fakeCtx((run) => writeEvidence(run, [yard], Array.from({ length: count }, () => ['Yard']))), 7);
     expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
-  });
-
-  it('rejects a location no image covers and posts nothing', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard, horn], [['Horn']])), 7)).rejects.toThrow('No evidence image covers "Yard"');
-    expect(calls).not.toContain('move 7 Approval');
-  });
-
-  it('rejects an image that claims coverage of a feature the manifest does not list', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Salvage yard']])), 7)).rejects.toThrow('by exact name');
-    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
-  });
-
-  it('rejects a duplicate image for a location and posts nothing', async () => {
-    const ctx = fakeCtx((run) => {
-      writeEvidence(run, [yard], [['Yard'], ['Yard']]);
-      writeFileSync(`${run.clone}/${run.dir}/.factory/view1.png`, pngBytes(0));
-    });
-    await expect(runStage(ctx, 7)).rejects.toThrow('duplicates');
-    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
   });
 
   it('runs the fresh-clone checks before it posts a one-image location', async () => {
@@ -606,21 +599,6 @@ describe('testing stage evidence', () => {
   it('posts nothing when the fresh-clone checks fail twice, whatever the evidence', async () => {
     await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard']]), 2), 7)).rejects.toThrow('checks failed twice');
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
-    expect(calls).not.toContain('move 7 Approval');
-  });
-
-  it('fails the stage when an image file is missing', async () => {
-    const ctx = fakeCtx((run) => {
-      writeEvidence(run, items(2), each(2));
-      rmSync(`${run.clone}/${run.dir}/.factory/view1.png`);
-    });
-    await expect(runStage(ctx, 7)).rejects.toThrow('does not exist');
-  });
-
-  it('requires evidence from the final head, so a fix round that changed code must capture again', async () => {
-    let round = 0;
-    const ctx = fakeCtx((run) => writeEvidence(run, [horn], [['Horn']], round++ === 0 ? 'abc1234' : 'deadbee'), 1);
-    await expect(runStage(ctx, 7)).rejects.toThrow('Capture the views again');
     expect(calls).not.toContain('move 7 Approval');
   });
 
@@ -746,19 +724,9 @@ describe('visual review of the candidate', () => {
     expect(calls.at(-1)).toBe('move 7 Design');
   });
 
-  it('makes the agent repair a tune-sized mismatch itself instead of sending the card back', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, wrongOil('tune'))), 7)).rejects.toThrow('lists only tune-sized mismatches');
-    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
-    expect(posted()).toBe(false);
-  });
-
   it('sends a tune mismatch that two repair rounds did not fix to Implementation', async () => {
     await runStage(fakeCtx((run) => capture(run, wrongOil('tune', 2))), 7);
     expect(calls.at(-1)).toBe('move 7 Implementation');
-  });
-
-  it('refuses more repair rounds than the limit', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { repairs: 3 })), 7)).rejects.toThrow('the limit is 2');
   });
 
   it('caps the send-backs of a card, then fails with the report and no move', async () => {
@@ -778,21 +746,6 @@ describe('visual review of the candidate', () => {
     expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
-  it('regenerates and re-inspects the evidence of the final head: a reading of an older image fails', async () => {
-    const stale = (run: AgentRun): void => {
-      capture(run);
-      const out = `${run.clone}/${run.dir}/.factory`;
-      writeFileSync(`${out}/screenshot.png`, pngBytes(99));
-      writeFileSync(`${out}/view1.png`, pngBytes(98));
-    };
-    await expect(runStage(fakeCtx(stale), 7)).rejects.toThrow('read an older screenshot.png');
-    expect(posted()).toBe(false);
-  });
-
-  it('fails when the reading is from an older commit', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { commit: 'deadbee' })), 7)).rejects.toThrow('visual-review.json is from commit deadbee');
-  });
-
   it('inspects again after a check-fix round and sends a now-wrong candidate back, with no post', async () => {
     let round = 0;
     await runStage(fakeCtx((run) => capture(run, round++ === 0 ? {} : wrongOil('rebuild')), 1), 7);
@@ -802,38 +755,22 @@ describe('visual review of the candidate', () => {
     expect(state().testPhase).toEqual({});
   });
 
-  it('fails safely, with a diagnostic and no post, when the agent wrote no reading', async () => {
-    await expect(runStage(fakeCtx((run) => { capture(run); rmSync(`${run.clone}/${run.dir}/.factory/visual-review.json`); }), 7)).rejects.toThrow('wrote no .factory/visual-review.json');
-    expect(posted()).toBe(false);
-    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
-  });
-
-  it('fails safely when an image is unreadable', async () => {
-    const run = (r: AgentRun): void => {
-      writeOutputs(r, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: true, images: [{ file: 'screenshot.png', sha256: 'x', observations: 'The truck sits on sand.', verdict: 'correct' }], decisions: [{ verdict: 'correct', notes: 'It fits the issue and the docs.' }] });
-    };
-    await expect(runStage(fakeCtx(run), 7)).rejects.toThrow('The image screenshot.png cannot be inspected');
-    expect(posted()).toBe(false);
-  });
-
-  it.each([
-    ['a missing image reading', { images: [] }, 'has no reading of the shown image screenshot.png'],
-    ['a missing feature decision', { decisions: [] }, 'no decision for the feature "Oil patch"'],
-    ['a thin note', { decisions: [{ feature: 'Oil patch', verdict: 'correct', notes: 'ok' }] }, 'at least 20 characters'],
-    ['a wrong verdict with no mismatch', { decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle.' }] }, 'lists no mismatch'],
-    ['a made-up verdict', { decisions: [{ feature: 'Oil patch', verdict: 'fine', notes: 'The oil looks fine to me.' }] }, 'verdict of correct or wrong'],
-  ])('refuses %s', async (_name, review, message) => {
-    await expect(runStage(fakeCtx((run) => capture(run, review)), 7)).rejects.toThrow(message);
-    expect(posted()).toBe(false);
-  });
-
-  it('refuses the nonvisual exemption when the manifest lists visible features', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { visual: false, reason: 'Nothing changed on screen at all.' })), 7)).rejects.toThrow('lists visible features (Oil patch)');
-    expect(posted()).toBe(false);
-  });
-
-  it('refuses the nonvisual exemption without a reason', async () => {
-    await expect(runStage(fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: false })), 7)).rejects.toThrow('without a "reason"');
+  it.each<[string, (run: AgentRun) => void]>([
+    ['only tune-sized mismatches and repair rounds left', (run) => capture(run, wrongOil('tune'))],
+    ['more repair rounds than the limit', (run) => capture(run, { repairs: 3 })],
+    ['a reading of an older image', (run) => { capture(run); writeFileSync(`${run.clone}/${run.dir}/.factory/screenshot.png`, pngBytes(99)); }],
+    ['a reading from an older commit', (run) => capture(run, { commit: 'deadbee' })],
+    ['no reading at all', (run) => { capture(run); rmSync(`${run.clone}/${run.dir}/.factory/visual-review.json`); }],
+    ['a missing image reading', (run) => capture(run, { images: [] })],
+    ['a missing feature decision', (run) => capture(run, { decisions: [] })],
+    ['a thin note', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'correct', notes: 'ok' }] })],
+    ['a wrong verdict with no mismatch', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle.' }] })],
+    ['a made-up verdict', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'fine', notes: 'The oil looks fine to me.' }] })],
+    ['the nonvisual exemption while the manifest lists visible features', (run) => capture(run, { visual: false, reason: 'Nothing changed on screen at all.' })],
+  ])('ignores a visual review with %s, and the card goes on to its post', async (_name, write) => {
+    await runStage(fakeCtx(write), 7);
+    expect(posted()).toBe(true);
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
   it('keeps a nonvisual task viable on its stated reason, with no images read', async () => {
@@ -855,5 +792,43 @@ describe('visual review of the candidate', () => {
     writeState(`${home}/state.json`, { ...state(), approvedResolving: { 7: 'Ann' } });
     await runStage(fakeCtx(() => undefined), 7);
     expect(readState(`${home}/state.json`).pendingApprovals).toEqual({ 7: 'Ann' });
+  });
+});
+
+describe('a round with no screenshot', () => {
+  const APPROVAL = JSON.stringify({ description: 'Salvage yard fights.', howToTry: 'Drive to the yard.' });
+  // The agent leaves an approval and no image at all.
+  const approvalOnly = (run: AgentRun): void => writeFileSync(`${run.clone}/${run.dir}/.factory/approval.json`, APPROVAL);
+
+  it('lets verify accept an approval with no screenshot, evidence or visual review and moves on to the checks', async () => {
+    await runVerify(fakeCtx(approvalOnly), 7);
+    expect(readState(`${home}/state.json`).testPhase).toEqual({ 7: 'checks' });
+    expect(calls).not.toContain('checks');
+  });
+
+  it('runs the same checks, then posts a text approval with buttons, a warning and normal routing', async () => {
+    await runStage(fakeCtx(approvalOnly), 7);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(shellScript).toContain('npm run playtest -- --cpu');
+    expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+    const text = calls.find((call) => call.startsWith('buttons')) ?? '';
+    expect(text).toContain('No screenshot. Judge it by playing.');
+    expect(text).toContain('Play: https://play.test/abc123/');
+    expect(text).toContain('Reply to this post to ask a question or ask for a change.');
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
+    expect(commentBodies[0]).toContain('The testing agent wrote no .factory/screenshot.png.');
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 120: 7 });
+    expect(state.textPosts).toEqual(['120']);
+    expect(state.postCaptions['120']).toBe(text.replace('buttons chat ', ''));
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('posts nothing when the checks fail', async () => {
+    await expect(runStage(fakeCtx(approvalOnly, 2), 7)).rejects.toThrow('The factory checks failed twice');
+    expect(calls.some((call) => call.startsWith('buttons') || call.startsWith('photo'))).toBe(false);
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
   });
 });

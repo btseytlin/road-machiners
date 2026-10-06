@@ -20,7 +20,7 @@ A `ready` issue may bundle other free Triage cards that touch the same code. Eac
 
 ## Design
 
-Design runs Opus with up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
+Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
 
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
 - `.factory/wont-do.md` closes the issue as wont-do.
@@ -40,7 +40,7 @@ Implementation runs Sonnet with up:uexecute on the task file. For a change a pla
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
 - Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
-- The post holds a screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons.
+- The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
 
 ## Approval
 
@@ -57,6 +57,8 @@ A rerun of design, implementation and testing costs hours, so a reply takes the 
 - answer: Hermes answers in the chat. The card and its post stay, and the question goes on the issue under "## Committee question".
 - patch: the card moves to Implementation, and `patching` keeps the commit of the played build. The patch job runs Sonnet with `prompts/patch.md`. It merges the base, applies the reply, checks only the diff since the played build and writes new approval text and evidence. Then the card goes to Testing in phase `checks`. An agent that finds the plan must change writes `.factory/needs-redesign.md`, and the card goes to Design.
 - redesign: the card goes to Design.
+
+Before a patch or a redesign queues, the plugin checks the issue as [process.md](process.md#committee-inputs) says. A refusal queues nothing and names what to get from the member.
 
 A patch or a redesign goes on the issue under "## Committee feedback", closes the post and drops a queued approval. Every route adds a line to the ledger.
 
