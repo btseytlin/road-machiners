@@ -1,21 +1,14 @@
-// Save, load and new game buttons. Save and Load open the slot panels. Load and new game reload the page, and boot reads the request they leave.
+// Save, load and new game buttons. Save and Load open the slot panels, and New game opens the New game screen. Load
+// and the New game screen reload the page, and boot reads the request they leave.
 
-import { CONFIRM_NEW_GAME } from "./save-screen";
-import type { BootRequest } from "../three/save-slots";
 import { el, panel, topRight } from "./dom";
-import { defaultSetup } from "../sim/settings";
+import { isNewGameOpen, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
 
 export type GameMenuActions = SavePanelActions & {
   hasSave: () => boolean;
-  requestBoot: (request: BootRequest) => void;
+  newGame: NewGameActions;
 };
-
-// A new game is a page reload with a boot request. Boot deletes the autosaves and keeps the manual slots.
-export function startNewGame(requestBoot: (request: BootRequest) => void): void {
-  requestBoot({ new: defaultSetup("roaming") });
-  window.location.reload();
-}
 
 export class GameMenu {
   private root = panel("game-menu", topRight());
@@ -31,7 +24,7 @@ export class GameMenu {
   }
 
   isPanelOpen(): boolean {
-    return this.savePanel.isOpen();
+    return this.savePanel.isOpen() || isNewGameOpen();
   }
 
   refresh(): void {
@@ -42,7 +35,6 @@ export class GameMenu {
   }
 
   private newGame(): void {
-    if (!window.confirm(CONFIRM_NEW_GAME)) return;
-    startNewGame(this.actions.requestBoot);
+    openNewGame(this.actions.newGame, () => this.refresh());
   }
 }

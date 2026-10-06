@@ -7,21 +7,16 @@ import { partDef } from '../data/parts';
 import { WORLD_SETTINGS } from '../data/modes';
 import { percent } from '../sim/settings';
 import { el, panel } from './dom';
+import { openNewGame, type NewGameActions } from './new-game';
 
-export type SaveFate = 'migrate' | 'new';
-
-export const CONFIRM_NEW_GAME = 'Start a new game? The autosaves are deleted. Your save slots stay.';
-
-// Shows the choice and resolves with the player's pick. New game asks first, and a no leaves the screen up.
-export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<SaveFate> {
+// Shows the choice and resolves when the player picks Migrate. New game opens the New game screen over it, whose Back
+// returns here and whose Start reloads into the new game.
+export function chooseSaveFate(reason: string, canMigrate: boolean, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
-    const done = (fate: SaveFate) => {
+    const migrate = () => {
       root.remove();
-      resolve(fate);
-    };
-    const confirmNew = () => {
-      if (window.confirm(CONFIRM_NEW_GAME)) done('new');
+      resolve();
     };
     root.append(
       el('div', {}, 'This update changed the world. Migrate keeps your skills, perks, money, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh.'),
@@ -29,8 +24,8 @@ export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<Sav
       el(
         'div',
         { class: 'death-buttons' },
-        el('button', { onclick: () => done('migrate'), disabled: !canMigrate }, 'Migrate save'),
-        el('button', { onclick: confirmNew }, 'New game'),
+        el('button', { onclick: migrate, disabled: !canMigrate }, 'Migrate save'),
+        el('button', { onclick: () => openNewGame(newGame, () => {}) }, 'New game'),
       ),
     );
     if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));

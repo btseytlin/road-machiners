@@ -20,13 +20,14 @@ import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
 import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
+import { browserNewGame } from '../ui/new-game';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
 import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, writeSave } from './save';
-import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
+import { newestSlot, requestBoot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
@@ -76,10 +77,11 @@ function newGameSaved(setup: WorldSetup): World {
   return world;
 }
 
+// Migrate carries the save over. New game opens the New game screen, whose Start reloads into the new game.
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
   const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun(defaultSetup('roaming'));
+  await chooseSaveFate(error.message, canMigrate, browserNewGame((request) => requestBoot(window.sessionStorage, SAVE_KEY, request)));
   const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);

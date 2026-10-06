@@ -2,6 +2,7 @@
 
 import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
+import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import { el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
@@ -148,6 +149,8 @@ export class Hud {
       el("summary", { title: "Driving and combat controls" }, "?"),
     );
     this.help.append(guide);
+    // The world setup stays for the page, since a new game reloads it.
+    const setup = setupLabel(this.actions.dialogue.world().setup);
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: string) =>
       el(
@@ -166,7 +169,7 @@ export class Hud {
         { title: "Report a bug or request a feature", "aria-label": "Report a bug or request a feature" },
         "!",
       ),
-      feedbackLink(bugReportUrl(versionLabel()), "Report a bug"),
+      feedbackLink(bugReportUrl(`${versionLabel()} · ${setup}`), "Report a bug"),
       feedbackLink(featureRequestUrl(), "Request a feature"),
     );
     this.feedback.append(feedbackMenu);
@@ -185,6 +188,7 @@ export class Hud {
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
+      el("div", { class: "version world-setup" }, setup),
     );
   }
 

@@ -4,6 +4,7 @@ import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, World, WorldSetup } from '../sim/types';
 import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
+import { browserNewGame } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
 import { allSlots, listSaves, manualSlots, requestBoot, slotKey, type BootRequest, type SlotId } from './save-slots';
@@ -216,6 +217,7 @@ export function saveStore(storage: Storage, session: Storage, world: () => World
     hasSave: () => hasSave(storage, allSlots(slotCount)),
     save: (slot: SlotId) => writeSave(storage, slot, world(), Date.now()),
     requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
+    newGame: browserNewGame((request) => requestBoot(session, SAVE_KEY, request)),
   };
 }
 
