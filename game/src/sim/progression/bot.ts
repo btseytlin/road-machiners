@@ -19,6 +19,7 @@ import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
 import { isTownGuarded } from '../guards';
+import { campGunning, nearestGate } from '../camp-guns';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
@@ -106,8 +107,20 @@ export function botOrders(world: World, archetype: Archetype, options: BotOption
 
 // A hold, a service stop and a fight each take the turn's command before the goal does.
 function act(o: Orders, goal: Goal): void {
-  if (holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
+  if (leaveCampGuns(o) || holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
   GOALS[goal](o);
+}
+
+// A camp's gate guns shoot every outsider in range and no fight there can be won, so a bot inside the range drives
+// straight out to the hunter's standoff distance, as a player would, unless a job holds the truck. True when it does.
+function leaveCampGuns(o: Orders): boolean {
+  const camp = campGunning(o.me, o.me.pos);
+  if (!camp || o.me.job) return false;
+  const gate = nearestGate(camp, o.me.pos);
+  const gap = Math.max(dist(gate, o.me.pos), 1e-6);
+  const out = { x: gate.x + ((o.me.pos.x - gate.x) / gap) * CAMP_STANDOFF, y: gate.y + ((o.me.pos.y - gate.y) / gap) * CAMP_STANDOFF };
+  driveTo(o, { x: clamp(out.x, 1, o.world.size - 1), y: clamp(out.y, 1, o.world.size - 1) });
+  return true;
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -661,7 +674,7 @@ function wantsBounty(world: World, c: Contract): boolean {
 function engageFoe(o: Orders): boolean {
   const seen = weakestFoe(o.world);
   if (seen) return engageSeen(o, seen);
-  const heard = heardFoe(o.world, (v) => huntable(o.world, v));
+  const heard = heardFoe(o.world, (v) => huntable(o.world, v) && !campGunning(o.me, v.pos));
   if (heard) driveTo(o, heard);
   return heard !== null;
 }
@@ -682,7 +695,7 @@ function huntable(world: World, foe: Vehicle): boolean {
 }
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe) || campGunning(o.me, foe.pos)) return false;
   setFire(o, true);
   aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);

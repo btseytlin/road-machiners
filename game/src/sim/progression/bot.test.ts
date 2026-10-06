@@ -13,7 +13,8 @@ import { freeCells, goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { playerSees } from '../vision';
-import { nearestPad, nearestTown } from '../sites';
+import { nearestPad, nearestTown, siteGates } from '../sites';
+import { RULES } from '../../data/rules';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
@@ -855,5 +856,42 @@ describe('the fast trader', () => {
     const after = playerVehicle(turn.world);
     expect(chassisDef(after.chassisId).maxSpeed).toBeGreaterThan(chassisDef(before.chassisId).maxSpeed);
     expect(mountedParts(after, 'armor').length).toBeLessThanOrEqual(armor);
+  });
+});
+
+describe('camp gate guns', () => {
+  const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
+  const gate = siteGates(kiln)[0];
+  // A point `d` tiles from the kiln gate, straight away from the camp center.
+  const outside = (d: number) => {
+    const len = Math.hypot(gate.x - kiln.pos.x, gate.y - kiln.pos.y);
+    return { x: gate.x + ((gate.x - kiln.pos.x) / len) * d, y: gate.y + ((gate.y - kiln.pos.y) / len) * d };
+  };
+
+  it('has a bot inside a camp gun range drive out of it', () => {
+    const w = emptyWorld(outside(3));
+    playerVehicle(w).speed = 0;
+
+    const order = playerVehicle(botOrders(w, 'hunter').world).order;
+
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(dist(order.dest, gate)).toBeGreaterThan(RULES.guards.range);
+  });
+
+  it('has a hunter leave alone a foe inside a camp gun range', () => {
+    const turnFacing = (at: number) => {
+      const w = emptyWorld(outside(RULES.guards.range + 12));
+      const me = playerVehicle(w);
+      me.speed = 0;
+      for (let i = 0; i < 4; i++) expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+      const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], outside(at));
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      return playerVehicle(botOrders(w, 'hunter').world).order;
+    };
+
+    const near = turnFacing(RULES.guards.range - 2);
+    const far = turnFacing(RULES.guards.range + 20);
+    expect(near?.kind === 'stopAt' && dist(near.dest, gate) <= RULES.guards.range).toBe(false);
+    expect(far).toEqual({ kind: 'stopAt', dest: outside(RULES.guards.range + 20) });
   });
 });
