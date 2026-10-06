@@ -134,7 +134,7 @@ export function playDryGuns(host: CombatHost, played: Set<string>): void {
 const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
 
 // Each active utility sounds as it is used: the mortar's tube and the flare cannon fire, the Sprout bursts its smoke,
-// caltrops clatter down and oil glugs out. The mortar's shell bursts its smoke where it lands and the flare bursts
+// caltrops clatter down and oil glugs out. The mortar's shell lands with the cannon's boom and the flare bursts
 // alight at its top, each when its flight in hazards.ts ends. An emitter pulse cracks, a truck on caltrops bursts a
 // tire and a torn harpoon line snaps. A claymore blast sounds as an explosion with its crash.
 const USE_CUES: Partial<Record<UtilityEffectType | "claymore", CueId>> = {
@@ -164,7 +164,7 @@ const EVENT_CUES: Partial<Record<GameEvent["t"], CueId>> = { pulse: "emitter-pul
 
 // Rounds that burst at their point when their flight ends.
 const BURSTS: Partial<Record<UtilityEffectType | "claymore", { cue: CueId; delayMs: number }>> = {
-  mortar: { cue: "smoke-burst", delayMs: SHELL.flightMs },
+  mortar: { cue: "cannon-fire", delayMs: SHELL.flightMs },
   flare: { cue: "flare-burst", delayMs: FLARE_LOOK.flightMs },
 };
 

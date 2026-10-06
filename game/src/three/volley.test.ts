@@ -117,11 +117,11 @@ describe("playUtilitySounds", () => {
     ]);
   });
 
-  it("bursts the mortar's smoke where it lands and the flare at its point, when each flight ends", () => {
+  it("booms the mortar's shell where it lands and bursts the flare at its point, when each flight ends", () => {
     const point = { x: 40, y: 30 };
     const ground = groundPoint(terrain, point);
     expect(played([use("a", "mortar", point), use("a", "flare", point)]).filter((s) => s.delayMs > 0)).toEqual([
-      { cue: "smoke-burst", p: ground, delayMs: SHELL.flightMs },
+      { cue: "cannon-fire", p: ground, delayMs: SHELL.flightMs },
       { cue: "flare-burst", p: ground, delayMs: FLARE_LOOK.flightMs },
     ]);
   });

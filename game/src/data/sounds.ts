@@ -76,7 +76,7 @@ const DEFS = {
   "harpoon-hook": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["A heavy barbed steel harpoon bolt slams into a truck's steel plate: a hard punching clank and a short metallic scrape."], seconds: 0.8 },
   "line-tear": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A thick steel tow cable under huge tension snaps: a sharp loud twang and whip, then the loose cable slapping on metal."], seconds: 1.2 },
 
-  // Other utilities. A smoke shell landing and a Sprout both play smoke-burst. Generated oil takes came out as bright
+  // Other utilities. A Sprout plays smoke-burst; a smoke shell lands with cannon-fire. Generated oil takes came out as bright
   // hiss; they are run through ffmpeg "asetrate=44100*0.8,aresample=44100,lowpass=f=3000,lowpass=f=3000,bass=g=4:f=150"
   // before import, so they glug.
   "mortar-fire": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A small smoke mortar fires from a truck deck: one deep hollow tube thoomp and a short metallic ring."], seconds: 1.2 },
