@@ -626,6 +626,24 @@ describe('the hunter', () => {
     expect(pointsAway(me.pos, order.dest, raider.pos)).toBe(true);
   });
 
+  // A hunter drove on toward a raider gunwagon it saw, and one tank gun shot at 9 tiles knocked it out.
+  it('has a bot turn away from a stronger raider in sight before any fight starts', () => {
+    const w = withPrey(emptyWorld({ x: 30, y: 30 }));
+    const me = playerVehicle(w);
+    const ahead = { x: me.pos.x + 12, y: me.pos.y };
+    me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
+    const raider = addVehicle(w, 'raiders', 'wagon', ['cannon', 'heavyDiesel'], ahead);
+    raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
+    expect([hostileToPlayer(w, raider), playerSees(w, raider.pos)]).toEqual([true, true]);
+
+    for (const archetype of ['hunter', 'trader'] as const) {
+      const order = playerVehicle(botOrders(w, archetype).world).order;
+
+      if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+      expect(pointsAway(me.pos, order.dest, raider.pos)).toBe(true);
+    }
+  });
+
   // A merc camps at the gate. Firing from town makes the guard shoot the bot, so it holds fire and repairs instead.
   it('has a bot at a town gate in combat hold its fire and repair', () => {
     const w = parkedAt('bowl');
@@ -799,7 +817,7 @@ describe('the hunter', () => {
     w.player.engineHeat = ENGINE_HEAT.warnAt + 0.05;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    expect(hostileToPlayer(w, raider) && playerSees(w, raider.pos)).toBe(true);
+    expect([hostileToPlayer(w, raider), playerSees(w, raider.pos)]).toEqual([true, true]);
 
     expect(playerVehicle(botOrders(w, 'trader').world).order).not.toBeNull();
   });

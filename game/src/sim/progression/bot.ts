@@ -775,7 +775,7 @@ function dangerOf(world: World, foe: Vehicle): number {
 // raider. A foe that drops out of sight for a turn is still on its tail, so the bot keeps running until the combat
 // ends. The hunter chases instead when it hears a foe it would hunt. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
-  if (!inCombat(o.world, o.me)) return false;
+  if (!inCombat(o.world, o.me)) return avoid(o, goal);
   const foe = weakestFoe(o.world);
   if (!foe) {
     if (!(goal === 'hunter' && engageFoe(o))) flee(o);
@@ -783,6 +783,17 @@ function defend(o: Orders, goal: Goal): boolean {
   }
   if (fights(o, foe, goal)) charge(o, foe, goal);
   else flee(o);
+  return true;
+}
+
+// Out of combat, the bot runs before the guns reach it when it would not fight even the weakest hostile in sight, as
+// an NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. A truck in
+// town, parked on a job or stranded does not run. True when the turn's command went to the run.
+function avoid(o: Orders, goal: Goal): boolean {
+  if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me)) return false;
+  const foe = weakestFoe(o.world);
+  if (!foe || fights(o, foe, goal)) return false;
+  flee(o);
   return true;
 }
 
