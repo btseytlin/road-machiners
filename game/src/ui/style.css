@@ -24,6 +24,8 @@ body {
   --metal: #33383b;
   --inspection-width: 300px;
   --inspection-height: 340px;
+  --log-width: 282px;
+  --right-column: max(calc(var(--inspection-width) + 14px), calc(var(--log-width) + 16px));
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -119,8 +121,6 @@ body {
 }
 
 #ui .instruments {
-  left: 14px;
-  bottom: 14px;
   padding: 5px 8px 5px 4px;
   display: grid;
   grid-template-columns: 66px auto;
@@ -373,9 +373,7 @@ body {
 }
 
 #ui .weapons {
-  left: 412px;
-  bottom: 14px;
-  max-width: calc(100vw - 542px);
+  min-width: 0;
   box-sizing: border-box;
   padding: 6px 8px 8px;
 }
@@ -396,6 +394,7 @@ body {
 .weapons fieldset {
   display: flex;
   align-items: stretch;
+  flex-wrap: wrap;
   gap: 6px;
   border: 0;
   margin: 0;
@@ -404,6 +403,7 @@ body {
 }
 .weapons .weapon-slots {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .weapons .weapon-slot {
@@ -517,7 +517,7 @@ body {
 #ui .log {
   right: 16px;
   bottom: 112px;
-  width: 282px;
+  width: var(--log-width);
   height: 122px;
   box-sizing: border-box;
   padding: 8px 10px;
@@ -864,10 +864,11 @@ body {
   > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .top-left {
+#ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .instruments,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
 }
@@ -1308,35 +1309,22 @@ body {
   background: #cc775555;
 }
 @media (max-width: 1100px) {
-  /* Room between the instruments and the narrower log. */
-  #ui .weapons {
-    max-width: calc(100vw - 644px);
-  }
-  #ui .log {
-    width: 246px;
-  }
-}
-@media (max-width: 900px) {
-  /* Too narrow beside the instruments, so the weapons sit above them. */
-  #ui .weapons {
-    left: 14px;
-    bottom: 224px;
-    max-width: calc(100vw - 30px);
+  #ui {
+    --log-width: 246px;
   }
 }
 @media (max-width: 720px) {
   .instrument-actions {
     flex-wrap: wrap;
   }
-  #ui .weapons {
-    bottom: 196px;
-    max-width: calc(100vw - 30px);
+  #ui {
+    --log-width: 200px;
+    --right-column: calc(var(--log-width) + 14px);
   }
   #ui .log {
     top: auto;
     bottom: 176px;
     right: 14px;
-    width: 200px;
     height: 80px;
   }
   .log-lines {
@@ -1432,6 +1420,26 @@ canvas.view {
 }
 #ui .top-left > .panel {
   position: static;
+}
+/* The instruments and the weapons sit side by side, and the weapons wrap above when they do not fit. */
+.bottom-left {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100vw - 22px - var(--right-column));
+}
+#ui .bottom-left > .panel {
+  position: static;
+}
+#ui .bottom-left > .instruments {
+  order: 0;
+}
+#ui .bottom-left > .weapons {
+  order: 1;
 }
 .top-right {
   position: absolute;

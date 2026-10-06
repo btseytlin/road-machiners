@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 
 const url = process.argv[2];
 if (!url) throw new Error('Usage: node scripts/ui-playtest.mjs <dev-server-url>');
-const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: process.env.CPU ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 
 function doRectsOverlap(a, b) {
   return a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
@@ -46,8 +46,8 @@ async function checkInstruments(page) {
   const { panel } = m;
   assert(m.clock.x >= panel.x && m.clock.right <= panel.right && m.clock.y >= panel.y && m.clock.bottom <= panel.bottom, 'Clock must lie inside the instruments');
   assert(m.clock.bottom <= m.dial.y && m.clock.bottom <= m.readouts.y, 'Clock must sit above the dial and readouts');
-  assert(/Day \d+ \d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
-  assert.equal(m.panelText.match(/Day \d+ \d+:\d\d/g).length, 1, 'Time must show once');
+  assert(/Day \d+\s+\d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
+  assert.equal(m.panelText.match(/Day \d+\s+\d+:\d\d/g).length, 1, 'Time must show once');
   assert(!m.actionsText.includes('broken'), 'No broken badge in the action row');
   assert(!/km\/h|·/.test(m.speedoText), 'No unit text under the dial');
   assert(m.heights.every(h => Math.abs(h - m.heights[0]) <= 1), `Action buttons must share one height: ${m.heights}`);
@@ -56,8 +56,74 @@ async function checkInstruments(page) {
   }
 }
 
+const DOCK_VIEWPORTS = [[1920, 1080], [1280, 720], [1280, 656], [1024, 656], [900, 656], [800, 656], [700, 800]];
+const DOCK_PANELS = ['.instruments', '.weapons', '.truck-condition', '.log', '.turn-control', '.info'];
+
+// Long weather, the Cool engine button, the most weapons a random truck mounts, and a hovered truck.
+async function loadHeavyHud(page) {
+  await page.evaluate(async () => {
+    const { runCommand } = await import('/src/ui/console.ts');
+    const game = window.__ROAM__;
+    const run = line => { const r = runCommand(game.state, line); if (r.world) game.apply(r.world); };
+    let best = 0;
+    for (let i = 0; i < 40 && best < 6; i++) {
+      run('randomkit 5');
+      best = Math.max(best, document.querySelectorAll('.weapon-pick').length);
+      if (document.querySelectorAll('.weapon-pick').length >= 6) break;
+    }
+    run('spawn buggy');
+    run('weather storm');
+    run('weather heatwave');
+    const world = structuredClone(game.state);
+    world.player.engineHeat = 0.5;
+    world.player.supplies = Math.max(world.player.supplies, 10);
+    game.apply(world);
+    const other = game.state.vehicles.find(v => v.id !== game.state.player.vehicleId);
+    game.hovered = other.id;
+    game.refreshInfo();
+    if (getComputedStyle(document.querySelector('.info')).display === 'none') {
+      game.hovered = game.state.player.vehicleId;
+      game.refreshInfo();
+    }
+    // Tips are transient, not panels.
+    document.head.append(Object.assign(document.createElement('style'), { textContent: '#ui .tip { display: none !important }' }));
+    return { other: other.id, seen: getComputedStyle(document.querySelector('.info')).display, hov: game.hovered };
+  }).then(r => console.log(JSON.stringify(r)));
+}
+
+function assertNoOverlaps(rects, width, height) {
+  const names = Object.keys(rects).filter(name => width > 720 || name !== '.info');
+  for (const a of names) {
+    for (const b of names.filter(name => name > a)) {
+      assert(!doRectsOverlap(rects[a], rects[b]), `${a} must not overlap ${b} at ${width}x${height}`);
+    }
+  }
+}
+
+async function checkDockLayout(page, [width, height]) {
+  await page.setViewportSize({ width, height });
+  const m = await page.evaluate(([selectors, narrow]) => {
+    // Narrow screens let the inspection panel cover the dock's top by design.
+    if (narrow) document.querySelector('.info').style.visibility = 'hidden';
+    const shown = node => node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden';
+    const rects = Object.fromEntries(selectors.map(selector => [selector, document.querySelector(selector)]).filter(([, node]) => shown(node)).map(([selector, node]) => [selector, node.getBoundingClientRect().toJSON()]));
+    const controls = [...document.querySelectorAll('.weapons button, .weapons .switch, .weapons .weapon-pick')].map(node => {
+      const r = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return { name: node.innerText.replace(/\s+/g, ' ').slice(0, 24), hit: hit?.className, ok: node.contains(hit) };
+    });
+    return { rects, controls };
+  }, [DOCK_PANELS, width <= 720]);
+  console.log(`${width}x${height}`, Object.entries(m.rects).map(([n, r]) => `${n}=${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
+  await page.screenshot({ path: `.playtest/dock-${width}x${height}.png`, timeout: 180000 });
+  assert(m.rects['.weapons'], `Weapons panel must show at ${width}x${height}`);
+  assertNoOverlaps(m.rects, width, height);
+  for (const c of m.controls) assert(c.ok, `Weapon control "${c.name}" must take the click at its center at ${width}x${height}, hit ${c.hit}`);
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  page.setDefaultTimeout(process.env.CPU ? 180000 : 30000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url);
@@ -91,6 +157,10 @@ try {
     await checkVisibleReadouts(page);
     await checkInstruments(page);
   }
+  await page.keyboard.press('Escape');
+  await loadHeavyHud(page);
+  await mkdir('.playtest', { recursive: true });
+  for (const viewport of DOCK_VIEWPORTS) await checkDockLayout(page, viewport);
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
   await page.screenshot({ path: '.playtest/ui-regression.png' });

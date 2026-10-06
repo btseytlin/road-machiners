@@ -31,6 +31,16 @@ export function topLeft(): HTMLElement {
   return row;
 }
 
+// The instruments and weapons in the bottom left corner flow in one wrapping row.
+export function bottomLeft(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .bottom-left');
+  if (found) return found;
+  const row = el('div', { class: 'bottom-left' });
+  root.append(row);
+  return row;
+}
+
 // Panels in the top right corner sit side by side in one row.
 export function topRight(): HTMLElement {
   const root = uiRoot();

@@ -8,7 +8,7 @@ import type { Aim, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
 import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
-import { el, panel } from "./dom";
+import { bottomLeft, el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
 import { createIcon } from './cards';
@@ -170,7 +170,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
 }
 
 export class WeaponPanel {
-  private root = panel("weapons");
+  private root = panel("weapons", bottomLeft());
   private turn = panel('turn-control');
   private expanded = true;
 
