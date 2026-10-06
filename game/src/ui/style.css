@@ -520,6 +520,8 @@ body {
   width: 282px;
   height: 122px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   padding: 8px 10px;
   background: #202529e8;
   border: 0;
@@ -662,6 +664,37 @@ body {
   border-radius: 1px;
   background: var(--ink);
 }
+/* The next track key is a black plastic transport key from an old CD player, in a strip above the screen. */
+.radio-keys {
+  display: flex;
+  justify-content: flex-end;
+}
+#ui .radio-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--knob-size) * 1.3);
+  height: calc(var(--knob-size) * 0.65);
+  padding: 0;
+  background: linear-gradient(#4a5155, #2a2f32);
+  border: 1px solid #15191b;
+  border-radius: 3px;
+  box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #0000004d, 0 2px 3px #000000a0;
+  color: var(--ink);
+}
+#ui .radio-next:hover {
+  background: linear-gradient(#545b5f, #33393c);
+  border-color: #15191b;
+}
+#ui .radio-next:active {
+  transform: translateY(1px);
+  background: linear-gradient(#2a2f32, #3a4043);
+  box-shadow: inset 0 2px 3px #00000080, 0 1px 1px #000000a0;
+}
+.radio-next svg {
+  width: 50%;
+  fill: currentColor;
+}
 /* The mute switch is the metal toggle, shrunk to the knobs' height. */
 #ui .radio-faceplate button.switch {
   gap: 0;
@@ -684,38 +717,40 @@ body {
   margin: 0 !important;
 }
 .log-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
 }
-.log-expand {
+#ui .log-expand {
   padding: 0 6px;
   font-size: 12px;
   line-height: 16px;
 }
 .log-time {
+  white-space: nowrap;
   margin-right: 6px;
   font: 11px var(--font-mono);
   color: var(--muted);
 }
 .log-lines {
   overflow-anchor: none;
-  max-height: 86px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
 }
 .log-lines > div {
   padding: 3px 0;
+  overflow-wrap: anywhere;
 }
 /* A modal takes the screen, so the log only grows while none is open. */
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
   z-index: 22;
   width: 420px;
   height: calc(100dvh - 112px - 72px);
-}
-#ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded .log-lines {
-  max-height: calc(100% - 28px);
 }
 #ui .recenter {
   left: 50%;
@@ -1472,9 +1507,6 @@ body {
     width: 200px;
     height: 80px;
   }
-  .log-lines {
-    max-height: 48px;
-  }
   #ui .radio {
     --radio-line: 12px;
     --radio-lines: 4;
@@ -1980,8 +2012,10 @@ canvas.view {
   border-bottom: 1px solid #3b454b;
   font: 13px var(--font-mono);
 }
-.town-repair .bad,
-.town-repair .dim {
+.town-repair > button:first-of-type {
+  margin-left: auto;
+}
+.town-repair .bad {
   flex: 1;
 }
 #ui .town-repair button {
