@@ -3,7 +3,7 @@ import { CHASSIS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { partDef, type CoreDef } from '../data/parts';
 import BASELINE from './body-baseline.json';
-import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, hulkBoxes, lanesAt, restOn, surfaceAt } from './body';
+import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, hulkBoxes, lanesAt, restOn, surfaceAt, surfaceSamples } from './body';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
 
@@ -287,6 +287,21 @@ describe('resting parts', () => {
     }
         console.log(`resting parts: ${leaning} of ${total} footprints lean on a slope, ${perched} find no rest and are hidden unless always drawn, floating ${[0.1, 0.2, 0.4].map((lim) => `${floats.filter((f) => f > lim).length} more than ${lim} m`).join(', ')}`);
     expect(problems).toEqual([]);
+  });
+});
+
+describe('surface samples', () => {
+  it('lists the samples near a cab roof cell with its surface height, all within the radius', () => {
+    const rect = cellRect('scout', [{ x: 3, y: 2 }]);
+    const center = { x: (rect.x0 + rect.x1) / 2, z: (rect.z0 + rect.z1) / 2 };
+    const samples = surfaceSamples('scout', center, 0.3);
+    expect(samples.length).toBeGreaterThan(0);
+    for (const s of samples) expect(Math.hypot(s.x - center.x, s.z - center.z)).toBeLessThanOrEqual(0.3 + 1e-9);
+    expect(Math.max(...samples.map((s) => s.y))).toBeCloseTo(surfaceAt('scout', { x0: center.x - 0.3, x1: center.x + 0.3, z0: center.z - 0.3, z1: center.z + 0.3 }), 1);
+  });
+
+  it('leaves out samples over air', () => {
+    expect(surfaceSamples('scout', { x: 50, z: 50 }, 1)).toEqual([]);
   });
 });
 

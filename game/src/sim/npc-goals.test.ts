@@ -59,6 +59,7 @@ describe('goal stack', () => {
 
   it('an interrupted scavenge goal is active again after flee and service pop', () => {
     const { w, npc } = scavengerWorld();
+    w.vehicles[0].pos = { x: 50, y: 50 }; // inside the live range, so the cover rock hides the raider
     forceOption('hostileSeen', 'flee');
     forceOption('resume', 'resume');
     const site = REGION.locations.find((l) => l.id === 'podfield')!;

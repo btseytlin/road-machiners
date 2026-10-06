@@ -50,7 +50,7 @@ async function pass(ctx: Ctx, issue: number, reason: string, hotfix: boolean, ro
   await ctx.github.move(issue, 'Design');
 }
 
-// Triage picks models by task complexity: trivial gets Sonnet at design (label design-sonnet), hard gets Opus at implementation and testing (label implementation-opus), anything between keeps the default.
+// Triage picks models by task complexity: trivial gets Sonnet at design (label design-sonnet), hard gets Opus at implementation (label implementation-opus), anything between keeps the default.
 // It decides once. Labels already on the issue are the committee's and stay as they are, and an earlier routing comment means a label removed since was removed on purpose.
 // The comment is the audit trail and the marker of that decision.
 async function routeModels(ctx: Ctx, issue: number, { complexity, why }: Routing): Promise<string> {

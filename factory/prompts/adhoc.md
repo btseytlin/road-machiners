@@ -5,7 +5,7 @@ The request is in `.factory/request.md`.
 Rules:
 
 - Follow `CLAUDE.md`.
-- For a game question, use the repo harnesses to get numbers: `npm run combat`, `npm run econ`, `npm run loadouts` and `npm run progression:*`.
+- For a game question, get numbers from the progression recorder, `npm run progression:*`. Use `npm run combat` only for single-fight detail and `npm run loadouts` for NPC gear rolls.
 - Run the playtest only as `{{playtest}}`.
 - Read the project skills in `.agents/skills` that fit the request. For a balance question, read `evaluating-gameplay-balance`.
 - Do not change game code. Do not commit. This is investigation only.

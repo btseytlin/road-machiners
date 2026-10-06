@@ -9,7 +9,7 @@ import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
-import { checkEscort, checkPlayerTow, lapseClaim, payEscort } from './tow';
+import { checkEscort, checkPlayerTow, checkTowPromise, lapseClaim, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
 import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
@@ -71,7 +71,8 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     binds: true,
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
-  towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
+  // A tower that dropped a hitched tow for danger keeps the deal. See checkTowPromise() in src/sim/tow.ts.
+  towPromise: { refresh: never, check: checkTowPromise, hooks: {}, work: noWork, binds: false },
   // The holder has taken the job of towing the other party, so no other driver answers. It is fulfilled by the offer
   // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack. It lapses after its turns with the
   // other party in sight and out of combat, since a blocked tower never gets to offer.

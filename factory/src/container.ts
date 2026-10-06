@@ -1,9 +1,12 @@
-import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
-import { appendUsage, usageFromOutput } from './ledger';
+import { closeRun, closeRunFromTranscript, openRun, runProjectsDir, usageFromOutput } from './ledger';
 import { withLock } from './lock';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
 
@@ -75,10 +78,37 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
   return (await docker('docker ps', ['ps', '-q', '--filter', `label=${FACTORY_LABEL}`])).trim() !== '';
 }
 
+// The agent runs the factory's own evidence checks in its container. The image has Node but not the factory's code, so each run bundles the current source into one file
+// and mounts its folder read only. The agent can read the checks but never change them, and they cannot drift from the ones the factory runs after the stage.
+const CHECK_MOUNT = '/opt/factory-check';
+export const EVIDENCE_CHECK_COMMAND = `node ${CHECK_MOUNT}/check.mjs`;
+const CHECK_ENTRY = fileURLToPath(new URL('./agent-check-bin.ts', import.meta.url));
+
+// Parallel jobs bundle at once, so each writes its own file and renames it into place.
+export async function buildCheckBundle(home: string): Promise<string> {
+  const dir = join(home, 'agent-check');
+  mkdirSync(dir, { recursive: true });
+  const part = join(dir, `check-${process.pid}-${Date.now()}.mjs`);
+  await build({ entryPoints: [CHECK_ENTRY], bundle: true, platform: 'node', format: 'esm', target: 'node22', outfile: part, logLevel: 'silent' });
+  renameSync(part, join(dir, 'check.mjs'));
+  return dir;
+}
+
+async function readOnlyMounts(home: string, readOnly: Record<string, string>, evidenceCheck: boolean): Promise<string[]> {
+  const mounts = evidenceCheck ? { ...readOnly, [await buildCheckBundle(home)]: CHECK_MOUNT } : readOnly;
+  return Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
+}
+
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${LONG_JOBS_NOTE}`;
 }
+
+// The public dashboard shows the milestone beside the activity, so a reader sees which part of the card is in work.
+const MILESTONE_NOTE = 'Each time you start a new part of the work, run factory-status milestone \'<step>\' with a short step in the card\'s words, like \'Building orchard buildings\' or \'Testing the tow fee\'. Use 3 to 80 letters, digits, spaces and , . \' - only. Never name files, commands or secrets.';
+
+// Background tasks are off, and a sleep loop on a stuck command lost hours. factory-job runs a long command under a time limit and reports its activity on each check.
+const LONG_JOBS_NOTE = 'Start a command that may run longer than 5 minutes with factory-job start <name> <activity> <minutes> \'<command>\', with a time limit of about twice its expected run. Then check it with sleep 240; factory-job check <name>, with a Bash timeout of 5 minutes, until it ends. If its log has not changed for 15 minutes, stop it with factory-job stop <name> and find out why. Never end your run while a job is running, since the end of the run kills it.';
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
 function sessionMount(session: AgentSession | undefined): string[] {
@@ -93,32 +123,50 @@ function effortArgs(effort: string | undefined): string[] {
   return effort === undefined ? [] : ['--effort', effort];
 }
 
-// A finished run must report its cost. A failed run may have died before its result event, and then it records nothing.
-function recordUsage(home: string, jobId: string, result: RunResult, model: string): void {
-  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model));
-  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model));
+// A finished run must report its cost, and one that does not fails its job, which then prices the run from its transcript.
+// A failed run may have died before its result event, and then its transcript prices it at once.
+function recordUsage(cfg: FactoryConfig, jobId: string | null, result: RunResult, model: string, session: AgentSession | undefined): void {
+  if (jobId === null) return;
+  if (result.code === 0 || result.stdout.includes('"type":"result"')) return closeRun(cfg.home, jobId, usageFromOutput(result.stdout, model, session?.resume ?? false));
+  closeRunFromTranscript(cfg.home, jobId, cfg.tokenPrices, new Date());
+}
+
+// A run by hand has no job id and records no usage.
+function openRecordedRun(cfg: FactoryConfig, jobId: string | null, model: string, session: AgentSession | undefined): void {
+  if (jobId === null || session === undefined) return;
+  openRun(cfg.home, jobId, { model, projects: session.dir, sessionId: session.id, resumed: session.resume, startedAt: new Date().toISOString() });
+}
+
+// Every run of a job keeps its transcript on the host. A run with no issue session gets one of its own that lives until the run is priced.
+function recordedSession(cfg: FactoryConfig, jobId: string | null, session: AgentSession | undefined): AgentSession | undefined {
+  if (session !== undefined || jobId === null) return session;
+  const dir = runProjectsDir(cfg.home, jobId);
+  mkdirSync(dir, { recursive: true });
+  return { dir, id: randomUUID(), resume: false };
 }
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill, effort }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, evidenceCheck, session: issueSession, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
+      const session = recordedSession(cfg, jobId, issueSession);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
       const env = {
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
-      const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
+      const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly, evidenceCheck === true);
       const args = [
         ...baseArgs(jobId, cpus, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
+      openRecordedRun(cfg, jobId, model, session);
       const result = await run('docker', args, { env, input, logPath: log });
-      if (jobId !== null) recordUsage(cfg.home, jobId, result, model);
+      recordUsage(cfg, jobId, result, model, session);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {

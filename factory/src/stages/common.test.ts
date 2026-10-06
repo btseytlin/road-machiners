@@ -148,20 +148,20 @@ describe('model routing', () => {
     expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
   });
 
-  it('implementation-opus forces Opus for implementation and verify, never triage', () => {
-    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'opus-id']);
+  it('implementation-opus changes implementation only, leaving verification on Sonnet', () => {
+    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'sonnet-id']);
   });
 
   it('both labels apply independently', () => {
-    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'opus-id']);
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'sonnet-id']);
   });
 
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
     const labels: string[] = ['implementation-opus'];
     const { ctx, runs } = agentCtx(labels);
-    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
     labels.length = 0;
-    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
@@ -215,11 +215,13 @@ describe('stage prompts for reference images', () => {
     }
   });
 
-  it('require the reference-versus-screenshot comparison in testing', () => {
-    const text = fillPrompt('test', vars);
+  it('require the reference-versus-screenshot comparison in testing, inside the one visual review', () => {
+    const text = fillPrompt('test', { ...vars, visualRules: fillPrompt('visual-review', { taskFile: 'f' }) });
     expect(text).toContain('a gameplay test is not enough');
     expect(text).toContain('.factory/comparison.png');
-    expect(text).toContain('up to three rounds');
+    // One look loop with one limit: the visual review's two repair rounds.
+    expect(text).not.toContain('three rounds');
+    expect(text).not.toContain('"Visual comparison"');
   });
 
   it('make implementation capture and read real screenshots of any visible change, with or without a reference image', () => {
@@ -228,7 +230,8 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('with or without a reference image');
     expect(text).toContain('Capture real in-game screenshots');
     expect(text).toContain('Read every screenshot with the Read tool');
-    expect(text).toContain('game/docs/DESIGN.md');
+    // The agent works in game/, so the path is relative to it.
+    expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('placeholder shapes');
     expect(text).toContain('behind it');
     expect(text).toContain('successive simulation points');
@@ -245,7 +248,7 @@ describe('stage prompts for reference images', () => {
     const text = fillPrompt('visual-review', { taskFile: 'f' });
     expect(text).toContain('independent of what the implementation stage claimed');
     expect(text).toContain('Read each shown image with the Read tool');
-    expect(text).toContain('game/docs/DESIGN.md');
+    expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('with no concept image');
     expect(text).toContain('`tune`');
     expect(text).toContain('`rebuild`');
@@ -255,7 +258,6 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('Do not approve a look you did not see');
     const test = fillPrompt('test', { ...vars, visualRules: text });
     expect(test).toContain('Visual review of the final build');
-    expect(test).toContain('up to three rounds');
   });
 
   it('tell design how to read visual review findings', () => {

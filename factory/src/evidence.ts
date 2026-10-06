@@ -8,7 +8,6 @@ import { OUT_DIR } from './types';
 export const EVIDENCE_MAX = 10;
 export const PRIMARY_FILE = 'screenshot.png';
 export const MANIFEST_FILE = 'evidence.json';
-const LOCATION_VIEWS = 3;
 const DESCRIPTION_LIMIT = 200;
 const KINDS = ['location', 'item', 'system', 'other'] as const;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
@@ -24,7 +23,7 @@ export type Evidence = { images: EvidenceImage[]; features: string[] };
 // The agent's manifest `.factory/evidence.json`:
 // {"commit": "<git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}],
 //  "images": [{"file": "screenshot.png", "description": "Gate and approach", "covers": ["Salvage yard"], "sheet": false}]}
-// With no manifest the single screenshot stands, as before. A manifest that fails any rule throws, so no post goes out with doubtful evidence.
+// With no manifest the single screenshot stands, as before. A manifest that fails any rule throws.
 export function readEvidence(home: string, head: string | null): Evidence {
   const out = join(home, OUT_DIR);
   const manifest = join(out, MANIFEST_FILE);
@@ -35,6 +34,21 @@ export function readEvidence(home: string, head: string | null): Evidence {
   const images = parseImages(data.images, features, out);
   requireCoverage(features, images);
   return { images, features: features.map((feature) => feature.name) };
+}
+
+// What an approval post shows. `problem` says what was missing or dropped, and the post and the issue say it too.
+export type Shown = { evidence: Evidence | null; problem: string | null };
+
+// Evidence never blocks a card. With no screenshot the post is text. A manifest that breaks a rule is dropped, and the one screenshot stands.
+export function readShown(home: string, head: string | null): Shown {
+  const primary = join(home, OUT_DIR, PRIMARY_FILE);
+  if (!existsSync(primary)) return { evidence: null, problem: `The testing agent wrote no .factory/${PRIMARY_FILE}.` };
+  try {
+    return { evidence: readEvidence(home, head), problem: null };
+  } catch (error) {
+    const evidence = { images: [{ path: primary, description: '', covers: [], sheet: false }], features: [] };
+    return { evidence, problem: `The evidence manifest was dropped: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 // The evidence must come from the final branch. An agent that changed code after it captured has to capture again.
@@ -101,13 +115,12 @@ function requireDistinct(images: EvidenceImage[]): void {
   }
 }
 
-// Every changed feature needs a view. A location needs several views, and a system-wide change needs a labeled sheet.
+// Every changed feature needs a view. The count of views is the agent's judgment, so there is no minimum. A system-wide change needs a labeled sheet.
 function requireCoverage(features: Feature[], images: EvidenceImage[]): void {
   for (const feature of features) requireViews(feature, images.filter((image) => image.covers.includes(feature.name)));
 }
 
 function requireViews(feature: Feature, views: EvidenceImage[]): void {
   if (views.length === 0) throw new Error(`No evidence image covers "${feature.name}"`);
-  if (feature.kind === 'location' && views.length < LOCATION_VIEWS) throw new Error(`The location "${feature.name}" needs ${LOCATION_VIEWS} different views (layout and landmarks, approach, traversal), it has ${views.length}`);
   if (feature.kind === 'system' && !views.some((image) => image.sheet)) throw new Error(`The system change "${feature.name}" needs one labeled contact sheet ("sheet": true) built from real screenshots`);
 }
