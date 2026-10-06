@@ -3,7 +3,9 @@
 ## Context
 - The server has 8 cores and 15.5 GB of RAM. The tick starts jobs up to fixed counts per queue, and nothing checks memory.
 - On 2026-10-06 at 21:05 the server ran 4 checks, 2 verify jobs and several implement jobs. 4.7 GB sat in swap and 1 GB was available.
-- The kernel ran out of memory 21 times in 3 days. Each time it killed the biggest process on the host, mostly the Chrome of some job. That job then failed as if its code broke.
+- The kernel ran out of memory 7 times in 4 days, all between 11:14 and 11:35 UTC on 2026-10-06. Each time it killed the Chrome of some job. One checks run failed on it with "Target crashed".
+- The checks share one GPU, and their playtest fails under 50 fps. On 2026-10-06, 12 of 14 failed checks failed only on frame rate. The rate of those failures grows with the checks that run at once: none of 18 alone, 1 of 9 with 2, 2 of 12 with 3 and 9 of 39 with 4.
+- Live container peaks on 2026-10-06 at 21:30: checks 2.5 to 2.9 GB, implement 2.7 GB, patch 1.7 to 2.3 GB, verify 0.8 to 1.9 GB. Several containers also held up to 0.8 GB in swap.
 - The tick already holds all starts when free disk is low. Memory has only a Hermes incident and no hold.
 - Agent jobs use little memory while they wait on the model and a lot while they run tests. So the memory that is free right now says little about what running jobs will need soon.
 - The game's test runner starts one worker per CPU it sees, up to 6, and each worker holds 0.4 to 0.9 GB.
