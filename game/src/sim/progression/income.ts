@@ -9,7 +9,13 @@ import { playerVehicle } from '../damage';
 import { getLotTradePrice, partTradePrice, repairCost } from '../economy';
 import { goodsCount, isMounted } from '../grid';
 import type { GameEvent, PartInstance, Vehicle, World } from '../types';
-import type { Policy } from './bot';
+import { getTradePrice } from '../economy';
+import { isDefeated } from '../defeat';
+import { topGoal } from '../npc-activities';
+import { npcProfile } from '../npc-decisions';
+import { escortsOf } from '../tow';
+import { SHOPS } from '../../data/market';
+import { haulMarginAt, wouldRob, type Policy } from './bot';
 import { LEDGER_KEYS, type BotNote, type BotTurn } from './orders';
 import { playTurns, startWorld } from './record';
 
@@ -18,6 +24,11 @@ export const INCOME_SKILL_RANK = 2;
 // The bot buys no gear: net worth counts money, goods and spares, so a gear purchase would read as a loss.
 const INCOME_BOT = { noGear: true };
 const HOURS_PER_DAY = 24;
+// The world is sampled every this many turns.
+export const SAMPLE_TURNS = 30;
+// The spend and cells of the load the hauling margin index prices, about a mid-game hauler's.
+export const INDEX_SPEND = 2000;
+export const INDEX_ROOM = 20;
 
 export type TargetKind = 'trader' | 'convoy';
 
@@ -35,6 +46,14 @@ export type Attempt = {
   repairSpent: number;
 };
 
+// One awake trader or convoy at a sample. qualifies: the robber would demand from it, sight aside. cargoValue: what its
+// loose goods and spares sell for to the player. boughtGoods: units of the good its trade goal bought that it carries.
+export type TargetSample = { kind: TargetKind; guarded: boolean; qualifies: boolean; cargoValue: number; wallet: number; boughtGoods: number };
+
+// The world every SAMPLE_TURNS turns. haulIndex: the hauling margin at INDEX_SPEND and INDEX_ROOM. salvageIndex: the
+// mean sell price at one unit over every town and good it buys.
+export type WorldSample = { turn: number; haulIndex: number; salvageIndex: number; targets: TargetSample[] };
+
 // One run. days and hours are what was played, short of the asked days when the player died (death is that turn).
 // daily holds the net worth change of each full in-game day. walletsByDay holds the trader and convoy NPC wallets at
 // the start and at the end of each full day.
@@ -51,9 +70,17 @@ export type IncomeRun = {
   knockouts: number;
   death: number | null;
   walletsByDay: Record<TargetKind, number[][]>;
+  samples: WorldSample[];
+  npcKnockoutsByDay: number[];
+  towsByDay: number[];
+  candidate: string;
+  commit: string;
 };
 
-export function playIncome(seed: number, policy: Policy, days: number): IncomeRun {
+// What build a run measured: the tuning candidate's name and the git commit.
+export type RunLabel = { candidate: string; commit: string };
+
+export function playIncome(seed: number, policy: Policy, days: number, label: RunLabel): IncomeRun {
   const turns = Math.round(days * TIME.turnsPerDay);
   const start = startWorld(seed, INCOME_KIT, INCOME_SKILL_RANK);
   const startWorth = worth(start);
@@ -62,6 +89,11 @@ export function playIncome(seed: number, policy: Policy, days: number): IncomeRu
   const daily: number[] = [];
   const walletsByDay: Record<TargetKind, number[][]> = { trader: [], convoy: [] };
   sampleWallets(start, walletsByDay);
+  const samples = [sampleWorld(start)];
+  const npcKnockoutsByDay: number[] = [];
+  const towsByDay: number[] = [];
+  let dayKnockouts = 0;
+  let dayTows = 0;
   let dayStart = startWorth;
   let knockouts = 0;
   let played = 0;
@@ -71,9 +103,16 @@ export function playIncome(seed: number, policy: Policy, days: number): IncomeRu
     for (const [reason, amount] of pipelineMoney(orders.world, next)) add(ledger, reason, amount);
     attempts.note(orders, next);
     knockouts += next.events.filter((e) => e.t === 'knockout').length;
+    dayKnockouts += next.events.filter((e) => e.t === 'npcKnockout').length;
+    dayTows += next.events.filter((e) => e.t === 'towHitched').length;
     played++;
     last = next;
+    if (played % SAMPLE_TURNS === 0) samples.push(sampleWorld(next));
     if (played % TIME.turnsPerDay !== 0) continue;
+    npcKnockoutsByDay.push(dayKnockouts);
+    towsByDay.push(dayTows);
+    dayKnockouts = 0;
+    dayTows = 0;
     daily.push(worth(next) - dayStart);
     dayStart = worth(next);
     sampleWallets(next, walletsByDay);
@@ -92,7 +131,55 @@ export function playIncome(seed: number, policy: Policy, days: number): IncomeRu
     knockouts,
     death: last.player.state === 'dead' ? last.turn : null,
     walletsByDay,
+    samples,
+    npcKnockoutsByDay,
+    towsByDay,
+    ...label,
   };
+}
+
+// Samples the world's prices and its traders and convoys. It reads through the sim and changes nothing.
+export function sampleWorld(world: World): WorldSample {
+  const targets = world.vehicles.flatMap((v) => {
+    const kind = templateKind(v);
+    return kind && v.resources && !isDefeated(v) ? [targetSample(world, v, kind)] : [];
+  });
+  return { turn: world.turn, haulIndex: haulMarginAt(world, INDEX_SPEND, INDEX_ROOM), salvageIndex: salvageIndex(world), targets };
+}
+
+function templateKind(v: Vehicle): TargetKind | null {
+  const id = v.brain?.templateId;
+  return id === 'trader' || id === 'convoy' ? id : null;
+}
+
+function targetSample(world: World, v: Vehicle, kind: TargetKind): TargetSample {
+  const guarded = escortsOf(world, v.id).some((e) => !isDefeated(e));
+  const bought = topGoal(v)?.purchase?.good;
+  const boughtGoods = bought ? (goodsCount(v)[bought] ?? 0) : 0;
+  return { kind, guarded, qualifies: wouldRob(world, v), cargoValue: saleValue(world, goodsCount(v), spareParts(v)), wallet: v.resources!.money, boughtGoods };
+}
+
+// The most one trader load can sell for: its trade stake spent on the good with the best ratio of the player's sell
+// price at one shop to a trader's buy price at another. Unit prices, so a real lot sells for less.
+export function largestTraderLoad(world: World): number {
+  const trader = world.vehicles.find((v) => v.brain?.templateId === 'trader');
+  if (!trader) throw new Error('No trader to price a load for');
+  const me = playerVehicle(world);
+  const shops = Object.values(SHOPS);
+  const ratios = shops.flatMap((source) => shops.filter((b) => b.id !== source.id).flatMap((buyer) =>
+    source.goods.filter((good) => buyer.goods.includes(good)).map((good) => getTradePrice(world, me, buyer.id, good, 'sell') / getTradePrice(world, trader, source.id, good, 'buy'))));
+  return npcProfile(trader).tradeStake * Math.max(...ratios);
+}
+
+// Part prices do not depend on the town, so only goods move this index.
+function salvageIndex(world: World): number {
+  const me = playerVehicle(world);
+  const prices = REGION.towns.flatMap((t) => {
+    const shop = SHOPS[t.id];
+    if (!shop) throw new Error(`Town ${t.id} has no shop`);
+    return shop.goods.map((good) => getTradePrice(world, me, t.id, good, 'sell'));
+  });
+  return prices.reduce((sum, p) => sum + p, 0) / prices.length;
 }
 
 // Money plus own goods and spares at the best sale price in any town, less the cost to repair everything.
@@ -229,116 +316,3 @@ function targetKind(world: World, id: string): TargetKind {
   throw new Error(`Robbery target ${id} is of faction ${v.faction}`);
 }
 
-// ---- Report.
-
-export function formatIncomeReport(runs: readonly IncomeRun[]): string {
-  if (runs.length === 0) throw new Error('No income runs to report');
-  const policies = [...new Set(runs.map((r) => r.policy))];
-  const seeds = [...new Set(runs.map((r) => r.seed))].sort((a, b) => a - b);
-  const lines = [
-    '# Income report',
-    '',
-    `Seeds ${seeds.join(', ')}. Kit ${INCOME_KIT}, every skill at rank ${INCOME_SKILL_RANK}. Every truck travels far, so physics crashes and rams are absent and fight damage may read low.`,
-    '',
-    '| Policy | Runs | Days | Net per hour | ± SE | Daily p10 | p50 | p90 | Knockouts | Deaths |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...policies.map((p) => summaryRow(p, runs.filter((r) => r.policy === p))),
-  ];
-  for (const p of policies) lines.push('', ...policySection(p, runs.filter((r) => r.policy === p)));
-  return `${lines.join('\n')}\n`;
-}
-
-function netPerHour(run: IncomeRun): number {
-  return (run.endWorth - run.startWorth) / run.hours;
-}
-
-function summaryRow(policy: Policy, runs: readonly IncomeRun[]): string {
-  const rates = runs.map(netPerHour);
-  const daily = runs.flatMap((r) => r.daily);
-  const tails = daily.length > 0 ? [10, 50, 90].map((q) => fmt(percentile(daily, q))) : ['no full day', '-', '-'];
-  const days = runs.reduce((sum, r) => sum + r.days, 0);
-  const deaths = runs.filter((r) => r.death !== null).length;
-  const knockouts = runs.reduce((sum, r) => sum + r.knockouts, 0);
-  return `| ${policy} | ${runs.length} | ${fmt(days)} | ${fmt(mean(rates))} | ${rates.length > 1 ? fmt(standardError(rates)) : 'one run'} | ${tails.join(' | ')} | ${knockouts} | ${deaths} |`;
-}
-
-function policySection(policy: Policy, runs: readonly IncomeRun[]): string[] {
-  const lines = [`## ${policy}`, '', 'Ledger, mean per run:', ''];
-  const reasons = [...new Set(runs.flatMap((r) => Object.keys(r.ledger)))].sort();
-  for (const reason of reasons) lines.push(`- ${reason}: ${fmt(mean(runs.map((r) => r.ledger[reason] ?? 0)))}`);
-  if (reasons.length === 0) lines.push('- no money moved');
-  const attempts = runs.flatMap((r) => r.attempts);
-  if (policy === 'robber' || policy === 'convoyRobber') lines.push('', ...attemptSection(attempts));
-  lines.push('', ...walletSection(runs));
-  return lines;
-}
-
-type AttemptGroup = 'trader' | 'guarded convoy' | 'unguarded convoy';
-
-function groupOf(a: Attempt): AttemptGroup {
-  if (a.kind === 'trader') return 'trader';
-  return a.guarded ? 'guarded convoy' : 'unguarded convoy';
-}
-
-function attemptNet(a: Attempt): number {
-  return a.goodsValue - a.repairSpent;
-}
-
-function attemptSection(attempts: readonly Attempt[]): string[] {
-  if (attempts.length === 0) return ['No attempts.'];
-  const lines = ['| Target | Attempts | Comply | Fight back | Flee | Pile | Knockout | Mercy | Lost | Mean net per attempt |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'];
-  for (const group of ['trader', 'guarded convoy', 'unguarded convoy'] as const) {
-    const of = attempts.filter((a) => groupOf(a) === group);
-    if (of.length === 0) continue;
-    const count = (pred: (a: Attempt) => boolean) => of.filter(pred).length;
-    const answers = (['comply', 'fightBack', 'flee'] as const).map((x) => count((a) => a.answer === x));
-    const outcomes = (['pile', 'knockout', 'mercy', 'lost'] as const).map((x) => count((a) => a.outcome === x));
-    lines.push(`| ${group} | ${of.length} | ${answers.join(' | ')} | ${outcomes.join(' | ')} | ${fmt(mean(of.map(attemptNet)))} |`);
-  }
-  const losing = attempts.filter((a) => attemptNet(a) < 0).length;
-  const hauls = attempts.map((a) => a.goodsValue);
-  const total = hauls.reduce((sum, n) => sum + n, 0);
-  const failed = attempts.filter((a) => a.outcome === 'lost');
-  lines.push(
-    '',
-    `- Attempts that lost money: ${fmt((100 * losing) / attempts.length)}%`,
-    `- Largest haul: ${fmt(Math.max(...hauls))}, ${total > 0 ? `${fmt((100 * Math.max(...hauls)) / total)}% of all robbery takings` : 'no takings'}`,
-    `- Mean net of lost attempts: ${failed.length > 0 ? fmt(mean(failed.map(attemptNet))) : 'none lost'}`,
-  );
-  return lines;
-}
-
-function walletSection(runs: readonly IncomeRun[]): string[] {
-  const lines = ['NPC wallets by day, p10 / p50 / p90 over all runs (day 0 is the start):', ''];
-  for (const kind of ['trader', 'convoy'] as const) {
-    const days = Math.max(...runs.map((r) => r.walletsByDay[kind].length));
-    const cells = Array.from({ length: days }, (_, d) => {
-      const pool = runs.flatMap((r) => r.walletsByDay[kind][d] ?? []);
-      return pool.length > 0 ? `day ${d}: ${[10, 50, 90].map((q) => fmt(percentile(pool, q))).join(' / ')}` : `day ${d}: none alive`;
-    });
-    lines.push(`- ${kind}: ${cells.join('; ')}`);
-  }
-  return lines;
-}
-
-function mean(xs: readonly number[]): number {
-  if (xs.length === 0) throw new Error('Mean of no values');
-  return xs.reduce((sum, x) => sum + x, 0) / xs.length;
-}
-
-function standardError(xs: readonly number[]): number {
-  const m = mean(xs);
-  const variance = xs.reduce((sum, x) => sum + (x - m) ** 2, 0) / (xs.length - 1);
-  return Math.sqrt(variance / xs.length);
-}
-
-// The nearest-rank percentile.
-function percentile(xs: readonly number[], q: number): number {
-  if (xs.length === 0) throw new Error('Percentile of no values');
-  const sorted = [...xs].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((q / 100) * sorted.length) - 1))];
-}
-
-function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}

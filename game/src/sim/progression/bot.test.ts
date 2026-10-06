@@ -15,15 +15,15 @@ import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, type Vec } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from '../testkit';
-import { NPCS } from '../../data/npcs';
+import { NPCS, TRAITS } from '../../data/npcs';
 import { towData } from '../states';
 import { playerTow, startEscort } from '../tow';
 import { playerSees } from '../vision';
 import { cloneWorld, endTurn } from '../world';
 import { getTradePrice, partTradePrice, repairCost } from '../economy';
-import { getUpkeepReserve } from '../npc-decisions';
+import { getKnownSite, getUpkeepReserve, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
-import { botOrders } from './bot';
+import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -799,5 +799,48 @@ describe('botOrders for robbers', () => {
 
     expect(goodsCount(playerVehicle(looted.world)).electronics).toBe(4);
     expect(goodsCount(vehicleById(looted.world, trader.id)).electronics).toBeUndefined();
+  });
+});
+
+describe('the convoy robber patrol', () => {
+  it('runs between the sites supply convoys haul between', () => {
+    expect(CONVOY_ROB_PATROL).toEqual([...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns]);
+  });
+
+  it('drives to the nearest of them with no target in sight', () => {
+    const w = robberWorld();
+    const order = playerVehicle(botOrders(w, 'convoyRobber').world).order;
+    if (order?.kind !== 'stopAt') throw new Error(`The convoy robber gave order ${order?.kind}`);
+    const near = CONVOY_ROB_PATROL.map(getKnownSite).sort((a, b) => dist(w.vehicles[0].pos, a.pos) - dist(w.vehicles[0].pos, b.pos))[0];
+    expect(dist(order.dest, nearestPad(near, playerVehicle(w).pos))).toBeLessThan(1e-6);
+  });
+});
+
+describe('wouldRob', () => {
+  it('takes a loaded trader out of sight that robTarget cannot see', () => {
+    const w = robberWorld();
+    const trader = addTrader(w, { x: 160, y: 60 });
+    expect(wouldRob(w, trader)).toBe(true);
+    expect(robTarget(w, true)).toBeNull();
+  });
+
+  it('skips a trader with more guns than the player', () => {
+    const w = robberWorld();
+    expect(wouldRob(w, addTrader(w, { x: 160, y: 60 }, ['mg', 'mg', 'stockEngine']))).toBe(false);
+  });
+});
+
+describe('haulMarginAt', () => {
+  it('with no money left is the cheapest haul fuel lost', () => {
+    const w = robberWorld();
+    const me = playerVehicle(w);
+    const fuels = REGION.towns.flatMap((a) => REGION.towns.filter((b) => b.id !== a.id).map((b) => tripFuelCost(w, me, dist(a.pos, b.pos))));
+    expect(haulMarginAt(w, 0, 20)).toBeCloseTo(-Math.min(...fuels), 9);
+  });
+
+  it('grows with the money and room of the load', () => {
+    const w = robberWorld();
+    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 200, 20));
+    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 2000, 2));
   });
 });

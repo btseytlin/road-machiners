@@ -5,7 +5,7 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, TRAITS } from '../../data/npcs';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
@@ -31,7 +31,7 @@ import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
-import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger, getKnownSite, tripFuelCost } from '../npc-decisions';
 import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -548,21 +548,34 @@ function bestMarket(world: World): TownDef {
 function bestPurchase(world: World): Purchase | null {
   const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
-  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend }))));
+  const room = freeCells(playerVehicle(world));
+  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
   return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
+}
+
+// The hauling margin of the world's prices: the most a load bought with `spend` into `room` cells earns between any
+// two towns, less the player truck's fuel for the haul from source to market. Every town counts as known, so it
+// measures the market and not what the bot found.
+export function haulMarginAt(world: World, spend: number, room: number): number {
+  const me = playerVehicle(world);
+  const pairs = REGION.towns.flatMap((source) => REGION.towns.filter((t) => t.id !== source.id).map((market) => ({ source, market })));
+  return Math.max(...pairs.flatMap(({ source, market }) => {
+    const fuel = tripFuelCost(world, me, dist(source.pos, market.pos));
+    return GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }).profit - fuel);
+  }));
 }
 
 // Buying the lot of a good at the source that sells at the market for the most profit, within what fits and the
 // money allows. Each unit bought raises the price and each unit sold lowers it, so a big lot can lose money that a
 // smaller one makes; the lot prices count that.
-function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
+function purchase(world: World, { source, market, good, spend, room }: { source: TownDef; market: TownDef; good: string; spend: number; room: number }): Purchase {
   const me = playerVehicle(world);
   const none = { town: source, good, count: 0, profit: 0 };
   if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
   const lotProfit = (count: number) => (count === 0 ? 0 : getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy'));
   // Each extra unit adds less profit than the one before, so the best lot is the last one whose last unit still pays.
   let low = 0;
-  let high = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
+  let high = affordableBuyCount(world, me, source.id, good, room, spend);
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
     if (lotProfit(mid) > lotProfit(mid - 1)) low = mid;
@@ -837,8 +850,11 @@ function visitStock(o: Orders, stock: SalvageStock): void {
 export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'sell carried cargo', 'buy profitable cargo', 'load cargo at its source'];
 // The factions a robber demands cargo from.
 const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
-// The towns a robber drives between while it looks for a target.
-const ROB_PATROL: readonly string[] = ['bowl', 'nose'];
+// The sites a robber drives between while it looks for a target: the towns for the selective robber, and for the
+// convoy robber the sites supply convoys haul between, their haul sources and their towns.
+function robPatrol(guarded: boolean): readonly string[] {
+  return guarded ? [...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns] : ['bowl', 'nose'];
+}
 
 // A careful robber. It sells at its best market once its cells are full, and in any town it stops at. Otherwise it
 // takes what lies in reach, fights a foe it is engaged with, demands cargo from a target in sight, goes for a pile, a
@@ -854,7 +870,7 @@ function robberGoal(o: Orders, guarded: boolean): void {
   const foe = engagedFoe(o.world);
   if (foe) return driveTo(o, foe);
   demandInSight(o, guarded);
-  if (freeCells(o.me) > 0) collectOrPatrol(o);
+  if (freeCells(o.me) > 0) collectOrPatrol(o, guarded);
 }
 
 function sellInTown(o: Orders): void {
@@ -868,13 +884,13 @@ function demandInSight(o: Orders, guarded: boolean): void {
   if (o.world.player.call) throw new Error(`The robber left a call with ${o.world.player.call.with} open`);
 }
 
-// Strips a knocked-out target in sight, or goes for a pile or wreck in sight, or drives on between the towns.
-function collectOrPatrol(o: Orders): void {
+// Strips a knocked-out target in sight, or goes for a pile or wreck in sight, or drives on along its patrol.
+function collectOrPatrol(o: Orders, guarded: boolean): void {
   const downed = downedTarget(o.world);
   if (downed) return takeFromTarget(o, downed);
   const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => !isSiteStock(s) && playerSees(o.world, s.pos)));
   if (stock) return visitStock(o, stock);
-  patrol(o);
+  patrol(o, robPatrol(guarded));
 }
 
 // The nearest truck in a fight with the player: a hostile in sight, or one heard while their combat lasts. Combat
@@ -894,15 +910,20 @@ function engagedFoe(world: World): Vec | null {
 // in sight is skipped.
 export function robTarget(world: World, guarded: boolean): Vehicle | null {
   const me = playerVehicle(world);
-  const guns = mountedParts(me, 'weapon').length;
-  const targets = world.vehicles.filter((v) => isRobberyPrey(world, v) && saysCarriesCargo(v) && mountedParts(v, 'weapon').length <= guns && (guarded || !guardedInSight(world, v)));
+  const targets = world.vehicles.filter((v) => isRobberyPrey(world, v) && (guarded || !guardedInSight(world, v)));
   return targets.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
 }
 
 // An awake trader or convoy driver in sight and radio reach, at peace with the player, not robbed by it before.
 function isRobberyPrey(world: World, v: Vehicle): boolean {
-  if (!isAwakeDriverOf(world, v, ROB_FACTIONS)) return false;
-  return inRadioSight(world, v) && !hostileToPlayer(world, v) && world.player.talked[v.id]?.rob === undefined;
+  return inRadioSight(world, v) && wouldRob(world, v);
+}
+
+// The robber's rules for a target, all but sight: an awake trader or convoy driver at peace with the player, not
+// robbed by it before, whose goal line says it carries cargo, with no more mounted guns than the player's truck.
+export function wouldRob(world: World, v: Vehicle): boolean {
+  if (!isAwakeDriverOf(world, v, ROB_FACTIONS) || hostileToPlayer(world, v) || world.player.talked[v.id]?.rob !== undefined) return false;
+  return saysCarriesCargo(v) && mountedParts(v, 'weapon').length <= mountedParts(playerVehicle(world), 'weapon').length;
 }
 
 function isAwakeDriverOf(world: World, v: Vehicle, factions: readonly Faction[]): boolean {
@@ -975,19 +996,18 @@ function looseSpot(me: Vehicle, item: GridItem): Spot | null {
   return findSpot(gridOf(me), me.items, { ...item, id: 'loot-probe' }, null, avoid);
 }
 
-// Drives between the patrol towns: on to the next one from a town, to the nearest one from the road, and on with an
+// Drives between the patrol sites: on to the next one from a site, to the nearest one from the road, and on with an
 // order already bound for one of them.
-function patrol(o: Orders): void {
-  const sites = ROB_PATROL.map((id) => {
-    const site = REGION.towns.find((t) => t.id === id);
-    if (!site) throw new Error(`No patrol town ${id}`);
-    return site;
-  });
+function patrol(o: Orders, ids: readonly string[]): void {
+  const sites = ids.map(getKnownSite);
   const order = o.me.order;
   if (order?.kind === 'stopAt' && sites.some((t) => canUseSite(order.dest, t))) return;
   const at = sites.findIndex((t) => canUseSite(o.me.pos, t));
   driveToSite(o, at >= 0 ? sites[(at + 1) % sites.length] : byDistance(o.world, sites)[0]);
 }
+
+// The convoy robber's patrol sites, for tests.
+export const CONVOY_ROB_PATROL: readonly string[] = robPatrol(true);
 
 // ---- Cargo.
 
