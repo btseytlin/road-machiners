@@ -424,8 +424,13 @@ function regrowBroken(world: World): void {
 }
 
 function canRegrow(world: World, o: Obstacle): boolean {
-  const reach = propReach(o);
-  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world, o.pos) + reach && clearOfVehicles(world, o.pos, reach);
+  return canVanish(world, o.pos, propReach(o));
+}
+
+// Whether a thing reaching `reach` tiles around pos may appear or vanish unseen: no part of it lies in the player's
+// gray vision and no truck stands on it. Broken props and craters both wait for this.
+export function canVanish(world: World, pos: Vec, reach: number): boolean {
+  return dist(playerVehicle(world).pos, pos) > grayRadius(world, pos) + reach && clearOfVehicles(world, pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {

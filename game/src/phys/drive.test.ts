@@ -105,7 +105,7 @@ describe('physics turns', () => {
     const d = buildDrive(w);
     try {
       d.obstacles.rock1 = [staleHandle(d)];
-      expect(() => syncDrive(d, w)).toThrow(/Obstacle rock1 has no collider/);
+      expect(() => syncDrive(d, w)).toThrow(/Obstacle or crater rock1 has no collider/);
     } finally {
       freeDrive(d);
     }

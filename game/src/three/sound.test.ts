@@ -70,7 +70,7 @@ describe("loopLevels", () => {
 });
 
 describe("accentOf", () => {
-  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [] });
+  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [], burst: null });
   const shot = (shooter: string, target: string, rounds: ShotRound[]): GameEvent => ({
     t: "shot", shooter, weapon: "w", target, aim: "body", chance: 0.5, damageChance: 0.5, side: "front", rounds,
   });
@@ -86,7 +86,7 @@ describe("accentOf", () => {
     expect(accentOf({ t: "guardShot", site: "s", from: { x: 0, y: 0 }, target: "p", rounds: [round(true)] }, "p")).toBe("accent-struck");
   });
   it("counts a round that strikes parts without a clean hit as struck", () => {
-    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [] };
+    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [], burst: null };
     expect(accentOf(shot("p", "n", [grazing]), "p")).toBe("accent-hit");
   });
   it("ignores fights between other trucks and answers the player's crashes", () => {

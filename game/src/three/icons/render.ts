@@ -227,7 +227,7 @@ function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THRE
 function bareTruck(chassisId: string): THREE.Object3D {
   const v = bareVehicle({ nextId: 0 }, { name: chassisId, faction: 'player', chassisId, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const view = new VehicleView(v, false);
-  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest }));
+  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest, ground: true }));
   view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels }, 0);
   return view.root;
 }

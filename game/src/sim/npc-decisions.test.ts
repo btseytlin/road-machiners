@@ -296,7 +296,7 @@ describe('aid decisions', () => {
 });
 
 describe('fight back', () => {
-  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [] });
+  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [], burst: null });
 
   // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
   // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
