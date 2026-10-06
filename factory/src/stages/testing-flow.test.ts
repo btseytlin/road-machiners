@@ -565,6 +565,7 @@ describe('playtest frame rate and browser crashes', () => {
   it('reads a finished playtest whose only problem is the frame rate as advisory, with the host line', () => {
     expect(playtestVerdict(LOW_FPS_LOG)).toEqual({ kind: 'low-fps', lowFps: { fps: 43, min: 50, host: '4 cpus, load 7.80 6.10 5.02, 2100 MB memory available' } });
     expect(playtestVerdict(checkLog('turns 12, fps 49\nFAIL\nfps 49 under 50')).kind).toBe('low-fps');
+    expect(playtestVerdict(checkLog('FAIL\nfps 44.5 under 50\nturns 12, fps 44.5'))).toMatchObject({ kind: 'low-fps', lowFps: { fps: 44.5 } });
   });
 
   it('reads a crash, a functional failure or a failure before the playtest as no frame-rate failure', () => {
