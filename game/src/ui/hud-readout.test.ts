@@ -10,8 +10,8 @@ import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
-import { aidGoods, clockLabel } from "./format";
-import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { aidGoods, clockLabel, contractDue, contractSummary } from "./format";
+import { bugReportUrl, ContextPicker, featureRequestUrl, contractRows, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
@@ -23,6 +23,7 @@ import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
 import { dumpOnPile } from "../sim/salvage";
+import type { Contract } from "../sim/market";
 import { TEST_MAP } from "../test/map";
 
 describe('knocked-out truck interaction', () => {
@@ -386,5 +387,19 @@ describe('context picker', () => {
     picker.cycle([shop, pile, wreck], 1);
     expect(picker.pick([shop, wreck])).toBe(shop);
     expect(picker.pick([wreck, pile, shop])).toBe(shop);
+  });
+});
+
+describe("contractRows", () => {
+  it("lists nothing while the player holds no contract", () => {
+    expect(contractRows(emptyWorld())).toEqual([]);
+  });
+
+  it("gives one line per held contract with its objective and due time", () => {
+    const w = emptyWorld();
+    const haul: Contract = { id: "h1", shop: "bowl", kind: "haul", good: "scrap", units: 2, to: "nose", reward: 100, deadline: 300, window: 100, rush: false, tier: 1 };
+    const bounty: Contract = { id: "b1", shop: "bowl", kind: "bounty", template: "trader", targetName: "Test Driver", reward: 300, deadline: 900, window: 900, tier: 2 };
+    w.player.contracts = [haul, bounty];
+    expect(contractRows(w)).toEqual([haul, bounty].map((c) => `${contractSummary(c)} — ${contractDue(c)}`));
   });
 });

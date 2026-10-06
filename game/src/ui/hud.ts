@@ -4,11 +4,9 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
-  contractDue,
-  contractSummary,
   eventText,
   formatNpcActivity,
   workLabel,
@@ -19,7 +17,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, contractRows, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -89,10 +87,12 @@ function weatherLabel(w: World): string {
 }
 
 export class Hud {
-  private top = panel("instruments");
+  private top = panel("instruments", bottomLeft());
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
-  private contracts = panel("contracts");
+  // Holds the condition diagram and, on wide screens, the contracts beside it.
+  private row = el("div", { class: "bottom-left-row" });
+  private contracts = panel("contracts", this.row);
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
@@ -102,7 +102,7 @@ export class Hud {
   private toastBox = panel("toast");
   private rescue = panel("rescue");
   // Stands on top of the part condition panel.
-  private stranded = panel("stranded", this.condition.root);
+  private stranded = panel("stranded", bottomLeft());
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
   private cameraSwitch = panel("camera-mode", topRight());
@@ -114,6 +114,8 @@ export class Hud {
 
   constructor(private actions: HudActions) {
     this.dialogue = new DialoguePanel(actions.dialogue);
+    bottomLeft().append(this.row);
+    this.row.prepend(this.condition.root);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
@@ -317,20 +319,15 @@ export class Hud {
 
   // Compact list of held contracts and their due times. Hidden while the player holds none.
   private renderContracts(w: World): void {
-    if (w.player.contracts.length === 0) {
+    const rows = contractRows(w);
+    if (rows.length === 0) {
       this.contracts.style.display = "none";
       return;
     }
     this.contracts.style.display = "";
     this.contracts.replaceChildren(
       el("h3", {}, "Contracts"),
-      ...w.player.contracts.map((c) =>
-        el(
-          "div",
-          { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
-        ),
-      ),
+      ...rows.map((line) => el("div", { class: "contract-line" }, line)),
     );
   }
 
@@ -381,7 +378,6 @@ export class Hud {
     this.renderContracts(w);
     this.tips.update(w, this.actions.autoTravel());
     this.top.replaceChildren(
-      this.condition.root,
       el(
         "div",
         {

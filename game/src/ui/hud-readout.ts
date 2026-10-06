@@ -1,7 +1,7 @@
 import { GAME_VERSION } from "../config";
 import { playerAid, readyAid } from "../sim/aid";
 import { aidData } from "../sim/states";
-import { aidGoods } from "./format";
+import { aidGoods, contractDue, contractSummary } from "./format";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
@@ -223,6 +223,11 @@ export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
   | { kind: "stranded"; beacon: boolean; reason: string };
+
+// One line per held contract: what it asks and when it is due.
+export function contractRows(w: World): string[] {
+  return w.player.contracts.map((c) => `${contractSummary(c)} — ${contractDue(c)}`);
+}
 
 export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;

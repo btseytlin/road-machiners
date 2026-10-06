@@ -41,6 +41,19 @@ export function topRight(): HTMLElement {
   return row;
 }
 
+// The bottom left column stacks the stranded panel, the condition diagram and contracts, the weapons and the instruments.
+export function bottomLeft(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .bottom-left');
+  if (found) return found;
+  const col = el('div', { class: 'bottom-left' });
+  // Keep clicks on the column's panels from reaching the game canvas.
+  col.addEventListener('pointerdown', (e) => e.stopPropagation());
+  col.addEventListener('wheel', (e) => e.stopPropagation());
+  root.append(col);
+  return col;
+}
+
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
   // Keep clicks on panels from reaching the game canvas.

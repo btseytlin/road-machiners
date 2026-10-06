@@ -24,6 +24,7 @@ body {
   --metal: #33383b;
   --inspection-width: 300px;
   --inspection-height: 340px;
+  --contracts-width: 282px;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -119,8 +120,6 @@ body {
 }
 
 #ui .instruments {
-  left: 14px;
-  bottom: 14px;
   padding: 5px 8px 5px 4px;
   display: grid;
   grid-template-columns: 66px auto;
@@ -128,6 +127,54 @@ body {
   row-gap: 4px;
   background: var(--metal);
   border-top: 2px solid #838a8d;
+}
+/* One column places the left panels, so none is offset by another's height. The contracts panel is the only one
+   that shrinks, and it scrolls. */
+#ui .bottom-left {
+  position: absolute;
+  left: 14px;
+  top: 56px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+#ui .bottom-left > .panel,
+#ui .bottom-left-row > .panel {
+  position: relative;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+#ui .bottom-left > .stranded {
+  order: 1;
+}
+.bottom-left-row {
+  order: 2;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 0;
+}
+#ui .bottom-left .truck-condition {
+  pointer-events: auto;
+  order: 2;
+}
+#ui .bottom-left > .weapons {
+  order: 3;
+}
+#ui .bottom-left .contracts {
+  order: 4;
+  flex-shrink: 1;
+  /* Always the header and one line, which scroll. */
+  min-height: 56px;
+}
+#ui .bottom-left > .instruments {
+  order: 5;
 }
 .instrument-clock {
   grid-column: 1 / -1;
@@ -372,9 +419,11 @@ body {
   bottom: -1px;
 }
 
-#ui .weapons {
-  left: 412px;
-  bottom: 14px;
+/* Out of the column's flow, beside the instruments, so it adds no height. Below 900px it joins the flow. */
+#ui .bottom-left > .weapons {
+  position: absolute;
+  left: 398px;
+  bottom: 0;
   max-width: calc(100vw - 542px);
   box-sizing: border-box;
   padding: 6px 8px 8px;
@@ -527,9 +576,9 @@ body {
   font-size: 12px;
 }
 #ui .contracts {
-  right: 16px;
-  bottom: 246px;
-  width: 282px;
+  width: var(--contracts-width);
+  overflow-y: auto;
+  scrollbar-width: thin;
   box-sizing: border-box;
   padding: 8px 10px;
   background: #202529e8;
@@ -577,7 +626,7 @@ body {
 /* A modal takes the screen, so the log only grows while none is open. */
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
   z-index: 22;
-  width: 420px;
+  width: min(420px, calc(100vw - 30px - var(--contracts-width) - 8px));
   height: calc(100dvh - 112px - 72px);
 }
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded .log-lines {
@@ -792,8 +841,6 @@ body {
   margin-bottom: 4px;
 }
 #ui .stranded {
-  left: 0;
-  bottom: calc(100% + 8px);
   min-width: 220px;
   text-align: center;
   background: var(--metal);
@@ -861,15 +908,18 @@ body {
   scrollbar-width: thin;
 }
 #ui:has(.modal:not([style*="display: none"]))
-  > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
+  > .panel:not(.modal):not(.toast):not(.log) {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .instruments,
-#ui:has(.modal:not([style*="display: none"])) > .log {
+#ui:has(.modal:not([style*="display: none"])) > .log,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left {
   z-index: 21;
+}
+#ui:has(.modal:not([style*="display: none"])) .bottom-left :is(.contracts, .weapons) {
+  visibility: hidden;
 }
 /* The wide modal reaches under the condition panel, which stands above the instruments. */
 #ui:has(.modal:not([style*="display: none"])) .truck-condition {
@@ -1308,6 +1358,10 @@ body {
   background: #cc775555;
 }
 @media (max-width: 1100px) {
+  /* The contracts leave the row and stack above the instruments, under the condition diagram. */
+  .bottom-left-row {
+    display: contents;
+  }
   /* Room between the instruments and the narrower log. */
   #ui .weapons {
     max-width: calc(100vw - 644px);
@@ -1318,19 +1372,16 @@ body {
 }
 @media (max-width: 900px) {
   /* Too narrow beside the instruments, so the weapons sit above them. */
-  #ui .weapons {
-    left: 14px;
-    bottom: 224px;
+  #ui .bottom-left > .weapons {
+    position: relative;
+    left: auto;
+    bottom: auto;
     max-width: calc(100vw - 30px);
   }
 }
 @media (max-width: 720px) {
   .instrument-actions {
     flex-wrap: wrap;
-  }
-  #ui .weapons {
-    bottom: 196px;
-    max-width: calc(100vw - 30px);
   }
   #ui .log {
     top: auto;
@@ -1343,7 +1394,6 @@ body {
     max-height: 48px;
   }
   #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
-    width: calc(100vw - 28px);
     height: calc(100dvh - 176px - 72px);
   }
   .info {
