@@ -251,12 +251,14 @@ export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "pl
   return !sunAt(turn) || lit.some((v) => !v.player && v.on);
 }
 
+const scratchRot = new THREE.Quaternion();
+const scratchAt = new THREE.Vector3();
+
 // The lamp-on vehicles nearest the truck first. Ties break by chassis id, then by input order.
 export function beamOrder(lit: LitVehicle[], truck: V3): LitVehicle[] {
   const dist = (v: LitVehicle) => Math.hypot(v.frame.pos.x - truck.x, v.frame.pos.y - truck.y, v.frame.pos.z - truck.z);
   return lit
-    .map((v, i) => ({ v, i, d: dist(v) }))
-    .filter((e) => e.v.on)
+    .flatMap((v, i) => (v.on ? [{ v, i, d: dist(v) }] : []))
     .sort((x, y) => x.d - y.d || (x.v.chassisId < y.v.chassisId ? -1 : x.v.chassisId > y.v.chassisId ? 1 : 0) || x.i - y.i)
     .map((e) => e.v);
 }
@@ -322,10 +324,10 @@ export class NightLights {
 
   private aimAt(beam: THREE.SpotLight, v: LitVehicle): void {
     const f = v.frame;
-    const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-    const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
+    const rot = scratchRot.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
+    const at = scratchAt.set(f.pos.x, f.pos.y, f.pos.z);
     const nose = bodyOf(v.chassisId).half.x;
-    beam.position.copy(new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at));
-    beam.target.position.copy(new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at));
+    beam.position.set(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at);
+    beam.target.position.set(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at);
   }
 }
