@@ -40,7 +40,7 @@ import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -830,27 +830,15 @@ function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Co
 
 type Steer = (world: World, vehicle: Vehicle, goal: NpcActivity, profile: NpcProfile, contacts: Contact[]) => void;
 
+// A driver on its way to meet re-aims at the other truck every turn. The two keep in touch on the radio, so it
+// knows where the other truck is without sight. A waiting driver has no point and stays put.
 const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   fight: steerFight,
   flee: (world, vehicle, goal, profile, contacts) => steerFlee(world, vehicle, profile, contacts, goal),
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
-  meet: (world, _vehicle, goal) => steerToMeet(world, goal),
+  meet: (world, _vehicle, goal) => { if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos }; },
   follow: steerFollow,
 };
-
-// A driver on its way to meet re-aims at the other truck every turn. The two keep in touch on the radio, so it
-// knows where the other truck is without sight. A waiting driver has no point and stays put.
-function steerToMeet(world: World, goal: NpcActivity): void {
-  if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos };
-}
-
-// A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
-// point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
-function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
-  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
-  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded client perceived`);
-  goal.destination = { ...at };
-}
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);
@@ -879,7 +867,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   serveStranded(world, vehicle, profile);
-  if (isDefeated(vehicle)) return retreatHome(world, vehicle);
+  if (isDefeated(vehicle)) return defeatedActivity(world, vehicle, profile, contacts);
   applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
   onParley(world, vehicle);
@@ -917,7 +905,15 @@ function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, s
   if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
 }
 
-// A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
+// A defeated driver makes no new decisions. It keeps its word on a meet or patch goal, which a deal pushes, then heads
+// home.
+function defeatedActivity(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): NpcActivity {
+  if (!['meet', 'patch'].includes(topGoal(vehicle)?.kind ?? '')) return retreatHome(world, vehicle);
+  steer(world, vehicle, profile, contacts);
+  return currentActivity(world, vehicle, profile);
+}
+
+// A defeated driver with no deal heads home, or waits for a tower on its way.
 function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
   if (topGoal(vehicle)?.kind !== 'retreat') {
     const home = npcHomeSite(vehicle);
