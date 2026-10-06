@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { pruneCaptions, withStatus } from './post-status';
 import { EMPTY_STATE } from './state';
-import { CAPTION_LIMIT } from './stages/testing';
+import { CAPTION_LIMIT } from './stages/checks';
 
 describe('withStatus', () => {
   it('adds the status on its own line under the caption', () => {

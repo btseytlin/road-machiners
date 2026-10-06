@@ -66,10 +66,11 @@ export function withLockSync<T>(dir: string, timeoutMs: number, work: () => T): 
 }
 
 // For async work, like a git command. The wait yields, so work of this process that holds the lock can finish first.
-export async function withLock<T>(dir: string, timeoutMs: number, work: () => Promise<T>): Promise<T> {
+export async function withLock<T>(dir: string, timeoutMs: number, work: () => Promise<T>, onWait?: (owner: number | null) => void): Promise<T> {
   mkdirSync(dirname(dir), { recursive: true });
   const started = Date.now();
   while (tryTake(dir) !== 'taken') {
+    onWait?.(readOwner(dir));
     timedOut(dir, started, timeoutMs);
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
