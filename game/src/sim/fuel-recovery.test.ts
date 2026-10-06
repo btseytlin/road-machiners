@@ -17,7 +17,8 @@ const moveAllFar = (w: World) => {
   for (const v of w.vehicles) advanceFar(w, v);
 };
 
-// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one drives again.
+// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one gets fuel again.
+// What a driver does with that fuel afterwards, like a long trip to sell loot, is its own goals' business.
 describe('a fuelless majority of NPCs', () => {
   it('all recover scrap fuel at their serving sites with no stall', () => {
     let w = emptyWorld({ x: 5, y: 5 });

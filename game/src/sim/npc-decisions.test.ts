@@ -6,9 +6,9 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, fitToHunt, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { isTerritory, siteGates, sitePads } from './sites';
+import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
@@ -18,6 +18,8 @@ import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
 import { fuelCap } from './stats';
+import { getResources } from './resources';
+import { RULES } from '../data/rules';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
@@ -201,6 +203,57 @@ describe('decision weights', () => {
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
     expect(stateOf(w, 'turnedDown', trader.id, me)).toBeNull();
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
+  });
+});
+
+describe('fit to hunt', () => {
+  function raider(): { w: World; v: Vehicle } {
+    const w = emptyWorld({ x: 80, y: 80 });
+    return { w, v: addNpc(w, 'raiders', 'buggy', ['raider'], { x: 10, y: 10 }, ['mg', 'stockEngine', 'plates']) };
+  }
+
+  it('holds for a fresh raider', () => {
+    const { w, v } = raider();
+    expect(fitToHunt(w, v)).toBe(true);
+  });
+
+  it('fails with no working gun', () => {
+    const { w, v } = raider();
+    for (const gun of mountedParts(v, 'weapon')) gun.hp = 0;
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with only junk guns', () => {
+    const { w, v } = raider();
+    for (const gun of mountedParts(v, 'weapon')) { gun.wear = 5; gun.hp = 0; }
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with no gun at all', () => {
+    const { w, v } = raider();
+    v.items = v.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'weapon'));
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with the body at the recover condition', () => {
+    const { w, v } = raider();
+    const cab = corePart(v, 'cab');
+    cab.hp = maxHp(cab) * NPC_BEHAVIOR.recoverCondition;
+    expect(fitToHunt(w, v)).toBe(false);
+    cab.hp = maxHp(cab) * NPC_BEHAVIOR.recoverCondition + 1;
+    expect(fitToHunt(w, v)).toBe(true);
+  });
+
+  it('fails with the driver at the recover condition', () => {
+    const { w, v } = raider();
+    getResources(w, v).health = RULES.maxHealth * NPC_BEHAVIOR.recoverCondition;
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails when stranded', () => {
+    const { w, v } = raider();
+    getResources(w, v).fuel = 0;
+    expect(fitToHunt(w, v)).toBe(false);
   });
 });
 
@@ -515,7 +568,7 @@ describe('hunting grounds', () => {
 
   it('keeps road grounds far from every site, and none at a town or camp', () => {
     const sites = [...REGION.towns, ...REGION.locations];
-    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
+    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(siteGap(site, p)).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
   });

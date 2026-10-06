@@ -307,7 +307,7 @@ describe('scumbag robbery', () => {
     }
     expect(robs / seeds).toBeGreaterThan(0.003);
     expect(robs / seeds).toBeLessThan(0.02);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 
   it('a scumbag scavenger with no prey still scavenges', () => {
     const w = emptyWorld({ x: 200, y: 200 });

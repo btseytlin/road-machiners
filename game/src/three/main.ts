@@ -100,7 +100,7 @@ groundTexture(world);
 const [, , bank] = await loading;
 // UI code may use Math.random(), and the radio changes no rule.
 const radio = new RadioPanel(new RadioStation(Math.random));
-const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate);
+const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
 const overlay = element('overlay');
 const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);

@@ -2,7 +2,7 @@
 
 A front-edge row of 3 cells: 1.45 m across, 0.65 m deep, outer face at +X. A flat grille of heavy box-section bars,
 0.9 m tall, with cross-bracing in every bay. It stands STANDOFF past the outer edge on brackets, so it clears the body
-sides. The view leaves the bumper off its cells.
+sides. A back rail joins the brackets. The view leaves the bumper off its cells.
 The top rail and corner gussets take the faction paint.
 Run: blender --background --python tools/blender/arm_reinforced_cage.py -- public/models/arm_reinforced_cage.glb [tmp/arm_reinforced_cage.png]
 """
@@ -33,6 +33,7 @@ def build(kit: Kit) -> None:
         kit.box(f"post{y:.2f}", (BAR, BAR, HEIGHT), (GRILLE_X, y, HEIGHT / 2), "metal", dent_by=0.004)
         for z in (0.12, HEIGHT - 0.1):
             kit.box(f"bracket{y:.2f}_{z:.2f}", (GRILLE_X - BRACKET_X, 0.05, 0.05), ((GRILLE_X + BRACKET_X) / 2, y, z), "metal")
+    kit.box("back_rail", (0.05, edge * 2 + 0.05, 0.05), (BRACKET_X, 0, HEIGHT - 0.1), "metal", dent_by=0.004)
     kit.box("low_rail", (BAR, edge * 2, BAR), (GRILLE_X, 0, 0.12), "metal")
     kit.box("top_rail", (BAR + 0.01, edge * 2 + BAR, BAR + 0.01), (GRILLE_X, 0, HEIGHT - BAR / 2), "paint")
     for y in (-edge, edge):

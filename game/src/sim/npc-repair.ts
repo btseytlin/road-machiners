@@ -1,10 +1,11 @@
 // NPC field repairs: which part to patch, where to park for it, and the repair jobs. Shared jobs complete repairs
 // and spend parts. src/sim/npc-activities.ts decides when a repair goal goes on the stack.
 
-import { NPC_UPKEEP } from '../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
 import { inCombat } from './combat';
+import { bodyCondition } from './npc-decisions';
 import { startJob } from './jobs';
 import { withinReach } from './npc-activities';
 import { straightClear } from './path';
@@ -14,6 +15,20 @@ import { vehicleStats } from './stats';
 import { inShade, shadeCasters, shadeMatters, sunAt } from './sun';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+
+// A truck with no engine or a junk one stays stranded for good. No patch fixes it, only a refit. See serveStranded.
+export function isStrandedForGood(vehicle: Vehicle): boolean {
+  const engine = mountedParts(vehicle, 'engine')[0];
+  return !engine || isJunk(engine);
+}
+
+// A part that keeps the truck driving, or a truck broken up all around, needs service. Worn armor, guns and cargo do
+// not. Junk parts do not count, since no service rebuilds them.
+export function isDamaged(vehicle: Vehicle): boolean {
+  const drivingPartWorn = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'engine')]
+    .some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
+  return isStrandedForGood(vehicle) || drivingPartWorn || bodyCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition;
+}
 
 function chooseRepairPart(world: World, vehicle: Vehicle) {
   return mountedParts(vehicle)
