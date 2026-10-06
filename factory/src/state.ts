@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { withLockSync } from './lock';
 import type { FactoryState, Job } from './types';
 
-export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], capNoticed: false, postCaptions: {}, devBuild: null, devFailed: null, interrupted: [], testPhase: {}, patching: {}, unroutedReplies: {}, visualSendBacks: {},textPosts: [], lastWasteReview: null };
+export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], capNoticed: false, postCaptions: {}, devBuild: null, devFailed: null, interrupted: [], testPhase: {}, patching: {}, unroutedReplies: {}, visualSendBacks: {}, textPosts: [], lastWasteReview: null, fpsWaivers: {} };
 
 // A state update is a few file operations, so a writer that waits this long found a stuck lock.
 const STATE_LOCK_MS = 30_000;

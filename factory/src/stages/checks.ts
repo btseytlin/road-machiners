@@ -4,6 +4,7 @@ import { readShown, type Shown } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
+import { dropWaiver, fpsOnly, matchingWaiver, recordWaivedPass } from '../fps-waiver';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
@@ -45,9 +46,17 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
+// The build alone, in a clone whose checks stopped at a waived playtest.
+const BUILD_SCRIPT = `set -e
+echo "[checks] $(date -u +%T) build, FPS minimum waived"
+SAVE_SCOPE="$BUILD_SCOPE" npm run build
+echo "[checks] $(date -u +%T) done"
+`;
+
 // The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
 // It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
 // A first failure hands the card to verify for one fix round. A failure after that fix stops the card.
+// A member's waiver lets one approved build pass a playtest that failed on its frame rate alone, flagged as waived.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const phase = checksPhase(ctx, issue);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
@@ -58,7 +67,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approver = approvedAlready(ctx, issue, item.labels);
   const approval = approver === null ? readApproval(home) : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
-  const failure = await checkPatiently(ctx, issue, base, build);
+  const failure = await weighWaiver(ctx, issue, build, approver !== null, await checkPatiently(ctx, issue, base, build));
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
@@ -66,6 +75,25 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
+}
+
+// The failure that stands once a member's waiver is weighed. Only an approved card can use one, and it goes with this verdict, whatever it is.
+async function weighWaiver(ctx: Ctx, issue: number, build: string, approved: boolean, failure: string | null): Promise<string | null> {
+  const standing = failure === null || !approved ? failure : await waive(ctx, issue, build, failure);
+  dropWaiver(ctx, issue);
+  return standing;
+}
+
+// A member's waiver lets an approved card pass on a playtest that failed on its frame rate alone. The build then runs by itself.
+// Returns null when the waiver covers the failure and the build passes, or the failure that stands.
+async function waive(ctx: Ctx, issue: number, build: string, failure: string): Promise<string | null> {
+  const waiver = ctx.cfg.gpu ? matchingWaiver(ctx, issue, build) : null;
+  const miss = waiver === null ? null : fpsOnly(failure);
+  if (waiver === null || miss === null) return failure;
+  ctx.log('checks', issue, `the playtest failed on its frame rate alone, ${miss.fps} FPS, and ${waiver.by} waived it, building`);
+  const built = await shellChecks(ctx, issue, checkDir(ctx, issue), BUILD_SCRIPT, build);
+  if (built === null) await recordWaivedPass(ctx, issue, waiver, miss);
+  return built;
 }
 
 function checksPhase(ctx: Ctx, issue: number): TestPhase {
@@ -114,9 +142,13 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(`${ctx.cfg.home}/work`, { recursive: true });
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
+  return shellChecks(ctx, issue, dir, checkScript(playtestCommand(ctx.cfg)), build);
+}
+
+async function shellChecks(ctx: Ctx, issue: number, dir: string, script: string, build: string): Promise<string | null> {
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build });
     return null;
   } catch (error) {
     return checkFailure(log, error);

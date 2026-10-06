@@ -155,11 +155,13 @@ describe('approve', () => {
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });
 
-  it('clears a kept approver and a leftover test phase once the merge lands', async () => {
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' }, testPhase: { 7: 'checks', 8: 'fix' } });
+  it('clears a kept approver, a leftover test phase and an unused FPS waiver once the merge lands', async () => {
+    const waiver = { by: 'bob', reason: 'busy GPU', build: 'abc123', at: '' };
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' }, testPhase: { 7: 'checks', 8: 'fix' }, fpsWaivers: { 7: waiver, 8: waiver } });
     await approve(fakeCtx(), 7, 'bob');
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
     expect(readState(`${home}/state.json`).testPhase).toEqual({ 8: 'fix' });
+    expect(readState(`${home}/state.json`).fpsWaivers).toEqual({ 8: waiver });
   });
 
   it('refuses a hotfix without itch.io keys before any git call', async () => {

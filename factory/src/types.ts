@@ -150,7 +150,11 @@ export type FactoryState = {
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  fpsWaivers: Record<string, FpsWaiver>; // issue number -> a member's one-shot waiver of the playtest FPS minimum. The next checks verdict on the issue drops it.
 };
+
+// Lets the checks of one approved issue accept a playtest that failed on its frame rate alone, for the branch head it names.
+export type FpsWaiver = { by: string; reason: string; build: string; at: string };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 

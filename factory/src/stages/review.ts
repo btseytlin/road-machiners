@@ -1,4 +1,5 @@
 import { rmSync, writeFileSync } from 'node:fs';
+import { withoutWaiver } from '../fps-waiver';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
 import { BASE_BRANCH, agentHome, fillPrompt, fitComment, readOutput, runAgent, workDir } from './common';
@@ -53,7 +54,7 @@ export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound
   updateState(ctx.statePath, (state) => {
     const approvedResolving = { ...state.approvedResolving };
     delete approvedResolving[String(issue)];
-    return { ...state, approvedResolving };
+    return { ...state, approvedResolving, fpsWaivers: withoutWaiver(state.fpsWaivers, issue) };
   });
   await ctx.github.move(issue, 'Design');
   return false;

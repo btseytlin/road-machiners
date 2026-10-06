@@ -55,6 +55,7 @@ Testing is two jobs. Verify runs the testing agent. Checks runs the machine chec
 - A release cleanup task runs only the harden line, since it merges with no post.
 - The visual review sends a card back at most twice. A third send-back fails the stage.
 - A card that the review already sent to Design once fails the stage on its next second FAIL.
+- A member can waive the frame rate minimum for one approved card stuck on it. Its checks run again with no agent, and a playtest whose one problem is the frame rate passes, flagged as waived. [operations.md](operations.md#fps-waiver) has the rules.
 
 ## Committee inputs
 
