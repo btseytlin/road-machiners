@@ -10,6 +10,7 @@ import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
 import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
 import { mountedParts } from "../sim/grid";
+import { wreckVehicle } from "../sim/combat";
 
 function part(wear: number): PartInstance {
   return { id: "p1", defId: "mg", hp: 10, wear };
@@ -213,6 +214,16 @@ describe("shot log", () => {
     const names = line.spans!.map((s) => s.text);
     expect(names.findIndex((t) => t.startsWith(partDef(cab.defId).name))).toBeLessThan(names.findIndex((t) => t.startsWith(partDef(armor.defId).name)));
     expect(line.spans!.find((s) => s.text.startsWith(partDef(armor.defId).name))?.cls).toBe("dim");
+  });
+
+  it("names the parts a shot hit on a truck it wrecked, which went onto the wreck's stock", () => {
+    const { w, raider, armor, shot } = duel();
+    if (!armor) throw new Error('The raider has no armor');
+    const e = shot([{ part: armor.id, damage: 3 }]);
+    w.events.push(e);
+    wreckVehicle(w, raider);
+    expect(eventText(w, e)!.text).toContain(`${partDef(armor.defId).name} −3`);
+    expect(roundLabel(w, raider.id, [{ part: armor.id, damage: 3 }], false)).toBe("Arm: 3");
   });
 
   it("logs a shot with no damage without a damage list", () => {

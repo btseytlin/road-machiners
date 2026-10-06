@@ -12,8 +12,9 @@ import { gaveUp, isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
-import { goodsCount, mountedParts } from '../sim/grid';
+import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
+import { carriedPart } from '../sim/salvage';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -132,8 +133,7 @@ function findAny(world: World, id: string): Vehicle | undefined {
 }
 
 function partName(world: World, vehicleId: string, partId: string): string {
-  const v = findAny(world, vehicleId);
-  const p = v && mountedParts(v).find((x) => x.id === partId);
+  const p = carriedPart(world, vehicleId, partId);
   return p ? partDef(p.defId).name : 'part';
 }
 
@@ -261,8 +261,7 @@ const PART_SHORT = {
 } as const;
 
 function partShort(world: World, vehicleId: string, partId: string): string {
-  const v = findAny(world, vehicleId);
-  const p = v && mountedParts(v).find((x) => x.id === partId);
+  const p = carriedPart(world, vehicleId, partId);
   if (!p) throw new Error(`Round hit part ${partId}, which ${vehicleId} does not carry`);
   const def = partDef(p.defId);
   return PART_SHORT[def.kind === 'core' ? def.role : def.kind];
@@ -322,9 +321,8 @@ function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget
 
 // " · Cab −5 broken, Plate −3": inner parts first, then armor in the dim color. A part with no HP left reads broken.
 function damageSpans(world: World, vehicleId: string, hits: PartHit[]): LogSpan[] {
-  const v = findAny(world, vehicleId);
   const parts = [...partDamage(hits)].map(([id, d]) => {
-    const part = v && mountedParts(v).find((x) => x.id === id);
+    const part = carriedPart(world, vehicleId, id);
     if (!part) throw new Error(`Round hit part ${id}, which ${vehicleId} does not carry`);
     return { part, armor: partDef(part.defId).kind === 'armor', d };
   });

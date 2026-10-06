@@ -11,7 +11,7 @@ import { findRoadWreckSpot, isBreakable, propReach } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { findSpot, goodsCount, gridOf, isMounted, mountedParts, MOUNT_CELLS, type Spot } from './grid';
 import { addGoods, cargoMassRoom, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
@@ -194,6 +194,14 @@ function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: n
 // The stock a destroyed NPC leaves.
 export function wreckStockId(vehicleId: string): string {
   return `wreck-${vehicleId}`;
+}
+
+// A part a truck has mounted, or had mounted until its wreck put the part on the wreck's stock, so this turn's
+// events can still name the parts of a truck they wrecked.
+export function carriedPart(world: World, vehicleId: string, partId: string): PartInstance | undefined {
+  const v = world.vehicles.find((x) => x.id === vehicleId) ?? world.removed.find((x) => x.id === vehicleId);
+  const wreck = world.salvage.find((s) => s.id === wreckStockId(vehicleId));
+  return (v && mountedParts(v).find((x) => x.id === partId)) ?? wreck?.parts.find((x) => x.id === partId);
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {

@@ -3,7 +3,7 @@ import { PHYSICS } from "../data/physics";
 import { REGION } from "../data/region";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
-import { mountedParts } from "../sim/grid";
+import { carriedPart } from "../sim/salvage";
 import type { GameEvent, ShotRound, World } from "../sim/types";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
@@ -110,8 +110,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const b = host.eventPoint(e.target);
   if (!a || !b) return null;
   const w = host.world;
-  const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
-  const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+  const gun = carriedPart(w, e.shooter, e.weapon);
   if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
   const view = viewOf(host.views, e.shooter);
   const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);
