@@ -330,11 +330,33 @@ describe('aid handover action', () => {
     return { w, npc };
   }
 
-  it('offers giving fuel, not ready while the trucks are apart, ready once side by side', () => {
-    const far = aidScene(60, 'player');
-    expect(getContextActions(far.w, false)[0]).toMatchObject({ label: `Give ${aidGoods(playerAid(far.w)!)} to ${npcName(far.npc)}`, ready: false });
+  it('offers giving fuel unready while the trucks move in reach, ready once parked side by side', () => {
+    const moving = aidScene(34, 'player');
+    moving.npc.speed = RULES.parkedSpeed + 1;
+    expect(getContextActions(moving.w, false)[0]).toMatchObject({ label: `Give ${aidGoods(playerAid(moving.w)!)} to ${npcName(moving.npc)}`, ready: false, target: { kind: 'aid', id: moving.npc.id } });
     const near = aidScene(34, 'player');
-    expect(getContextActions(near.w, false)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true });
+    expect(getContextActions(near.w, false)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true, target: { kind: 'aid', id: near.npc.id } });
+  });
+
+  it('shows no aid action while the agreed driver is out of reach, even beside another driver', () => {
+    const { w, npc } = aidScene(60, 'player');
+    addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    const actions = getContextActions(w, false);
+    expect(actions.filter((a) => a.target.kind === 'aid')).toEqual([]);
+    expect(actions.some((a) => a.label.includes(npcName(npc)))).toBe(false);
+  });
+
+  it('shows one aid action naming the agreed driver when another is also in reach', () => {
+    const { w, npc } = aidScene(34, 'player');
+    addVehicle(w, 'traders', 'scout', [], { x: 26, y: 30 });
+    const aids = getContextActions(w, false).filter((a) => a.target.kind === 'aid');
+    expect(aids).toHaveLength(1);
+    expect(aids[0]).toMatchObject({ target: { kind: 'aid', id: npc.id }, label: expect.stringContaining(npcName(npc)) });
+  });
+
+  it('gives the same actions after a save and reload', () => {
+    const { w } = aidScene(34, 'player');
+    expect(getContextActions(JSON.parse(JSON.stringify(w)), false)).toEqual(getContextActions(w, false));
   });
 
   it('offers taking fuel when the driver gives, and wins over a ready place action', () => {
@@ -343,6 +365,18 @@ describe('aid handover action', () => {
     w.vehicles[0].pos = { ...sitePads(site)[0] };
     npc.pos = { x: w.vehicles[0].pos.x + 4, y: w.vehicles[0].pos.y };
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `Take ${aidGoods(playerAid(w)!)} from ${npcName(npc)}`, ready: true });
+  });
+});
+
+describe('several trades', () => {
+  it('lists only the trade whose driver is in reach, with that driver as target', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const far = addVehicle(w, 'traders', 'scout', [], { x: 90, y: 30 });
+    const near = addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    addState(w, 'trade', far.id, w.player.vehicleId, { kind: 'none' });
+    addState(w, 'trade', near.id, w.player.vehicleId, { kind: 'none' });
+    const trades = getContextActions(w, false).filter((a) => a.target.kind === 'trade');
+    expect(trades).toEqual([{ label: `Trade with ${npcName(near)}`, ready: true, target: { kind: 'trade', id: near.id } }]);
   });
 });
 

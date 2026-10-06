@@ -675,11 +675,14 @@ export function startTrade(world: World, npc: Vehicle): void {
   meetGoal(world, npc, playerVehicle(world), "pull over to trade");
 }
 
+// The two trucks of a deal are in reach of each other, moving or not. The one owner of the meeting reach.
+export function inMeetingReach(world: World, s: NpcState): boolean {
+  return inTowReach(vehicleById(world, s.holder), vehicleById(world, s.other));
+}
+
 // Both trucks of the meeting are parked in reach. It keeps the meeting from lapsing.
 export function isMeeting(world: World, s: NpcState): boolean {
-  const npc = vehicleById(world, s.holder);
-  const me = vehicleById(world, s.other);
-  return isParked(npc) && isParked(me) && inTowReach(npc, me);
+  return isParked(vehicleById(world, s.holder)) && isParked(vehicleById(world, s.other)) && inMeetingReach(world, s);
 }
 
 // A feud between the two calls the meeting off. A missing party is left to the missing-party rule.
@@ -689,10 +692,15 @@ export function checkTrade(world: World, s: NpcState): "broken" | null {
   return npc && me && inFeud(world, npc, me) ? "broken" : null;
 }
 
-// The NPC with an agreed trade, met or still on its way, or null.
-export function tradePartner(world: World): Vehicle | null {
-  const s = world.states.find((x) => x.kind === "trade" && x.other === world.player.vehicleId);
-  return s ? vehicleById(world, s.holder) : null;
+// Every trade agreed with the player, met or still on its way. There can be one per driver.
+export function playerTrades(world: World): NpcState[] {
+  return world.states.filter((x) => x.kind === "trade" && x.other === world.player.vehicleId);
+}
+
+// The player can trade with this driver now: the trade is agreed and both trucks meet.
+export function canTradeWith(world: World, npcId: string): boolean {
+  const s = playerTrades(world).find((x) => x.holder === npcId);
+  return s !== undefined && isMeeting(world, s);
 }
 
 // The NPC the player can trade with now, or null.

@@ -2,7 +2,7 @@ import { GAME_VERSION } from "../config";
 import { playerAid, readyAid } from "../sim/aid";
 import { aidData } from "../sim/states";
 import { aidGoods } from "./format";
-import { tradePartner, tradeReady } from "../sim/economy";
+import { inMeetingReach, isMeeting, playerTrades } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
@@ -16,7 +16,7 @@ import { playerTow } from "../sim/tow";
 import { heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { SalvageStock, Vehicle, World } from "../sim/types";
+import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
@@ -64,23 +64,28 @@ export class ContextPicker {
 // Every action in reach, the default first. The player picks between them with the arrow keys.
 export function getContextActions(world: World, playing: boolean): ContextAction[] {
   if (playing || !playerCanAct(world)) return [];
-  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
-  const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
+  // An aid handover or a trade the player arranged shows only while its own driver is in reach. It wins over the place once both trucks are parked side by side.
+  const deals = [getAidAction(world), ...getTradeActions(world)].filter((d) => d !== null);
   return [...deals.filter((d) => d.ready), ...getPlaceActions(world), ...deals.filter((d) => !d.ready)];
+}
+
+function awaitsStart(s: NpcState): boolean {
+  return aidData(s).agreed && !aidData(s).started;
 }
 
 // An agreed aid deal the player has not started yet.
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
-  if (!s || !aidData(s).agreed || aidData(s).started) return null;
+  if (!s || !awaitsStart(s) || !inMeetingReach(world, s)) return null;
   const npc = npcName(vehicleById(world, s.holder));
   const label = aidData(s).giver === "player" ? `Give ${aidGoods(s)} to ${npc}` : `Take ${aidGoods(s)} from ${npc}`;
-  return { label, ready: readyAid(world) !== null, target: { kind: 'aid' } };
+  return { label, ready: readyAid(world)?.id === s.id, target: { kind: 'aid', id: s.holder } };
 }
 
-function getTradeAction(world: World): ContextAction | null {
-  const partner = tradePartner(world);
-  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null, target: { kind: 'trade' } };
+function getTradeActions(world: World): ContextAction[] {
+  return playerTrades(world)
+    .filter((s) => inMeetingReach(world, s))
+    .map((s) => ({ label: `Trade with ${npcName(vehicleById(world, s.holder))}`, ready: isMeeting(world, s), target: { kind: 'trade', id: s.holder } }));
 }
 
 function getPlaceActions(world: World): ContextAction[] {
