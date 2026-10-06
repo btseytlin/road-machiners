@@ -22,7 +22,8 @@ import { ramFactor, ramImpact } from './crash-contact';
 import { isDefeated, isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
-import { getTradePrice } from './economy';
+import { affordableBuyCount, getTradePrice } from './economy';
+import { cargoRoom } from './inventory';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
@@ -222,23 +223,33 @@ export function tradeSpend(world: World, vehicle: Vehicle): number {
   return Math.min(getResources(world, vehicle).money - getUpkeepReserve(vehicle), stake);
 }
 
-// Every affordable profitable run: a good bought at one shop and sold at another. Its weight is the profit per unit
-// over the tiles of the trip, from the driver to the source and on to the buyer. Near runs win most rolls, but not
-// all, so traders spread over every shop pair instead of all taking the one best run.
+// Every run whose load pays more than its trip fuel: a good bought at one shop and sold at another. Its weight is the
+// load's profit above the fuel over the tiles of the trip, from the driver to the source and on to the buyer. Near runs
+// win most rolls, but not all, so traders spread over every shop pair instead of all taking the one best run.
 export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
   const spend = tradeSpend(world, vehicle);
   const shops = Object.values(SHOPS);
   return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
 }
 
-// The runs from source to buyer, one per good both trade that pays and costs no more than `spend` a unit.
+// The money the fuel for a trip of `tiles` costs the driver at the supply price.
+export function tripFuelCost(world: World, vehicle: Vehicle, tiles: number): number {
+  if (!Number.isFinite(tiles) || tiles < 0) throw new Error(`${vehicle.id} prices the fuel of a trip of ${tiles} tiles`);
+  return tiles * vehicleStats(world, vehicle).fuelPerTile * ECONOMY.supplyPrice.fuel;
+}
+
+// The runs from source to buyer, one per good both trade, sized to the load the driver can afford with `spend` and fit,
+// as the purchase buys it. A run whose load profit does not beat its trip fuel is no offer.
 function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopDef, spend: number): Weighted<TradePlan>[] {
   const sourcePos = getKnownSite(source.id).pos;
   const trip = dist(vehicle.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
+  const fuel = tripFuelCost(world, vehicle, trip);
   return source.goods.filter((good) => buyer.goods.includes(good)).flatMap((good) => {
     const buy = getTradePrice(world, vehicle, source.id, good, 'buy');
     const profit = getTradePrice(world, vehicle, buyer.id, good, 'sell') - buy;
-    return spend >= buy && profit > 0 ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: profit / trip }] : [];
+    if (spend < buy || profit <= 0) return [];
+    const loadProfit = affordableBuyCount(world, vehicle, source.id, good, cargoRoom(vehicle, good), spend) * profit;
+    return loadProfit > fuel ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: (loadProfit - fuel) / trip }] : [];
   });
 }
 
