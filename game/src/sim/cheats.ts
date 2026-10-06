@@ -14,8 +14,9 @@ import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart, makeVehicle } from './factory';
 import { maxHealthOf } from './health';
-import { corePart, mountedParts } from './grid';
-import { addGoods, stowPart } from './inventory';
+import { corePart, mountedParts, type Spot } from './grid';
+import { addGoods, applyRefitLayout, planItemMove, stowPart } from './inventory';
+import { disarm } from './claymore';
 import { generateNpcLoadout } from './npc-loadout';
 import { grantXp, isPerkId, pickedFromPair } from './progress';
 import { isTerritory, nearestPad, type Site } from './sites';
@@ -130,6 +131,19 @@ function givePart(w: World, defId: string, count: number): void {
 
 function giveGoods(w: World, good: string, count: number): void {
   if (addGoods(w, playerVehicle(w), good, count) < count) throw new CheatError(`No room for ${count} ${good}`);
+}
+
+// The full shop's move: places a truck item as a garage refit would, at once, anywhere and in combat too. The rules
+// of where an item fits still hold.
+export function instantMoveItem(world: World, itemId: string, to: Spot): World {
+  return update(world, (w) => {
+    const me = playerVehicle(w);
+    const result = planItemMove(me, itemId, to);
+    if (result.error !== null) throw new CheatError(result.error);
+    const item = me.items.find((it) => it.id === itemId);
+    if (item?.kind === 'part') disarm(item.part);
+    applyRefitLayout(w, me, result.plan.items);
+  });
 }
 
 export function toggleGod(world: World): World {

@@ -11,15 +11,15 @@ import { START_KITS } from '../data/start';
 import {
   addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  noclipMove, startBattle, startWeather, teleport, toggleFrozen, toggleFullLog, toggleGod, freezeDriving, freezeFire,
+  noclipMove, startBattle, startWeather, teleport, toggleFrozen, toggleFullLog, toggleGod, freezeDriving, freezeFire, instantMoveItem,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
 import { corePart, goodsCount, mountedParts } from './grid';
-import { removeAllGoods, spareParts } from './inventory';
+import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, startCombat, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { canUseSite, siteGap } from './sites';
@@ -214,6 +214,39 @@ describe('frozen NPCs', () => {
     };
     expect(Object.keys(after(false).weaponOrders)).not.toEqual([]);
     expect(after(true)).toMatchObject({ speed: 0, weaponOrders: {} });
+  });
+});
+
+describe('instantMoveItem', () => {
+  // The player out in the field, in combat with a raider.
+  function fighting(): World {
+    const { w, id } = withSpawned(emptyWorld(), 'buggy', true);
+    startCombat(w, playerVehicle(w), w.vehicles.find((v) => v.id === id)!);
+    return w;
+  }
+
+  it('takes a mounted gun off at once in the field and in combat, with no refit job', () => {
+    const w = fighting();
+    const mg = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    const off = instantMoveItem(w, mg.id, stowSpot(playerVehicle(w), mg)!);
+
+    expect(playerVehicle(off).job).toBeNull();
+    expect(spareParts(playerVehicle(off)).map((p) => p.defId)).toEqual(['mg']);
+  });
+
+  it('mounts a given part at once', () => {
+    const w = give(fighting(), 'harpoon', 1);
+    const harpoon = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'harpoon')!;
+    if (harpoon.kind !== 'part') throw new Error('Expected a part');
+    const on = instantMoveItem(w, harpoon.id, installSpot(playerVehicle(w), harpoon)!);
+
+    expect(mountedParts(playerVehicle(on)).map((p) => p.defId)).toContain('harpoon');
+  });
+
+  it('refuses a spot the item does not fit, as a refit would', () => {
+    const w = fighting();
+    const mg = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    expect(() => instantMoveItem(w, mg.id, { x: -5, y: 0, rot: 0 })).toThrow(CheatError);
   });
 });
 

@@ -40,6 +40,14 @@ describe("breakRounds", () => {
     expect(breakRounds([off("a")]).map((b) => b.round)).toEqual([null]);
   });
 
+  it("gives a break from a claymore blast, caltrops or a torn line no round, not the shot after it", () => {
+    const later = shot([round([dmg("b")])]);
+    const blast: GameEvent = { t: "claymore", vehicle: "s", other: "t", pos: { x: 0, y: 0 }, hits: [dmg("a")], selfHits: [] };
+    const spikes: GameEvent = { t: "caltrops", vehicle: "t", field: "g1", source: "s", hits: [dmg("a")] };
+    const torn: GameEvent = { t: "lineTorn", line: "l1", vehicle: "t", part: "a", damage: 12 };
+    for (const owner of [blast, spikes, torn]) expect(breakRounds([off("a"), owner, later]).map((b) => [b.owner, b.round])).toEqual([[null, null]]);
+  });
+
   it("throws when the shot never damaged the part", () => {
     expect(() => breakRounds([off("a"), shot([round([dmg("b")])])])).toThrow();
     expect(() => breakRounds([off("a", "other"), shot([round([dmg("a")])])])).toThrow();

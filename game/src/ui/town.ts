@@ -56,9 +56,9 @@ import { npcName } from "../sim/spawn";
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
-type StockFilter = "all" | Exclude<PartKind, "core">;
+export type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
+export const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -394,7 +394,7 @@ export class TownScreen {
   }
 }
 
-const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+export const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   all: "All",
   weapon: "Weapons",
   engine: "Engines",
@@ -405,7 +405,7 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   utility: "Utilities",
 };
 
-const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
+export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
   armor: "armor",

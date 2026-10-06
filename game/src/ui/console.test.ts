@@ -123,6 +123,7 @@ describe("queries", () => {
         "fps",
         "freeze",
         "fuel",
+        "fullshop",
         "give",
         "god",
         "health",

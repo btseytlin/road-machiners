@@ -43,6 +43,7 @@ import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
+import { FullShopScreen } from "../ui/full-shop";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
@@ -180,6 +181,7 @@ export class Game {
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
+  private readonly fullShop: FullShopScreen;
   private readonly context: TruckContext;
   private readonly trade: TruckTradeScreen;
   private readonly character: CharacterScreen;
@@ -276,6 +278,7 @@ export class Game {
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
     this.town = new TownScreen(host);
+    this.fullShop = new FullShopScreen(host);
     this.trade = new TruckTradeScreen(host);
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
@@ -366,6 +369,13 @@ export class Game {
     if (!this.saves.held) saveInTown(window.localStorage, next, Date.now());
   }
 
+  // The console's fullshop command: the full shop screen over any other screen, anywhere.
+  openFullShop(): void {
+    if (this.anim) return;
+    this.closeScreens(null);
+    this.fullShop.open();
+  }
+
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
@@ -379,7 +389,8 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
+    const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -409,6 +420,7 @@ export class Game {
     if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
     this.town.render();
+    this.fullShop.render();
     this.trade.render();
     this.character.render();
     this.inventory.render();
@@ -535,7 +547,7 @@ export class Game {
   }
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
-    for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
+    for (const s of [this.town, this.fullShop, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
   }
 
   private toggleScreen(screen: CharacterScreen | InventoryScreen): void {

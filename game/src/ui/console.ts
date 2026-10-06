@@ -38,9 +38,9 @@ import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
 
-// `toggleFps` asks the console to show or hide the frame rate panel, and `noclip` to switch noclip flight.
-// Both live outside the world.
-export type CommandResult = { world: World | null; lines: string[]; toggleFps?: true; noclip?: true };
+// `toggleFps` asks the console to show or hide the frame rate panel, `noclip` to switch noclip flight and
+// `fullShop` to open the full shop screen. All live outside the world.
+export type CommandResult = { world: World | null; lines: string[]; toggleFps?: true; noclip?: true; fullShop?: true };
 
 export type Command = {
   name: string;
@@ -138,6 +138,7 @@ export const COMMANDS: readonly Command[] = [
   }),
 
   command("fps", "Toggle the frame rate panel.", { min: 0, max: 0 }, () => ({ world: null, lines: [], toggleFps: true })),
+  command("fullshop", "Open a shop of every part, free, where parts fit at once, anywhere and in combat.", { min: 0, max: 0 }, () => ({ world: null, lines: [], fullShop: true })),
 
   command("tp <location id> | tp <x> <y>", "Move the truck to a location or map point.", { min: 1, max: 2 }, (world, args, usage) => {
     if (args.length === 1) return changed(teleport(world, placeSpot(world, args[0])), `teleported to ${args[0]}`);
@@ -224,6 +225,7 @@ export type ConsoleGame = {
   readonly state: World;
   readonly busy: boolean;
   apply(w: World): void;
+  openFullShop(): void;
 };
 
 // The view parts noclip flight drives: the ground point at the view center in meters, and the key pan speed.
@@ -361,6 +363,10 @@ export class DebugConsole {
     if (result.world !== null) this.game.apply(result.world);
     if (result.toggleFps) this.print(`fps panel ${this.fps.toggle() ? "on" : "off"}`);
     for (const text of result.lines) this.print(text);
+    if (result.fullShop) {
+      this.close();
+      this.game.openFullShop();
+    }
   }
 
   // Only bad user input is printed. Any other error is a bug and goes to the crash screen, or to this log outside dev.
