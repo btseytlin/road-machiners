@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { START_KITS } from '../data/start';
+import { TIME } from '../data/time';
 import { TEST_MAP } from '../test/map';
 import { playerVehicle } from './damage';
 import { townAt } from './sites';
 import { vehicleStats } from './stats';
 import { RULES } from '../data/rules';
+import { sunAt } from './sun';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import type { World } from './types';
 import { dist } from './vec';
-import { isAtRest, newWorld, startPose, townStart } from './world';
+import { endTurn, isAtRest, newWorld, setHeadlights, startPose, townStart, update } from './world';
 
 describe('townStart', () => {
   it('parks every chassis on a town pad with no vehicle on top of it', () => {
@@ -44,5 +48,78 @@ describe('isAtRest', () => {
 
   it('is false when faster than parked speed even while braking', () => {
     expect(isAtRest({ ...truck(), speed: fast, order: { kind: 'brake' } })).toBe(false);
+  });
+});
+
+describe('the headlight switch', () => {
+  const duskTurn = Math.ceil(((TIME.sunset - TIME.startHour) * TIME.turnsPerDay) / 24) + 1;
+  const playAcrossDusk = (world: World): World[] => {
+    const seen: World[] = [];
+    let w = update(world, (d) => {
+      d.turn = duskTurn - 4;
+    });
+    for (let k = 0; k < 8; k++) {
+      w = endTurn(w, testDrive);
+      seen.push(w);
+    }
+    return seen;
+  };
+
+  it('starts off in a new game', () => {
+    expect(newWorld(7, START_KITS.standard, TEST_MAP, false).player.headlights).toBe(false);
+  });
+
+  it('switches through setHeadlights into a new world', () => {
+    const world = emptyWorld();
+    const next = setHeadlights(world, true);
+
+    expect(next.player.headlights).toBe(true);
+    expect(next).not.toBe(world);
+    expect(world.player.headlights).toBe(false);
+  });
+
+  it('holds its setting through dusk either way', () => {
+    const seen = playAcrossDusk(emptyWorld());
+    expect(sunAt(seen[0].turn)).not.toBeNull();
+    expect(sunAt(seen.at(-1)!.turn)).toBeNull();
+
+    expect(seen.map((w) => w.player.headlights)).toEqual(seen.map(() => false));
+    const lit = playAcrossDusk(setHeadlights(emptyWorld(), true));
+    expect(lit.map((w) => w.player.headlights)).toEqual(lit.map(() => true));
+  });
+
+  it('keeps the events and removed vehicles of the turn being shown', () => {
+    const world = emptyWorld();
+    const gone = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 60, y: 30 });
+    world.vehicles = world.vehicles.filter((v) => v !== gone);
+    world.removed = [gone];
+    world.events = [{ t: 'destroyed', vehicle: gone.id, by: world.player.vehicleId }];
+
+    const next = setHeadlights(world, true);
+
+    expect(next.events).toEqual(world.events);
+    expect(next.removed).toEqual(world.removed);
+  });
+
+  it('changes no turn result at night with NPCs about', () => {
+    const night = update(emptyWorld({ x: 100, y: 100 }), (w) => {
+      w.turn = duskTurn + 2;
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 125, y: 100 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 100, y: 130 });
+      trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    });
+    expect(sunAt(night.turn)).toBeNull();
+    const play = (world: World): World[] => {
+      const seen = [world];
+      for (let k = 0; k < 4; k++) seen.push(endTurn(seen.at(-1)!, testDrive));
+      return seen.slice(1);
+    };
+
+    const dark = play(night);
+    const lit = play(setHeadlights(night, true));
+
+    expect(dark.at(-1)!.player.contacts.length).toBeGreaterThan(0);
+    expect(lit.map((w) => ({ ...w, player: { ...w.player, headlights: false } }))).toEqual(dark);
   });
 });

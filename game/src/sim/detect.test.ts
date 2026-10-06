@@ -9,7 +9,7 @@ import { advanceDust, cloudsSeenBy, contactsOf, dustRange, markVehicle, scannerR
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { TERRAIN } from '../data/terrain';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { dist } from './vec';
 import { refreshVision, sightRadius } from './vision';
 import { vehicleStats } from './stats';
@@ -267,11 +267,11 @@ describe('perception hearing and contact fix', () => {
     return { w, target };
   }
 
-  it('the player hears farther at level 5', () => {
+  it('the player hears farther at rank 5', () => {
     const { w, target } = pastHearing();
     const me = w.vehicles[0];
     expect(contactsOf(w, me, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(contactsOf(w, me, Infinity).find((c) => c.vehicleId === target.id)?.sources).toContain('sound');
   });
 
@@ -279,17 +279,17 @@ describe('perception hearing and contact fix', () => {
     const { w, target } = pastHearing({ x: 2, y: 60 });
     const listener = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 2, y: 60 });
     listener.speed = 0;
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(contactsOf(w, listener, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
   });
 
-  it('the player gets a tighter contact circle at level 5', () => {
+  it('the player gets a tighter contact circle at rank 5', () => {
     const w = emptyWorld({ x: 20, y: 30 });
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
     target.speed = 3;
     const radius = () => contactsOf(w, w.vehicles[0], Infinity).find((c) => c.vehicleId === target.id)!.radius;
     const base = radius();
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(radius()).toBeCloseTo(base * (1 - 5 * SKILL_EFFECTS.perception.contactFix));
   });
 
@@ -300,7 +300,7 @@ describe('perception hearing and contact fix', () => {
     target.speed = 3;
     const radius = () => contactsOf(w, observer, Infinity).find((c) => c.vehicleId === target.id)!.radius;
     const base = radius();
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(radius()).toBe(base);
   });
 });
