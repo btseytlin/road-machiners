@@ -357,11 +357,6 @@ function armoredCells(v: Vehicle): number {
   return mountedItems(v, 'armor').reduce((sum, item) => sum + itemCells(item).length, 0);
 }
 
-// The worst gear level the template rolls.
-export function lowestGearLevel(template: NpcTemplate): GearLevel {
-  return GEAR_LEVEL_IDS.find((id) => template.loadout.levels.some((l) => l.value === id))!;
-}
-
 // A fresh loadout for the template at a rolled gear level, or at `level` when given. A given chassis keeps the
 // truck the driver already has.
 export function generateNpcLoadout(world: World, template: NpcTemplate, chassisId: string | null = null, level: GearLevel | null = null): NpcLoadout {
