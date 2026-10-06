@@ -783,6 +783,12 @@ function fightTargetId(v: Vehicle): string | null {
   return top?.kind === "fight" && !isKnockedOut(v) ? top.targetId ?? null : null;
 }
 
+// True when a and b hold a combat state in either direction, or a live NPC among them has its top fight goal on the
+// other, seen or not.
+export function engagedWith(world: World, a: Vehicle, b: Vehicle): boolean {
+  return fightsAgainst(world, a, b) || fightsAgainst(world, b, a) || fightTargetId(a) === b.id || fightTargetId(b) === a.id;
+}
+
 // The hostile truck v hunts on a top fight goal and sees, if any.
 function huntedTarget(world: World, v: Vehicle): Vehicle | null {
   const id = fightTargetId(v);
