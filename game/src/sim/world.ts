@@ -32,6 +32,7 @@ import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
 import { advanceStates } from './states';
+import { forgetOld } from './memory';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
@@ -98,6 +99,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       townPatched: false,
       engineHeat: 0,
       overdrive: false,
+      headlights: false,
       discovered: [],
       scavenged: [],
       storage: [],
@@ -296,6 +298,7 @@ export function endTurn(
     advanceAid(w);
     advanceStates(w);
     checkBeacon(w);
+    forgetOld(w);
     resolveNpcActivities(w);
     noteEngagements(w);
     discoverSites(w);
@@ -364,6 +367,12 @@ export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
     w.player.overdrive = on;
   });
+}
+
+// The one switch that flips while a turn plays, so it skips update(): that would empty the events and removed
+// vehicles the turn is still showing. No rule reads the lamps, so nothing else needs settling.
+export function setHeadlights(world: World, on: boolean): World {
+  return { ...world, player: { ...world.player, headlights: on } };
 }
 
 export function setAutoFire(world: World, on: boolean): World {

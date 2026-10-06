@@ -50,6 +50,16 @@ describe('removeStaleBuilds', () => {
     expect(['dev', 'keep1', 'gone1', 'index.html'].map((n) => existsSync(join(webRoot, n)))).toEqual([true, true, false, true]);
   });
 
+  it('keeps the reserved concepts folder and its files while removing stale builds', () => {
+    const { webRoot } = setup();
+    mkdirSync(join(webRoot, 'concepts'), { recursive: true });
+    mkdirSync(join(webRoot, 'stale'), { recursive: true });
+    writeFileSync(join(webRoot, 'concepts', 'a.png'), 'img');
+    const removed = removeStaleBuilds(webRoot, new Set(), () => undefined);
+    expect(removed).toEqual(['stale']);
+    expect(readFileSync(join(webRoot, 'concepts', 'a.png'), 'utf8')).toBe('img');
+  });
+
   it('does nothing when the web root does not exist yet', () => {
     expect(removeStaleBuilds(join('tmp', 'factory-no-such-web'), new Set(), () => undefined)).toEqual([]);
   });

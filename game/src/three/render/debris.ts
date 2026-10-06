@@ -10,7 +10,8 @@ import type { Quat, V3, VehicleFrame } from '../../phys/frames';
 import { hashStr } from '../../render/noise';
 import { bodyOf } from '../../sim/body';
 import { propPose } from '../../sim/mapgen';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { propBase } from '../../sim/bridge';
+import type { Terrain } from '../../sim/terrain';
 import type { Obstacle, Vehicle } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { model, type ModelName } from './models';
@@ -73,7 +74,8 @@ export class DebrisSim {
   // or null for a prop broken out of view, which topples over.
   burst(o: Obstacle, push: V3 | null, near: readonly Obstacle[]): THREE.Group {
     const pose = propPose(o);
-    const origin = new THREE.Vector3(pose.pos.x * S, heightAt(this.terrain, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
+    if (pose.model === 'hulk') throw new Error(`Hulk ${o.id} is not breakable`);
+    const origin = new THREE.Vector3(pose.pos.x * S, propBase(this.terrain, o) * S, pose.pos.y * S);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pose.yaw);
     const scale = new THREE.Vector3(pose.scale.x, pose.scale.z, pose.scale.y);
     const others = near.filter((n) => n.id !== o.id && dist(n.pos, o.pos) * S <= FLY_REACH + 2 * S);

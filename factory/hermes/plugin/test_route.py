@@ -26,9 +26,16 @@ def test_approve_reply():
     assert route("  Approve \n", "55") == ("approve", 12)
 
 
-def test_other_reply_is_feedback():
-    assert route("make it bigger", "55") == ("feedback", 12, "make it bigger")
-    assert route("approve it", "55") == ("feedback", 12, "approve it")
+def test_other_reply_goes_to_hermes():
+    assert route("make it bigger", "55") == ("reply", 12, "make it bigger")
+    assert route("approve it", "55") == ("reply", 12, "approve it")
+
+
+def test_route_prefix_picks_the_route_itself():
+    assert route("patch: make the horn louder", "55") == ("patch", 12, "make the horn louder")
+    assert route("  Redesign : use top-down icons\nfor the grid", "55") == ("redesign", 12, "use top-down icons\nfor the grid")
+    assert route("patching is fine", "55") == ("reply", 12, "patching is fine")
+    assert route("patch: x", "99") is None
 
 
 def test_reply_to_unknown_post_is_normal_chat():
@@ -103,9 +110,11 @@ def test_inbox_command_shapes():
     assert plugin.inbox_command(("approve", 12), 1, "Ann", -100, "77", "60") == {
         "kind": "approve", "issue": 12, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77, "postId": 60,
     }
-    assert plugin.inbox_command(("feedback", 12, "x y"), 1, None, -100, 78, 60) == {
-        "kind": "feedback", "issue": 12, "text": "x y", "by": "1", "byName": None, "chat": "-100", "messageId": 78, "postId": 60,
+    assert plugin.inbox_command(("reply", 12, "x y"), 1, None, -100, 78, 60) == {
+        "kind": "reply", "issue": 12, "text": "x y", "by": "1", "byName": None, "chat": "-100", "messageId": 78, "postId": 60,
     }
+    assert plugin.inbox_command(("patch", 12, "x"), 1, None, -100, 78, 60)["kind"] == "patch"
+    assert plugin.inbox_command(("redesign", 12, "x"), 1, None, -100, 78, 60)["issue"] == 12
     assert plugin.inbox_command(("change", "z"), 1, "", -100, 79, None) == {
         "kind": "change", "issue": None, "text": "z", "by": "1", "byName": None, "chat": "-100", "messageId": 79, "postId": None,
     }
@@ -142,7 +151,9 @@ def test_write_inbox_is_atomic(tmp_path, monkeypatch):
 
 def env(tmp_path):
     return {
-        "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": "/st", "FACTORY_COMMITTEE_CHAT": "-100",
+        "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": str(tmp_path / "state"), "FACTORY_COMMITTEE_CHAT": "-100",
+        "FACTORY_OBSERVATION_HEARTBEAT_MS": "10000",
+        "FACTORY_PUBLIC_URL": "https://example.org", "FACTORY_STATUS_TIMEOUT_MS": "10000",
         "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
         "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
     }
@@ -150,7 +161,7 @@ def env(tmp_path):
 
 def test_load_config(tmp_path):
     cfg = plugin.load_config(env(tmp_path))
-    assert (cfg.inbox, cfg.state_dir, cfg.chat) == ("/in", "/st", "-100")
+    assert (cfg.inbox, cfg.state_dir, cfg.chat) == ("/in", str(tmp_path / "state"), "-100")
     assert cfg.committee.bootstrap == "1"
 
 
@@ -172,7 +183,7 @@ def test_register_seeds_the_file(tmp_path):
     finally:
         plugin.os.environ.clear()
         plugin.os.environ.update(old)
-    assert hooks == ["pre_gateway_dispatch"]
+    assert hooks == ["pre_gateway_dispatch", "pre_llm_call", "pre_api_request", "pre_tool_call", "post_tool_call", "on_session_end", "on_session_finalize"]
     data = json.loads((tmp_path / "committee" / "committee.json").read_text())
     assert data == {"members": [{"telegram": "1", "github": "boss", "name": None}]}
 
@@ -241,6 +252,68 @@ def test_hook_routes_release_reply(tmp_path):
     assert result == {"action": "skip", "reason": "factory-ship"}
     (file,) = (tmp_path / "inbox").iterdir()
     assert json.loads(file.read_text())["issue"] == 40
+
+
+def test_hook_queues_a_plain_approval_reply_and_hands_it_to_hermes_with_a_header(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text('{"approvalPosts": {"55": 12}}')
+    (tmp_path / "inbox").mkdir()
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), "-100", committee)
+    gateway = types.SimpleNamespace(adapters={"telegram": Adapter()})
+    source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
+    event = types.SimpleNamespace(text="show us the top-down atlas", reply_to_message_id="55", source=source, message_id="5")
+    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    assert result["action"] == "rewrite"
+    assert result["text"].startswith("[Factory: a committee reply to the approval post 55 of issue #12.")
+    assert "factory_route_reply" in result["text"]
+    assert result["text"].endswith("\n\nshow us the top-down atlas")
+    (file,) = (tmp_path / "inbox").iterdir()
+    assert json.loads(file.read_text()) | {} == {
+        "kind": "reply", "issue": 12, "text": "show us the top-down atlas", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 5, "postId": 55,
+    }
+
+
+def route_setup(tmp_path, session=None):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text('{"approvalPosts": {"55": 12}}')
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
+    values = SESSION if session is None else session
+    return inbox, plugin.make_route_handler(cfg, session_env=lambda key: values.get(key, ""))
+
+
+@pytest.mark.parametrize("route_name", ["answer", "patch", "redesign"])
+def test_route_tool_writes_a_route_command_for_an_open_post(tmp_path, route_name):
+    inbox, handle = route_setup(tmp_path)
+    result = json.loads(handle({"post": 55, "route": route_name, "text": "  Flip the grid icons to top-down.  "}))
+    assert result == {"success": True, "message": plugin.ROUTE_DONE[route_name]}
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text()) == {
+        "kind": "route", "issue": 12, "text": "Flip the grid icons to top-down.", "route": route_name,
+        "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77, "postId": 55,
+    }
+
+
+@pytest.mark.parametrize("args", [
+    {"post": 99, "route": "patch", "text": "x"},
+    {"post": 55, "route": "ship", "text": "x"},
+    {"post": 55, "route": "patch", "text": "  "},
+])
+def test_route_tool_refuses_a_closed_post_an_unknown_route_or_no_text(tmp_path, args):
+    inbox, handle = route_setup(tmp_path)
+    assert "error" in json.loads(handle(args))
+    assert list(inbox.iterdir()) == []
+
+
+def test_route_tool_refuses_a_non_member(tmp_path):
+    inbox, handle = route_setup(tmp_path, {**SESSION, "HERMES_SESSION_USER_ID": "2"})
+    assert "error" in json.loads(handle({"post": 55, "route": "patch", "text": "x"}))
+    assert list(inbox.iterdir()) == []
 
 
 def test_hook_queues_without_a_reply_of_its_own(tmp_path):
@@ -385,3 +458,6 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     assert calls[0]["name"] == "factory_queue_task" and calls[0]["toolset"] == "factory"
     assert calls[0]["schema"]["parameters"]["required"] == ["request"]
     assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"
+    assert calls[2]["name"] == "factory_route_reply" and calls[2]["toolset"] == "factory"
+    assert calls[3]["name"] == "factory_status" and calls[3]["toolset"] == "factory"
+    assert calls[2]["schema"]["parameters"]["required"] == ["post", "route", "text"]

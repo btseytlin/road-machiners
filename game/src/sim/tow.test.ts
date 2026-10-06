@@ -38,6 +38,8 @@ const MID_FAR: Vec = { x: 80, y: 330 };
 
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
+  // No region spawns, so NPCs elsewhere on the map never cross a long tow.
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   w.player.fuel = 0;
   const trader = withTower(w, 'trader', 'traders', 'hauler', traderPos);
   return { w, trader };
@@ -584,6 +586,41 @@ describe('tow deals', () => {
     expect(again.holder).toBe(deal.holder);
     expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
+  });
+
+  it('a tower that dropped the tow for danger waits before it offers again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    for (let i = 0; i < 5; i++) w = endTurn(w, testDrive);
+    const holder = playerTow(w)!.holder;
+    dropTow(w, playerTow(w)!, 'danger');
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, holder));
+
+    // The sibling test shows the same tower offers again within 30 turns. A long wait must hold it back.
+    const wait = TOW.dangerWait;
+    TOW.dangerWait = 200;
+    try {
+      expect(playerTow(runUntil(w, 30, (x) => playerTow(x) !== null).w)).toBeNull();
+    } finally {
+      TOW.dangerWait = wait;
+    }
+  });
+
+  // A promise kept for a later breakdown charged the old fee for a far shorter tow.
+  it('a tower forgets its promise once the player drives again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    const tower = playerTow(w)!.holder;
+    dropTow(w, playerTow(w)!, 'danger');
+    w.player.fuel = 30;
+
+    w = endTurn(w, testDrive);
+
+    expect(isStranded(w, playerVehicle(w))).toBe(false);
+    expect(stateOf(w, 'towPromise', tower, w.player.vehicleId)).toBeNull();
   });
 });
 

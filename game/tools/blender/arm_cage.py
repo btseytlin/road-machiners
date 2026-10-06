@@ -1,7 +1,7 @@
 """Rebar cage for the 'cage' armor.
 
 A front-edge row of 2 cells: 0.97 m across, 0.65 m deep, outer face at +X. A flat grille of rebar bars, 0.9 m tall,
-stands STANDOFF past the outer edge on brackets, so it clears the body sides. The view leaves the bumper off its cells. The bar tips stick up unevenly past the top rail.
+stands STANDOFF past the outer edge on brackets, so it clears the body sides. A back rail joins the bracket clamps. The view leaves the bumper off its cells. The bar tips stick up unevenly past the top rail.
 The top rail takes the faction paint.
 Run: blender --background --python tools/blender/arm_cage.py -- public/models/arm_cage.glb [tmp/arm_cage.png]
 """
@@ -38,6 +38,7 @@ def build(kit: Kit) -> None:
         for z in (0.1, RAIL_Z):
             kit.box(f"bracket{y:.2f}_{z:.2f}", (GRILLE_X - BRACKET_X, 0.04, 0.04), ((GRILLE_X + BRACKET_X) / 2, y, z), "metal")
         kit.box(f"clamp{y:.2f}", (0.04, 0.08, RAIL_Z - 0.1 + 0.08), (BRACKET_X, y, (RAIL_Z + 0.1) / 2), "metal_light")
+    kit.box("back_rail", (0.04, edge * 2, 0.04), (BRACKET_X, 0, RAIL_Z), "metal", dent_by=0.003)
 
 
 if __name__ == "__main__":

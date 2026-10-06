@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIX } from "../data/sounds";
-import { parseSettings } from "./sound";
+import { knobAngle, parseSettings, turned } from "./sound";
 
 describe("parseSettings", () => {
   it("starts from the mix volumes", () => {
@@ -13,5 +13,29 @@ describe("parseSettings", () => {
   it("fails loud on invalid settings", () => {
     expect(() => parseSettings('{"muted":true}')).toThrow();
     expect(() => parseSettings('{"muted":false,"volume":{"ui":2,"sfx":1,"ambient":1,"music":1}}')).toThrow();
+  });
+});
+
+describe("turned", () => {
+  it("steps a twentieth at a time and snaps to whole steps", () => {
+    expect(turned(0.5, 1)).toBeCloseTo(0.55);
+    expect(turned(0.5, -2)).toBeCloseTo(0.4);
+    expect(turned(0.52, 0)).toBeCloseTo(0.5);
+  });
+  it("gives exact step values, so stored settings hold no float noise", () => {
+    expect(turned(0.1, 1)).toBe(0.15);
+    expect(turned(0.65, 1)).toBe(0.7);
+  });
+  it("stops at silence and full", () => {
+    expect(turned(0.95, 3)).toBe(1);
+    expect(turned(0.05, -3)).toBe(0);
+  });
+});
+
+describe("knobAngle", () => {
+  it("swings the pointer through 270 degrees", () => {
+    expect(knobAngle(0)).toBe(-135);
+    expect(knobAngle(0.5)).toBe(0);
+    expect(knobAngle(1)).toBe(135);
   });
 });
