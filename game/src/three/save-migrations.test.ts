@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
-import type { Vehicle } from '../sim/types';
+import type { Vehicle, WeatherEvent, World } from '../sim/types';
+import { stormStrength } from '../sim/weather';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -11,6 +12,7 @@ import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -198,5 +200,19 @@ describe('save migration 8 to 9', () => {
   it('ends a search of the old stock and keeps other searches', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  const next = MIGRATIONS[9](FORMAT_2_9) as { turn: number; weather: WeatherEvent[] };
+
+  it('gives a storm a birth turn past its build-up and changes nothing else', () => {
+    expect(next).toEqual({ ...FORMAT_2_9, weather: [{ ...FORMAT_2_9.weather[0], born: 470 }, FORMAT_2_9.weather[1]] });
+  });
+
+  it('leaves a storm with a long way to go at full strength', () => {
+    const storm = next.weather[0];
+    if (storm.kind !== 'storm') throw new Error('expected the storm first');
+    expect(stormStrength(next as unknown as World, storm)).toBe(1);
   });
 });

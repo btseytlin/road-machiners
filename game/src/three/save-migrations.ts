@@ -201,6 +201,16 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
+// keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 10.
+const STORM_FADE_TURNS_9_10 = 30;
+
+function withStormBorn_9_10(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_9_10;
+  const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
+  return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -255,6 +265,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
+  // 9 to 10: a storm records the turn it was born, already past its build-up.
+  withStormBorn_9_10,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
