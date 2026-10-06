@@ -65,7 +65,7 @@ import {
   storageItem,
   footprint,
 } from "./inventory-draw";
-import { fuelLiters, kg } from "./units";
+import { fuelLiters, kg, moneyText } from "./units";
 import { moneyLabel } from "./hud-readout";
 import {
   doubleClickCommand,
@@ -473,7 +473,7 @@ export class InventoryView {
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `${action} ${cost}`,
+      `${action} ${moneyText(cost)}`,
     );
   }
 

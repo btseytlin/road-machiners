@@ -19,7 +19,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph, moneyAmount } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -213,8 +213,8 @@ function weatherLabel(w: World, pos: Vec): string {
 // Negative money is debt. It shows as a positive amount owed.
 export function moneyLabel(money: number): string {
   return money < 0
-    ? `Debt ${(-money).toLocaleString("en-US")}`
-    : money.toLocaleString("en-US");
+    ? `Debt ${moneyAmount(-money)}`
+    : moneyAmount(money);
 }
 
 // What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null

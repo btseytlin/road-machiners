@@ -16,6 +16,7 @@ import type { Vehicle, World } from '../sim/types';
 import { partValue } from '../sim/wear';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from './map';
+import { moneyAmount } from '../ui/units';
 
 type CabSide = 'front' | 'rear' | 'left' | 'right';
 const CAB_SIDES: readonly CabSide[] = ['front', 'rear', 'left', 'right'];
@@ -105,13 +106,13 @@ export function formatLoadoutReport(stats: TemplateStats[]): string {
     '',
     `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Gun drag is the top speed the guns take. Speed is the top speed against the chassis top speed. Cab is the share of cab lanes shielded per side: front, rear, left, right.`,
     '',
-    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | gun drag | speed | cargo value |',
+    '| template | levels | guns | armor | cab F/B/L/R | gear value M | mass | gun drag | speed | cargo value M |',
     '|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const s of stats) {
     const levels = GEAR_LEVEL_IDS.map((l) => pct(s.levels[l])).join(' ');
     const cab = CAB_SIDES.map((side) => pct(s.cab[side])).join(' ');
-    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${Math.round(s.cargo)} |`);
+    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${moneyAmount(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${moneyAmount(s.cargo)} |`);
   }
   return lines.join('\n') + '\n';
 }

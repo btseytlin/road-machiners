@@ -5,6 +5,7 @@ import type { CarryReport } from '../sim/world';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { el, panel } from './dom';
+import { moneyText } from './units';
 
 export type SaveFate = 'migrate' | 'new';
 
@@ -57,7 +58,7 @@ function savePanel(title: string): HTMLElement {
 
 function reportLines(report: CarryReport): string[] {
   const garage = report.toGarage.map((id) => partDef(id).name);
-  const sold = report.sold.map((s) => `${s.units} ${GOODS[s.good].name} sold for $${s.money}`);
+  const sold = report.sold.map((s) => `${s.units} ${GOODS[s.good].name} sold for ${moneyText(s.money)}`);
   return [
     ...(garage.length > 0 ? [`Moved to the garage: ${garage.join(', ')}`] : []),
     ...sold,

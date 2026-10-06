@@ -47,3 +47,16 @@ export function hp(value: number): number {
 export function damage(value: number): number {
   return Math.ceil(value);
 }
+
+// Money is integer cents in the sim. It reads in M: no decimals for a whole M, two otherwise.
+export function moneyAmount(cents: number): string {
+  const whole = Math.round(cents);
+  if (whole === 0) return '0';
+  const decimals = whole % UNITS.centsPerM === 0 ? 0 : 2;
+  return (whole / UNITS.centsPerM).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// Money in running text, with its unit: log lines, talk and titles.
+export function moneyText(cents: number): string {
+  return `${moneyAmount(cents)} M`;
+}
