@@ -13,6 +13,7 @@ import { createServer } from 'vite';
 
 const BUILD_LIMIT_MS = 600000; // software drawing renders about 150 icons, each in four passes
 const cpu = process.argv.includes('--cpu');
+const plansOnly = process.argv.includes('--plans');
 
 function writeAtomic(path, data) {
   mkdirSync(dirname(path), { recursive: true });
@@ -31,6 +32,11 @@ try {
   await page.goto(`${server.resolvedUrls.local[0]}icons.html`);
   await page.waitForFunction(() => window.__ICONS__, null, { timeout: 60000 });
   page.setDefaultTimeout(BUILD_LIMIT_MS);
+  for (const [path, url] of Object.entries(await page.evaluate(() => window.__ICONS__.plans()))) {
+    writeAtomic(path, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
+    console.log(`${path}: ${(statSync(path).size / 1024).toFixed(0)} KB`);
+  }
+  if (plansOnly) process.exit(errors.length ? 1 : 0);
   const result = await page.evaluate(() => window.__ICONS__.build());
   if (errors.length) throw new Error(`The icons page logged errors:\n${errors.join('\n')}`);
 

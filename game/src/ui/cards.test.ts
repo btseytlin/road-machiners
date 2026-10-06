@@ -94,8 +94,8 @@ describe("item icons", () => {
     expect(() => itemIconCell("hoverPad")).toThrow(/hoverPad/);
   });
 
-  it("has no model icon for a cab, which keeps its glyph", () => {
-    expect(() => itemIconCell("cabPickup")).toThrow(/npm run icons/);
+  it("has an item icon for every cab", () => {
+    expect(["cab", "cabPickup", "cabHardtop"].map((id) => itemIconCell(id).label)).toEqual(["Driver seat", "Cab", "Hardtop cab"]);
   });
 
   it.each(Object.keys(CHASSIS))("names the %s portrait after its chassis", (id) => {

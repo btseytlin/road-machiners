@@ -100,6 +100,10 @@ const NAMES = [
   'store_jerrycans',
   'store_locker',
 
+  'cab_seat',
+  'cab_pickup',
+  'cab_hardtop',
+
   'eng_stock',
   'eng_tuned_v8',
   'eng_flat_four',

@@ -1,19 +1,18 @@
 // Draws an item icon as a blueprint, all in vectors so it stays sharp at any size. The item's shape is the union of its
 // model's triangles as drawn, filled deep, with the faces turned from the light filled deeper. The outer contour draws
-// in one thick line with sharp corners and the visible model edges inside it in one thin line.
-// An edge draws where its faces turn away from the viewer or fold sharper than CREASE_DEG. A ray toward the camera
-// hides the parts of it behind other faces. Model pieces too small to read at icon size drop out entirely.
+// in one thick line with sharp corners. Inside it, thin lines mark only where one part's outline passes in front of
+// another, so each part reads and its own folds are left to the shading.
+// An edge draws where its faces turn away from the viewer. A ray toward the camera hides the parts of it behind other
+// faces. Model pieces too small to read at icon size drop out entirely.
 
 import ClipperLib from 'clipper-lib';
 import * as THREE from 'three';
 import { thicken, type Mask, type Pixels } from './lines';
 
-// Edges that fold less than this draw no line, so the side facets of 8-sided cylinders stay smooth and box edges show.
-const CREASE_DEG = 65;
 // A piece narrower than this share of the drawing's longer side drops out, so small fittings do not become squiggles.
-const MIN_PIECE = 0.08;
+const MIN_PIECE = 0.12;
 // Inner lines shorter than this share of the drawing's longer side drop out.
-const MIN_INNER = 0.045;
+const MIN_INNER = 0.1;
 // How far apart visibility samples lie along an edge, in drawing pixels.
 const SAMPLE_PX = 2;
 // A face this close to the sample, in meters, is the edge's own face, not one in front of it.
@@ -28,18 +27,32 @@ const SHADOW_TOLERANCE = 1.5;
 const SNAP_GRID = 4;
 // Shadow patches smaller across than this share of the drawing's longer side drop out.
 const MIN_SHADOW = 0.04;
-// The light in view space, from over the viewer's left shoulder. A face lit less than SHADE_AT of full is in shadow.
+// The light in view space, from over the viewer's left shoulder. A face lit less than SHADE_AT of full is in shadow,
+// and one lit more than LIT_AT is in highlight.
 const LIGHT = new THREE.Vector3(-0.6, 0.45, 0.65).normalize();
 const SHADE_AT = 0.35;
+const LIT_AT = 0.65;
 
 // Line widths in drawing pixels.
 export type BlueprintPen = { outer: number; inner: number };
-export type BlueprintColors = { line: string; fill: string; shadow: string };
+// light: the highlight color. Without it the lit faces keep the fill.
+export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string; light?: string };
+// The material name of window glass, which draws in its own color so cabs show their windows.
+export const GLASS_MATERIAL = 'glass';
 
 type Vec2 = { x: number; y: number };
 
-// One icon in drawing pixels of a size x size square: the filled shape, its shadow loops and its inner lines.
-export type Blueprint = { size: number; pen: BlueprintPen; shape: Vec2[][]; shadow: Vec2[][]; lines: Vec2[][] };
+// One icon in drawing pixels of a size x size square: the filled shape, its shadow, highlight and glass loops and its
+// inner lines.
+export type Blueprint = {
+  size: number;
+  pen: BlueprintPen;
+  shape: Vec2[][];
+  shadow: Vec2[][];
+  light: Vec2[][];
+  glass: Vec2[][];
+  lines: Vec2[][];
+};
 
 // draw renders the scene at size x size with the material, or with its own materials for null.
 export function blueprintOf(
@@ -63,11 +76,30 @@ export function blueprintOf(
   const lines = visibleRuns(meshes, tris, camera, toPx, near)
     .filter((r) => lengthOf(r) >= MIN_INNER * longest)
     .map((r) => (r.length > 2 ? douglasPeucker(r, LINE_TOLERANCE) : r));
-  const shade = shadeMask(draw(new THREE.MeshNormalMaterial({ flatShading: true })), solid);
-  const shadow = contours(shade)
+  const normal = draw(new THREE.MeshNormalMaterial({ flatShading: true }));
+  const shadow = patchesOf(lightMask(normal, solid, (lit) => lit < SHADE_AT), longest);
+  const light = patchesOf(lightMask(normal, solid, (lit) => lit > LIT_AT), longest);
+  const glass = patchesOf(glassMask(meshes, draw, solid), longest);
+  return { size, pen, shape, shadow, light, glass, lines };
+}
+
+// A mask's patches as straightened loops, without those under MIN_SHADOW of the drawing across.
+function patchesOf(mask: Mask, longest: number): Vec2[][] {
+  return contours(mask)
     .map((loop) => simplifyPath(loop, SHADOW_TOLERANCE))
     .filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= MIN_SHADOW * longest);
-  return { size, pen, shape, shadow, lines };
+}
+
+// Pixels inside the shape where glass shows, from a pass that draws glass white and everything else black.
+function glassMask(meshes: readonly THREE.Mesh[], draw: (override: THREE.Material | null) => Pixels, solid: Mask): Mask {
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const own = meshes.map((m) => m.material);
+  meshes.forEach((m, i) => (m.material = (own[i] as THREE.Material).name === GLASS_MATERIAL ? white : black));
+  const pass = draw(null);
+  meshes.forEach((m, i) => (m.material = own[i]));
+  [white, black].forEach((m) => m.dispose());
+  return { w: solid.w, h: solid.h, bits: solid.bits.map((b, i) => (b && pass.data[i * 4] > 127 ? 1 : 0)) };
 }
 
 // Paints the blueprint scaled to the canvas, on a transparent background.
@@ -82,6 +114,8 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.clip(shape, 'evenodd');
   ctx.fillStyle = colors.shadow;
   ctx.fill(new Path2D(loopsPath(bp.shadow)), 'evenodd');
+  ctx.fillStyle = colors.glass;
+  ctx.fill(new Path2D(loopsPath(bp.glass)), 'evenodd');
   ctx.restore();
   ctx.strokeStyle = colors.line;
   ctx.lineCap = 'round';
@@ -95,16 +129,44 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.restore();
 }
 
-// The blueprint as one SVG group in drawing pixels, for a sheet or a file. id names its clip path.
-export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string): string {
+// The blueprint as one SVG group in drawing pixels, for a sheet or a file. id names its clip path. Colors go in style,
+// so they may be CSS variables. With screenPen, line widths are CSS values in screen pixels whatever the scale.
+export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string, screenPen?: { outer: string; inner: string }): string {
   const shape = shapePath(bp.shape);
+  const width = (drawn: number, screen: string | undefined): string =>
+    screen === undefined ? `stroke-width:${num(drawn)}` : `stroke-width:${screen};vector-effect:non-scaling-stroke`;
   return [
     `<clipPath id="${id}"><path d="${shape}" clip-rule="evenodd"/></clipPath>`,
-    `<path d="${shape}" fill="${colors.fill}" fill-rule="evenodd"/>`,
-    `<path d="${loopsPath(bp.shadow)}" fill="${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
-    `<path d="${linesPath(bp.lines)}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.inner)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-    `<path d="${shape}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.outer)}" stroke-linejoin="miter" stroke-miterlimit="3"/>`,
+    `<path d="${shape}" style="fill:${colors.fill}" fill-rule="evenodd"/>`,
+    `<path d="${loopsPath(bp.shadow)}" style="fill:${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    colors.light === undefined ? '' : `<path d="${loopsPath(bp.light)}" style="fill:${colors.light}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    `<path d="${loopsPath(bp.glass)}" style="fill:${colors.glass}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    `<path d="${linesPath(bp.lines)}" style="fill:none;stroke:${colors.line};${width(bp.pen.inner, screenPen?.inner)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${shape}" style="fill:none;stroke:${colors.line};${width(bp.pen.outer, screenPen?.outer)}" stroke-linejoin="miter" stroke-miterlimit="3"/>`,
   ].join('');
+}
+
+// The blueprint calmer for small screens. Its shape keeps outer loops only, without holes, and drops loops under
+// minArea of the largest. Shading and glass patches narrower than minPatch of the drawing drop out. Every loop
+// straightens steps under tolerance of the drawing, so diagonal edges draw as one line.
+export type Calm = { tolerance: number; minArea: number; minPatch: number };
+export function calmed(bp: Blueprint, calm: Calm): Blueprint {
+  const areas = bp.shape.map(areaOf);
+  const largest = areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
+  const straight = (loop: Vec2[]): Vec2[] => simplifyPath(loop, calm.tolerance * bp.size);
+  const shape = bp.shape
+    .filter((_, i) => Math.sign(areas[i]) === Math.sign(largest) && Math.abs(areas[i]) >= calm.minArea * Math.abs(largest))
+    .map(straight);
+  const patches = (loops: Vec2[][]): Vec2[][] =>
+    loops.filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= calm.minPatch * bp.size).map(straight);
+  return { ...bp, shape, shadow: patches(bp.shadow), light: patches(bp.light), glass: patches(bp.glass) };
+}
+
+// The blueprint's outline alone as SVG for a plan, which the game stretches over grid cells. Its colors come from the
+// CSS variables --plan-line and --plan-fill, and the line keeps its width in screen pixels whatever the stretch.
+export function blueprintPlanSvg(bp: Blueprint, stroke: number): string {
+  const shape = shapePath(bp.shape);
+  return `<path d="${shape}" style="fill:var(--plan-fill);stroke:var(--plan-line);stroke-width:${stroke}px;vector-effect:non-scaling-stroke" fill-rule="evenodd" stroke-linejoin="miter" stroke-miterlimit="3"/>`;
 }
 
 // Drawing pixels are a quarter of a sheet pixel, so one decimal is finer than any screen shows.
@@ -161,12 +223,13 @@ function maskOf(shape: readonly Vec2[][], size: number): Mask {
 }
 
 // Pixels inside the shape whose face, by the normal pass, is lit less than SHADE_AT.
-function shadeMask(normal: Pixels, solid: Mask): Mask {
+// The solid pixels whose face's light share passes the test.
+function lightMask(normal: Pixels, solid: Mask, test: (lit: number) => boolean): Mask {
   const bits = new Uint8Array(solid.bits.length);
   for (let i = 0; i < bits.length; i++) {
     if (!solid.bits[i] || normal.data[i * 4 + 3] === 0) continue;
     const n = [0, 1, 2].map((c) => (normal.data[i * 4 + c] / 255) * 2 - 1);
-    bits[i] = n[0] * LIGHT.x + n[1] * LIGHT.y + n[2] * LIGHT.z < SHADE_AT ? 1 : 0;
+    bits[i] = test(n[0] * LIGHT.x + n[1] * LIGHT.y + n[2] * LIGHT.z) ? 1 : 0;
   }
   return { w: solid.w, h: solid.h, bits };
 }
@@ -282,8 +345,7 @@ function collapse(meshes: readonly THREE.Mesh[], dropped: readonly Tri[]): void 
 
 // The edges that draw, by the faces on each side.
 function featureEdges(tris: readonly Tri[], toward: THREE.Vector3): [THREE.Vector3, THREE.Vector3][] {
-  const cos = Math.cos(CREASE_DEG * THREE.MathUtils.DEG2RAD);
-  return [...edgeFaces(tris).values()].filter((e) => drawsEdge(e.normals, toward, cos)).map((e) => [e.a, e.b]);
+  return [...edgeFaces(tris).values()].filter((e) => drawsEdge(e.normals, toward)).map((e) => [e.a, e.b]);
 }
 
 // Every edge with the normals of the faces that share it.
@@ -301,12 +363,11 @@ function edgeFaces(tris: readonly Tri[]): Map<string, { a: THREE.Vector3; b: THR
   return faces;
 }
 
-// An open edge draws. So does one between a face toward the viewer and one away, or one that folds past cos.
-function drawsEdge(normals: readonly THREE.Vector3[], toward: THREE.Vector3, cos: number): boolean {
+// An open edge draws, and so does one between a face toward the viewer and one away: a part's outline as seen.
+function drawsEdge(normals: readonly THREE.Vector3[], toward: THREE.Vector3): boolean {
   if (normals.length === 1) return true;
   const facing = normals.map((n) => n.dot(toward) > 1e-3);
-  if (!facing.some((f) => f)) return false;
-  return facing.some((f) => !f) || normals.some((n, i) => normals.slice(i + 1).some((m) => n.dot(m) < cos));
+  return facing.some((f) => f) && facing.some((f) => !f);
 }
 
 // The visible stretches of every feature edge in pixels, outside the near mask.

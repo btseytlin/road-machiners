@@ -10,6 +10,11 @@ import { hashStr } from './noise';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
 
+// A chassis plan is its outline from straight above, nose up, behind the truck condition panel and over the inventory
+// grid. It covers the inner grid columns and every row, and reaches PLAN_PAD grid cells past them on every side, so
+// wheels that stick out still draw.
+export const PLAN_PAD = 0.5;
+
 // The base model each chassis is drawn from. Kit parts stand on its row surfaces.
 const BASE_MODELS: Record<string, ModelName> = {
   scout: 'base_scout',
@@ -386,7 +391,7 @@ export function iconCatalog(
   picks: Record<string, WeaponLook>,
 ): IconEntry[] {
   const drafts: IconDraft[] = [
-    ...Object.values(parts).filter((def) => !BODY_PARTS.has(def.id)).map((def) => partDraft(def, picks)),
+    ...Object.values(parts).map((def) => partDraft(def, picks)),
     ...Object.values(goods).map(goodDraft),
     ...Object.values(chassis).map(chassisDraft),
   ];
@@ -397,9 +402,19 @@ export function iconCatalog(
 // An entry before its rank, with the HP that ranks it among entries drawn alike.
 type IconDraft = { entry: Omit<IconEntry, 'rank'>; hp: number };
 
+// Cabs have no model on the truck, where the base draws them. These models stand in for them in icons only.
+const CAB_ICON_MODELS: Record<string, ModelName> = { cab: 'cab_seat', cabPickup: 'cab_pickup', cabHardtop: 'cab_hardtop' };
+
+function iconModel(defId: string): ModelName {
+  if (!BODY_PARTS.has(defId)) return partModel(defId);
+  const name = CAB_ICON_MODELS[defId];
+  if (!name) throw new Error(`No icon model for cab ${defId}. Add it to CAB_ICON_MODELS.`);
+  return name;
+}
+
 function partDraft(def: PartDef, picks: Record<string, WeaponLook>): IconDraft {
   const base = { id: def.id, section: PART_SECTION[def.kind], label: def.name, footprint: { w: def.w, h: def.h } };
-  if (def.kind !== 'weapon') return { entry: { ...base, models: [partModel(def.id)], weapon: null }, hp: def.hp };
+  if (def.kind !== 'weapon') return { entry: { ...base, models: [iconModel(def.id)], weapon: null }, hp: def.hp };
   const weapon = picks[def.id] ?? weaponLook(`icon:${def.id}`, def.id);
   return { entry: { ...base, models: weaponModels(weapon), weapon }, hp: def.hp };
 }
