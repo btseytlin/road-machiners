@@ -1,6 +1,6 @@
 """Riser post that lifts a weapon mount standing below a base's top, so the turret clears the cab when it turns.
 
-Authored 1 m tall on a 0.5 m along by 0.4 m across foot. The view stretches its height from the surface under the post
+Authored 1 m tall on a 0.5 m along by 0.4 m across foot. The view stretches its height from the surface under the column
 to the mount and stands the weapon mount on its top. The footprint stays unstretched.
 Run: blender --background --python tools/blender/wmount_riser.py -- public/models/wmount_riser.glb [tmp/wmount_riser.png]
 """
@@ -27,6 +27,8 @@ def build(kit: Kit) -> None:
     kit.box("band", (COLUMN + 0.02, COLUMN + 0.02, 0.12), (0, 0, HEIGHT * 0.7), "paint")
     kit.box("top", (0.36, 0.3, 0.05), (0, 0, HEIGHT - 0.025), "dark")
     kit.socket("top", (0, 0, HEIGHT))
+    # A corner of the column on the foot: the view stands the post on the highest surface under the column.
+    kit.socket("column", (COLUMN / 2, COLUMN / 2, 0))
 
 
 if __name__ == "__main__":

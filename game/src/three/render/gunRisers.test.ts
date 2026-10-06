@@ -7,7 +7,7 @@ import { CLIP_TOLERANCE, cellRect, highestUnder, restOn } from '../../sim/body';
 import { baseGrid, itemCells } from '../../sim/grid';
 import type { GridItem } from '../../sim/types';
 import { loadModels } from './models';
-import { footprint, postFoot, standingY, weaponStand, wouldFloat } from './vehicle';
+import { footprint, postColumn, standingY, weaponStand, wouldFloat } from './vehicle';
 import { budget } from '../../test/budget';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -32,7 +32,7 @@ describe('gun risers', () => {
             const { at: { pos }, bottom, top } = weaponStand({ chassisId: id }, item);
             const rect = cellRect(id, itemCells(item));
             const label = `${def.id} rot ${rot} at ${x},${y}`;
-            const surface = highestUnder(id, postFoot(pos));
+            const surface = highestUnder(id, postColumn(pos));
             if (!Number.isFinite(surface)) problems.push(`${label}: no surface under the post`);
             else if (bottom - surface > CLIP_TOLERANCE) problems.push(`${label}: base ${bottom.toFixed(2)} over surface ${surface.toFixed(2)}`);
             else if (bottom < top && Math.abs(bottom - surface) > 1e-9) problems.push(`${label}: post starts at ${bottom.toFixed(2)} over surface ${surface.toFixed(2)}`);
