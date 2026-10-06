@@ -612,8 +612,8 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 // Caltrops on the player's wheels read as bad, the player's caltrops on another truck as good, the rest dim.
 function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
   const me = world.player.vehicleId;
-  if (e.vehicle === me) return { text: 'You drive into caltrops. Wheels damaged.', cls: 'bad' };
-  return { text: `${vehicleName(world, e.vehicle)} drives into caltrops`, cls: e.source === me ? 'good' : 'dim' };
+  const [text, cls] = e.vehicle === me ? ['You drive into caltrops', 'bad'] : [`${vehicleName(world, e.vehicle)} drives into caltrops`, e.source === me ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
 }
 
 // An emitter pulse the player fired, naming the trucks it shut down, or one that shut the player down. Others log

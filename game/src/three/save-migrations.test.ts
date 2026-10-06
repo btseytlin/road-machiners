@@ -23,6 +23,7 @@ import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -424,5 +425,18 @@ describe('save migration 17 to 18', () => {
 
   it('does not change its input', () => {
     expect(FORMAT_2_17).toEqual(before);
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  const before = structuredClone(FORMAT_2_18);
+  const next = MIGRATIONS[18](FORMAT_2_18) as typeof FORMAT_2_18;
+
+  it('gives each caltrops event an empty list of wheel hits and leaves other events alone', () => {
+    expect(next.events).toEqual([{ t: 'caltrops', vehicle: 'player', field: 'g4', source: 'npc2', hits: [] }, FORMAT_2_18.events[1]]);
+  });
+
+  it('does not change its input', () => {
+    expect(FORMAT_2_18).toEqual(before);
   });
 });

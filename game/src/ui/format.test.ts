@@ -243,25 +243,42 @@ describe("claymore log", () => {
 });
 
 describe("caltrops log", () => {
-  it("tells the player its wheels took caltrops", () => {
-    const w = emptyWorld();
-    const me = w.player.vehicleId;
+  // A hit of 8 on each of the truck's wheels, as a caltrop field deals.
+  const wheelHits = (v: { items: { kind: string; part?: PartInstance }[] }) =>
+    v.items.flatMap((i) => (i.part && partDef(i.part.defId).kind === "core" && i.part.defId.includes("wheel") ? [{ part: i.part.id, damage: 8 }] : []));
 
-    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me })).toEqual({ text: "You drive into caltrops. Wheels damaged.", cls: "bad" });
+  it("lists the player's wheel damage like a hit", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const hits = wheelHits(me);
+
+    const line = eventText(w, { t: "caltrops", vehicle: me.id, field: "g1", source: me.id, hits });
+
+    expect(hits).toHaveLength(4);
+    expect(line).toMatchObject({ cls: "bad", text: expect.stringMatching(/^You drive into caltrops · (\S+ −8, ){3}\S+ −8$/) });
   });
 
-  it("names a seen truck that drives into the player's caltrops", () => {
+  it("names a seen truck that drives into the player's caltrops, with its wheel damage", () => {
     const w = emptyWorld();
     const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
 
-    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId })).toEqual({ text: `${vehicleName(w, trader.id)} drives into caltrops`, cls: "good" });
+    const line = eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId, hits: wheelHits(trader) });
+
+    expect(line).toMatchObject({ cls: "good", text: expect.stringMatching(new RegExp(`^${vehicleName(w, trader.id)} drives into caltrops · .*−8`)) });
+  });
+
+  it("logs a caltrops event from an old save with no wheel numbers", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+
+    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me, hits: [] })).toMatchObject({ text: "You drive into caltrops", cls: "bad" });
   });
 
   it("logs nothing for a truck out of sight", () => {
     const w = emptyWorld();
     const trader = addVehicle(w, "traders", "hauler", [], { x: 200, y: 200 });
 
-    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id })).toBeNull();
+    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id, hits: [] })).toBeNull();
   });
 });
 

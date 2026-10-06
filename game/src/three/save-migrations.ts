@@ -408,6 +408,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), frozen: false } }),
   // 17 to 18: the harpoon is a gun.
   (world) => harpoonAsGun_17_18(world) as SavedJson,
+  // 18 to 19: a caltrops event lists the wheel damage it dealt. A saved one gets none, so its log line shows no
+  // numbers.
+  (world) => ({ ...world, events: (world.events as SavedJson[]).map((e) => (e.t === 'caltrops' ? { ...e, hits: [] } : e)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
