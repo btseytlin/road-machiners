@@ -145,8 +145,13 @@ function cardFacts(found: Card, state: FactoryState): string[] {
   ];
 }
 
+// An empty list prints "none", so the reader can tell it from a command that printed nothing by mistake.
+function printRows(rows: string[]): void {
+  console.log(rows.length === 0 ? 'none' : rows.join('\n'));
+}
+
 function jobs(ctx: Ctx): void {
-  for (const job of readState(ctx.statePath).jobs) console.log(`${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}`);
+  printRows(readState(ctx.statePath).jobs.map((job) => `${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}`));
 }
 
 function queues(ctx: Ctx): void {
@@ -171,7 +176,7 @@ function release(ctx: Ctx): void {
 }
 
 function failures(ctx: Ctx): void {
-  for (const row of readState(ctx.statePath).failures) console.log(`${row.at} ${row.stage}${row.issue === null ? '' : ` #${row.issue}`}: ${row.error.split('\n')[0]} (log ${row.log ?? 'none'})`);
+  printRows(readState(ctx.statePath).failures.map((row) => `${row.at} ${row.stage}${row.issue === null ? '' : ` #${row.issue}`}: ${row.error.split('\n')[0]} (log ${row.log ?? 'none'})`));
 }
 
 function newestLog(dir: string, issue: number, stage: string | null): string {
