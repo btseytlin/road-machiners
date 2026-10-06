@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // eight physics turns on a hill take 40s alone on a 3-core machine
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
