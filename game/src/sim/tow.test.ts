@@ -1136,6 +1136,17 @@ describe('a truck stranded for good', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
+  it('with money, heads for a town, not a stall that cannot fit an engine', () => {
+    const yard = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const pad = sitePads(yard)[0];
+    const { w, npc } = engineless(pad);
+    npc.pos = { ...pad };
+    getResources(w, npc).money = 5000;
+    const goal = thinkNpc(w, npc);
+    expect(goal).toMatchObject({ kind: 'resupply' });
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
+  });
+
   it('a junk engine counts too', () => {
     const pad = nearestPad(bowl, far);
     const w = emptyWorld(pad);
