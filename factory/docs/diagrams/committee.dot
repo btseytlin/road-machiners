@@ -6,18 +6,18 @@ digraph committee {
   node [fillcolor="#fde68a", color="#b45309"];
   approve [label="Approve"]; deny [label="Deny"]; reply [label="Other reply to\nan approval post"]; forced [label="patch: or redesign:\nreply"];
   ship [label="Ship"]; remove [label="remove #N"]; rtask [label="Other reply to\nthe candidate post"]; change [label="/change or\nQueue as change"]; ask [label="Message\nto Hermes"];
-  member [label="Member gets what\nis missing"];
+  member [label="Member says what\nto change"];
   node [fillcolor="#f3f4f6", color="#6b7280"];
   hermes [label="Hermes routes"]; hermes2 [label="Hermes queues"];
   node [fillcolor="#eef2ff", color="#6366f1"];
-  ready [label="Plugin checks the issue:\nimages, links, text"];
+  ready [label="Plugin checks the text;\nimages never block"];
   node [fillcolor="#eef2ff", color="#6366f1"];
   approveJob [label="approve job"]; closed [label="Issue closed\nas wont-do"]; answer [label="Answer in chat\ncard stays"];
   patchJob [label="patch job"]; design [label="Card to Design"]; shipJob [label="ship job"]; removeJob [label="remove job"];
   newTask [label="release-task issue\nin Design"]; changeJob [label="change job"]; adhocJob [label="adhoc job"];
   approve -> approveJob; deny -> closed;
   reply -> hermes; hermes -> answer [label="answer"]; hermes -> ready [label="patch or\nredesign"];
-  forced -> ready; ready -> patchJob [label="patch"]; ready -> design [label="redesign"]; ready -> member [label="something missing\nnothing queued"];
+  forced -> ready; ready -> patchJob [label="patch"]; ready -> design [label="redesign"]; ready -> member [label="text too short\nnothing queued"];
   ship -> shipJob; remove -> removeJob; rtask -> newTask;
   change -> changeJob; ask -> hermes2; hermes2 -> adhocJob [label="task"]; hermes2 -> changeJob [label="factory change"];
 }

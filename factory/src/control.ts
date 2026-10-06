@@ -5,6 +5,7 @@ import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
 import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
 import { withStatus } from './post-status';
+import { dropReplyMedia } from './reply-media';
 import { clearSessions } from './sessions';
 import { readState, updateState } from './state';
 import { agentHome, workDir } from './stages/common';
@@ -152,7 +153,7 @@ function requireLeavable(ctx: Ctx, issue: number): void {
   if (missing !== undefined) throw new Error(`No caption is recorded for post ${missing}`);
 }
 
-// Edits every open post of the card with the status line, and forgets them.
+// Edits every open post of the card with the status line, and forgets them with the reply images kept for them.
 async function closePosts(ctx: Ctx, issue: number, status: string): Promise<void> {
   const before = readState(ctx.statePath);
   for (const id of cardPosts(before, issue)) {
@@ -160,6 +161,7 @@ async function closePosts(ctx: Ctx, issue: number, status: string): Promise<void
     if (before.textPosts.includes(id)) await ctx.telegram.editText(ctx.cfg.committeeChat, Number(id), next);
     else await ctx.telegram.editCaption(ctx.cfg.committeeChat, Number(id), next);
     updateState(ctx.statePath, (state) => ({ ...state, postCaptions: { ...state.postCaptions, [id]: next }, approvalPosts: omitKey(state.approvalPosts, id) }));
+    dropReplyMedia(ctx.cfg.home, [Number(id)]);
   }
 }
 

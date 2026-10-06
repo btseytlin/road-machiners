@@ -66,11 +66,12 @@ Members talk to the bot in the committee chat. The Hermes plugin turns commands 
 
 A reply that gets no route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a failure, so Hermes sees it.
 
-A patch or a redesign queues only when the issue has what the next stage reads. The plugin checks this in code, for Hermes's route and for a member's `patch:` or `redesign:` reply. If anything is missing it queues nothing and tells Hermes or the member what to get.
+A patch or a redesign queues when its text has at least `FACTORY_ROUTE_MIN_WORDS` words, so it names what to change. The plugin checks this for Hermes's route and for a member's `patch:` or `redesign:` reply. A shorter text queues nothing, and the plugin tells Hermes or the member why. Images never block a route.
 
-- Every image the member sent in Telegram is on the issue. Telegram files stay in Hermes's cache and no tool can attach them, so the member uploads them as a comment on the issue.
-- Every image the issue shows, and every image the reply links, downloads under the fetch rules of `src/media.ts`. A link on another host, or one that fails, is refused.
-- The text has at least `FACTORY_ROUTE_MIN_WORDS` words, so it names what to change.
+- A member's Telegram images reach the agent best effort. The plugin copies each file of a reply to an approval post from Hermes's cache into `$FACTORY_HOME/inbox/media/post-<post>/`. A file it cannot copy leaves a note with the reason, and the plugin logs it.
+- A patch or a redesign route moves the post's files into the issue's media folder. The tick checks each file with the rules of `src/media.ts`. The feedback comment lists each image by type, size and sha256, or as not available with the reason. The pixels never reach GitHub. An answer leaves the files for a later route. Approve, deny and a route delete the files of the closed post.
+- An image that is missing, unreadable or on the issue but not downloadable is marked NOT AVAILABLE in the agent's prompt. The agent works from the text and never describes an image it did not get. The patch runs on in that case, and the other stages still stop.
+- An image the agent lacks matters only when the text leaves a visual detail open. Hermes then routes answer and asks the member for the detail in words. The patch agent writes `.factory/needs-committee.md`.
 
 A reference that arrives while the card is in Design waits. The running design already read its images, so nothing interrupts it. The next stage reads every image on the issue again, and a member who needs the design to see it replies `redesign:` at the approval post.
 

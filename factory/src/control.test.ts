@@ -1,7 +1,8 @@
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cardDrift } from './position';
+import { replyMediaDir } from './reply-media';
 import { workDir } from './stages/common';
 import { readLedger } from './ledger';
 import { EMPTY_STATE, readState, writeState } from './state';
@@ -214,6 +215,14 @@ describe('move', () => {
     expect(calls).toContain('editText 44 Text four\n\n↪️ Moved to design by Ann: the gate failed on load');
     expect(calls.some((call) => call.includes(' 43 '))).toBe(false);
     expect(readState(statePath).postCaptions[42]).toBe('Post four\n\n↪️ Moved to design by Ann: the gate failed on load');
+  });
+
+  it('deletes the reply images of each post it closes, and keeps those of other cards', async () => {
+    busyCard();
+    for (const post of [42, 43]) mkdirSync(replyMediaDir(ROOT, post), { recursive: true });
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }));
+    expect(existsSync(replyMediaDir(ROOT, 42))).toBe(false);
+    expect(existsSync(replyMediaDir(ROOT, 43))).toBe(true);
   });
 
   it.each([

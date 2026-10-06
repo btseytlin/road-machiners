@@ -194,10 +194,32 @@ describe('runAgent reference images', () => {
     await expect(runAgent(ctx, 7, 'design', 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
     expect(runs).toHaveLength(0);
   });
+
+  it('runs a patch on committee text when an issue image cannot be fetched, and marks the image NOT AVAILABLE', async () => {
+    const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
+    await runAgent(ctx, 7, 'patch', 'patch', 'p');
+    expect(runs[0].prompt).toContain(`1. NOT AVAILABLE, ${ASSET} (issue body): `);
+  });
+
+  it('adds the committee images of earlier routes after the issue images', async () => {
+    mkdirSync('tmp/factory-common-test/media/issue-7/committee', { recursive: true });
+    writeFileSync('tmp/factory-common-test/media/issue-7/committee/abc.png', solidPng(1, 1, [0, 0, 0]));
+    writeFileSync('tmp/factory-common-test/media/issue-7/committee.json', JSON.stringify([{ url: 'telegram:post-55-5-1.png', source: 'committee reply in Telegram by ann', status: 'ok', file: 'committee/abc.png', type: 'png', width: 1, height: 1, bytes: 9, sha256: 'f'.repeat(64) }]));
+    const { ctx, runs } = agentCtx([], `look ${ASSET}`, [], hosted(200));
+    await runAgent(ctx, 7, 'design', 'design', 'p');
+    expect(runs[0].prompt).toContain(`2. /work/.factory-media/committee/abc.png (png, 1x1, 9 bytes, sha256 ${'f'.repeat(64)}, from the committee reply in Telegram by ann)`);
+  });
 });
 
 describe('stage prompts for reference images', () => {
   const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '', playtest: 'npm run playtest' };
+  it('tell the patch to act on the words, never on an image it lacks, and to ask when only that image decides', () => {
+    const text = fillPrompt('patch', { ...vars, played: 'abc' });
+    expect(text).toContain('act on the words, even when an image is NOT AVAILABLE');
+    expect(text).toContain('never describe what it shows');
+    expect(text).toContain('Write the question to `.factory/needs-committee.md`');
+  });
+
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
       const text = fillPrompt(name, vars);
