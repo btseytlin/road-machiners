@@ -9,6 +9,7 @@ import { TERRITORIES, type FarmRoad, type FarmRules, type Hazard, type SpotTable
 import { deckById } from './bridge';
 import { isTerritory, siteEdgeCrossings, siteGap } from './sites';
 import { randInt } from './rng';
+import { PROP_KINDS, type PropKind } from './terrain';
 import type { LandmarkLook, NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
 import { dist, lerp, type Vec } from './vec';
 
@@ -64,10 +65,17 @@ export function spotTable(o: Obstacle): LootTable {
   return SALVAGE[table];
 }
 
-// The territory whose loot spot holds this stock. Ids of baked props are <kind>-<k>, so the id tells a spot's kind.
-export function territoryOfStock(stock: SalvageStock): TerritoryDef | null {
+// The prop kind in a stock's id, or null when the id names none. Ids of baked props are <kind>-<k>, so the id tells a
+// spot's kind.
+export function spotLookOf(stock: SalvageStock): PropKind | null {
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
-  return spotTableAt(kind, stock.pos) ? territoryAt(stock.pos) : null;
+  return PROP_KINDS.find((k) => k === kind) ?? null;
+}
+
+// The territory whose loot spot holds this stock.
+export function territoryOfStock(stock: SalvageStock): TerritoryDef | null {
+  const look = spotLookOf(stock);
+  return look && spotTableAt(look, stock.pos) ? territoryAt(stock.pos) : null;
 }
 
 export function territorySpots(world: World, id: string): SalvageStock[] {

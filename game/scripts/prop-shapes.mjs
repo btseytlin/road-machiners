@@ -48,6 +48,7 @@ const PROP_MODELS = [
   'ship_hub',
   'silo',
   'tank_hulk',
+  'tank_trap',
   'ship_wing',
   'watchtower',
   'water_tower',

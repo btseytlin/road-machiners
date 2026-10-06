@@ -4,7 +4,7 @@ import { PHYSICS } from '../data/physics';
 import { ORCHARD_HEADING, REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
 import { MAPGEN, TERRAIN } from '../data/terrain';
-import { FALLEN_SUN_DECKS, onOrchardRoad, TERRITORIES, type TerritoryRules } from '../data/territory';
+import { EMPLACEMENT, FALLEN_SUN_DECKS, onOrchardRoad, PERIMETER, TERRITORIES, type Run, type TerritoryRules } from '../data/territory';
 import { deckAt, deckById } from '../sim/bridge';
 import { boxDistance, onDeck, propBoxes, propPose, propReach, type PosedBox } from '../sim/mapgen';
 import { CELL, navLayer } from '../sim/nav/layer';
@@ -16,23 +16,29 @@ import { groundAt, isCliff, type BakedProp, type Terrain } from '../sim/terrain'
 import { newWorld } from '../sim/world';
 import { angleDiff, dist, lerp, segmentDist, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
-import { newDraft, tileSteepness, type MapDraft } from './bake';
-import { fillFarm } from './farm';
+import { footprintRelief, groundForTerritories, newDraft, tileSteepness, type MapDraft } from './bake';
+import { fillFarm, newRoadHold } from './farm';
 import { BUILT_CANAL, BUILT_GLASS, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileCenter, tileOf, tilesWithin } from './oldworld';
-import { territoryLayer } from './territory';
+import { TERRITORY_SEED_OFFSET, territoryLayer } from './territory';
 import { budget } from '../test/budget';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const t = fallenSun as never;
+
+// The committed map's heights before the territory layer, baked once: the orchard grades its own ground, so the
+// committed heights cannot stand in for them.
+let groundHeights: Float32Array | undefined;
+function territoryGround(): Float32Array {
+  groundHeights ??= groundForTerritories(MAPGEN.seed).heights;
+  return groundHeights;
+}
 const rules = TERRITORIES['fallen-sun'].wreck!;
 const reactor = TERRITORIES['fallen-sun'].reactor!;
 const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
 const pieces = territoryPieces(t);
 const inside = TEST_MAP.props.filter((p) => siteGap(fallenSun, p.pos) < 0);
 const DEBRIS_LOOKS = new Set<string>(rules.patches.flatMap((p) => p.debris.map((d) => d.look)));
-
-// A draft over the whole region with rolling ground, so the seat levels ground both below and above a piece's centre.
 function rollingDraft(): MapDraft {
   const d = newDraft(REGION.size);
   const w = d.size + 1;
@@ -86,11 +92,10 @@ describe('the territory layer', () => {
     const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
-    // Other territories seat their own pieces inside their outlines; every other corner keeps the Fallen Sun's heights.
-    const others = REGION.locations.filter((l) => l.kind === 'territory' && l.id !== 'fallen-sun');
+    // The orchard grades its own ground, so heights are compared over the Fallen Sun's.
     const w = full.size + 1;
-    const outsideOthers = (heights: Float32Array) => Array.from(heights).filter((_, k) => others.every((o) => siteGap(o, { x: k % w, y: Math.floor(k / w) }) >= 0));
-    expect(outsideOthers(full.heights)).toEqual(outsideOthers(solo.heights));
+    const sunCorners = Array.from(full.heights.keys()).filter((k) => dist({ x: k % w, y: Math.floor(k / w) }, fallenSun.pos) < fallenSun.radius + 1);
+    expect(sunCorners.map((k) => full.heights[k])).toEqual(sunCorners.map((k) => solo.heights[k]));
   });
 
   it("levels the ground under every piece's low boxes to the height at its centre, less its sink", () => {
@@ -169,6 +174,21 @@ describe('the territory layer', () => {
     spots.forEach((a, i) => {
       expect(dist(a.pos, zone.pos), a.kind).toBeGreaterThan(zone.radius + a.r);
       for (const b of spots.slice(i + 1)) expect(dist(a.pos, b.pos)).toBeGreaterThanOrEqual(TERRITORIES['fallen-sun'].spotGap);
+    });
+  });
+
+  it('bakes the Fallen Sun props of the committed map, with no relief limit', () => {
+    expect(TERRITORIES['fallen-sun'].relief).toBeNull();
+    const d = newDraft(REGION.size);
+    d.heights.set(territoryGround());
+    const drawn = territoryLayer(MAPGEN.seed, d).props.filter((p) => siteGap(fallenSun, p.pos) < 0);
+    const committed = inside.filter((p) => siteGap(fallenSun, p.pos) < 0 && p.kind !== 'rock' && p.kind !== 'crag');
+    expect(drawn.length).toBe(committed.length);
+    drawn.forEach((p, i) => {
+      expect(p.kind).toBe(committed[i].kind);
+      expect(p.pos.x).toBeCloseTo(committed[i].pos.x, 3);
+      expect(p.pos.y).toBeCloseTo(committed[i].pos.y, 3);
+      expect(p.r).toBeCloseTo(committed[i].r, 3);
     });
   });
 
@@ -369,11 +389,11 @@ describe('the orchard farm', () => {
   // The five main roads come first in the list; the rest are narrow tracks.
   const MAIN_ROADS = 5;
 
-  // A draft over the region with the committed map's heights, so the farm bakes on the orchard's real basin and
-  // ridges. Marks and props start empty, as no earlier layer marks or builds inside a territory.
+  // A draft over the region with the map's heights before the territory layer, so the farm bakes on the orchard's real
+  // basin and ridges. Marks and props start empty, as no earlier layer marks or builds inside a territory.
   function groundDraft(): MapDraft {
     const d = newDraft(REGION.size);
-    d.heights.set(TEST_MAP.terrain.heights);
+    d.heights.set(territoryGround());
     return d;
   }
 
@@ -403,18 +423,13 @@ describe('the orchard farm', () => {
   const loose = props.filter((p) => (clutterLooks.has(p.kind) || debrisLooks.has(p.kind)) && !(runRadius.has(p.kind) && p.r === runRadius.get(p.kind)));
   const segments = props.filter((p) => runRadius.has(p.kind) && p.r === runRadius.get(p.kind));
 
-  it('marks the same tiles as before the road marks moved to ./marks', () => {
-    // Counts and a hash of every marked tile's index and code, taken from the farm's own road marks before the move.
-    const counts: Record<number, number> = {};
-    let hash = 0;
-    baked.built.forEach((code, tile) => {
-      if (code === 0 || siteGap(orchard, { x: (tile % baked.size) + 0.5, y: Math.floor(tile / baked.size) + 0.5 }) >= 0) return;
-      counts[code] = (counts[code] ?? 0) + 1;
-      hash = (hash * 31 + tile * 7 + code) >>> 0;
-    });
-    expect(counts).toEqual({ [BUILT_OLD_ROAD]: 321, [BUILT_FIELD]: 1484, [BUILT_TRACK]: 632, [BUILT_CANAL]: 321, [BUILT_PAD]: 119 });
-    expect(hash).toBe(2377274311);
-  });
+  // The army's works: sandbag arcs, steel hedgehogs and every concrete barrier, in runs, the perimeter or loose.
+  const arcs = props.filter((p) => p.kind === 'sandbags');
+  const traps = props.filter((p) => p.kind === 'tankTrap');
+  const barriers = props.filter((p) => p.kind === 'barrier');
+  // Tiles from an arc's chord out toward its convex front, the way it faces.
+  const ahead = (arc: BakedProp, p: Vec): number => (p.x - arc.pos.x) * Math.cos(arc.yaw) + (p.y - arc.pos.y) * Math.sin(arc.yaw);
+  const isPerimeter = (run: Run): boolean => run.look === PERIMETER.look && run.broken === PERIMETER.broken && run.knocked.share === PERIMETER.knocked.share;
 
   it('bakes the same farm for the same seed', () => {
     const again = territoryLayer(7, groundDraft());
@@ -516,7 +531,8 @@ describe('the orchard farm', () => {
     const moved = structuredClone(rules);
     // Over the old road and its canals, where no tree may stand.
     moved.farm!.blocks[0] = { at: onOrchardRoad(-15, 0), size: { x: 10, y: 6 }, rows: 'along', turn: 0 };
-    expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, 1))).toThrow(/keeps/);
+    // The orchard's own draws, so every building stands where the bake puts it and the block is what fails.
+    expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, TERRITORY_SEED_OFFSET + TERRITORIES.orchard.seed))).toThrow(/keeps/);
   });
 
   it('leaves a lane between rows wider than the widest truck under the tree crowns', () => {
@@ -600,6 +616,155 @@ describe('the orchard farm', () => {
     }
   }, budget(120_000));
 
+  it('grades each farm road so its centre line holds its grade', () => {
+    const t = terrainOf(baked.size, baked.heights);
+    // Near a road of today's world the farm grading fades out, so that road keeps its own grade. Where a farm road
+    // meets one, the stretch in the fade blends graded and ungraded ground and may climb to this junction limit.
+    const JUNCTION_LIMIT = 0.15;
+    const inFade = (p: Vec) => [[0, 0], [1, 0], [0, 1], [1, 1]].some(([i, j]) => newRoadHold({ x: Math.floor(p.x) + i, y: Math.floor(p.y) + j }) > 0);
+    for (const road of farm.roads) {
+      const points = road.points.map(abs);
+      for (let k = 1; k < points.length; k++) {
+        const steps = Math.ceil(dist(points[k - 1], points[k]) / 0.5);
+        for (let i = 1; i <= steps; i++) {
+          const [a, b] = [lerp(0, 1, (i - 1) / steps), lerp(0, 1, i / steps)];
+          const p = { x: lerp(points[k - 1].x, points[k].x, a), y: lerp(points[k - 1].y, points[k].y, a) };
+          const q = { x: lerp(points[k - 1].x, points[k].x, b), y: lerp(points[k - 1].y, points[k].y, b) };
+          const grade = Math.abs(groundAt(t, q.x, q.y) - groundAt(t, p.x, p.y)) / dist(p, q);
+          const limit = [p, q].some(inFade) ? JUNCTION_LIMIT : (road.grade ?? TERRAIN.roadGrade) + 0.01;
+          expect(grade, `${road.surface} at ${frameOf(p).s.toFixed(1)},${frameOf(p).c.toFixed(1)}`).toBeLessThanOrEqual(limit);
+        }
+      }
+    }
+  });
+
+  it('keeps the surface of every farm road under the cliff slope, though its cuttings may be cliffs', () => {
+    for (const road of farm.roads) {
+      const points = road.points.map(abs);
+      for (let k = 1; k < points.length; k++) {
+        const mid = { x: (points[k - 1].x + points[k].x) / 2, y: (points[k - 1].y + points[k].y) / 2 };
+        for (const tile of tilesWithin(baked.size, mid, dist(points[k - 1], points[k]) / 2 + road.width)) {
+          const c = { x: (tile % baked.size) + 0.5, y: Math.floor(tile / baked.size) + 0.5 };
+          if (segmentDist(c, points[k - 1], points[k]) > road.width / 2 || siteGap(orchard, c) >= 0) continue;
+          expect(tileSteepness(baked.heights, baked.size, tile), `${road.surface} at ${frameOf(c).s.toFixed(1)},${frameOf(c).c.toFixed(1)}`).toBeLessThanOrEqual(TERRAIN.drive.maxSlope);
+        }
+      }
+    }
+  });
+
+  it('levels the ground under every building within the relief limit', () => {
+    const buildings = props.filter((p) => buildingLooks.has(p.kind));
+    expect(buildings).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0));
+    for (const p of buildings) expect(footprintRelief(baked.heights, baked.size, p, false), `${p.kind} at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`).toBeLessThanOrEqual(rules.relief!);
+  });
+
+  it('keeps run and clutter pieces off ground that lies off their seat past the relief limit', () => {
+    for (const p of [...loose.filter((q) => clutterLooks.has(q.kind)), ...segments]) {
+      expect(footprintRelief(baked.heights, baked.size, p, segments.includes(p)), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeLessThanOrEqual(rules.relief!);
+    }
+  });
+
+  it('digs about 30 emplacements of sandbag arcs, sets 20 tank traps and stands 60 barriers', () => {
+    // Arcs within 1.5 tiles of each other belong to one emplacement.
+    const group = arcs.map((_, i) => i);
+    const root = (i: number): number => (group[i] === i ? i : root(group[i]));
+    arcs.forEach((a, i) => arcs.forEach((b, j) => {
+      if (j > i && dist(a.pos, b.pos) <= 1.5) group[root(j)] = root(i);
+    }));
+    expect(new Set(arcs.map((_, i) => root(i))).size).toBeGreaterThanOrEqual(28);
+    expect(arcs.length).toBeGreaterThanOrEqual(55);
+    expect(traps.length).toBeGreaterThanOrEqual(20);
+    expect(barriers.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it('stands every tank trap out ahead of its nearest sandbag arc and never behind one', () => {
+    for (const trap of traps) {
+      const where = `tankTrap at ${frameOf(trap.pos).s.toFixed(1)},${frameOf(trap.pos).c.toFixed(1)}`;
+      const nearest = arcs.reduce((a, b) => (dist(b.pos, trap.pos) < dist(a.pos, trap.pos) ? b : a));
+      expect(ahead(nearest, trap.pos), where).toBeGreaterThan(EMPLACEMENT.arcRadius);
+      // No hedgehog stands within 2 tiles of an arc's concave side, where the guards crouch.
+      expect(EMPLACEMENT.behindClear).toBe(2);
+      for (const arc of arcs) if (ahead(arc, trap.pos) <= 0) expect(dist(arc.pos, trap.pos), where).toBeGreaterThanOrEqual(EMPLACEMENT.behindClear);
+    }
+  });
+
+  it("keeps every arc, trap and barrier off roads, tracks, canals and pads and out of every spot's parking gap", () => {
+    const marks = [BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL, BUILT_PAD];
+    for (const p of [...arcs, ...traps]) {
+      const where = `${p.kind} at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`;
+      for (const tile of footprint(baked, p)) expect(marks, where).not.toContain(baked.built[tile]);
+      for (const spot of spots) expect(dist(p.pos, spot.pos), `${where} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + p.r + rules.debrisGap);
+    }
+    for (const p of barriers) {
+      const where = `barrier at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`;
+      // A run segment is a line; a loose barrier keeps its whole footprint clear.
+      const [a, b] = [-1, 1].map((k) => ({ x: p.pos.x + k * p.r * Math.cos(p.yaw), y: p.pos.y + k * p.r * Math.sin(p.yaw) }));
+      const reach = segments.includes(p) ? 0 : p.r;
+      for (const spot of spots) expect(segmentDist(spot.pos, a, b), `${where} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + reach + rules.debrisGap - 1e-9);
+    }
+  });
+
+  it('leaves the perimeter open at every main road and at least every 25 tiles along it', () => {
+    // A point of the perimeter's line is closed where a placed barrier lies within a tile of it.
+    const COVER = 1;
+    const closed = (p: Vec) => barriers.some((b) => segmentDist(p, ...([-1, 1].map((k) => ({ x: b.pos.x + k * b.r * Math.cos(b.yaw), y: b.pos.y + k * b.r * Math.sin(b.yaw) })) as [Vec, Vec])) < COVER);
+    // Each side is its polylines in list order, joined across the authored gaps between them.
+    const lines = farm.runs.filter(isPerimeter).map((run) => run.points.map(abs));
+    expect(lines.length).toBeGreaterThan(0);
+    const sides: Vec[][] = [];
+    for (const line of lines) {
+      const last = sides.at(-1);
+      if (last && dist(last.at(-1)!, line[0]) <= 15) last.push(...line);
+      else sides.push([...line]);
+    }
+    const roads = farm.roads.slice(0, MAIN_ROADS).map((road) => road.points.map(abs));
+    for (const side of sides) {
+      // Walk the side in half-tile steps, noting each step's point and whether a main road crosses there.
+      const walk: { p: Vec; open: boolean }[] = [];
+      for (let k = 1; k < side.length; k++) {
+        const steps = Math.ceil(dist(side[k - 1], side[k]) / 0.5);
+        for (let i = 0; i < steps; i++) {
+          const p = { x: lerp(side[k - 1].x, side[k].x, i / steps), y: lerp(side[k - 1].y, side[k].y, i / steps) };
+          walk.push({ p, open: !closed(p) });
+        }
+      }
+      const where = (i: number) => `perimeter at ${frameOf(walk[i].p).s.toFixed(1)},${frameOf(walk[i].p).c.toFixed(1)}`;
+      // Every main road crossing the side leaves a 3-tile opening round its crossing.
+      walk.forEach(({ p }, i) => {
+        const onRoad = roads.some((road) => road.slice(1).some((b, k) => segmentDist(p, road[k], b) < 1.5));
+        if (onRoad) expect(walk.slice(Math.max(0, i - 3), i + 4).every((w) => w.open), where(i)).toBe(true);
+      });
+      // Each 25 tiles of the side hold an opening of 3 tiles or more.
+      let since = 0;
+      let run = 0;
+      walk.forEach(({ open }, i) => {
+        run = open ? run + 0.5 : 0;
+        since = run >= 3 ? 0 : since + 0.5;
+        expect(since, where(i)).toBeLessThanOrEqual(25);
+      });
+    }
+  });
+
+  it("draws the same values for every run segment, so knocking one run's segments shifts no other's", () => {
+    const last = farm.runs.length - 1;
+    const moved = structuredClone(rules);
+    moved.farm!.runs[last].knocked = { share: 1, turn: 0.5, shift: 0.5 };
+    const d = groundDraft();
+    fillFarm(d, orchard, moved, moved.farm!, ruleRng(7, TERRITORY_SEED_OFFSET + TERRITORIES.orchard.seed));
+    // Props away from the knocked run's line stand exactly where they did.
+    const line = farm.runs[last].points.map(abs);
+    const far = (p: BakedProp) => line.slice(1).every((b, k) => segmentDist(p.pos, line[k], b) > 5);
+    const before = territoryLayer(7, groundDraft()).props.filter((p) => siteGap(orchard, p.pos) < 0 && far(p) && !debrisLooks.has(p.kind));
+    expect(d.props.filter((p) => far(p) && !debrisLooks.has(p.kind))).toEqual(before);
+  });
+
+  it('throws on a building whose ring cannot level its ground', () => {
+    const moved = structuredClone(rules);
+    // The depot hangar's first pose, on the slope where its pad cut a cliff.
+    moved.farm!.buildings.find((b) => b.look === 'quonset')!.poses[3].at = onOrchardRoad(51, -33);
+    expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, 1))).toThrow(/levels its ground into a cliff/);
+  });
+
   it('throws on a building off the outline', () => {
     const moved = structuredClone(rules);
     moved.farm!.buildings[0].poses[0].at = onOrchardRoad(-30, 40);
@@ -640,6 +805,7 @@ describe('a third territory', () => {
       spotGap: 6,
       debrisGap: 1.5,
       reactor: null,
+      relief: null,
     };
   }
 

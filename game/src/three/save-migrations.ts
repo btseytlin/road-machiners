@@ -203,15 +203,15 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
 
 // Glass Flats became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
 // ends with it. The step repeats the 8 to 9 one, since a committed step is never edited.
-const RETIRED_STOCK_15_16 = 'glass-flats';
+const RETIRED_STOCK_16_17 = 'glass-flats';
 
-function withoutRetiredStock_15_16(world: SavedJson): SavedJson {
-  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_15_16 ? { ...v, job: null } : v);
+function withoutRetiredStock_16_17(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_16_17 ? { ...v, job: null } : v);
   const player = world.player as SavedJson;
   return {
     ...world,
-    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_15_16),
-    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_15_16) },
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_16_17),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_16_17) },
     vehicles: (world.vehicles as SavedJson[]).map(idle),
   };
 }
@@ -262,6 +262,15 @@ function withPatchParts_13_14(world: SavedJson): SavedJson {
     return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
   };
   return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
@@ -334,8 +343,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
   // driver still on its retreat lies up when it gets home.
   (world) => world,
-  // 15 to 16: Glass Flats is a territory, so its site stock goes.
-  withoutRetiredStock_15_16,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  // 16 to 17: Glass Flats is a territory, so its site stock goes.
+  withoutRetiredStock_16_17,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

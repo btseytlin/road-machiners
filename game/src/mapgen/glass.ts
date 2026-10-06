@@ -75,7 +75,7 @@ function placeSpires(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, glass:
   };
   const onGlass = (pos: Vec, r: number): boolean => touchedTiles(d.size, pos, r).every((tile) => d.built[tile] === BUILT_GLASS);
   const ok = (pos: Vec, r: number): boolean => siteGap(t, pos) < -r && onGlass(pos, r) && clearOf(d.props, pos, r, 0) && clearOf(spots, pos, r, rules.debrisGap);
-  for (let i = 0; i < glass.spires.count; i++) d.props.push(draw({ d, t, rng }, glass.spires.look, 'on its glass', pick, glass.spires.radius, ok));
+  for (let i = 0; i < glass.spires.count; i++) d.props.push(draw({ d, t, rules, rng }, glass.spires.look, 'on its glass', pick, glass.spires.radius, ok));
 }
 
 // The looks whose props inside the territory are its loot spots, as src/sim/territory.ts reads them: a wreck's caches

@@ -12,7 +12,7 @@ import { prop, ruleRng, tileCenter, tilesWithin } from './oldworld';
 const T: TerritoryDef = { id: 'test-glass', name: 'Test Glass', kind: 'territory', pos: { x: 405, y: 378 }, radius: 24, outline: null };
 const GLASS: GlassRules = { cell: 6, cover: [0.25, 0.55], clear: 1.5, spires: { look: 'hullShard', count: 6, radius: [0.8, 1.1] } };
 // Rules with no wreck and no farm: only the glass bakes.
-const RULES: TerritoryRules = { seed: 2, wreck: null, farm: null, glass: GLASS, spotGap: 6, debrisGap: 1.5, reactor: null };
+const RULES: TerritoryRules = { seed: 2, wreck: null, farm: null, glass: GLASS, spotGap: 6, debrisGap: 1.5, reactor: null, relief: null };
 
 // A wreck with nothing but the given building groups.
 function wreckOf(buildings: BuildingGroup[]): WreckRules {

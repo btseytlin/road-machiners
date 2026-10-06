@@ -1,21 +1,27 @@
 {
-  "turn": 40,
-  "player": {
-    "vehicleId": "player",
-    "scavenged": ["glass-flats", "wreck3"]
-  },
-  "vehicles": [
+  "turn": 50,
+  "events": [
     {
-      "id": "player",
-      "job": { "kind": "search", "stockId": "glass-flats", "turnsLeft": 2 }
+      "t": "shot",
+      "shooter": "npc1",
+      "weapon": "cannon",
+      "target": "player",
+      "aim": "body",
+      "chance": 0.5,
+      "damageChance": 0.8,
+      "side": "front",
+      "rounds": [
+        { "hit": false, "crit": false, "offset": 2.4, "struck": null, "hits": [], "blast": [] },
+        { "hit": true, "crit": false, "offset": 0.1, "struck": "player", "hits": [{ "part": "p1", "damage": 3 }], "blast": [] }
+      ]
     },
     {
-      "id": "npc1",
-      "job": { "kind": "search", "stockId": "wreck3", "turnsLeft": 1 }
-    }
-  ],
-  "salvage": [
-    { "id": "glass-flats", "pos": { "x": 81, "y": 75 }, "radius": 16, "goods": { "scrap": 1 }, "parts": [] },
-    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
+      "t": "guardShot",
+      "site": "nose",
+      "from": { "x": 120, "y": 80 },
+      "target": "npc1",
+      "rounds": [{ "hit": true, "crit": true, "offset": -0.2, "struck": "npc1", "hits": [], "blast": [] }]
+    },
+    { "t": "arrived", "vehicle": "npc2" }
   ]
 }

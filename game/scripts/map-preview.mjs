@@ -60,6 +60,7 @@ const PROP_LOOKS = {
   deadTruck: { color: 0x7040a0, shape: 'long' },
   glassSpire: { color: 0x2f8f88, shape: 'disc' },
   scrapWall: { color: 0xa8a090, shape: 'rail' },
+  tankTrap: { color: 0x5e3420, shape: 'disc' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);

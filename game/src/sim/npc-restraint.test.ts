@@ -9,6 +9,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { advanceJobs } from './jobs';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { getKnownSite } from './npc-decisions';
 import { spawnInitial } from './spawn';
 import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
@@ -273,6 +274,16 @@ describe('NPC field repairs', () => {
     if (!engine || engine.kind !== 'part') throw new Error('Missing test engine');
     engine.part.hp = 1;
     expect(thinkNpc(world, npc).kind).toBe('resupply');
+  });
+
+  it('sends a truck with no engine on a service stall to a town, since only a town refits it', () => {
+    const { world, npc } = createNpc();
+    npc.items = npc.items.filter((item) => !(item.kind === 'part' && item.part.defId === 'stockEngine'));
+    npc.resources!.money = 900;
+    npc.pos = { ...sitePads(getKnownSite('granary'))[0] };
+    const goal = thinkNpc(world, npc);
+    expect(goal.kind).toBe('resupply');
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
   });
 
   it('does not seek service for a broken gun', () => {

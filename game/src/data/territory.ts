@@ -16,6 +16,8 @@ import type { DeckSpec, DeckStation } from './terrain';
 export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores' | 'engineScrap' | 'cityStores';
+// Loot spots that are wrecks, so their prompts keep wreck wording. Every other loot spot is a plain place.
+export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache'];
 export type Hazard = {
   radius: number; // tiles around the reactor
   healthPerTurn: number;
@@ -55,10 +57,13 @@ export type FarmRules = {
   groves: GroveRule;
   blocks: GroveBlock[];
   runs: Run[];
+  emplacements: Emplacement[];
   clutter: ClutterRule[];
 };
-// A polyline of road, width in tiles. An oldRoad is cracked asphalt; a track is pale packed dirt.
-export type FarmRoad = { points: Vec[]; width: number; surface: 'oldRoad' | 'track' };
+// A polyline of road, width in tiles. An oldRoad is cracked asphalt; a track is pale packed dirt. grade, when set, is the
+// steepest height change per tile the bake grades along it. A farm road without one holds TERRAIN.roadGrade; a wreck's dirt
+// road is not graded.
+export type FarmRoad = { points: Vec[]; width: number; surface: 'oldRoad' | 'track'; grade?: number };
 // Loot spots of one look, all rolling one table. shoulder lets a pose touch the old road. Each pose turns by up to
 // turnJitter radians and shifts by up to shift tiles each way, drawn from the territory's seed.
 export type BuildingGroup = {
@@ -86,7 +91,20 @@ export type GroveRule = {
 export type GroveBlock = { at: Vec; size: Vec; rows: 'along' | 'across'; turn: number };
 // Segment props segment tiles long along a polyline. A share broken of the segments is gone, each left segment turns
 // by up to jitter.turn radians and shifts by up to jitter.shift tiles, and segments on roads, tracks or canals drop.
-export type Run = { look: PropKind; points: Vec[]; segment: number; broken: number; jitter: { turn: number; shift: number } };
+// A share knocked of the segments was shoved out of line: each turns by up to knocked.turn radians and shifts by up to
+// knocked.shift tiles more.
+export type Run = {
+  look: PropKind;
+  points: Vec[];
+  segment: number;
+  broken: number;
+  jitter: { turn: number; shift: number };
+  knocked: { share: number; turn: number; shift: number };
+};
+// A sandbag position a guard dug facing a threat: arcs sandbag arcs side by side across the face direction, their
+// convex fronts toward it, and traps steel hedgehogs out ahead on the approach. at is the middle of the arcs; face is
+// radians from the road's heading.
+export type Emplacement = { at: Vec; face: number; arcs: 1 | 2 | 3; traps: number };
 // Loose pieces of one look, count of them, each beside a random building of a look in near, from the debris gap past
 // its footprint to reach tiles further out, at a random turn. radius is the piece's footprint in tiles.
 export type ClutterRule = { look: PropKind; count: number; radius: [number, number]; near: PropKind[]; reach: number };
@@ -135,6 +153,9 @@ export type TerritoryRules = {
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: Reactor | null;
+  // Most height units the ground under a drawn prop's or farm decoration's footprint may lie off its seat at its
+  // centre, so none floats on a slope, or null for no limit.
+  relief: number | null;
 };
 
 // Debris of the dense field in the concept's lower half, thinned to the second reference's sparse scrap: islands of
@@ -183,22 +204,38 @@ const ALONG = 0; // a turn that keeps a building's front along the road, toward 
 const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road, toward map east: the road for a building on its west side
 const AT = onOrchardRoad; // short for the many authored points below
 const pose = (s: number, c: number, r: number, turn: number) => ({ at: onOrchardRoad(s, c), r, turn, shoulder: false });
-// Fences around the grove blocks: old wood, a third of it fallen, every post leaning its own way.
-const FENCE = { look: 'fence' as const, segment: 1, broken: 0.3, jitter: { turn: 0.12, shift: 0.15 } };
-// Concrete road barriers the army dragged into place: a third gone, each one shoved askew.
-const BARRIER = { look: 'barrier' as const, segment: 1, broken: 0.35, jitter: { turn: 0.25, shift: 0.3 } };
-// The sandbag L a guard built at a post: a front of bags 2 tiles out toward its road, which lies in the direction
-// (ds, dc), and a leg round the corner back along the post's side, clear of its hut. The post stands at (s, c).
-function sandbagL(s: number, c: number, ds: number, dc: number): Run {
-  const [fs, fc] = [s + ds * 2, c + dc * 2];
-  const [ps, pc] = [-dc * 1.8, ds * 1.8];
-  return {
-    look: 'sandbags',
-    points: [AT(fs - ps, fc - pc), AT(fs + ps, fc + pc), AT(fs + ps - ds * 2, fc + pc - dc * 2)],
-    segment: 1,
-    broken: 0,
-    jitter: { turn: 0.2, shift: 0.1 },
-  };
+// Fences around the grove blocks: old wood, a third of it fallen, every post leaning its own way, and a few panels
+// pushed over out of line by a truck or the wind.
+const FENCE = { look: 'fence' as const, segment: 1, broken: 0.3, jitter: { turn: 0.12, shift: 0.15 }, knocked: { share: 0.05, turn: 0.6, shift: 0.3 } };
+// Concrete road barriers the army dragged into place: a third gone, each one shoved askew, some rammed out of line.
+const BARRIER = { look: 'barrier' as const, segment: 1, broken: 0.35, jitter: { turn: 0.25, shift: 0.3 }, knocked: { share: 0.15, turn: 0.8, shift: 0.6 } };
+// The army's perimeter line of barriers inside the orchard's edge, long since breached: nearly half gone and a fifth
+// rammed or dragged well out of line, so it reads as a broken wall, never a maze.
+export const PERIMETER = { look: 'barrier' as const, segment: 1, broken: 0.45, jitter: { turn: 0.25, shift: 0.3 }, knocked: { share: 0.2, turn: 1.2, shift: 1.2 } };
+// How an emplacement stands its arcs and traps.
+export const EMPLACEMENT = {
+  arcStep: 1, // tiles between neighbouring arcs across the face: the 5 m arc model overlaps its neighbour at 4 m, so they read as one wall
+  arcRadius: 0.5, // tiles, an arc's footprint for clearances, as the sandbag run segments had
+  turnJitter: 0.15, // radians each arc turns off the face either way, so the bags were piled by hand
+  shift: 0.2, // tiles each arc strays each way, small enough that neighbours still meet
+  trapAhead: [2.5, 4] as [number, number], // tiles out ahead of the arcs where hedgehogs stand: in the guards' field of fire, past their own cover
+  trapSpread: 2.5, // tiles to each side of the face line the hedgehogs spread over, about the approach road's width
+  trapGap: 1.5, // tiles between a hedgehog's centre and every other hedgehog's and arc's, so each stands alone
+  behindClear: 2, // tiles a hedgehog keeps from an arc it lies behind, so none stands in the guards' own position
+  trapRadius: 0.25, // tiles, a hedgehog's footprint: the 1 m model at scale 1
+};
+// Faces of an emplacement, turns from the road's heading: up the road, across it toward map east, down it and toward
+// map west, and between them.
+const NORTH = 0;
+const EAST = Math.PI / 2;
+const SOUTH = Math.PI;
+const WEST = -Math.PI / 2;
+const NORTH_EAST = Math.PI / 4;
+const NORTH_WEST = -Math.PI / 4;
+const SOUTH_WEST = (-3 * Math.PI) / 4;
+// An emplacement at (s, c) facing face, with arcs sandbag arcs and traps tank traps.
+function dig(s: number, c: number, face: number, arcs: Emplacement['arcs'], traps: number): Emplacement {
+  return { at: AT(s, c), face, arcs, traps };
 }
 // A grove block over s0..s1 along the road and c0..c1 across it.
 function block(s0: number, s1: number, c0: number, c1: number, rows: GroveBlock['rows'], turn: number): GroveBlock {
@@ -513,6 +550,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     glass: null,
     spotGap: 6,
     debrisGap: 1.5,
+    relief: null,
     // The core glows in the breach on the bow's near flank (800,278). It stands where the bow model's breach is, 10 m
     // forward of the bow's centre and 5 m toward that flank, 2 tiles from the concept point.
     reactor: {
@@ -534,9 +572,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     farm: {
       // The old road through the basin. Debris is drawn along it, and raiders wait beside it.
       spine: { from: AT(-30, 0), to: AT(44, 0), band: 30 },
-      // Debris along the road band: loose junk and old car wrecks scavengers stripped and pushed off the roads.
+      // Debris along the road band: loose junk and old car wrecks scavengers stripped and pushed off the roads. Junk is
+      // 3, down from 5: the emplacements, traps and barriers leave the orchard too little open ground for more.
       debris: [
-        { look: 'junk', count: 5, radius: [0.8, 1.2] },
+        { look: 'junk', count: 3, radius: [0.8, 1.2] },
         { look: 'carWreck', count: 4, radius: [0.6, 0.8] },
       ],
       // Beside the old road, between it and the groves' outer rows.
@@ -556,31 +595,43 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // R3, the south-west road: past the motor pool and the barn, down the west side and out of the south edge
         // toward the old asphalt road at map (100, 326).
         { points: [AT(-6, 1.5), AT(-10, 9), AT(-13, 21), AT(-22, 25), AT(-30, 22), AT(-35.4, 14)], width: 3, surface: 'track' },
-        // R4, the depot road: from the highway at s 20 along the hangars' south and east sides, through the
-        // north-east ground and out of the east edge beside the trunk road.
-        { points: [AT(20, -1.5), AT(19, -10), AT(21, -31), AT(40, -33), AT(47, -41)], width: 3, surface: 'track' },
+        // R4, the depot road: from the highway at s 20 along the hangars' south and east sides to the depot track, then
+        // back down out of the east edge beside the trunk road. Its last point moved from (47, -41) to (31, -37): the
+        // bank up to the trunk road there climbs at 0.27 a tile, and at (31, -37) the ground meets it level.
+        { points: [AT(20, -1.5), AT(19, -10), AT(21, -31), AT(40, -33), AT(31, -37)], width: 3, surface: 'track' },
         // R5, the north field road: from the highway west through the north-west pocket, out of its west edge.
         { points: [AT(60, 6.6), AT(61, 22), AT(59, 40.6)], width: 2.5, surface: 'track' },
         // Narrow tracks the farmhands and the army wore: from the farmhouse yard into the north-west groves, and
         // from the depot road to the depot hangar.
         { points: [AT(6, 18), AT(10.75, 22), AT(10.75, 31)], width: 2, surface: 'track' },
         { points: [AT(40, -33), AT(45.5, -33)], width: 2, surface: 'track' },
+        // The army's dozer track from the highway cutting up onto the north ridge's crest and its gun shelf. It leaves
+        // the highway at (42, 1), south of the gap's crate stack, and not at (50, 4.5): from there it ran along the
+        // ridge's west scarp at (45, 8), where its bank cut a cliff beside the stack. Its next points moved from (45, 8)
+        // and (38, 8.5) to (39, 5.5) and (36, 7), up the crest over the cutting and off the shelf's north scarp, where
+        // its bank cut a cliff beside the shelf's stack.
+        { points: [AT(42, 1), AT(39, 5.5), AT(36, 7), AT(33.5, 10)], width: 2, surface: 'track', grade: 0.25 },
       ],
       buildings: [
         // The ruined two-storey farmhouse above the road at the middle, its long side and yard toward the road. The
         // farmer built it square to the road; the ruin has settled a little.
         { look: 'farmhouse', table: 'landmark', turnJitter: 0.06, shift: 0.3, poses: [pose(12, 14, 4, ACROSS)] },
         // The gabled barn far left above the road and its shed beside it, door gables to the road, and the old
-        // barn of the north-west pocket's fields.
-        { look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-12, 29.5, 3.7, ACROSS), pose(-6, 30.5, 2.2, ACROSS), pose(53.5, 35, 3.7, ALONG)] },
+        // barn of the north-west pocket's fields. The old barn moved from (53.5, 35) to (54.5, 32), off the slope
+        // under the west ridge where its levelled pad cut a cliff.
+        { look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-12, 29.5, 3.7, ACROSS), pose(-6, 30.5, 2.2, ACROSS), pose(54.5, 32, 3.7, ALONG)] },
         // The army's hangars: three side by side on packed dirt right of centre, ends to the road, and one at the
-        // north-east depot.
-        { look: 'quonset', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(26, -12, 3.2, ACROSS), pose(30, -19, 3.2, ACROSS), pose(34, -26, 3.2, ACROSS), pose(51, -33, 3.2, ALONG)] },
+        // north-east depot. Their levelled pads cut cliffs on the slopes, so the first moved from (26, -12) to
+        // (25, -13) and the depot's from (51, -33) to (51, -27), up the bank beside the depot track's end, with the
+        // grove block to its north trimmed to make room.
+        { look: 'quonset', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(25, -13, 3.2, ACROSS), pose(30, -19, 3.2, ACROSS), pose(34, -26, 3.2, ACROSS), pose(51, -27, 3.2, ALONG)] },
         // The sandbagged blockhouse below the road, commanding the crossroads.
         { look: 'bunker', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(0, -10, 3.9, ALONG)] },
         // Guard huts where roads enter: the south entry, the crossroad's and the depot road's east exits, the
-        // highway's north exit, and the motor pool's gate on the south-west road.
-        { look: 'guardPost', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-25.5, -6.5, 1.1, ALONG), pose(8, -28, 1.1, ACROSS), pose(37, -36, 1.1, ALONG), pose(67, 10.5, 1.1, ALONG), pose(-14.5, 12, 1.1, ALONG)] },
+        // highway's north exit, and the motor pool's gate on the south-west road. The depot road's hut moved from
+        // (37, -36), on the bank the road used to climb, to (30.5, -29), across the road from its new exit. The north
+        // exit's levelled pad cut a cliff, so it moved from (67, 10.5) to (68, 11.5).
+        { look: 'guardPost', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-25.5, -6.5, 1.1, ALONG), pose(8, -28, 1.1, ACROSS), pose(30.5, -29, 1.1, ALONG), pose(68, 11.5, 1.1, ALONG), pose(-14.5, 12, 1.1, ALONG)] },
         {
           look: 'armyTruck',
           table: 'roadWreck',
@@ -593,14 +644,17 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
             // The derelict jeep on the lower-left shoulder of the highway, and the army truck on the upper-right one.
             { at: AT(-20, -1.5), r: 1.1, turn: ALONG, shoulder: true },
             { at: AT(16, 1.5), r: 1.1, turn: Math.PI, shoulder: true },
-            // A truck broken down on the depot road, and one run off the south-west road.
-            { at: AT(30, -33.5), r: 1.1, turn: ALONG, shoulder: true },
-            { at: AT(-31.5, 24), r: 1.1, turn: 0.6, shoulder: true },
+            // A truck broken down on the depot road, and one run off the south-west road. The first moved from
+            // (30, -33.5) to (29, -32.5) when the road's exit came past it, and the second from (-31.5, 24) to
+            // (-28, 18.5), off the road's bank, where its levelled pad cut a cliff.
+            { at: AT(29, -32.5), r: 1.1, turn: ALONG, shoulder: true },
+            { at: AT(-28, 18.5), r: 1.1, turn: 0.6, shoulder: true },
           ],
         },
         // Crate stacks the army left where a truck could load them: dug in on the ridge shelf over the highway, by
-        // the hangars' checkpoint, by the depot road at the east edge, and beside the highway in the north gap.
-        { look: 'armyCache', table: 'armyStores', turnJitter: 0.3, shift: 0.3, poses: [pose(32, 11, 0.9, ALONG), pose(24, -5.5, 0.9, ACROSS), pose(21, -34, 0.9, ALONG), pose(43, 5.5, 0.9, ALONG)] },
+        // the hangars' checkpoint, by the depot road at the east edge, and beside the highway in the north gap. The
+        // shelf's stack moved from (32, 11) to (32.5, 7.5), down off the shelf's edge where its levelled pad cut a cliff.
+        { look: 'armyCache', table: 'armyStores', turnJitter: 0.3, shift: 0.3, poses: [pose(32.5, 7.5, 0.9, ALONG), pose(24, -5.5, 0.9, ACROSS), pose(21, -34, 0.9, ALONG), pose(43, 5.5, 0.9, ALONG)] },
       ],
       pads: [
         // The concrete motor pool under the army trucks, beside the south-west road. The hangars stand on packed dirt,
@@ -651,7 +705,8 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         block(33, 45, -4.6, -9, 'along', -0.02),
         // The north-east ground, east of the highway.
         block(44, 55, -4.6, -13.5, 'across', 0.05),
-        block(41, 56, -16.5, -26, 'along', 0.04),
+        // Its outer edge was trimmed from c -26 to c -22, so the depot hangar's parking gap leaves it its trees.
+        block(41, 56, -16.5, -22, 'along', 0.04),
         // The big block lower left, below the road.
         block(-23.5, -12.3, -6.6, -22.3, 'across', -0.02),
         // Below the crossroad's east leg, by the east edge.
@@ -670,36 +725,105 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { ...FENCE, points: [AT(44, -14.5), AT(55, -14.5)] },
         { ...FENCE, points: [AT(7, -21), AT(16.4, -21)] },
         { ...FENCE, points: [AT(-29, 33.4), AT(-19.5, 33.4)] },
-        // Barriers the army dragged along both shoulders of the highway at the crossroads, and at the south entry,
-        // staggered so a truck must weave between them.
-        { ...BARRIER, points: [AT(-5, 2.25), AT(-0.5, 2.25)] },
-        { ...BARRIER, points: [AT(3.5, -2.25), AT(8.5, -2.25)] },
-        { ...BARRIER, points: [AT(-30, 2.25), AT(-27, 2.25)] },
-        { ...BARRIER, points: [AT(-27, -2.25), AT(-24, -2.25)] },
-        // A sandbag L at each guard hut, toward its road.
-        sandbagL(-25.5, -6.5, 0, 1),
-        sandbagL(8, -28, -1, 0),
-        sandbagL(37, -36, 0, 1),
-        sandbagL(67, 10.5, 0, -1),
-        sandbagL(-14.5, 12, 1, 0),
+        // Barriers the army dragged along both shoulders of the highway at the crossroads, from s -8 to 8, and at the
+        // south entry, from s -32 to -22, staggered so a truck must weave between them. Where a road joins, its marks
+        // break the line.
+        { ...BARRIER, points: [AT(-8, 2.25), AT(8, 2.25)] },
+        { ...BARRIER, points: [AT(-8, -2.25), AT(8, -2.25)] },
+        { ...BARRIER, points: [AT(-31, 2.25), AT(-28, 2.25)] },
+        { ...BARRIER, points: [AT(-28, -2.25), AT(-25, -2.25)] },
+        { ...BARRIER, points: [AT(-25, 2.25), AT(-22, 2.25)] },
+        // A broken ring round the hangars' aprons: along their west side and across their north side, open to the
+        // depot road on the south and east and toward the depot to the north-east.
+        { ...BARRIER, points: [AT(27.5, -8.5), AT(32.5, -8.5)] },
+        { ...BARRIER, points: [AT(36.2, -9.5), AT(37, -20.5)] },
+        // Checkpoint lines along the depot road's south shoulder, the crossroad's east leg, the canal south of the
+        // blockhouse, the north-west pocket's field road and the highway's east shoulder in the north cutting.
+        { ...BARRIER, points: [AT(16.8, -11), AT(17.9, -22)] },
+        { ...BARRIER, points: [AT(2.3, -22.5), AT(2.3, -30)] },
+        { ...BARRIER, points: [AT(-11.8, -7), AT(-11.8, -21)] },
+        { ...BARRIER, points: [AT(59, 9), AT(59, 22)] },
+        { ...BARRIER, points: [AT(57, 4.4), AT(62, 4.6)] },
+        // The army's perimeter, 2-3 tiles inside the outline. Each side breaks into lines with gaps of 3 tiles or more,
+        // and every line stops short of a road, where a guard post or emplacements mark the gate. The east side runs
+        // from the south-east corner to the depot: it leaves the grove block by the east edge, the crossroad's exit and
+        // the depot road, which runs along the edge from s 20 to 40, open, and stands again past the bank by the depot.
+        { ...PERIMETER, points: [AT(-25.5, -11), AT(-25.5, -15), AT(-24.5, -20)] },
+        { ...PERIMETER, points: [AT(-22, -23.8), AT(-19.5, -25.5), AT(-16, -26.2)] },
+        // The south side, short of the south-west road's exit. It leaves the ground between the old road's entry and the
+        // south end of the grove block west of it open, the motor pool's way in from the entry.
+        { ...PERIMETER, points: [AT(-33.8, 8.5), AT(-33.5, 11.5)] },
+        // Across the north-west pocket's north end, west of the north gap's guard post, between two rows of trees.
+        { ...PERIMETER, points: [AT(69, 16), AT(69, 26)] },
+        { ...PERIMETER, points: [AT(69, 30), AT(69, 39)] },
+      ],
+      // Sandbag positions the guards dug facing the ways a threat comes, with steel hedgehogs out on the approach. Each
+      // is dig(s, c, face, arcs, traps).
+      emplacements: [
+        // The south entry and the south-east corner: by the guard post, and on the open strip up the east edge, with
+        // hedgehogs on its open ground.
+        dig(-27, -14, NORTH, 2, 0),
+        dig(-19, -27, SOUTH_WEST, 1, 1),
+        dig(-13, -26.5, NORTH, 2, 3),
+        // The crossroads round the blockhouse and the old road north of it: along the old road and the crossroads loop,
+        // with hedgehogs on the open shoulders.
+        dig(-9, -5, NORTH, 3, 1),
+        dig(-12, 5, SOUTH, 2, 1),
+        dig(-4, 5, WEST, 3, 3),
+        dig(6, 5, NORTH, 3, 3),
+        dig(1, 7, NORTH, 3, 0),
+        dig(3, -18, NORTH_WEST, 2, 1),
+        dig(-1, -18, NORTH, 1, 0),
+        dig(-9, -18, EAST, 1, 1),
+        dig(18, 8, NORTH, 2, 0),
+        // The east exits: the crossroad's by its guard post and the open ground between it and the depot road.
+        dig(8, -23, WEST, 2, 1),
+        dig(14, -28, NORTH_EAST, 3, 3),
+        dig(15, -23, NORTH_EAST, 2, 2),
+        dig(12, -33, EAST, 2, 0),
+        // The hangar yard: toward the old road, across the aprons and toward the depot road's north leg.
+        dig(31, -6, NORTH, 1, 0),
+        dig(23, -24, NORTH_EAST, 2, 2),
+        dig(41, -30, NORTH, 3, 2),
+        dig(42, -25, SOUTH_WEST, 2, 0),
+        // The depot: on the strip past the bank by the east edge.
+        dig(50, -41, WEST, 3, 3),
+        dig(44, -39, NORTH_EAST, 2, 1),
+        // The motor pool, toward the south-west road. Its south side stays open: it is the pool's way in from the entry.
+        dig(-10, 20, NORTH, 2, 1),
+        // The north gap: below the highway's cutting, facing up it.
+        dig(53, 1, NORTH_EAST, 2, 2),
+        dig(48, 7, NORTH_EAST, 2, 0),
+        // The ridge shelf over the highway, by its crate stack.
+        dig(38, 9, NORTH, 3, 1),
+        dig(35, 12, EAST, 2, 0),
+        // The south gate, on the old road's west shoulder facing down it. Was (32, 15) on the ridge shelf, where no arc
+        // found ground. It keeps this place in the list, so the draws of the positions after it stay the same.
+        dig(-28, 4.6, SOUTH, 2, 0),
+        // The groves west of the old road and the north-west pocket's far corner.
+        dig(24, 21, EAST, 3, 1),
+        dig(31, 23, NORTH, 3, 0),
+        dig(38, 23, NORTH, 3, 0),
+        dig(70, 41, NORTH, 1, 0),
       ],
       clutter: [
-        // Fuel drums the drivers and mechanics left by the trucks and hangars.
-        { look: 'drums', count: 12, radius: [0.4, 0.48], near: ['armyTruck', 'quonset'], reach: 4 },
+        // Fuel drums the drivers and mechanics left by the trucks and hangars. 6, down from 12, so both baked seeds (7
+        // and the map's) find room for every grove tree and debris piece after the emplacements went in.
+        { look: 'drums', count: 6, radius: [0.4, 0.48], near: ['armyTruck', 'quonset'], reach: 4 },
         // Lumber the farmhands stacked by the barns and the farmhouse for repairs that never came.
         { look: 'woodpile', count: 8, radius: [0.6, 0.7], near: ['barn', 'farmhouse'], reach: 4 },
         // Junk thrown out of the barns, the trucks and the house as they were stripped.
         { look: 'junk', count: 10, radius: [0.8, 1.1], near: ['barn', 'armyTruck', 'farmhouse'], reach: 5 },
-        // Loose sandbags left over from the guards' walls.
-        { look: 'sandbags', count: 10, radius: [0.5, 0.5], near: ['guardPost', 'bunker'], reach: 3 },
-        // Barriers pulled aside from the hangars and checkpoints.
-        { look: 'barrier', count: 8, radius: [0.5, 0.5], near: ['quonset', 'guardPost'], reach: 4 },
+        // Barriers pulled aside from the hangars, checkpoints and the blockhouse. 10, up from 8, for the army's many more
+        // barriers.
+        { look: 'barrier', count: 10, radius: [0.5, 0.5], near: ['quonset', 'guardPost', 'bunker'], reach: 4 },
       ],
     },
     glass: null,
     spotGap: 6,
     debrisGap: 3,
     reactor: null,
+    relief: 0.1,
   },  // Glass Flats: a crashed ship's engine half buried in a glass desert, with the roofless compounds of a New World
   // town round it. The nozzle and the frame are pieces; the compounds are buildings, each a loot spot; the caches lie in
   // the engine; dead trucks lie in the outer patches; fused glass covers the open ground.
@@ -837,6 +961,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     spotGap: 6,
     debrisGap: 1.5,
     reactor: null,
+    relief: null,
   },
 };
 
