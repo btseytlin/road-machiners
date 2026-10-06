@@ -466,7 +466,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // The ridge shelf over the highway, by its crate stack.
         dig(38, 9, NORTH, 3, 1),
         dig(35, 12, EAST, 2, 0),
-        dig(32, 15, NORTH, 2, 0),
+        // The south gate, on the old road's west shoulder facing down it. Was (32, 15) on the ridge shelf, where no arc
+        // found ground. It keeps this place in the list, so the draws of the positions after it stay the same.
+        dig(-28, 4.6, SOUTH, 2, 0),
         // The groves west of the old road and the north-west pocket's far corner.
         dig(24, 21, EAST, 3, 1),
         dig(31, 23, NORTH, 3, 0),
