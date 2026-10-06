@@ -20,7 +20,12 @@ async function enter(page, spot) {
   await page.evaluate(async (id) => {
     const g = window.__ROAM__;
     const c = await import('/src/sim/cheats.ts');
-    g.apply(c.teleport(g.state, c.placeSpot(g.state, id)));
+    let w = c.teleport(g.state, c.placeSpot(g.state, id));
+    if (id === 'nose' || id === 'bowl') {
+      const guns = (x) => x.vehicles.find(v => v.id === x.player.vehicleId).items.filter(i => i.kind === 'part' && i.part.defId && /gun|cannon|rifle|turret|shotgun/i.test(i.part.defId)).length;
+      for (let i = 0; i < 40 && !guns(w); i++) w = c.randomKit(w, 5);
+    }
+    g.apply(w);
     g.town.open();
   }, spot);
   await page.waitForSelector('.town-shop .tabs button', { timeout: 90000 });
@@ -36,7 +41,7 @@ try {
   for (const spot of ['nose', 'bowl']) {
     await enter(page, spot);
     await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
-    const gun = () => page.locator('.inv-item.k-weapon.mounted').first();
+    const gun = () => page.locator('.inv-item.mounted', { hasText: /turret|rifle|cannon|shotgun|MG/i }).first();
     // Mouse: select, compare, clear.
     await gun().click();
     await page.waitForTimeout(500);
