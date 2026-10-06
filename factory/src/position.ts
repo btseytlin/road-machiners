@@ -1,5 +1,5 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
-import type { Card, FactoryState, JobStage } from './types';
+import { RELEASE_LABEL, type Card, type FactoryState, type Job, type JobStage } from './types';
 
 export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'done'] as const;
@@ -9,8 +9,8 @@ export type MoveTarget = (typeof MOVE_TARGETS)[number];
 const POSITION_STAGE: Record<Position, JobStage | null> = {
   triage: 'triage', design: 'design', implement: 'implement', patch: 'patch', verify: 'verify', fix: 'verify', checks: 'checks', post: 'checks', approval: 'approve', done: null,
 };
-// Jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no position owns them.
-const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks', 'approve'];
+// Lists the jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no position owns them.
+export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks'];
 
 export function cardPosition(card: Card, state: FactoryState): Position {
   const key = String(card.issue);
@@ -24,8 +24,15 @@ function testingPosition(phase: string | undefined): Position {
   return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
 }
 
+// The release tracking card waits in Approval for the whole release, and its post is release.postId, so no store can disagree about it.
 export function cardDrift(card: Card, state: FactoryState): string[] {
+  if (card.labels.includes(RELEASE_LABEL)) return [];
   return [...phaseDrift(card, state), ...approvalDrift(card, state), ...jobDrift(card, state)];
+}
+
+// The jobs that run on a card. A job owns its card mid-step, because a stage changes the column and the post before its job entry leaves the state.
+export function runningJobs(card: Card, state: FactoryState): Job[] {
+  return state.jobs.filter((job) => job.issue === card.issue);
 }
 
 function phaseDrift(card: Card, state: FactoryState): string[] {

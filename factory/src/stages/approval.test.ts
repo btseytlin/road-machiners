@@ -4,7 +4,7 @@ import { writeState, readState, EMPTY_STATE } from '../state';
 import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
-const { approve, deny, routeFeedback } = await import('./approval');
+const { approve, closeCard, deny, routeFeedback } = await import('./approval');
 const { readLedger } = await import('../ledger');
 
 let home = '';
@@ -271,5 +271,19 @@ describe('deny', () => {
     column = 'Testing';
     await expect(deny(fakeCtx(), 7, 'bob')).rejects.toThrow('not in Approval');
     expect(calls).toEqual([]);
+  });
+});
+
+describe('closeCard', () => {
+  it('drops a card from any column with the given comment', async () => {
+    column = 'Testing';
+    await closeCard(fakeCtx(), 7, 'Dropped by Ann: dead end');
+    expect(calls).toEqual([
+      'comment 7 Dropped by Ann: dead end',
+      'addLabel 7 wont-do',
+      'close 7 not planned',
+      'move 7 Done',
+    ]);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
   });
 });

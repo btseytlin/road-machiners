@@ -81,3 +81,9 @@ def test_each_audit_line_is_a_drift_line(tmp_path):
 
 def test_a_failed_audit_prints_one_stable_line(tmp_path):
     assert run(tmp_path, health(), audit="echo boom >&2; exit 1") == ["audit failed"]
+
+
+def test_one_failed_audit_is_retried_and_opens_no_incident(tmp_path):
+    flag = tmp_path / "first-run-done"
+    audit = f"if [ -f {flag} ]; then echo '#5 testPhase checks but column Design'; else touch {flag}; exit 1; fi"
+    assert run(tmp_path, health(), audit=audit) == ["drift: #5 testPhase checks but column Design"]

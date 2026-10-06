@@ -1,16 +1,18 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee } from './committee';
 import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
-import { MOVE_TARGETS, type MoveTarget } from './position';
+import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
 import { withStatus } from './post-status';
 import { clearSessions } from './sessions';
 import { readState, updateState } from './state';
-import { NEEDS_INFO_LABEL, STUCK_LABEL, type Card, type Column, type Ctx, type FactoryState, type JobStage, type ReleaseState, type TestPhase } from './types';
+import { agentHome, workDir } from './stages/common';
+import { closeCard } from './stages/approval';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
 
-const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
-type DropQueue = (typeof DROP_QUEUES)[number];
+export const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
+export type DropQueue = (typeof DROP_QUEUES)[number];
 
 // One order that changes the factory state, written by the `factory` CLI into $FACTORY_HOME/inbox.
 export type ControlAction =
@@ -122,9 +124,6 @@ export async function applyControl(ctx: Ctx, command: ControlCommand): Promise<s
   return text;
 }
 
-// The jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no card position owns them.
-// A running merge is not among them, since requireLeavable refuses to move a card while it merges.
-const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks'];
 const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', checks: 'Testing', approval: 'Testing', done: 'Done' };
 const PHASE: Partial<Record<MoveTarget, TestPhase>> = { checks: 'checks', approval: 'post' };
 // A card put back before its build, or finished, no longer holds the approval it had.
@@ -175,9 +174,9 @@ async function stopJobs(ctx: Ctx, issue: number): Promise<void> {
 }
 
 // Clears what a position keeps in the state. The failures go too, so Hermes's incident watch does not report the old position.
-function clearCardState(ctx: Ctx, issue: number, dropsApproval: boolean): void {
+function clearCardState(state: FactoryState, issue: number, dropsApproval: boolean): FactoryState {
   const key = String(issue);
-  updateState(ctx.statePath, (state: FactoryState) => ({
+  return {
     ...state,
     testPhase: omitKey(state.testPhase, key),
     patching: omitKey(state.patching, key),
@@ -186,41 +185,89 @@ function clearCardState(ctx: Ctx, issue: number, dropsApproval: boolean): void {
     approvedResolving: dropsApproval ? omitKey(state.approvedResolving, key) : state.approvedResolving,
     unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.issue !== issue)),
     failures: state.failures.filter((failure) => failure.issue !== issue),
-  }));
-  clearSessions(ctx.cfg.home, issue);
+  };
 }
 
 async function clearFlags(ctx: Ctx, card: Card): Promise<void> {
   for (const label of [STUCK_LABEL, NEEDS_INFO_LABEL]) if (card.labels.includes(label)) await ctx.github.removeLabel(card.issue, label);
 }
 
-// Leaves the card with no job, no sub-position and no open post, so the new position starts from clean stores.
-async function leavePosition(ctx: Ctx, card: Card, status: string, dropsApproval: boolean): Promise<void> {
-  requireLeavable(ctx, card.issue);
-  await stopJobs(ctx, card.issue);
-  await closePosts(ctx, card.issue, status);
-  clearCardState(ctx, card.issue, dropsApproval);
+// The work clone and the branch hold what a position needs. A missing one throws with the position that makes it.
+async function requireBranch(ctx: Ctx, issue: number): Promise<void> {
+  await ctx.repo.fetch();
+  try {
+    await ctx.repo.headHash(BRANCH(issue));
+  } catch (error) {
+    throw new Error(`Issue #${issue} has no branch ${BRANCH(issue)} on GitHub (${(error as Error).message}); move it to design, which creates the branch.`);
+  }
+}
+
+async function requireApprovalFile(ctx: Ctx, issue: number): Promise<void> {
+  const path = join(agentHome(workDir(ctx, issue), GAME_DIR), OUT_DIR, 'approval.json');
+  if (!existsSync(path)) throw new Error(`Issue #${issue} has no ${path}; move it to verify, which writes the approval.`);
+}
+
+async function requireTaskFile(ctx: Ctx, issue: number): Promise<void> {
+  const path = join(agentHome(workDir(ctx, issue), GAME_DIR), TASK_FILE(issue));
+  if (!existsSync(path)) throw new Error(`Issue #${issue} has no task file ${path}; move it to design, which writes the task.`);
+}
+
+type Need = (ctx: Ctx, issue: number) => Promise<void>;
+const NEEDS: Partial<Record<MoveTarget, Need[]>> = {
+  implement: [requireTaskFile],
+  verify: [requireBranch],
+  checks: [requireBranch, requireApprovalFile],
+  approval: [requireBranch, requireApprovalFile],
+};
+
+// The release flow owns the tracking card.
+async function requireWorkCard(ctx: Ctx, issue: number): Promise<Card> {
+  const found = await requireCard(ctx, issue);
+  if (found.labels.includes(RELEASE_LABEL)) throw new Error(`Issue #${issue} is the release tracking card. The release flow owns it.`);
+  return found;
+}
+
+type Relocation = { column: Column; status: string; dropsApproval: boolean; enter: (state: FactoryState) => FactoryState };
+
+// Every check comes first, so a refused order changes nothing. Then the writes run in an order a repeat of the same order can finish:
+// jobs, board, state, posts, labels. Each step skips what an earlier run did.
+async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): Promise<void> {
+  const { issue } = card;
+  requireLeavable(ctx, issue);
+  for (const need of needs) await need(ctx, issue);
+  await stopJobs(ctx, issue);
+  await ctx.github.move(issue, plan.column);
+  updateState(ctx.statePath, (state) => plan.enter(clearCardState(state, issue, plan.dropsApproval)));
+  clearSessions(ctx.cfg.home, issue);
+  await closePosts(ctx, issue, plan.status);
   await clearFlags(ctx, card);
 }
 
 async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' }>, by: string): Promise<Outcome> {
   const { issue, to } = command;
-  const card = await requireCard(ctx, issue);
-  await leavePosition(ctx, card, `↪️ Moved to ${to} by ${by}: ${command.reason}`, DROPS_APPROVAL.includes(to));
+  const card = await requireWorkCard(ctx, issue);
   const phase = PHASE[to];
-  if (phase !== undefined) updateState(ctx.statePath, (state) => ({ ...state, testPhase: { ...state.testPhase, [String(issue)]: phase } }));
-  await ctx.github.move(issue, COLUMN[to]);
+  await relocate(ctx, card, NEEDS[to] ?? [], {
+    column: COLUMN[to],
+    status: `↪️ Moved to ${to} by ${by}: ${command.reason}`,
+    dropsApproval: DROPS_APPROVAL.includes(to),
+    enter: (state) => (phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [String(issue)]: phase } }),
+  });
+  if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`);
   return { issue, text: `Moved to ${to}.` };
 }
 
 // The approve job merges at once for a card in Approval that holds an approval, so the merge needs no post and no hardening.
 async function merge(ctx: Ctx, command: Extract<ControlCommand, { action: 'merge' }>, by: string): Promise<Outcome> {
   const { issue } = command;
-  const card = await requireCard(ctx, issue);
-  await leavePosition(ctx, card, `↪️ Merge ordered by ${by}: ${command.reason}`, false);
+  const card = await requireWorkCard(ctx, issue);
   const key = String(issue);
-  updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by }, pendingApprovals: { ...state.pendingApprovals, [key]: by } }));
-  await ctx.github.move(issue, 'Approval');
+  await relocate(ctx, card, [requireBranch], {
+    column: 'Approval',
+    status: `↪️ Merge ordered by ${by}: ${command.reason}`,
+    dropsApproval: false,
+    enter: (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by }, pendingApprovals: { ...state.pendingApprovals, [key]: by } }),
+  });
   return { issue, text: 'The merge into its base is queued.' };
 }
 

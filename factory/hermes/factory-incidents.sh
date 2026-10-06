@@ -18,8 +18,9 @@ if [ -f /factory/home/health ]; then
 else
   echo "tick stalled: no health file, so no tick ran on this code"
 fi
-# Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once. A failed audit prints one stable line.
-if audit=$(factory audit 2>/dev/null); then
+# Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once.
+# A failed audit runs once more, so one ssh or GitHub error does not open an incident. Two failures print one stable line.
+if audit=$(factory audit 2>/dev/null || factory audit 2>/dev/null); then
   if [ -n "$audit" ]; then printf '%s\n' "$audit" | sed 's/^/drift: /'; fi
 else
   echo "audit failed"

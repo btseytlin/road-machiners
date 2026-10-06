@@ -62,9 +62,9 @@ Read commands run at once and change nothing.
 - `factory log N [stage]` prints the tail of the card's newest job log.
 - `factory audit` lists each drift between stores. The incident watch reports each line as `drift: <line>`.
 
-Write commands take `--by <member or hermes>` and `--reason "<text>"`. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
+Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <member>` names the member whose message ordered the action. Never name a member who did not order it. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
 
-- `factory move N <triage|design|implement|verify|checks|approval|done>` puts a card in any position and clears the state of the old one. `move N approval` builds and posts the branch with no tests or playtest. The post says no factory checks ran.
+- `factory move N <triage|design|implement|verify|checks|approval|done>` puts a card in any position and clears the state of the old one. `move N approval` builds and posts the branch with no tests or playtest. The post says no factory checks ran. `move N done` drops the card, like Deny: it closes the issue as not planned.
 - `factory merge N` merges a card into its base now.
 - `factory ship` ships the open release now.
 - `factory cut` cuts a release now.
@@ -163,7 +163,8 @@ Use the `factory` CLI first. Change a store by hand only for a step the CLI lack
 - Prefer the factory's own steps to doing their work by hand. A step also builds, publishes and records what it did. A merge with `gh pr merge` does none of that.
 - Keep the state file valid JSON with every field. Write a new file and rename it over the old one.
 - Nothing reaches `main` without a Ship or a hotfix approval from the committee, or a member's order to run `factory ship`. Never push to `main` by hand.
-- You may close an issue, delete a branch with work on it, or push to `dev` by hand when it serves the goal. Record what you did and why in an issue comment. Prefer `factory merge N` to a push by hand.
+- You may close an issue or delete a branch with work on it when it serves the goal. Record what you did and why in an issue comment.
+- Pushing to `dev` by hand needs a member's order, like `factory merge N`. Prefer `factory merge N` to a push by hand.
 
 ## Changing the factory itself
 

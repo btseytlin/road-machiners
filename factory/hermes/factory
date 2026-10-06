@@ -1,4 +1,4 @@
 #!/bin/bash
 # Runs a factory CLI command on the factory server, from the deployed code. Hermes calls it as `factory <command>`.
-# printf %q quotes each argument, so a reason with spaces reaches the server as one argument. It is bash only.
-exec factory-host "cd /opt/factory/code/factory && npm run -s factory -- $(printf '%q ' "$@")"
+# The arguments travel NUL-separated on stdin, so spaces and non-ASCII text reach the server unchanged, whatever its shell.
+printf '%s\0' "$@" | factory-host 'cd /opt/factory/code/factory && xargs -0 npm run -s factory --'

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isGated, resolveActor, writeControl, type ControlAction } from './control';
-import { pauseFile } from './pause';
-import { MOVE_TARGETS, cardDrift, cardPosition, releaseDrift, type MoveTarget } from './position';
+import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, type DropQueue } from './control';
+import { pauseFile, pausedReason } from './pause';
+import { MOVE_TARGETS, cardDrift, cardPosition, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
 import { STUCK_LABEL, type Card, type Ctx, type FactoryState } from './types';
 
@@ -10,8 +10,8 @@ import { STUCK_LABEL, type Card, type Ctx, type FactoryState } from './types';
 const SNAPSHOT_AGENT = 'curl/8.0';
 // A job log runs to thousands of lines. Fifty lines hold the failing step, and Hermes asks the log path for more.
 const LOG_TAIL_LINES = 50;
-const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
-type DropQueue = (typeof DROP_QUEUES)[number];
+// Every pause made by `factory pause` starts with this text, so `resume` lifts only its own.
+const PAUSE_PREFIX = 'Paused with factory pause:';
 
 type Handler = (ctx: Ctx, args: string[]) => Promise<void> | void;
 // Builds the action from the positional arguments, and throws on a bad one.
@@ -95,6 +95,8 @@ function writeCommand(ctx: Ctx, name: string, args: string[]): void {
   resolveActor(ctx, command.by, isGated(ctx, command));
   const path = writeControl(ctx.cfg.home, command, ctx.now());
   console.log(`Wrote ${path}. It applies on the next tick.`);
+  const paused = pausedReason(ctx.cfg.home);
+  if (paused !== null) console.log(`The factory is paused: ${paused}. The order applies when the pause is lifted.`);
 }
 
 async function status(ctx: Ctx): Promise<void> {
@@ -119,7 +121,13 @@ async function findCard(ctx: Ctx, value: string | undefined): Promise<Card> {
 async function card(ctx: Ctx, args: string[]): Promise<void> {
   const found = await findCard(ctx, args[0]);
   const state = readState(ctx.statePath);
-  for (const line of [...cardFacts(found, state), ...cardDrift(found, state).map((row) => `drift: ${row}`)]) console.log(line);
+  for (const line of [...cardFacts(found, state), ...cardDrift(found, state).map((row) => `drift: ${row}`), ...jobNote(found, state)]) console.log(line);
+}
+
+// A running job owns its card mid-step, so drift on it may pass in seconds.
+function jobNote(found: Card, state: FactoryState): string[] {
+  const stages = runningJobs(found, state).map((job) => job.stage);
+  return stages.length === 0 ? [] : [`note: a ${stages.join(', ')} job is running, so the drift above may pass in seconds`];
 }
 
 // Prints a value, or "none" when a store holds nothing for the card.
@@ -197,7 +205,7 @@ function log(ctx: Ctx, args: string[]): void {
 async function audit(ctx: Ctx): Promise<void> {
   const state = readState(ctx.statePath);
   const board = await ctx.github.cards();
-  for (const line of [...board.flatMap((row) => cardDrift(row, state)), ...releaseDrift(state, board)]) console.log(line);
+  for (const line of [...board.filter((row) => runningJobs(row, state).length === 0).flatMap((row) => cardDrift(row, state)), ...releaseDrift(state, board)]) console.log(line);
 }
 
 async function retry(ctx: Ctx, args: string[]): Promise<void> {
@@ -211,11 +219,13 @@ function pause(ctx: Ctx, args: string[]): void {
   const reason = args.join(' ').trim();
   if (reason === '') throw new Error('pause needs a reason.');
   mkdirSync(ctx.cfg.home, { recursive: true });
-  writeFileSync(pauseFile(ctx.cfg.home), `${reason}\n`);
+  writeFileSync(pauseFile(ctx.cfg.home), `${PAUSE_PREFIX} ${reason}\n`);
   console.log(`Paused: ${reason}`);
 }
 
 function resume(ctx: Ctx): void {
+  const paused = pausedReason(ctx.cfg.home);
+  if (paused !== null && !paused.startsWith(PAUSE_PREFIX)) throw new Error('This pause was written by hand or by a member. Ask the committee before removing it.');
   rmSync(pauseFile(ctx.cfg.home), { force: true });
   console.log('Resumed.');
 }

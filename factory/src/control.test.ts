@@ -1,10 +1,11 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cardDrift } from './position';
+import { workDir } from './stages/common';
 import { readLedger } from './ledger';
 import { EMPTY_STATE, readState, writeState } from './state';
-import type { Card, Column, Ctx, FactoryConfig, FactoryState, Job, ReleaseState } from './types';
+import { TASK_FILE, type Card, type Column, type Ctx, type FactoryConfig, type FactoryState, type Job, type ReleaseState } from './types';
 
 const killed: string[] = [];
 vi.mock('./jobs', () => ({ killJob: async (_run: unknown, pid: number, id: string) => { killed.push(`${pid} ${id}`); } }));
@@ -19,6 +20,9 @@ const JOB: Job = { id: 'verify-4-x', stage: 'verify', issue: 4, pid: 77, started
 
 let calls: string[] = [];
 let cards: Card[] = [];
+let branches: string[] = [];
+let moveFails = false;
+let editFails = false;
 
 const card = (issue: number, column: Column, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
 
@@ -29,14 +33,32 @@ function fakeCtx(): Ctx {
     github: {
       cards: async () => cards,
       comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
-      move: async (n: number, column: string) => { calls.push(`move ${n} ${column}`); },
+      move: async (n: number, column: string) => {
+        if (moveFails) throw new Error('board down');
+        calls.push(`move ${n} ${column}`);
+      },
+      pullRequestFor: async () => null,
+      close: async (n: number, reason: string) => { calls.push(`close ${n} ${reason}`); },
       addLabel: async (n: number, label: string) => { calls.push(`addLabel ${n} ${label}`); },
       removeLabel: async (n: number, label: string) => { calls.push(`removeLabel ${n} ${label}`); },
       mergePullRequest: async (branch: string) => { calls.push(`mergePullRequest ${branch}`); },
     },
     telegram: {
-      editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
-      editText: async (_chat: string, id: number, text: string) => { calls.push(`editText ${id} ${text}`); },
+      editCaption: async (_chat: string, id: number, caption: string) => {
+        if (editFails) throw new Error('telegram down');
+        calls.push(`editCaption ${id} ${caption}`);
+      },
+      editText: async (_chat: string, id: number, text: string) => {
+        if (editFails) throw new Error('telegram down');
+        calls.push(`editText ${id} ${text}`);
+      },
+    },
+    repo: {
+      fetch: async () => { calls.push('fetch'); },
+      headHash: async (branch: string) => {
+        if (!branches.includes(branch)) throw new Error(`unknown revision ${branch}`);
+        return 'abc1234';
+      },
     },
   } as unknown as Ctx;
 }
@@ -58,8 +80,25 @@ function busyCard(): void {
   });
 }
 
+// The work clone of an issue holds the task file and the approval the stages write.
+function stageArtifacts(issue: number, names: { task: boolean; approval: boolean }): void {
+  const game = join(workDir(fakeCtx(), issue), 'game');
+  if (names.task) {
+    mkdirSync(dirname(join(game, TASK_FILE(issue))), { recursive: true });
+    writeFileSync(join(game, TASK_FILE(issue)), 'task');
+  }
+  if (names.approval) {
+    mkdirSync(join(game, '.factory'), { recursive: true });
+    writeFileSync(join(game, '.factory', 'approval.json'), '{}');
+  }
+}
+
 beforeEach(() => {
   rmSync(ROOT, { recursive: true, force: true });
+  branches = ['factory/issue-4', 'factory/issue-6'];
+  moveFails = false;
+  editFails = false;
+  for (const issue of [4, 6]) stageArtifacts(issue, { task: true, approval: true });
   mkdirSync(join(ROOT, 'inbox'), { recursive: true });
   calls = [];
   killed.length = 0;
@@ -291,6 +330,97 @@ describe('merge', () => {
     seed({ pendingApprovals: { 6: 'Bob' } });
     await applyControl(fakeCtx(), command({ action: 'merge', issue: 6, by: 'hermes' }));
     expect(readState(statePath).pendingApprovals).toEqual({ 6: 'Hermes' });
+  });
+});
+
+describe('move and merge preconditions and write order', () => {
+  const expectUntouched = (before: FactoryState): void => {
+    expect(readState(statePath)).toEqual(before);
+    expect(killed).toEqual([]);
+    expect(calls.filter((call) => call !== 'fetch')).toEqual([]);
+    expect(ctrlLines()).toEqual([]);
+  };
+
+  it('refuses move and merge for the release tracking card', async () => {
+    cards = [card(4, 'Testing', ['release'])];
+    seed({ jobs: [JOB] });
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('release');
+    await expect(applyControl(fakeCtx(), command({ action: 'merge', issue: 4, by: '11' }))).rejects.toThrow('release');
+    expectUntouched(before);
+  });
+
+  it.each(['approval', 'checks'] as const)('move to %s needs the approval file, and names the position that writes it', async (to) => {
+    busyCard();
+    rmSync(join(workDir(fakeCtx(), 4), 'game', '.factory', 'approval.json'));
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }))).rejects.toThrow(/approval\.json.*move it to verify/);
+    expectUntouched(before);
+  });
+
+  it.each(['approval', 'checks', 'verify'] as const)('move to %s needs the branch, and names design', async (to) => {
+    busyCard();
+    branches = [];
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }))).rejects.toThrow(/factory\/issue-4.*move it to design/);
+    expectUntouched(before);
+  });
+
+  it('move to implement needs the task file, and names design', async () => {
+    busyCard();
+    rmSync(join(workDir(fakeCtx(), 4), 'game', TASK_FILE(4)));
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'implement' }))).rejects.toThrow(/issue-4\.md.*move it to design/);
+    expectUntouched(before);
+  });
+
+  it('merge needs the branch', async () => {
+    busyCard();
+    branches = [];
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'merge', issue: 4, by: '11' }))).rejects.toThrow(/factory\/issue-4.*move it to design/);
+    expectUntouched(before);
+  });
+
+  it('a board failure leaves the state as it was, except the killed job', async () => {
+    busyCard();
+    moveFails = true;
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('board down');
+    expect(readState(statePath)).toEqual({ ...before, jobs: before.jobs.filter((job) => job.issue !== 4) });
+    expect(killed).toEqual(['77 verify-4-x']);
+    expect(calls).toEqual([]);
+    expect(ctrlLines()).toEqual([]);
+  });
+
+  it('a post edit failure leaves the board and state on the new position, and a repeat finishes', async () => {
+    busyCard();
+    editFails = true;
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('telegram down');
+    const half = readState(statePath);
+    expect(calls).toContain('move 4 Design');
+    expect(half.approvalPosts).toEqual({ 42: 4, 43: 5 });
+    expect(half.testPhase).toEqual({ 5: 'fix' });
+    expect(half.pendingApprovals).toEqual({ 5: 'Bob' });
+    expect(calls.some((call) => call.startsWith('removeLabel'))).toBe(false);
+    expect(ctrlLines()).toEqual([]);
+    editFails = false;
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }));
+    const state = readState(statePath);
+    expect(state.approvalPosts).toEqual({ 43: 5 });
+    expect(calls.filter((call) => call.startsWith('editCaption'))).toHaveLength(1);
+    expect(calls.filter((call) => call.startsWith('removeLabel'))).toHaveLength(2);
+    expect(ctrlLines()).toHaveLength(1);
+  });
+
+  it('move to done closes the card the way a denial does', async () => {
+    busyCard();
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'done' }));
+    expect(calls).toContain('comment 4 Dropped by Ann: the gate failed on load');
+    expect(calls).toContain('addLabel 4 wont-do');
+    expect(calls).toContain('close 4 not planned');
+    expect(calls).toContain('move 4 Done');
+    expect(readState(statePath).approvalPosts).toEqual({ 43: 5 });
   });
 });
 

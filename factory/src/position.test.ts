@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_STATE } from './state';
-import { cardDrift, cardPosition, releaseDrift } from './position';
+import { CARD_JOBS, cardDrift, cardPosition, releaseDrift, runningJobs } from './position';
 import type { Card, Column, FactoryState, Job, JobStage } from './types';
 
 const card = (column: Column, issue = 157, labels: string[] = []): Card => ({ itemId: 'i', issue, column, labels });
@@ -58,6 +58,27 @@ describe('cardDrift', () => {
   });
   it('ignores jobs of other issues and release jobs', () => {
     expect(cardDrift(card('Design'), withState({ jobs: [job('implement', 158), job('candidate', 157)] }))).toEqual([]);
+  });
+});
+
+describe('release tracking card', () => {
+  it('reports no drift while it waits in Approval with its post in release.postId', () => {
+    const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: 5, removed: [] };
+    expect(cardDrift(card('Approval', 300, ['release']), withState({ release }))).toEqual([]);
+  });
+});
+
+describe('runningJobs', () => {
+  it('lists the jobs of one card and ignores other issues', () => {
+    const state = withState({ jobs: [job('design', 157), job('checks', 158), job('candidate', 157)] });
+    expect(runningJobs(card('Design'), state).map((row) => row.stage)).toEqual(['design', 'candidate']);
+    expect(runningJobs(card('Design', 159), state)).toEqual([]);
+  });
+});
+
+describe('CARD_JOBS', () => {
+  it('lists the jobs that belong to a card position', () => {
+    expect(CARD_JOBS).toEqual(['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks']);
   });
 });
 

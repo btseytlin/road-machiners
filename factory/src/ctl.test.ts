@@ -5,7 +5,8 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { ROOT, fake, reset, type Fake } from './stages/test-fakes';
 
 // The control module has its own tests. These fakes write the inbox file like the real one and let only the name "ann" act.
-vi.mock('./control', () => ({
+vi.mock('./control', async (importOriginal) => ({
+  DROP_QUEUES: (await importOriginal<{ DROP_QUEUES: readonly string[] }>()).DROP_QUEUES,
   resolveActor: (_ctx: unknown, by: string, gated: boolean) => {
     if (by === 'hermes' && gated) throw new Error('hermes cannot order this');
     if (by !== 'hermes' && by !== 'ann') throw new Error(`unknown actor ${by}`);
@@ -81,6 +82,17 @@ describe('write commands', () => {
   });
 });
 
+describe('write commands while paused', () => {
+  it('still writes the order and says it waits for the pause to lift', async () => {
+    const f = fake();
+    writeFileSync(join(ROOT, 'paused'), 'Paused with factory pause: fixing state\n');
+    await run(f, 'cut', '--by', 'ann', '--reason', 'r');
+    expect(stored()).toMatchObject({ action: 'cut' });
+    expect(out.join('\n')).toContain('The factory is paused: Paused with factory pause: fixing state.');
+    expect(out.join('\n')).toContain('applies when the pause is lifted');
+  });
+});
+
 describe('read commands', () => {
   function board(): Fake {
     const f = fake();
@@ -102,6 +114,17 @@ describe('read commands', () => {
     writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
     await run(board(), 'audit');
     expect(out).toEqual(['#5 testPhase checks but column Design', '#6 column Approval but no open post and no approval']);
+  });
+
+  it('audit skips a card with a running job, and card still shows its drift and the job', async () => {
+    const f = board();
+    const running = { id: 'j', stage: 'checks' as const, issue: 5, pid: 1, startedAt: '2026-01-01T00:00:00Z', log: 'l' };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, jobs: [running], approvalPosts: { '77': 6 } });
+    await run(f, 'audit');
+    expect(out).toEqual([]);
+    await run(f, 'card', '5');
+    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    expect(out).toContain('note: a checks job is running, so the drift above may pass in seconds');
   });
 
   it('audit and the other read commands change no store', async () => {
@@ -179,9 +202,15 @@ describe('immediate commands', () => {
   it('pause writes the pause file and resume removes it', async () => {
     const f = fake();
     await run(f, 'pause', 'fixing', 'state');
-    expect(readFileSync(join(ROOT, 'paused'), 'utf8')).toBe('fixing state\n');
+    expect(readFileSync(join(ROOT, 'paused'), 'utf8')).toBe('Paused with factory pause: fixing state\n');
     await expect(run(f, 'pause')).rejects.toThrow('needs a reason');
     await run(f, 'resume');
     expect(existsSync(join(ROOT, 'paused'))).toBe(false);
+  });
+
+  it('resume keeps a pause written by hand', async () => {
+    writeFileSync(join(ROOT, 'paused'), 'Hermes fixing #5\npid: 12\n');
+    await expect(run(fake(), 'resume')).rejects.toThrow('This pause was written by hand or by a member. Ask the committee before removing it.');
+    expect(existsSync(join(ROOT, 'paused'))).toBe(true);
   });
 });
