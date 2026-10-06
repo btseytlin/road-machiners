@@ -103,7 +103,7 @@ function readDoing(activity) {
   return formatActivity(activity);
 }
 function formatActivity(activity) {
-  if (activity.milestone) return `Reported: ${milestones[activity.milestone]} · ${actions[activity.activity]}`;
+  if (activity.milestone) return `Reported: ${milestones[activity.milestone]}, ${actions[activity.activity]}`;
   return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity];
 }
 function createWorkerRow(job) {
@@ -243,7 +243,7 @@ function readManagerAction(manager) {
   if (manager.status !== 'ok') return 'Activity stale';
   if (manager.phase === 'completed') return `Idle for ${formatAge(manager.since)}`;
   const phase = manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
-  return `${phase} · ${formatAge(manager.since)} in phase`;
+  return `${phase}, ${formatAge(manager.since)} in phase`;
 }
 function renderManager() {
   const live = readLive();
@@ -320,7 +320,7 @@ function renderCounters(summary) {
   setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
-  setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC · ${summary.missingUsage} runs lack token counts · ${summary.waitingGaps} wait gaps` : 'No recorded history');
+  setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function renderTokenCounters(tokens) {
   setCounter('usage-tokens', formatNumber(countTokens(tokens)), countTokens(tokens));
@@ -429,8 +429,8 @@ function createStageModelCell(stage, model, usage, measure) {
   const value = usage ? measure === 'input' ? countInputTokens(usage) : usage.output : null;
   const cell = createNode('td', formatNumber(value), 'numeric');
   if (usage) cell.dataset.exact = measure === 'input'
-    ? `${readStageModelLabel(stage)} · ${model}: ${value} input including ${usage.cacheRead} cache read and ${usage.cacheWrite} cache write, ${formatCost(usage.cost)} estimated cost`
-    : `${readStageModelLabel(stage)} · ${model}: ${value} output`;
+    ? `${readStageModelLabel(stage)}, ${model}: ${value} input including ${usage.cacheRead} cache read and ${usage.cacheWrite} cache write, ${formatCost(usage.cost)} estimated cost`
+    : `${readStageModelLabel(stage)}, ${model}: ${value} output`;
   return cell;
 }
 function createStageModelRow(stage, models, summary) {
