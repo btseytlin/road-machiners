@@ -57,10 +57,13 @@ export function recordBuild(statePath: string, issue: number, name: string): voi
   updateState(statePath, (state) => ({ ...state, builds: { ...state.builds, [String(issue)]: name } }));
 }
 
-// Deletes every folder in the web root except dev and the kept builds. Returns the names it removed.
+// The web root folder that holds first-party images, like reference concepts. It is not a build and cleanup never touches it.
+export const RESERVED_WEB_DIRS = ['dev', 'concepts'];
+
+// Deletes every folder in the web root except the reserved ones and the kept builds. Returns the names it removed.
 export function removeStaleBuilds(webRoot: string, keep: Set<string>, log: (msg: string) => void): string[] {
   if (!existsSync(webRoot)) return [];
-  const stale = readdirSync(webRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && entry.name !== 'dev' && !keep.has(entry.name));
+  const stale = readdirSync(webRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !RESERVED_WEB_DIRS.includes(entry.name) && !keep.has(entry.name));
   for (const entry of stale) {
     rmSync(join(webRoot, entry.name), { recursive: true, force: true });
     log(`removed stale build ${entry.name}`);

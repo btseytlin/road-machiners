@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { playerVehicle } from './damage';
 import { advanceEngineHeat, douseEngine } from './engine-heat';
 import { mountedParts } from './grid';
@@ -110,15 +110,15 @@ describe('machining on engine heat', () => {
   function heating(machining: number): number {
     const w = emptyWorld();
     w.turn = NOON;
-    w.player.skills.machining = machining;
+    w.player.ranks.machining = machining;
     const me = w.vehicles[0];
     me.speed = vehicleStats(w, me).maxSpeed;
     advanceEngineHeat(w);
     return w.player.engineHeat;
   }
 
-  it('heats the player engine slower at level 5', () => {
-    expect(heating(XP_TO_REACH[5])).toBeCloseTo(heating(0) * (1 - 5 * SKILL_EFFECTS.machining.engineHeat));
+  it('heats the player engine slower at rank 5', () => {
+    expect(heating(5)).toBeCloseTo(heating(0) * (1 - 5 * SKILL_EFFECTS.machining.engineHeat));
   });
 });
 
@@ -177,7 +177,7 @@ describe('engine heat on the road', () => {
       return w.player.engineHeat < 1;
     });
     expect(cool.map((e) => e.id)).toEqual([]);
-  });
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
 });
 
 describe('engine overdrive', () => {

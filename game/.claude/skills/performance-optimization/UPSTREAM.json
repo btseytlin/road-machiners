@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/gamedev-skills/awesome-gamedev-agent-skills",
+  "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+  "files": [
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "LICENSE",
+      "local": "LICENSE",
+      "sha256": "6f82dcfeb95a1c0a0452180a3b16f21bf82111780018fed59d95a052b5b75f6c"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/performance-optimization/SKILL.md",
+      "local": "SKILL.md",
+      "sha256": "ddfc68c927f9a482d78cc0e103edb2e2711bc876a5965ff53eabd9a7d308dfab"
+    },
+    {
+      "repo": "gamedev-skills/awesome-gamedev-agent-skills",
+      "revision": "d4b0e35550c55ae70bdfcab4ef5a0e94610438a9",
+      "source": "skills/disciplines/performance-optimization/references/profiling-and-budgets.md",
+      "local": "references/profiling-and-budgets.md",
+      "sha256": "fb161af3797b364c5a9032dc3836bc25f05762508f2831f6a19a6aa416811dd8"
+    }
+  ]
+}

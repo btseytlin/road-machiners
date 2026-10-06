@@ -2,6 +2,8 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
+import { FALLEN_SUN_DECKS } from '../data/territory';
+import { deckById } from './bridge';
 import { resetPerf, perfSnapshot } from '../perf';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isDriveObstacle, propBoxes, propReach } from './mapgen';
@@ -16,6 +18,7 @@ import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
@@ -159,6 +162,58 @@ describe("route", () => {
     // rules 1277 and 1.14 on TEST_MAP.
     expect(waypoints).toBeLessThanOrEqual(2000);
     expect(length).toBeLessThanOrEqual(1.28 * straight);
+  });
+});
+
+describe('raised deck ends', () => {
+  const flap = deckById(FALLEN_SUN_DECKS[0].id);
+  const on = (along: number, across: number): Vec => ({
+    x: flap.from.x + flap.axis.x * along - flap.axis.y * across,
+    y: flap.from.y + flap.axis.y * along + flap.axis.x * across,
+  });
+  const alongOf = (p: Vec) => (p.x - flap.from.x) * flap.axis.x + (p.y - flap.from.y) * flap.axis.y;
+  const acrossOf = (p: Vec) => (p.y - flap.from.y) * flap.axis.x - (p.x - flap.from.x) * flap.axis.y;
+  const onFlap = (p: Vec) => alongOf(p) >= 0 && alongOf(p) <= flap.length && Math.abs(acrossOf(p)) <= flap.width / 2;
+
+  // Points along the route every twentieth of a tile.
+  function samples(points: Vec[]): Vec[] {
+    const out = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const n = Math.max(1, Math.ceil(dist(points[i - 1], points[i]) * 20));
+      for (let k = 1; k <= n; k++) out.push({ x: points[i - 1].x + ((points[i].x - points[i - 1].x) * k) / n, y: points[i - 1].y + ((points[i].y - points[i - 1].y) * k) / n });
+    }
+    return out;
+  }
+
+  // Each step that gets on or off the flap does so over its low end, never over the lip or a rail.
+  function expectOnAndOffOverLowEnd(points: Vec[]): void {
+    const path = samples(points);
+    for (let i = 1; i < path.length; i++) {
+      if (onFlap(path[i]) === onFlap(path[i - 1])) continue;
+      expect(alongOf(path[i]), `${path[i].x},${path[i].y}`).toBeLessThan(0.5);
+      expect(Math.abs(acrossOf(path[i]))).toBeLessThan(flap.width / 2);
+    }
+  }
+
+  it('climbs from the landing below the lip onto the flap only round by its low end', () => {
+    const radius = 0.5;
+    const below = on(flap.length + 4, 0);
+    const top = on(flap.length - 1.5, 0);
+    const points = [below, ...route(w1337, below, top, radius, [])];
+
+    expect(points.at(-1)).toEqual(top);
+    expectOnAndOffOverLowEnd(points);
+    expect(routeLength(below, points.slice(1))).toBeGreaterThan(flap.length);
+  });
+
+  it('never routes off the flap over its lip, though the landing lies straight ahead', () => {
+    const radius = 0.5;
+    const top = on(flap.length - 1.5, 0);
+    const landing = on(flap.length + 6, 0);
+    const points = [top, ...route(w1337, top, landing, radius, [])];
+
+    expect(points.at(-1)).toEqual(landing);
+    expectOnAndOffOverLowEnd(points);
   });
 });
 
@@ -673,7 +728,7 @@ describe('nav layers match the old grid rules', () => {
       const goal = Ref.nearestFree(g, Ref.cellOf(g, to));
       const layer = navLayer(w.terrain, w.obstacles, radius);
       expect(layer.n).toBe(g.n);
-      const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, extra), radius);
+      const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, extra), radius);
       expect(nearestFreeCell(layer, overlay, Ref.cellOf(g, to))).toBe(goal);
       if (goal === null) continue;
       const ref = Ref.astar(g, start, goal);
@@ -691,7 +746,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, 60_000);
+  }, budget(180_000)); // ten reference searches take seconds alone and over a minute when the whole suite shares the cores
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;
@@ -727,7 +782,7 @@ describe('nav layers match the old grid rules', () => {
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a new kill wreck changes the route without rebuilding the static layer', () => {
     const a = { x: 30, y: 30 };
@@ -825,7 +880,7 @@ describe('long routes search a coarse corridor', () => {
     const local = { ...w, obstacles };
     const radius = 0.6;
     const layer = navLayer(local.terrain, local.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, local.terrain, []), radius);
     const g = Ref.grid(Ref.terrainLayer(local.terrain, radius), Ref.blockers(local, []), radius);
     const goal = Ref.cellOf(g, center);
     const from = { x: 40, y: 40 };
@@ -837,7 +892,7 @@ describe('long routes search a coarse corridor', () => {
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
@@ -845,7 +900,7 @@ describe('long routes search a coarse corridor', () => {
     for (let y = 16; y < w.size; y += 1.5) w.obstacles.push({ id: `wreck-w${y}`, pos: { x: 80, y }, r: 1, kind: 'wreck' });
     const radius = 0.6;
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, []), radius);
     const n = layer.n;
     const start = 200 * n + 60;
     const goal = 200 * n + 260;
@@ -877,5 +932,5 @@ describe('long routes search a coarse corridor', () => {
     expect(found).toBeGreaterThanOrEqual(5);
     // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
-  }, 60_000);
+  }, budget(60_000));
 });
