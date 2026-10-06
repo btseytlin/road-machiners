@@ -46,7 +46,7 @@ import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary, contractWindow } from "./format";
+import { contractDue, contractSummary, contractWindow, ESTIMATE_HELP, ESTIMATE_HELP_TITLE, GOODS_COLUMNS, heldLines, heldReadout, lotTitle } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters } from "./units";
@@ -187,9 +187,10 @@ export class TownScreen {
       el(
         "div",
         { class: "goods" },
-        el("div", { class: "goods-head dim" }, el("span", {}, "Good"), el("span", {}, "Buy"), el("span", {}, "Sell"), el("span", {}, "In truck")),
+        goodsHead(),
         ...def.goods.map((g) => this.goodRow(w, shopId, def, state, g)),
       ),
+      goodsHelp(),
     );
   }
 
@@ -209,19 +210,21 @@ export class TownScreen {
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade buy" },
+        tradeCaption(GOODS_COLUMNS.buy),
         priceEl(buyPrice(w, shopId, g)),
         this.button("+1", (x) => buyGood(x, g, 1)),
-        this.button("+5", (x) => buyGood(x, g, 5), false, `5 for ${getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy")}`),
+        this.button("+5", (x) => buyGood(x, g, 5), false, lotTitle("buy", 5, getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy"))),
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade sell" },
+        tradeCaption(GOODS_COLUMNS.sell),
         priceEl(sell),
         this.button("−1", (x) => sellGood(x, g, 1), held === 0),
-        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? `${held} for ${getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")}` : ""),
+        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? lotTitle("sell", held, getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")) : ""),
       ),
-      heldEl(held, sell, w.player.costBasis[g]),
+      heldCell(held, sell, w.player.costBasis[g]),
     );
   }
 
@@ -439,16 +442,25 @@ function priceEl(price: number): HTMLElement {
   return el("span", { class: "price" }, createIcon("money"), `${price}`);
 }
 
-// The count in the truck and the profit per unit against the price paid, when sold here.
-function heldEl(held: number, sell: number, basis: number | undefined): HTMLElement {
-  if (held === 0) return el("span", { class: "dim" }, "–");
-  if (basis === undefined) return el("span", { class: "held" }, `×${held}`);
-  return el("span", { class: "held", title: `Paid about ${Math.round(basis)} each` }, `×${held}`, profitEl(Math.round(sell - basis)));
+const HELD_TONE_CLASS = { count: "held-count", gain: "delta better", loss: "delta worse", even: "delta same", dim: "dim" } as const;
+
+// The count in the truck and the worded sale estimate against the average cost.
+function heldCell(held: number, sell: number, basis: number | undefined): HTMLElement {
+  const lines = heldLines(heldReadout(held, sell, basis));
+  return el("div", { class: "held" }, ...lines.map((l) => el("span", { class: HELD_TONE_CLASS[l.tone] }, l.text)));
 }
 
-function profitEl(profit: number): HTMLElement {
-  const gain = profit >= 0;
-  return el("span", { class: `delta ${gain ? "better" : "worse"}` }, `${gain ? "+" : "−"}${Math.abs(profit)} each`);
+function tradeCaption(text: string): HTMLElement {
+  return el("span", { class: "trade-caption" }, text);
+}
+
+function goodsHead(): HTMLElement {
+  const c = GOODS_COLUMNS;
+  return el("div", { class: "goods-head dim" }, el("span", {}, c.good), el("span", {}, c.buy), el("span", {}, c.sell), el("span", {}, c.held));
+}
+
+function goodsHelp(): HTMLElement {
+  return el("details", { class: "goods-help dim" }, el("summary", {}, ESTIMATE_HELP_TITLE), ...ESTIMATE_HELP.map((line) => el("div", {}, line)));
 }
 
 function bar(share: number): HTMLElement {
@@ -608,9 +620,9 @@ export class TruckTradeScreen {
     if (listed.length === 0) return el("div", { class: "dim" }, "Neither truck carries goods to trade.");
     return el(
       "div",
-      { class: "goods" },
-      el("div", { class: "goods-head dim" }, el("span", {}, "Good"), el("span", {}, "Buy"), el("span", {}, "Sell"), el("span", {}, "In truck")),
-      ...listed.map((g) => this.goodRow(w, npc, g, mine[g] ?? 0)),
+      {},
+      el("div", { class: "goods" }, goodsHead(), ...listed.map((g) => this.goodRow(w, npc, g, mine[g] ?? 0))),
+      goodsHelp(),
     );
   }
 
@@ -629,19 +641,21 @@ export class TruckTradeScreen {
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade buy" },
+        tradeCaption(GOODS_COLUMNS.buy),
         priceEl(truckGoodPrice(w, g, "buy")),
         this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), theirs < 1),
         this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), theirs < 1),
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade sell" },
+        tradeCaption(GOODS_COLUMNS.sell),
         priceEl(sell),
         this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), held === 0),
         this.button("All", (x) => sellTruckGood(x, npc.id, g, held), held === 0),
       ),
-      heldEl(held, sell, w.player.costBasis[g]),
+      heldCell(held, sell, w.player.costBasis[g]),
     );
   }
 

@@ -989,6 +989,7 @@ body {
 }
 .town-truck,
 .town-shop {
+  container-type: inline-size;
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
@@ -1816,9 +1817,62 @@ canvas.view {
 }
 .held {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+  font-size: 11px;
+}
+.held span {
+  white-space: nowrap;
+}
+.held .held-count {
   font: 13px var(--font-mono);
+}
+.trade-caption {
+  display: none;
+  font-size: 11px;
+}
+.goods-help {
+  margin-top: 12px;
+  font-size: 12px;
+}
+.goods-help summary {
+  cursor: pointer;
+}
+.goods-help > div {
+  margin-top: 7px;
+  max-width: 560px;
+}
+@container (max-width: 560px) {
+  .goods-head {
+    display: none;
+  }
+  .good-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "name held"
+      "buy sell";
+    row-gap: 6px;
+  }
+  .good-row .good-name {
+    grid-area: name;
+  }
+  .good-row .held {
+    grid-area: held;
+  }
+  .good-row .trade.buy {
+    grid-area: buy;
+  }
+  .good-row .trade.sell {
+    grid-area: sell;
+  }
+  .trade {
+    flex-wrap: wrap;
+  }
+  .trade-caption {
+    display: block;
+    flex-basis: 100%;
+  }
 }
 
 /* Garage services: fuel, supplies and repair, each a meter and its buttons. */
