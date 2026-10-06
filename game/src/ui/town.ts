@@ -39,7 +39,7 @@ import {
   type Supply,
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
-import { moneyLabel } from "./hud-readout";
+import { balanceEl, moneyEl, moneyText, pricedEl } from "./money";
 import { spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
@@ -169,7 +169,7 @@ export class TownScreen {
     this.render();
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false, title = ""): HTMLElement {
+  private button(label: string | HTMLElement, cmd: (w: World) => World, disabled = false, title = ""): HTMLElement {
     return el("button", { disabled, title, onclick: () => this.run(cmd) }, label);
   }
 
@@ -210,16 +210,16 @@ export class TownScreen {
       el(
         "div",
         { class: "trade" },
-        priceEl(buyPrice(w, shopId, g)),
+        moneyEl(buyPrice(w, shopId, g)),
         this.button("+1", (x) => buyGood(x, g, 1)),
-        this.button("+5", (x) => buyGood(x, g, 5), false, `5 for ${getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy")}`),
+        this.button("+5", (x) => buyGood(x, g, 5), false, `5 for ${moneyText(getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy"))}`),
       ),
       el(
         "div",
         { class: "trade" },
-        priceEl(sell),
+        moneyEl(sell),
         this.button("−1", (x) => sellGood(x, g, 1), held === 0),
-        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? `${held} for ${getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")}` : ""),
+        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? `${held} for ${moneyText(getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell"))}` : ""),
       ),
       heldEl(held, sell, w.player.costBasis[g]),
     );
@@ -235,7 +235,7 @@ export class TownScreen {
       return partCard({
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(`Buy ${price}`, (x) => buyStockPart(x, p.id), w.player.money < price),
+        action: this.button(pricedEl("Buy", price), (x) => buyStockPart(x, p.id), w.player.money < price),
         onHover: this.hintMounts(kind),
       });
     });
@@ -280,7 +280,7 @@ export class TownScreen {
       return partCard({
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(`Sell ${partTradePrice(w, me, p, "sell")}`, (x) => sellPart(x, p.id)),
+        action: this.button(pricedEl("Sell", partTradePrice(w, me, p, "sell")), (x) => sellPart(x, p.id)),
         onHover: this.hintMounts(kind),
       });
     });
@@ -307,7 +307,7 @@ export class TownScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, fuel ? `${price} per ${amount(1)}` : `${price} each`),
+      el("span", { class: "dim" }, moneyEl(price), fuel ? ` per ${amount(1)}` : " each"),
       this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), afford < 1),
       this.button(`Fill ${amount(afford)}`, (x) => buySupply(x, k, afford), afford < 1),
     );
@@ -323,8 +323,8 @@ export class TownScreen {
       { class: "town-repair" },
       createIcon("tools"),
       el("span", { class: broken ? "bad" : "dim" }, broken ? `${broken} broken` : "Nothing broken"),
-      this.button(basics === 0 ? "Basics fine" : `Repair basics ${basics}`, repairBasics, basics === 0),
-      this.button(all === 0 ? "No repairs" : `Repair all ${all}`, repairAll, all === 0),
+      this.button(basics === 0 ? "Basics fine" : pricedEl("Repair basics", basics), repairBasics, basics === 0),
+      this.button(all === 0 ? "No repairs" : pricedEl("Repair all", all), repairAll, all === 0),
     );
   }
 
@@ -348,7 +348,7 @@ export class TownScreen {
             "div",
             { class: "card-foot" },
             el("span", { class: "dim" }, own ? "Your truck" : `vs ${chassisDef(me.chassisId).name}`),
-            own ? null : this.button(cost >= 0 ? `Swap ${cost}` : `Swap, get ${-cost} back`, (x) => buyChassis(x, id), w.player.money < cost),
+            own ? null : this.button(cost >= 0 ? pricedEl("Swap", cost) : el("span", { class: "priced" }, "Swap, get ", moneyEl(-cost), " back"), (x) => buyChassis(x, id), w.player.money < cost),
           ),
         ),
       );
@@ -359,8 +359,9 @@ export class TownScreen {
       el(
         "div",
         { class: "note" },
-        createIcon("money"),
-        `Your truck trades in for ${tradeIn}.`,
+        "Your truck trades in for ",
+        moneyEl(tradeIn),
+        ".",
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
@@ -435,20 +436,16 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   bounty: "cannon",
 };
 
-function priceEl(price: number): HTMLElement {
-  return el("span", { class: "price" }, createIcon("money"), `${price}`);
-}
-
 // The count in the truck and the profit per unit against the price paid, when sold here.
 function heldEl(held: number, sell: number, basis: number | undefined): HTMLElement {
   if (held === 0) return el("span", { class: "dim" }, "–");
   if (basis === undefined) return el("span", { class: "held" }, `×${held}`);
-  return el("span", { class: "held", title: `Paid about ${Math.round(basis)} each` }, `×${held}`, profitEl(Math.round(sell - basis)));
+  return el("span", { class: "held", title: `Paid about ${moneyText(Math.max(0, Math.round(basis)))} each` }, `×${held}`, profitEl(Math.round(sell - basis)));
 }
 
 function profitEl(profit: number): HTMLElement {
   const gain = profit >= 0;
-  return el("span", { class: `delta ${gain ? "better" : "worse"}` }, `${gain ? "+" : "−"}${Math.abs(profit)} each`);
+  return el("span", { class: `delta ${gain ? "better" : "worse"}` }, gain ? "+" : "−", moneyEl(Math.abs(profit)), " each");
 }
 
 function bar(share: number): HTMLElement {
@@ -465,7 +462,7 @@ function contractRow(w: World, c: Contract, action: HTMLElement, posted = false)
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price" }, createIcon("money"), `${c.reward}`),
+    moneyEl(c.reward),
     clock,
     action,
   );
@@ -593,7 +590,7 @@ export class TruckTradeScreen {
     this.render();
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false): HTMLElement {
+  private button(label: string | HTMLElement, cmd: (w: World) => World, disabled = false): HTMLElement {
     return el("button", { disabled, onclick: () => this.run(cmd) }, label);
   }
 
@@ -630,14 +627,14 @@ export class TruckTradeScreen {
       el(
         "div",
         { class: "trade" },
-        priceEl(truckGoodPrice(w, g, "buy")),
+        moneyEl(truckGoodPrice(w, g, "buy")),
         this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), theirs < 1),
         this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), theirs < 1),
       ),
       el(
         "div",
         { class: "trade" },
-        priceEl(sell),
+        moneyEl(sell),
         this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), held === 0),
         this.button("All", (x) => sellTruckGood(x, npc.id, g, held), held === 0),
       ),
@@ -653,11 +650,11 @@ export class TruckTradeScreen {
     };
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");
-      return card(p, this.button(`Buy ${price}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
+      return card(p, this.button(pricedEl("Buy", price), (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
     });
     const mine = spareParts(me).map((p) => {
       const price = truckPartPrice(w, p, "sell");
-      return card(p, this.button(`Sell ${price}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
+      return card(p, this.button(pricedEl("Sell", price), (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
     });
     return el(
       "div",
@@ -682,7 +679,7 @@ export class TruckTradeScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, `${fuel ? `${price} per ${amount(1)}` : `${price} each`}, ${amount(offer)} on offer`),
+      el("span", { class: "dim" }, moneyEl(price), `${fuel ? ` per ${amount(1)}` : " each"}, ${amount(offer)} on offer`),
       this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), most < SUPPLY_STEP),
       this.button(`Fill ${amount(most)}`, (x) => buyTruckSupply(x, npc.id, k, most), most < 1),
     );
@@ -694,7 +691,7 @@ function partnerChips(npc: Vehicle): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyLabel(npc.resources!.money)),
+    el("span", { class: "chip", title: "Their M's" }, balanceEl(npc.resources!.money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

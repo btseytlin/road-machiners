@@ -591,7 +591,7 @@ export const TOPICS: Record<TopicId, Topic> = {
           { text: 'Too much.', when: [], effects: [], go: HUB },
         ],
       },
-      paid: { line: 'Money is in. Guns down.', options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
+      paid: { line: "The M's are in. Guns down.", options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
     },
   },
   // The player offers a driver low on fuel or supplies some of its own, for what the driver can pay or for free. The

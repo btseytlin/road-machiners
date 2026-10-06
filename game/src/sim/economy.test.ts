@@ -74,7 +74,7 @@ describe("trade", () => {
       /cargo space/,
     );
     w.player.money = 300;
-    expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
+    expect(() => buyGood(w, "meds", 10)).toThrow(/M's/);
   });
 
   it("the salt route from Nose to Bowl pays and trains Social", () => {
@@ -401,7 +401,7 @@ describe("garage", () => {
     w.player.storage.push({ ...cab, id: "stored" });
     expect(() => repairPart(w, "stored")).toThrow(/part/);
     w.player.money = 0;
-    expect(() => repairPart(w, cab.id)).toThrow(/money/);
+    expect(() => repairPart(w, cab.id)).toThrow(/M's/);
     expect(cab.hp).toBe(10);
   });
 
@@ -686,13 +686,13 @@ describe("debt", () => {
     const w = startAtBowl();
     w.player.money = -100;
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
-    expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
-    expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
-    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
-    expect(() => repairAll(w)).toThrow(/money/);
+    expect(() => buyGood(w, "scrap", 1)).toThrow(/M's/);
+    expect(() => buySupply(w, "fuel", 1)).toThrow(/M's/);
+    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/M's/);
+    expect(() => repairAll(w)).toThrow(/M's/);
     // A chassis swap that costs nothing is still a purchase.
     w.player.money = -1;
-    expect(() => buyChassis(w, "courier")).toThrow(/money/);
+    expect(() => buyChassis(w, "courier")).toThrow(/M's/);
   });
 
   it("sales pay the debt down", () => {

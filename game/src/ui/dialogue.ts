@@ -2,6 +2,7 @@
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
 // hovered truck and H honks.
 
+import { moneyText } from './money';
 import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
@@ -49,9 +50,9 @@ function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
   return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts, unit: 'part' } });
 }
 
-// A town's goods prices in words: "salt buy 14 sell 9, grain buy 6 sell 4".
+// A town's goods prices in words: "salt buy 14 sell 9 M's, grain buy 6 sell 4".
 function pricesText(v: Extract<CallVar, { kind: 'prices' }>): string {
-  return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${g.buy} sell ${g.sell}`).join(', ');
+  return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${g.buy} sell ${moneyText(g.sell)}`).join(', ');
 }
 
 // Fuel and supplies in words: "12 L of fuel and 3 supplies", leaving out a zero part.
@@ -77,7 +78,7 @@ type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => s
 const VAR_TEXT: VarText = {
   town: (v) => townName(v.id),
   site: (v) => siteName(v.id),
-  money: (v) => String(v.amount),
+  money: (v) => moneyText(v.amount),
   distance: (v) => distanceText(v.tiles),
   bearing: (v) => compass(v.rad),
   count: (v) => `${v.n} ${v.n === 1 ? v.unit : `${v.unit}s`}`,

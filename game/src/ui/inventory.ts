@@ -66,7 +66,7 @@ import {
   footprint,
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
-import { moneyLabel } from "./hud-readout";
+import { balanceEl, pricedEl } from "./money";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -466,14 +466,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title: w.player.money < cost ? "Not enough money" : title,
+        title: w.player.money < cost ? "Not enough M's" : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `${action} ${cost}`,
+      pricedEl(action, cost),
     );
   }
 
@@ -971,7 +971,7 @@ export function truckChips(w: World): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "M's" }, balanceEl(w.player.money)),
     el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
     el(
       "span",

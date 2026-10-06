@@ -19,7 +19,8 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { balanceText } from "./money";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -302,7 +303,7 @@ export class Hud {
     this.rescue.replaceChildren(
       el("h3", {}, "Under tow"),
       el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival.`),
+      el("div", { class: "dim" }, `Fee ${balanceText(r.fee)} on arrival.`),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -449,7 +450,7 @@ export class Hud {
               "data-resource": resource.label,
             },
             el("small", {}, resource.label),
-            el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
+            el("strong", {}, ...(resource.icon ? [createIcon(resource.icon)] : []), `${resource.warning ? "! " : ""}${resource.value}`),
           ),
         ),
         ...readout.survival.map((entry) =>

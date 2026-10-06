@@ -2,6 +2,7 @@ import { GAME_VERSION } from "../config";
 import { playerAid, readyAid } from "../sim/aid";
 import { aidData } from "../sim/states";
 import { aidGoods } from "./format";
+import { balanceNumber } from "./money";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
@@ -210,13 +211,6 @@ function weatherLabel(w: World, pos: Vec): string {
   return names.length ? [...new Set(names)].join(", ") : "Clear";
 }
 
-// Negative money is debt. It shows as a positive amount owed.
-export function moneyLabel(money: number): string {
-  return money < 0
-    ? `Debt ${(-money).toLocaleString("en-US")}`
-    : money.toLocaleString("en-US");
-}
-
 // What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
 // when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
@@ -270,22 +264,26 @@ export function getHudReadout(w: World) {
     clock: clockLabel(w.turn),
     resources: [
       {
-        label: "Money",
-        value: moneyLabel(p.money),
+        label: "M's",
+        value: balanceNumber(p.money),
+        icon: "money" as IconName | null,
         warning: p.money < 0,
       },
       {
         label: "Fuel",
+        icon: null as IconName | null,
         value: `${fuelLiters(p.fuel)} / ${fuelLiters(capacity)} L`,
         warning: p.fuel < capacity * RULES.lowFuelThreshold,
       },
       {
         label: "Supplies",
+        icon: null as IconName | null,
         value: p.supplies.toFixed(1),
         warning: p.supplies <= RULES.suppliesLow,
       },
       {
         label: "Driver",
+        icon: null as IconName | null,
         value: `${hp(p.health)} / ${maxHealth}`,
         warning: p.health < maxHealth,
       },

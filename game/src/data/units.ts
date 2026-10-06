@@ -7,4 +7,5 @@ export const UNITS = {
   celsiusPerHeat: 12, // degrees per heat above 1; full noon sun at heat 2.5 reads 40 °C
   engineColdCelsius: 80, // engine gauge at heat 0
   engineHotCelsius: 120, // engine gauge at heat 1, overheated
+  currency: { one: 'M', many: "M's" }, // the display name of the sim's money
 };
