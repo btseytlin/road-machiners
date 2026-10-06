@@ -1,8 +1,9 @@
 import { PRESSURE_MAX } from '../../data/market';
-import type { World } from '../types';
+import type { Vehicle, World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
+import { START_KITS } from '../../data/start';
 import { partDef } from '../../data/parts';
 import { SHOPS } from '../../data/market';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
@@ -31,12 +32,17 @@ function town(id: string) {
   return found;
 }
 
-// An empty world with the player parked on a pad of a town, its cargo gone, and both towns known.
+// The goods a truck carries beside the repair parts every bot keeps.
+const loadOf = (v: Vehicle): string[] => Object.keys(goodsCount(v)).filter((good) => good !== 'parts');
+
+// An empty world with the player parked on a pad of a town, its cargo gone but the standard kit's repair parts, and
+// both towns known.
 function parkedAt(id: string) {
   const site = town(id);
   const w = emptyWorld(nearestPad(site, site.pos));
   const me = playerVehicle(w);
   removeAllGoods(me);
+  addGoods(w, me, 'parts', START_KITS.standard.cargo.parts ?? 0);
   me.speed = 0;
   w.player.discovered = ['bowl', 'nose'];
   return w;
@@ -66,7 +72,7 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'trader');
 
-    expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+    expect(loadOf(playerVehicle(turn.world))).toEqual(['salt']);
     expect(turn.world.player.money).toBeLessThan(w.player.money);
   });
 
@@ -117,7 +123,7 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'scavenger');
 
-    expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+    expect(loadOf(playerVehicle(turn.world))).toEqual(['salt']);
   });
 
   it('has a scavenger with no salvage left, every site found and no load it can afford read the next board', () => {
@@ -284,7 +290,7 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'trader');
 
-    expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+    expect(loadOf(playerVehicle(turn.world))).toEqual(['salt']);
   });
 
   it('has a bot in debt in town sell gear to clear it', () => {
@@ -730,6 +736,40 @@ describe('the hunter', () => {
 
     expect(demandedBy(['autocannon', 'ram'])).toBe(0);
     expect(demandedBy([])).toBeGreaterThan(0);
+  });
+
+  // A raider offers to strip the stranded truck. The bot gives up its gear only to a raider that outmatches it, and
+  // fights on against one its guns already disarmed.
+  it('has a stranded bot accept a strip offer only from a raider that outmatches it', () => {
+    const offeredBy = (weapons: string[]) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      addGoods(w, me, 'salt', 2);
+      for (const wheel of mountedParts(me).filter((p) => p.defId.includes('wheel'))) wheel.hp = 0;
+      const raider = addVehicle(w, 'raiders', 'buggy', [...weapons, 'stockEngine'], { x: 36, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      startCombat(w, raider, me);
+      w.player.call = { with: raider.id, topic: 'surrender', node: 'offer', vars: {}, line: { text: 'Your truck is dead.', vars: {} } };
+      return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
+    };
+
+    expect(offeredBy(['autocannon', 'ram'])).toBe(0);
+    expect(offeredBy([])).toBeGreaterThan(0);
+  });
+
+  // A breakdown on the road needs parts for a field patch, so the bot keeps the start kit's stock of them.
+  it('has a bot in town top up its repair parts to the standard kit stock before buying gear', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    w.player.money = 2000;
+    removeAllGoods(me);
+    const want = START_KITS.standard.cargo.parts ?? 0;
+    expect(want).toBeGreaterThan(0);
+
+    const turn = botOrders(w, 'trader');
+
+    expect(goodsCount(playerVehicle(turn.world)).parts).toBe(want);
+    expect(turn.ledger.repairs).toBeLessThan(0);
   });
 
   it('drives at the weaker of two raiders in sight', () => {

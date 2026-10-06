@@ -24,7 +24,7 @@ import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
 import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
-import { getLayoutError, stowSpot, storePart } from '../inventory';
+import { cargoRoom, getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
@@ -39,7 +39,7 @@ import { towData } from '../states';
 import type { Call, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { clamp, dist, pointsAway, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
-import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
+import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
 // Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
 // goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
@@ -132,15 +132,16 @@ function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
 
 // ---- Calls and switches.
 
-// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The hunter also
-// refuses a truce and answers a plea for mercy with a demand to be stripped.
-const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
+// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo and an offer to
+// strip its stranded truck. The hunter also refuses a truce and answers a plea for mercy with a demand to be stripped.
+const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.', surrender: 'Come and get it.' };
 const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
 const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
 const YIELD_CARGO = 'Fine. Take it.';
 
 // Every open call gets the first reply of each topic, unless the bot's replies name another. Every bot hands its
-// cargo to a demand from a foe that outmatches it. On the hub, the bot hangs up, which is the last option.
+// cargo to a demand, and its truck to a strip offer, only from a foe that outmatches it. On the hub, the bot hangs
+// up, which is the last option.
 function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
@@ -153,7 +154,7 @@ function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFEN
 }
 
 function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
-  if (call.topic === 'demand' && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
+  if ((call.topic === 'demand' || call.topic === 'surrender') && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
   return call.topic ? replies[call.topic] : undefined;
 }
 
@@ -291,6 +292,7 @@ function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   restoreBasics(o, shop);
   serviceHere(o);
   if (needsService(o)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
+  stockRepairParts(o, shop);
   if (mountedParts(o.me, 'engine').length === 0) return;
   rearm(o);
   upgradeGear(o, style);
@@ -448,6 +450,16 @@ function serviceHere(o: Orders): void {
     if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
   repairAtGarage(o);
+}
+
+// Tops up the parts good to REPAIR_PARTS, before any gear, so a breakdown on the road gets a field patch instead of a
+// beacon. A shop that does not trade parts leaves the stock as it is.
+function stockRepairParts(o: Orders, shop: string): void {
+  if (!shopDef(shop).goods.includes('parts')) return;
+  const want = Math.min(REPAIR_PARTS - (goodsCount(o.me).parts ?? 0), cargoRoom(o.me, 'parts'));
+  if (want <= 0) return;
+  const n = affordableBuyCount(o.world, o.me, shop, 'parts', want, o.world.player.money);
+  if (n > 0) o.run((w) => buyGood(w, 'parts', n), 'repairs');
 }
 
 // A field repairer pays the garage for the built-in parts at every visit and leaves guns and armor to the field.

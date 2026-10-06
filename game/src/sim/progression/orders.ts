@@ -26,6 +26,9 @@ export type Ledger = Record<LedgerKey, number>;
 
 export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) => [k, 0])) as Ledger;
 
+// Units of the parts good every bot keeps for field repair: what the standard start kit carries.
+export const REPAIR_PARTS = startKit('standard').cargo.parts ?? 0;
+
 // The world after the bot's commands, every event those commands raised, and the money each moved.
 export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger };
 
@@ -112,9 +115,11 @@ function quality(part: PartInstance): number {
 
 // ---- Chassis.
 
-// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
+// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only with
+// no goods but its repair parts, a few single cells that fit any grid.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
-  if (style.chassis === 'keep' || Object.keys(goodsCount(o.me)).length > 0) return [];
+  const load = Object.entries(goodsCount(o.me)).some(([good, n]) => good !== 'parts' || n > REPAIR_PARTS);
+  if (style.chassis === 'keep' || load) return [];
   const current = chassisDef(o.me.chassisId);
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);
