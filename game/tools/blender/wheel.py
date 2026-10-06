@@ -48,7 +48,7 @@ def lug_layout() -> list[Lug]:
 def check_mirrored(layout: list[Lug]) -> None:
     """Fails when a half-bar has no twin across the mid-plane, which would bring back the two-wheel look."""
     for name, loc, rot in layout:
-        mirrored = next((l for l in layout if abs(l[1][0] - loc[0]) < 1e-6 and abs(l[1][2] - loc[2]) < 1e-6 and abs(l[1][1] + loc[1]) < 1e-6), None)
+        mirrored = next((t for t in layout if abs(t[1][0] - loc[0]) < 1e-6 and abs(t[1][2] - loc[2]) < 1e-6 and abs(t[1][1] + loc[1]) < 1e-6), None)
         if mirrored is None:
             raise ValueError(f"{name} has no mirrored twin across the mid-plane")
         a, b = Matrix(Euler(rot).to_matrix()), Matrix(Euler(mirrored[2]).to_matrix())
