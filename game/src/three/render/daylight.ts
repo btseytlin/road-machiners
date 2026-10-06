@@ -1,4 +1,4 @@
-// Light from the clock, and the lights that switch on at night. The sun moves continuously: white at noon, gold in the late afternoon,
+// Light from the clock, and the lights that switch on at night. The sun moves continuously: warm white at noon, gold in the late afternoon,
 // red at the horizon with long shadows, then a short twilight hands over to blue moonlight.
 
 import * as THREE from "three";
@@ -18,9 +18,11 @@ const MOON_ELEVATION = 25; // degrees
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
+const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without losing the truck's contact shadow
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
-// By day the ground color is warm sand, so faces turned down catch light bounced off the desert.
+// By day the ground color is warm sand, so faces turned down catch light bounced off the desert. The day sky is a
+// light blue, so shadows on the orange sand go mauve-brown.
 type Key = {
   h: number;
   sun: number;
@@ -34,21 +36,21 @@ type Key = {
 const KEYS: Key[] = [
   {
     h: 45,
-    sun: 0xffecd0,
-    sunI: 2.0,
-    sky: 0xaebbd7,
-    ground: 0xba8a56,
-    skyI: 1.0,
+    sun: 0xfff0d8,
+    sunI: 2.3,
+    sky: 0x9cbff0,
+    ground: 0xc08a52,
+    skyI: 0.9,
     glassI: 0,
     glassWhite: 0,
   },
   {
     h: 20,
-    sun: 0xffdcaa,
-    sunI: 2.15,
-    sky: 0xb5b7cf,
-    ground: 0xba8a56,
-    skyI: 0.95,
+    sun: 0xffe4c0,
+    sunI: 2.35,
+    sky: 0xa4b8e8,
+    ground: 0xc08a52,
+    skyI: 0.88,
     glassI: 0,
     glassWhite: 0,
   },
@@ -193,6 +195,7 @@ export function sunLight(): THREE.DirectionalLight {
   sun.shadow.mapSize.set(2048, 2048);
   // The terrain shadows itself. Without a normal offset its lit slopes show striped shadow acne.
   sun.shadow.normalBias = 0.3;
+  sun.shadow.radius = SHADOW_SOFTNESS;
   Object.assign(sun.shadow.camera, {
     left: -80,
     right: 80,

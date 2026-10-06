@@ -3,6 +3,8 @@
 // Generated cues carry prompt subjects; scripts/sfx-gen.mjs puts the SOUND_STYLE of the cue's setup in front.
 // A cue with several prompts is a family of different sounds, one prompt per variant.
 
+import { RULES } from "./rules";
+
 export type Bus = "ui" | "sfx" | "ambient" | "music";
 
 export type CueDef = {
@@ -72,11 +74,28 @@ const DEFS = {
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
-  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop."], seconds: 90 },
+  // The desert blues take, music-calm-1791230467032.mp3, is run through ffmpeg
+  // "highpass=f=40,equalizer=f=250:t=q:w=1:g=2,equalizer=f=1500:t=q:w=1:g=-4,volume=3dB,asoftclip=type=tanh,volume=-3dB,lowpass=f=6500,treble=g=-3:f=4000" before import, for tape grit.
+  // The doom metal take, music-calm-1791230995351.mp3, is run through ffmpeg
+  // "asetrate=44100*0.9,aresample=44100,equalizer=f=1500:t=q:w=1:g=-3,lowpass=f=7000,treble=g=-3:f=4000" before import, to sit back as road music.
+  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop.", "Slow hypnotic Saharan desert blues, 80 bpm, instrumental. Tuareg-style looping electric guitar riff with pentatonic bends, tende drum, calabash and frame drums, a droning imzad fiddle and a low drone. A baritone sax and muted trumpet play a dark minor-key Ethiopian jazz melody, rare and distant, with long open space. Dry, dusty, wide open sound, warm 1970s analog live recording, no claps, no synths, seamless loop.", "Slow heavy groove, 70 bpm, instrumental. Dark, tough and determined, with swagger, not sad and not cheerful. Sludgy trucker doom metal: thick fuzzy downtuned guitar riff ringing out, heavy dragging bass, slow pounding drums with lots of space. Over it, a baritone sax and muted trumpet play a menacing, proud minor-key Ethiopian jazz melody in long slow notes. Raw 1970s band playing live in a dry garage, real acoustic drum kit, tube amps, tape. No 1980s sound, no synth pads, no arpeggiator, no electronic drums, no big reverb, no organ, no screaming, seamless loop."], seconds: 90 },
 
+  // The town take, music-town-1791232434318.mp3, is split with Demucs htdemucs. The drums stem goes back quiet and muffled,
+  // so the metal clanks drop out. The bass, other, vocals and drums stems are mixed with ffmpeg
+  // "[3]lowpass=f=2500,volume=-12dB[d];[0][1][2][d]amix=inputs=4:normalize=0,acompressor=threshold=-22dB:ratio=3:attack=5:release=200:makeup=2,treble=g=-3:f=5000"
+  // before import.
+  "music-town": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Lively but hard wasteland junkyard groove for a trading town, 100 bpm, instrumental. Driving junk percussion: clanking scrap metal, hammered steel pipes, anvil hits, rattling chains and oil drums, over a dry acoustic drum kit and a deep upright bass riff. Baritone sax and trumpet stay in the background with a low, dark minor-key Ethiopian jazz line. Tough and gritty, not cheerful. Raw live recording in a dry room, tape. No electric guitar, no fuzz, no synths, no organ, seamless loop."], seconds: 90 },
+  // The outpost take, music-outpost-1791233198633.mp3, gets the same Demucs split and ffmpeg mix as the town take.
+  "music-outpost": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dark, menacing wasteland outpost groove with a steady pulse, 92 bpm, instrumental. Brooding minor key, like a spaghetti western standoff: baritone sax and trumpet play a grim Ethiopian jazz melody up front, over a tight dry drum kit and quiet junk percussion of clanking scrap metal and steel pipes. A deep driving bass riff, and a gritty overdriven guitar kept low in the mix, playing short muted stabs, never blasting. Hard and watchful, still moving, never happy or bright. Raw 1970s band playing live in a dry room, tape, no synths, no organ, seamless loop."], seconds: 90 },
+  // Music for abandoned territories. The take, music-abandoned-1791234140171.mp3, is run through ffmpeg
+  // "atempo=0.95,acompressor=threshold=-24dB:ratio=4:attack=2:release=300:makeup=2,lowpass=f=3500,treble=g=-4:f=2500,aecho=0.8:0.6:120|260:0.25|0.15"
+  // and cut from 20 s before import, to sit far back and calm. Its volume is lower than the other music, so it stays quiet.
+  "music-abandoned": { bus: "music", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow, sinister instrumental for exploring abandoned machine ruins, 60 bpm, A minor. Haunted and menacing, something is watching, not sad, not cheerful. A distant baritone sax plays a grim minor-key Ethiopian jazz phrase, then long rests of near silence. A muffled muted trumpet answers it now and then. A slow, sparse pattern of junk metal percussion: hollow knocks on steel pipes, a ringing oil drum hit, a dragged chain. A muffled, slightly detuned baritone guitar plucks a few low notes. Wind creaks through rusted metal, short bursts of radio static. The phrases grow a little louder, then fall back quiet. Raw 1970s live recording in a big empty hangar, tape. No drone, no pads, no sustained bass, no drum kit, no synths, seamless loop."], seconds: 90 },
   // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
   "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
   "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
+  "score-horns": { bus: "music", setup: "score", beat: { bpm: 100, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless dark Afro-funk war loop, 100 BPM in 4/4: brutal low baritone sax and trumpet blasts on D minor, pounding heavy drums, fuzz bass hammering every beat. Hard and menacing, not happy, no fills."] },
+  "score-trombone": { bus: "music", setup: "score", beat: { bpm: 100, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless dark Afro-funk war loop, 100 BPM in 4/4: growling low trombone riff with heavy slides on D minor, pounding heavy drums, fuzz bass hammering every beat. Hard and menacing, not happy, no fills."] },
   "accent-sighted": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["Three heavy tribal war drum hits, boom boom boom, with a low Mongolian throat singing growl rising under them."], seconds: 1.5 },
   "accent-struck": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["One distorted electric guitar power chord on D slammed with a big tribal drum hit, then a short falling throat singing groan."], seconds: 1.5 },
   "accent-miss": { bus: "music", setup: "stinger", volume: 0.75, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["A quick palm-muted distorted electric guitar chug and a tight snare flam, then silence."], seconds: 1 },
@@ -153,8 +172,10 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 
 // First-beat offset of each beat loop file, from scripts/sfx-phase.py. Layers start at these offsets, so their beats meet.
 const SCORE_PHASES: Record<string, number> = {
-  "score-drums-1.ogg": 0.014,
-  "score-bass-1.ogg": 0.232,
+  "score-drums-1.ogg": 0.006,
+  "score-bass-1.ogg": 0.22,
+  "score-horns-1.ogg": 0.176,
+  "score-trombone-1.ogg": 0.172,
 };
 
 export function scorePhaseOf(file: string): number {
@@ -199,7 +220,8 @@ export const MIX = {
   // Music crossfades to combat while the player is in combat, as the sim's combat state defines it.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
-  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
+  // Outpost music plays within outpostReachTiles of an outpost gate, the reach town music gets from guard range.
+  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6, outpostReachTiles: RULES.guards.range },
   // Combat score. One random base plays while the player is in combat. Heat is a fading sum of
   // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
   // and muffle each bar, full at fullHeat. Each event stabs on the lead or secondary line with its peak on the

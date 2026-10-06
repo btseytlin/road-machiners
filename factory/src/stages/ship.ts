@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
+import { appendLedger } from '../ledger';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
 import { closeBundle } from './bundle';
@@ -73,7 +74,8 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await publish(ctx, keys, 'ship');
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
-  await ctx.telegram.sendMessage(channel, changelog);
+  const postId = await ctx.telegram.sendMessage(channel, changelog);
+  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, channel, text: changelog, at: ctx.now().toISOString() });
   // Only the factory pushes main, so main still holds the release merge here.
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));

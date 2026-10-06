@@ -171,7 +171,7 @@ describe("shot log", () => {
       rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
     };
     const line = eventText(w, e);
-    expect(line?.text).toContain(" · stray fire hits ");
+    expect(line?.text).toContain(", stray fire hits ");
     expect(line?.cls).toBe("bad");
   });
 
@@ -193,7 +193,7 @@ describe("shot log", () => {
     const { w, raider, cab, shot } = duel();
     cab.hp = maxHp(cab);
     const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
-    expect(line.text).toMatch(/^.+ → .+ · 1\/2 hit \(40%\) · .+ −2$/);
+    expect(line.text).toMatch(/^.+ → .+, 1\/2 hit \(40%\): .+ −2$/);
     expect(line.text).toContain(raider.name);
   });
 
@@ -270,5 +270,15 @@ describe("aid handover text", () => {
     const theirs = next.vehicles.find((v) => v.id === npc.id)!;
     expect(workLabel(next, theirs, workOf(next, theirs)!)).toMatch(/^Taking .* from you$/);
     expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
+  });
+});
+
+describe("wake-up log", () => {
+  it("says an NPC regains consciousness, so the line does not read as cut off", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "npcWake", vehicle: npc.id });
+    expect(line?.text).toBe(`${vehicleName(w, npc.id)} regains consciousness`);
+    expect(line?.cls).toBe("dim");
   });
 });

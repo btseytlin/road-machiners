@@ -20,11 +20,13 @@ export type RadioTopic =
   | 'wisdom';
 
 export const RADIO = {
-  minGapTurns: 8, // turns heard between two broadcasts, so the screen never chatters
+  minGapTurns: 35, // minimum turns between broadcasts
+  gapJitterTurns: 45, // add a random 0..45 turns so J.J. never broadcasts on a metronome
+  clockChance: 0.25, // a clock crossing is occasional color, not an hourly announcement
   queueCap: 3, // broadcasts waiting at once; the oldest filler goes first when full
-  staleTurns: 40, // news and time calls older than this are dropped unsent
+  staleTurns: 65, // old news and clock calls expire instead of playing in a burst
   placeCooldownTurns: 150, // turns before a second raid report at the same place
-  idleTurns: 90, // quiet turns before J.J. fills the air with road wisdom
+  idleTurns: 240, // quiet turns before J.J. fills the air with banter
   charsPerSecond: 24, // real-time typing speed of the pager screen
   nearTiles: 60, // a place farther than this from the news is named by basin direction instead
   maxChars: 90, // a filled line fits the three-line screen
@@ -43,37 +45,37 @@ export const RADIO_LINES: Record<RadioTopic, readonly string[]> = {
     'Waste Of Time Radio, J.J. at the mic. Nobody asked, and here I am anyway.',
   ],
   dawn: [
-    "Sun's up over the basin. Check your water, road machiners.",
+    "Sun's up over the basin. The water sellers have beaten it to market.",
     'Morning, boys. Dew on the glass, sand in the gears. Same as yesterday.',
     'Dawn report: sky clear of anything worth eating. Rise and roll.',
   ],
   noon: [
-    'High noon. Engines run hot and tempers hotter. Find yourself some shade.',
+    'High noon. The engines are singing a song I never learned to like.',
     'Noon on the basin. Even the lizards have the sense to stop.',
   ],
   dusk: [
-    'Sun going down. Lights draw eyes after dark, road machiners.',
+    'Sun going down. Somewhere, somebody just became a landmark.',
     'Dusk report: the day crop came in dry again. Bring it home, boys.',
   ],
   midnight: [
-    'Midnight. Nobody sees far out there now. Listen for engines.',
+    'Midnight. Only the engines know whose road this is.',
     'Midnight on Waste Of Time Radio. Still here. Still wasting it.',
   ],
   heatwaveStart: [
-    'Incoming heat wave. Watch your engines, boys.',
+    'Heat wave coming. The radiator choir has begun its warm-up.',
     'Heat wave over the basin. Radiators will boil before the kettles do.',
   ],
   heatwaveEnd: [
-    'Heat wave broke. Engines may breathe again.',
+    'Heat wave broke. The engine choir is mercifully quiet.',
     'That heat finally let go. Thank whoever you thank.',
   ],
   overcastStart: [
     "Clouds over the basin. The sun's taking the day off.",
-    'Overcast and cool. Best engine weather this side of the fall.',
+    'Overcast and cool. The sky remembered how to be kind.',
   ],
   stormStart: [
     'Dust storm rolling {place}, heading {heading}.',
-    'Storm warning: dust wall {place}, drifting {heading}. Nobody sees in that.',
+    'Dust wall {place}, drifting {heading}. The horizon just resigned.',
   ],
   stormEnd: [
     'That dust storm {place} has blown itself out.',
@@ -92,28 +94,36 @@ export const RADIO_LINES: Record<RadioTopic, readonly string[]> = {
     'Paper up at {shop} for {target}. I just read the board, boys.',
   ],
   raid: [
-    'Raider business {place}. Drive careful.',
+    'Raider business {place}. Another busy day for the accountants.',
     'Raiders working the road {place}. Cargo changes hands out there.',
     'Word of a stickup {place}. Raiders, keeping regular hours.',
   ],
   raidKnockout: [
-    'Another rig went quiet {place}. Raiders, sounds like.',
+    'Another rig went quiet {place}. Raiders, by the sound of it.',
     'A rig sits dead {place}. Raiders took their cut. Nobody take more.',
   ],
-  // Each line is a real rule from docs/wiki/mechanics/, as road wisdom.
+  // Banter stays in-world; hints, where present, are oblique, never instructions.
   wisdom: [
-    'Noon sun cooks an engine. Park in shade.', // truck.md: sun heat peaks at noon, shade blocks it
-    "Town guns don't care who you are, only who you shot.", // content.md: lawmen hunt whoever fires on a neutral
-    "Night halves a driver's eyes. Ears work the same in the dark.", // detection.md: sight halves at night, sound does not
-    'A parked truck makes no sound. Remember that, boys.', // detection.md: a parked truck is silent
-    'Dust behind you is a flag. Roads raise the least.', // detection.md: dust clouds, roads raise little
-    'Heavy rig wins the shoving match. Light rig wins the race.', // turns.md: the lighter truck takes the bigger crash share
-    'Off the road, every part pays the toll. Roads are cheap.', // truck.md: roads wear parts least
-    'Raiders never stop for the stranded. Traders mostly do.', // defeat.md: traders and scavengers help, raiders never
-    'In a dust storm nobody sees nothing. Plan accordingly.', // detection.md: storms cut sight
-    "A low tank slows a rig. Don't let it reach the bottom.", // social.md: at 20% of the tank speed halves
-    'Rest your bones in town. Wounds close faster there.', // defeat.md: healing is five times faster in town
-    'Honk at a trader and a trader honks back. Manners survive.', // social.md: traders in earshot honk back
+    'The noon sun has opinions about engines. The shade keeps its own counsel.',
+    "Town guns have a longer memory than the town clerk.",
+    "After dark, you hear a neighbor long before you see one.",
+    'A silent rig at the roadside has either good brakes or bad luck.',
+    'Road dust has a way of introducing a driver before their name does.',
+    'A heavy rig always gets the last word in an argument with a light one.',
+    'Off-road miles have a habit of becoming repair bills.',
+    'A stranded trader gets visitors. A stranded raider gets stories.',
+    'The dust swallowed the horizon again. I never trusted it anyway.',
+    "A fuel needle at the bottom tells the longest stories.",
+    'Town beds are dear. A night without a wrench is dearer.',
+    'Somebody honked at a trader. The trader honked back. Society survives.',
+    'My producer says we need a sponsor. I told him we need a producer.',
+    'Found an Old World weather report. It ended with “chance of rain.” Lovely fiction.',
+    'The mast is still here. The coffee is not. One of us has priorities.',
+    'Tonight the road has company. Tomorrow it will deny knowing any of them.',
+    'A listener sent me a map. It had one mark: “not here.” Sensible cartography.',
+    'I have been accused of talking to myself. You are the evidence against me.',
+    'The static just requested a song. I said it was already playing one.',
+    'Somewhere an honest mechanic has retired. The rest have raised their prices.',
   ],
 };
 

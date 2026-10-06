@@ -6,6 +6,7 @@ import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
 import { liftEndedPause, pausedReason } from './pause';
+import { reportScheduler } from './observability';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
@@ -24,7 +25,10 @@ async function main(args: string[]): Promise<void> {
   const [command, stage, issue] = args;
   if (command === 'tick') {
     writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.cfg.minAvailableGb, ctx.now());
-    if (paused(ctx)) return;
+    if (paused(ctx)) {
+      reportScheduler(ctx.cfg.home, 'paused', ctx.now());
+      return;
+    }
     return guardTick(ctx, async () => {
       await drainInbox(ctx);
       await tick(ctx, codeDir);

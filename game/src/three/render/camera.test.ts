@@ -2,6 +2,15 @@ import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CameraRig, KeyPan, TruckFollow } from './camera';
 
+function rigAt(): CameraRig {
+  const container = {
+    clientWidth: 1280,
+    clientHeight: 720,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+  } as HTMLElement;
+  return new CameraRig(container);
+}
+
 describe('camera picking', () => {
   it('hits the vehicle model but not nearby ground inside the old click radius', () => {
     const container = {
@@ -15,8 +24,41 @@ describe('camera picking', () => {
     model.updateMatrixWorld(true);
     const center = rig.screenOf({ x: 0, y: 0, z: 0 });
 
-    expect(rig.hitsObject(center.x, center.y, model)).toBe(true);
-    expect(rig.hitsObject(center.x + 25, center.y, model)).toBe(false);
+    expect(rig.hitDistance(center.x, center.y, model)).not.toBeNull();
+    expect(rig.hitDistance(center.x + 25, center.y, model)).toBeNull();
+  });
+
+  it('hits the end of a long model past the old radius at zoom 4', () => {
+    const rig = rigAt();
+    rig.setZoom(4);
+    rig.tick(0);
+    const model = new THREE.Mesh(new THREE.BoxGeometry(6, 2, 2));
+    model.updateMatrixWorld(true);
+    const center = rig.screenOf({ x: 0, y: 0, z: 0 });
+    const end = rig.screenOf({ x: 2.8, y: 0, z: 0 });
+    const past = rig.screenOf({ x: 3, y: 0, z: 0 });
+
+    expect(Math.hypot(end.x - center.x, end.y - center.y)).toBeGreaterThan(30);
+    expect(rig.hitDistance(end.x, end.y, model)).not.toBeNull();
+    expect(rig.hitDistance(past.x + 150, past.y, model)).toBeNull();
+  });
+
+  it('ignores a box in front and orders two boxes along one ray by distance', () => {
+    const rig = rigAt();
+    rig.tick(0);
+    const far = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+    const near = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+    const toCamera = rig.camera.position.clone().normalize().multiplyScalar(6);
+    near.position.copy(toCamera);
+    far.updateMatrixWorld(true);
+    near.updateMatrixWorld(true);
+    const center = rig.screenOf({ x: 0, y: 0, z: 0 });
+
+    const farDistance = rig.hitDistance(center.x, center.y, far);
+    const nearDistance = rig.hitDistance(center.x, center.y, near);
+    expect(farDistance).not.toBeNull();
+    expect(nearDistance).not.toBeNull();
+    expect(nearDistance!).toBeLessThan(farDistance!);
   });
 });
 

@@ -3,8 +3,9 @@ import { FIRST_NAMES, NPCS, SPAWN, SURNAMES } from '../data/npcs';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
-import { siteGates, sitePads } from './sites';
-import { npcName, spawnNpcs } from './spawn';
+import { siteGap, siteGates, sitePads } from './sites';
+import { isFree, npcName, spawnNpcs } from './spawn';
+import { territoryPieces } from './territory';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
@@ -13,7 +14,7 @@ import { budget } from '../test/budget';
 
 const NEUTRAL_SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'camp')];
 const nearestSite = (pos: { x: number; y: number }) =>
-  NEUTRAL_SITES.reduce((best, site) => (dist(pos, site.pos) - site.radius < dist(pos, best.pos) - best.radius ? site : best));
+  NEUTRAL_SITES.reduce((best, site) => (siteGap(site, pos) < siteGap(best, pos) ? site : best));
 
 describe('NPC spawns', () => {
   it('names each driver from the pools and keeps the name through turns', () => {
@@ -94,5 +95,25 @@ describe('npcName', () => {
 
   it('throws for an unknown template', () => {
     expect(() => npcName(npcOf('nope', 'Silas Kane'))).toThrow('Unknown NPC template nope');
+  });
+});
+
+describe('free spots', () => {
+  const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+  world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
+  const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+  const cage = territoryPieces(fallenSun as never).find((p) => p.look === 'shipCage')!;
+  const hub = territoryPieces(fallenSun as never).find((p) => p.look === 'shipHub')!;
+
+  it('counts the lane inside a hull a truck drives through as free, by its low boxes', () => {
+    // On the cage's axis, 1.5 tiles toward its south end: under the ribs, clear of both caches.
+    const lane = { x: cage.pos.x + Math.cos(cage.yaw) * -1.5, y: cage.pos.y + Math.sin(cage.yaw) * -1.5 };
+    expect(isFree(world, lane, 0.6, null)).toBe(true);
+  });
+
+  it('keeps a solid piece and its walls taken', () => {
+    expect(isFree(world, hub.pos, 0.6, null)).toBe(false);
+    const wall = { x: cage.pos.x + Math.sin(cage.yaw) * 3.8, y: cage.pos.y - Math.cos(cage.yaw) * 3.8 };
+    expect(isFree(world, wall, 0.6, null)).toBe(false);
   });
 });

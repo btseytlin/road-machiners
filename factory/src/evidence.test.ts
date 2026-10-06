@@ -39,13 +39,24 @@ describe('readEvidence', () => {
     expect(read().images.map((i) => i.description)).toEqual(['View 0', 'View 1', 'View 2']);
   });
 
-  it('requires three views of a location', () => {
+  it('accepts a location with any number of real views, down to one', () => {
     shots(3);
     const features = [{ name: 'Yard', kind: 'location' }];
+    write({ features, images: [image(0, ['Yard'])] });
+    expect(read().images).toHaveLength(1);
     write({ features, images: [image(0, ['Yard']), image(1, ['Yard'])] });
-    expect(read).toThrow('needs 3 different views');
+    expect(read().images).toHaveLength(2);
     write({ features, images: [image(0, ['Yard']), image(1, ['Yard']), image(2, ['Yard'])] });
     expect(read().images).toHaveLength(3);
+  });
+
+  it('still rejects a location no image covers, and a location covered only under a wrong name', () => {
+    shots(2);
+    const features = [{ name: 'Yard', kind: 'location' }, { name: 'Horn', kind: 'item' }];
+    write({ features, images: [image(0, ['Horn'])] });
+    expect(read).toThrow('No evidence image covers "Yard"');
+    write({ features, images: [image(0, ['Horn']), image(1, ['Yard Gate'])] });
+    expect(read).toThrow('by exact name');
   });
 
   it('requires a labeled sheet for a system change', () => {

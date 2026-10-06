@@ -32,6 +32,15 @@ describe('botClient sendButtons', () => {
   });
 });
 
+describe('botClient editText', () => {
+  it('replaces the text and drops the buttons', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(51)]);
+    await botClient('T', fetchFn).editText('-100', 51, 'Approved');
+    expect(calls[0]!.url).toContain('/editMessageText');
+    expect(body(calls[0]!)).toEqual({ chat_id: '-100', message_id: 51, text: 'Approved', reply_markup: { inline_keyboard: [] } });
+  });
+});
+
 describe('botClient sendMessage', () => {
   it('posts JSON to the bot endpoint and returns the message id', async () => {
     const { fetchFn, calls } = fakeFetch([ok(41)]);

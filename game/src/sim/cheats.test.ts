@@ -22,7 +22,7 @@ import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
-import { canUseSite } from './sites';
+import { canUseSite, siteGap } from './sites';
 import { endTurn, hostileToPlayer, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
@@ -253,7 +253,7 @@ describe('places and time', () => {
   it('sends a teleport to a territory to where its road ends', () => {
     const w = newWorld(1, START_KITS.standard, TEST_MAP);
     const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
-    expect(dist(placeSpot(w, sun.id), sun.pos)).toBeCloseTo(sun.radius, 6);
+    expect(Math.abs(siteGap(sun, placeSpot(w, sun.id)))).toBeLessThan(1e-6);
   });
 
   it('skips to the first later turn at the hour', () => {
