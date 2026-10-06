@@ -1924,14 +1924,16 @@ canvas.view {
 }
 
 /* Contracts: one row per job. */
+/* Rows share the list's columns, so a short due time or action never shifts the reward and clock. */
 .jobs {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto auto;
+  column-gap: 12px;
 }
 .job {
   display: grid;
-  grid-template-columns: 26px 1fr auto auto auto;
-  gap: 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   padding: 5px 4px;
   border-bottom: 1px solid #3b454b;
