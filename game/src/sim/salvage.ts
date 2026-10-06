@@ -79,11 +79,11 @@ export function hasSalvage(stock: SalvageStock): boolean {
   return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
 }
 
-// Whether a collect would move anything from the stock into the vehicle. Stores count only when a unit of them fits
-// (or what is left of the stock), so a nearly full tank does not keep a collector searching a stock for good.
+// Whether a collect would move anything from the stock into the vehicle. Stores pour in whole units, so they count
+// only when a unit fits.
 export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
-  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= Math.min(stock[kind] ?? 0, 1))) return true;
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= 1)) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);
@@ -168,13 +168,14 @@ function stockBasis(stock: SalvageStock, good: string): number {
   return basis;
 }
 
-// Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
-// Whatever does not fit stays behind.
+// Pours the stock's fuel and supplies into the driver's tank and stores in whole units, up to their caps. Whatever
+// does not fit stays behind. A pour up to the exact cap left crumbs under a unit in the stock, which kept a picked
+// wreck counted as loot and drew every passing driver to it.
 export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   const resources = getResources(world, vehicle);
   const room = storesRoom(world, vehicle);
   for (const kind of ['fuel', 'supplies'] as const) {
-    const took = Math.min(stock[kind] ?? 0, room[kind]);
+    const took = Math.min(stock[kind] ?? 0, Math.floor(room[kind]));
     if (took <= 0) continue;
     resources[kind] += took;
     stock[kind] = (stock[kind] ?? 0) - took;
