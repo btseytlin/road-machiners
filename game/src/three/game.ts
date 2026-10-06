@@ -89,7 +89,6 @@ const PLAN_TURNS = 3; // turns of path preview
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
-// The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 

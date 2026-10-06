@@ -49,12 +49,17 @@ export class PointerPicker {
 
   // What a click at this screen point does. The click, the stop sign and the ground highlight all ask here.
   action(x: number, y: number): PointerAction {
+    return this.resolve(x, y, true);
+  }
+
+  // The radius pick only matters off the truck's shape, so the per-frame checks skip it.
+  private resolve(x: number, y: number, withRadius: boolean): PointerAction {
     const me = playerVehicle(this.deps.world());
     const own = this.deps.hit(x, y, this.deps.views.get(me.id)?.root ?? null);
     return resolvePointer({
       own,
       nearestNpc: own === null ? null : this.nearestNpc(x, y, me.id),
-      radiusPick: this.deps.radiusPick(x, y),
+      radiusPick: withRadius ? this.deps.radiusPick(x, y) : null,
       playerId: me.id,
       atRest: isAtRest(me),
     });
@@ -62,13 +67,13 @@ export class PointerPicker {
 
   // True over the player truck's drawn shape, where the ground highlight stays hidden.
   overOwn(x: number, y: number): boolean {
-    const kind = this.action(x, y).kind;
+    const kind = this.resolve(x, y, false).kind;
     return kind === 'stop' || kind === 'own';
   }
 
   // Shows the cursor exactly when a click at the pointer would stop the truck. True when the cue flipped.
   updateCue(canClick: boolean): boolean {
-    const cue = this.at !== null && canClick && !isAtRest(playerVehicle(this.deps.world())) && this.action(this.at.x, this.at.y).kind === 'stop';
+    const cue = this.at !== null && canClick && !isAtRest(playerVehicle(this.deps.world())) && this.resolve(this.at.x, this.at.y, false).kind === 'stop';
     const flipped = cue !== this.stopCue;
     this.stopCue = cue;
     return flipped;
@@ -76,12 +81,16 @@ export class PointerPicker {
 
   // The visible NPC whose drawn model is nearest the camera along the pointer ray.
   private nearestNpc(x: number, y: number, playerId: string): { id: string; distance: number } | null {
-    const hits: { id: string; distance: number }[] = [];
+    let nearest: { id: string; distance: number } | null = null;
     for (const [id, view] of this.deps.views) {
-      if (id === playerId || !this.deps.visible(vehicleById(this.deps.world(), id))) continue;
-      const distance = this.deps.hit(x, y, view.root);
-      if (distance !== null) hits.push({ id, distance });
+      const distance = this.npcDistance(x, y, id, view, playerId);
+      if (distance !== null && (nearest === null || distance < nearest.distance)) nearest = { id, distance };
     }
-    return hits.sort((a, b) => a.distance - b.distance)[0] ?? null;
+    return nearest;
+  }
+
+  private npcDistance(x: number, y: number, id: string, view: VehicleView, playerId: string): number | null {
+    if (id === playerId || !this.deps.visible(vehicleById(this.deps.world(), id))) return null;
+    return this.deps.hit(x, y, view.root);
   }
 }
