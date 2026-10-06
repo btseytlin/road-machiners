@@ -18,7 +18,7 @@ const MOON_ELEVATION = 25; // degrees
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
-const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without losing the truck's contact shadow
+const SHADOW_SOFTNESS = 1; // shadow-map texels between the 3x3 filter taps, a clear edge about three texels wide
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
 // By day the ground color is warm sand, so faces turned down catch light bounced off the desert. The day sky is a
