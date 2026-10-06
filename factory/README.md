@@ -5,6 +5,7 @@ The public files and votes on GitHub issues. Agents design and build the top one
 ## Docs
 
 - [docs/process.md](docs/process.md) is the spec, with a diagram of each flow. Read it first.
+- [docs/state.md](docs/state.md) describes all factory state as one model: the stores, card positions, queues and the commands that change them.
 - [docs/stages.md](docs/stages.md) holds the rules of each stage, model routing and reference images.
 - [docs/evidence.md](docs/evidence.md) covers screenshots, the visual review and ad hoc files.
 - [docs/operations.md](docs/operations.md) covers queues, CPU pools, the daily cap, resume, cleanup, failures, the ledger and deploys.
