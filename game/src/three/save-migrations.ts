@@ -222,10 +222,10 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
 // pressure stands in for what it saw, and the saved turn for when.
 // Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
 // keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 15.
-const STORM_FADE_TURNS_14_15 = 30;
+const STORM_FADE_TURNS_15_16 = 30;
 
-function withStormBorn_14_15(world: SavedJson): SavedJson {
-  const born = (world.turn as number) - STORM_FADE_TURNS_14_15;
+function withStormBorn_15_16(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_15_16;
   const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
   return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
 }
@@ -233,23 +233,23 @@ function withStormBorn_14_15(world: SavedJson): SavedJson {
 // 15 to 16: a truck records how far each storm has got into it. A saved truck gets the share it would have settled to
 // where it stands, so loading inside a storm neither flashes nor drops. These are copies of WEATHER.sim.stormEdge and
 // stormFadeTurns, and of the stormDepth rule, at format 16.
-const STORM_EDGE_15_16 = 25;
-const STORM_FADE_TURNS_15_16 = 30;
+const STORM_EDGE_16_17 = 25;
+const STORM_FADE_TURNS_16_17 = 30;
 
-function settledShare_15_16(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
+function settledShare_16_17(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
   const centre = storm.pos as { x: number; y: number };
-  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_15_16);
+  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_16_17);
   if (edge <= 0) return 0;
-  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_15_16, (storm.turnsLeft as number) / STORM_FADE_TURNS_15_16);
+  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_16_17, (storm.turnsLeft as number) / STORM_FADE_TURNS_16_17);
   return edge * strength;
 }
 
-function withStormExposure_15_16(world: SavedJson): SavedJson {
+function withStormExposure_16_17(world: SavedJson): SavedJson {
   const storms = (world.weather as SavedJson[]).filter((e) => e.kind === 'storm');
   const exposed = (v: SavedJson): SavedJson => {
     const stormExposure: Record<string, number> = {};
     for (const s of storms) {
-      const share = settledShare_15_16(world.turn as number, s, v.pos as { x: number; y: number });
+      const share = settledShare_16_17(world.turn as number, s, v.pos as { x: number; y: number });
       if (share > 0) stormExposure[s.id as string] = share;
     }
     return { ...v, stormExposure };
@@ -354,10 +354,13 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
   // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
-  // 14 to 15: a storm records the turn it was born, already past its build-up.
-  withStormBorn_14_15,
-  // 15 to 16: a truck records how far each storm has got into it, settled where it stands.
-  withStormExposure_15_16,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: a storm records the turn it was born, already past its build-up.
+  withStormBorn_15_16,
+  // 16 to 17: a truck records how far each storm has got into it, settled where it stands.
+  withStormExposure_16_17,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

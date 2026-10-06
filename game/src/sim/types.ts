@@ -166,7 +166,7 @@ export type DriverResources = {
 export type NpcActivity = {
   kind:
     | 'scavenge' | 'prowl' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
-    | 'meet' | 'retreat' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
+    | 'meet' | 'retreat' | 'rearm' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -175,6 +175,7 @@ export type NpcActivity = {
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
+  until?: number; // the turn a rearm's fresh gear is ready
 };
 
 export type NpcBrain = {

@@ -22,6 +22,7 @@ import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
+import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -321,10 +322,16 @@ describe('save migration 13 to 14', () => {
 });
 
 describe('save migration 14 to 15', () => {
-  const next = MIGRATIONS[14](FORMAT_2_14) as { turn: number; weather: WeatherEvent[] };
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  const next = MIGRATIONS[15](FORMAT_2_15) as { turn: number; weather: WeatherEvent[] };
 
   it('gives a storm a birth turn past its build-up and changes nothing else', () => {
-    expect(next).toEqual({ ...FORMAT_2_14, weather: [{ ...FORMAT_2_14.weather[0], born: 470 }, FORMAT_2_14.weather[1]] });
+    expect(next).toEqual({ ...FORMAT_2_15, weather: [{ ...FORMAT_2_15.weather[0], born: 470 }, FORMAT_2_15.weather[1]] });
   });
 
   it('leaves a storm with a long way to go at full strength', () => {
@@ -334,8 +341,8 @@ describe('save migration 14 to 15', () => {
   });
 });
 
-describe('save migration 15 to 16', () => {
-  const next = MIGRATIONS[15](FORMAT_2_15) as unknown as World;
+describe('save migration 16 to 17', () => {
+  const next = MIGRATIONS[16](FORMAT_2_16) as unknown as World;
   const shares = (id: string) => next.vehicles.find((v) => v.id === id)!.stormExposure;
 
   it('gives each truck the share each storm has settled to where it stands, and nothing outside', () => {
@@ -349,7 +356,7 @@ describe('save migration 15 to 16', () => {
   it('gives a removed truck no shares and changes nothing else', () => {
     expect(next.removed[0].stormExposure).toEqual({});
     const strip = (vs: Vehicle[]) => vs.map((v) => Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stormExposure')));
-    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_15);
+    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_16);
   });
 
   it('loads every truck feeling exactly the settled weather where it stands', () => {

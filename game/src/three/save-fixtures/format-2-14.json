@@ -1,7 +1,34 @@
 {
-  "turn": 500,
-  "weather": [
-    { "id": "wx1", "kind": "storm", "pos": { "x": 120, "y": 80 }, "radius": 90, "vel": { "x": 0.5, "y": -0.3 }, "turnsLeft": 120 },
-    { "id": "wx2", "kind": "heatwave", "turnsLeft": 30 }
-  ]
+  "turn": 1000,
+  "vehicles": [
+    {
+      "id": "retreating",
+      "chassisId": "buggy",
+      "defeat": {
+        "phase": "retreat",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ],
+        "gaveUp": true
+      },
+      "brain": {
+        "templateId": "buggy",
+        "goals": [
+          {
+            "kind": "retreat",
+            "targetId": "kiln",
+            "destination": {
+              "x": 100,
+              "y": 100
+            },
+            "phase": "travel",
+            "reason": "retreat home after a defeat"
+          }
+        ]
+      }
+    }
+  ],
+  "removed": []
 }
