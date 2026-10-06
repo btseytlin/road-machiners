@@ -74,6 +74,15 @@ export function spanAt(x: number, y: number): DeckPoint | null {
   return best;
 }
 
+// The point on a deck's centre line at the same distance along as a map point, with along kept at least
+// margin from either end. A margin of half a tile diagonal puts the result in a tile whose centre is on
+// the deck. A negative margin, or one that leaves no centre line, is a bug.
+export function deckCenterAt(deck: Deck, x: number, y: number, margin: number): Vec {
+  if (margin < 0 || margin >= deck.length / 2) throw new Error(`Deck ${deck.id} has no centre line at margin ${margin}`);
+  const along = Math.min(deck.length - margin, Math.max(margin, alongOf(deck, x, y)));
+  return { x: deck.from.x + deck.axis.x * along, y: deck.from.y + deck.axis.y * along };
+}
+
 // Share of the road and site flattening removed at a map point: 1 in the gap under a deck with a cut,
 // 0 on its abutments and away from every such deck.
 export function bridgeCut(x: number, y: number): number {

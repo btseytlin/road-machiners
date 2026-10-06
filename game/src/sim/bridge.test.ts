@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
-import { bridgeCut, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
+import { bridgeCut, crossesRail, deckAt, deckById, deckCenterAt, DECKS, nearRail } from './bridge';
 import { route, routeLength } from './path';
 import { segmentDist } from './vec';
 import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
@@ -161,5 +161,46 @@ describe('Canyon Bridge', () => {
     expect(points.at(-1)).toEqual(deck);
     for (let i = 1; i < points.length; i++) expect(crossesRail(points[i - 1], points[i], 0)).toBe(false);
     expect(routeLength(floor, points.slice(1))).toBeGreaterThan(B.length / 2);
+  });
+});
+
+describe('deckCenterAt', () => {
+  const near = (p: { x: number; y: number }, q: { x: number; y: number }) => {
+    expect(p.x).toBeCloseTo(q.x, 9);
+    expect(p.y).toBeCloseTo(q.y, 9);
+  };
+
+  it('maps a point beside the rail to the centre line at the same distance along', () => {
+    near(deckCenterAt(B, at(5, 3.9).x, at(5, 3.9).y, 1), at(5, 0));
+    near(deckCenterAt(B, at(5, -7).x, at(5, -7).y, 1), at(5, 0));
+  });
+
+  it('clamps points past either end to the margin from that end', () => {
+    near(deckCenterAt(B, at(-3, 2).x, at(-3, 2).y, 1), at(1, 0));
+    near(deckCenterAt(B, at(B.length + 3, -2).x, at(B.length + 3, -2).y, 1), at(B.length - 1, 0));
+  });
+
+  it('gives the same point again for its own result', () => {
+    for (const p of [at(-2, 1), at(4, 3), at(B.length + 1, -3)]) {
+      const once = deckCenterAt(B, p.x, p.y, Math.SQRT1_2);
+      near(deckCenterAt(B, once.x, once.y, Math.SQRT1_2), once);
+    }
+  });
+
+  it('with a margin of half a tile diagonal, always lands in a tile whose centre is on the deck', () => {
+    for (const deck of DECKS) {
+      for (let along = -2; along <= deck.length + 2; along += 0.37) {
+        for (let across = -deck.width; across <= deck.width; across += 0.41) {
+          const p = { x: deck.from.x + deck.axis.x * along - deck.axis.y * across, y: deck.from.y + deck.axis.y * along + deck.axis.x * across };
+          const c = deckCenterAt(deck, p.x, p.y, Math.SQRT1_2);
+          expect(deckAt(Math.floor(c.x) + 0.5, Math.floor(c.y) + 0.5)?.deck).toBe(deck);
+        }
+      }
+    }
+  });
+
+  it('fails loudly on a negative margin or one that leaves no segment', () => {
+    expect(() => deckCenterAt(B, B.from.x, B.from.y, -1)).toThrow();
+    expect(() => deckCenterAt(B, B.from.x, B.from.y, B.length / 2)).toThrow();
   });
 });
