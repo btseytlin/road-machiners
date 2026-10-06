@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
-import type { Vehicle } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
-import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, shortStatus, weaponGrid, BLOCK_SHORT, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -31,6 +31,7 @@ describe("weapon readout at current positions", () => {
       status: "ready",
       chance: hitOdds(world, me, gun, target, "body").damageChance,
       canFire: true,
+      block: null,
     });
   });
 
@@ -42,6 +43,7 @@ describe("weapon readout at current positions", () => {
       status: "hold fire",
       chance: null,
       canFire: false,
+      block: "noTarget",
     });
   });
 
@@ -74,6 +76,7 @@ describe("weapon readout at current positions", () => {
       status: "out of range",
       chance: null,
       canFire: false,
+      block: "range",
     });
   });
 
@@ -100,6 +103,7 @@ describe("weapon readout at current positions", () => {
       status: "not in sight",
       chance: null,
       canFire: false,
+      block: "unseen",
     });
     expect(world.vehicles).toContain(target);
   });
@@ -132,6 +136,7 @@ describe("weapon readout at current positions", () => {
       status: "hold fire",
       chance: null,
       canFire: false,
+      block: "noTarget",
     });
   });
 });
@@ -323,12 +328,11 @@ describe("hover hold", () => {
 
 class FakeNode {
   className = "";
-  style: Record<string, string> = {};
+  props = new Map<string, string>();
+  style = { setProperty: (k: string, v: string) => { this.props.set(k, v); } };
   children: (FakeNode | string)[] = [];
   listeners = new Map<string, ((e: unknown) => void)[]>();
   attrs = new Map<string, string>();
-  scrollLeft = 0;
-  scrollIntoView = vi.fn();
   constructor(readonly tag: string) {}
   append(...c: (FakeNode | string)[]) { this.children.push(...c); }
   replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
@@ -357,12 +361,13 @@ describe("weapon panel keys and the turn button", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function build(auto = false) {
+  function build(auto = false, setup: (w: World) => void = () => {}) {
     ui.children = [];
     win.listeners.clear();
-    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
     vi.stubGlobal("window", win);
     const { world, gun } = createDuel();
+    setup(world);
     const host = {
       world: () => world,
       apply: vi.fn(),
@@ -393,29 +398,42 @@ describe("weapon panel keys and the turn button", () => {
     expect(host.selectWeapon).not.toHaveBeenCalled();
   });
 
-  it("a re-render keeps the weapon row scrolled where it was", () => {
-    const { panel, row } = build();
-    row().scrollLeft = 120;
-    panel.render();
-    expect(row().scrollLeft).toBe(120);
-  });
-
-  it("scrolls a newly selected weapon into view once", () => {
-    const { panel, host, gun, card } = build();
-    expect(card(gun.part.id).scrollIntoView).not.toHaveBeenCalled();
-    host.selectedWeapon.mockReturnValue(gun.part.id);
-    panel.render();
-    expect(card(gun.part.id).scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
-    panel.render();
-    expect(card(gun.part.id).scrollIntoView).toHaveBeenCalledTimes(0);
-  });
-
   it("the Q, X and All buttons run their keys", () => {
     const { host, button } = build();
-    for (const [text, code] of [["Hide [X]", "KeyX"], ["All [0]", "Digit0"]] as const) {
+    for (const [text, code] of [["Auto fire [Q]", "KeyQ"], ["Hide [X]", "KeyX"], ["All [0]", "Digit0"]] as const) {
       button(text).fire("click");
       expect(host.runKey).toHaveBeenLastCalledWith(code);
     }
+  });
+
+  it("draws a compact element with the inventory icon, no filler text and no old glyphs", () => {
+    const { card, row } = build();
+    const slot = card(createDuel().gun.part.id);
+    const text = (ui.children as FakeNode[]).map((n) => n.text()).join(" ");
+    for (const prose of ["hold fire", "no target", "MG turret"]) expect(text).not.toContain(prose);
+    expect(slot.find((n) => n.className.split(" ").includes("item-icon"))).toBeDefined();
+    expect(slot.find((n) => /icon-(mg|cannon)/.test(n.className))).toBeUndefined();
+    expect((row() as FakeNode).props.get("--weapon-cols")).toBe("1");
+    expect(row().className).toBe("weapon-slots");
+  });
+
+  it("Auto fire shows its state and Hold is disabled with nothing to hold", () => {
+    const off = build(false, (w) => { playerVehicle(w).weaponOrders = {}; });
+    expect(off.button("Auto fire").attrs.get("aria-pressed")).toBe("false");
+    expect(off.button("Hold").attrs.has("disabled")).toBe(true);
+    const on = build(false, (w) => { w.player.autoFire = true; });
+    expect(on.button("Auto fire").attrs.get("aria-pressed")).toBe("true");
+    expect(on.button("Auto fire").className).toBe("on");
+    expect(on.button("Hold").attrs.has("disabled")).toBe(false);
+  });
+
+  it("Hold is enabled with an order and clears it with auto fire off", () => {
+    const { host, button } = build();
+    expect(button("Hold").attrs.has("disabled")).toBe(false);
+    button("Hold").fire("click");
+    const applied = host.apply.mock.calls[0][0] as World;
+    expect(applied.player.autoFire).toBe(false);
+    expect(Object.keys(playerVehicle(applied).weaponOrders)).toHaveLength(0);
   });
 
   it("the turn button presses on pointerdown and releases on pointerup of that press", () => {
@@ -437,5 +455,33 @@ describe("weapon panel keys and the turn button", () => {
     expect(host.pressTurn).toHaveBeenCalledTimes(1);
     win.fire("pointercancel");
     expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("compact gun grid", () => {
+  it("keeps up to five guns in one row and balances two rows above that", () => {
+    expect(weaponGrid(0)).toEqual({ cols: 0, small: false });
+    expect(weaponGrid(1)).toEqual({ cols: 1, small: false });
+    expect(weaponGrid(5)).toEqual({ cols: 5, small: false });
+    expect(weaponGrid(6)).toEqual({ cols: 3, small: true });
+    expect(weaponGrid(7)).toEqual({ cols: 4, small: true });
+    expect(weaponGrid(10)).toEqual({ cols: 5, small: true });
+    expect(weaponGrid(11)).toEqual({ cols: 6, small: true });
+  });
+
+  it("gives a short state: nothing without an order, a chance, or a short reason", () => {
+    const { world, me, gun } = createDuel();
+    expect(shortStatus(gun, getWeaponReadout(world, gun))).toMatch(/^\d+%$/);
+    gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
+    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("wait 2");
+    gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
+    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe(`load ${gun.def.reload - 1}`);
+    gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
+    gun.part.hp = 0;
+    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("broken");
+    gun.part.hp = 10;
+    me.weaponOrders = {};
+    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("");
+    for (const word of Object.values(BLOCK_SHORT)) expect(word.length).toBeLessThanOrEqual(7);
   });
 });
