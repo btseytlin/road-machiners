@@ -746,6 +746,15 @@ describe('a guarded driver', () => {
     expect(comply(down.w, down.convoy, down.raider)).toBeCloseTo(comply(unguarded(down.w, down.convoy, down.guard), down.convoy, down.raider));
   });
 
+  it('complies with at most a quarter of its threatened weight when the player threatens it with its guard in sight', () => {
+    const { w, convoy } = guardedConvoy();
+    const me = playerVehicle(w);
+    me.pos = { x: 16, y: 10 };
+    const weights = optionWeights(w, convoy, 'threatened', me.id, lowest(w, me));
+    const total = Object.values(weights).reduce((sum, n) => sum + (n ?? 0), 0);
+    expect(weights.comply! / total).toBeLessThanOrEqual(0.25);
+  });
+
   it('weighs a player threat the same as an NPC threat', () => {
     const { w, convoy, guard } = guardedConvoy();
     const me = playerVehicle(w);

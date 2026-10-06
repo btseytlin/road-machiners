@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TIME } from '../../data/time';
 import { POLICIES, type Policy } from './bot';
-import { playIncome, SAMPLE_TURNS, type IncomeRun } from './income';
+import { INCOME_KIT, INCOME_SKILL_RANK, largestTraderLoad, playIncome, SAMPLE_TURNS, type IncomeRun } from './income';
+import { startWorld } from './record';
+import { TRAITS } from '../../data/npcs';
 import { formatIncomeReport, gateReport, pairedDifference } from './income-report';
 
 const SHORT_TURNS = 30;
@@ -29,6 +31,15 @@ describe('playIncome', () => {
   it('keeps the robber blind to the cargo samples', () => {
     expect(readFileSync(new URL('./bot.ts', import.meta.url), 'utf8')).not.toMatch(/from '\.\/income/);
   });
+});
+
+describe('largestTraderLoad', () => {
+  // G4 compares this with the hauler's mean net per day. It moves with the trader stake and the start prices.
+  it('is the trader stake at the best ratio of the player sell price to the trader buy price', () => {
+    const load = largestTraderLoad(startWorld(1, INCOME_KIT, INCOME_SKILL_RANK));
+    expect(load).toBeGreaterThan(TRAITS.trader.tradeStake);
+    expect(load).toBeCloseTo(2575.76, 1);
+  }, RUN_TIMEOUT);
 });
 
 function fakeRun(policy: Policy, seed: number, rate = 10 * seed, label = LABEL): IncomeRun {
