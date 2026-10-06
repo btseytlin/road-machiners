@@ -606,15 +606,18 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
   }
 }
 
-// A shot from a camp gate gun makes the driver run from the camp. It cannot win against a gun it cannot hit, so there is
-// no roll. A driver already running from that camp keeps on.
+// A shot from a camp or town gate gun makes the driver run out of its range. It cannot win against a gun it cannot hit,
+// so there is no roll. A driver already running from that site, or already out of its range, keeps on.
 function onGunned(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string | undefined): void {
   const site = gunSiteById(siteId ?? null);
-  if (!site) return;
-  const top = topGoal(vehicle);
-  if (top?.kind === 'flee' && top.targetId === site.id) return;
+  if (!site || !inGunRange(site, vehicle.pos, NPC_BEHAVIOR.campGunMargin) || fleesFrom(vehicle, site.id)) return;
   const goal = createActivity('flee', site.id, fleeDestination(world, vehicle, profile, nearestGate(site, vehicle.pos), site.id), 'shot by gate guns');
   interrupt(world, vehicle, goal);
+}
+
+function fleesFrom(vehicle: Vehicle, siteId: string): boolean {
+  const top = topGoal(vehicle);
+  return top?.kind === 'flee' && top.targetId === siteId;
 }
 
 // A tower with a client on the rope ignores a hostile it only hears. A flee from it ends the next turn, as soon as the
