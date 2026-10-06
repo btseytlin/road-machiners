@@ -440,6 +440,17 @@ describe('botOrders', () => {
     expect(playerVehicle(botOrders(w, 'hunter').world).order).not.toBeNull();
   });
 
+  it('has a scavenging hunter that starts stripping a spare in town stay parked for the strip', () => {
+    const w = parkedAt('bowl');
+    w.player.discovered = [];
+    expect(stowPart(w, playerVehicle(w), makePart(w, 'mg', 0))).toBe(true);
+
+    const me = playerVehicle(botOrders(w, 'hunter').world);
+
+    expect(me.job?.kind).toBe('strip');
+    expect(me.order).toBeNull();
+  });
+
   it('has a scavenging hunter that left town with more repair parts than it needs not drive back to sell them', () => {
     const site = town('bowl');
     const pad = nearestPad(site, site.pos);

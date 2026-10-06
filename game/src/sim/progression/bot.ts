@@ -611,7 +611,7 @@ function sellAt(world: World, town: TownDef, good: string): number {
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
 // sellCargo.
 function scavenge(o: Orders, stripping: boolean): boolean {
-  if (townAt(o.world) && sellsCargo(o, stripping)) sellCargo(o, stripping);
+  if (sellInTown(o, stripping)) return true;
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
@@ -639,7 +639,7 @@ function findSalvageSite(o: Orders): boolean {
 function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
-  if (townAt(o.world) && sellsCargo(o, true)) sellCargo(o, true);
+  if (sellInTown(o, true)) return;
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
@@ -942,6 +942,13 @@ function hasCargo(world: World, v: Vehicle): boolean {
 function sellCargo(o: Orders, stripping = false): void {
   for (const [good, n] of goodsToSell(o, stripping)) o.run((w) => sellGood(w, good, n), 'goodsSold');
   sellSpares(o, stripping && o.fieldRepair);
+}
+
+// Sells in town. True when the sale started a strip job: the job holds the truck parked, and a drive order would
+// cancel it and leave the spare unsold.
+function sellInTown(o: Orders, stripping: boolean): boolean {
+  if (townAt(o.world) && sellsCargo(o, stripping)) sellCargo(o, stripping);
+  return o.me.job !== null;
 }
 
 function goodsToSell(o: Orders, stripping: boolean): [string, number][] {
