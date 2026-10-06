@@ -1,12 +1,11 @@
 import { writeFileSync } from 'node:fs';
-import { readEvidence } from '../evidence';
+import { readApproval } from '../clone-checks';
+import { readShown } from '../evidence';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
 import { visualGate } from './visual';
 import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
-
-export type Approval = { description: string; howToTry: string };
 
 // What a testing round does. `preview` gets a card ready to show: the agent plays the feature, fixes what blocks it and captures the evidence, with no review.
 // `harden` runs after the committee approved: verify, review, nitpicks and cost, with no post after it. `full` does both before the post.
@@ -78,31 +77,31 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 }
 
 // `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
-// A round that `shows` leaves the approval and the evidence a post needs. The checks stage reads them, and the evidence must match the branch head.
-// It also leaves the agent's reading of those images. Returns false when that reading sent the card back, so no post follows.
+// A round that `shows` leaves the approval a post needs, and the evidence and the agent's reading of it when it captured any.
+// Missing or broken evidence never fails the round. Returns false when the reading sent the card back, so no post follows.
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
-  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
-  const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
-  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
-  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars));
+  await runAgent(ctx, issue, 'verify', round, roundPrompt(ctx, issue, prompt, shows), { evidenceCheck: shows });
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   if (shows) readApproval(home);
   await guardAndPush(ctx, issue, base, 'verify');
-  if (!shows) return true;
+  return shows ? showEvidence(ctx, issue, home) : true;
+}
+
+function roundPrompt(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', shows: boolean): string {
+  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
+  if (prompt === 'harden') return fillPrompt(prompt, vars);
+  const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
+  if (prompt === 'test') return fillPrompt(prompt, { ...vars, visualRules });
+  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
+  return fillPrompt(prompt, { ...vars, evidenceRules });
+}
+
+// A shown round's evidence goes through the visual gate. A round with a broken or missing evidence report passes, since evidence never blocks.
+async function showEvidence(ctx: Ctx, issue: number, home: string): Promise<boolean> {
   const head = await ctx.repo.headHash(BRANCH(issue));
-  return visualGate(ctx, issue, home, head, readEvidence(home, head));
-}
-
-export function readApproval(home: string): Approval {
-  const raw = readOutput(home, 'approval.json');
-  if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
-  return parseApproval(JSON.parse(raw));
-}
-
-function parseApproval(data: unknown): Approval {
-  const { description, howToTry } = (data ?? {}) as Record<string, unknown>;
-  if (typeof description !== 'string' || typeof howToTry !== 'string') throw new Error('.factory/approval.json needs string fields description and howToTry');
-  return { description, howToTry };
+  const shown = readShown(home, head);
+  if (shown.problem !== null) ctx.log('verify', issue, shown.problem);
+  if (shown.evidence === null) return true;
+  return visualGate(ctx, issue, home, head, shown.evidence);
 }

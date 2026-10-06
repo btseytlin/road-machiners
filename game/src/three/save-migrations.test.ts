@@ -20,6 +20,7 @@ import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -319,8 +320,14 @@ describe('save migration 13 to 14', () => {
 });
 
 describe('save migration 14 to 15', () => {
-  const before = structuredClone(FORMAT_2_14);
-  const next = MIGRATIONS[14](FORMAT_2_14) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  const before = structuredClone(FORMAT_2_15);
+  const next = MIGRATIONS[15](FORMAT_2_15) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
 
   it('drops the Glass Flats stock and its searched mark, and keeps every other stock', () => {
     expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
@@ -329,7 +336,7 @@ describe('save migration 14 to 15', () => {
 
   it('ends a search of the old stock, keeps other searches and does not mutate its input', () => {
     expect(next.vehicles[0].job).toBeNull();
-    expect(next.vehicles[1]).toEqual(FORMAT_2_14.vehicles[1]);
-    expect(FORMAT_2_14).toEqual(before);
+    expect(next.vehicles[1]).toEqual(FORMAT_2_15.vehicles[1]);
+    expect(FORMAT_2_15).toEqual(before);
   });
 });

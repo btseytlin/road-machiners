@@ -1,21 +1,34 @@
 {
-  "turn": 40,
-  "player": {
-    "vehicleId": "player",
-    "scavenged": ["glass-flats", "wreck3"]
-  },
+  "turn": 1000,
   "vehicles": [
     {
-      "id": "player",
-      "job": { "kind": "search", "stockId": "glass-flats", "turnsLeft": 2 }
-    },
-    {
-      "id": "npc1",
-      "job": { "kind": "search", "stockId": "wreck3", "turnsLeft": 1 }
+      "id": "retreating",
+      "chassisId": "buggy",
+      "defeat": {
+        "phase": "retreat",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ],
+        "gaveUp": true
+      },
+      "brain": {
+        "templateId": "buggy",
+        "goals": [
+          {
+            "kind": "retreat",
+            "targetId": "kiln",
+            "destination": {
+              "x": 100,
+              "y": 100
+            },
+            "phase": "travel",
+            "reason": "retreat home after a defeat"
+          }
+        ]
+      }
     }
   ],
-  "salvage": [
-    { "id": "glass-flats", "pos": { "x": 81, "y": 75 }, "radius": 16, "goods": { "scrap": 1 }, "parts": [] },
-    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
-  ]
+  "removed": []
 }

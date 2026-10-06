@@ -203,15 +203,15 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
 
 // Glass Flats became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
 // ends with it. The step repeats the 8 to 9 one, since a committed step is never edited.
-const RETIRED_STOCK_14_15 = 'glass-flats';
+const RETIRED_STOCK_15_16 = 'glass-flats';
 
-function withoutRetiredStock_14_15(world: SavedJson): SavedJson {
-  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_14_15 ? { ...v, job: null } : v);
+function withoutRetiredStock_15_16(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_15_16 ? { ...v, job: null } : v);
   const player = world.player as SavedJson;
   return {
     ...world,
-    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_14_15),
-    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_14_15) },
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_15_16),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_15_16) },
     vehicles: (world.vehicles as SavedJson[]).map(idle),
   };
 }
@@ -331,8 +331,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
   // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
-  // 14 to 15: Glass Flats is a territory, so its site stock goes.
-  withoutRetiredStock_14_15,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: Glass Flats is a territory, so its site stock goes.
+  withoutRetiredStock_15_16,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
