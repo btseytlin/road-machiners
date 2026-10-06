@@ -25,7 +25,7 @@ import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
 import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
-import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, writeSave } from './save';
+import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, tryWriteSave } from './save';
 import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
@@ -71,7 +71,8 @@ function freshRun(): World {
 
 function newGameSaved(): World {
   const world = newGame();
-  writeSave(window.localStorage, 'auto', world, Date.now());
+  // Full storage does not stop the new game. The first autosave that fails tells the player.
+  tryWriteSave(window.localStorage, 'auto', world, Date.now());
   return world;
 }
 
