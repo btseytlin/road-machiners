@@ -353,7 +353,7 @@ export const REGION = {
       pos: BROKEN_WING_SITE,
       radius: 6,
     },
-    // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
+    // Raider camps. Raiders spawn at their gates and service there.
     {
       id: "scrapjaw",
       name: "Scrapjaw Camp",
@@ -527,7 +527,7 @@ export const REGION = {
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
-    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
+    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so

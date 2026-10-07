@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
 import { SALVAGE } from '../data/salvage';
-import { NPCS, type TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision, wreckVehicle } from './combat';
 import { advanceContracts } from './market';
 import { update } from './world';
@@ -227,7 +227,7 @@ describe('NPC pleas to NPCs', () => {
     const gone = npcAt(w, 'raiders', ['raider'], 200, 200);
     feud(w, a, b);
     feud(w, a, gone);
-    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened' });
+    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened', perceived: w.turn - NPC_BEHAVIOR.fleeCalmTurns - 1 });
     a.brain!.hurt = 5;
     a.lastHitBy = b.id;
     thinkNpc(w, a);

@@ -3,7 +3,6 @@
 // Generated cues carry prompt subjects; scripts/sfx-gen.mjs puts the SOUND_STYLE of the cue's setup in front.
 // A cue with several prompts is a family of different sounds, one prompt per variant.
 
-import { RULES } from "./rules";
 
 export type Bus = "ui" | "sfx" | "ambient" | "music";
 
@@ -220,8 +219,8 @@ export const MIX = {
   // Music crossfades to combat while the player is in combat, as the sim's combat state defines it.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
-  // Outpost music plays within outpostReachTiles of an outpost gate, the reach town music gets from guard range.
-  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6, outpostReachTiles: RULES.guards.range },
+  // Town and outpost music play within musicReachTiles of a town or outpost gate.
+  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6, musicReachTiles: 12 },
   // Combat score. One random base plays while the player is in combat. Heat is a fading sum of
   // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
   // and muffle each bar, full at fullHeat. Each event stabs on the lead or secondary line with its peak on the

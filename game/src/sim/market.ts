@@ -207,10 +207,12 @@ export function cargoValue(v: Vehicle): number {
   return goods + spareParts(v).reduce((a, p) => a + partValue(p), 0);
 }
 
-// A bounty's reward: a share of the target's own total worth, so a tougher, better-equipped truck
-// pays more to put down. The deadline window is random and does not change the pay.
-export function bountyReward(target: Vehicle): number {
-  return Math.round(vehicleValue(target) * CONTRACTS.bounty.valueShare);
+// A bounty's reward: a fixed sum for the target's raider template, whatever it carries. The deadline window is
+// random and does not change the pay.
+export function bountyReward(templateId: string): number {
+  const turns = CONTRACTS.bounty.rewardTurns[templateId];
+  if (turns === undefined) throw new Error(`No bounty reward for template ${templateId}`);
+  return Math.round(turns * EFFORT.wage[1]);
 }
 
 // The pristine buy price of a part def: its base value plus the shop spread, ignoring wear. A fetch
@@ -281,7 +283,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
-  const reward = bountyReward(target);
+  const reward = bountyReward(target.brain.templateId);
   return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier };
 }
 

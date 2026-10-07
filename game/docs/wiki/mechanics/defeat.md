@@ -4,7 +4,7 @@ Knockouts, looting, stranding, tows, the beacon, healing, death and saves. The p
 
 Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-A broken cab knocks the player out while health is above 0. A cab below half may do so earlier, but not while health is 75 or more. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe.
+A broken cab knocks the player out while health is above 0. A cab below half may do so earlier, but not while health is 75 or more. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe. Combat with the player ends in the same turn, so robbers that set out to loot keep that goal.
 
 While knocked out, turns run on their own and the player gives no orders. Looters strip the truck by the same rules as a knocked-out NPC truck, below. The player comes to when the trucks that fought it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP.
 

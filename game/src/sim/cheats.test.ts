@@ -399,7 +399,7 @@ describe('vehicle cheats', () => {
     hunter.brain = npcBrain('scavenger', hunter.pos, ['scavenger']);
     const prey = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 45, y: 30 });
     addState(w, 'feud', hunter.id, prey.id, { kind: 'feud', robbery: false });
-    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test' });
+    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
     const next = killVehicles(w, prey.id);
     expect(next.states).toEqual([]);
     const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;

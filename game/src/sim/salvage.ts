@@ -97,11 +97,11 @@ export function hasSalvage(stock: SalvageStock): boolean {
   return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
 }
 
-// Whether a collect would move anything from the stock into the vehicle. Stores count only when a unit of them fits
-// (or what is left of the stock), so a nearly full tank does not keep a collector searching a stock for good.
+// Whether a collect would move anything from the stock into the vehicle. Stores pour in whole units, so they count
+// only when a unit fits.
 export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
-  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= Math.min(stock[kind] ?? 0, 1))) return true;
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= 1)) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);
@@ -186,13 +186,14 @@ function stockBasis(stock: SalvageStock, good: string): number {
   return basis;
 }
 
-// Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
-// Whatever does not fit stays behind.
+// Pours the stock's fuel and supplies into the driver's tank and stores in whole units, up to their caps. Whatever
+// does not fit stays behind. A pour up to the exact cap left crumbs under a unit in the stock, which kept a picked
+// wreck counted as loot and drew every passing driver to it.
 export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   const resources = getResources(world, vehicle);
   const room = storesRoom(world, vehicle);
   for (const kind of ['fuel', 'supplies'] as const) {
-    const took = Math.min(stock[kind] ?? 0, room[kind]);
+    const took = Math.min(stock[kind] ?? 0, Math.floor(room[kind]));
     if (took <= 0) continue;
     resources[kind] += took;
     stock[kind] = (stock[kind] ?? 0) - took;
@@ -632,6 +633,9 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 
 // ---- NPC looters
 
+// Why a loot ends when the looter's hold takes nothing more of it.
+export const CANNOT_HOLD = 'cargo cannot hold the loot';
+
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
 // installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
 // Returns why the loot ends, or null while work remains.
@@ -640,7 +644,7 @@ export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): s
   takeLooseItems(world, looter, target);
   if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
-  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? CANNOT_HOLD : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);
   return null;
 }

@@ -153,6 +153,7 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       traits: rollTraits(world, tpl),
       goals: [],
       noticed: {},
+      tracks: {},
       hurt: 0,
       attackers: {},
       goal: null,

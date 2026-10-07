@@ -79,7 +79,6 @@ export const FORTRESS = {
   bastionSize: 1.5, // square footprint of a star point bastion, 6 m
   // The castle gatehouse of the masonry and scrap styles, 16 m high (fort_kit.py GATE_HEIGHT).
   gate: { width: 5, depth: 2.5, height: 4 } as FortressGate,
-  gunLift: 0.2, // the gate gun's muzzle stands this far over the gatehouse parapet
   innerWidth: 3, // inner gate in the curtain behind a barbican, along the wall. Its depth is wallDepth.
   circleTowerEvery: 5, // circle wall sections between towers
   flankMin: 2, // the least distance a flanking tower stands out past the wall it covers

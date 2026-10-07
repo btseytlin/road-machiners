@@ -26,6 +26,11 @@ import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import FORMAT_2_19 from './save-fixtures/format-2-19.json';
+import FORMAT_2_20 from './save-fixtures/format-2-20.json';
+import FORMAT_2_21 from './save-fixtures/format-2-21.json';
+import FORMAT_2_22 from './save-fixtures/format-2-22.json';
+import FORMAT_2_23 from './save-fixtures/format-2-23.json';
+import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -395,24 +400,114 @@ describe('save migration 18 to 19', () => {
 });
 
 describe('save migration 19 to 20', () => {
+  it('drops guard shots, guard kill credit and the gate a driver was shot by, and keeps every other field', () => {
+    const next = MIGRATIONS[19](FORMAT_2_19);
+
+    expect(next).toEqual({
+      ...FORMAT_2_19,
+      events: [FORMAT_2_19.events[0], FORMAT_2_19.events[2]],
+      vehicles: [{ id: 'player', lastHitBy: null }, FORMAT_2_19.vehicles[1], { id: 'npc-4', lastHitBy: null, brain: { goals: [] } }],
+      removed: [{ id: 'npc-8', lastHitBy: null }, FORMAT_2_19.removed[1]],
+    });
+  });
+});
+
+describe('save migration 20 to 21', () => {
+  it('stamps every flee goal with the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[20](FORMAT_2_20);
+    const [player, runner, fighter] = FORMAT_2_20.vehicles;
+    const fled = (g: { kind: string }) => (g.kind === 'flee' ? { ...g, perceived: 620 } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_20,
+      vehicles: [player, { ...runner, brain: { goals: runner.brain!.goals.map(fled) } }, fighter],
+      removed: [{ ...FORMAT_2_20.removed[0], brain: { goals: FORMAT_2_20.removed[0].brain.goals.map(fled) } }],
+    });
+  });
+});
+
+describe('save migration 21 to 22', () => {
+  it('gives every fight goal a fresh wear window from the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[21](FORMAT_2_21);
+    const [player, raider, runner] = FORMAT_2_21.vehicles;
+    const worn = (g: { kind: string }) => (g.kind === 'fight' ? { ...g, worn: { turn: 700, condition: 1 } } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_21,
+      vehicles: [player, { ...raider, brain: { goals: raider.brain!.goals.map(worn) } }, runner],
+      removed: [{ ...FORMAT_2_21.removed[0], brain: { goals: FORMAT_2_21.removed[0].brain.goals.map(worn) } }],
+    });
+  });
+});
+
+describe('save migration 22 to 23', () => {
+  it('turns noted hostiles and fight or flee targets into tracks, and keeps every other field', () => {
+    const next = MIGRATIONS[22](FORMAT_2_22) as typeof FORMAT_2_22;
+    const [player, raider, runner] = FORMAT_2_22.vehicles;
+    const [raid, fight] = raider.brain!.goals;
+    const { perceived: _, ...untimedFight } = fight;
+    const robbery = FORMAT_2_22.removed[0].brain.goals[0];
+    const { perceived: __, ...untimedRobbery } = robbery;
+
+    expect(next).toEqual({
+      ...FORMAT_2_22,
+      vehicles: [
+        player,
+        {
+          ...raider,
+          brain: {
+            noticed: { 'preySeen:npc-5': 799 },
+            goals: [raid, untimedFight],
+            tracks: {
+              player: { at: { x: 30, y: 30 }, turn: 797, sighted: true, choice: 'fight', chosenInSight: true },
+              'npc-5': { at: { x: 10, y: 12 }, turn: 797, sighted: false, choice: 'keep', chosenInSight: false },
+            },
+          },
+        },
+        { ...runner, brain: { ...runner.brain, tracks: { 'npc-2': { at: { x: 40, y: 40 }, turn: 799, sighted: true, choice: 'flee', chosenInSight: true } } } },
+      ],
+      removed: [
+        {
+          ...FORMAT_2_22.removed[0],
+          brain: { noticed: {}, goals: [untimedRobbery], tracks: { 'npc-5': { at: { x: 10, y: 12 }, turn: 790, sighted: true, choice: 'fight', chosenInSight: true } } },
+        },
+      ],
+    });
+  });
+});
+
+describe('save migration 23 to 24', () => {
+  it('marks every track out of sight and keeps every other field', () => {
+    const next = MIGRATIONS[23](FORMAT_2_23) as typeof FORMAT_2_23;
+    const [player, runner] = FORMAT_2_23.vehicles;
+    const tracks = runner.brain!.tracks;
+
+    expect(next).toEqual({
+      ...FORMAT_2_23,
+      vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
+    });
+  });
+});
+
+describe('save migration 24 to 25', () => {
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
-    const next = MIGRATIONS[19](FORMAT_2_19) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
-    expect(next.obstacles[0]).toEqual(FORMAT_2_19.obstacles[5]);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_24.obstacles[5]);
   });
 
   it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
-    const world = { ...FORMAT_2_19, obstacles: [
+    const world = { ...FORMAT_2_24, obstacles: [
       { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
     ] };
-    const next = MIGRATIONS[19](world) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
     expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
   });
 
   it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
-    const world = { ...FORMAT_2_19, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
-    const next = MIGRATIONS[19](world) as { obstacles: { id: string }[] };
+    const world = { ...FORMAT_2_24, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });

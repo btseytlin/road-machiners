@@ -286,7 +286,7 @@ export class VehicleLights {
   constructor(private readonly scene: THREE.Scene) {}
 
   // Lights the vehicles within gray vision. truck: the drawn player truck position.
-  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3, beam: number): void {
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
     const lit = world.vehicles
       .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
       .map((v) => ({
@@ -295,7 +295,7 @@ export class VehicleLights {
         on: vehicleLampsOn(world, v, lightTurn),
         player: v.id === world.player.vehicleId,
       }));
-    this.update(nightLightsWanted(world.turn, lit), beam, truck, lit);
+    this.update(nightLightsWanted(world.turn, lit), daylightAt(lightTurn).beam, truck, lit);
   }
 
   // night: nightLightsWanted. beam: Daylight.beam. truck: the drawn player truck position. lit: vehicles within gray vision.
