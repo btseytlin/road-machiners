@@ -22,6 +22,18 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Warning off: the player parked beside a wreck, a pile or a knocked-out truck that a peaceful driver is looting can radio it once to back off. The driver leaves the loot, refuses and keeps looting, or fights. Raiders and lawmen fight more, traders and cowards give way more. It pays no XP.
 - Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. A driver whose escort is in sight gives up a tenth as often. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
+- Dead Army wagon: once the player has heard at Bowl of a lost Army wagon, a driver that talks rumors and passed near the wagon can tell where it lies. It needs no perk and marks nothing. Its words go into the journal.
+
+## Settlement talk
+
+Bowl and Nose have people. Their town screen has a People tab, which a stall does not have. The tab lists three locals of the town by name and role. Picking one opens a conversation: a greeting, then the questions that local takes up, then the answer and the questions again. Talk takes no time, pays nothing and teaches nothing. Leaving the screen ends it. Locals never drive or show in the world.
+
+Each local has a voice and their own questions. Bowl talks warm and slow, of crops, canals and seed. Nose talks short, like the Army post it is. Each town is biased about the other. Two locals may answer the same question their own way and contradict each other. Some questions open only after something happened: finding a place, hearing a rumor or searching a wreck.
+
+Rumors are not always true. Some are sound, some outdated, some tall tales. A rumor never marks a place. The Farmers patrol at Bowl and the dispatcher at Nose answer "Any work?" with the best-paying offer the town's own board has, and taking it is the same as taking it from the Contracts tab. With the board empty or the player holding the most contracts, they say so.
+
+Rumors and clues go into the journal [J], newest first, with the day, who told them and what they said. The log notes each new entry. Plain lore stays out of the journal. A journal note is information, never an order or a place on the screen.
+
 H honks, also while a turn plays. Traders and scavengers in earshot that are not hostile honk back. During a turn they answer once it ends.
 
 Waste Of Time Radio plays on the radio panel above the log, and above the held contracts when there are some. It steps away while the hover panel of a truck would cover it. J.J. reports weather as it starts and ends, new contracts on boards of found places, raider robberies and knockouts of other drivers, dawn, noon, dusk and midnight, and road wisdom after a quiet stretch. She names a place only when the player has found it and it lies near the news. Anywhere else she gives a basin direction. She never reports the player's own fights and never quotes prices. News comes before clock calls, and clock calls before road wisdom. Broadcasts keep a gap of several turns between them, old news is dropped unsent, one place gets one raid report in a long while, and one restock gives at most one contract report, the best paid. A load or a new game starts the station over without announcing what is already on the boards. NPCs do not listen, since the radio changes no rule or decision.
