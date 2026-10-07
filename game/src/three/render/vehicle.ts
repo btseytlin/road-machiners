@@ -446,8 +446,8 @@ export class VehicleView {
 
   // A gun's post starts on the model's surface under it and rises to top, where the mount stands. A mount within
   // CLIP_TOLERANCE of that surface, or over air, gets no post.
-  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
-    const { at, foot } = weaponStand(v, item);
+  private riser(stand: ReturnType<typeof weaponStand>, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
+    const { at, foot } = stand;
     const bottom = postBottom(foot, top);
     const mount = { ...at, pos: at.pos.clone().setY(top) };
     if (bottom >= top) return mount;
@@ -485,7 +485,7 @@ export class VehicleView {
     const top = Math.max(stand.top, clear - headAt.y - shape.bottom);
     if (!Number.isFinite(top)) throw new Error(`Gun ${item.part.id} on ${v.chassisId} has a post height of ${top}`);
 
-    const at = this.riser(v, item, paint, still, top);
+    const at = this.riser(stand, item, paint, still, top);
     place(mount, at);
     tint(mount, paint, wear);
     still.add(mount);
