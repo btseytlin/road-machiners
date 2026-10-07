@@ -100,7 +100,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
   const byId = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
   const onRoad = (w: World, v: Vehicle) => onRouteRoad(terrainNav(w.terrain), v.pos.x, v.pos.y);
 
-  it('takes a raider retreating after a knockout beside the road to its camp, where it refits', () => {
+  it('takes a raider retreating after a knockout beside the road to its camp, where it lies up to refit', () => {
     let w = campRoad();
     const id = raider(w, { x: 325, y: 345 }).id;
     const start = byId(w, id);
@@ -111,14 +111,14 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     w = play(w, 14, (w) => {
       const v = byId(w, id);
       turn++;
-      if (!v.defeat) return true;
-      expect(v.brain!.farRoute?.offRoad).toBe(true);
+      if (v.brain!.goals.at(-1)?.kind === 'rearm') return true;
+      if (v.order) expect(v.brain!.farRoute?.offRoad).toBe(true);
       if (onRoad(w, v)) road.push(turn);
     });
     // It leaves the road it starts on within a few turns and never drives on it again.
     expect(Math.max(0, ...road)).toBeLessThanOrEqual(4);
     const v = byId(w, id);
-    expect(v.defeat).toBeUndefined();
+    expect(v.brain!.goals.at(-1)?.kind).toBe('rearm');
     expect(dist(v.pos, pad)).toBeLessThan(3);
   }, 120_000);
 
