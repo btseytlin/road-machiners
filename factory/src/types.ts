@@ -67,6 +67,13 @@ export type FactoryConfig = {
   cpuTest: number; // share of the server's CPUs for testing
   vitestWorkersImplement: number; // workers the game's test runner starts in an implement pool container
   vitestWorkersTest: number; // workers the game's test runner starts in a test pool container
+  errorDailyIssues: number; // new error-report issues per UTC day
+  errorDiskMb: number; // total size of stored error reports
+  errorMapDays: number; // days dev and candidate source maps stay
+  errorBodyKb: number; // largest gzipped report
+  errorUnzippedMb: number; // largest report after gunzip
+  errorIpPerHour: number; // reports one address may send per hour
+  errorOrigins: string; // page origins, besides the public URL's, that may post reports, separated by spaces
 };
 
 // Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
@@ -204,6 +211,10 @@ export interface GitHub {
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;
+  // The issue, open or closed, whose body holds this error fingerprint line, or null.
+  findByFingerprint(fingerprint: string): Promise<FingerprintIssue | null>;
+  // The state of an error-report issue the store already names. Search lags new issues, so a known number is read directly.
+  errorIssue(number: number): Promise<FingerprintIssue>;
   mergePullRequest(branch: string): Promise<void>; // merges the open pull request of that head branch with a merge commit
 }
 
@@ -325,6 +336,11 @@ export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
 export const WASTE_LABEL = 'factory-review'; // the record of one waste review
 export const BUG_LABEL = 'bug';
+// A bug the error service opened from a game error report. It skips votes like a hotfix, but goes to Triage.
+export const ERROR_REPORT_LABEL = 'error-report';
+// The body line that ties an error-report issue to its fingerprint. GitHub search finds the issue by it.
+export const fingerprintLine = (fingerprint: string): string => `Error fingerprint: ${fingerprint}`;
+export type FingerprintIssue = { number: number; state: 'OPEN' | 'CLOSED'; stateReason: string | null; closedAt: string | null };
 // An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
 export const BUNDLED_LABEL = 'bundled';
 export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];

@@ -19,6 +19,7 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
     "chart.js": "^4.5.1"
   }
 }

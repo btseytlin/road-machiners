@@ -7,7 +7,9 @@ import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
-export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10 } as FactoryConfig;
+export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10, publicUrl: 'https://play.test/play', errorMapDays: 14 } as FactoryConfig;
+// The full commit every fake clone stands on.
+export const CLONE_SHA = 'abc1234'.padEnd(40, '0');
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
@@ -22,7 +24,7 @@ export function fake(): Fake {
     statePath: join(ROOT, 'state.json'),
     now: () => new Date('2026-09-29T10:00:00Z'),
     log: () => undefined,
-    run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; },
+    run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: cmd === 'git' && args[0] === 'rev-parse' ? `${CLONE_SHA}\n` : '', stderr: '' }; },
     github: {
       createIssue: async (title: string, body: string, labels: string[]) => { note(`createIssue ${title}`); f.created.push({ title, body, labels }); return 10 + f.created.length; },
       cards: async () => f.cards,
@@ -68,7 +70,12 @@ export function fake(): Fake {
     repo: {
       path: join(ROOT, 'repo'),
       fetch: async () => note('fetch'),
-      prepareWorkClone: async (branch: string, _base: string, dir: string) => { note(`prepare ${branch}`); mkdirSync(dir, { recursive: true }); },
+      prepareWorkClone: async (branch: string, _base: string, dir: string) => {
+        note(`prepare ${branch}`);
+        // A clone's build output, as the game's build leaves it, maps included.
+        mkdirSync(join(dir, 'game', 'dist', 'assets'), { recursive: true });
+        writeFileSync(join(dir, 'game', 'dist', 'assets', 'index.js.map'), '{}');
+      },
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),

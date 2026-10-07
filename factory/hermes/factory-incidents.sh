@@ -66,5 +66,7 @@ fi
 from_source audit drift
 # A finished waste review waits for Hermes until Hermes deletes the file.
 if [ -f /factory/home/review-pending ]; then echo "factory review ready: $(cat /factory/home/review-pending)"; fi
+# The error service writes one line per cap it hits, with the day, and Hermes deletes the file once handled.
+if [ -f /factory/home/error-reports/alert ]; then cat /factory/home/error-reports/alert; fi
 # Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.
 if [ -n "$(find /factory/home/paused -mmin +60 2>/dev/null)" ]; then echo "paused over an hour: $(cat /factory/home/paused)"; fi
