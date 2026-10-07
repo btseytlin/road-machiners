@@ -602,8 +602,7 @@ export class Game {
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
-    if (this.live && f)
-      return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
+    if (this.live && f) return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
     return playerSees(this.world, v.pos);
   }
 
@@ -982,7 +981,8 @@ export class Game {
     this.rig.leash(truck, sightRadius);
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
-    const light = lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
+    const light = daylightAt(this.lightTurn());
+    lightScene(this.sun, this.sky, truck, light);
     this.vehicleLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck, light.beam);
     Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
     this.fx.tick(dt * speed, this.world);
