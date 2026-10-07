@@ -52,7 +52,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   resetOutputs(home);
   writeFileSync(join(home, OUT_DIR, 'changelog.md'), await changelogInput(ctx, features));
   const log = releaseLog(ctx, 'candidate');
-  await ctx.container.shell(dir, playtestScript(playtestCommand(ctx.cfg)), log);
+  await ctx.container.shell(dir, playtestScript(playtestCommand(ctx.cfg, true)), log);
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.designModel, prompt: fillPrompt('release', {}), log });
   const notes = readOutput(home, 'release.md');
   if (notes === null) throw new Error('release agent wrote no .factory/release.md');

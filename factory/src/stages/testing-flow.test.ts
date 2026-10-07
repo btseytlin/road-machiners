@@ -178,11 +178,11 @@ describe('testing stage', () => {
     expect(calls.find((call) => call.startsWith('photo'))).toContain('PR: https://github.com/o/r/pull/12');
   });
 
-  it('plays every turn with the frame rate check when the host has a GPU', async () => {
+  it('plays every turn on the GPU without the frame rate check, which only the release candidate keeps', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
     ctx.cfg.gpu = true;
     await runStage(ctx, 7);
-    expect(shellScript).toContain('\nnpm run playtest\n');
+    expect(shellScript).toContain('\nnpm run playtest -- --no-fps-gate\n');
     expect(shellScript).not.toContain('--cpu');
   });
 

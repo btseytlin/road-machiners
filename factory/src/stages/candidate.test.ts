@@ -36,6 +36,18 @@ describe('candidate', () => {
     expect(models).toEqual(['opus']);
   });
 
+  it('checks the frame rate in its playtest on a GPU host, unlike issue checks', async () => {
+    const f = fake();
+    f.ctx.cfg = { ...f.ctx.cfg, gpu: true };
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    const scripts: string[] = [];
+    f.ctx.container.shell = async (_dir, script) => { scripts.push(script); };
+    await candidate(f.ctx, 11);
+    expect(scripts[0]).toContain('  npm run playtest || status=$?');
+    expect(scripts[0]).not.toContain('--no-fps-gate');
+  });
+
   it('posts one photo with a Ship button, stores the post id and puts the whole changelog in a reply to it', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn', 'Merge issue #6: gone'];

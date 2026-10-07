@@ -64,9 +64,11 @@ export async function issueText(ctx: Ctx, issue: number, heading: string): Promi
   return [`${heading} ${item.title}`, item.body, ...comments.flatMap((comment) => [`${heading}# Comment by ${comment.login}`, comment.body])];
 }
 
-// On the GPU the playtest plays all its turns and checks the frame rate. Without one, --cpu draws in software, plays fewer turns and skips the frame rate.
-export function playtestCommand(cfg: FactoryConfig): string {
-  return cfg.gpu ? 'npm run playtest' : 'npm run playtest -- --cpu';
+// On the GPU the playtest plays all its turns. Without one, --cpu draws in software, plays fewer turns and skips the frame rate.
+// Only the release candidate checks the frame rate. Other jobs share the GPU and CPUs, so their frame rate measures the load, not the change.
+export function playtestCommand(cfg: FactoryConfig, fpsGate: boolean): string {
+  if (!cfg.gpu) return 'npm run playtest -- --cpu';
+  return fpsGate ? 'npm run playtest' : 'npm run playtest -- --no-fps-gate';
 }
 
 export function fillPrompt(name: string, vars: Record<string, string>): string {

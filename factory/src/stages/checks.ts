@@ -130,7 +130,7 @@ function checkDir(ctx: Ctx, issue: number): string {
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
 // Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
 async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
-  return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg)));
+  return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg, false)));
 }
 
 async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {

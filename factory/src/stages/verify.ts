@@ -100,7 +100,7 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 // A round that `shows` leaves the approval a post needs, and the evidence and the agent's reading of it when it captured any.
 // Missing or broken evidence never fails the round. Returns false when the reading sent the card back, so no post follows.
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
-  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
+  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg, false) };
   const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
   const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
   await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars), { evidenceCheck: shows });
