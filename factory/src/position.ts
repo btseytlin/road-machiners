@@ -1,5 +1,5 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
-import { RELEASE_LABEL, type Card, type FactoryState, type Job, type JobStage } from './types';
+import { RELEASE_LABEL, type Card, type FactoryState, type Job, type JobStage, type ReleaseState } from './types';
 
 export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'done'] as const;
@@ -68,9 +68,15 @@ function runsStage(position: Position, expected: JobStage | null, stage: JobStag
 }
 
 export function releaseDrift(state: FactoryState, cards: Card[]): string[] {
-  const lines: string[] = [];
   const release = state.release;
-  if (release !== null && !cards.some((card) => card.issue === release.issue)) lines.push(`release tracking card #${release.issue} missing`);
+  const lines = release === null ? [] : openReleaseDrift(release, cards);
   if (state.pendingShip !== null && (release === null || release.postId === null)) lines.push('pending ship but no current candidate post');
+  return lines;
+}
+
+function openReleaseDrift(release: ReleaseState, cards: Card[]): string[] {
+  const lines: string[] = [];
+  if (!cards.some((card) => card.issue === release.issue)) lines.push(`release tracking card #${release.issue} missing`);
+  if (release.postId !== null && release.candidateSha !== release.playtest.passed) lines.push(`candidate post of ${release.candidateSha ?? 'no commit'} that the playtest did not pass`);
   return lines;
 }

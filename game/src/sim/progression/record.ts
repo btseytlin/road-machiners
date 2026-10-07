@@ -17,8 +17,11 @@ import { TEST_MAP } from '../../test/map';
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
 // The last entry of a run the player did not survive. turn is the world turn the player died on.
 export type RunEnd = { end: 'death'; turn: number };
-// death is set on the last step of a run the player did not survive.
-export type RecordStep = { world: World; lines: TraceLine[]; death: RunEnd | null };
+// One game event and the world turn it happened on.
+export type TurnEvent = { turn: number; event: GameEvent };
+// death is set on the last step of a run the player did not survive. events holds every event of the turn, the bot's
+// commands first.
+export type RecordStep = { world: World; lines: TraceLine[]; events: TurnEvent[]; death: RunEnd | null };
 export type Recording = { lines: TraceLine[]; death: RunEnd | null };
 
 // A truck that moves less than this many tiles in a whole in-game day, while not parked on purpose, has stalled.
@@ -44,24 +47,24 @@ export function recordTurns(seed: number, archetype: Archetype, turns: number): 
 }
 
 // The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
-function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
+export function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   let world = start;
   const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
   for (let i = 0; i < turns; i++) {
     const before = world;
-    const { next, lines } = inContext(label, before, () => playTurn(before, archetype));
+    const { next, lines, events } = inContext(label, before, () => playTurn(before, archetype));
     world = next;
     if (world.player.state === 'dead') {
-      yield { world, lines, death: { end: 'death', turn: world.turn } };
+      yield { world, lines, events, death: { end: 'death', turn: world.turn } };
       return;
     }
     watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
-    yield { world, lines, death: null };
+    yield { world, lines, events, death: null };
   }
 }
 
-function startWorld(seed: number): World {
+export function startWorld(seed: number): World {
   return update(newWorld(seed, startKit('standard'), TEST_MAP), (w) => {
     const p = w.player;
     for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
@@ -73,10 +76,11 @@ function startWorld(seed: number): World {
   });
 }
 
-function playTurn(world: World, archetype: Archetype): { next: World; lines: TraceLine[] } {
+function playTurn(world: World, archetype: Archetype): { next: World; lines: TraceLine[]; events: TurnEvent[] } {
   const orders = botOrders(world, archetype);
   const next = endTurn(orders.world, moveAllFar);
-  return { next, lines: [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)] };
+  const events = [...orders.events.map((event) => ({ turn: orders.world.turn, event })), ...next.events.map((event) => ({ turn: next.turn, event }))];
+  return { next, lines: [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)], events };
 }
 
 // Adds the seed, archetype, turn and truck position to any error of the turn.

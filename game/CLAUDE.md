@@ -27,6 +27,7 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits, so ask before running it.
 - `npm run sfx:reimport` rebuilds every sound file from the raw source path stored in its tags, after an import change.
 - `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
+- `npm run progression:playthrough -- --seed 7 --turns 2250 --out tmp/playthrough.jsonl` plays one mixed bot run and writes its full activity log: every game event, snapshots of the player and every NPC, how the run ended and a summary of counts. Every truck travels far, so physics and close driving never run. The factory's release playtest reads it.
 - `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the days to each skill level, the XP per day per archetype and misses against the targets in `src/data/skills.ts`.
 - `npm run itch` builds the game and uploads it to itch.io with butler. It builds the last commit in a clean worktree and names the upload after it. [Publishing](docs/publishing.md) has the one-time setup.
 

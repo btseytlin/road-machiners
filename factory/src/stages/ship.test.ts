@@ -8,7 +8,7 @@ import { ROOT, fake, reset, type Fake } from './test-fakes';
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { ship } = await import('./ship');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6] };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6], candidateSha: 'abc1234', playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
 const done = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Done', labels });
 
 beforeEach(() => {
@@ -151,6 +151,13 @@ describe('ship', () => {
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, postId: null } });
     await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('no current candidate post');
     expect(f.calls.some((call) => call.startsWith('merge'))).toBe(false);
+  });
+
+  it('refuses when the release moved after the candidate was posted, before it merges anything', async () => {
+    const f = shippable();
+    f.ctx.repo.headHash = async () => 'def5678';
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('moved to def5678 after the candidate of abc1234');
+    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('run butler'))).toBe(false);
   });
 
   it('refuses while a release task is outside Done (IV3)', async () => {
