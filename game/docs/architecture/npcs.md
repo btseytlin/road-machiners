@@ -5,6 +5,7 @@
 NPC behavior has three layers. Traits in `brain.traits` are permanent and replace classes. A goal stack in `brain.goals` keeps long-term goals under interruptions. Decision points pick reactions by weighted chance with world RNG. A weight of 0 is only for an option the driver physically cannot take or its traits forbid. Each trait's `robs` field forbids robbing always or while the driver follows a leader. Every available option gets at least `MIN_CHANCE`.
 
 - `src/sim/npc-decisions.ts` owns trait profiles, option availability, the weighted rolls and robbery checks. `tradeSpend()` is the one budget of a trade load: the wallet above the upkeep reserve, capped by the trait `tradeStake`. A spawned driver's wallet is its template's `money` in `src/data/npcs.ts`, and traits live in `src/data/npc-traits.ts`.
+- `holdsUp()` in `npc-decisions.ts` owns the hold-up rule: a robber that wants the prey's loot, is not weak or outgunned and faces prey with cargo answers a truce with its cargo demand. `answersPlea()` and `plead()` in `parley.ts` call it.
 - `holdsOffRobbery()` in `npc-decisions.ts` owns the stranded robbery rule: option availability, wanting loot, and the give-up step in `thinkNpc()` all call it.
 - `src/sim/npc-activities.ts` owns the goal stack and fires the decision points in `thinkNpc()`.
 - `onContactSpotted()` in `npc-activities.ts` ends an investigation whose driver sees its target and clears that target's `hostileSeen` notice, so the sighting rolls like any new hostile in sight.
