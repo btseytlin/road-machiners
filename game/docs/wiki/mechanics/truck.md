@@ -10,7 +10,7 @@ The grid is a top view of the truck with the nose up. Each chassis marks deck ce
 
 Stores raise how much fuel and supplies a truck carries. A jerrycan rack adds 60 L of fuel. A supply locker adds half the base supplies. Each mounts on one deck cell, so it competes with a gun. A store counts only while mounted, and a broken one still holds. Removing a store spills whatever no longer fits. Bowl and Nose sell both. The Pump Station sells jerrycan racks, and the Granary sells supply lockers.
 
-Cargo parts add full-width rows to the grid while mounted. A roof rack adds one row, a cargo box adds three.
+Cargo parts add full-width rows to the grid while mounted and working. A roof rack adds one row, a cargo box adds three. A broken cargo part's rows go dead, at the bottom of the cargo rows, and whatever lay on them falls onto a pile beside the truck. Dead rows still slow rounds like empty cells. Repairing the part brings the rows back empty.
 
 Goods take one cell per unit and can be moved or dumped anywhere. Dragging an item onto another swaps them if both fit. Spare parts ride in the grid or wait in garage storage.
 

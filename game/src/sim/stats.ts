@@ -3,7 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
-import { MIN_NPC_SPEED_SHARE } from '../data/npcs';
+import { MIN_NPC_SPEED, NPCS, PRIORITY_TOP, SPEED_SHARE, type LoadoutPriorities } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
@@ -228,10 +228,11 @@ function gunDragOf(draw: number, capacity: number): number {
   return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
 }
 
-// Kilograms an NPC truck can still take before load and gun drag cut its speed below MIN_NPC_SPEED_SHARE of the unloaded
-// speed. Zero when it is already below. Speed falls as mass rises, so a bisection finds the limit.
-export function npcMassRoom(v: Vehicle): number {
-  const needed = neededLoadFactor(v);
+// Kilograms an NPC truck can still take before load and gun drag cut its top speed below `share` of its unloaded
+// speed or below MIN_NPC_SPEED. Zero when it is already below. Speed falls as mass rises, so a bisection finds the
+// limit. A spawned driver keeps its template's share.
+export function npcMassRoom(v: Vehicle, share = templateSpeedShare(v)): number {
+  const needed = neededLoadFactor(v, share);
   if (loadFactor(v) < needed) return 0;
   let low = 0;
   let high = chassisDef(v.chassisId).ratedMass;
@@ -244,20 +245,43 @@ export function npcMassRoom(v: Vehicle): number {
   return low;
 }
 
-// Whether the truck keeps MIN_NPC_SPEED_SHARE of its unloaded speed.
-export function meetsSpeedFloor(v: Vehicle): boolean {
-  return loadFactor(v) >= neededLoadFactor(v);
+// Whether the truck keeps `share` of its unloaded speed and MIN_NPC_SPEED on its worn engine.
+export function meetsSpeedFloor(v: Vehicle, share: number): boolean {
+  return loadFactor(v) >= neededLoadFactor(v, share);
 }
 
-// The load factor that, with the gun drag, still gives MIN_NPC_SPEED_SHARE.
-function neededLoadFactor(v: Vehicle): number {
+// The load factor that, with the gun drag, keeps both. The unloaded speed is the chassis speed with the worn engine's
+// bonus. A truck with no engine only crawls, so only the share counts.
+function neededLoadFactor(v: Vehicle, share: number): number {
   const engine = mountedParts(v, 'engine')[0];
-  return MIN_NPC_SPEED_SHARE / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
+  if (!engine) return share;
+  const e = wornDef<EngineDef>(engine);
+  const unloaded = chassisDef(v.chassisId).maxSpeed + e.speedBonus;
+  const floor = unloaded > 0 ? MIN_NPC_SPEED / unloaded : Infinity;
+  return Math.max(share, floor) / gunDrag(v, e.capacity);
 }
 
-// Only the player's truck has engine overdrive.
+// The share of its unloaded speed a template's trucks keep, from its speed priority.
+export function speedShare(priorities: LoadoutPriorities): number {
+  return SPEED_SHARE.low + ((SPEED_SHARE.high - SPEED_SHARE.low) * priorities.speed) / PRIORITY_TOP;
+}
+
+function templateSpeedShare(v: Vehicle): number {
+  const template = v.brain && NPCS[v.brain.templateId];
+  if (!template) throw new Error(`${v.id} has no NPC template to read its speed share from`);
+  return speedShare(template.loadout.priorities);
+}
+
+// Only the player's truck has engine overdrive, and only while its engine allows it.
 export function inOverdrive(world: World, v: Vehicle): boolean {
-  return v.id === world.player.vehicleId && world.player.overdrive;
+  return v.id === world.player.vehicleId && world.player.overdrive && canOverdrive(v);
+}
+
+// Whether the active engine, the same one vehicleStats drives with, is above the overdrive cutoff share of its
+// max HP. No engine or a broken one blocks overdrive.
+export function canOverdrive(v: Vehicle): boolean {
+  const engine = mountedParts(v, 'engine')[0];
+  return engine !== undefined && engine.hp > RULES.overdriveMinEngineShare * maxHp(engine);
 }
 
 // The chassis tank plus every mounted fuel store.

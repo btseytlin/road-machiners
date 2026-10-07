@@ -5,7 +5,7 @@
 import type { GameEvent, GridItem, ShotRound } from "../sim/types";
 
 export type PartBreak = { vehicle: string; part: string };
-export type ShotLike = Extract<GameEvent, { t: "shot" | "guardShot" }>;
+export type ShotLike = Extract<GameEvent, { t: "shot" }>;
 export type BreakRound = { brk: PartBreak; owner: ShotLike | null; round: number | null };
 
 const damageTo = (r: ShotRound, brk: PartBreak): number => {
@@ -13,14 +13,14 @@ const damageTo = (r: ShotRound, brk: PartBreak): number => {
   return hits.filter((h) => h.part === brk.part).reduce((sum, h) => sum + h.damage, 0);
 };
 
-// Pairs each partDisabled with the first shot, guardShot or collision after it, since the sim pushes the owning event
+// Pairs each partDisabled with the first shot or collision after it, since the sim pushes the owning event
 // once its damage is dealt. For a shot the round is the last that dealt positive damage to the part.
 export function breakRounds(events: GameEvent[]): BreakRound[] {
   const out: BreakRound[] = [];
   events.forEach((e, i) => {
     if (e.t !== "partDisabled") return;
     const brk = { vehicle: e.vehicle, part: e.part };
-    const owner = events.slice(i + 1).find((x) => x.t === "shot" || x.t === "guardShot" || x.t === "collision");
+    const owner = events.slice(i + 1).find((x) => x.t === "shot" || x.t === "collision");
     if (!owner || owner.t === "collision") return void out.push({ brk, owner: null, round: null });
     const round = owner.rounds.map((r) => damageTo(r, brk) > 0).lastIndexOf(true);
     if (round < 0) throw new Error(`Part ${brk.part} of ${brk.vehicle} was disabled but no round of the following ${owner.t} damaged it`);

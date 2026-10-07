@@ -9,7 +9,7 @@ import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, itemSize } from "../sim/grid";
-import { fuelCap, gunDraw, hasWorkingEngine, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
+import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
 import { fuelLimit } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -33,6 +33,19 @@ import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { npcName } from '../sim/spawn';
+
+// The overdrive switch: on only while the engine really overdrives, and blocked with the reason while it is too worn.
+export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean; title: string } {
+  const me = playerVehicle(w);
+  const blocked = !canOverdrive(me);
+  return {
+    checked: inOverdrive(w, me),
+    blocked,
+    title: blocked
+      ? `Engine too worn for overdrive: repair it above ${Math.round(RULES.overdriveMinEngineShare * 100)}% [O]`
+      : "Engine overdrive: faster, but the engine heats fast [O]",
+  };
+}
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
