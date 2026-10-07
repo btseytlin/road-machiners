@@ -67,6 +67,13 @@ export type FactoryConfig = {
   cpuTest: number; // share of the server's CPUs for testing
   vitestWorkersImplement: number; // workers the game's test runner starts in an implement pool container
   vitestWorkersTest: number; // workers the game's test runner starts in a test pool container
+  errorDailyIssues: number; // new error-report issues per UTC day
+  errorDiskMb: number; // total size of stored error reports
+  errorMapDays: number; // days dev and candidate source maps stay
+  errorBodyKb: number; // largest gzipped report
+  errorUnzippedMb: number; // largest report after gunzip
+  errorIpPerHour: number; // reports one address may send per hour
+  errorOrigins: string; // page origins, besides the public URL's, that may post reports, separated by spaces
 };
 
 // Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.

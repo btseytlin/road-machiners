@@ -57,7 +57,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const notes = readOutput(home, 'release.md');
   if (notes === null) throw new Error('release agent wrote no .factory/release.md');
   const changes = changeLines(notes, features).join('\n') || 'No changes in this candidate.';
-  const url = await buildAndDeploy(ctx, dir, CANDIDATE_SCOPE, log);
+  const url = await buildAndDeploy(ctx, dir, CANDIDATE_SCOPE, log, 'candidate');
   recordBuild(ctx.statePath, issue, CANDIDATE_SCOPE);
   const pr = (await ctx.github.pullRequestFor(release.branch)) ?? await ctx.github.openPullRequest(release.branch, 'main', `Release ${release.day}`, `The release candidate of ${release.day}. The factory merges it when the committee presses Ship.`);
   if (await staleBuild(ctx, release, sha)) return;

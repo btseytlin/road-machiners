@@ -1,9 +1,10 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readPublished } from '../sourcemaps';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { Card, ReleaseState } from '../types';
-import { ROOT, fake, reset, type Fake } from './test-fakes';
+import { CLONE_SHA, ROOT, fake, reset, type Fake } from './test-fakes';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { ship } = await import('./ship');
@@ -32,7 +33,7 @@ describe('ship', () => {
   it('merges, builds main in a fresh clone, pushes with butler alone, and posts publicly only afterwards', async () => {
     const f = shippable();
     const runs: { cmd: string; args: string[]; env?: Record<string, string> }[] = [];
-    f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd}`); return { code: 0, stdout: '', stderr: '' }; };
+    f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd}`); return { code: 0, stdout: cmd === 'git' ? CLONE_SHA : '', stderr: '' }; };
     const shells: { script: string; env?: Record<string, string> }[] = [];
     f.ctx.container.shell = async (clone, script, _log, env) => { shells.push({ script, env }); f.calls.push(`shell ${clone}`); };
     await ship(f.ctx, 11, 'Ann');
@@ -42,8 +43,15 @@ describe('ship', () => {
     expect(at('prepare main')).toBeLessThan(at('run butler'));
     expect(at('run butler')).toBeLessThan(at('photo public'));
     expect(at('photo public')).toBeLessThan(at('message public'));
-    expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '' } }]);
-    expect(runs).toEqual([{ cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } }]);
+    expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
+    expect(runs).toEqual([
+      { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
+      { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
+    ]);
+    // The maps stay on the host under the commit, so itch never gets them.
+    expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
+    expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
+    expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);
     const publicNote = f.calls.find((call) => call.startsWith('message public')) ?? '';
     expect(publicNote).toContain('- [#3] Trucks are faster.');
     expect(publicNote).not.toContain('#6');
@@ -199,7 +207,7 @@ describe('ship', () => {
 
   it('posts nothing publicly when butler fails', async () => {
     const f = shippable();
-    f.ctx.run = async () => ({ code: 1, stdout: '', stderr: 'bad key' });
+    f.ctx.run = async (cmd) => (cmd === 'butler' ? { code: 1, stdout: '', stderr: 'bad key' } : { code: 0, stdout: CLONE_SHA, stderr: '' });
     await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('butler push failed');
     expect(f.calls.some((call) => call.startsWith('photo') || call.startsWith('message'))).toBe(false);
     expect(readState(f.ctx.statePath).release).not.toBeNull();
