@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
 import { addVehicle, emptyWorld } from '../sim/testkit';
-import { canStowPart, moveItem, storePart, stowPart, takeFromStorage } from '../sim/inventory';
+import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
 import { makePart } from '../sim/factory';
+import type { GridItem } from '../sim/types';
 import { siteOf } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
@@ -101,9 +102,17 @@ describe('local game save', () => {
     const loaded = loadWorld(storage, 'auto', TEST_MAP);
     if (!loaded) throw new Error('Expected save');
     expect(loaded.player.storage.find((p) => p.id === part.id)).toEqual({ ...part });
-    const filler = loaded.vehicles[0].items.at(-1)!;
-    const freed = storePart(loaded, filler.id);
-    const back = takeFromStorage(freed, part.id, { x: filler.x, y: filler.y, rot: filler.rot });
+    const stored = loaded.player.storage.find((p) => p.id === part.id)!;
+    const probe: GridItem = { id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part: stored };
+    let freed = loaded;
+    let spot = stowSpot(freed.vehicles[0], probe);
+    while (!spot) {
+      const filler = freed.vehicles[0].items.filter((it) => it.kind === 'part').at(-1);
+      if (!filler) throw new Error('Expected room for the stored part');
+      freed = storePart(freed, filler.id);
+      spot = stowSpot(freed.vehicles[0], probe);
+    }
+    const back = takeFromStorage(freed, part.id, spot);
     expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
