@@ -45,10 +45,13 @@ def test_a_new_job_sends_failures_nowhere_and_incidents_to_the_committee(tmp_pat
 def test_an_existing_job_is_edited_in_place_and_never_recreated_or_paused(tmp_path):
     out, calls = run(tmp_path, LISTED)
     assert out.returncode == 0
-    assert calls == [
-        ["cron", "list", "--all"],
-        ["cron", "edit", "factory-incidents", "--deliver", "telegram:-10042", "--failure-deliver", "local"],
-    ]
+    assert calls[0] == ["cron", "list", "--all"]
+    edit = calls[1]
+    assert edit[:3] == ["cron", "edit", "factory-incidents"]
+    assert "Never ask for permission" in edit[edit.index("--prompt") + 1]
+    assert edit[edit.index("--deliver") + 1] == "telegram:-10042"
+    assert edit[edit.index("--failure-deliver") + 1] == "local"
+    assert len(calls) == 2
 
 
 def test_a_failed_edit_is_logged_and_lets_hermes_start(tmp_path):
