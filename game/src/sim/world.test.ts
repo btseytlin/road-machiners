@@ -107,8 +107,9 @@ describe('the overdrive cutoff', () => {
   });
 });
 
+// The start truck's engine at full HP. The cutoff is a share of this worn max HP, not of the def HP.
 function stockHp(): number {
-  return partDef('stockEngine').hp;
+  return maxHp(mountedParts(playerVehicle(emptyWorld()), 'engine')[0]);
 }
 
 describe('the start kit', () => {

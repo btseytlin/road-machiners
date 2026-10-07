@@ -197,6 +197,8 @@ describe('engine overdrive', () => {
     const w = emptyWorld();
     w.turn = NIGHT;
     w.player.overdrive = true;
+    // The 16-turn figure in ENGINE_HEAT is for a cold stock engine. A worn engine heats faster.
+    engine(w).wear = 0;
     const me = w.vehicles[0];
     me.speed = vehicleStats(w, me).maxSpeed;
     let turns = 0;

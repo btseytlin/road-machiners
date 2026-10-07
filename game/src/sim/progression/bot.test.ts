@@ -36,11 +36,20 @@ function town(id: string) {
 // The goods a truck carries beside the repair parts every bot keeps.
 const loadOf = (v: Vehicle): string[] => Object.keys(goodsCount(v)).filter((good) => good !== 'parts');
 
+// The player's truck with every part new, so a test of bot choices does not depend on the start kit's wear.
+function withNewParts(w: World): World {
+  for (const p of mountedParts(playerVehicle(w))) {
+    p.wear = 0;
+    p.hp = maxHp(p);
+  }
+  return w;
+}
+
 // An empty world with the player parked on a pad of a town, its cargo gone but the standard kit's repair parts, and
 // both towns known.
 function parkedAt(id: string) {
   const site = town(id);
-  const w = emptyWorld(nearestPad(site, site.pos));
+  const w = withNewParts(emptyWorld(nearestPad(site, site.pos)));
   const me = playerVehicle(w);
   removeAllGoods(me);
   addGoods(w, me, 'parts', START_KITS.standard.cargo.parts ?? 0);
@@ -677,7 +686,7 @@ describe('the hunter', () => {
   // A new misjudgment each turn flipped the bot between running from a near-even gunwagon and driving on, so it stood
   // still for ten turns.
   it('has a bot judge the same foe the same way whatever the turn rolls', () => {
-    const w = emptyWorld({ x: 30, y: 30 });
+    const w = withNewParts(emptyWorld({ x: 30, y: 30 }));
     const me = playerVehicle(w);
     me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
