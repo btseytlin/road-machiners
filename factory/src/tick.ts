@@ -322,23 +322,6 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
 }
 
-// Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.
-async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise<void> {
-  const state = readState(ctx.statePath);
-  const now = ctx.now();
-  if (!atCap(state, now, ctx.cfg)) {
-    if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
-    return;
-  }
-  // Work waits when more jobs would start without the cap.
-  const waiting = chooseJobs(state, cards, now, { ...ctx.cfg, maxJobsPerDay: Infinity }, devHead).length > chooseJobs(state, cards, now, ctx.cfg, devHead).length;
-  if (state.capNoticed || !waiting) return;
-  const starts = recentStarts(state, now);
-  const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Daily job cap reached: ${starts.length} of ${ctx.cfg.maxJobsPerDay} agent jobs ran in the last 24 hours. Public work waits. The next slot frees at ${free}.`);
-  updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
-}
-
 // A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
 async function expireReplies(ctx: Ctx): Promise<void> {
   const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
@@ -376,7 +359,6 @@ async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<voi
   }
   await ctx.repo.fetch();
   const devHead = await ctx.repo.headHash('dev');
-  await noteCap(ctx, cards, devHead);
   const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
   reportScheduler(ctx.cfg.home, 'ready', ctx.now(), report, cards);
   if (report.picks.length === 0) return ctx.log('tick', null, 'nothing to start');

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readLedger } from './ledger';
+import { readObservation, type SchedulerData } from './observability';
 import { resumedStage } from './sessions';
 import { chooseJobs, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
@@ -378,29 +379,25 @@ describe('tick', () => {
     expect(readState(c.ctx.statePath).jobStarts).toEqual(starts(2));
   });
 
-  it('posts the cap notice once, then again after the cap frees', async () => {
+  it('holds capped work at the cap without a chat message, across cap windows', async () => {
     const h = harness(null, false, [card(8, 'Design')]);
+    const scheduler = () => readObservation(h.ctx.cfg.home, 'scheduler')?.data as SchedulerData;
     writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
     await tick(h.ctx, '/code', h.deps);
     await tick(h.ctx, '/code', h.deps);
     expect(h.spawned).toEqual([]);
-    expect(h.sent).toHaveLength(1);
-    expect(h.sent[0]).toContain('3 of 3');
-    expect(h.sent[0]).toContain('2026-01-10T13:00:00.000Z');
-    expect(readState(h.ctx.statePath).capNoticed).toBe(true);
-    writeState(h.ctx.statePath, state({ jobStarts: starts(1, 5), capNoticed: true }));
+    expect(scheduler().report?.decisions.find((item) => item.issue === 8)?.reasons).toContain('daily-cap');
+    expect(scheduler().report?.nextCapAt).toBe('2026-01-10T13:00:00.000Z');
+    expect(readState(h.ctx.statePath).jobStarts).toEqual(starts(23, 5, 1));
+    writeState(h.ctx.statePath, state({ jobStarts: starts(1, 5) }));
     await tick(h.ctx, '/code', h.deps);
-    expect(readState(h.ctx.statePath).capNoticed).toBe(false);
-    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
-    await tick(h.ctx, '/code', h.deps);
-    expect(h.sent).toHaveLength(2);
-  });
-
-  it('posts no cap notice when nothing waits', async () => {
-    const h = harness(null, false, []);
-    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
-    await tick(h.ctx, '/code', h.deps);
-    expect(h.sent).toEqual([]);
+    expect(args(h)).toEqual([['design', '8']]);
+    expect(scheduler().report?.nextCapAt).toBeNull();
+    const again = harness(null, false, [card(8, 'Design')]);
+    writeState(again.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
+    await tick(again.ctx, '/code', again.deps);
+    expect(again.spawned).toEqual([]);
+    expect([...h.sent, ...again.sent]).toEqual([]);
   });
 
   it('starts jobs before intake, so a failed intake still fails the tick but holds back no job', async () => {
