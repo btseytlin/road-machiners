@@ -57,9 +57,9 @@ import { vehicleHasPerk } from "../sim/progress";
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
-type StockFilter = "all" | Exclude<PartKind, "core">;
+export type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
+export const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -406,7 +406,7 @@ function bountyPays(w: World): string {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
-const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+export const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   all: "All",
   weapon: "Weapons",
   engine: "Engines",
@@ -414,15 +414,17 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   cargo: "Cargo",
   scanner: "Scanners",
   store: "Stores",
+  utility: "Utilities",
 };
 
-const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
+export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
   store: "supplies",
+  utility: "utility",
 };
 
 const TAB_LABEL: Record<Tab, string> = {

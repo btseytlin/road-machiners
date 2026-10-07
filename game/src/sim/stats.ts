@@ -13,6 +13,7 @@ import { corePart, coreParts, mountedItems, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
 import { isTowing } from './tow';
+import { isShutDown } from './utility';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherOn } from './weather';
@@ -163,7 +164,6 @@ function conditionSpeed(world: World, v: Vehicle, from: number, steps: SpeedStep
 
 export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const ch = chassisDef(v.chassisId);
-  const engines = mountedParts(v, 'engine');
   const mass = vehicleMass(v);
   // Top speed and turning follow loadFactor(), which drops hard past the rated mass. The engine and brakes give fixed forces,
   // so acceleration and braking fall with mass.
@@ -177,17 +177,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
   const limpAccel = limpSpeed * ch.accel;
 
-  const maxSpeed = walkSpeed(world, v, limpSpeed, load, brokenWheels, null);
-  let accel = limpAccel;
-  let fuelMult = 0;
-  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
-  if (hasWorkingEngine(v) && !isStalled(world, v)) {
-    const e = wornDef<EngineDef>(engines[0]);
-    const drag = gunDragOf(gunDraw(v), e.capacity);
-    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
-    fuelMult = e.fuelMult;
-    if (inOverdrive(world, v)) accel *= RULES.overdriveBoost;
-  }
+  const { maxSpeed, accel, fuelMult } = driveOf(world, v, { limpSpeed, limpAccel, load, brokenWheels, force });
 
   return {
     maxSpeed,
@@ -204,6 +194,22 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+type Drive = { maxSpeed: number; accel: number; fuelMult: number };
+type DriveShares = { limpSpeed: number; limpAccel: number; load: number; brokenWheels: number; force: number };
+
+// What the engine gives. A truck an emitter pulse shut down has no drive at all: it coasts, steers and brakes in
+// physics. Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
+function driveOf(world: World, v: Vehicle, s: DriveShares): Drive {
+  if (isShutDown(world, v)) return { maxSpeed: 0, accel: 0, fuelMult: 0 };
+  const maxSpeed = walkSpeed(world, v, s.limpSpeed, s.load, s.brokenWheels, null);
+  if (!hasWorkingEngine(v) || isStalled(world, v)) return { maxSpeed, accel: s.limpAccel, fuelMult: 0 };
+  const ch = chassisDef(v.chassisId);
+  const e = wornDef<EngineDef>(mountedParts(v, 'engine')[0]);
+  const boost = inOverdrive(world, v) ? RULES.overdriveBoost : 1;
+  const accel = (ch.accel + e.accelBonus) * s.force * RULES.accelScale * gunDragOf(gunDraw(v), e.capacity) * boost;
+  return { maxSpeed, accel, fuelMult: e.fuelMult };
 }
 
 // Total draw of the working guns. Broken guns draw nothing.

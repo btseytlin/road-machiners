@@ -43,7 +43,8 @@ export type ContextTarget =
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
-  | { kind: 'stock'; id: string }
+  | { kind: 'stock'; id: string } // search the stock
+  | { kind: 'loot'; id: string } // take the stock's revealed loot
   | { kind: 'empty' };
 export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
 

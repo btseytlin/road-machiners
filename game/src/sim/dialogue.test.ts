@@ -13,7 +13,7 @@ import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
 import { addGoods } from './inventory';
-import { hasCargo } from './salvage';
+import { hasCargo, emptyHidden } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, aidData, endState, stateOf } from './states';
@@ -480,7 +480,7 @@ describe('warn off', () => {
   // A scavenger parked at a road wreck at `at` with a scavenge goal in the act phase. With `search` it searches it.
   function looterAt(at: { x: number; y: number }, search: boolean): { w: World; npc: Vehicle; wreckId: string } {
     const w = emptyWorld({ x: 30, y: 30 });
-    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: at.x + 1, y: at.y });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
@@ -759,7 +759,7 @@ describe('rumor mill', () => {
   }
 
   function wreck(id: string, pos: { x: number; y: number }): SalvageStock {
-    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [] };
+    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() };
   }
 
   it('names the nearest wreck to the driver and marks it rumored', () => {

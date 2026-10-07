@@ -150,6 +150,14 @@ const NAMES = [
   'store_jerrycans',
   'store_locker',
 
+  'util_sprout',
+  'util_caltrops',
+  'util_oil',
+  'util_crane',
+  'util_mortar',
+  'util_flare',
+  'util_scraper',
+  'util_emitter',
   'cab_seat',
   'cab_pickup',
   'cab_hardtop',
@@ -173,6 +181,7 @@ const NAMES = [
   'arm_plate',
   'arm_scrap_sheet',
   'arm_ceramic_tile',
+  'arm_claymore_ram',
 
   'cargo_rack',
   'cargo_trailer_box',
@@ -207,6 +216,7 @@ const NAMES = [
   'wrec_tank',
   'wrec_rocket_pod',
   'wrec_sniper',
+  'wrec_harpoon',
 
   'wbar_mg_short',
   'wbar_mg_long',
@@ -217,6 +227,7 @@ const NAMES = [
   'wbar_tank',
   'wbar_sniper',
   'wbar_rocket_tubes',
+  'wbar_harpoon',
 
   'wext_scope',
   'wext_shield',

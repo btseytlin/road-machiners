@@ -25,6 +25,7 @@ import { cloneWorld, endTurn, hostileToPlayer } from '../world';
 import { basicsRepairCost, driveRepairCost, getTradePrice, partTradePrice, repairCost } from '../economy';
 import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
+import { emptyHidden } from '../salvage';
 import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
@@ -180,12 +181,24 @@ describe('botOrders', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.speed = 0;
-    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }), me);
 
     const turn = botOrders(w, 'scavenger');
 
     expect(playerVehicle(turn.world).job).toBeNull();
+  });
+
+  it('has a scavenger search a searched wreck again while units stay hidden there', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: {}, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 4 } } });
+    w.player.scavenged.push('wreck-beside');
+
+    const turn = botOrders(w, 'scavenger');
+
+    expect(playerVehicle(turn.world).job).toMatchObject({ kind: 'search', stockId: 'wreck-beside' });
   });
 
   it('has a stranded truck crawl to the nearest town', () => {
