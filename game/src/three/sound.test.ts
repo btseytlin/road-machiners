@@ -31,11 +31,12 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, inCombat: false, place: null, paused: false } as const;
+  const calm = { stormShare: 0, inCombat: false, place: null, paused: false } as const;
   const gains = (l: ReturnType<typeof loopLevels>) => [l.calmGain, l.townGain, l.outpostGain, l.abandonedGain, l.combatGain];
-  it("raises wind near storms", () => {
+  it("raises the wind with the player's storm share", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
-    expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
+    expect(loopLevels({ ...calm, stormShare: 0.5 }, MIX).windGain).toBeCloseTo((MIX.wind.baseGain + MIX.wind.stormGain) / 2);
+    expect(loopLevels({ ...calm, stormShare: 1 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
   it("switches music to combat while in combat", () => {
     expect(gains(loopLevels({ ...calm, inCombat: true }, MIX))).toEqual([0, 0, 0, 0, 1]);
@@ -63,14 +64,14 @@ describe("loopLevels", () => {
   it("keeps the music choice when paused or near storms", () => {
     for (const inCombat of [true, false]) {
       const base = loopLevels({ ...calm, inCombat }, MIX);
-      const other = loopLevels({ ...calm, inCombat, paused: true, stormTiles: 0 }, MIX);
+      const other = loopLevels({ ...calm, inCombat, paused: true, stormShare: 1 }, MIX);
       expect([other.calmGain, other.combatGain]).toEqual([base.calmGain, base.combatGain]);
     }
   });
 });
 
 describe("accentOf", () => {
-  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [] });
+  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [], burst: null });
   const shot = (shooter: string, target: string, rounds: ShotRound[]): GameEvent => ({
     t: "shot", shooter, weapon: "w", target, aim: "body", chance: 0.5, damageChance: 0.5, side: "front", rounds,
   });
@@ -86,7 +87,7 @@ describe("accentOf", () => {
     expect(accentOf({ t: "guardShot", site: "s", from: { x: 0, y: 0 }, target: "p", rounds: [round(true)] }, "p")).toBe("accent-struck");
   });
   it("counts a round that strikes parts without a clean hit as struck", () => {
-    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [] };
+    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [], burst: null };
     expect(accentOf(shot("p", "n", [grazing]), "p")).toBe("accent-hit");
   });
   it("ignores fights between other trucks and answers the player's crashes", () => {
@@ -142,7 +143,7 @@ describe("next track", () => {
 
   it("crossfades the calm music to a new track at its current level", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, inCombat: false, place: null, paused: false });
+    loops.update({ stormShare: 1, inCombat: false, place: null, paused: false });
     loops.nextTrack();
     expect(calm).toHaveLength(2);
     expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
@@ -160,7 +161,7 @@ describe("next track", () => {
 
   it("keeps the new track silent in combat", () => {
     const { calm, loops } = fake();
-    loops.update({ stormTiles: 0, inCombat: true, place: null, paused: false });
+    loops.update({ stormShare: 1, inCombat: true, place: null, paused: false });
     loops.nextTrack();
     expect(calm[1].gains).toEqual([0]);
   });
