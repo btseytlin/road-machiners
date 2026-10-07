@@ -19,12 +19,12 @@ import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'maxJobsPerCard' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
-// Committee-driven jobs and the factory's own review never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste'];
+// Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
 const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -132,6 +132,10 @@ export function recentStarts(state: FactoryState, now: Date): string[] {
   return state.jobStarts.filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
 }
 
+export function recentCardStarts(state: FactoryState, now: Date, issue: number): string[] {
+  return (state.cardStarts[issue] ?? []).filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
+}
+
 export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, 'maxJobsPerDay'>): boolean {
   return recentStarts(state, now).length >= cfg.maxJobsPerDay;
 }
@@ -141,7 +145,7 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -166,20 +170,37 @@ function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null 
   return new Date(Date.parse(recentStarts(state, now).sort()[0]) + DAY_MS).toISOString();
 }
 
+// Starts a card may still make in the 24 hours, counting the jobs this evaluation already picked for it. A job with no card has no budget.
+function readCardLeft(state: FactoryState, now: Date, cfg: Due, picked: Map<number, number>, issue: number | null): number {
+  if (issue === null) return Infinity;
+  return cfg.maxJobsPerCard - recentCardStarts(state, now, issue).length - (picked.get(issue) ?? 0);
+}
+function readCapReasons(capped: number, capLeft: number, cardLeft: number): WaitReason[] {
+  const reasons: WaitReason[] = [];
+  if (capped > capLeft) reasons.push('daily-cap');
+  if (capped > 0 && cardLeft < 1) reasons.push('card-budget');
+  return reasons;
+}
+function countCardPick(picked: Map<number, number>, capped: number, issue: number | null): void {
+  if (capped > 0 && issue !== null) picked.set(issue, (picked.get(issue) ?? 0) + 1);
+}
+
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
 // At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
 export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const picks: JobPick[] = [];
+  const pickedForCard = new Map<number, number>();
   const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
   for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
-    const reasons = findCapacityReasons(pick, [...state.jobs, ...picks], cfg);
-    if (capped > capLeft) reasons.push('daily-cap');
+    const cardLeft = readCardLeft(state, now, cfg, pickedForCard, pick.issue);
+    const reasons = [...findCapacityReasons(pick, [...state.jobs, ...picks], cfg), ...readCapReasons(capped, capLeft, cardLeft)];
     decisions.push({ ...pick, reasons });
     if (reasons.length) continue;
     capLeft -= capped;
+    countCardPick(pickedForCard, capped, pick.issue);
     picks.push(pick);
   }
   return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards) };
@@ -262,8 +283,16 @@ async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps)
     // Jobs started by one tick share a start time, so only one of them goes.
     const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
     const jobStarts = state.jobStarts.filter((_, index) => index !== start);
+    const cardStart = (state.cardStarts[job.issue] ?? []).indexOf(job.startedAt);
+    const cardStarts = { ...state.cardStarts, [job.issue]: (state.cardStarts[job.issue] ?? []).filter((_, index) => index !== cardStart || start === -1) };
     const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
-    return { ...state, jobs: state.jobs.filter((other) => other.id !== job.id), jobStarts, interrupted };
+    return {
+      ...state,
+      jobs: state.jobs.filter((other) => other.id !== job.id),
+      jobStarts,
+      cardStarts,
+      interrupted,
+    };
   });
   ctx.log('tick', job.issue, `${job.stage} process died, it resumes once on the next start`);
 }
@@ -276,7 +305,11 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const cpus = cpuSets(ctx.cfg, deps.cores())[pool];
   const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus, vitestWorkersOf(ctx.cfg, pool));
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
-  updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  updateState(ctx.statePath, (state) => {
+    if (!countsAgainstCap(pick.stage)) return { ...state, jobs: [...state.jobs, job] };
+    const cardStarts = pick.issue === null ? state.cardStarts : { ...state.cardStarts, [pick.issue]: [...recentCardStarts(state, ctx.now(), pick.issue), job.startedAt] };
+    return { ...state, jobs: [...state.jobs, job], jobStarts: [...recentStarts(state, ctx.now()), job.startedAt], cardStarts };
+  });
   reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }

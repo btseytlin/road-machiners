@@ -30,7 +30,9 @@ Memory, not CPU, limits how many jobs fit on the host. Each container prints its
 
 ## Daily cap
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, checks, the release cut and the candidate. Approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, the release cut and the candidate. Checks, approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
+
+One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 hours. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window, and other cards keep the daily cap. Hotfix jobs count but run at the limit.
 
 ## Resume
 
