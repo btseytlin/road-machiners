@@ -138,7 +138,6 @@ export type NpcTemplate = {
   extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
   loadout: NpcLoadoutTable;
   aggroRange: number; // raiders pick targets inside this range
-  preferredRange: number; // distance a raider tries to hold while fighting
   // hold: drives to the best spot and parks there while the target stays parked. circle: keeps driving around the
   // target. See the fight driving in src/sim/ai.ts.
   fightStyle: 'hold' | 'circle';
@@ -698,7 +697,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'buggy', name: 'Raider outrider', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
-    preferredRange: 3,
     fightStyle: 'circle',
     money: NPC_RESOURCES.money,
     cap: 6,
@@ -711,7 +709,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'gunwagon', name: 'Gunwagon', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
-    preferredRange: 6,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     cap: 2,
@@ -725,7 +722,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     // Traders start with working capital, so a load is worth robbing. Their trade stake keeps a reserve, so one
     // robbery does not ruin them. Eight traders keep the roads busy enough that a robber meets a target every few
@@ -740,7 +736,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     cap: 4,
@@ -751,7 +746,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'bowlFarmer', name: 'Bowl Farmers patrol', profession: 'Bowl Farmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // Three cars keep the Bowl approaches watched. A lost car comes back in 70 turns, so a full patrol is back in
@@ -764,7 +758,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'noseArmy', name: 'Nose Army patrol', profession: 'Nose soldier', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // Same size and refill as the Bowl patrol.
@@ -777,7 +770,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // Couriers are cheap, fast traffic. A lost one is replaced in 30 turns, a few hours of the day.
@@ -790,7 +782,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // Same count and refill as couriers.
@@ -803,7 +794,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     extraTraits: VULTURE_EXTRAS,
     loadout: LOADOUTS.vulture,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // Same count and refill as couriers and roamers.
@@ -815,7 +805,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'convoy', name: 'Supply convoy', profession: 'Convoy driver', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     // Convoys carry the supply runs' takings. A side trade spends their trade stake.
     money: 4000,
@@ -828,7 +817,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'convoyGuard', name: 'Convoy guard', profession: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // One guard per convoy. It spawns only beside a new convoy, so its interval never runs.
@@ -840,7 +828,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     id: 'merc', name: 'Merc', profession: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
     aggroRange: 0,
-    preferredRange: 0,
     fightStyle: 'hold',
     money: NPC_RESOURCES.money,
     // A few mercs wait for hire at the towns. A lost one comes back in 70 turns, like a patrol car.

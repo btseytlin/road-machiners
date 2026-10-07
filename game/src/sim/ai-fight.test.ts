@@ -7,7 +7,7 @@ import { thinkNpc } from './npc-activities';
 import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { dist } from './vec';
-import { inArc } from './combat';
+import { bodyHitChance, inArc } from './combat';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { makePart } from './factory';
@@ -34,13 +34,27 @@ function inReachAfter(w: World, v: Vehicle, target: Vehicle, p: Vec): boolean {
   return vehicleStats(w, v).weapons.some((mw) => dist(me.pos, target.pos) <= mw.def.range && inArc(me, mw, target));
 }
 
+// Tiles a fighter keeps from its target, about two truck radii and the yield distance.
+const CLEAR = 3;
+
 describe('fight driving', () => {
+  // NPCs held one ring at their shortest gun's range, where most shots had under a fifth to land.
+  it('closes in on a target that cannot shoot back, where its rounds land more often', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 30, y: 30 });
+    v.speed = 6;
+    const range = vehicleStats(w, v).weapons[0].def.range;
+    expect(dist(fightPoint(w, v, me, CLEAR), me.pos)).toBeLessThan(range / 2);
+  });
+
   it('a forward-gun fighter inside its range picks a point it can shoot from, not the one straight back', () => {
     const w = emptyWorld({ x: 40, y: 30 });
     const me = w.vehicles[0];
     const v = fighter(w, 'gunwagon', ['stockEngine', 'cannon'], { x: 40, y: 27 });
     expect(bearsFrom(w, v, me, { x: 40, y: 24 })).toBe(false);
-    const p = fightPoint(w, v, me, 6);
+    const p = fightPoint(w, v, me, CLEAR);
     expect(bearsFrom(w, v, me, p)).toBe(true);
   });
 
@@ -55,7 +69,7 @@ describe('fight driving', () => {
     v.speed = 6; // fast enough that a turn's drive reaches either spot
     const ahead = { x: 46, y: 30 };
     const behind = { x: 34, y: 30 };
-    expect(scorePoint(w, v, target, target.pos, 6, behind, 0)).toBeGreaterThan(scorePoint(w, v, target, target.pos, 6, ahead, 0));
+    expect(scorePoint(w, v, target, target.pos, behind, 0)).toBeGreaterThan(scorePoint(w, v, target, target.pos, ahead, 0));
   });
 
   it('keeps out of the target\'s forward cannon arc', () => {
@@ -66,7 +80,7 @@ describe('fight driving', () => {
     w.vehicles = [gun, ...w.vehicles.slice(1, -1)];
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 45, y: 30 });
     v.speed = 4;
-    const next = afterTurn(w, v, fightPoint(w, v, gun, 6));
+    const next = afterTurn(w, v, fightPoint(w, v, gun, CLEAR));
     expect(Math.abs(angleDiff(gun.heading, bearing(gun.pos, next.pos)))).toBeGreaterThan(Math.PI / 6);
   });
 
@@ -78,7 +92,7 @@ describe('fight driving', () => {
     w.vehicles = [heavy, ...w.vehicles.slice(1, -1)];
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 46, y: 30 }, 'buggy');
     v.speed = 1;
-    const next = afterTurn(w, v, fightPoint(w, v, heavy, 4));
+    const next = afterTurn(w, v, fightPoint(w, v, heavy, CLEAR));
     expect(ramValue(w, { ...heavy, pos: leadOf(heavy) }, next)).toBe(0);
   });
 
@@ -94,7 +108,7 @@ describe('fight driving', () => {
     trader.speed = 4;
     trader.brain!.traits = ['trader'];
     const lined = { x: 45, y: 30 }; // on the raider's nose line
-    expect(scorePoint(w, raider, me, me.pos, 6, lined, 0)).toBeGreaterThan(scorePoint(w, trader, me, me.pos, 6, lined, 0));
+    expect(scorePoint(w, raider, me, me.pos, lined, 0)).toBeGreaterThan(scorePoint(w, trader, me, me.pos, lined, 0));
   });
 
   it('a circling fighter picks a point ahead around the target in its direction', () => {
@@ -103,7 +117,7 @@ describe('fight driving', () => {
       const me = w.vehicles[0];
       const v = fighter(w, 'buggy', ['stockEngine', 'mg'], { x: 34, y: 30 }, 'buggy');
       v.brain!.fightTurn = turn;
-      const p = fightPoint(w, v, me, 3);
+      const p = fightPoint(w, v, me, CLEAR);
       expect(turn * angleDiff(bearing(me.pos, v.pos), bearing(me.pos, p))).toBeGreaterThan(0);
     }
   });
@@ -126,9 +140,8 @@ describe('fight driving', () => {
     const v = fighter(w, 'convoyGuard', ['stockEngine', 'shotgun'], { x: 48.3, y: 30 });
     v.heading = 0; // the shotgun points away from the target
     for (const part of mountedParts(v)) if (PARTS[part.defId].kind === 'core') part.hp = 0; // a limping truck
-    const start = vehicleStats(w, v);
     expect(inReachAfter(w, v, me, v.pos)).toBe(false);
-    const p = fightPoint(w, v, me, start.weapons[0].def.range);
+    const p = fightPoint(w, v, me, CLEAR);
     expect(inReachAfter(w, v, me, p)).toBe(true);
   });
 
@@ -205,8 +218,24 @@ describe('exposure', () => {
     return exposure(w, gun, gun, v);
   }
 
-  it('is full for a bare side facing a gun that bears', () => {
-    expect(faceOff(null)).toBeCloseTo(1);
+  // The cannon at 8 tiles, and the same gun 4 tiles closer.
+  function bareAt(gap: number) {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const gun = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], { x: 40, y: 30 }, 0);
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 40 + gap, y: 30 });
+    v.heading = Math.PI;
+    return { exposure: exposure(w, gun, gun, v), chance: bodyHitChance(w, gun, vehicleStats(w, gun).weapons[0], v) };
+  }
+
+  it('is the hit chance for a bare side facing a gun that bears', () => {
+    const { exposure: share, chance } = bareAt(8);
+    expect(share).toBeCloseTo(chance);
+    expect(chance).toBeLessThan(1);
+  });
+
+  // NPCs held one range whatever their guns hit from it, so most shots had under a fifth to land.
+  it('grows as the gun closes in, since hit chance falls with distance', () => {
+    expect(bareAt(4).exposure).toBeGreaterThan(bareAt(8).exposure);
   });
 
   it('drops when the side facing the gun is plated, and not when only the far side is', () => {

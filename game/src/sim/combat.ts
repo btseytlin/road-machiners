@@ -332,16 +332,12 @@ export function hitOdds(
   target: Vehicle,
   aim: Aim,
 ): HitOdds {
-  const distance = dist(shooter.pos, target.pos) * M;
-  if (!(distance > 0))
-    throw new Error(`${shooter.id} and ${target.id} share a point`);
+  const distance = shotDistance(shooter, target);
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
   const causes = spreadCauses(world, shooter, mw, target);
-  const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
-  if (!(spread > 0))
-    throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
+  const spread = totalSpread(mw, causes);
   const chance = clamp(
     rawChance({ halfAngle, spread }),
     RULES.minHit,
@@ -351,6 +347,26 @@ export function hitOdds(
   const odds = { chance, bodyChance, distance, width, halfAngle, spread, causes };
   const damageChance = damageChanceOf({ world, shooter, target, round: mw.def.round, stray: mw.def.stray, aim, a }, odds);
   return { ...odds, damageChance };
+}
+
+// The chance one round of a body shot lands on the target, as hitOdds() gives it, without walking the parts in the
+// way. Cheap enough to judge many spots a turn.
+export function bodyHitChance(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): number {
+  const halfAngle = aiming(shooter, target, "body").width / (2 * shotDistance(shooter, target));
+  const spread = totalSpread(mw, spreadCauses(world, shooter, mw, target));
+  return clamp(rawChance({ halfAngle, spread }), RULES.minHit, RULES.maxHit);
+}
+
+function shotDistance(shooter: Vehicle, target: Vehicle): number {
+  const distance = dist(shooter.pos, target.pos) * M;
+  if (!(distance > 0)) throw new Error(`${shooter.id} and ${target.id} share a point`);
+  return distance;
+}
+
+function totalSpread(mw: MountedWeapon, causes: HitOdds["causes"]): number {
+  const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
+  if (!(spread > 0)) throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
+  return spread;
 }
 
 // F3. The chance one round damages what it aims at: the aimed part, or for a body shot any part of the target.

@@ -7,8 +7,10 @@ import { planNpcOrders } from './ai';
 import { addGoods, mountPart } from './inventory';
 import { makePart } from './factory';
 import { partDef } from '../data/parts';
-import { DECISIONS, NPC_BEHAVIOR, NPCS, TRAITS } from '../data/npcs';
+import { DECISIONS, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { dist } from './vec';
+import { vehicleStats } from './stats';
+import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
@@ -111,7 +113,7 @@ describe('ram chances', () => {
   });
 
   // A parked target is routed around, not braked for.
-  it('holds its range when it chose to keep', () => {
+  it('keeps clear of its target when it chose to keep', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
     forceOption('ramChance', 'keep');
@@ -120,7 +122,8 @@ describe('ram chances', () => {
     expect(raider.brain!.ramTarget).toBeUndefined();
     const order = raider.order!;
     if (order.kind === 'brake') throw new Error('A fighter with its target in sight drives');
-    expect(dist(order.dest, world.vehicles[0].pos)).toBeGreaterThanOrEqual(NPCS.buggy.preferredRange - 0.01);
+    const clearance = vehicleStats(world, raider).radius + vehicleStats(world, world.vehicles[0]).radius + RULES.yieldDistance;
+    expect(dist(order.dest, world.vehicles[0].pos)).toBeGreaterThanOrEqual(clearance - 0.01);
   });
 
   it('rams only while the target stays within reach', () => {

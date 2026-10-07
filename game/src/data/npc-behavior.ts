@@ -38,16 +38,16 @@ export const NPC_BEHAVIOR = {
   followGap: RULES.yieldDistance + 1,
   // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,
-  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
-  // point gets arcWeight × the share of its gun damage that bears from there and gets past the armor on the side the
-  // target shows it, so it works round to a bare side, minus threatWeight × the share of the
-  // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
-  // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
+  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points on each ring around its target's next spot,
+  // the rings at `rings` shares of its longest gun's range. Each point gets arcWeight × the share of its gun damage
+  // expected to land from there, by each gun's hit chance at that distance, and get past the armor on the side the
+  // target shows it, so it closes in or works round to a bare side, minus threatWeight × the same share of the
+  // target's gun damage on it, minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
   // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the ram value of the target's ram at
   // that point, and one that rams readily adds ramWeight × the ram value of its own ram from there. A fighter rolls
   // fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
+  fight: { angles: 16, rings: [0.25, 0.5, 0.75, 1], arcWeight: 2, threatWeight: 2, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
