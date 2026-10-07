@@ -446,7 +446,15 @@ export function siteOf(siteId: string): Site {
   return site;
 }
 
-function requireShop(world: World, shopId: string): void {
+// The shop the parked player uses for trade and garage work: storage and instant refits. Every shop is
+// staffed and does both. Throws when there is none.
+export function requireShop(world: World): string {
+  const shopId = shopAt(world);
+  if (!shopId) throw new Error('Not parked at a shop');
+  return shopId;
+}
+
+function requireParkedAt(world: World, shopId: string): void {
   if (shopAt(world) !== shopId) throw new Error(`Not parked at ${shopId}`);
 }
 
@@ -494,7 +502,7 @@ export function deliverContract(world: World, contractId: string): World {
 }
 
 function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
-  requireShop(world, c.to);
+  requireParkedAt(world, c.to);
   const v = playerVehicle(world);
   if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${GOODS[c.good].name}`);
   removeGoods(v, c.good, c.units);
@@ -507,7 +515,7 @@ export function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstan
 }
 
 function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): void {
-  requireShop(world, c.shop);
+  requireParkedAt(world, c.shop);
   const v = playerVehicle(world);
   const spare = spareParts(v).find((p) => fitsFetch(c, p));
   if (spare) {
