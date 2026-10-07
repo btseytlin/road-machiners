@@ -6,9 +6,11 @@ import { UNITS } from "../data/units";
 import { createIcon } from "./cards";
 import { el } from "./dom";
 
+const GROUPING = new Intl.NumberFormat("en-US");
+
 export function moneyNumber(amount: number): string {
   if (!Number.isFinite(amount) || amount < 0) throw new Error(`Not a currency amount: ${amount}`);
-  return amount.toLocaleString("en-US");
+  return GROUPING.format(amount);
 }
 
 export function moneyText(amount: number): string {
