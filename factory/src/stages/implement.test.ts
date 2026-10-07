@@ -18,6 +18,7 @@ function fakeCtx(labels: string[], models: string[], prompts: string[] = []): Ct
     cfg: { home, designModel: 'opus', buildModel: 'sonnet' },
     log: () => undefined,
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     github: { issue: async () => ({ labels, title: 'Oil spiller', body: 'Drop oil behind the truck.' }), comments: async () => [], move: async () => undefined },
     container: { agent: async (run: AgentRun) => { models.push(run.model); prompts.push(run.prompt); mkdirSync(`${run.clone}/${run.dir}/.factory`, { recursive: true }); } },
     repo: {

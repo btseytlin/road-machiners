@@ -10,6 +10,7 @@ import { clearSessions } from './sessions';
 import { readState, updateState } from './state';
 import { agentHome, workDir } from './stages/common';
 import { closeCard } from './stages/approval';
+import { moveCard } from './card-events';
 import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
 
 export const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
@@ -238,7 +239,7 @@ async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): 
   requireLeavable(ctx, issue);
   for (const need of needs) await need(ctx, issue);
   await stopJobs(ctx, issue);
-  await ctx.github.move(issue, plan.column);
+  await moveCard(ctx, issue, plan.column, 'moved');
   updateState(ctx.statePath, (state) => plan.enter(clearCardState(state, issue, plan.dropsApproval)));
   clearSessions(ctx.cfg.home, issue);
   await closePosts(ctx, issue, plan.status);
@@ -255,7 +256,7 @@ async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' 
     dropsApproval: DROPS_APPROVAL.includes(to),
     enter: (state) => (phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [String(issue)]: phase } }),
   });
-  if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`);
+  if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
   return { issue, text: `Moved to ${to}.` };
 }
 

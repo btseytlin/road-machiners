@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { rmSync, writeFileSync } from 'node:fs';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
@@ -55,6 +56,6 @@ export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound
     delete approvedResolving[String(issue)];
     return { ...state, approvedResolving };
   });
-  await ctx.github.move(issue, 'Design');
+  await moveCard(ctx, issue, 'Design', 'review-failed');
   return false;
 }

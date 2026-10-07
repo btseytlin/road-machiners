@@ -74,6 +74,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat', gpu: false },
     log: () => undefined,
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },

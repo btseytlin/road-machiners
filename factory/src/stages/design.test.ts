@@ -30,6 +30,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     github: {
       issue: async (number: number) => ({ number, title: number === 7 ? 'Big horn' : 'Louder horn', body: number === 7 ? 'Add a horn' : 'Make it louder', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => [{ login: 'a', body: 'yes please' }, ...earlier.map((body) => ({ login: 'bot', body }))],

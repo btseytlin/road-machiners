@@ -28,6 +28,7 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
