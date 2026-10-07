@@ -107,7 +107,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly nightLights = new VehicleLights(this.scene);
+  private readonly vehicleLights = new VehicleLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -984,7 +984,7 @@ export class Game {
     this.hud.showRecenter(!this.follow.isFollowing());
     const light = daylightAt(this.lightTurn());
     lightScene(this.sun, this.sky, truck, light);
-    this.nightLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck, light.beam);
+    this.vehicleLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck, light.beam);
     Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
     this.fx.tick(dt * speed, this.world);
     this.playPanelSounds();
