@@ -5,7 +5,7 @@ import type { GameEvent, GridItem, PartInstance, ShotRound } from "../sim/types"
 import { breakRounds, BreakCues, shownItems, type ShotLike } from "./breakCues";
 
 const round = (hits: { part: string; damage: number }[] = [], blast: ShotRound["blast"] = [], struck: string | null = "t"): ShotRound => ({
-  hit: hits.length > 0, crit: false, offset: 0, struck, hits, blast,
+  hit: hits.length > 0, crit: false, offset: 0, struck, hits, blast, burst: null,
 });
 const shot = (rounds: ShotRound[]): ShotLike => ({ t: "shot", shooter: "s", weapon: "mg", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds }) as ShotLike;
 const off = (part: string, vehicle = "t"): GameEvent => ({ t: "partDisabled", vehicle, part });
