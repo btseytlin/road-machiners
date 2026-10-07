@@ -556,5 +556,5 @@ export const REGION = {
   // sight, near the top edge of the screen at the widest zoom. The ground between is open. A new player drives
   // ahead and meets the road. The opening wreck of a new game lies `wreck.ahead` tiles ahead of the start and
   // `wreck.side` to its right, in clear sight on the open ground.
-  playerStart: { road: 0, distance: 125, offset: 45, wreck: { ahead: 11, side: 3 } },
+  playerStart: { road: 0, distance: 125, offset: 45, wreck: { ahead: 6, side: 5 } },
 };
