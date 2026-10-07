@@ -17,7 +17,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
-import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { backOffLoot, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { beginSearch } from './search';
 import { salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
@@ -962,6 +962,30 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.kind).not.toBe('investigate');
     expect(topGoal(raider)?.kind).not.toBe('fight');
     expect(topGoal(raider)?.kind).not.toBe('flee');
+  });
+});
+
+describe('a defeated driver with a deal goal', () => {
+  function defeatedClient() {
+    const { w, npc } = createScavenger();
+    const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 14, y: 10 });
+    npc.defeat = { phase: 'retreat', turns: 0, unseen: 0, foes: [], gaveUp: false };
+    addState(w, 'patch', other.id, npc.id, { kind: 'patch', deal: 'free', parts: 0, partIds: [], price: 0, work: 3, workLeft: 3 });
+    patchGoal(w, npc, other, false);
+    return { w, npc };
+  }
+
+  it('keeps a patch goal on top instead of retreating', () => {
+    const { w, npc } = defeatedClient();
+    expect(thinkNpc(w, npc).kind).toBe('patch');
+    expect(topGoal(npc)?.kind).toBe('patch');
+  });
+
+  it('retreats once the deal is gone', () => {
+    const { w, npc } = defeatedClient();
+    w.states = [];
+    expect(thinkNpc(w, npc).kind).toBe('retreat');
+    expect(npc.defeat).toBeTruthy();
   });
 });
 
