@@ -188,19 +188,25 @@ const SUN_RADIUS = 150; // meters from the focus to the sun light
 
 // Moves focus along the shadow camera's right and up axes to the nearest whole texel, so the shadow map's
 // sampling grid stays fixed on the ground while the focus travels. The light axis is untouched.
+const snapZ = new THREE.Vector3();
+const snapX = new THREE.Vector3();
+const snapY = new THREE.Vector3();
+const snapF = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
 export function snapToShadowTexels(focus: V3, toLight: V3, texel: number): V3 {
   if (!(texel > 0) || !Number.isFinite(texel)) throw new Error(`Shadow texel must be positive, got ${texel}`);
-  const values = [focus.x, focus.y, focus.z, toLight.x, toLight.y, toLight.z];
-  if (!values.every(Number.isFinite)) throw new Error("Shadow snap needs finite vectors");
-  const z = new THREE.Vector3(toLight.x, toLight.y, toLight.z).normalize();
+  if (!Number.isFinite(focus.x + focus.y + focus.z + toLight.x + toLight.y + toLight.z))
+    throw new Error("Shadow snap needs finite vectors");
+  snapZ.set(toLight.x, toLight.y, toLight.z).normalize();
   // Same basis as Matrix4.lookAt() with up = (0, 1, 0).
-  const x = new THREE.Vector3(0, 1, 0).cross(z).normalize();
-  const y = new THREE.Vector3().crossVectors(z, x);
-  const f = new THREE.Vector3(focus.x, focus.y, focus.z);
-  const dx = Math.round(f.dot(x) / texel) * texel - f.dot(x);
-  const dy = Math.round(f.dot(y) / texel) * texel - f.dot(y);
-  f.addScaledVector(x, dx).addScaledVector(y, dy);
-  return { x: f.x, y: f.y, z: f.z };
+  snapX.crossVectors(UP, snapZ).normalize();
+  snapY.crossVectors(snapZ, snapX);
+  snapF.set(focus.x, focus.y, focus.z);
+  const fx = snapF.dot(snapX);
+  const fy = snapF.dot(snapY);
+  snapF.addScaledVector(snapX, Math.round(fx / texel) * texel - fx).addScaledVector(snapY, Math.round(fy / texel) * texel - fy);
+  return { x: snapF.x, y: snapF.y, z: snapF.z };
 }
 
 // Puts the sun above focus in the light's direction and colors both lights.
