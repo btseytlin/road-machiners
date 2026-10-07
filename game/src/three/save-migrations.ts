@@ -395,8 +395,68 @@ function withSeenSince_23_24(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
-// Wagon Seven as STORY_WRECKS placed it at format 2.25: its wreck obstacle and its fixed stock.
-const WAGON_SEVEN_2_25 = {
+// Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
+// their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
+// wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
+const FORTRESS_OBSTACLES_24_25 = new Set(
+  ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
+);
+
+function isGoneObstacle_24_25(o: SavedJson): boolean {
+  const id = o.id as string;
+  return FORTRESS_OBSTACLES_24_25.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
+    || id === 'pond-dustwell' || id === 'pond-green-pit' || id.startsWith('cw-salvage-yard-');
+}
+
+// Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
+// and every stock gets hidden loot. The stream comes from the world seed like a new game's.
+const SEARCH_SALT_25_26 = 0x73656172;
+const NO_HIDDEN_25_26 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+
+function withUtilities_25_26(world: SavedJson): SavedJson {
+  const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
+  return {
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(ordered),
+    removed: (world.removed as SavedJson[]).map(ordered),
+    smoke: [],
+    fields: [],
+    flares: [],
+    lines: [],
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_25_26 },
+  };
+}
+
+// Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
+// ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
+// in the open.
+const LOOT_SITES_25_26 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_25_26 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_25_26 = /^wreck\d+$/;
+
+function isRolledStock_25_26(stock: SavedJson): boolean {
+  const id = stock.id as string;
+  return !stock.pile && (LOOT_SITES_25_26.has(id) || LOOT_SPOT_25_26.test(id) || ROAD_WRECK_25_26.test(id));
+}
+
+// A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
+function withHiddenStock_25_26(world: SavedJson): SavedJson {
+  const searched = new Set((world.player as SavedJson).scavenged as string[]);
+  const hide = (stock: SavedJson): SavedJson => {
+    if (searched.has(stock.id as string) || !isRolledStock_25_26(stock)) return { ...stock, hidden: NO_HIDDEN_25_26() };
+    const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
+    return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
+  };
+  return { ...world, salvage: (world.salvage as SavedJson[]).map(hide) };
+}
+
+// A player gets the debug freeze switch, off as in a new game.
+function withFreeze_25_26(world: SavedJson): SavedJson {
+  return { ...world, player: { ...(world.player as SavedJson), frozen: false } };
+}
+
+// Wagon Seven as STORY_WRECKS placed it at format 2.27: its wreck obstacle and its fixed stock.
+const WAGON_SEVEN_26_27 = {
   obstacle: { id: 'story-wagon-seven', pos: { x: 171, y: 381 }, r: 0.8, kind: 'wreck', hulk: { chassisId: 'wagon', yaw: 2.2 } },
   stock: {
     id: 'story-wagon-seven',
@@ -406,20 +466,21 @@ const WAGON_SEVEN_2_25 = {
     parts: [{ id: 'story-wagon-seven-cannon', defId: 'cannon', hp: 48, wear: 2, gun: { cooldown: 0, ammo: 2, reloadWork: 0 } }],
     fuel: 10,
     supplies: 4,
+    hidden: { goods: {}, parts: [], fuel: 0, supplies: 0 },
   },
 };
 
 // The player keeps a journal, empty in an old save, and wagon Seven lies where a new game puts it, unless the save
 // already holds it.
-function withNotesAndWagon_24_25(world: SavedJson): SavedJson {
-  const has = (list: SavedJson[]) => list.some((x) => x.id === WAGON_SEVEN_2_25.obstacle.id);
+function withNotesAndWagon_26_27(world: SavedJson): SavedJson {
+  const has = (list: SavedJson[]) => list.some((x) => x.id === WAGON_SEVEN_26_27.obstacle.id);
   const obstacles = world.obstacles as SavedJson[];
   const salvage = world.salvage as SavedJson[];
   return {
     ...world,
     player: { ...(world.player as SavedJson), notes: [] },
-    obstacles: has(obstacles) ? obstacles : [...obstacles, structuredClone(WAGON_SEVEN_2_25.obstacle)],
-    salvage: has(salvage) ? salvage : [...salvage, structuredClone(WAGON_SEVEN_2_25.stock)],
+    obstacles: has(obstacles) ? obstacles : [...obstacles, structuredClone(WAGON_SEVEN_26_27.obstacle)],
+    salvage: has(salvage) ? salvage : [...salvage, structuredClone(WAGON_SEVEN_26_27.stock)],
   };
 }
 
@@ -511,8 +572,13 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withTracks_22_23,
   // 23 to 24: a track records the turn its truck came in sight, null after loading.
   withSeenSince_23_24,
-  // 24 to 25: the player keeps a journal of notes, and wagon Seven, a story wreck, lies off the Bowl north road.
-  withNotesAndWagon_24_25,
+  // 24 to 25: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  // 25 to 26: utility orders and effects, the search stream, hidden salvage in every unsearched rolled stock and the
+  // debug freeze switch.
+  (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
+  // 26 to 27: the player keeps a journal of notes, and wagon Seven, a story wreck, lies off the Bowl north road.
+  withNotesAndWagon_26_27,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

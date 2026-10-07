@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ARTIFACT_DIR, collectArtifacts, holdArtifacts, releaseArtifacts } from '../adhoc-artifacts';
@@ -41,7 +42,7 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   }
   await ctx.github.comment(issue, report);
   await ctx.github.close(issue, 'completed');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'reported', 'adhoc');
   updateState(ctx.statePath, (state) => {
     const adhocReplies = { ...state.adhocReplies };
     delete adhocReplies[String(issue)];
@@ -64,7 +65,7 @@ async function runAdhocAgent(ctx: Ctx, issue: number, dir: string): Promise<void
   const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, ...analyticsMounts(ctx.cfg.home) };
   const session = roundSession(ctx.cfg.home, issue, 'adhoc', isResuming(ctx, issue));
   if (session.resume) ctx.log('adhoc', issue, `resuming round adhoc, session ${session.id}`);
-  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, ledger: FACTORY_LEDGER_MOUNT, transcripts: FACTORY_TRANSCRIPTS_MOUNT, transcriptDays: String(ctx.cfg.transcriptDays), files: `${OUT_DIR}/${ARTIFACT_DIR}`, playtest: playtestCommand(ctx.cfg) });
+  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, ledger: FACTORY_LEDGER_MOUNT, transcripts: FACTORY_TRANSCRIPTS_MOUNT, transcriptDays: String(ctx.cfg.transcriptDays), files: `${OUT_DIR}/${ARTIFACT_DIR}`, playtest: playtestCommand(ctx.cfg, false) });
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly, session });
 }
 
@@ -77,7 +78,7 @@ function analyticsMounts(home: string): Record<string, string> {
   return { [ledger]: FACTORY_LEDGER_MOUNT, [transcriptsDir(home)]: FACTORY_TRANSCRIPTS_MOUNT };
 }
 
-type Reply = { chat: string; messageId: number };
+type Reply = { chat: string; messageId: number | null };
 
 async function deliverable(ctx: Ctx, issue: number, home: string, reply: Reply) {
   let files;

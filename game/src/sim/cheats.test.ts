@@ -11,16 +11,16 @@ import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
   addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
-  repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
+  repairAll, revealMap, setEngineHeat, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
+  noclipMove, startBattle, startWeather, teleport, toggleFrozen, toggleFullLog, toggleGod, freezeDriving, freezeFire, instantMoveItem,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
-import { corePart, goodsCount, mountedParts } from './grid';
-import { removeAllGoods, spareParts } from './inventory';
+import { corePart, goodsCount, gridOf, mountedParts } from './grid';
+import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, startCombat, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { stormStrength } from './weather';
@@ -46,6 +46,14 @@ describe('resource cheats', () => {
     expect(() => addXp(w, Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
+  });
+
+  it('sets engine heat from cold to overheated and rejects values outside', () => {
+    expect(setEngineHeat(emptyWorld(), 1).player.engineHeat).toBe(1);
+    expect(setEngineHeat(emptyWorld(), 0.8).player.engineHeat).toBe(0.8);
+    expect(() => setEngineHeat(emptyWorld(), 1.5)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), -0.1)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), Number.NaN)).toThrow(CheatError);
   });
 
   it('sets fractional fuel and supplies up to their caps', () => {
@@ -102,6 +110,14 @@ describe('part cheats', () => {
   it('damages the first mounted part with a def', () => {
     const w = damagePartTo(emptyWorld(), 'mg', 3);
     expect(mountedParts(playerVehicle(w)).find((p) => p.defId === 'mg')!.hp).toBe(3);
+  });
+
+  it('spills the cargo off a cargo part it breaks', () => {
+    const w = damagePartTo(emptyWorld(), 'panniers', 0);
+    const me = playerVehicle(w);
+    const g = gridOf(me);
+    expect(me.items.filter((it) => it.y >= g.deadFrom)).toEqual([]);
+    expect(w.events.filter((e) => e.t === 'cargoSpilled')).toHaveLength(1);
   });
 
   it('rejects an unmounted def and hit points out of range', () => {
@@ -174,6 +190,81 @@ describe('god mode', () => {
     };
     expect(endTurn(broken(false), testDrive).player.state).toBe('knockedOut');
     expect(endTurn(broken(true), testDrive).player.state).toBe('active');
+  });
+});
+
+describe('frozen NPCs', () => {
+  it('toggles on and off', () => {
+    const on = toggleFrozen(emptyWorld());
+    expect(on.player.frozen).toBe(true);
+    expect(toggleFrozen(on).player.frozen).toBe(false);
+  });
+
+  it('clears NPC drivers\' move, gun and utility orders, and leaves the player alone', () => {
+    const { w, id } = withSpawned(toggleFrozen(emptyWorld()), 'buggy', true);
+    const npc = w.vehicles.find((v) => v.id === id)!;
+    const me = playerVehicle(w);
+    npc.order = { kind: 'through', dest: me.pos };
+    npc.weaponOrders = { x: { targetId: me.id, aim: 'body' } };
+    npc.utilityOrders = { y: { kind: 'self' } };
+    me.order = { kind: 'through', dest: npc.pos };
+    freezeDriving(w);
+    freezeFire(w);
+    expect(npc).toMatchObject({ order: null, weaponOrders: {}, utilityOrders: {} });
+    expect(me.order).toEqual({ kind: 'through', dest: npc.pos });
+  });
+
+  it('keeps a hostile NPC from raising a radio call', () => {
+    const called = (frozen: boolean): boolean => {
+      const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
+      const { w } = withSpawned(start, 'buggy', true);
+      return endTurn(w, testDrive).player.call !== null;
+    };
+    expect(called(false)).toBe(true);
+    expect(called(true)).toBe(false);
+  });
+
+  it('keeps a hostile NPC parked with no gun orders through a turn', () => {
+    const after = (frozen: boolean) => {
+      const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
+      const { w, id } = withSpawned(start, 'buggy', true);
+      return endTurn(w, testDrive).vehicles.find((v) => v.id === id)!;
+    };
+    expect(Object.keys(after(false).weaponOrders)).not.toEqual([]);
+    expect(after(true)).toMatchObject({ speed: 0, weaponOrders: {} });
+  });
+});
+
+describe('instantMoveItem', () => {
+  // The player out in the field, in combat with a raider.
+  function fighting(): World {
+    const { w, id } = withSpawned(emptyWorld(), 'buggy', true);
+    startCombat(w, playerVehicle(w), w.vehicles.find((v) => v.id === id)!);
+    return w;
+  }
+
+  it('takes a mounted gun off at once in the field and in combat, with no refit job', () => {
+    const w = fighting();
+    const mg = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    const off = instantMoveItem(w, mg.id, stowSpot(playerVehicle(w), mg)!);
+
+    expect(playerVehicle(off).job).toBeNull();
+    expect(spareParts(playerVehicle(off)).map((p) => p.defId)).toEqual(['mg']);
+  });
+
+  it('mounts a given part at once', () => {
+    const w = give(fighting(), 'harpoon', 1);
+    const harpoon = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'harpoon')!;
+    if (harpoon.kind !== 'part') throw new Error('Expected a part');
+    const on = instantMoveItem(w, harpoon.id, installSpot(playerVehicle(w), harpoon)!);
+
+    expect(mountedParts(playerVehicle(on)).map((p) => p.defId)).toContain('harpoon');
+  });
+
+  it('refuses a spot the item does not fit, as a refit would', () => {
+    const w = fighting();
+    const mg = playerVehicle(w).items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    expect(() => instantMoveItem(w, mg.id, { x: -5, y: 0, rot: 0 })).toThrow(CheatError);
   });
 });
 
@@ -329,6 +420,18 @@ describe('vehicle cheats', () => {
     expect(added).toHaveLength(1);
     expect(hostileToPlayer(next, added[0])).toBe(true);
     expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
+  });
+
+  it('places the hostile straight ahead of the truck, whichever way it faces, when that spot is free', () => {
+    for (const heading of [0, 2, -2.5]) {
+      const w = emptyWorld();
+      playerVehicle(w).heading = heading;
+      const me = playerVehicle(w);
+      const next = startBattle(w);
+      const foe = next.vehicles[next.vehicles.length - 1];
+      expect(foe.pos.x).toBeCloseTo(me.pos.x + Math.cos(heading) * CHEATS.spawnDistance);
+      expect(foe.pos.y).toBeCloseTo(me.pos.y + Math.sin(heading) * CHEATS.spawnDistance);
+    }
   });
 
   it('picks templates of every kind with the world RNG', () => {

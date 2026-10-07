@@ -69,9 +69,34 @@ const DEFS = {
   "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
+  // The harpoon. Generated takes came out thin, with a high whine. Fire takes are run through ffmpeg
+  // "asetrate=44100*0.85,aresample=44100,lowpass=f=6000,lowpass=f=6000,bass=g=6:f=120", hook takes through
+  // "lowpass=f=8000:p=1,bass=g=4:f=150" and tear takes through
+  // "asetrate=44100*0.85,aresample=44100,lowpass=f=5000,lowpass=f=5000,bass=g=4:f=150" before import.
+  "harpoon-fire": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A heavy spring-loaded harpoon gun on a truck fires: a deep mechanical thunk and clank of steel, then a thick rope whipping out fast."], seconds: 1.2 },
+  "harpoon-hook": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["A heavy barbed steel harpoon bolt slams into a truck's steel plate: a hard punching clank and a short metallic scrape."], seconds: 0.8 },
+  "line-tear": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A thick steel tow cable under huge tension snaps: a sharp loud twang and whip, then the loose cable slapping on metal."], seconds: 1.2 },
+
+  // Other utilities. A Sprout plays smoke-burst; a smoke shell lands with cannon-fire. Generated oil takes came out as bright
+  // hiss; they are run through ffmpeg "asetrate=44100*0.8,aresample=44100,lowpass=f=3000,lowpass=f=3000,bass=g=4:f=150"
+  // before import, so they glug.
+  "mortar-fire": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A small smoke mortar fires from a truck deck: one deep hollow tube thoomp and a short metallic ring."], seconds: 1.2 },
+  "smoke-burst": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A smoke grenade canister bursts open: a short pop, then a loud rushing hiss of thick smoke pouring out."], seconds: 2 },
+  "flare-fire": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A flare cannon fires a signal flare: a sharp hollow pop, then a fizzing hiss rising quickly into the sky."], seconds: 1.5 },
+  "flare-burst": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["A magnesium illumination flare ignites high in the air: a dull crack, then a steady crackling, sizzling burn."], seconds: 2 },
+  "caltrops-drop": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["A handful of heavy steel spikes dumped from a truck clatter and bounce onto hard gravel."], seconds: 1.2 },
+  "caltrops-hit": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.06, maxVoices: 3, loop: false, prompts: ["A truck tire runs over steel spikes and bursts: a loud pop and a fast rushing hiss of escaping air."], seconds: 1.2 },
+  "oil-spill": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["A valve opens under a truck and thick motor oil glugs and splashes onto dry dirt."], seconds: 2 },
+  "emitter-pulse": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["A huge electrical capacitor discharges outdoors: a violent arc crack and buzz, then nearby diesel engines sputter and die."], seconds: 2 },
+
   // Loops.
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
+  // The strained engine plays while heat damages the engine. Variant 1 is a 4 s ElevenLabs loop with the engine's prompt
+  // style, close to the engine bay, and this subject: "Heavy old diesel engine at full throttle in a failing state:
+  // coarse labored growl, heavy knocking, clattering and ticking, a missing cylinder stumble." Variant 2 is a 2 s
+  // overheated truck engine take, supplied by hand.
+  "engine-strain": { bus: "sfx", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   // The desert blues take, music-calm-1791230467032.mp3, is run through ffmpeg
   // "highpass=f=40,equalizer=f=250:t=q:w=1:g=2,equalizer=f=1500:t=q:w=1:g=-4,volume=3dB,asoftclip=type=tanh,volume=-3dB,lowpass=f=6500,treble=g=-3:f=4000" before import, for tape grit.
@@ -189,6 +214,19 @@ export function engineFileFor(chassisId: string): string {
   return file;
 }
 
+// Trucks with the heavy engine recording get the generated strained loop; lighter trucks get the supplied one.
+const STRAIN_FILES: Record<string, string> = {
+  "engine-1.ogg": "engine-strain-2.ogg",
+  "engine-2.ogg": "engine-strain-2.ogg",
+  "engine-3.ogg": "engine-strain-1.ogg",
+};
+
+export function engineStrainFileFor(chassisId: string): string {
+  const file = STRAIN_FILES[engineFileFor(chassisId)];
+  if (!file) throw new Error(`Engine recording of ${chassisId} has no strained loop`);
+  return file;
+}
+
 export const MIX = {
   busVolume: { ui: 0.8, sfx: 0.75, ambient: 0.6, music: 0.65 } satisfies Record<Bus, number>,
   // Import loudness per bus: the loudest 400 ms moment, in LUFS. Cue volume then sets each cue's place in the mix.
@@ -202,8 +240,9 @@ export const MIX = {
   // Engine over a turn: playback rate and level follow speed in m/s, plus a load term from the speed change,
   // so speeding up revs and slowing drops audibly. Load is full at loadMs of change in one turn. Under movingMs
   // at both ends it stays silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
-  // Overdrive multiplies the engine level by overdriveGain.
-  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 31.2, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12, overdriveGain: 1.5 },
+  // Overdrive multiplies the engine level by overdriveGain. While heat damages the engine the level moves to the
+  // strained loop; strain falls by strainRelease per turn without heat damage.
+  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 31.2, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12, overdriveGain: 1.5, strainRelease: 0.5 },
   // Overdrive switching on revs the engine loop once: playback rate and level at each point, seconds from the start.
   // It jumps from idle to high revs, holds, and falls back as the throttle lets go.
   rev: [
@@ -261,4 +300,8 @@ export const MIX = {
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
   anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,
+  // Tone of the sfx anchor, in dB against its mids: low below 250 Hz, high above 4 kHz. Import shelves a world
+  // one-shot back to within spread of it; `npm run sfx:report` measures it. A spread of 10 dB leaves the guns, hits
+  // and explosions as they are and catches the hissy and tinny takes.
+  tone: { low: 8, high: -17, spread: 10 },
 } as const;

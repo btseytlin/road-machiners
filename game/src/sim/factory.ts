@@ -42,7 +42,7 @@ export function makePart(world: IdSource, defId: string, wear: number): PartInst
 // makePart with a fixed id, for a part placed by data rather than made in play.
 export function partWithId(id: string, defId: string, wear: number): PartInstance {
   if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
-  const part: PartInstance = { id, defId, hp: 0, wear, ...gunFor(defId) };
+  const part: PartInstance = { id, defId, hp: 0, wear, ...gunFor(defId), ...chargeFor(defId) };
   return { ...part, hp: maxHp(part) };
 }
 
@@ -50,6 +50,13 @@ export function partWithId(id: string, defId: string, wear: number): PartInstanc
 export function gunFor(defId: string): Pick<PartInstance, 'gun'> {
   const def = partDef(defId);
   return def.kind === 'weapon' ? { gun: { cooldown: 0, ammo: def.magazine, reloadWork: 0 } } : {};
+}
+
+// An active utility and a claymore ram start ready. Other parts carry no charge.
+export function chargeFor(defId: string): Pick<PartInstance, 'charge'> {
+  const def = partDef(defId);
+  const active = (def.kind === 'utility' && def.reload !== null) || (def.kind === 'armor' && def.claymore !== undefined);
+  return active ? { charge: { reload: 0 } } : {};
 }
 
 // Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.
@@ -87,6 +94,7 @@ export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | '
     order: null,
     direct: false,
     weaponOrders: {},
+    utilityOrders: {},
     trail: [],
     brain: spec.brain,
     resources: spec.faction === 'player' ? null : { ...NPC_RESOURCES, fuel: Math.min(NPC_RESOURCES.fuel, chassisDef(spec.chassisId).fuelCap), health: RULES.maxHealth },

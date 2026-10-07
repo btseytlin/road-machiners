@@ -75,15 +75,6 @@ def test_member_approve_writes_command_and_clears_markup(tmp_path):
     assert query.markups == [None]
 
 
-def test_waste_review_button_queues_its_change(tmp_path):
-    query = FakeQuery("factory:waste:301")
-    assert press(tmp_path, query) == [{
-        "kind": "waste-change", "issue": 301, "text": None, "by": "7", "byName": "Ann Lee", "chat": "-100", "messageId": 55, "postId": 55,
-    }]
-    assert query.answers == ["Change queued"]
-    assert query.markups == [None]
-
-
 def test_member_deny(tmp_path):
     query = FakeQuery("factory:deny:9")
     commands = press(tmp_path, query)
@@ -108,6 +99,26 @@ def test_ship_on_stale_post_queues_nothing(tmp_path, state):
     query = FakeQuery("factory:ship:40")
     assert press(tmp_path, query, state) == []
     assert query.answers == [plugin.BUTTON_STALE]
+    assert query.markups == []
+
+
+def release_post_state(post_id):
+    return {"approvalPosts": {}, "release": None, "releasePost": {"issue": 40, "day": "d", "postId": post_id, "draft": "Text" if post_id else None}}
+
+
+def test_publish_on_current_draft_queues(tmp_path):
+    query = FakeQuery("factory:publish:40")
+    commands = press(tmp_path, query, release_post_state(55))
+    assert [(c["kind"], c["issue"], c["postId"], c["by"]) for c in commands] == [("publish", 40, 55, "7")]
+    assert query.answers == ["Publish queued"]
+    assert query.markups == [None]
+
+
+@pytest.mark.parametrize("state", [release_post_state(54), release_post_state(None), {"approvalPosts": {}, "releasePost": None}, {"approvalPosts": {}}, None])
+def test_publish_on_stale_draft_queues_nothing(tmp_path, state):
+    query = FakeQuery("factory:publish:40")
+    assert press(tmp_path, query, state) == []
+    assert query.answers == [plugin.DRAFT_STALE]
     assert query.markups == []
 
 

@@ -1,5 +1,6 @@
 // Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
+import { FORTRESS_SITES } from '../data/fortress';
 import { STALL_MARKETS } from '../data/market';
 import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
@@ -20,6 +21,11 @@ export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
 const TERRITORIES: readonly LocationDef[] = REGION.locations.filter(isTerritory);
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
+
+// Whether the site stands behind a fortress curtain of baked pieces, in place of a circle collider.
+export function isFortress(site: Site): boolean {
+  return site.id in FORTRESS_SITES;
+}
 
 // Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {

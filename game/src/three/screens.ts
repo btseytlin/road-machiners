@@ -3,6 +3,7 @@
 
 import { CharacterScreen } from "../ui/character";
 import type { UiHost } from "../ui/host";
+import { FullShopScreen } from "../ui/full-shop";
 import { InventoryScreen } from "../ui/inventory";
 import { JournalScreen } from "../ui/journal";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
@@ -11,6 +12,7 @@ type Toggled = CharacterScreen | JournalScreen | InventoryScreen;
 
 export class ModalScreens {
   readonly town: TownScreen;
+  readonly fullShop: FullShopScreen;
   readonly trade: TruckTradeScreen;
   readonly character: CharacterScreen;
   readonly journal: JournalScreen;
@@ -18,14 +20,15 @@ export class ModalScreens {
 
   constructor(host: UiHost) {
     this.town = new TownScreen(host);
+    this.fullShop = new FullShopScreen(host);
     this.trade = new TruckTradeScreen(host);
     this.character = new CharacterScreen(host);
     this.journal = new JournalScreen(host);
     this.inventory = new InventoryScreen(host);
   }
 
-  private all(): (TownScreen | TruckTradeScreen | Toggled)[] {
-    return [this.town, this.trade, this.character, this.journal, this.inventory];
+  private all(): (TownScreen | FullShopScreen | TruckTradeScreen | Toggled)[] {
+    return [this.town, this.fullShop, this.trade, this.character, this.journal, this.inventory];
   }
 
   anyOpen(): boolean {

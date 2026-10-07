@@ -105,12 +105,12 @@ describe('hills and the scanner', () => {
     observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 0.2; // below the parked threshold used by sound, so only the scanner should trigger
-    expect(scannerRange(observer)).toBe(0);
+    expect(scannerRange(w, observer)).toBe(0);
     const before = contactsOf(w, observer, Infinity);
     expect(before.find((c) => c.vehicleId === target.id)).toBeUndefined();
     if (!mountPart(w, observer, makePart(w, 'scanner', 0))) throw new Error('No free mount for the test scanner');
     target.speed = 4;
-    expect(scannerRange(observer)).toBeGreaterThan(0);
+    expect(scannerRange(w, observer)).toBeGreaterThan(0);
     const after = contactsOf(w, observer, Infinity);
     expect(after.find((c) => c.vehicleId === target.id)?.sources).toContain('radio');
   });
@@ -123,9 +123,9 @@ describe('a worn scanner', () => {
     observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
     const scanner = makePart(w, 'scanner', 0);
     if (!mountPart(w, observer, scanner)) throw new Error('No free mount for the test scanner');
-    const fresh = scannerRange(observer);
+    const fresh = scannerRange(w, observer);
     scanner.wear = 2;
-    expect(scannerRange(observer)).toBeLessThan(fresh);
+    expect(scannerRange(w, observer)).toBeLessThan(fresh);
   });
 });
 
@@ -417,7 +417,7 @@ describe('the spotter perk', () => {
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
     target.speed = 0;
     refreshVision(w);
-    expect(scannerRange(playerVehicle(w))).toBe(0);
+    expect(scannerRange(w, playerVehicle(w))).toBe(0);
     return { w, target };
   }
 

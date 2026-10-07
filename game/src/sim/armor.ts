@@ -36,9 +36,14 @@ export function ramMult(v: Vehicle, side: Side): number {
   for (const p of mountedParts(v, 'armor')) {
     const def = partDef(p.defId);
     if (def.kind !== 'armor') throw new Error(`${p.id} is mounted as armor but is ${def.kind}`);
-    if (p.hp > 0 && sideOf(v, p) === LETTER[side]) mult = Math.max(mult, def.ramMult);
+    if (p.hp > 0 && coversSide(v, p, side)) mult = Math.max(mult, def.ramMult);
   }
   return mult;
+}
+
+// Whether a mounted armor part covers the side.
+export function coversSide(v: Vehicle, part: PartInstance, side: Side): boolean {
+  return sideOf(v, part) === LETTER[side];
 }
 
 // How well armor shields the cab, to compare armor layouts. A cab lane is shielded where an armor cell on that
@@ -159,6 +164,7 @@ function checkLane(lane: number, across: number, side: Side): void {
 
 // The only way damage reaches parts. A working mounted part takes damage × min(1, pen / armor), then lowers pen
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
+// A broken cargo part's dead rows are still the truck's body, so they cost pen like empty cells.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
   return planLane(v, side, lane, round).map((h) => ({ part: h.part.id, damage: damagePart(world, v, h.part, h.amount) }));
@@ -185,7 +191,7 @@ export function sidePlanner(v: Vehicle): (side: Side, round: Round) => { part: P
 type LaneCell = { part: PartInstance | undefined } | null;
 
 function laneOwners(g: Grid, owner: Map<number, PartInstance>, side: Side, lane: number): LaneCell[] {
-  return laneCells(g, side, lane).map((c) => (g.cells[c.y][c.x] === null ? null : { part: owner.get(cellKey(c.x, c.y)) }));
+  return laneCells(g, side, lane).map((c) => (g.cells[c.y][c.x] === null && c.y < g.deadFrom ? null : { part: owner.get(cellKey(c.x, c.y)) }));
 }
 
 function walkCells(cells: LaneCell[], round: Round): { part: PartInstance; amount: number }[] {
@@ -203,6 +209,26 @@ function walkCells(cells: LaneCell[], round: Round): { part: PartInstance; amoun
     hits.push(hitPart(part, left, round));
   }
   return hits;
+}
+
+// Where a harpoon bolt that struck the truck in this lane holds: the first working part in the lane from its side,
+// whatever pen it would take to reach it. A lane with none, as an outer lane of empty armor slots, passes the hold to
+// the nearest lane that has one. Null only for a truck with no working part.
+export function heldPart(v: Vehicle, side: Side, lane: number): PartInstance | null {
+  const owner = cellOwners(v);
+  const g = gridOf(v);
+  const working = (at: number) => laneCells(g, side, at).map((c) => owner.get(cellKey(c.x, c.y))).find((p) => p !== undefined && p.hp > 0);
+  for (const at of lanesOutFrom(lane, laneCount(v, side))) {
+    const part = working(at);
+    if (part) return part;
+  }
+  return null;
+}
+
+// Every lane from `lane` outward, nearest first and the lower one first at equal distance.
+function lanesOutFrom(lane: number, lanes: number): number[] {
+  const all = Array.from({ length: lanes }, (_, at) => at);
+  return all.sort((a, b) => Math.abs(a - lane) - Math.abs(b - lane) || a - b);
 }
 
 function cellOwners(v: Vehicle): Map<number, PartInstance> {

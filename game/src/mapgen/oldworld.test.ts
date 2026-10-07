@@ -6,8 +6,9 @@ import { ROAD_INDEX } from '../sim/road-index';
 import { hashRandom } from '../sim/rng';
 import type { BakedProp } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
+import { TEST_MAP } from '../test/map';
 import { padReach } from '../test/sites';
-import { bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import {
   BUILT_FIELD,
@@ -21,8 +22,10 @@ import {
   oldRoads,
   oldWorldLayer,
   overlooks,
+  pickLook,
   powerLines,
   settlements,
+  shipDebris,
   tankHulks,
   type OldSettlement,
 } from './oldworld';
@@ -351,6 +354,106 @@ describe('tank hulks', () => {
       expect(p.pos.x).toBeLessThanOrEqual(12 + rules.along[1] + rules.spread);
       expect(Math.abs(p.pos.y - 40)).toBeGreaterThanOrEqual(road.width / 2 + rules.gap + rules.radius);
       expect(Math.abs(p.pos.y - 40)).toBeLessThanOrEqual(road.width / 2 + rules.gap + rules.radius + rules.spread);
+    }
+  });
+});
+
+describe('ship debris', () => {
+  const rules = OLD_WORLD.shipDebris;
+  const trail = new RoadLine(rules.trail);
+  const reach = rules.sideSpread + rules.clusterStep / 3 + rules.clusterReach;
+
+  // Flat ground over the whole map, with an old road across the south of the trail.
+  function debrisDraft(): MapDraft {
+    const d = newDraft(SIZE);
+    for (let x = 0; x < SIZE; x++) for (let y = 300; y < 302; y++) d.built[y * SIZE + x] = BUILT_OLD_ROAD;
+    return d;
+  }
+  function lay(seed: number, r = rules): BakedProp[] {
+    const d = debrisDraft();
+    shipDebris(seed, d, r);
+    return d.props;
+  }
+  function trailDistance(p: Vec): number {
+    return polylineDist(p, trail.points);
+  }
+
+  it('keeps place() rules and covers no old road tile (IV1)', () => {
+    const d = debrisDraft();
+    shipDebris(SEED, d, rules);
+
+    expect(d.props.length).toBeGreaterThan(30);
+    for (const p of d.props) {
+      expectOffBuilt(p);
+      expect(Math.abs(p.pos.y - 301)).toBeGreaterThan(1 + p.r);
+    }
+    for (let a = 0; a < d.props.length; a++) for (let b = a + 1; b < d.props.length; b++) {
+      expect(dist(d.props[a].pos, d.props[b].pos)).toBeGreaterThanOrEqual(d.props[a].r + d.props[b].r);
+    }
+  });
+
+  it('gives the same debris for the same seed and other debris for another (IV2)', () => {
+    expect(lay(SEED)).toEqual(lay(SEED));
+    expect(lay(SEED + 1)).not.toEqual(lay(SEED));
+  });
+
+  it('lays trail pieces near the trail, aligned ones facing along it (IV3)', () => {
+    const near = lay(SEED).filter((p) => trailDistance(p.pos) <= reach);
+    expect(near.length).toBeGreaterThan(rules.pieces[0]);
+    const aligned = near.filter((p) => rules.trailLooks.some((l) => l.look === p.kind && l.aligned && p.kind === 'wingShard'));
+    expect(aligned.length).toBeGreaterThan(0);
+    for (const p of aligned) {
+      let best = Infinity;
+      for (let s = 0; s <= trail.length; s += 1) {
+        if (dist(trail.pointAt(s), p.pos) <= reach) best = Math.min(best, angleDiff(p.yaw, Math.atan2(trail.dirAt(s).y, trail.dirAt(s).x)));
+      }
+      expect(best).toBeLessThanOrEqual(rules.yawJitter + 1e-6);
+    }
+  });
+
+  it('puts at most one habitat in a cluster (IV4)', () => {
+    const heavy = { ...rules, strays: { ...rules.strays, count: 0 }, trailLooks: rules.trailLooks.map((l) => (l.look === 'habitat' ? { ...l, weight: 50 } : l)) };
+    const habitats = lay(SEED, heavy).filter((p) => p.kind === 'habitat');
+
+    expect(habitats.length).toBeGreaterThan(0);
+    for (let a = 0; a < habitats.length; a++) for (let b = a + 1; b < habitats.length; b++) {
+      expect(dist(habitats[a].pos, habitats[b].pos)).toBeGreaterThan(rules.clusterReach * 2 - 1e-6);
+    }
+  });
+
+  it('refuses an empty look table', () => {
+    expect(() => pickLook({ rngState: 1 }, [])).toThrow(/look/);
+  });
+});
+
+describe('ship debris on the baked map', () => {
+  const rules = OLD_WORLD.shipDebris;
+  const trail = new RoadLine(rules.trail);
+  const reach = rules.sideSpread + rules.clusterStep / 3 + rules.clusterReach;
+  const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun');
+  if (fallenSun === undefined) throw new Error('No Fallen Sun site');
+  const NEW_KINDS = ['escapePod', 'habitat', 'wingShard', 'powerCell'];
+  const debris = TEST_MAP.props.filter((p) => NEW_KINDS.includes(p.kind) || (p.kind === 'hullChunk' && dist(p.pos, fallenSun.pos) > fallenSun.radius + O.siteClearance));
+  const clusters = Math.floor(trail.length / rules.clusterStep) + 1;
+
+  it('holds every new kind', () => {
+    for (const kind of NEW_KINDS) expect(TEST_MAP.props.some((p) => p.kind === kind)).toBe(true);
+  });
+
+  it('places at least 80% of the planned trail pieces and strays (IV5)', () => {
+    const onTrail = debris.filter((p) => polylineDist(p.pos, trail.points) <= reach);
+    expect(onTrail.length).toBeGreaterThanOrEqual(0.8 * clusters * rules.pieces[0]);
+    const lone = debris.filter((p) => p.kind === 'escapePod' && polylineDist(p.pos, trail.points) > reach);
+    expect(lone.length).toBeGreaterThanOrEqual(0.8 * rules.strays.count * (5 / 9) * 0.6);
+  });
+
+  it('keeps clear of the Fallen Sun and Old Orchard (IV6)', () => {
+    for (const p of TEST_MAP.props.filter((q) => NEW_KINDS.includes(q.kind))) {
+      for (const id of ['fallen-sun', 'orchard']) {
+        const site = SITES.find((s) => s.id === id);
+        if (site === undefined) throw new Error(`No site ${id}`);
+        expect(siteGap(site, p.pos)).toBeGreaterThan(O.siteClearance + p.r);
+      }
     }
   });
 });
