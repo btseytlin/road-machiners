@@ -290,6 +290,8 @@ export interface HostRepo {
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   // Clones into `dir` unless a working clone is there. A broken clone, with no commit checked out, is replaced.
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
+  // Clones GitHub's `branch` into the new folder `dir`, with no fallback to a base, and returns its head. Throws when the host clone lacks the branch.
+  cloneBranch(branch: string, dir: string): Promise<string>;
   // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
   untrackFactoryFiles(dir: string): Promise<string[]>;
   // Brings the work clone's branch head into the host clone, without pushing it, and returns its full hash.

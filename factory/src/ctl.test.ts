@@ -20,6 +20,9 @@ vi.mock('./control', async (importOriginal) => ({
     return path;
   },
 }));
+// The repair has its own tests with real git. Here it records the order it got.
+const repairs: unknown[] = [];
+vi.mock('./repair-clone', () => ({ repairClone: async (_ctx: unknown, order: unknown) => { repairs.push(order); return ['repaired']; } }));
 const { runCtl } = await import('./ctl');
 
 let out: string[];
@@ -186,7 +189,7 @@ describe('read commands', () => {
 
   it('help lists every command', async () => {
     await run(fake(), 'help');
-    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume']) {
+    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume', 'repair-clone N']) {
       expect(out.some((line) => line.startsWith(name))).toBe(true);
     }
   });
@@ -256,6 +259,28 @@ describe('immediate commands', () => {
     await expect(run(f, 'pause')).rejects.toThrow('needs a reason');
     await run(f, 'resume');
     expect(existsSync(join(ROOT, 'paused'))).toBe(false);
+  });
+
+  it('repair-clone passes the card, who, why and --backup-merge to the repair and prints its lines', async () => {
+    repairs.length = 0;
+    await run(fake(), 'repair-clone', '5', '--by', 'hermes', '--reason', 'merge left it dirty');
+    await run(fake(), 'repair-clone', '6', '--backup-merge', '--reason', 'open merge', '--by', 'ann');
+    expect(repairs).toEqual([
+      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false },
+      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true },
+    ]);
+    expect(out).toContain('repaired');
+    expect(inbox()).toEqual([]);
+  });
+
+  it('repair-clone refuses a missing --by or --reason, an unknown actor and stray arguments before it repairs', async () => {
+    repairs.length = 0;
+    await expect(run(fake(), 'repair-clone', '5', '--reason', 'r')).rejects.toThrow('Missing --by');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'hermes')).rejects.toThrow('Missing --reason');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'bob', '--reason', 'r')).rejects.toThrow('unknown actor');
+    await expect(run(fake(), 'repair-clone', '5', '6', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('Unexpected "6"');
+    await expect(run(fake(), 'repair-clone', 'x', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('not an issue number');
+    expect(repairs).toEqual([]);
   });
 
   it('resume keeps a pause written by hand', async () => {

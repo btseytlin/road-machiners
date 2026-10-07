@@ -138,6 +138,12 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       console.error(`${dir} has no commit checked out, so it is cloned again`);
       rmSync(dir, { recursive: true, force: true });
     }
+    await initClone(dir);
+    await checkoutBranch(dir, branch, base);
+  }
+
+  // A new clone in `dir` with the host clone's refs and no branch checked out yet.
+  async function initClone(dir: string): Promise<void> {
     mkdirSync(dir, { recursive: true });
     await gitIn(dir, ['init', '--quiet']);
     await gitIn(dir, ['remote', 'add', 'origin', path]);
@@ -145,7 +151,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     await gitIn(dir, ['fetch', '--quiet', 'origin']);
     // The clone ignores the factory's own files, whatever the branch's .gitignore says.
     appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n${MEDIA_DIR}/\n`);
-    await checkoutBranch(dir, branch, base);
   }
 
   // A conflict, a merge in progress or a revert in progress means the agent did not commit.
@@ -228,6 +233,13 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (lines(await git(['ls-remote', '--heads', 'origin', branch])).length > 0) await git(['push', 'origin', '--delete', branch]);
     },
     prepareWorkClone: prepareClone,
+    async cloneBranch(branch, dir) {
+      if (!(await hasRef(path, `refs/remotes/origin/${branch}`))) throw new Error(`branch ${branch} is not in the host clone, so GitHub has no such branch as of the last fetch`);
+      if (existsSync(dir)) throw new Error(`${dir} exists already`);
+      await initClone(dir);
+      await gitIn(dir, ['checkout', '--quiet', '-B', branch, `origin/${branch}`]);
+      return (await gitIn(dir, ['rev-parse', 'HEAD'])).trim();
+    },
     async untrackFactoryFiles(dir) {
       const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`, `:(glob)**/${MEDIA_DIR}/**`]));
       if (tracked.length === 0) return [];
