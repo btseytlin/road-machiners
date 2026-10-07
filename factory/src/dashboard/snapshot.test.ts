@@ -111,6 +111,26 @@ it('does not expose committee posts when Telegram is hidden', async () => {
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
+it('publishes delivery numbers from card lines in every range with no committee text', async () => {
+  const home = mkdtempSync(resolve('tmp/snapshot-'));
+  try {
+    mkdirSync(join(home, 'state'));
+    writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
+    const hour = 3_600_000;
+    const at = (hoursAgo: number): string => new Date(Date.now() - hoursAgo * hour).toISOString();
+    appendLedger(home, { kind: 'card', issue: 5, step: 'entered', to: 'Triage', at: at(5) });
+    appendLedger(home, { kind: 'card', issue: 5, step: 'accepted', to: 'Design', at: at(4) });
+    appendLedger(home, { kind: 'route', issue: 5, route: 'redesign', by: 'PRIVATE member', at: at(3) });
+    appendLedger(home, { kind: 'control', action: 'move', issue: 5, by: 'PRIVATE', reason: 'PRIVATE reason', at: at(3) });
+    const config = createConfig(home);
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    await collector.refreshLocal();
+    const snapshot = collector.getSnapshot();
+    expect(snapshot.analytics.value?.ranges.map((range) => range.delivery?.issues)).toEqual([1, 1, 1]);
+    expect(snapshot.analytics.value?.ranges[0].delivery?.stages.find((row) => row.stage === 'triage')?.count).toBe(1);
+    expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
 it('refuses to collect a private repository before reading its issues', async () => {
   const calls: string[][] = [];
   const run: Run = async (_command, args) => { calls.push(args); return { code: 0, stdout: 'private', stderr: '' }; };
