@@ -32,6 +32,7 @@ import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
 import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
+import { warnedOffTarget } from '../loot-warning';
 import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -166,9 +167,23 @@ function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFEN
   }
 }
 
+// The bot keeps its word to leave loot a driver warned it off.
+function keepsOff(world: World, targetId: string): boolean {
+  return warnedOffTarget(world, playerVehicle(world), targetId) !== null;
+}
+
+// Topics the bot answers by whether the caller outmatches it: the reply when it does, and when it does not, where
+// undefined leaves the bot's own replies. It hands its cargo only to a foe that outmatches it, and leaves loot only to
+// such a driver.
+const OUTMATCHED_REPLIES: Partial<Record<TopicId, [string, string | undefined]>> = {
+  demand: [YIELD_CARGO, undefined], surrender: [YIELD_CARGO, undefined], lootWarning: ['Rolling on.', 'Find your own.'],
+};
+
 function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
-  if ((call.topic === 'demand' || call.topic === 'surrender') && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
-  return call.topic ? replies[call.topic] : undefined;
+  if (!call.topic) return undefined;
+  const pair = OUTMATCHED_REPLIES[call.topic];
+  if (pair) return (outmatchedBy(world, vehicleById(world, call.with)) ? pair[0] : pair[1]) ?? replies[call.topic];
+  return replies[call.topic];
 }
 
 // Auto patch stays on for every bot. Auto fire shoots the nearest hostile in sight, and a raider is hostile to any
@@ -1002,10 +1017,10 @@ function postAfterNearest(pos: Vec): Post {
 // ---- Salvage.
 
 // Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// explored ground. The bot keeps its word to leave a stock a driver warned it off.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id) || keepsOff(world, stock.id)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -1020,7 +1035,7 @@ function nearestStock(world: World, stocks: SalvageStock[]): SalvageStock | null
 function lootHere(o: Orders): void {
   const stock = salvageHere(o.world);
   if (!stock || !canLoot(o.world, stock.id) || freeCells(o.me) === 0) return;
-  if (lootBlocker(o.world, o.me, stock.id)) return;
+  if (lootBlocker(o.world, o.me, stock.id) || keepsOff(o.world, stock.id)) return;
   o.loot(stock.id, (w) => takeAllLoot(w, stock.id));
 }
 
@@ -1160,7 +1175,7 @@ function threatAnswerOf(node: string): ThreatAnswer {
 // A knocked-out trader or convoy in sight with loose items on its grid, which the player strips on the loot grid.
 function downedTarget(world: World): Vehicle | null {
   const me = playerVehicle(world);
-  const downed = world.vehicles.filter((v) => ROB_FACTIONS.includes(v.faction) && isKnockedOut(v) && playerSees(world, v.pos) && hasLooseItems(v) && !lootBlocker(world, me, v.id));
+  const downed = world.vehicles.filter((v) => ROB_FACTIONS.includes(v.faction) && isKnockedOut(v) && playerSees(world, v.pos) && hasLooseItems(v) && !lootBlocker(world, me, v.id) && !keepsOff(world, v.id));
   return downed.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
 }
 

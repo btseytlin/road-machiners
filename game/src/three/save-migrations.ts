@@ -498,6 +498,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withSeenSince_23_24,
   // 24 to 25: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
   (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  // 25 to 26: loot warnings join the states, and a call may show a driver's own line. Old saves hold neither, so
+  // nothing changes.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

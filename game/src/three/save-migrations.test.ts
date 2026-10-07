@@ -31,6 +31,7 @@ import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import FORMAT_2_24 from './save-fixtures/format-2-24.json';
+import FORMAT_2_25 from './save-fixtures/format-2-25.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -510,5 +511,11 @@ describe('save migration 24 to 25', () => {
     const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
+  });
+});
+
+describe('save migration 25 to 26', () => {
+  it('keeps the states and the open call as they are', () => {
+    expect(MIGRATIONS[25](FORMAT_2_25)).toEqual(FORMAT_2_25);
   });
 });
