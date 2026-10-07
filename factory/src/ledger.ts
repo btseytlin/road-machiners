@@ -12,7 +12,7 @@ export type ModelUsage = { model: string; input: number; output: number; cacheRe
 export type AgentUsage = { model: string; costUsd: number; minutes: number; modelUsage?: ModelUsage[]; sessionId?: string; resumed?: boolean; fromTranscript?: true };
 // The agent run a job has going. Its file outlives a killed job process, so whoever ends the job prices the run from its transcript.
 export type OpenRun = { model: string; projects: string; sessionId: string; resumed: boolean; startedAt: string };
-export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout' | 'stopped';
+export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout' | 'stopped' | 'held';
 
 // One line per ended job, per routed committee reply and per card move. The waste review derives queue wait and reruns from these lines.
 // `peakGb` is the highest memory any container of the job used. A job whose containers never ended normally has none.

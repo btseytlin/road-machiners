@@ -46,6 +46,8 @@ Screenshots never block a card. A card with no screenshot still runs verify and 
 
 A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label. A run that hits the Claude weekly usage limit pauses the factory instead, and its card takes no label.
 
+A member or Hermes can hold one card with `factory pause-card N`, so its worker goes to other work, like release tasks. The hold stops the card's job and keeps its work clone and agent sessions. The card waits in its column with no label until `factory resume-card N`, and then the stopped stage continues where it stopped. [state.md](state.md) has the rules.
+
 Every column change writes a card line to the ledger, named by its arrow in the diagram. The public dashboard reads these lines for its delivery numbers. [operations.md](operations.md#ledger-and-waste-review) lists the names.
 
 Hermes can put a card in any position with `factory move`. The move clears the state of the old position, so every store agrees on the new one. [state.md](state.md) lists the positions.
@@ -137,6 +139,8 @@ Jobs pick in this order. A job starts when its queue has a free worker and no ot
 1. Branch jobs: queued approve, remove, ship, incident, then a stale `/dev/`, the release cut, and the release playtest or the candidate. The playtest runs in the verify queue.
 2. The waste review, when due.
 3. Card jobs: hotfixes, ad hoc tasks, factory changes, release tasks, then other cards. Within each, the card furthest along goes first.
+
+A held card gets no job of any kind, and its queued approval waits while the next one runs.
 
 Queues:
 

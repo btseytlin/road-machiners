@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_STATE } from './state';
-import { CARD_JOBS, cardDrift, cardPosition, releaseDrift, runningJobs } from './position';
+import { CARD_JOBS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs } from './position';
 import type { Card, Column, FactoryState, Job, JobStage } from './types';
 
 const card = (column: Column, issue = 157, labels: string[] = []): Card => ({ itemId: 'i', issue, column, labels });
@@ -113,5 +113,20 @@ describe('releaseDrift', () => {
   it('flags a pending ship with no current candidate post', () => {
     expect(releaseDrift(withState({ release, pendingShip: 'bob' }), [card('Approval', 300)])).toEqual(['pending ship but no current candidate post']);
     expect(releaseDrift(withState({ pendingShip: 'bob' }), [])).toEqual(['pending ship but no current candidate post']);
+  });
+});
+
+describe('hold drift', () => {
+  const hold = { by: 'Ann', reason: 'release first', at: '2026-01-01T00:00:00Z', stage: null };
+  it('prints nothing for a held card that waits in its column', () => {
+    expect(cardDrift(card('Implementation'), withState({ held: { 157: hold } }))).toEqual([]);
+    expect(holdDrift(withState({ held: { 157: hold } }), [card('Implementation')])).toEqual([]);
+  });
+  it('flags a held card in Done and a held card with a running job, with the reason', () => {
+    expect(cardDrift(card('Done'), withState({ held: { 157: hold } }))).toEqual(['#157 held by Ann (release first) but column Done']);
+    expect(cardDrift(card('Implementation'), withState({ held: { 157: hold }, jobs: [job('implement', 157)] }))).toEqual(['#157 held by Ann (release first) but a implement job is running']);
+  });
+  it('flags a held issue that left the board', () => {
+    expect(holdDrift(withState({ held: { 158: hold } }), [card('Implementation')])).toEqual(['#158 held by Ann (release first) but not on the board']);
   });
 });

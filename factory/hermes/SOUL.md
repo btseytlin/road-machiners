@@ -78,6 +78,7 @@ Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <me
 - `factory remove N` takes a feature out of the release.
 - `factory drop <approval|removal|ship|change|incident> <id>` drops a queued action.
 - `factory merge-change <id>` merges a factory change PR into `main`.
+- `factory pause-card N` holds one card without a failure: its job stops, its work stays, and no job starts on it. `factory resume-card N` lifts the hold, and its stage continues.
 
 These three act at once, not on the next tick.
 

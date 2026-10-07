@@ -40,6 +40,8 @@ One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 h
 
 A job whose process dies within its time limit resumes once. This covers a crash, a memory kill or a reboot. Each issue keeps its agents' Claude Code sessions in `$FACTORY_HOME/sessions/issue-N`. The tick removes the dead job's containers, puts the issue in `interrupted` and frees its cap slot. The next tick starts the same stage, and each agent round continues its session with `--resume`. Merges, checks and publishing run again. A second death or a timeout fails the job. A dead branch job always fails, since a restart could repeat a half-done branch move. A job's end clears the sessions and the mark.
 
+`factory pause-card N` uses the same path. It kills the card's job, puts the issue in `interrupted` and frees its cap slot, and the card waits until `resume-card N`. The continued job counts as resumed once, so its death fails it.
+
 ## Cleanup and health
 
 Every tick, after it checks the running jobs:
@@ -76,7 +78,7 @@ When a member acts on a post by button or reply, the factory adds a status line 
 
 ## Ledger and waste review
 
-Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. A finished agent run with no `result` event fails its job.
+Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out, and `pause-card` the line of the job it held, with the outcome `held`. The dashboard and the waste review count a held job as neither finished nor failed, and its spend as no waste, since its stage continues in the same sessions. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. A finished agent run with no `result` event fails its job.
 
 A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died or timed out as wasted.
 

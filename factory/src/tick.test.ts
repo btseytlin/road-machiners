@@ -160,6 +160,33 @@ describe('chooseJobs during a release', () => {
   });
 });
 
+const HOLD = { by: 'Ann', reason: 'release tasks first', at: '2026-01-10T11:00:00Z', stage: 'implement' as const };
+
+describe('chooseJobs with held cards', () => {
+  it('starts no job on a held card, and gives the freed worker to a release task first', () => {
+    const cards = [card(5, 'Implementation'), card(6, 'Implementation', ['release-task']), card(7, 'Implementation')];
+    expect(chooseJobs(state({ held: { 5: HOLD } }), cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 6 }]);
+    expect(chooseJobs(state({ held: { 5: HOLD, 6: HOLD } }), cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 7 }]);
+  });
+
+  it('reports a held card as waiting with the reason held', () => {
+    const report = evaluateSchedule(state({ held: { 5: HOLD } }), [card(5, 'Testing')], NOW, CFG);
+    expect(report.picks).toEqual([]);
+    expect(report.decisions).toEqual([{ stage: 'verify', issue: 5, reasons: ['held'] }]);
+  });
+
+  it('keeps a queued approval of a held card waiting, and runs the next approval', () => {
+    const s = state({ pendingApprovals: { 4: 'u', 9: 'u' }, held: { 4: { ...HOLD, stage: null } } });
+    expect(chooseJobs(s, [card(4, 'Approval'), card(9, 'Approval')], NOW, CFG)).toEqual([{ stage: 'approve', issue: 9 }]);
+    const report = evaluateSchedule(s, [card(4, 'Approval')], NOW, CFG);
+    expect(report.decisions).toContainEqual({ stage: 'approve', issue: 4, reasons: ['approval', 'held'] });
+  });
+
+  it('starts the card again once the hold is gone', () => {
+    expect(chooseJobs(state({ interrupted: [5] }), [card(5, 'Implementation')], NOW, CFG)).toEqual([{ stage: 'implement', issue: 5 }]);
+  });
+});
+
 describe('chooseJobs', () => {
   it('picks the lowest ad hoc card before other agent work, beside a branch job', () => {
     const cards = [card(8, 'Implementation', ['adhoc']), card(6, 'Implementation', ['adhoc']), card(5, 'Implementation'), card(7, 'Implementation', ['adhoc', 'factory-stuck'])];
