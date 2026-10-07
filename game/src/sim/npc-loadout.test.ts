@@ -329,12 +329,18 @@ describe('trader spare parts', () => {
     const template = structuredClone(NPCS.trader);
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
-    template.loadout.goods = [{ value: null, weight: 1 }];
-    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 0, weight: 1 }] };
-    const bare = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
-    const free = freeCells(makeVehicle(fixture, { ...bare, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
-    template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 3, weight: 1 }] };
+    // The gear picker keeps room for the biggest load, so the goods count that fills the grid is found by rolling
+    // again until the room left after gear and repair parts matches it.
+    let free = 1;
+    for (let i = 0; i < 10; i++) {
+      template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
+      const rolled = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+      const room = freeCells(makeVehicle(fixture, { ...rolled, spares: [], cargo: { parts: rolled.cargo.parts }, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
+      if (room === free) break;
+      free = room;
+    }
+    template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
     expect(loadout.cargo.textiles).toBe(free);
     expect(loadout.spares).toEqual([]);

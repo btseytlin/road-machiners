@@ -703,13 +703,15 @@ function onGrievances(world: World, vehicle: Vehicle): void {
   }
 }
 
-// One roll per turn the driver was hurt, about the hostile that hit it last, while it sees that hostile. A truce
-// or a beg pleads with it.
+// One roll per turn the driver was hurt, about the hostile that hit it last, while it sees that hostile. The danger
+// is judged again with the damage taken, so a fight that turns bad can end. A truce or a beg pleads with the foe, and
+// flee breaks off.
 function onParley(world: World, vehicle: Vehicle): void {
   const foe = hurtingFoe(world, vehicle);
   if (!foe) return;
   const option = decide(world, vehicle, 'parley', foe.id, perceiveDanger(world, vehicle, foe));
-  if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
+  if (option === 'flee') interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), foe.id, foe.pos, 'break off a losing fight'));
+  else if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
 }
 
 // The hostile in sight that hit the driver last, when the driver took damage last turn.

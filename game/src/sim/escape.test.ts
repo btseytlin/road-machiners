@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { XP_SOURCES } from '../data/skills';
 import { isHostile } from './combat';
 import { noteEscape } from './escape';
-import { vehicleDanger } from './npc-decisions';
+import { fightOdds } from './fight-odds';
 import { addVehicle, emptyWorld, npcBrain, practiceOf, testDrive } from './testkit';
 import type { Vehicle, World } from './types';
 import { addState } from './states';
@@ -33,10 +33,9 @@ describe('escape practice', () => {
     raider.pos = { x: 80, y: 30 };
     refreshVision(w);
     noteEscape(w);
-    const theirs = vehicleDanger(w, raider);
-    const ours = vehicleDanger(w, w.vehicles[0]);
+    const theirOdds = 1 - fightOdds(w, [w.vehicles[0]], [raider]).win;
     expect(practiceOf(w, 'escape')).toMatchObject([{ amount: 1 }]);
-    expect(practiceOf(w, 'escape')[0].difficulty).toBeCloseTo(theirs / (theirs + ours));
+    expect(practiceOf(w, 'escape')[0].difficulty).toBeCloseTo(theirOdds);
     expect(w.player.hostilesSeen).toEqual([]);
   });
 

@@ -253,7 +253,7 @@ export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec,
   const sv = vehicleStats(world, v);
   const me = afterTurn(world, v, p);
   const there = { ...target, pos: lead };
-  const mine = bearingShare(world, v, there, p);
+  const mine = exposure(world, v, me, there);
   const theirs = exposure(world, target, there, me);
   const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);

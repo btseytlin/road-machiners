@@ -10,6 +10,8 @@ import { dist } from './vec';
 import { inArc } from './combat';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { makePart } from './factory';
+import { mountPart } from './inventory';
 import type { Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -40,6 +42,20 @@ describe('fight driving', () => {
     expect(bearsFrom(w, v, me, { x: 40, y: 24 })).toBe(false);
     const p = fightPoint(w, v, me, 6);
     expect(bearsFrom(w, v, me, p)).toBe(true);
+  });
+
+  // A plated nose stops most of an mg's rounds, and a bare rear lets them all through.
+  it('scores a spot facing the target\'s bare side above one facing its plates', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const target = addVehicle(w, 'player', 'hauler', ['stockEngine'], { x: 40, y: 30 }, 0);
+    target.id = w.vehicles[0].id;
+    w.vehicles = [target, ...w.vehicles.slice(1, -1)];
+    while (mountPart(w, target, makePart(w, 'plates', 0), ['F']));
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 40, y: 37 });
+    v.speed = 6; // fast enough that a turn's drive reaches either spot
+    const ahead = { x: 46, y: 30 };
+    const behind = { x: 34, y: 30 };
+    expect(scorePoint(w, v, target, target.pos, 6, behind, 0)).toBeGreaterThan(scorePoint(w, v, target, target.pos, 6, ahead, 0));
   });
 
   it('keeps out of the target\'s forward cannon arc', () => {

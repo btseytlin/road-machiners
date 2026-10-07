@@ -898,7 +898,7 @@ export type DecisionOptions = {
   // drives straight through the target, halt brakes and sits, veer turns the other way round to a random spot.
   fightWhim: 'keep' | 'rush' | 'halt' | 'veer';
   crashed: 'forgive' | 'retaliate'; // a truck at peace with the driver damaged it in a crash
-  parley: 'keep' | 'truce' | 'beg'; // a foe hurt the driver this turn
+  parley: 'keep' | 'truce' | 'beg' | 'flee'; // a foe hurt the driver this turn
   truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
   // A driver that takes nothing fights a stranded foe alone: offer it a way out, or judge it not worth the trouble and
@@ -947,8 +947,9 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   // Most crashes between trucks at peace are accidents. Four drivers in five shrug one off.
   crashed: { forgive: 4, retaliate: 1 },
   // A hurt driver mostly fights on. Asking for a truce is rare unless the foe is a threat, and begging is rare
-  // unless the driver is weak.
-  parley: { keep: 8, truce: 0.5, beg: 0.1 },
+  // unless the driver is weak. Breaking off is rare unless the foe turns out a threat the driver can outrun, or the
+  // driver is weak.
+  parley: { keep: 8, truce: 0.5, beg: 0.1, flee: 0.1 },
   // Two drivers in three take a truce. A threat on the other side makes it more likely.
   truceOffered: { accept: 2, refuse: 1 },
   // Three drivers in four let a beaten foe go. The beggar leaves its cargo.

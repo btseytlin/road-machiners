@@ -81,8 +81,8 @@ function printEpisodes(label, turns, test) {
   console.log(`${label}: ${found.length} stretches, ${found.reduce((n, e) => n + e.to - e.from + 1, 0)} turns: ${list}`);
 }
 
-// Each combat stretch: who shot first, the foes and their danger and speed against the truck's, how many turns the
-// truck stood still under fire, and the net worth, cargo and parts it came out with.
+// Each combat stretch: who shot first, the foes with the player's odds to win against each and their speed against
+// the truck's, how many turns the truck stood still under fire, and the net worth, cargo and parts it came out with.
 // A combat stretch with no shot in it is a standoff, such as a refused demand, and prints as one line apart.
 function printFights(turns) {
   const stretches = episodes(turns, (l) => l.flags.includes('combat'));
@@ -96,7 +96,7 @@ function printFights(turns) {
     const firstShot = span.flatMap((l) => l.ev.filter((x) => x.startsWith('shot ')).map((x) => `${l.t} ${x}`))[0] ?? 'none';
     const foes = firstSeen(fight);
     const still = fight.filter((l, i) => i > 0 && l.pos[0] === fight[i - 1].pos[0] && l.pos[1] === fight[i - 1].pos[1]).length;
-    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me danger ${before.danger} speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} d${f.danger} s${f.speed}`).join(', ') || 'unseen'}`);
+    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} win ${f.odds}% s${f.speed}`).join(', ') || 'unseen'}`);
     console.log(`  first shot ${firstShot}; still ${still} turns; nw ${before.nw} -> ${after.nw}; ${outcome(fight, before, after)}`);
   }
 }

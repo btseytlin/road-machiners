@@ -23,7 +23,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 
 ## Traits
 
-`robs` says when the driver may rob. Boldness multiplies the driver's own danger when it judges another truck.
+`robs` says when the driver may rob. Boldness is the most danger, how many times stronger the other side looks, that the driver will take on.
 
 <!-- wiki:traits -->
 | id | robs | boldness | fuel margin | weight changes |
@@ -79,6 +79,7 @@ Base weights of every option at each decision point. Traits and states add or mu
 | parley | keep | 8 |
 | parley | truce | 0.5 |
 | parley | beg | 0.1 |
+| parley | flee | 0.1 |
 | truceOffered | accept | 2 |
 | truceOffered | refuse | 1 |
 | mercyBegged | spare | 3 |

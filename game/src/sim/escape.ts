@@ -6,7 +6,7 @@
 
 import { engagedWith, isHostile } from './combat';
 import { playerVehicle } from './damage';
-import { vehicleDanger } from './npc-decisions';
+import { fightOdds } from './fight-odds';
 import { practice } from './progress';
 import type { Vehicle, World } from './types';
 import { playerSees } from './vision';
@@ -20,7 +20,7 @@ export function noteEscape(world: World): void {
   if (p.state !== 'active' || p.hostilesSeen.length > 0) return;
   const escaped = escapedFrom(world, me, before);
   if (!escaped) return;
-  const strongest = escaped.reduce((a, b) => (vehicleDanger(world, b) > vehicleDanger(world, a) ? b : a));
+  const strongest = escaped.reduce((a, b) => (escapeDifficulty(world, me, b) > escapeDifficulty(world, me, a) ? b : a));
   practice(world, 'escape', 1, escapeDifficulty(world, me, strongest), strongest.id);
 }
 
@@ -38,9 +38,7 @@ function hostilesInSight(world: World, me: Vehicle): string[] {
   return world.vehicles.filter((v) => v.id !== me.id && isHostile(world, v, me) && playerSees(world, v.pos)).map((v) => v.id);
 }
 
-// The strongest escaped truck's danger against the player's own, from 0 for a harmless one toward 1.
+// The strongest escaped truck's odds to beat the player in a fight, from 0 for a harmless one toward 1.
 function escapeDifficulty(world: World, me: Vehicle, strongest: Vehicle): number {
-  const theirs = vehicleDanger(world, strongest);
-  if (theirs === 0) return 0;
-  return theirs / (theirs + vehicleDanger(world, me));
+  return 1 - fightOdds(world, [me], [strongest]).win;
 }

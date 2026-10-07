@@ -32,7 +32,8 @@ import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
-import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger, getKnownSite, tripFuelCost, vehicleDanger } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, perceiveDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
+import { fightOdds } from '../fight-odds';
 import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -730,9 +731,8 @@ function engageFoe(o: Orders): boolean {
   return heard !== null;
 }
 
-// A hunter picks a fight only against a foe this many times less dangerous than itself. In the snowball runs, fights
-// below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost next to nothing. A foe it will not
-// fight it outruns, as a player does.
+// A hunter picks a fight only against a foe group this many times weaker than itself by strengthRatio(), which is
+// odds of 80% or more to win. A won fight still costs repairs. A foe it will not fight it outruns, as a player does.
 const HUNT_MARGIN = 4;
 
 // Whether the hunter would fight the foe even if it read the foe at its worst: the foe and its faction mates near it,
@@ -741,12 +741,12 @@ const HUNT_MARGIN = 4;
 // so the same judgement of the same foe holds on every turn.
 function huntable(world: World, foe: Vehicle): boolean {
   const group = world.vehicles.filter((v) => v.id === foe.id || (v.faction === foe.faction && !isKnockedOut(v) && dist(v.pos, foe.pos) <= SPAWN.neighborHelp));
-  const danger = group.reduce((sum, v) => sum + vehicleDanger(world, v), 0) * (1 + NPC_BEHAVIOR.dangerSpread);
-  return danger * HUNT_MARGIN <= ownDanger(world, playerVehicle(world));
+  const danger = strengthRatio(fightOdds(world, [playerVehicle(world)], group)) * (1 + NPC_BEHAVIOR.dangerSpread);
+  return danger * HUNT_MARGIN <= 1;
 }
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe) || campGunning(o.me, foe.pos)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > 1 || !isSoftTarget(o.world, foe) || campGunning(o.me, foe.pos)) return false;
   setFire(o, true);
   aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
@@ -910,12 +910,12 @@ function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
 function beats(o: Orders, foe: Vehicle, goal: Goal): boolean {
   if (campGunning(o.me, foe.pos)) return false;
   const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
-  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me);
+  return dangerOf(o.world, foe) * margin <= 1;
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
 function outmatchedBy(world: World, foe: Vehicle): boolean {
-  return dangerOf(world, foe) > ownDanger(world, playerVehicle(world)) && !outruns(world, playerVehicle(world), foe);
+  return dangerOf(world, foe) > 1 && !outruns(world, playerVehicle(world), foe);
 }
 
 function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {

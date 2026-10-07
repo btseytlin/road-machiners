@@ -34,7 +34,8 @@ export const NPC_BEHAVIOR = {
   // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,
   // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
-  // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
+  // point gets arcWeight × the share of its gun damage that bears from there and gets past the armor on the side the
+  // target shows it, so it works round to a bare side, minus threatWeight × the share of the
   // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
@@ -45,15 +46,19 @@ export const NPC_BEHAVIOR = {
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
-  // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
+  // An enemy is a threat when its group looks stronger than the driver's by more than this times its boldness.
+  // Strength is the odds to lose a fight over the odds to win it, see strengthRatio() in src/sim/npc-decisions.ts.
   threatRatio: 1,
   // A sighting misjudges a truck's danger by up to a quarter either way, rolled once per sighting. Damage shows,
   // but only roughly.
   dangerSpread: 0.25,
   // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
-  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
+  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always. A driver
+  // whose odds to get away from a threat are below its odds to win gets trappedFlee instead of threatFlee: it mostly
+  // stays to fight or gives in, since running would only show the threat its rear.
   threatFlee: 20,
   weakFlee: 20,
+  trappedFlee: 0.2,
   // Damage taken last turn, as a share of cab max HP, that adds the base weight to flee when attacked.
   hurtFullFlee: 0.1,
   // A shot that did no damage gives flee this much of its base weight when attacked.

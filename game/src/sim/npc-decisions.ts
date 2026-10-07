@@ -20,6 +20,7 @@ import { RULES } from '../data/rules';
 import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isDefeated, isKnockedOut } from './defeat';
+import { fightOdds, type FightOdds } from './fight-odds';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { affordableBuyCount, getTradePrice } from './economy';
@@ -130,35 +131,42 @@ export function firepower(world: World, vehicle: Vehicle): number {
   return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
 }
 
-// How dangerous a truck is as it stands now: firepower times toughness. Toughness is the current HP of the chassis
-// core parts and the mounted armor.
-export function vehicleDanger(world: World, vehicle: Vehicle): number {
-  const toughness = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'armor')].reduce((sum, part) => sum + part.hp, 0);
-  return firepower(world, vehicle) * toughness;
-}
-
-// A truck and its faction mates within SPAWN.neighborHelp of it that the observer sees.
+// A truck and its faction mates within SPAWN.neighborHelp of it that the observer sees, none knocked out.
 function localGroup(world: World, observer: Vehicle, member: Vehicle): Vehicle[] {
-  return world.vehicles.filter((v) => v.id === member.id || (v.id !== observer.id && v.faction === member.faction
-    && dist(v.pos, member.pos) <= SPAWN.neighborHelp && canVehicleSee(world, observer, v.pos)));
+  return world.vehicles.filter((v) => !isDefeated(v) && (v.id === member.id || (v.id !== observer.id && v.faction === member.faction
+    && dist(v.pos, member.pos) <= SPAWN.neighborHelp && canVehicleSee(world, observer, v.pos))));
 }
 
-// Another truck's local group danger as one sighting judges it: off by a factor rolled with world RNG.
+// The driver with its visible faction mates nearby that are not at odds with it.
+function ownGroup(world: World, vehicle: Vehicle): Vehicle[] {
+  return [vehicle, ...localGroup(world, vehicle, vehicle).filter((v) => v.id !== vehicle.id && !isHostile(world, vehicle, v))];
+}
+
+// The driver's group against the other truck's group, by the real damage rules. See src/sim/fight-odds.ts.
+export function fightOddsAgainst(world: World, vehicle: Vehicle, other: Vehicle): FightOdds {
+  return fightOdds(world, ownGroup(world, vehicle), localGroup(world, vehicle, other));
+}
+
+// How many times stronger the other truck's group is than the driver's: the driver's odds to lose a fight over its
+// odds to win it. Even odds give 1, and a foe it cannot hurt gives Infinity.
+export function strengthRatio(odds: FightOdds): number {
+  return odds.win === 0 ? Infinity : (1 - odds.win) / odds.win;
+}
+
+// The other truck's group danger: its strength ratio against the driver's group.
+export function judgeDanger(world: World, observer: Vehicle, other: Vehicle): number {
+  return strengthRatio(fightOddsAgainst(world, observer, other));
+}
+
+// judgeDanger() as one sighting judges it, off by a factor rolled with world RNG.
 export function perceiveDanger(world: World, observer: Vehicle, other: Vehicle): number {
   const spread = NPC_BEHAVIOR.dangerSpread;
-  const danger = localGroup(world, observer, other).reduce((sum, v) => sum + vehicleDanger(world, v), 0);
-  return danger * randRange(world, 1 - spread, 1 + spread);
+  return judgeDanger(world, observer, other) * randRange(world, 1 - spread, 1 + spread);
 }
 
-// The driver's own danger with its visible faction mates nearby that are not at odds with it.
-export function ownDanger(world: World, vehicle: Vehicle): number {
-  const group = localGroup(world, vehicle, vehicle).filter((v) => v.id === vehicle.id || !isHostile(world, vehicle, v));
-  return group.reduce((sum, v) => sum + vehicleDanger(world, v), 0);
-}
-
-// Whether a perceived danger stays within the driver's own group danger times threat ratio and boldness.
-function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
-  return danger <= ownDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
+// Whether a perceived danger stays within threat ratio times the driver's boldness.
+function isManageable(vehicle: Vehicle, danger: number): boolean {
+  return danger <= NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
 }
 
 // Combat condition or driver health at or below the flee condition, or below the higher recover condition while
@@ -708,14 +716,17 @@ function weakFlee(world: World, vehicle: Vehicle): number {
   return isWeak(world, vehicle) ? NPC_BEHAVIOR.weakFlee : 1;
 }
 
-// A seen group is a threat when its perceived danger beats the driver's own group, scaled by threat ratio and
-// boldness.
-function threatFlee(world: World, vehicle: Vehicle, danger: number | null): number {
-  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatFlee : 1;
+// A seen group is a threat when its perceived danger beats threat ratio times boldness. The driver runs from it when
+// it can get away at all and its odds to get away are at least its odds to win. Otherwise it seldom runs, since
+// running would only show the threat its rear.
+function threatFlee(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
+  if (danger === null || isManageable(vehicle, danger)) return 1;
+  const odds = fightOddsAgainst(world, vehicle, subjectOf(world, decision, subject));
+  return odds.getaway > 0 && odds.getaway >= odds.win ? NPC_BEHAVIOR.threatFlee : NPC_BEHAVIOR.trappedFlee;
 }
 
-function fleeSeenFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  return threatFlee(world, vehicle, danger) * weakFlee(world, vehicle);
+function fleeSeenFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
+  return threatFlee(world, vehicle, decision, subject, danger) * weakFlee(world, vehicle);
 }
 
 // A heard enemy is judged only by the driver's own state.
@@ -724,13 +735,13 @@ function fleeHeardFactor(world: World, vehicle: Vehicle): number {
 }
 
 // A miss counts a little, and damage taken last turn adds by its share of the cab.
-function fleeAttackedFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+function fleeAttackedFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const cabMax = maxHp(corePart(vehicle, 'cab'));
   const hit = NPC_BEHAVIOR.missFlee + vehicle.brain!.hurt / cabMax / NPC_BEHAVIOR.hurtFullFlee;
-  return hit * weakFlee(world, vehicle) * threatFlee(world, vehicle, danger);
+  return hit * weakFlee(world, vehicle) * threatFlee(world, vehicle, decision, subject, danger);
 }
 
-const FLEE_FACTORS: Partial<Record<DecisionId, SituationFactor>> = { hostileSeen: fleeSeenFactor, contactHeard: fleeHeardFactor, attacked: fleeAttackedFactor, threatened: fleeSeenFactor };
+const FLEE_FACTORS: Partial<Record<DecisionId, SituationFactor>> = { hostileSeen: fleeSeenFactor, contactHeard: fleeHeardFactor, attacked: fleeAttackedFactor, threatened: fleeSeenFactor, parley: fleeSeenFactor };
 
 function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const factor = FLEE_FACTORS[decision];
@@ -758,7 +769,7 @@ function appealOf(world: World, vehicle: Vehicle, target: Vehicle, curve: Appeal
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger'));
-  const stronger = seen !== null && seen >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
+  const stronger = seen !== null && seen >= npcProfile(vehicle).boldness;
   const appeal = appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.rob);
   return (stronger ? NPC_BEHAVIOR.robStronger : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
@@ -774,7 +785,7 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
 // loot attacks a cheap cargo rarely.
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
-  const eager = !isBusy(vehicle) && danger !== null && isManageable(world, vehicle, danger);
+  const eager = !isBusy(vehicle) && danger !== null && isManageable(vehicle, danger);
   const lootOnly = decision === 'hostileSeen' && huntsForLoot(world, vehicle, target);
   const appeal = lootOnly ? appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.raid) : 1;
   return (eager ? NPC_BEHAVIOR.manageableFight : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
@@ -782,7 +793,7 @@ function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subje
 
 // An attacked driver mostly defends against a manageable group, busy or not.
 function fightBackFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  return danger !== null && isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.manageableFight : 1;
+  return danger !== null && isManageable(vehicle, danger) ? NPC_BEHAVIOR.manageableFight : 1;
 }
 
 // A driver busy with work, not weak, mostly keeps on around a hostile that is not aimed at it or its group.
@@ -807,7 +818,7 @@ function retaliateFactor(world: World, vehicle: Vehicle, decision: DecisionId, s
 // A driver facing a threat offers a truce readily. One that is not weak and can handle its foe is winning, so it
 // rarely offers one.
 function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  if (danger !== null && !isManageable(world, vehicle, danger)) return NPC_BEHAVIOR.threatTruce;
+  if (danger !== null && !isManageable(vehicle, danger)) return NPC_BEHAVIOR.threatTruce;
   return isWeak(world, vehicle) ? 1 : NPC_BEHAVIOR.winningTruce;
 }
 
@@ -818,7 +829,7 @@ function begFactor(world: World, vehicle: Vehicle): number {
 
 // A driver facing a threat, or weak itself, wants the fight to end.
 function wantsPeace(world: World, vehicle: Vehicle, danger: number | null): boolean {
-  return (danger !== null && !isManageable(world, vehicle, danger)) || isWeak(world, vehicle);
+  return (danger !== null && !isManageable(vehicle, danger)) || isWeak(world, vehicle);
 }
 
 // A driver takes a truce more often from a threat, or when it is weak itself.
@@ -856,7 +867,7 @@ export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle)
 
 // A driver hands its cargo to a threat, and seldom while its escort watches.
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  const threat = danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+  const threat = danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
   return guardedNow(world, vehicle) ? threat * NPC_BEHAVIOR.guardedComply : threat;
 }
 

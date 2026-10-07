@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SIDES } from './armor';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
-import { toughness } from './npc-gear-score';
+import { toughness } from './fight-odds';
 import { addVehicle, emptyWorld } from './testkit';
 import type { Cell } from './grid';
 

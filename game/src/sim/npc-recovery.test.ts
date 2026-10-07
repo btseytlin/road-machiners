@@ -6,7 +6,7 @@ import { assignAutoOrders, fireWeapons } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
-import { ownDanger, perceiveDanger } from './npc-decisions';
+import { fightOddsAgainst, judgeDanger, perceiveDanger } from './npc-decisions';
 import { siteGates } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -129,14 +129,28 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario(template);
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, enemy, npc);
+    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'test flight' }];
+    npc.brain!.attackers[enemy.id] = true;
+    npc.brain!.noticed[`hostileSeen:${enemy.id}`] = world.turn;
+    npc.brain!.hurt = 0;
+    planNpcOrders(world);
+    expect(topGoal(npc)?.kind).toBe('flee');
+    expectReturnFire(world, npc, enemy);
+  });
+
+  // Running only shows a foe the rear. A driver that would lose the race but could win the fight turns on it.
+  it('turns on an attacker it cannot get away from rather than run', () => {
+    const { world, npc } = createScenario('scavenger');
+    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
+    fireAt(world, enemy, npc);
     corePart(npc, 'cab').hp = 1;
+    const odds = fightOddsAgainst(world, npc, enemy);
+    expect(odds.getaway).toBeLessThan(odds.win);
     const fled = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
-      const flees = topGoal(me)?.kind === 'flee';
-      if (flees) expectReturnFire(x, me, byId(x, enemy.id));
-      return flees;
+      return topGoal(me)?.kind === 'flee';
     });
-    expect(fled).toBeGreaterThan(0.9);
+    expect(fled).toBeLessThan(0.6);
   });
 
   it('allows a scavenger to help a nearby faction mate under attack', () => {
@@ -179,15 +193,17 @@ describe('NPC gameplay recovery', () => {
     addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 30, y: 42 });
     expect(judged()).toBe(alone);
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 33 });
-    expect(judged()).toBeCloseTo(alone * 2);
+    expect(judged()).toBeGreaterThan(alone * 1.5);
   });
 
   it('counts visible faction mates nearby in its own strength', () => {
     const { world, npc } = createScenario('buggy');
-    const alone = ownDanger(world, npc);
-    addVehicle(world, 'raiders', 'scout', ['mg'], { x: 32, y: 30 });
+    const trader = addVehicle(world, 'traders', 'scout', ['mg'], { x: 36, y: 30 });
+    const alone = judgeDanger(world, npc, trader);
     addVehicle(world, 'raiders', 'scout', ['mg'], { x: 30 + SPAWN.neighborHelp + 5, y: 30 });
-    expect(ownDanger(world, npc)).toBe(alone * 2);
+    expect(judgeDanger(world, npc, trader)).toBe(alone);
+    addVehicle(world, 'raiders', 'scout', ['mg'], { x: 32, y: 30 });
+    expect(judgeDanger(world, npc, trader)).toBeLessThan(alone / 1.5);
   });
 
   it('mostly withdraws from a locally stronger enemy group', () => {
