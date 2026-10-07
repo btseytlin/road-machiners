@@ -28,8 +28,19 @@ export function parseSettings(raw: string | null): Settings {
 const STEPS = 20;
 // A knob's pointer swings this many degrees each side of straight up.
 const SWEEP = 135;
-// Pixels of vertical drag for one step.
-const DRAG_PX = 6;
+// Pixels of drag travel for the whole range.
+const DRAG_FULL_PX = 160;
+// Drag travel in pixels that changes nothing, so a click never adjusts.
+const DRAG_DEAD_PX = 3;
+// A drag sets whole percents.
+const DRAG_STEPS = 100;
+
+// A volume dragged from where the press began: up or right raises it, down or left lowers it.
+export function dragged(start: number, dx: number, dy: number): number {
+  if (Math.abs(dx) + Math.abs(dy) < DRAG_DEAD_PX) return start;
+  const value = Math.round((start + (dx - dy) / DRAG_FULL_PX) * DRAG_STEPS) / DRAG_STEPS;
+  return Math.min(1, Math.max(0, value));
+}
 
 // A volume turned some steps, clamped to the knob's range and snapped to whole steps.
 export function turned(value: number, steps: number): number {
@@ -54,6 +65,7 @@ export class SoundSettings {
   private settings: Settings;
   private muteSwitch: HTMLElement;
   private knobs = new Map<Bus, HTMLElement>();
+  private readouts = new Map<Bus, HTMLElement>();
 
   // The knobs and mute live on the radio's faceplate, the next track key in the strip above its screen.
   constructor(private mixer: Mixer, private storage: Storage, faceplate: HTMLElement, keys: HTMLElement, nextTrack: () => void) {
@@ -71,26 +83,49 @@ export class SoundSettings {
     this.save();
   }
 
-  // Turns by vertical drag, the wheel or the arrow keys while focused. Handled keys stay off the game.
+  // The whole column under a knob is its handle: drag it, turn the wheel, or use the arrow keys while the knob is focused.
   private knob(bus: Bus): HTMLElement {
     const dial = el("div", { class: "knob-dial" }, el("span", { class: "knob-notch" }));
     const knob = el("div", { class: "knob", role: "slider", tabindex: 0, "aria-label": `${LABEL[bus]} volume`, "aria-valuemin": 0, "aria-valuemax": 100 }, dial);
     this.knobs.set(bus, knob);
-    let drag: { y: number; value: number } | null = null;
-    knob.addEventListener("pointerdown", (e) => {
-      knob.setPointerCapture(e.pointerId);
-      knob.focus();
-      drag = { y: e.clientY, value: this.settings.volume[bus] };
+    const readout = el("span", { class: "knob-readout" });
+    this.readouts.set(bus, readout);
+    const cell = el("div", { class: "knob-cell" }, knob, el("span", { class: "knob-labels" }, el("span", { class: "knob-label" }, LABEL[bus]), readout));
+    this.bindDrag(cell, bus);
+    this.bindWheel(cell, bus);
+    this.bindKeys(knob, bus);
+    return cell;
+  }
+
+  // A drag keeps the pointer captured on the column, so the map and other panels never see it. It ends when the capture does.
+  private bindDrag(cell: HTMLElement, bus: Bus): void {
+    let drag: { pointerId: number; x: number; y: number; value: number } | null = null;
+    cell.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || drag) return;
+      e.preventDefault();
+      cell.setPointerCapture(e.pointerId);
+      drag = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, value: this.settings.volume[bus] };
+      cell.classList.add("turning");
     });
-    knob.addEventListener("pointermove", (e) => {
-      if (drag) this.setVolume(bus, turned(drag.value, Math.round((drag.y - e.clientY) / DRAG_PX)));
+    cell.addEventListener("pointermove", (e) => {
+      if (drag?.pointerId === e.pointerId) this.setVolume(bus, dragged(drag.value, e.clientX - drag.x, e.clientY - drag.y));
     });
-    knob.addEventListener("pointerup", () => (drag = null));
-    knob.addEventListener("pointercancel", () => (drag = null));
-    knob.addEventListener("wheel", (e) => {
+    cell.addEventListener("lostpointercapture", (e) => {
+      if (drag?.pointerId !== e.pointerId) return;
+      drag = null;
+      cell.classList.remove("turning");
+    });
+  }
+
+  private bindWheel(cell: HTMLElement, bus: Bus): void {
+    cell.addEventListener("wheel", (e) => {
       e.preventDefault();
       this.setVolume(bus, turned(this.settings.volume[bus], -Math.sign(e.deltaY)));
     });
+  }
+
+  // Handled keys stay off the game.
+  private bindKeys(knob: HTMLElement, bus: Bus): void {
     knob.addEventListener("keydown", (e) => {
       const steps = KNOB_KEYS[e.code];
       if (steps === undefined) return;
@@ -98,7 +133,6 @@ export class SoundSettings {
       e.stopPropagation();
       this.setVolume(bus, turned(this.settings.volume[bus], steps));
     });
-    return el("div", { class: "knob-cell" }, knob, el("span", { class: "knob-label" }, LABEL[bus]));
   }
 
   private setVolume(bus: Bus, value: number): void {
@@ -112,7 +146,10 @@ export class SoundSettings {
     const volume = this.settings.volume[bus];
     this.mixer.setBusVolume(bus, volume);
     const knob = this.knobs.get(bus)!;
-    knob.setAttribute("aria-valuenow", String(Math.round(volume * 100)));
+    const percent = Math.round(volume * 100);
+    knob.setAttribute("aria-valuenow", String(percent));
+    knob.setAttribute("aria-valuetext", `${percent}%`);
+    this.readouts.get(bus)!.textContent = `${percent}%`;
     knob.style.setProperty("--knob-angle", `${knobAngle(volume)}deg`);
   }
 
