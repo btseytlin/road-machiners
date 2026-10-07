@@ -393,12 +393,13 @@ export class InventoryView {
     ];
   }
 
+  // The actions come right under the name, so Patch stays on screen when a short window cuts off the stats.
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
-      el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
 
