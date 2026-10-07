@@ -118,15 +118,18 @@ async function readOnlyMounts(home: string, readOnly: Record<string, string>, ev
 }
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
-export function outputsNote(dir: string): string {
-  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${LONG_JOBS_NOTE}`;
+export function outputsNote(dir: string, jobMaxMinutes: number): string {
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${longJobsNote(jobMaxMinutes)}`;
 }
 
 // The public dashboard shows the milestone beside the activity, so a reader sees which part of the card is in work.
 const MILESTONE_NOTE = 'Each time you start a new part of the work, run factory-status milestone \'<step>\' with a short step in the card\'s words, like \'Building orchard buildings\' or \'Testing the tow fee\'. Use 3 to 80 letters, digits, spaces and , . \' - only. Never name files, commands or secrets.';
 
 // Background tasks are off, and a sleep loop on a stuck command lost hours. factory-job runs a long command under a time limit and reports its activity on each check.
-const LONG_JOBS_NOTE = 'Start a command that may run longer than 5 minutes with factory-job start <name> <activity> <minutes> \'<command>\', with a time limit of about twice its expected run. Then check it with sleep 240; factory-job check <name>, with a Bash timeout of 5 minutes, until it ends. If its log has not changed for 15 minutes, stop it with factory-job stop <name> and find out why. Never end your run while a job is running, since the end of the run kills it.';
+// factory-job refuses a limit above FACTORY_JOB_MAX_MINUTES, since agents gave sims and screenshot scripts hours and polled them until the job timed out.
+function longJobsNote(jobMaxMinutes: number): string {
+  return `Start a command that may run longer than 5 minutes with factory-job start <name> <activity> <minutes> '<command>', with a time limit of about twice its expected run. The limit is at most ${jobMaxMinutes} minutes. A check that needs longer is too big, so use fewer seeds, fewer turns or a direct test. Then check it with sleep 240; factory-job check <name>, with a Bash timeout of 5 minutes, until it ends. If its log has not changed for 15 minutes, stop it with factory-job stop <name> and find out why. Never end your run while a job is running, since the end of the run kills it.`;
+}
 
 // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
 function sessionMount(session: AgentSession | undefined): string[] {
@@ -178,14 +181,14 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
       const env = {
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
-        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', FACTORY_JOB_MAX_MINUTES: String(cfg.agentJobMaxMinutes),
       };
       const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly, evidenceCheck === true);
       const args = [
         ...baseArgs(jobId, cpus, testWorkers, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), ...disallowedArgs(disallowedTools), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
-      const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
+      const input = [skill, outputsNote(dir, cfg.agentJobMaxMinutes), prompt].filter((part) => part !== undefined).join('\n\n');
       openRecordedRun(cfg, jobId, model, session);
       const result = await run('docker', args, { env, input, logPath: log });
       recordUsage(cfg, jobId, result, model, session);

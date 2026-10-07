@@ -41,6 +41,7 @@ export type FactoryConfig = {
   verifyTimeoutMinutes: number;
   testTimeoutMinutes: number;
   branchTimeoutMinutes: number;
+  agentJobMaxMinutes: number; // highest time limit an agent may give one factory-job background command
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
   wasteReviewDays: number; // days between waste reviews of the factory

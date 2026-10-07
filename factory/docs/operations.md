@@ -4,7 +4,7 @@ How the factory runs on its host: jobs, limits, cleanup, failures and records.
 
 ## Jobs and queues
 
-Each job is its own process, started by the tick. [process.md](process.md#tick-and-queues) lists the queues and the order jobs start in. `FACTORY_<QUEUE>_WORKERS` sets each queue's limit, and the branch queue runs one job at a time. `FACTORY_<QUEUE>_TIMEOUT_MINUTES` sets each queue's time limit. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job.
+Each job is its own process, started by the tick. [process.md](process.md#tick-and-queues) lists the queues and the order jobs start in. `FACTORY_<QUEUE>_WORKERS` sets each queue's limit, and the branch queue runs one job at a time. `FACTORY_<QUEUE>_TIMEOUT_MINUTES` sets each queue's time limit. Inside a job, an agent runs long commands with `factory-job`, and `FACTORY_JOB_MAX_MINUTES` caps the limit of each one. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job.
 
 Jobs share the host clone and the state file. Each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.
 

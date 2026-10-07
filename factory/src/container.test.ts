@@ -9,7 +9,7 @@ type Call = { cmd: string; args: string[]; opts?: RunOptions };
 
 const HOME = resolve('tmp/factory-container-test');
 const tokenPrices: FactoryConfig['tokenPrices'] = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
-const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME, tokenPrices } as FactoryConfig;
+const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, agentJobMaxMinutes: 30, home: HOME, tokenPrices } as FactoryConfig;
 
 // A finished agent run ends with this event, which the job's ledger line reads.
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
@@ -48,7 +48,8 @@ describe('dockerContainer', () => {
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
-    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' });
+    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', FACTORY_JOB_MAX_MINUTES: '30' });
+    expect(call.opts?.input).toContain('The limit is at most 30 minutes.');
     expect(call.opts?.input).toMatch(/^Your folder is \/work\/game\./);
     expect(call.opts?.input).toContain('When your activity changes, run factory-status');
     expect(call.opts?.input).toContain('factory-status milestone');
@@ -58,7 +59,7 @@ describe('dockerContainer', () => {
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
-    expect(call.args.filter((a) => a === '-e')).toHaveLength(11);
+    expect(call.args.filter((a) => a === '-e')).toHaveLength(12);
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'bash', '-c', expect.stringMatching(/memory\.peak.*; factory-agent "\$@"$/), 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
