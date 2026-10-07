@@ -11,8 +11,14 @@ export const CONDITION = {
   // Job stat loss per wear step. Cargo and core parts lose max HP only.
   statLoss: {
     spread: 0.15, // share of weapon spread added
+    damage: 0.05, // share of weapon round damage lost
+    pen: 0.05, // share of weapon round penetration lost
+    range: 0.05, // share of weapon range lost
     speedBonus: 0.26, // engine top speed bonus lost, in tiles per turn, a fifth of the smallest engine step
     accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
+    capacity: 0.05, // share of engine gun power lost
+    fuelMult: 0.05, // share of engine fuel use added
+    heat: 0.05, // share of engine heat added
     armor: 0.12, // share of an armor part's armor lost
     scannerRange: 0.1, // share of scanner range lost
   },

@@ -12,6 +12,7 @@ import { gearBaseline, gearScore, type Load } from './npc-gear-score';
 import { gunDrag, meetsSpeedFloor, npcMassRoom, speedShare } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { GridItem, Vehicle, World } from './types';
+import { wornDef } from './wear';
 
 export type NpcLoadout = {
   chassisId: string;
@@ -344,10 +345,10 @@ function coverSides(v: Vehicle, sides: Cell[], mount: (u: Vehicle, side: Cell) =
   return added ? v : null;
 }
 
-// Whether the guns slow the truck by no more than MAX_GUN_SLOWDOWN on its pristine engine.
+// Whether the guns slow the truck by no more than MAX_GUN_SLOWDOWN on its worn engine.
 function withinGunDraw(v: Vehicle): boolean {
   const engine = mountedItems(v, 'engine')[0];
-  return 1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity) <= MAX_GUN_SLOWDOWN;
+  return 1 - gunDrag(v, wornDef<EngineDef>(engine.part).capacity) <= MAX_GUN_SLOWDOWN;
 }
 
 // Adds guns and armor one pick at a time, judged by gearScore(). Each step goes through the moves in a random order

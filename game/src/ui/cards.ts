@@ -476,6 +476,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("magazine", "Shots per magazine", d.magazine, "", "more"),
     stat("reload", "Turns to reload", d.reload, "t", "less"),
     stat("arc", "Firing arc", d.arc, "°", "more"),
+    stat("spread", "Spread", d.spread, "°", "less", 1),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
     stat("power", "Power draw", d.draw, "", "less", 1),
   ];

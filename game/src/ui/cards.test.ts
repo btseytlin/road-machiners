@@ -38,6 +38,11 @@ describe("part stats and their change against the player's part", () => {
     expect(speed(part("turbine", 2))).toBeLessThan(speed(part("turbine")) ?? 0);
   });
 
+  it("shows a rebuilt gun with more spread than a pristine one", () => {
+    const spread = diffStats(partStats(part("mg", 4)), partStats(part("mg"))).find((d) => d.stat.icon === "spread");
+    expect(spread).toMatchObject({ verdict: "worse" });
+  });
+
   it("compares trucks stat by stat", () => {
     const speed = diffStats(chassisStats("courier"), chassisStats("hauler")).find((d) => d.stat.icon === "speed");
     expect(speed).toMatchObject({ verdict: "better" });

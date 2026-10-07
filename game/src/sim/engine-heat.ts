@@ -7,7 +7,7 @@ import { RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
 import { PERK_NUMBERS } from '../data/skills';
-import { damagePart } from './wear';
+import { damagePart, wornDef } from './wear';
 import { playerVehicle } from './damage';
 import { mountedParts } from './grid';
 import { practice, regionOf, skillEffect, vehicleHasPerk } from './progress';
@@ -87,5 +87,5 @@ function overdriveGain(world: World, v: Vehicle): number {
 // How fast the sun heats the mounted engine. A truck with no engine has nothing to heat.
 function engineHeatMult(v: Vehicle): number {
   const engine = mountedParts(v, 'engine')[0];
-  return engine ? (partDef(engine.defId) as EngineDef).heat : 0;
+  return engine ? wornDef<EngineDef>(engine).heat : 0;
 }

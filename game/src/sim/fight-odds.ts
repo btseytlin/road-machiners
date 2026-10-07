@@ -1,9 +1,10 @@
-import { PARTS, partDef, type WeaponDef } from '../data/parts';
+import { PARTS, type WeaponDef } from '../data/parts';
 import { openSides, reachedSides, sidePlanner, SIDES, type Round, type Side } from './armor';
 import { corePart, mountedItems, mountedParts, sideOf } from './grid';
 import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
+import { wornDef } from './wear';
 
 // How a fight between two trucks or groups goes, by the real damage rules. Each side of a truck takes some number of
 // rounds of a gun before the truck stops: its cab breaks, or its engine or transmission, which strands it. A gun stops
@@ -112,7 +113,7 @@ export function gunsBySide(v: Vehicle): Record<Side, WeaponDef[]> {
   const out: Record<Side, WeaponDef[]> = { front: [], rear: [], left: [], right: [] };
   for (const item of mountedItems(v, 'weapon')) {
     if (item.part.hp <= 0) continue;
-    const def = partDef(item.part.defId) as WeaponDef;
+    const def = wornDef<WeaponDef>(item.part);
     for (const side of openSides(v, item)) if (reachedSides(def).includes(side)) out[side].push(def);
   }
   return out;

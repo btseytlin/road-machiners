@@ -231,16 +231,27 @@ describe('stat loss per wear step', () => {
     expect(maxHp(part('cab', 2))).toBe(Math.round(def.hp * (1 - 2 * CONDITION.hpLoss)));
   });
 
-  it('widens weapon spread', () => {
+  it('widens weapon spread and cuts damage, penetration and range, and keeps the pristine def intact', () => {
     const def = partDef('mg') as WeaponDef;
-    expect(wornDef<WeaponDef>(part('mg', 2)).spread).toBeCloseTo(def.spread * (1 + 2 * CONDITION.statLoss.spread));
+    const worn = wornDef<WeaponDef>(part('mg', 2));
+    const loss = CONDITION.statLoss;
+    expect(worn.spread).toBeCloseTo(def.spread * (1 + 2 * loss.spread));
+    expect(worn.round.damage).toBeCloseTo(def.round.damage * (1 - 2 * loss.damage));
+    expect(worn.round.pen).toBeCloseTo(def.round.pen * (1 - 2 * loss.pen));
+    expect(worn.range).toBeCloseTo(def.range * (1 - 2 * loss.range));
+    expect(worn.round).not.toBe(def.round);
+    expect([worn.cooldown, worn.magazine, worn.reload, worn.arc, worn.mass]).toEqual([def.cooldown, def.magazine, def.reload, def.arc, def.mass]);
   });
 
-  it('cuts engine speed and accel bonus', () => {
+  it('cuts engine speed, accel bonus and gun power, and raises fuel use and heat', () => {
     const def = partDef('stockEngine') as EngineDef;
     const worn = wornDef<EngineDef>(part('stockEngine', 2));
-    expect(worn.speedBonus).toBeCloseTo(def.speedBonus - 2 * CONDITION.statLoss.speedBonus);
-    expect(worn.accelBonus).toBeCloseTo(def.accelBonus - 2 * CONDITION.statLoss.accelBonus);
+    const loss = CONDITION.statLoss;
+    expect(worn.speedBonus).toBeCloseTo(def.speedBonus - 2 * loss.speedBonus);
+    expect(worn.accelBonus).toBeCloseTo(def.accelBonus - 2 * loss.accelBonus);
+    expect(worn.capacity).toBeCloseTo(def.capacity * (1 - 2 * loss.capacity));
+    expect(worn.fuelMult).toBeCloseTo(def.fuelMult * (1 + 2 * loss.fuelMult));
+    expect(worn.heat).toBeCloseTo(def.heat * (1 + 2 * loss.heat));
   });
 
   it('lowers armor on armor parts', () => {

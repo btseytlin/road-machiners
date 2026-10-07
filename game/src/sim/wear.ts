@@ -123,10 +123,20 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
   const hp = maxHp(part);
   const loss = CONDITION.statLoss;
   switch (def.kind) {
-    case 'weapon':
-      return { ...def, hp, spread: def.spread * (1 + loss.spread * steps) } as T;
+    case 'weapon': {
+      const round = { ...def.round, damage: def.round.damage * (1 - loss.damage * steps), pen: def.round.pen * (1 - loss.pen * steps) };
+      return { ...def, hp, round, range: def.range * (1 - loss.range * steps), spread: def.spread * (1 + loss.spread * steps) } as T;
+    }
     case 'engine':
-      return { ...def, hp, speedBonus: def.speedBonus - loss.speedBonus * steps, accelBonus: def.accelBonus - loss.accelBonus * steps } as T;
+      return {
+        ...def,
+        hp,
+        speedBonus: def.speedBonus - loss.speedBonus * steps,
+        accelBonus: def.accelBonus - loss.accelBonus * steps,
+        capacity: def.capacity * (1 - loss.capacity * steps),
+        fuelMult: def.fuelMult * (1 + loss.fuelMult * steps),
+        heat: def.heat * (1 + loss.heat * steps),
+      } as T;
     case 'armor':
       return { ...def, hp, armor: def.armor * (1 - loss.armor * steps), blastArmor: def.blastArmor * (1 - loss.armor * steps) } as T;
     case 'scanner':
