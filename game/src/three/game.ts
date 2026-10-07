@@ -66,7 +66,7 @@ import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { stormTintStyle, WeatherView } from "./render/weather";
 import { stormShare } from "../sim/weather";
 import { ZonesView } from "./render/zones";
-import { daylightAt, lightScene, NightLights, sunLight, vehicleLampsOn } from "./render/daylight";
+import { daylightAt, lightScene, VehicleLights, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
@@ -107,7 +107,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly nightLights = new NightLights(this.scene);
+  private readonly vehicleLights = new VehicleLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -982,8 +982,8 @@ export class Game {
     this.rig.leash(truck, sightRadius);
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
-    lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
-    this.nightLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck);
+    const light = lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
+    this.vehicleLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck, light.beam);
     Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
     this.fx.tick(dt * speed, this.world);
     this.playPanelSounds();
