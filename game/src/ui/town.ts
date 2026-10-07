@@ -84,7 +84,7 @@ export class TownScreen {
     // The truck grid fits its cells to the window height, so a resize lays the screen out again.
     window.addEventListener("resize", () => this.render());
     this.inventory = new InventoryView(host, () => this.render(), false);
-    this.people = new PeopleView((cmd) => this.run(cmd), () => this.render());
+    this.people = new PeopleView((cmd) => this.run(cmd, true), () => this.render());
   }
 
   isOpen(): boolean {
@@ -167,11 +167,14 @@ export class TownScreen {
     return body[this.tab]();
   }
 
-  // Runs a command; a thrown rule error shows in the screen instead of changing the world.
-  private run(cmd: (w: World) => World): void {
+  // Runs a command; a thrown rule error shows in the screen instead of changing the world. An announced command
+  // also logs its events, like a journal note from talk.
+  private run(cmd: (w: World) => World, announce = false): void {
     keepFocus(this.root, () => {
       try {
-        this.host.apply(cmd(this.host.world()));
+        const next = cmd(this.host.world());
+        if (announce) this.host.announce(next);
+        else this.host.apply(next);
         this.error = "";
       } catch (e) {
         this.error = (e as Error).message;

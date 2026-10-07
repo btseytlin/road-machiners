@@ -1821,6 +1821,8 @@ canvas.view {
 #ui .talk .talk-topics button,
 #ui .talk .talk-offer button {
   text-align: left;
+  padding: 4px 10px;
+  min-height: 0;
 }
 
 /* Journal: one card per note, newest first. */
