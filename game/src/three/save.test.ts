@@ -88,6 +88,20 @@ describe('local game save', () => {
     expect(update(loaded, () => {}).player.overdrive).toBe(false);
   });
 
+  it('keeps a held haul with the reward and deadline it was accepted with, through a reload and a turn before its deadline', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    // Terms of the old rule: a tier 3 wage and a window of eight times the estimate.
+    const haul: Contract = { id: 'ct-h', shop: 'bowl', kind: 'haul', good: 'tools', units: 8, to: 'granary', reward: 1328, deadline: 934, window: 934, rush: false, tier: 3 };
+    world.player.contracts = [haul];
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected saved haul');
+    expect(loaded.player.contracts).toEqual([haul]);
+    const after = update(loaded, (d) => advanceContracts(d));
+    expect(after.player.contracts).toEqual([haul]);
+  });
+
   it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
     const storage = makeStorage();
     const world = emptyWorld();
