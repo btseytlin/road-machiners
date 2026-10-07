@@ -195,7 +195,22 @@ export function factoryPaths(diff: string): string[] {
 }
 
 // Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
+// Members and other jobs push to the branch while an agent works. Their commits are merged in before the push, and again whenever GitHub rejects it.
 export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
+  await catchUpBranch(ctx, issue, stage);
+  for (;;) {
+    const head = await guardedHead(ctx, issue, base, stage);
+    try {
+      await ctx.repo.push(head, BRANCH(issue));
+      return;
+    } catch (error) {
+      if (!(await catchUpBranch(ctx, issue, stage))) throw error;
+    }
+  }
+}
+
+// The work clone's head, once its diff passed the checks.
+async function guardedHead(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<string> {
   const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
   if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
@@ -205,5 +220,20 @@ export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage:
   if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
-  await ctx.repo.push(head, BRANCH(issue));
+  return head;
+}
+
+// Merges the commits that reached the issue branch on GitHub since the work clone last saw it. An agent resolves a conflict at once, in the same job.
+// Returns false when GitHub held nothing new.
+export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): Promise<boolean> {
+  await ctx.repo.fetch();
+  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(workDir(ctx, issue), BRANCH(issue));
+  if (commit === null) return false;
+  ctx.log(stage, issue, `${BRANCH(issue)} moved on GitHub, merged ${commit.slice(0, 7)} into the work${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
+  if (conflicts.length === 0) return true;
+  const files = conflicts.map((file) => `- ${file}`).join('\n');
+  await runAgent(ctx, issue, stage, 'branch-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), files }));
+  const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
+  if (!(await ctx.repo.isMerged(commit, head))) throw new Error(`The agent left the merge of ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
+  return true;
 }

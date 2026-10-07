@@ -15,7 +15,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home);
+  const merged = await mergeBase(ctx, issue, base, home, 'patch');
   await runAgent(ctx, issue, 'patch', 'patch', fillPrompt('patch', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), played }), { evidenceCheck: true });
   throwIfNeedsCommittee(home);
   const redesign = readOutput(home, 'needs-redesign.md');

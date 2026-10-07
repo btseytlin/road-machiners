@@ -241,6 +241,9 @@ export interface HostRepo {
   // Merges `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
+  // Merges GitHub's copy of `branch` into the work clone when it holds commits the clone lacks, like a member's push. A null commit means nothing to merge.
+  // A conflicted merge stays open, like in mergeBaseIntoWork.
+  mergeBranchIntoWork(dir: string, branch: string): Promise<{ commit: string | null; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
@@ -248,6 +251,7 @@ export interface HostRepo {
   readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
+  // A target that moved on GitHub meanwhile gets the steps again on its new tip.
   merge(steps: MergeStep[]): Promise<void>;
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
 }

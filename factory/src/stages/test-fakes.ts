@@ -71,6 +71,7 @@ export function fake(): Fake {
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       merge: async (steps: MergeStep[]) => {
         for (const step of steps) note(`merge ${step.branch} ${step.into}`);
         note(`push ${steps.map((step) => step.into).join(' ')}`);

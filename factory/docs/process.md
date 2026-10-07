@@ -81,6 +81,13 @@ A reference that arrives while the card is in Design waits. The running design a
 
 Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes at once. Steps that move several branches push them in one atomic push, so a conflict moves nothing.
 
+Members, other jobs and releases push all the time, so any branch may move while a job runs. A moved branch never fails a job.
+
+- An agent stage merges the new commits of its issue branch into the work before each push. When GitHub rejects the push because the branch moved again, it merges again and pushes again.
+- A conflict with those commits goes to an agent in the same job. The agent keeps both sides, and the stage goes on. An unfinished merge fails the stage.
+- Verify and patch also merge those commits before their agent starts, so the round tests them.
+- A merge into `dev`, `main` or the release that GitHub rejects because a target moved runs again on the new tips. Only a real conflict stops it.
+
 ![Branches](diagrams/branches.svg)
 
 - The release cut merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup tasks.

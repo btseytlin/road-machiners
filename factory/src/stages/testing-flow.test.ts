@@ -126,6 +126,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       headHash: async () => 'abc123',
       fetch: async () => { bases.push('fetch'); },
       mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
     },
   };

@@ -24,6 +24,7 @@ function fakeCtx(labels: string[], models: string[], prompts: string[] = []): Ct
     repo: {
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
       fetchFromWork: async () => 'w1', isMerged: async () => false, untrackFactoryFiles: async () => [], diff: async () => '', push: async () => undefined,
+      fetch: async () => undefined, mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
     },
   };
   return fake as unknown as Ctx;

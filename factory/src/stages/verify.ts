@@ -2,10 +2,10 @@ import { writeFileSync } from 'node:fs';
 import { readApproval } from '../clone-checks';
 import { readShown } from '../evidence';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type CardStage, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
 import { visualGate } from './visual';
-import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { HOTFIX_BASE, agentHome, baseBranchFor, catchUpBranch, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
 // What a testing round does. `preview` gets a card ready to show: the agent plays the feature, fixes what blocks it and captures the evidence, with no review.
 // `harden` runs after the committee approved: verify, review, nitpicks and cost, with no post after it. `full` does both before the post.
@@ -31,7 +31,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home);
+  const merged = await mergeBase(ctx, issue, base, home, 'verify');
   if (mode === 'preview') {
     const shown = await agentRound(ctx, issue, 'test', 'test', base, true);
     await requireBaseMerged(ctx, issue, base, merged);
@@ -60,9 +60,10 @@ export function setPhase(ctx: Ctx, issue: number, phase: TestPhase): void {
 
 // The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
 // so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
+// The issue branch itself may have moved on GitHub too, so its new commits come in first and get tested with the rest.
 // Returns the base commit it merged.
-export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
-  await ctx.repo.fetch();
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
+  await catchUpBranch(ctx, issue, stage);
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
   return commit;
