@@ -296,6 +296,23 @@ function withBurst_15_16(event: SavedJson): SavedJson {
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
+// Town and camp gates lost their guns, so their shot events, their kill credit and a driver's note of the gate that
+// shot it go. A gun's credit named `guard-<site>`, no truck.
+function withoutGuards_18_19(world: SavedJson): SavedJson {
+  const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
+  const unnoted = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { gunnedBy: _, ...brain } = v.brain as SavedJson;
+    return { ...v, brain };
+  };
+  return {
+    ...world,
+    events: (world.events as SavedJson[]).filter((e) => e.t !== 'guardShot'),
+    vehicles: (world.vehicles as SavedJson[]).map((v) => unnoted(uncredited(v))),
+    removed: (world.removed as SavedJson[]).map(uncredited),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -372,6 +389,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withStormBorn_16_17,
   // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
   withStormExposure_17_18,
+  // 18 to 19: gate guns are gone, with their shot events and kill credit.
+  withoutGuards_18_19,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

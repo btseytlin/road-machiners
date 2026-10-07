@@ -1,6 +1,6 @@
 # World
 
-The map, sites, guard guns, time of day, weather and engine heat. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+The map, sites, town and camp patrols, time of day, weather and engine heat. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
 ## Map and sites
 
@@ -37,9 +37,9 @@ Old Orchard is a territory too: a ruined farm under military occupation, in a wi
 - **Clutter and debris.** Fuel drums lie by the trucks and hangars, lumber and junk by the barns and the farmhouse, and barriers pulled aside by the guard huts, all scattered, never in rows. Junk piles and old car wrecks lie along the road.
 - **NPCs.** Scavengers search the spots, and raiders and vultures hunt there.
 
-Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired at anyone but a raider, whatever its own faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
+No town or camp has a gate gun or a guard tower. Lawmen live in Bowl and Nose, spawn at their gates and patrol the roads around them. Within 12 tiles of a lawman town's gate, drivers rarely start a robbery or a fight, but a fight that reaches a gate goes on there.
 
-Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. Gate guns, at towns and camps, never shoot a knocked-out truck or a defeated NPC in any phase. A driver a gun knocked out wakes by the normal rule and retreats unharmed. The player cannot use camp services.
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. The player cannot use camp services.
 
 ## Sun, time and weather
 

@@ -358,13 +358,12 @@ describe('bounty settlement', () => {
     }
   });
 
-  it('a defeat of another template, or by another truck or a guard, finishes nothing', () => {
+  it('a defeat of another template, or by another truck, finishes nothing', () => {
     const w = emptyWorld();
     const gunwagon = addRaider(w, 'gunwagon');
     const outrider = addRaider(w, 'buggy', { x: 20, y: 5 });
     expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: gunwagon.id, by: w.player.vehicleId }]))).toEqual([]);
     expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: outrider.id, by: 'other-npc' }]))).toEqual([]);
-    expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: outrider.id, by: 'guard-bowl' }]))).toEqual([]);
   });
 
   it('a bounty fulfilled on its deadline turn is done, and one past it fails', () => {

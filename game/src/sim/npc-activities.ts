@@ -7,7 +7,6 @@ import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
-import { campGunning, gunSiteById, inGunRange, nearestGate } from './camp-guns';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart } from './grid';
@@ -147,8 +146,8 @@ function createSiteActivity(kind: NpcActivity['kind'], id: string, reason: strin
 // Where an NPC flees to, away from a threat at `threatPos`: its spot at the nearest known town or own camp whose
 // direction from the vehicle is more than 90 degrees off the threat's, or straight away from the threat if no such
 // site is known. Trucks never enter a site, so the spot lies on a pad. A site whose guns shoot the driver is no refuge.
-function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, threatPos: Vec, gunning?: string): Vec {
-  const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => site.id !== gunning && pointsAway(vehicle.pos, site.pos, threatPos));
+function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, threatPos: Vec): Vec {
+  const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => pointsAway(vehicle.pos, site.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
   const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius, 0) : away;
@@ -402,8 +401,6 @@ function fightGoal(world: World, vehicle: Vehicle, target: Vehicle, reason: stri
 }
 
 function fleeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
-  const site = gunSiteById(goal.targetId);
-  if (site) return inGunRange(site, vehicle.pos, NPC_BEHAVIOR.campGunMargin) ? null : 'out of the gun range';
   if (visibleHostiles(world, vehicle).length > 0 || contacts.some((c) => c.vehicleId === goal.targetId)) return null;
   return 'no hostile in sight';
 }
@@ -606,20 +603,6 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
   }
 }
 
-// A shot from a camp or town gate gun makes the driver run out of its range. It cannot win against a gun it cannot hit,
-// so there is no roll. A driver already running from that site, or already out of its range, keeps on.
-function onGunned(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string | undefined): void {
-  const site = gunSiteById(siteId ?? null);
-  if (!site || !inGunRange(site, vehicle.pos, NPC_BEHAVIOR.campGunMargin) || fleesFrom(vehicle, site.id)) return;
-  const goal = createActivity('flee', site.id, fleeDestination(world, vehicle, profile, nearestGate(site, vehicle.pos), site.id), 'shot by gate guns');
-  interrupt(world, vehicle, goal);
-}
-
-function fleesFrom(vehicle: Vehicle, siteId: string): boolean {
-  const top = topGoal(vehicle);
-  return top?.kind === 'flee' && top.targetId === siteId;
-}
-
 // A tower with a client on the rope ignores a hostile it only hears. A flee from it ends the next turn, as soon as the
 // contact drops out, and would cost the tow for nothing. A hostile in sight or a shot still makes it drop the tow.
 function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
@@ -767,7 +750,7 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const clients = world.vehicles
     .filter((client) => client.id !== world.player.vehicleId || !inCombat(world, client))
     .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
-    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null && !campGunning(vehicle, c.at))
+    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null)
     .sort((a, b) => dist(vehicle.pos, a.at) - dist(vehicle.pos, b.at));
   const chosen = clients.find((c) => react(world, vehicle, 'strandedSeen', c.client.id) === 'tow');
   if (chosen) startTow(world, vehicle, chosen.client, chosen.at);
@@ -858,10 +841,9 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
 };
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
-  const site = gunSiteById(goal.targetId);
-  const threat = site ? nearestGate(site, vehicle.pos) : fleeThreat(world, vehicle, contacts, goal);
+  const threat = fleeThreat(world, vehicle, contacts, goal);
   if (!threat) throw new Error(`${vehicle.id} flees with no threat perceived`);
-  goal.destination = fleeDestination(world, vehicle, profile, threat, site?.id);
+  goal.destination = fleeDestination(world, vehicle, profile, threat);
 }
 
 // The fled target where the NPC sees it, else the nearest hostile in sight, else the target's contact circle.
@@ -881,8 +863,6 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   const contacts = usefulContacts(world, vehicle);
   forget(world, vehicle, contacts);
   pruneAttackers(world, vehicle);
-  const gunnedBy = brain.gunnedBy;
-  delete brain.gunnedBy;
   forgetFullHold(world, vehicle);
   breakOffDeals(world, vehicle);
   giveUpStrandedRobberies(world, vehicle);
@@ -896,7 +876,6 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   dropInvalidGoals(world, vehicle, contacts);
   onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
-  onGunned(world, vehicle, profile, gunnedBy);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
@@ -1028,17 +1007,6 @@ export function noteHurt(world: World): void {
   const hits = turnPartHits(world);
   for (const v of world.vehicles) {
     if (v.brain) v.brain.hurt = (hits.get(v.id) ?? []).reduce((sum, hit) => sum + hit.damage, 0);
-  }
-  noteGunned(world);
-}
-
-// A gate gun's shot, hit or miss, at a driver marks its camp or town on the driver's brain for its next decision.
-function noteGunned(world: World): void {
-  for (const e of world.events) {
-    if (e.t !== 'guardShot') continue;
-    // A truck the volley destroyed is already off the map.
-    const target = world.vehicles.find((v) => v.id === e.target);
-    if (target?.brain && gunSiteById(e.site)) target.brain.gunnedBy = e.site;
   }
 }
 

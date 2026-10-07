@@ -19,7 +19,6 @@ import { createWreckSalvage, removeStocks } from './salvage';
 import { STATE_TURNS } from '../data/npcs';
 import { addState, boundTo, endState, feudData, stateOf, strayData } from './states';
 import { isOnRope, towHeldBy } from './tow';
-import { isTownGuarded } from './guards';
 import { getResources } from './resources';
 import { chance, gauss, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
@@ -606,12 +605,12 @@ export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   return out;
 }
 
-// Every part hit of this turn per truck, from shots, guard shots and collisions.
+// Every part hit of this turn per truck, from shots and collisions.
 export function turnPartHits(world: World): Map<string, PartHit[]> {
   const out = new Map<string, PartHit[]>();
   const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
   for (const e of world.events) {
-    if (e.t === "shot" || e.t === "guardShot") for (const [id, hits] of shotDamage(e)) add(id, hits);
+    if (e.t === "shot") for (const [id, hits] of shotDamage(e)) add(id, hits);
     else if (e.t === "collision") {
       add(e.a, e.hitsA);
       add(e.b, e.hitsB);
@@ -621,7 +620,7 @@ export function turnPartHits(world: World): Map<string, PartHit[]> {
 }
 
 // The truck that beat v: the source that dealt v the most part damage this turn, the earliest first on a tie. A shot
-// counts for its shooter, a guard shot for `guard-<site>` and a crash for the other truck. With no damage this turn,
+// counts for its shooter and a crash for the other truck. With no damage this turn,
 // as when wear broke the cab, it is the last damage source. The one rule for kill credit.
 export function beatenBy(world: World, v: Vehicle): string {
   vehicleById(world, v.id);
@@ -652,7 +651,6 @@ type Blow = { source: string; hits: PartHit[] };
 // The source and part hits of one event on a truck.
 function blowOn(world: World, e: GameEvent, id: string): Blow | null {
   if (e.t === "shot") return { source: e.shooter, hits: hitsOn(e, id) };
-  if (e.t === "guardShot") return { source: `guard-${e.site}`, hits: hitsOn(e, id) };
   return e.t === "collision" ? crashBlowOn(world, e, id) : null;
 }
 
@@ -1007,7 +1005,7 @@ function brokenCabFate(world: World): "dies" | "knockedOut" {
 function damagedByShots(world: World): Set<string> {
   const hurt = new Set<string>();
   for (const e of world.events) {
-    if (e.t !== "shot" && e.t !== "guardShot") continue;
+    if (e.t !== "shot") continue;
     if (e.rounds.some((r) => r.hits.some((h) => h.damage > 0))) hurt.add(e.target);
   }
   return hurt;
@@ -1049,8 +1047,7 @@ function clearOldWrecks(world: World): void {
 }
 
 // An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
-// goals, and not while either stands in guard range of a town gate. A robber is no defender: its victim's return fire
-// does not let it shoot into guard range.
+// goals. A robber is no defender: its victim's return fire does not let it shoot once the robbery is off its goals.
 function canNpcEngage(world: World, v: Vehicle, target: Vehicle): boolean {
   if (!v.brain) return true;
   if (target.id in v.brain.attackers && !robs(world, v, target)) return true;
@@ -1064,8 +1061,7 @@ function robs(world: World, v: Vehicle, target: Vehicle): boolean {
 
 function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
   const top = goals[goals.length - 1];
-  if (top?.kind !== 'fight' || top.targetId !== target.id) return false;
-  return !isTownGuarded(v.pos) && !isTownGuarded(target.pos);
+  return top?.kind === 'fight' && top.targetId === target.id;
 }
 
 // Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire

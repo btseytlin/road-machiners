@@ -18,8 +18,6 @@ import { aimGuns, isSoftTarget } from './aim';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isDefeated, isKnockedOut } from '../defeat';
-import { isTownGuarded } from '../guards';
-import { campGunning, nearestGate } from '../camp-guns';
 import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
 import { offeredSurrenderBy, type ThreatAnswer } from '../parley';
 import { hashRandom } from '../rng';
@@ -41,7 +39,7 @@ import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleS
 import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
 import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
-import { clamp, dist, pointsAway, type Vec } from '../vec';
+import { dist, pointsAway, type Vec } from '../vec';
 import { canVehicleSee, playerExplored, playerSees } from '../vision';
 import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
@@ -121,20 +119,8 @@ export function botOrders(world: World, archetype: Policy, options: BotOptions =
 
 // A hold, a service stop and a fight each take the turn's command before the goal does.
 function act(o: Orders, goal: Goal): void {
-  if (leaveCampGuns(o) || holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
+  if (holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
   GOALS[goal](o);
-}
-
-// A camp's gate guns shoot every outsider in range and no fight there can be won, so a bot inside the range drives
-// straight out to the hunter's standoff distance, as a player would, unless a job holds the truck. True when it does.
-function leaveCampGuns(o: Orders): boolean {
-  const camp = campGunning(o.me, o.me.pos);
-  if (!camp || o.me.job) return false;
-  const gate = nearestGate(camp, o.me.pos);
-  const gap = Math.max(dist(gate, o.me.pos), 1e-6);
-  const out = { x: gate.x + ((o.me.pos.x - gate.x) / gap) * CAMP_STANDOFF, y: gate.y + ((o.me.pos.y - gate.y) / gap) * CAMP_STANDOFF };
-  driveTo(o, { x: clamp(out.x, 1, o.world.size - 1), y: clamp(out.y, 1, o.world.size - 1) });
-  return true;
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -193,10 +179,9 @@ function keepSwitches(o: Orders): void {
   setFire(o, underFire(o.world, o.me));
 }
 
-// In combat and outside the guns of a town gate. Inside them a foe may camp at the gate for hundreds of turns: the
-// guard shoots any truck that fires at a non-raider, so the bot holds its fire there and repairs as a player would.
+// In combat, wherever the bot stands. It fires back at a town gate as anywhere else.
 function underFire(world: World, me: Vehicle): boolean {
-  return inCombat(world, me) && !isTownGuarded(me.pos);
+  return inCombat(world, me);
 }
 
 // Holding fire also drops the aim: an order set while auto fire was on keeps the guns shooting after the switch is off.
@@ -722,7 +707,7 @@ function wantsBounty(world: World, c: Contract): boolean {
 function engageFoe(o: Orders): boolean {
   const seen = weakestFoe(o.world);
   if (seen) return engageSeen(o, seen);
-  const heard = heardFoe(o.world, (v) => huntable(o.world, v) && !campGunning(o.me, v.pos));
+  const heard = heardFoe(o.world, (v) => huntable(o.world, v));
   if (heard) driveTo(o, heard);
   return heard !== null;
 }
@@ -742,7 +727,7 @@ function huntable(world: World, foe: Vehicle): boolean {
 }
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > 1 || !isSoftTarget(o.world, foe) || campGunning(o.me, foe.pos)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > 1 || !isSoftTarget(o.world, foe)) return false;
   setFire(o, true);
   aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
@@ -804,7 +789,7 @@ function dangerOf(world: World, foe: Vehicle): number {
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
-// stronger foe it runs as an NPC runs: for the nearest town away from the threat, where guards cover it. Only the
+// stronger foe it runs as an NPC runs: for the nearest town away from the threat, where lawmen patrol. Only the
 // hunter fights a foe it can outrun: a won fight still costs repairs, and broken wheels leave the truck for the next
 // raider. A foe that drops out of sight for a turn is still on its tail, so the bot keeps running until the combat
 // ends. The hunter chases instead when it hears a foe it would hunt. True when the turn's command went to the fight.
@@ -897,14 +882,12 @@ function charge(o: Orders, foe: Vehicle, goal: Goal): void {
   driveTo(o, foe.pos);
 }
 
-// A foe under a camp's gate guns is never fought: the guns join the fight on its side.
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
   return beats(o, foe, goal) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
 }
 
 // A foe the bot judges it can beat, by the hunter's margin for a hunter.
 function beats(o: Orders, foe: Vehicle, goal: Goal): boolean {
-  if (campGunning(o.me, foe.pos)) return false;
   const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
   return dangerOf(o.world, foe) * margin <= 1;
 }
@@ -963,9 +946,9 @@ function collectOrHunt(o: Orders): void {
 // A place on the hunter's patrol: a shop, reached at its nearest pad, or a point on the road out of a raider camp.
 type Post = { pos: Vec; shop: Site | null };
 
-// A camp's gate guns shoot every outsider in range, so the hunter waits for raiders leaving it half a gun range
-// beyond that, on the line to the nearest shop.
-const CAMP_STANDOFF = RULES.guards.range * 1.5;
+// Tiles off a camp gate where the hunter waits for raiders leaving it, on the line to the nearest shop, clear of
+// the gate traffic.
+const CAMP_STANDOFF = 18;
 
 // The camp posts, each with the shop nearest to its gate.
 function campPosts(): { post: Post; near: Site }[] {

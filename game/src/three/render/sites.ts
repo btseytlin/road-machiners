@@ -179,25 +179,24 @@ type WallStyle = {
   height: number;
   thickness: number;
   segment: number; // tiles per straight section around the curve
-  towerEvery: number | null; // sections between wall towers
   ragged: boolean; // sections vary in height, like scrap and posts
   fence: boolean; // posts and two rails instead of solid sections
   colors: number[]; // section colors, one picked per section
   postColor: number;
   doorColor: number;
-  guarded: boolean; // a guard tower on each gate side and a banner pole at each gate
+  bannered: boolean; // a banner pole at each gate
 };
 
 const SET = REGION.settlement;
-const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, guarded: false };
+const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, bannered: false };
 const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
-  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
+  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, bannered: true },
   palisade: PALISADE,
-  // Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
-  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, guarded: true },
-  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, guarded: false },
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, towerEvery: null, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, guarded: false },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
+  // Raider camps hide behind rusted scrap, with a banner at every gate.
+  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, bannered: true },
+  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, bannered: false },
+  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, bannered: false },
+  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, bannered: false },
 };
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
@@ -236,6 +235,7 @@ function addWall(b: SiteBuilder, site: Site, style: WallStyle): void {
   b.root.userData.gates = runs.length;
   b.root.userData.doors = 2 * runs.length;
   b.root.userData.edgeReach = [ring.mid - style.thickness / 2, ring.radius];
+  b.root.userData.wallThickness = style.thickness;
 }
 
 function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number): number {
@@ -248,7 +248,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
     const p = { x: Math.cos(a) * ring.mid, z: Math.sin(a) * ring.mid };
     if (style.fence) addFenceSection(b, ring, style, p, a, i);
     else b.addBox(p.x, p.z, style.thickness, height + SINK, ring.length, color, -SINK, -a);
-    if (hasTower(ring, style, i)) addPost(b, ring, i * ring.step, style.thickness * 2, style.height * 1.4, style.postColor);
     sections++;
   }
   return sections;
@@ -258,10 +257,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
 function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
   for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
   addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
-}
-
-function hasTower(ring: Ring, style: WallStyle, i: number): boolean {
-  return style.towerEvery !== null && i % style.towerEvery === 0 && !ring.open[(i + ring.count - 1) % ring.count];
 }
 
 function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: number, color: number): void {
@@ -282,13 +277,12 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts or guard towers on both sides, and two door leaves hinged at the posts that meet in the middle.
+// Posts on both sides, and two door leaves hinged at the posts that meet in the middle. A post rises a little over
+// its wall, never a tower's height.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) {
-    if (style.guarded) addGuardTower(b, ring, style, a);
-    else addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
-  }
-  if (style.guarded) addBanner(b, ring, from);
+  const postHeight = style.height + Math.min(style.height * 0.4, SET.gatePostRise);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, postHeight, style.postColor);
+  if (style.bannered) addBanner(b, ring, from - ring.step / 2);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
@@ -305,31 +299,20 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
   b.addDoor(h.x, h.z, length, height, style.thickness * DOOR_THICKNESS, style.doorColor, -Math.atan2(t.z - h.z, t.x - h.x));
 }
 
-// A lamp on a post, or on the tower top, beside each gate, so a stop shows from far away.
+// A lamp on its own post beside each gate, so a stop shows from far away.
 function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
+  const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
-  if (!style.guarded) b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
+  b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
   b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
   b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
 }
 
-
-function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const t = style.thickness;
-  addPost(b, ring, a, t * 2.4, tower, style.postColor);
-  const q = onEdge(ring, a, t * 2.4);
-  b.addBox(q.x, q.z, t * 3.2, 0.12, t * 3.2, PAL.wall.dark, tower, -a);
-  const gun = onEdge(ring, a, -t * 1.4);
-  b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
-}
-
-// The pole rises from the gate's first tower. Its banner hangs across the tangent, so it faces the road.
+// The pole stands on the ground at angle a, behind the wall beside the gate. Its banner hangs across the tangent, so
+// it faces the road.
 function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
-  const tower = SET.guardTowerHeight;
   const q = onEdge(ring, a, 1);
-  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight - tower, 0.12, PAL.trunk, tower);
+  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight + SINK, 0.12, PAL.trunk, -SINK);
   const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
   b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1, -a);
 }

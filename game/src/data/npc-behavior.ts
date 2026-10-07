@@ -5,6 +5,8 @@ import { TERRAIN } from './terrain';
 import { TIME } from './time';
 import type { MemoryFact } from '../sim/types';
 
+const LAW_GATE_REACH = 12;
+
 export const NPC_BEHAVIOR = {
   // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
   // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
@@ -23,9 +25,12 @@ export const NPC_BEHAVIOR = {
   // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
   // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
   escortWaitGap: 12,
-  // Tiles from a town gate a patrol drives out to: the gate guns' range plus four sight radii, about 90 tiles. A
-  // patrol covers the roads well past the guns, about a sixth of the way to the other town.
-  patrolRadius: RULES.guards.range + TERRAIN.vision.radius * 4,
+  // Tiles of a lawman town's gate where drivers seldom start a robbery or a fight, since that town's lawmen live,
+  // spawn and patrol there. See robNearGuards and fightNearGuards.
+  lawGateReach: LAW_GATE_REACH,
+  // Tiles from a town gate a patrol drives out to: the lawmen's gate reach plus four sight radii, about 90 tiles. A
+  // patrol covers the roads well past the gate, about a sixth of the way to the other town.
+  patrolRadius: LAW_GATE_REACH + TERRAIN.vision.radius * 4,
   // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
   patrolSpacing: 4,
   // Tiles a follower keeps to the side of its leader past both radii: the yield distance plus one, so it rides
@@ -77,9 +82,6 @@ export const NPC_BEHAVIOR = {
   // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
   // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.
   fightSearchTurns: 6,
-  // Tiles past a camp gate gun's range that a driver shot by it keeps running, so it does not stop on the line and
-  // drift back into the next volley.
-  campGunMargin: 4,
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
@@ -107,11 +109,11 @@ export const NPC_BEHAVIOR = {
   },
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
-  // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
+  // A robber mostly picks targets weaker than itself, away from lawman town gates. Rob weight times this when the
   // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 0.5 drops to
   // 0.0075, so it robs at about 2%, not 34%.
   robStronger: 0.015,
-  // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
+  // Rob weight times this when the robber or target is within lawGateReach of a lawman town's gate. Same drop as above.
   robNearGuards: 0.015,
   // What the target's cargo is worth to a robber or raider: goods and spare parts, not mounted gear. At or below
   // `poor` the weight is times `poorMul`, at or above `rich` it is unchanged, and between them it rises
@@ -123,8 +125,8 @@ export const NPC_BEHAVIOR = {
     rob: { poor: 150, rich: 500, poorMul: 0.02 },
     raid: { poor: 0, rich: 400, poorMul: 0.002 },
   },
-  // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
-  // prey drops to 0.05, about 3%. Guards never lower fight back.
+  // Fight weight at a new hostile times this within lawGateReach of a lawman town's gate. A raider's fight weight of
+  // 50 against manageable prey drops to 0.05, about 3%. A lawman gate never lowers fight back.
   fightNearGuards: 0.001,
   // Tow weight falls when the stranded truck can crawl to a town gate. At limp speed, about 1 tile a turn, 15
   // tiles is a crawl of 15 turns, under two hours of the day. Within it, a tow weight of 9 drops to 0.18 against

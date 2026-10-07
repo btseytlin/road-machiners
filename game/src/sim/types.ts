@@ -185,7 +185,6 @@ export type NpcBrain = {
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
-    gunnedBy?: string; // the camp or town whose gate gun shot at this driver last turn, until the driver decides on it
     fullAt?: number; // free cells when a sale would have made room for a loot the hold could not take, until the hold frees more
     unfit?: string[]; // loot the driver reached and found would not fit its truck even after a sale
     // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
@@ -235,7 +234,7 @@ export type Vehicle = {
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
+  lastHitBy: string | null; // vehicle id of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
@@ -386,7 +385,6 @@ export type GameEvent =
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
-  | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'npcKnockout'; vehicle: string; by: string }

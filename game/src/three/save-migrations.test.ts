@@ -24,6 +24,7 @@ import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -376,5 +377,18 @@ describe('save migration 17 to 18', () => {
 
   it('loads every truck feeling exactly the settled weather where it stands', () => {
     for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  it('drops guard shots, guard kill credit and the gate a driver was shot by, and keeps every other field', () => {
+    const next = MIGRATIONS[18](FORMAT_2_18);
+
+    expect(next).toEqual({
+      ...FORMAT_2_18,
+      events: [FORMAT_2_18.events[0], FORMAT_2_18.events[2]],
+      vehicles: [{ id: 'player', lastHitBy: null }, FORMAT_2_18.vehicles[1], { id: 'npc-4', lastHitBy: null, brain: { goals: [] } }],
+      removed: [{ id: 'npc-8', lastHitBy: null }, FORMAT_2_18.removed[1]],
+    });
   });
 });
