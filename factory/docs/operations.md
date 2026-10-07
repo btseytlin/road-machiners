@@ -8,7 +8,7 @@ Each job is its own process, started by the tick. [process.md](process.md#tick-a
 
 Jobs share the host clone and the state file. Each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.
 
-GitHub holds every branch. The host clone `$FACTORY_HOME/repo` keeps GitHub's branches as `origin/*`, and each fetch deletes any local branch. A merge or a revert runs in a throwaway worktree and pushes at once. A conflict or a rejected push leaves GitHub as it was, so a retry starts from GitHub. An agent's work reaches GitHub only after the factory checks its diff.
+GitHub holds every branch. The host clone `$FACTORY_HOME/repo` keeps GitHub's branches as `origin/*`, and each fetch deletes any local branch. A merge or a revert runs in a throwaway worktree and pushes at once. A conflict or a rejected push leaves GitHub as it was, so a retry starts from GitHub. A conflict between branches goes to an agent in a work clone named `$FACTORY_HOME/work/merge-<branch>`, and its commit reaches GitHub only after the factory checks it. An agent's work reaches GitHub only after the factory checks its diff.
 
 A work clone with no commit checked out, like one a full disk cut short, holds no work. The next job deletes it and clones again, and its log names the folder.
 
