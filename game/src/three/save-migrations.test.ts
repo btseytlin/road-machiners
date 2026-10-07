@@ -31,6 +31,7 @@ import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import FORMAT_2_24 from './save-fixtures/format-2-24.json';
+import FORMAT_2_25 from './save-fixtures/format-2-25.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -491,6 +492,30 @@ describe('save migration 23 to 24', () => {
 });
 
 describe('save migration 24 to 25', () => {
+  it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
+    const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_24.obstacles[5]);
+  });
+
+  it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
+    const world = { ...FORMAT_2_24, obstacles: [
+      { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
+    ] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
+  });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_24, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
+  });
+});
+
+describe('save migration 25 to 26', () => {
   type Loot = { goods: Partial<Record<string, number>>; parts: unknown[]; fuel?: number; supplies?: number };
   type Stock = Loot & { id: string; hidden: Loot };
   type Saved = {
@@ -503,23 +528,23 @@ describe('save migration 24 to 25', () => {
     searchRng: { rngState: number };
     salvage: Stock[];
   };
-  const next = MIGRATIONS[24](FORMAT_2_24) as Saved;
+  const next = MIGRATIONS[25](FORMAT_2_25) as Saved;
   const stock = (id: string) => next.salvage.find((s) => s.id === id)!;
-  const before = (id: string) => FORMAT_2_24.salvage.find((s) => s.id === id)!;
+  const before = (id: string) => FORMAT_2_25.salvage.find((s) => s.id === id)!;
   const NO_HIDDEN = { goods: {}, parts: [], fuel: 0, supplies: 0 };
 
   it('gives the player the freeze switch, off', () => {
-    expect((next as unknown as { player: object }).player).toEqual({ ...FORMAT_2_24.player, frozen: false });
+    expect((next as unknown as { player: object }).player).toEqual({ ...FORMAT_2_25.player, frozen: false });
   });
 
   it('gives every vehicle and removed vehicle empty utility orders, keeping its other fields', () => {
-    expect(next.vehicles).toEqual(FORMAT_2_24.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
-    expect(next.removed).toEqual(FORMAT_2_24.removed.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.vehicles).toEqual(FORMAT_2_25.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.removed).toEqual(FORMAT_2_25.removed.map((v) => ({ ...v, utilityOrders: {} })));
   });
 
   it('starts empty smoke, fields, flares and lines, and the search stream a new game of the same seed has', () => {
     expect([next.smoke, next.fields, next.flares, next.lines]).toEqual([[], [], [], []]);
-    expect(next.searchRng).toEqual(searchStream(FORMAT_2_24.seed));
+    expect(next.searchRng).toEqual(searchStream(FORMAT_2_25.seed));
   });
 
   it.each(['burnt-convoy', 'barn-759', 'wreck12'])('hides all the loot of the unsearched rolled stock %s', (id) => {

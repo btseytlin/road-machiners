@@ -11,12 +11,12 @@ import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
   addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
-  repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
+  repairAll, revealMap, setEngineHeat, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   noclipMove, startBattle, startWeather, teleport, toggleFrozen, toggleFullLog, toggleGod, freezeDriving, freezeFire, instantMoveItem,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
@@ -46,6 +46,14 @@ describe('resource cheats', () => {
     expect(() => addXp(w, Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
+  });
+
+  it('sets engine heat from cold to overheated and rejects values outside', () => {
+    expect(setEngineHeat(emptyWorld(), 1).player.engineHeat).toBe(1);
+    expect(setEngineHeat(emptyWorld(), 0.8).player.engineHeat).toBe(0.8);
+    expect(() => setEngineHeat(emptyWorld(), 1.5)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), -0.1)).toThrow(CheatError);
+    expect(() => setEngineHeat(emptyWorld(), Number.NaN)).toThrow(CheatError);
   });
 
   it('sets fractional fuel and supplies up to their caps', () => {
@@ -102,6 +110,14 @@ describe('part cheats', () => {
   it('damages the first mounted part with a def', () => {
     const w = damagePartTo(emptyWorld(), 'mg', 3);
     expect(mountedParts(playerVehicle(w)).find((p) => p.defId === 'mg')!.hp).toBe(3);
+  });
+
+  it('spills the cargo off a cargo part it breaks', () => {
+    const w = damagePartTo(emptyWorld(), 'panniers', 0);
+    const me = playerVehicle(w);
+    const g = gridOf(me);
+    expect(me.items.filter((it) => it.y >= g.deadFrom)).toEqual([]);
+    expect(w.events.filter((e) => e.t === 'cargoSpilled')).toHaveLength(1);
   });
 
   it('rejects an unmounted def and hit points out of range', () => {

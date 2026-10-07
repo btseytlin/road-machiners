@@ -24,6 +24,9 @@ case "$action" in
     start)
         [ "$#" -eq 5 ] || usage
         case "$4" in ''|*[!0-9]*|0) printf '%s\n' 'The time limit is a whole number of minutes' >&2; exit 2 ;; esac
+        # The factory sets the highest limit. A bigger job is out of proportion for one agent check.
+        max=${FACTORY_JOB_MAX_MINUTES:?FACTORY_JOB_MAX_MINUTES is not set}
+        if [ "$4" -gt "$max" ]; then printf 'The time limit is at most %s minutes. Make the check smaller: fewer seeds, fewer turns or a direct test.\n' "$max" >&2; exit 2; fi
         if [ -f "$dir/pid" ] && [ ! -f "$dir/exit" ]; then printf 'Job %s is already running\n' "$2" >&2; exit 2; fi
         factory-status "$3"
         rm -rf "$dir"

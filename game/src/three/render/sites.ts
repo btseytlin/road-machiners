@@ -3,20 +3,24 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { FORTRESS_SITES, FORTRESS_STYLES } from '../../data/fortress';
+import { fortressGates, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { siteGates } from '../../sim/sites';
+import { isFortress, siteGates } from '../../sim/sites';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
+import { SiteMotion, type Motion } from './site-motion';
+import { buildBowl } from './interiors/bowl';
+import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
+import { buildNose } from './interiors/nose';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
-// Nose's 48 m bow from the 12 m cone.
-const NOSE_SCALE = 4;
 // The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
 // deck before this height scale.
 const BRIDGE_RISE = 1.5;
@@ -25,9 +29,15 @@ const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top,
 const WING_DECK_LENGTH = 156;
 const WING_DECK_WIDTH = 24;
 
+// A moving part of a site and its motion, before its site's phase is applied.
+export type Mover = { node: THREE.Object3D; motion: Motion };
+// Seconds over which each site's movers are offset in time, so the same machines at two sites do not move in step.
+const MOTION_PHASE_SPAN = 60;
+
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
-class SiteBuilder {
+export class SiteBuilder {
   readonly root = new THREE.Group();
+  readonly movers: Mover[] = [];
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
   constructor(private readonly terrain: Terrain, readonly site: Site) {
     this.root.name = `landmark-${site.id}`;
@@ -39,6 +49,8 @@ class SiteBuilder {
     let material = this.materials.get(color);
     if (!material) {
       material = new THREE.MeshLambertMaterial({ color, flatShading: true });
+      // A lit lamp glows in its own color, so it shows at night.
+      if (color === PAL.lamp.on) material.emissive.setHex(color);
       this.materials.set(color, material);
     }
     return material;
@@ -77,6 +89,11 @@ class SiteBuilder {
   addTank(x: number, z: number, radius: number, height: number, color: number, lift = 0): void {
     this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
   }
+  // A part that moves by motion once the site is added. Its node's origin is its pivot.
+  addMover(node: THREE.Object3D, motion: Motion): void {
+    if (this.movers.some((m) => m.node === node)) throw new Error(`Moving part ${node.name || node.uuid} of ${this.site.id} was added twice`);
+    this.movers.push({ node, motion });
+  }
   // A Blender model standing on the ground at site offset (x, z), turned by yaw radians.
   addModel(name: ModelName, x: number, z: number, yaw = 0, scale: number | THREE.Vector3 = 1, lift = 0): THREE.Object3D {
     const wx = this.site.pos.x + x;
@@ -90,14 +107,17 @@ class SiteBuilder {
     return obj;
   }
   // Many copies of one Blender model, each on the ground at its site offset, as instanced meshes.
-  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): void {
-    const placements = spots.map(({ x, z, yaw }) => {
+  // A spot's scale is uniform, 1 when absent, and its lift is in tiles over the ground, 0 when absent.
+  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number; scale?: number; lift?: number }[]): THREE.Group {
+    const placements = spots.map(({ x, z, yaw, scale = 1, lift = 0 }) => {
       const wx = this.site.pos.x + x;
       const wz = this.site.pos.y + z;
-      const pos = new THREE.Vector3(wx * S, heightAt(this.terrain, wx, wz) * S, wz * S);
-      return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(1, 1, 1));
+      const pos = new THREE.Vector3(wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
+      return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(scale, scale, scale));
     });
-    this.root.add(instancedModel(name, placements, placements.map(() => 1)));
+    const group = instancedModel(name, placements, placements.map(() => 1));
+    this.root.add(group);
+    return group;
   }
   // A site offset that must stay off every road, or the model would stand in traffic.
   offRoad(x: number, z: number, clearance: number): void {
@@ -137,42 +157,9 @@ class SiteBuilder {
   }
 }
 
-function buildSettlement(b: SiteBuilder, site: Site): void {
-  const layout = REGION.settlement;
-  const limit = site.radius - layout.houseWidth - 0.3;
-  let homes = 0;
-  for (let x = -limit; x <= limit; x += layout.streetSpacing) {
-    for (let z = -limit; z <= limit; z += layout.streetSpacing) {
-      if (Math.hypot(x, z) > limit) continue;
-      if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) continue;
-      const pos = { x: site.pos.x + x, y: site.pos.y + z };
-      if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth))) continue;
-      const h = layout.houseHeights[homes % layout.houseHeights.length];
-      const w = layout.houseWidth;
-      const d = layout.houseDepth;
-      b.addBox(x, z, w, h, d, homes % 3 ? PAL.wall.side : PAL.wall.top);
-      b.addBox(x, z, w + 0.3, 0.12, d + 0.3, homes % 4 ? PAL.rust.top : PAL.metal, h);
-      b.addBox(x, z + d / 2 + 0.02, 0.3, 0.55, 0.03, PAL.wall.dark);
-      for (const dx of [-0.8, 0.8]) {
-        b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 0.55);
-        if (h > 1.5) b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 1.25);
-      }
-      if (homes % 5 === 0) b.addTank(x - 0.6, z - 0.4, 0.3, 0.55, PAL.metalLight, h + 0.12);
-      homes++;
-    }
-  }
-  b.root.userData.homes = homes;
-  // The water tower stands in the open center, clear of the pond, the hull and the roads.
-  const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
-  b.offRoad(tower.x, tower.z, 1);
-  b.addModel('water_tower', tower.x, tower.z);
-  if (site.id === 'bowl') {
-    b.addTank(0, 0, 6, 0.05, PAL.water);
-    for (let row = 0; row < 4; row++) b.addBox(-6 + row * 3, 9, 2, 0.12, 4, PAL.scrub[0]);
-  } else {
-    b.addHull(-3, -1, 22, 10, 0);
-    b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
-  }
+// Whether a box of width w and depth d centered at (x, z) from the site lies inside the curtain, off its walls.
+export function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
+  return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
 }
 
 type WallStyle = {
@@ -184,25 +171,21 @@ type WallStyle = {
   colors: number[]; // section colors, one picked per section
   postColor: number;
   doorColor: number;
-  bannered: boolean; // a banner pole at each gate
 };
 
 const SET = REGION.settlement;
-const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, bannered: false };
-const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
-  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, bannered: true },
-  palisade: PALISADE,
-  // Raider camps hide behind rusted scrap, with a banner at every gate.
-  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, bannered: true },
-  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, bannered: false },
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, bannered: false },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, bannered: false },
+const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
+  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal },
+  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
 };
+const LAMP_REACH = 0.3; // tiles a gate lamp bracket stands out of the gatehouse face
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
 function edgeStyle(site: Site): WallStyle {
-  return EDGE_STYLES['kind' in site ? site.edge : 'town'];
+  const edge = 'edge' in site ? site.edge : undefined;
+  if (edge === undefined) throw new Error(`Site ${site.id} has no edge style`);
+  return EDGE_STYLES[edge];
 }
 
 // The edge circle cut into straight sections whose outer corners lie on the collision edge. Sections near a
@@ -277,12 +260,9 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts on both sides, and two door leaves hinged at the posts that meet in the middle. A post rises a little over
-// its wall, never a tower's height.
+// Posts on both sides, and two door leaves hinged at the posts that meet in the middle.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  const postHeight = style.height + Math.min(style.height * 0.4, SET.gatePostRise);
-  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, postHeight, style.postColor);
-  if (style.bannered) addBanner(b, ring, from - ring.step / 2);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
@@ -304,24 +284,50 @@ function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void 
   const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
   b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
-  b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
-  b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
+  addLampHead(b, q.x, q.z, top, -a);
 }
 
-// The pole stands on the ground at angle a, behind the wall beside the gate. Its banner hangs across the tangent, so
-// it faces the road.
-function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
-  const q = onEdge(ring, a, 1);
-  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight + SINK, 0.12, PAL.trunk, -SINK);
-  const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
-  b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1, -a);
+// The housing and the lit lamp on top of a post or a gate bracket.
+function addLampHead(b: SiteBuilder, x: number, z: number, top: number, yaw: number): void {
+  b.addBox(x, z, 0.2, 0.35, 0.6, PAL.metal, top, yaw);
+  b.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
 }
 
-function buildGranary(b: SiteBuilder): void {
-  // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
-  for (let x = -3; x <= 3; x += 3) b.addModel('silo', x, -1, -Math.PI / 2, (1.1 * S) / 2.5);
-  b.addRuin(0, 2.8, 6, 2.2);
-  for (let i = 0; i < 8; i++) b.addBox(-2.5 + (i % 4) * 0.65, 2 + Math.floor(i / 4) * 0.65, 0.5, 0.45, 0.5, PAL.crate);
+// Town and camp gates fly a banner.
+function isBannered(site: Site): boolean {
+  return REGION.towns.some((t) => t.id === site.id) || ('kind' in site && site.kind === 'camp');
+}
+
+// The gatehouse models carry no furniture. Each gate gets two lamps on brackets either side of the arch, below the
+// parapet, and at town and camp gates a banner pole behind the parapet. Offsets are from the gatehouse's
+// outer face, along the gate's bearing. A flush gate's face can lie a few degrees off that bearing (6 at Granary), and
+// the furniture keeps the bearing.
+function dressGates(b: SiteBuilder, site: Site): void {
+  const guarded = isBannered(site);
+  const first = b.root.children.length;
+  for (const fort of fortressGates(site)) dressGate(b, site, fort, guarded);
+  // Furniture stands on the gatehouses, which are part of the curtain, so it is no interior piece.
+  for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
+}
+
+function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean): void {
+  const { face, out, width, height } = fort;
+  const a = Math.atan2(out.y, out.x);
+  const at = (reach: number, side: number) => ({ x: face.x - site.pos.x + out.x * reach - out.y * side, z: face.y - site.pos.y + out.y * reach + out.x * side });
+  for (const side of [-1, 1]) {
+    const p = at(LAMP_REACH, (side * width) / 4);
+    const bracket = at(LAMP_REACH / 2, (side * width) / 4);
+    b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -a);
+    addLampHead(b, p.x, p.z, SET.lampHeight, -a);
+  }
+  if (!guarded) return;
+  // Heights are from the ground at the face.
+  const lift = (x: number, z: number) => b.groundAt(face.x - site.pos.x, face.y - site.pos.y) - b.groundAt(x, z);
+  const depth = FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate.depth;
+  const pole = at(-depth / 2, width / 2 - 0.6);
+  b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
+  const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
+  b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -a);
 }
 
 function buildPump(b: SiteBuilder): void {
@@ -331,8 +337,8 @@ function buildPump(b: SiteBuilder): void {
 }
 
 function buildLock(b: SiteBuilder): void {
-  for (const x of [-2, 2]) b.addBox(x, 0, 0.6, 1.1, 8, PAL.wall.side);
-  b.addBox(0, 0, 3.6, 0.05, 8, PAL.water);
+  for (const x of [-1.6, 1.6]) b.addBox(x, 0, 0.6, 1.1, 3.8, PAL.wall.side);
+  b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
   // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
@@ -364,38 +370,17 @@ function buildWingDeck(t: Terrain): THREE.Group {
   return root;
 }
 
-function buildOasis(b: SiteBuilder, well: boolean): void {
-  if (well) {
-    b.addTank(0, 0, 1.2, 0.8, PAL.wall.side);
-    b.addTank(0, 0, 0.9, 0.04, PAL.water, 0.8);
-    for (const x of [-1.5, 1.5]) b.addBox(x, 0, 0.18, 2.6, 0.18, PAL.trunk);
-    b.addBox(0, 0, 3.3, 0.2, 0.25, PAL.trunk, 2.5);
-    b.addRuin(2.7, 2.7, 2.3, 2);
-    // The palm model leans, so yaw varies the lean.
-    for (let i = 0; i < 4; i++) {
-      const a = i * 1.7 + 0.4;
-      b.addModel('palm', Math.cos(a) * 4.8, Math.sin(a) * 4.8, a * 2.3);
-    }
-  } else {
-    b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
-    for (let i = 0; i < 9; i++) {
-      const a = i * Math.PI * 2 / 9;
-      b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
-    }
+// Green Pit's pool among palms.
+function buildOasis(b: SiteBuilder): void {
+  b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
+  for (let i = 0; i < 9; i++) {
+    const a = i * Math.PI * 2 / 9;
+    b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
   }
 }
 
 function buildWrecks(b: SiteBuilder, id: string): void {
-  if (id === 'salvage-yard') {
-    for (const x of [-3, 0, 3]) {
-      b.addBox(x, -2, 2.3, 1.2, 2, PAL.rust.side);
-      b.addBox(x, -2, 2.6, 0.12, 2.4, PAL.metalLight, 1.3);
-      for (let i = 0; i < 3; i++) b.addBox(x, 1 + i * 0.8, 1.5, 0.5, 0.6, i % 2 ? PAL.metal : PAL.rust.top);
-    }
-    b.addBox(-3, 1, 0.25, 4, 0.25, PAL.metal);
-    b.addBox(-1.5, 1, 3.2, 0.22, 0.22, PAL.metal, 3.8);
-    b.addModel('crates', 4.8, 1.8, 0.3);
-  } else if (id === 'podfield') {
+  if (id === 'podfield') {
     for (let i = 0; i < 7; i++) {
       const a = i * 2.4;
       const pod = b.addShape(new THREE.CapsuleGeometry(0.45 * S, 1.1 * S, 2, 6), PAL.metalLight, Math.cos(a) * 3.4, Math.sin(a) * 3.4, 0.65);
@@ -436,11 +421,68 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
+// Fortress sites stand behind baked curtain pieces and need no edge of their own, only an interior inside them.
+function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
+  if (isFortress(site)) {
+    pullInside(site, b.root, t);
+    dressGates(b, site);
+  } else {
+    if (isBannered(site)) throw new Error(`Town or camp ${site.id} has no fortress`);
+    addWall(b, site, edgeStyle(site));
+  }
+}
+
+// Whether every vertex of the object lies inside the site's curtain, for every copy of an instanced mesh.
+function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
+  let inside = true;
+  obj.updateMatrixWorld(true);
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh && inside) inside = copiesOf(o).every((at) => verticesInside(site, o.geometry, at));
+  });
+  return inside;
+}
+
+// The world matrix of each drawn copy of a mesh: one, or one per instance.
+function copiesOf(o: THREE.Mesh): THREE.Matrix4[] {
+  if (!(o instanceof THREE.InstancedMesh)) return [o.matrixWorld];
+  return Array.from({ length: o.count }, (_, k) => o.matrixWorld.clone().multiply(o.getMatrixAt(k, new THREE.Matrix4())));
+}
+
+// Where rock closes the curtain, a piece may run on into the rock, like Nose's ship into its mountain.
+function verticesInside(site: Site, geometry: THREE.BufferGeometry, at: THREE.Matrix4): boolean {
+  const v = new THREE.Vector3();
+  const pos = geometry.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(at);
+    const p = { x: v.x / S, y: v.z / S };
+    if (!insideCurtain(site, p) && !onFortressRock(site, p)) return false;
+  }
+  return true;
+}
+
+// A fortress interior was laid out for the whole circle. Every piece moves toward the center by one shared factor, the
+// largest one that puts all of them inside the curtain, so the arrangement stays and no piece touches a wall.
+function pullInside(site: Site, root: THREE.Group, t: Terrain): void {
+  const cx = site.pos.x * S;
+  const cz = site.pos.y * S;
+  const homes = root.children.map((child) => child.position.clone());
+  let fits = false;
+  for (let step = 20; step >= 0 && !fits; step--) {
+    const k = step / 20;
+    root.children.forEach((child, i) => child.position.set(cx + (homes[i].x - cx) * k, homes[i].y, cz + (homes[i].z - cz) * k));
+    fits = root.children.every((child) => insideSiteCurtain(site, child));
+  }
+  if (!fits) throw new Error(`The interior of ${site.id} does not fit inside its curtain`);
+  // The ground differs at the new spot, so each piece keeps its height over the ground.
+  root.children.forEach((child, i) => {
+    child.position.y += (heightAt(t, child.position.x / S, child.position.z / S) - heightAt(t, homes[i].x / S, homes[i].z / S)) * S;
+  });
+}
+
 type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
 
 const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
 const camp: SiteDecor = (b, site) => buildCamp(b, site.id);
-const settlement: SiteDecor = (b, site) => buildSettlement(b, site);
 
 // How each site is dressed, by site id.
 const SITE_DECOR: Record<string, SiteDecor> = {
@@ -448,49 +490,69 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   'pump-station': (b) => buildPump(b),
   'south-lock': (b) => buildLock(b),
   'canyon-bridge': (b, _site, t) => buildBridge(b, t),
-  dustwell: (b) => buildOasis(b, true),
-  'green-pit': (b) => buildOasis(b, false),
+  dustwell: (b) => buildDustwell(b),
+  'green-pit': (b) => buildOasis(b),
   'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
-  nose: settlement,
-  bowl: settlement,
+  nose: (b, site) => buildNose(b, site),
+  bowl: (b, site) => buildBowl(b, site),
   'burnt-convoy': wrecks,
   podfield: wrecks,
   'ridge-wrecks': wrecks,
-  'salvage-yard': wrecks,
+  'salvage-yard': (b) => buildSalvageYard(b),
   scrapjaw: camp,
   kiln: camp,
 };
 
-function buildSite(t: Terrain, site: Site): THREE.Group {
+type BuiltSite = { root: THREE.Group; movers: Mover[] };
+
+function buildSite(t: Terrain, site: Site): BuiltSite {
   const b = new SiteBuilder(t, site);
   const decor = SITE_DECOR[site.id];
   if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
   decor(b, site, t);
-  addWall(b, site, edgeStyle(site));
-  // Site models never move after they are built.
+  closeSite(b, site, t);
+  // Site models stay where they are built. Only the movers' matrices are set again, by SiteMotion.
   b.root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
   });
-  return b.root;
+  return { root: b.root, movers: b.movers };
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
 // A territory has no edge, gates or models of its own: its props are baked.
 const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 
-// Every site model under one group, for inspection.
-export function buildSites(t: Terrain): THREE.Group {
-  const group = new THREE.Group();
-  for (const site of SITES) group.add(buildSite(t, site));
-  group.add(buildWingDeck(t));
-  return group;
+// Every site model under one group, and every moving part, for inspection.
+export function buildSites(t: Terrain): BuiltSite {
+  const root = new THREE.Group();
+  const movers: Mover[] = [];
+  for (const site of SITES) {
+    const built = buildSite(t, site);
+    root.add(built.root);
+    movers.push(...built.movers);
+  }
+  root.add(buildWingDeck(t));
+  return { root, movers };
 }
 
-// Registers every site model with the scope at its site.
+// Registers every site model with the scope at its site, and moves its moving parts on real time, once per drawn frame.
+// Each site's parts run at their own time offset.
 export function addSites(t: Terrain, scope: RenderScope): void {
-  for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
+  const motion = new SiteMotion();
+  for (const site of SITES) {
+    const built = buildSite(t, site);
+    scope.add(built.root, site.pos, site.radius);
+    const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
+    for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
+  }
+  let last = performance.now();
+  scope.onFrame(() => {
+    const now = performance.now();
+    motion.tick((now - last) / 1000);
+    last = now;
+  });
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }

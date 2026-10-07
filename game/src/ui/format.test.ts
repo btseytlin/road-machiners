@@ -294,6 +294,22 @@ describe("collision log", () => {
   });
 });
 
+describe("cargo spill log", () => {
+  it("names the player's broken cargo part and how many items fell out", () => {
+    const w = emptyWorld();
+    const panniers = mountedParts(w.vehicles[0], "cargo")[0];
+    const line = eventText(w, { t: "cargoSpilled", vehicle: w.player.vehicleId, part: panniers.id, pile: "spill-1", units: 6 });
+    expect(line).toEqual({ text: "Your panniers broke. 6 items fell out.", cls: "bad" });
+  });
+
+  it("names the NPC whose cargo spilled", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "traders", "hauler", ["rack"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "cargoSpilled", vehicle: npc.id, part: mountedParts(npc, "cargo")[0].id, pile: "spill-2", units: 1 });
+    expect(line).toEqual({ text: `${vehicleName(w, npc.id)}: cargo spilled on the ground`, cls: "good" });
+  });
+});
+
 describe("patch log", () => {
   it("says a broken patch is off, naming the driver", () => {
     const w = emptyWorld();

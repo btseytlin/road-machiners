@@ -425,6 +425,7 @@ export type GameEvent =
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
+  | { t: 'cargoSpilled'; vehicle: string; part: string; pile: string; units: number }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'npcKnockout'; vehicle: string; by: string }
   | { t: 'npcWake'; vehicle: string }

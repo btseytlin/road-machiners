@@ -12,7 +12,7 @@ import { patchGoal, startTow, topGoal } from './npc-activities';
 import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
-import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
+import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
@@ -227,6 +227,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcBeaten: (world, npc) => isWeak(world, npc),
   notOfferedYield: (world, npc) => !offeredSurrenderBy(world, npc, playerVehicle(world)),
   guardsClaim: (world, npc) => guardsClaim(world, npc),
+  claimsSpill: (world, npc) => spillClaimOn(world, npc) !== null,
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
@@ -279,6 +280,13 @@ export const EFFECTS: Record<EffectId, Effect> = {
   // A handover and a threat end at once, so they practice social now. A patch practices when it is done.
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
+    settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  abandonSpill: (world, npc, call) => {
+    const stock = spillClaimOn(world, npc);
+    if (!stock) throw new Error(`${npc.id} claims no spilled cargo of the player`);
+    abandonSpill(world, playerVehicle(world), npc, stock);
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },

@@ -1,5 +1,5 @@
 {
- "format": "2.25",
+ "format": "2.26",
  "shape": {
   "broken": [],
   "craters": [],
@@ -1262,6 +1262,14 @@
     "heading": "number",
     "id": "string",
     "items": [
+     {
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
      {
       "id": "string",
       "kind": "string",

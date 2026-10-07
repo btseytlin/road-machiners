@@ -150,6 +150,7 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | oil-spill | sfx | false | 0.6 | 2 | 2 |
 | emitter-pulse | sfx | false | 0.8 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
+| engine-strain | sfx | true | 0.6 | 1 | 2 |
 | wind | ambient | true | 1 | 1 | 3 |
 | music-calm | music | true | 1 | 1 | 5 |
 | music-town | music | true | 1 | 1 | 1 |

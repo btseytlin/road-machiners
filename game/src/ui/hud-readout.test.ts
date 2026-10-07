@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
-import { corePart } from "../sim/grid";
+import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
@@ -10,7 +10,7 @@ import { maxHealthOf } from "../sim/health";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clockLabel } from "./format";
-import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
@@ -498,5 +498,31 @@ describe('context picker', () => {
     picker.cycle([shop, pile, wreck], 1);
     expect(picker.pick([shop, wreck])).toBe(shop);
     expect(picker.pick([wreck, pile, shop])).toBe(shop);
+  });
+});
+
+describe('overdrive switch', () => {
+  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
+  function wornTo(hp: number) {
+    const w = emptyWorld();
+    const engine = mountedParts(playerVehicle(w), 'engine')[0];
+    engine.wear = 2;
+    engine.hp = hp;
+    return w;
+  }
+
+  it('is blocked at 15% engine HP and says why, with the share from the rule', () => {
+    const w = wornTo(6);
+    w.player.overdrive = true;
+    const s = overdriveSwitch(w);
+    expect(s).toMatchObject({ checked: false, blocked: true });
+    expect(s.title).toBe(`Engine too worn for overdrive: repair it above ${RULES.overdriveMinEngineShare * 100}% [O]`);
+  });
+
+  it('is open one HP above 15% and shows the flag', () => {
+    const w = wornTo(7);
+    expect(overdriveSwitch(w)).toEqual({ checked: false, blocked: false, title: 'Engine overdrive: faster, but the engine heats fast [O]' });
+    w.player.overdrive = true;
+    expect(overdriveSwitch(w).checked).toBe(true);
   });
 });

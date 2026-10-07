@@ -1480,6 +1480,12 @@ body {
 .inv-cell.c-X {
   background: #20292e;
 }
+/* Rows of a broken cargo part: they hold nothing until the part is repaired. */
+.inv-cell.c-dead {
+  border-style: dashed;
+  border-color: #414c52;
+  background: repeating-linear-gradient(45deg, #20292e 0 4px, #303d44 4px 6px);
+}
 .inv-item {
   position: absolute;
   box-sizing: border-box;

@@ -395,12 +395,25 @@ function withSeenSince_23_24(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
+// their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
+// wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
+const FORTRESS_OBSTACLES_24_25 = new Set(
+  ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
+);
+
+function isGoneObstacle_24_25(o: SavedJson): boolean {
+  const id = o.id as string;
+  return FORTRESS_OBSTACLES_24_25.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
+    || id === 'pond-dustwell' || id === 'pond-green-pit' || id.startsWith('cw-salvage-yard-');
+}
+
 // Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
 // and every stock gets hidden loot. The stream comes from the world seed like a new game's.
-const SEARCH_SALT_24_25 = 0x73656172;
-const NO_HIDDEN_24_25 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+const SEARCH_SALT_25_26 = 0x73656172;
+const NO_HIDDEN_25_26 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
 
-function withUtilities_24_25(world: SavedJson): SavedJson {
+function withUtilities_25_26(world: SavedJson): SavedJson {
   const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
   return {
     ...world,
@@ -410,27 +423,27 @@ function withUtilities_24_25(world: SavedJson): SavedJson {
     fields: [],
     flares: [],
     lines: [],
-    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_24_25 },
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_25_26 },
   };
 }
 
 // Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
 // ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
 // in the open.
-const LOOT_SITES_24_25 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
-const LOOT_SPOT_24_25 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
-const ROAD_WRECK_24_25 = /^wreck\d+$/;
+const LOOT_SITES_25_26 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_25_26 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_25_26 = /^wreck\d+$/;
 
-function isRolledStock_24_25(stock: SavedJson): boolean {
+function isRolledStock_25_26(stock: SavedJson): boolean {
   const id = stock.id as string;
-  return !stock.pile && (LOOT_SITES_24_25.has(id) || LOOT_SPOT_24_25.test(id) || ROAD_WRECK_24_25.test(id));
+  return !stock.pile && (LOOT_SITES_25_26.has(id) || LOOT_SPOT_25_26.test(id) || ROAD_WRECK_25_26.test(id));
 }
 
 // A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
-function withHiddenStock_24_25(world: SavedJson): SavedJson {
+function withHiddenStock_25_26(world: SavedJson): SavedJson {
   const searched = new Set((world.player as SavedJson).scavenged as string[]);
   const hide = (stock: SavedJson): SavedJson => {
-    if (searched.has(stock.id as string) || !isRolledStock_24_25(stock)) return { ...stock, hidden: NO_HIDDEN_24_25() };
+    if (searched.has(stock.id as string) || !isRolledStock_25_26(stock)) return { ...stock, hidden: NO_HIDDEN_25_26() };
     const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
     return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
   };
@@ -438,7 +451,7 @@ function withHiddenStock_24_25(world: SavedJson): SavedJson {
 }
 
 // A player gets the debug freeze switch, off as in a new game.
-function withFreeze_24_25(world: SavedJson): SavedJson {
+function withFreeze_25_26(world: SavedJson): SavedJson {
   return { ...world, player: { ...(world.player as SavedJson), frozen: false } };
 }
 
@@ -530,9 +543,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withTracks_22_23,
   // 23 to 24: a track records the turn its truck came in sight, null after loading.
   withSeenSince_23_24,
-  // 24 to 25: utility orders and effects, the search stream, hidden salvage in every unsearched rolled stock and the
+  // 24 to 25: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  // 25 to 26: utility orders and effects, the search stream, hidden salvage in every unsearched rolled stock and the
   // debug freeze switch.
-  (world) => withFreeze_24_25(withHiddenStock_24_25(withUtilities_24_25(world))),
+  (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

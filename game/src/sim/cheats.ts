@@ -33,6 +33,7 @@ import { WEATHER } from '../data/weather';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
 import { fuelCap, suppliesCap } from './stats';
+import { spillDeadRows } from './spill';
 
 // Bad user input to a cheat. Any other error from a cheat is a bug.
 export class CheatError extends Error {}
@@ -74,6 +75,11 @@ export function setSupplies(world: World, n: number): World {
   return update(world, (w) => { w.player.supplies = n; });
 }
 
+export function setEngineHeat(world: World, n: number): World {
+  requireRange('Engine heat', n, 0, 1);
+  return update(world, (w) => { w.player.engineHeat = n; });
+}
+
 export function setHealth(world: World, n: number): World {
   requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
@@ -109,6 +115,7 @@ export function damagePartTo(world: World, defId: string, hp: number): World {
     requireInteger('Hit points', hp, 0, maxHp(part));
     if (hp <= part.hp) {
       damagePart(part, part.hp - hp, 0);
+      spillDeadRows(w);
       return;
     }
     if (part.hp === 0 && isJunk(part)) throw new CheatError(`${partDef(defId).name} is junk and cannot be rebuilt`);

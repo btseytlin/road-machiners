@@ -3,26 +3,28 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { agentHome } from './common';
-import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from '../types';
+import { MergeConflictError, RevertConflictError, type AgentRun, type Card, type Ctx, type FactoryConfig, type InlineButton, type MergeStep, type Resolution } from '../types';
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
-export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10 } as FactoryConfig;
+export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10, publicUrl: 'https://play.test/play', errorMapDays: 14 } as FactoryConfig;
+// The full commit every fake clone stands on.
+export const CLONE_SHA = 'abc1234'.padEnd(40, '0');
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
 export type Text = { chat: string; text: string; buttons: InlineButton[][] };
-export type Fake = { ctx: Ctx; texts: Text[]; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[] };
+export type Fake = { ctx: Ctx; texts: Text[]; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[]; mergeConflicts: string[]; revertConflicts: string[]; agentRuns: AgentRun[] };
 
 export function fake(): Fake {
-  const f: Fake = { texts: [], ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [] };
+  const f: Fake = { texts: [], ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [], mergeConflicts: [], revertConflicts: [], agentRuns: [] };
   const note = (text: string) => { f.calls.push(text); };
   f.ctx = {
     cfg,
     statePath: join(ROOT, 'state.json'),
     now: () => new Date('2026-09-29T10:00:00Z'),
     log: () => undefined,
-    run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; },
+    run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: cmd === 'git' && args[0] === 'rev-parse' ? `${CLONE_SHA}\n` : '', stderr: '' }; },
     github: {
       createIssue: async (title: string, body: string, labels: string[]) => { note(`createIssue ${title}`); f.created.push({ title, body, labels }); return 10 + f.created.length; },
       cards: async () => f.cards,
@@ -55,6 +57,7 @@ export function fake(): Fake {
     container: {
       shell: async () => note('shell'),
       agent: async (run: AgentRun) => {
+        f.agentRuns.push(run);
         note(run.readOnly ? `agent ro ${JSON.stringify(run.readOnly)}` : 'agent');
         const home = agentHome(run.clone, run.dir);
         mkdirSync(join(home, '.factory'), { recursive: true });
@@ -62,18 +65,35 @@ export function fake(): Fake {
           mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
           writeFileSync(join(home, '.factory', name), text, 'latin1');
         }
+        return '';
       },
     },
     repo: {
       path: join(ROOT, 'repo'),
       fetch: async () => note('fetch'),
-      prepareWorkClone: async (branch: string, _base: string, dir: string) => { note(`prepare ${branch}`); mkdirSync(dir, { recursive: true }); },
+      prepareWorkClone: async (branch: string, _base: string, dir: string) => {
+        note(`prepare ${branch}`);
+        // A clone's build output, as the game's build leaves it, maps included.
+        mkdirSync(join(dir, 'game', 'dist', 'assets'), { recursive: true });
+        writeFileSync(join(dir, 'game', 'dist', 'assets', 'index.js.map'), '{}');
+      },
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
-      merge: async (steps: MergeStep[]) => {
-        for (const step of steps) note(`merge ${step.branch} ${step.into}`);
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
+      // A step named in `mergeConflicts` as "branch into" conflicts until a resolution of its two tips arrives.
+      merge: async (steps: MergeStep[], resolutions: Resolution[] = []) => {
+        for (const step of steps) {
+          note(`merge ${step.branch} ${step.into}`);
+          const open = f.mergeConflicts.includes(`${step.branch} ${step.into}`) && !resolutions.some((item) => item.base === `${step.into}-tip` && item.source === `${step.branch}-tip`);
+          if (open) throw new MergeConflictError(step, ['game/src/a.ts'], 'boom', `${step.into}-tip`, `${step.branch}-tip`);
+        }
         note(`push ${steps.map((step) => step.into).join(' ')}`);
+      },
+      openConflict: async (dir: string, conflict: MergeConflictError | RevertConflictError) => { note(`open ${conflict.into}`); mkdirSync(dir, { recursive: true }); },
+      closeConflict: async (_dir: string, conflict: MergeConflictError | RevertConflictError) => {
+        note(`close ${conflict.into}`);
+        return { resolution: { base: conflict.base, source: conflict instanceof MergeConflictError ? conflict.source : conflict.merge, head: 'resolved-head' }, diff: '' };
       },
       mergeLog: async () => f.changelog,
       diff: async () => f.diff,
@@ -81,7 +101,12 @@ export function fake(): Fake {
       isMerged: async () => true,
       headHash: async () => 'abc1234',
       createBranch: async (name: string, from: string) => note(`branch ${name} ${from}`),
-      revertIssueMerge: async (issue: number, branch: string) => { note(`revert ${issue} ${branch}`); return true; },
+      // A branch named in `revertConflicts` conflicts until a resolution of its tip arrives.
+      revertIssueMerge: async (issue: number, branch: string, resolutions: Resolution[] = []) => {
+        note(`revert ${issue} ${branch}`);
+        if (f.revertConflicts.includes(branch) && !resolutions.some((item) => item.base === `${branch}-tip`)) throw new RevertConflictError(issue, branch, ['game/src/a.ts'], 'boom', `${branch}-tip`, 'merge-hash');
+        return true;
+      },
       deleteBranch: async (branch: string) => note(`delete ${branch}`),
     },
   } as unknown as Ctx;

@@ -15,7 +15,7 @@ import { gridOf, placementError } from './grid';
 import { addGoods } from './inventory';
 import { isPerkId, pickedFromPair, skillLevel } from './progress';
 import { fitStores } from './resources';
-import { generateObstacles, obstacleReach } from './mapgen';
+import { generateObstacles, touchesObstacle } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
@@ -29,6 +29,7 @@ import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { spillDeadRows } from './spill';
 import { fadeCraters } from './craters';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
@@ -40,7 +41,7 @@ import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, XpSource } from './types';
-import { vehicleStats } from './stats';
+import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
@@ -151,7 +152,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     brain: null,
   });
   const blocked = world.obstacles.filter(
-    (o) => dist(o.pos, truck.pos) < obstacleReach(o) + vehicleStats(world, truck).radius,
+    (o) => touchesObstacle(o, world.terrain, truck.pos, vehicleStats(world, truck).radius),
   );
   if (blocked.length > 0)
     throw new Error(
@@ -214,7 +215,15 @@ export function update(world: World, fn: (draft: World) => void): World {
   draft.removed = [];
   fn(draft);
   settleAims(draft);
+  settleOverdrive(draft);
   return draft;
+}
+
+// Overdrive cuts out once the engine is too worn for it, whatever wore it down. Only the player turns it back on.
+function settleOverdrive(w: World): void {
+  if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
+  w.player.overdrive = false;
+  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
 // Whether player commands are allowed now. The UI checks it before issuing one.
@@ -290,6 +299,7 @@ export function endTurn(
     followTower(w);
     caltropHits(w);
     applyWear(w);
+    spillDeadRows(w);
     advanceEngineHeat(w);
     advanceDust(w);
     advanceUtilityEffects(w);
@@ -310,6 +320,7 @@ export function endTurn(
     cookOffClaymores(w);
     consumeSupplies(w);
     applyHazards(w);
+    spillDeadRows(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);
@@ -405,6 +416,9 @@ export function setAutoRepair(world: World, on: boolean): World {
 
 export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
+    if (on && !canOverdrive(playerVehicle(w))) {
+      throw new Error(`Cannot overdrive: the engine is at or below ${RULES.overdriveMinEngineShare * 100}% of its max HP`);
+    }
     w.player.overdrive = on;
   });
 }
