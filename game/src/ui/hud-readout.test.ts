@@ -254,7 +254,7 @@ describe("critical vehicle readout", () => {
     w.player.ranks.toughness = 5;
     w.player.health = RULES.maxHealth;
     const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
-    expect(driver).toEqual({ label: "Driver", icon: null, value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });
+    expect(driver).toEqual({ label: "Driver", value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });
   });
 
   it("keeps parked jobs out of the survival instruments", () => {
