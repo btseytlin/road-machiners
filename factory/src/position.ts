@@ -1,13 +1,13 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
 import { RELEASE_LABEL, type Card, type FactoryState, type Job, type JobStage, type ReleaseState } from './types';
 
-export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'done';
+export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'resolve' | 'checks' | 'post' | 'approval' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'done'] as const;
 export type MoveTarget = (typeof MOVE_TARGETS)[number];
 
 // The job each position runs, as cardStage in tick.ts picks it. Done runs nothing.
 const POSITION_STAGE: Record<Position, JobStage | null> = {
-  triage: 'triage', design: 'design', implement: 'implement', patch: 'patch', verify: 'verify', fix: 'verify', checks: 'checks', post: 'checks', approval: 'approve', done: null,
+  triage: 'triage', design: 'design', implement: 'implement', patch: 'patch', verify: 'verify', fix: 'verify', resolve: 'verify', checks: 'checks', post: 'checks', approval: 'approve', done: null,
 };
 // Lists the jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no position owns them.
 export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks'];
@@ -20,7 +20,7 @@ export function cardPosition(card: Card, state: FactoryState): Position {
 }
 
 function testingPosition(phase: string | undefined): Position {
-  if (phase === 'fix' || phase === 'post') return phase;
+  if (phase === 'fix' || phase === 'post' || phase === 'resolve') return phase;
   return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
 }
 

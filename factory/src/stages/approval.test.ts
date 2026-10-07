@@ -136,11 +136,12 @@ describe('approve', () => {
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
-      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again and resolves the conflict. Then the approval by bob merges it, with no new post.',
+      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again, resolves the conflict and runs the checks, with no new hardening or review. Then the approval by bob merges it, with no new post.',
       'move 7 Testing',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.testPhase).toEqual({ 7: 'resolve' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
   });

@@ -180,7 +180,7 @@ export type UnroutedReply = { issue: number; postId: number; text: string; at: s
 // `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.
 // `post`: a control move to Approval. Only the build and the post run, with no tests and no playtest.
-export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post';
+export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post' | 'resolve';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;

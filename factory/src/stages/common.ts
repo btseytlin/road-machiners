@@ -233,7 +233,8 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   ctx.log(stage, issue, `${BRANCH(issue)} moved on GitHub, merged ${commit.slice(0, 7)} into the work${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
   if (conflicts.length === 0) return true;
   const files = conflicts.map((file) => `- ${file}`).join('\n');
-  await runAgent(ctx, issue, stage, 'branch-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), files }));
+  const source = `New commits reached ${BRANCH(issue)} on GitHub while the factory worked on it. A member or another job pushed them.`;
+  await runAgent(ctx, issue, stage, 'branch-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), source, files }));
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
   if (!(await ctx.repo.isMerged(commit, head))) throw new Error(`The agent left the merge of ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
   return true;

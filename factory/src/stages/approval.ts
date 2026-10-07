@@ -58,7 +58,7 @@ async function harden(ctx: Ctx, issue: number, by: string, base: string): Promis
 }
 
 // Parallel work moves the base on after testing, so the branch may conflict with it. That is routine work, not an incident.
-// The card goes back to Testing, which merges the base, lets the agent resolve the conflict and runs the checks again.
+// The change already passed hardening and review, so the card goes back to Testing only to resolve the conflict and run the checks.
 // Testing then queues the merge under the same approver, with no new post. Returns null in that case.
 async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string | null> {
   try {
@@ -66,8 +66,8 @@ async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string
   } catch (error) {
     if (!(error instanceof MergeConflictError) || error.branch !== BRANCH(issue)) throw error;
     forgetPosts(ctx, issue, true);
-    updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
-    await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Testing merges ${base} again and resolves the conflict. Then the approval by ${by} merges it, with no new post.`);
+    updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by }, testPhase: { ...state.testPhase, [String(issue)]: 'resolve' } }));
+    await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Testing merges ${base} again, resolves the conflict and runs the checks, with no new hardening or review. Then the approval by ${by} merges it, with no new post.`);
     await moveCard(ctx, issue, 'Testing', 'conflict');
     ctx.log('approve', issue, `conflict with ${base}, back to Testing to resolve`);
     return null;

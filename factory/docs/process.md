@@ -33,7 +33,7 @@ The loops:
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
 - redesign: the committee reply changes the plan.
 - review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
-- conflict: `dev` moved on since testing. The approval is kept, and hardening runs again.
+- conflict: `dev` moved on since testing. The approval is kept. A merge agent resolves the conflict, and the checks run again with no new hardening or review.
 - removed from release: `remove #N` on the release candidate post.
 
 The early ends:

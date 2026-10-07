@@ -26,6 +26,7 @@ Each position lists the column, the state fields, the artifacts it needs and the
 - `patch`: column Implementation, with a `patching` entry that holds the commit of the last posted build. Next job: patch. `move` cannot target it.
 - `verify`: column Testing, with no `testPhase` entry. Needs the branch with the build. Next job: verify.
 - `fix`: column Testing, `testPhase` is `fix`. The checks failed once. Next job: verify, which runs the fix round. `move` cannot target it.
+- `resolve`: column Testing, `testPhase` is `resolve`, with an `approvedResolving` entry. Approve hit a conflict with the base. Next job: verify, which merges the base, lets a merge agent resolve the conflict and skips hardening and the review. `move` cannot target it.
 - `checks`: column Testing, `testPhase` is `checks` or `checks-after-fix`. Next job: checks.
 - `post`: column Testing, `testPhase` is `post`. Next job: checks, which builds, publishes and posts with no tests or playtest. Needs `.factory/approval.json` and the screenshot. `move N approval` goes through it.
 - `approval`: column Approval. Needs a published build in `builds` and an open post in `approvalPosts`, or an approval queued in `pendingApprovals`. Next job: approve, which runs when the committee presses Approve.
@@ -36,7 +37,7 @@ Fields that belong to one position:
 - `testPhase` belongs to Testing only.
 - `patching` belongs to Implementation only.
 - `approvalPosts`, `postCaptions` and `pendingApprovals` belong to Approval only.
-- `approvedResolving` marks an approved card that is back in Testing to resolve a conflict. It merges after hardening, with no new post.
+- `approvedResolving` marks an approved card that is back in Testing to resolve a conflict. It merges after the checks, with no new post.
 
 Flags hold on any position:
 

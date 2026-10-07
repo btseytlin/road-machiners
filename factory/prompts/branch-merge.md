@@ -5,15 +5,16 @@ Read CLAUDE.md first.
 Follow it.
 Run `npm ci` before anything else. The commit hook needs it.
 
-New commits reached {{branch}} on GitHub while the factory worked on it. A member or another job pushed them.
-The factory merged them into your branch, and the merge stopped on conflicts in these files:
+{{source}}
+The merge stopped on conflicts in these files:
 
 {{files}}
 
 Resolve them.
 Read both sides with `git log --merge` and `git diff`.
 Keep what both sides meant, not just one side.
-The newer commits on GitHub are often a member's own fixes. Never drop them.
+The incoming commits are often a member's own fixes or other approved work. Never drop them.
+A file one side deleted and the other changed needs the change carried to where the deleting side moved that code, or dropped if that side removed the feature.
 Run the typecheck and the focused tests near the conflicted files.
 Then commit the merge with `git commit --no-edit`.
 Do nothing else. The factory checks and tests the branch after you.

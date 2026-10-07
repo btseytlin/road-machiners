@@ -27,22 +27,27 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   const mode = testMode(ctx, issue, item.labels);
-  if (readState(ctx.statePath).testPhase[String(issue)] === 'fix') return fixRound(ctx, issue, base, mode);
+  const phase = readState(ctx.statePath).testPhase[String(issue)];
+  if (phase === 'fix') return fixRound(ctx, issue, base, mode);
+  if (phase === 'resolve') return resolveRound(ctx, issue, base);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home, 'verify');
+  if (await agentRounds(ctx, issue, base, mode, merged)) setPhase(ctx, issue, 'checks');
+}
+
+// Plays the rounds of the mode. False means the card went elsewhere, so no checks follow.
+async function agentRounds(ctx: Ctx, issue: number, base: string, mode: TestMode, merged: string): Promise<boolean> {
   if (mode === 'preview') {
     const shown = await agentRound(ctx, issue, 'test', 'test', base, true);
     await requireBaseMerged(ctx, issue, base, merged);
-    if (!shown) return;
-  } else {
-    await agentRound(ctx, issue, 'harden', 'harden', base, false);
-    await requireBaseMerged(ctx, issue, base, merged);
-    if (!(await reviewGate(ctx, issue, base, async () => { await agentRound(ctx, issue, 'test-fix', 'review-fix', base, false); }))) return;
-    if (mode === 'full' && !(await agentRound(ctx, issue, 'test', 'test', base, true))) return;
+    return shown;
   }
-  setPhase(ctx, issue, 'checks');
+  await agentRound(ctx, issue, 'harden', 'harden', base, false);
+  await requireBaseMerged(ctx, issue, base, merged);
+  if (!(await reviewGate(ctx, issue, base, async () => { await agentRound(ctx, issue, 'test-fix', 'review-fix', base, false); }))) return false;
+  return mode !== 'full' || (await agentRound(ctx, issue, 'test', 'test', base, true));
 }
 
 // The checks stage left the end of its log in `.factory/check-failure.md`, next to the approval and evidence of the first round.
@@ -51,6 +56,23 @@ async function fixRound(ctx: Ctx, issue: number, base: string, mode: TestMode): 
   if (readOutput(agentHome(workDir(ctx, issue), GAME_DIR), 'check-failure.md') === null) throw new Error(`Issue #${issue} waits for a check fix, but its work clone has no .factory/check-failure.md`);
   if (!(await agentRound(ctx, issue, 'test-fix', 'checks-fix', base, mode !== 'harden'))) return;
   setPhase(ctx, issue, 'checks-after-fix');
+}
+
+// An approved card whose merge conflicted with the base. Its change already passed hardening and review, and only the merge is new.
+// A merge agent resolves the conflict, and the checks test the result before approve merges it.
+async function resolveRound(ctx: Ctx, issue: number, base: string): Promise<void> {
+  prepareOutputs(ctx, issue, agentHome(workDir(ctx, issue), GAME_DIR));
+  await catchUpBranch(ctx, issue, 'verify');
+  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  ctx.log('verify', issue, `merged ${base} at ${commit.slice(0, 7)}${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
+  if (conflicts.length > 0) {
+    const files = conflicts.map((file) => `- ${file}`).join('\n');
+    const source = `The factory merged the current ${base} into your branch. It holds work the committee approved after this issue was tested.`;
+    await runAgent(ctx, issue, 'verify', 'base-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), source, files }));
+  }
+  await guardAndPush(ctx, issue, base, 'verify');
+  await requireBaseMerged(ctx, issue, base, commit);
+  setPhase(ctx, issue, 'checks');
 }
 
 export function setPhase(ctx: Ctx, issue: number, phase: TestPhase): void {

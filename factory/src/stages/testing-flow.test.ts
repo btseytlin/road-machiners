@@ -561,6 +561,38 @@ describe('testing stage', () => {
     expect(calls).not.toContain('checks');
   });
 
+  it('resolves a conflict that stopped approve with a merge agent alone, then checks and queues the merge', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    conflicts = ['game/src/a.ts'];
+    const prompts: string[] = [];
+    await runStage(fakeCtx((run) => { prompts.push(run.prompt); }), 7);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('This is a merge round of the ROAM factory.');
+    expect(prompts[0]).toContain('merged the current dev into your branch');
+    expect(prompts[0]).toContain('- game/src/a.ts');
+    expect(calls.some((call) => call.startsWith('review'))).toBe(false);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+    expect(queued()).toEqual({ 7: 'Ann' });
+  });
+
+  it('runs no agent when the base merges cleanly after a conflict at approve', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    const prompts: string[] = [];
+    await runStage(fakeCtx((run) => { prompts.push(run.prompt); }), 7);
+    expect(prompts).toEqual([]);
+    expect(calls).toContain('push w1 factory/issue-7');
+    expect(queued()).toEqual({ 7: 'Ann' });
+  });
+
+  it('fails the stage when the merge agent leaves the merge of the base unfinished', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    conflicts = ['game/src/a.ts'];
+    merged = false;
+    await expect(runStage(fakeCtx(() => undefined), 7)).rejects.toThrow('left the merge of dev at base000 into factory/issue-7 unfinished');
+    expect(calls).not.toContain('checks');
+  });
+
   it('merges a cleanup task into the release itself, with no committee post', async () => {
     labels = ['release-task', 'maintenance'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));

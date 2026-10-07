@@ -39,6 +39,7 @@ Implementation runs Sonnet with up:uexecute on the task file. Subagents are off,
 [process.md](process.md#testing-column) shows the order of the rounds and their limits. These are the rules behind them.
 
 - Verify first merges the new commits of the issue branch on GitHub, then the current base, so the committee plays what approve will merge. A conflict with the branch goes to a merge agent at once. The round agent resolves a conflict with the base. An unfinished merge fails the stage.
+- An approved card that conflicts with the base at approve already passed hardening and the review. Verify merges the base, a merge agent resolves the conflict with `prompts/branch-merge.md`, and the checks run next. No harden round or review runs.
 - The preview round uses `prompts/test.md`, and the harden round uses `prompts/harden.md`. A cleanup task only hardens, since it merges with no post.
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. It must end `.factory/review.md` with `REVIEW_VERDICT: PASS` or `REVIEW_VERDICT: FAIL`, or the stage fails.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
