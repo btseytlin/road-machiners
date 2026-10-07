@@ -10,7 +10,7 @@ import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, itemSize } from "../sim/grid";
 import { fuelCap, gunDraw, hasWorkingEngine, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
-import { fuelLimit } from "../sim/far";
+import { fuelLimit, lowFuelSpeed } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
@@ -20,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -266,8 +266,8 @@ function townName(id: string): string {
 }
 
 // Max-speed rows and the power chip: the sim's steps and power facts, worded tersely for the HUD tooltip and the truck headers.
-// Each row shows its cause, its effect and the running km/h. The last row is the total the HUD shows.
-export type SpeedRow = { label: string; effect: string; kph: number; total: boolean };
+// The tooltip is one terse line per step that moves the number.
+export type SpeedRow = { label: string; text: string; delta: number };
 
 export type PowerChip = { text: string; detail: string; over: boolean };
 
@@ -288,51 +288,56 @@ export function powerNumber(n: number): string {
 }
 
 type Kind<K extends SpeedStep['kind']> = Extract<SpeedStep, { kind: K }>;
-type Words = { label: string; effect: (deltaKph: number) => string };
-// What each step is called and how its effect reads. A new step kind fails typecheck until it has an entry here.
-type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: string) => Words };
+// What each step is called. A new step kind fails typecheck until it has an entry here.
+type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: string) => string };
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-const byKph = (delta: number) => signed(delta, ' km/h');
-const byFactor = (factor: number) => () => percent(factor);
 
 const WORDING: Wording = {
-  chassis: () => ({ label: 'Chassis', effect: () => 'base' }),
-  engine: (s) => ({ label: s.worn ? 'Engine worn' : 'Engine', effect: byKph }),
-  load: (s) => ({ label: `Load ${kg(s.mass)} / ${kg(s.rated)}`, effect: byFactor(s.factor) }),
-  wheels: (s) => ({ label: plural(s.broken, 'broken wheel'), effect: byFactor(s.factor) }),
-  guns: (s) => ({ label: `Gun power ${powerNumber(s.draw)} / ${powerNumber(s.capacity)}`, effect: byFactor(s.factor) }),
-  floor: () => ({ label: 'Minimum speed', effect: byKph }),
-  overdrive: (s) => ({ label: 'Overdrive', effect: byFactor(s.factor) }),
-  transmission: () => ({ label: 'Broken transmission: crawl', effect: byKph }),
-  limp: (s) => ({ label: { noEngine: 'No engine: crawl', brokenEngine: 'Engine broken: crawl', stalled: 'Engine stalled: pushed at crawl speed' }[s.cause], effect: () => 'crawl' }),
-  weather: (s, weather) => ({ label: `Weather: ${weather}`, effect: byFactor(s.factor) }),
-  towing: (s) => ({ label: 'Towing', effect: byFactor(s.factor) }),
+  chassis: () => 'Chassis',
+  engine: (s) => (s.worn ? 'Engine worn' : 'Engine'),
+  load: () => 'Load',
+  wheels: (s) => plural(s.broken, 'broken wheel'),
+  guns: () => 'Guns power',
+  floor: () => 'Minimum speed',
+  overdrive: () => 'Overdrive',
+  transmission: () => 'Broken transmission',
+  limp: (s) => ({ noEngine: 'No engine', brokenEngine: 'Engine broken', stalled: 'Engine stalled' })[s.cause],
+  weather: (_s, weather) => weather,
+  towing: () => 'Towing',
 };
 
-// One row per step, each with its effect and the running km/h of the rounded speed, so the rows chain to the total.
-// weather is the HUD's label for the weather at the truck.
-export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
-  return steps.map((step, i) => {
-    const words = (WORDING[step.kind] as (step: SpeedStep, weather: string) => Words)(step, weather);
-    const speed = kph(step.speed);
-    return { label: words.label, effect: words.effect(i === 0 ? 0 : speed - kph(steps[i - 1].speed)), kph: speed, total: i === steps.length - 1 };
-  });
+function labelOf(weather: string, step: SpeedStep): string {
+  const word = WORDING[step.kind] as (step: SpeedStep, weather: string) => string;
+  return word(step, weather);
 }
 
-// Short notes for what the number leaves out: a low or empty tank, and how gun power works.
+// One row per step that moves the shown speed, with its km/h change. Each delta is the difference of two rounded speeds, so the rows add up to the total.
+// Limp reads as a crawl speed. The chassis step is the starting point, not a change. weather is the HUD's label for the weather at the truck.
+export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
+  const rows: SpeedRow[] = [];
+  steps.forEach((step, i) => {
+    const label = labelOf(weather, step);
+    if (step.kind === 'limp') return void rows.push({ label, text: `${label}: crawl ${kph(step.speed)} km/h`, delta: 0 });
+    if (i === 0) return;
+    const delta = kph(step.speed) - kph(steps[i - 1].speed);
+    if (delta !== 0) rows.push({ label, text: `${label}: ${signed(delta, ' km/h')}`, delta });
+  });
+  return rows;
+}
+
+// Short notes for what the number leaves out: a low or empty tank.
 export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
-  const notes: string[] = [];
-  const driving = steps.some((s) => s.kind === 'guns');
-  if (driving) {
-    notes.push(
-      `Guns draw engine power, and the draw is not a mounting limit. As the draw nears the engine's capacity, top speed and acceleration fall faster: the first guns cost little, and from full capacity on the cost stays at ${Math.round((1 - RULES.gunDragMax) * 100)}%. It is one total, not a cost per gun.`,
-    );
-  }
-  const fuel = fuelLimit(w, v, driving);
-  if (fuel === 'low') notes.push(`Low fuel: ${percent(RULES.lowFuelSpeedFactor)} on the road, not counted`);
-  if (fuel === 'empty') notes.push('Empty tank: crawl, not counted');
-  return notes;
+  const fuel = fuelLimit(w, v, steps.some((s) => s.kind === 'guns'));
+  if (fuel === 'low') return [`Low fuel: max ${kph(lowFuelSpeed(steps[steps.length - 1].speed))} km/h`];
+  if (fuel === 'empty') return ['Empty tank: crawl'];
+  return [];
+}
+
+// The tooltip's lines: the rows, then the fuel notes, or the compact empty state.
+export function speedTip(rows: SpeedRow[], notes: string[]): string[] {
+  const lines = [...rows.map((r) => r.text), ...notes];
+  return lines.length > 0 ? lines : ['No speed penalties'];
 }
 
 // The guns step, and the speed before it. Null while a stalled or missing engine skips the engine path.
@@ -378,8 +383,7 @@ export function getHudReadout(w: World) {
   return {
     speed: String(kph(me.speed)),
     maxSpeed: String(kph(steps[steps.length - 1].speed)),
-    maxSpeedRows: speedRows(weather, steps),
-    maxSpeedNotes: speedNotes(w, me, steps),
+    maxSpeedTip: speedTip(speedRows(weather, steps), speedNotes(w, me, steps)),
     manual: me.direct,
     clock: clockLabel(w.turn),
     resources: [
