@@ -14,6 +14,14 @@ The factory's own records are mounted read only:
 
 - `{{state}}/state.json` is the factory state: running jobs, failures, queued actions and recent job starts.
 - `{{logs}}` holds the job logs, one per issue and stage, like `issue-12-design.log`. An agent log is Claude's stream-json output. Its last line is the `result` event, with the run's duration, token usage and cost.
+- `{{ledger}}` has one JSON line per ended job: its stage, issue, outcome, start, end and agent runs. Each agent run names its model, cost, minutes and `sessionId`.
+- `{{transcripts}}/<sessionId>/<sessionId>.jsonl` is the Claude Code transcript of one agent run, kept for {{transcriptDays}} days. Its subagents are in `{{transcripts}}/<sessionId>/<sessionId>/subagents/`. Use these to find what agents did, where they got stuck and what cost the most.
+
+A transcript can be several MB. Query it with a Node script or `grep`, never read it whole. For example, this counts the tools one run called:
+
+```
+node -e 'const counts = {}; for (const line of require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)) for (const block of JSON.parse(line).message?.content ?? []) if (block.type === "tool_use") counts[block.name] = (counts[block.name] ?? 0) + 1; console.log(counts)' {{transcripts}}/<sessionId>/<sessionId>.jsonl
+```
 
 You may build any tool you need for the work, outside the game code. Node and npm are available.
 

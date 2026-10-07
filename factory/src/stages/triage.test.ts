@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import { runStage } from './triage';
@@ -9,6 +9,7 @@ let calls: string[] = [];
 let prompt = '';
 let effort: string | undefined;
 let related = '';
+let releaseInput = '';
 // The board the stage sees. Issue 7 is the card under triage.
 let cards: Card[] = [];
 
@@ -28,6 +29,7 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
@@ -41,19 +43,21 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
         calls.push(`agent ${run.model}`);
         effort = run.effort;
         related = readFileSync(`${run.clone}/${run.dir}/.factory/related.md`, 'utf8');
+        releaseInput = readFileSync(`${run.clone}/${run.dir}/.factory/release.md`, 'utf8');
         prompt = run.prompt;
         if (verdict !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/triage.json`, verdict);
       },
     },
     repo: {
       fetch: record('fetch'), push: record('push'), fetchFromWork: record('fetchFromWork'),
+      mergeLog: async () => ['Merge issue #5: Night driving', 'Merge main into dev'],
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
     },
   };
   return fake as unknown as Ctx;
 }
 
-const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, complexity: 'intermediate', complexityReason: 'Touches the horn code and the audio module.', bundle: [], ...over });
+const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, releaseFix: false, complexity: 'intermediate', complexityReason: 'Touches the horn code and the audio module.', bundle: [], ...over });
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
 
 describe('triage stage', () => {
@@ -184,16 +188,68 @@ describe('triage stage', () => {
     [JSON.stringify({ verdict: 'unclear', reason: 'x' }), 'at least one'],
     [JSON.stringify({ verdict: 'ready', reason: 'x' }), 'hotfix as true or false'],
     [verdict({ hotfix: 'yes' }), 'hotfix as true or false'],
-    [JSON.stringify({ verdict: 'ready', reason: 'x', hotfix: false, complexity: 'intermediate', complexityReason: 'y' }), 'bundle as a list of issue numbers'],
+    [JSON.stringify({ verdict: 'ready', reason: 'x', hotfix: false, releaseFix: false, complexity: 'intermediate', complexityReason: 'y' }), 'bundle as a list of issue numbers'],
     [verdict({ bundle: ['9'] }), 'bundle as a list of issue numbers'],
     [verdict({ bundle: [11] }), 'bundles #11, which is not an offered Triage card'],
     [verdict({ bundle: [9, 9] }), 'bundles an issue twice'],
     [verdict({ bundle: [9], hotfix: true }), 'bundles issues into a hotfix'],
+    [verdict({ releaseFix: 'yes' }), 'releaseFix as true or false'],
+    [verdict({ releaseFix: true }), 'no release takes fixes now'],
   ])('throws on a bad triage.json %#', async (text, message) => {
     cards = [card(7, 'Triage'), card(9, 'Triage')];
     await expect(runStage(fakeCtx(text), 7)).rejects.toThrow(message);
     expect(calls.filter((call) => /^(comment|move|close|addLabel)/.test(call))).toEqual([]);
     expect(readState(`${home}/state.json`).bundles).toEqual({});
+  });
+});
+
+describe('triage release fixes', () => {
+  const release = { issue: 40, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+  const openRelease = (postId: number | null) => writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { ...release, postId } });
+
+  it('tells the agent that no release takes fixes when none is open', async () => {
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(releaseInput).toContain('No release takes fixes now.');
+  });
+
+  it('lists the features of a release that has no candidate post yet', async () => {
+    openRelease(null);
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(releaseInput).toContain('Release 2026-09-29 takes fixes.');
+    expect(releaseInput).toContain('- #5 Night driving');
+    expect(releaseInput).not.toContain('Merge main');
+  });
+
+  it('takes no fixes once the candidate is posted', async () => {
+    openRelease(123);
+    await expect(runStage(fakeCtx(verdict({ releaseFix: true })), 7)).rejects.toThrow('no release takes fixes now');
+    expect(releaseInput).toContain('No release takes fixes now.');
+  });
+
+  it('labels a release fix as a release task, names the release and drops the dev clone', async () => {
+    openRelease(null);
+    await runStage(fakeCtx(verdict({ releaseFix: true, reason: 'Fixes the headlights of #5.' })), 7);
+    expect(calls).toContain('addLabel 7 release-task');
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed as a fix for release 2026-09-29: Fixes the headlights of #5.'))).toContain('It branches from release/2026-09-29');
+    expect(calls.at(-1)).toBe('move 7 Design');
+    expect(existsSync(`${home}/work/issue-7`)).toBe(false);
+  });
+
+  it('keeps the dev clone of a normal card for Design', async () => {
+    openRelease(null);
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(calls).not.toContain('addLabel 7 release-task');
+    expect(existsSync(`${home}/work/issue-7`)).toBe(true);
+  });
+
+  it('drops the dev clone of a hotfix, so Design branches it from main', async () => {
+    await runStage(fakeCtx(verdict({ hotfix: true })), 7);
+    expect(existsSync(`${home}/work/issue-7`)).toBe(false);
+  });
+
+  it('refuses a hotfix that is also a release fix', async () => {
+    openRelease(null);
+    await expect(runStage(fakeCtx(verdict({ hotfix: true, releaseFix: true })), 7)).rejects.toThrow('marks a hotfix as a release fix');
   });
 });
 

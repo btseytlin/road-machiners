@@ -6,13 +6,14 @@
 
 import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
 import { startKit } from '../../data/start';
-import { partDef, type PartKind } from '../../data/parts';
+import { partDef, PARTS, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
 import { freeCells, goodsCount, mountedItems, type Spot } from '../grid';
 import { getLayoutError, installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { townAt } from '../sites';
+import { vehicleStats } from '../stats';
 import { getUpkeepReserve } from '../npc-decisions';
 import type { ThreatAnswer } from '../parley';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
@@ -25,6 +26,9 @@ export type LedgerKey = (typeof LEDGER_KEYS)[number];
 export type Ledger = Record<LedgerKey, number>;
 
 export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) => [k, 0])) as Ledger;
+
+// Units of the parts good every bot keeps for field repair: what the standard start kit carries.
+export const REPAIR_PARTS = startKit('standard').cargo.parts ?? 0;
 
 // What the bot did that the events do not say: a demand and the driver's answer, and goods and spares it looted.
 export type BotNote =
@@ -78,7 +82,14 @@ const NEVER: readonly PartKind[] = ['core', 'scanner'];
 // skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot. keepRoom
 // marks a bot that lives off its cargo: it takes no part that leaves less room for goods. A bot with chassis keep stays
 // on the chassis it has, since every swap pays the shop's spread.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean };
+// lootRoom is the cells a bot with a fighter's gear keeps free for loot, and minSpeed the top speed it keeps for the
+// chase. A part that leaves fewer free cells, or a top speed below the lower of minSpeed and the current one, stays on
+// the shelf.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean; lootRoom?: number; minSpeed?: number };
+
+// The footprint of the biggest part in the game. A fighter that keeps this many cells free can always take the best
+// part of a wreck it knocked out.
+export const BIGGEST_PART_CELLS = Math.max(...Object.values(PARTS).map((p) => p.w * p.h));
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
@@ -98,7 +109,7 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   if (style.chassis === 'speed' && chassis) return chassis;
   const wanted = (c: Candidate) => !isJunk(c.part) && ![...NEVER, ...style.skip].includes(partDef(c.part.defId).kind);
   const parts = candidates(o, shop).filter(wanted);
-  const options = parts.flatMap((c) => partOption(o, c, style.keepRoom)).filter((option) => option.cost <= spend);
+  const options = parts.flatMap((c) => partOption(o, c, style)).filter((option) => option.cost <= spend);
   return strongest(chassis ? [chassis, ...options] : options);
 }
 
@@ -125,10 +136,12 @@ function quality(part: PartInstance): number {
 
 // ---- Chassis.
 
-// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
+// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only with
+// no goods but its repair parts, a few single cells that fit any grid.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
   // Chassis sell only in a town, as buyChassis() requires.
-  if (style.chassis === 'keep' || !townAt(o.world) || Object.keys(goodsCount(o.me)).length > 0) return [];
+  const load = Object.entries(goodsCount(o.me)).some(([good, n]) => good !== 'parts' || n > REPAIR_PARTS);
+  if (style.chassis === 'keep' || !townAt(o.world) || load) return [];
   const current = chassisDef(o.me.chassisId);
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);
@@ -147,10 +160,16 @@ function candidates(o: Orders, shop: string): Candidate[] {
 
 // Mounting the candidate, with the weakest mounted part of its kind sold first when no mount is free. Nothing when
 // the part would not mount or adds nothing, or, with keepRoom, when it leaves less room for goods.
-function partOption(o: Orders, c: Candidate, keepRoom: boolean): Option[] {
+function partOption(o: Orders, c: Candidate, style: UpgradeStyle): Option[] {
+  const topSpeed = (v: Vehicle) => vehicleStats(o.world, v).maxSpeed;
+  const speedFloor = style.minSpeed === undefined ? 0 : Math.min(topSpeed(o.me), style.minSpeed);
   const fits = (v: Vehicle) => {
     const spot = installSpot(v, probe(c.part));
-    return spot !== null && !(keepRoom && roomAfter(v, c.part, spot) < goodsRoom(o.me));
+    if (spot === null) return false;
+    const after = mounted(v, c.part, spot);
+    if (style.keepRoom && goodsRoom(after) < goodsRoom(o.me)) return false;
+    if (style.lootRoom !== undefined && freeCells(after) < Math.min(style.lootRoom, freeCells(o.me))) return false;
+    return topSpeed(after) >= speedFloor;
   };
   if (installSpot(o.me, probe(c.part))) return fits(o.me) ? [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }] : [];
   const weakest = weakestOfKind(o.me, partDef(c.part.defId).kind);
@@ -172,10 +191,10 @@ function goodsRoom(v: Vehicle): number {
   return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
 }
 
-// A spare that moves onto the mount frees the cells it held.
-function roomAfter(v: Vehicle, part: PartInstance, spot: Spot): number {
+// The truck with the part on the spot. A spare that moves onto the mount frees the cells it held.
+function mounted(v: Vehicle, part: PartInstance, spot: Spot): Vehicle {
   const items = v.items.filter((it) => !(it.kind === 'part' && it.part.id === part.id));
-  return goodsRoom({ ...v, items: [...items, { ...probe(part), ...spot }] });
+  return { ...v, items: [...items, { ...probe(part), ...spot }] };
 }
 
 function weakestOfKind(v: Vehicle, kind: PartKind): PartItem | null {

@@ -126,22 +126,40 @@ export function partLane(v: Vehicle, partId: string, side: Side): number {
   return side === 'front' || side === 'rear' ? item.x + Math.floor(size.w / 2) : item.y + Math.floor(size.h / 2);
 }
 
+// Lane cells by grid. Grids are frozen and shared, see gridOf(), so their lanes never change.
+const laneCache = new WeakMap<Grid, Map<string, readonly { x: number; y: number }[]>>();
+
 // Cells of one lane in the order a round meets them. The nose is row 0, the left edge is column 0.
-function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[] {
-  const across = side === 'front' || side === 'rear' ? g.w : g.h;
+function laneCells(g: Grid, side: Side, lane: number): readonly { x: number; y: number }[] {
+  let lanes = laneCache.get(g);
+  if (!lanes) laneCache.set(g, (lanes = new Map()));
+  const key = `${side}${lane}`;
+  let cells = lanes.get(key);
+  if (!cells) lanes.set(key, (cells = buildLaneCells(g, side, lane)));
+  return cells;
+}
+
+function buildLaneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[] {
+  const lengthwise = side === 'front' || side === 'rear';
+  checkLane(lane, lengthwise ? g.w : g.h, side);
+  return Array.from({ length: lengthwise ? g.h : g.w }, (_, i) => LANE_STEP[side](g, lane, i));
+}
+
+// The i-th cell a round meets in a lane, from the struck side inward.
+const LANE_STEP: Record<Side, (g: Grid, lane: number, i: number) => { x: number; y: number }> = {
+  front: (_g, lane, i) => ({ x: lane, y: i }),
+  rear: (g, lane, i) => ({ x: lane, y: g.h - 1 - i }),
+  left: (_g, lane, i) => ({ x: i, y: lane }),
+  right: (g, lane, i) => ({ x: g.w - 1 - i, y: lane }),
+};
+
+function checkLane(lane: number, across: number, side: Side): void {
   if (!Number.isInteger(lane) || lane < 0 || lane >= across) throw new Error(`Lane ${lane} is outside the ${side} side (${across} lanes)`);
-  const depth = side === 'front' || side === 'rear' ? g.h : g.w;
-  const steps = Array.from({ length: depth }, (_, i) => i);
-  switch (side) {
-    case 'front': return steps.map((y) => ({ x: lane, y }));
-    case 'rear': return steps.map((i) => ({ x: lane, y: g.h - 1 - i }));
-    case 'left': return steps.map((x) => ({ x, y: lane }));
-    case 'right': return steps.map((i) => ({ x: g.w - 1 - i, y: lane }));
-  }
 }
 
 // The only way damage reaches parts. A working mounted part takes damage × min(1, pen / armor), then lowers pen
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
+// A broken cargo part's dead rows are still the truck's body, so they cost pen like empty cells.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
   return planLane(v, side, lane, round).map((h) => ({ part: h.part.id, damage: damagePart(world, v, h.part, h.amount) }));
@@ -149,17 +167,38 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
 
 // The parts a round walking this lane would hit and the damage each would take, without dealing it.
 export function planLane(v: Vehicle, side: Side, lane: number, round: Round): { part: PartInstance; amount: number }[] {
-  checkRound(round);
+  return walkCells(laneOwners(gridOf(v), cellOwners(v), side, lane), round);
+}
+
+// planLane() for every lane of a side, with each lane's cells read once for every round.
+export function sidePlanner(v: Vehicle): (side: Side, round: Round) => { part: PartInstance; amount: number }[][] {
   const g = gridOf(v);
   const owner = cellOwners(v);
+  const sides = new Map<Side, LaneCell[][]>();
+  return (side, round) => {
+    let lanes = sides.get(side);
+    if (!lanes) sides.set(side, (lanes = Array.from({ length: laneCount(v, side) }, (_, lane) => laneOwners(g, owner, side, lane))));
+    return lanes.map((cells) => walkCells(cells, round));
+  };
+}
+
+// A lane cell as a round meets it: null for a hole in the grid, else the mounted part there, if any.
+type LaneCell = { part: PartInstance | undefined } | null;
+
+function laneOwners(g: Grid, owner: Map<number, PartInstance>, side: Side, lane: number): LaneCell[] {
+  return laneCells(g, side, lane).map((c) => (g.cells[c.y][c.x] === null && c.y < g.deadFrom ? null : { part: owner.get(cellKey(c.x, c.y)) }));
+}
+
+function walkCells(cells: LaneCell[], round: Round): { part: PartInstance; amount: number }[] {
+  checkRound(round);
   const hits: { part: PartInstance; amount: number }[] = [];
   const struck = new Set<string>();
   const left = { pen: round.pen, damage: round.damage };
-  for (const c of laneCells(g, side, lane)) {
+  for (const cell of cells) {
     if (left.pen <= 0) break;
-    if (g.cells[c.y][c.x] === null) continue;
+    if (cell === null) continue;
     left.pen -= RULES.cellPen;
-    const part = owner.get(cellKey(c.x, c.y));
+    const part = cell.part;
     if (!takesHit(part, left.pen, struck)) continue;
     struck.add(part.id);
     hits.push(hitPart(part, left, round));

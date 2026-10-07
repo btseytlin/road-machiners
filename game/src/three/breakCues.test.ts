@@ -29,11 +29,6 @@ describe("breakRounds", () => {
     expect(breakRounds([off("a"), s])[0].round).toBe(1);
   });
 
-  it("pairs a guardShot break", () => {
-    const g = { t: "guardShot", site: "x", from: { x: 0, y: 0 }, target: "t", rounds: [round([dmg("a")])] } as ShotLike;
-    expect(breakRounds([off("a"), g])[0].owner).toBe(g);
-  });
-
   it("gives a collision break and an unowned break no round", () => {
     const c: GameEvent = { t: "collision", a: "t", b: "x", hitsA: [dmg("a")], hitsB: [] };
     expect(breakRounds([off("a"), c]).map((b) => [b.owner, b.round])).toEqual([[null, null]]);

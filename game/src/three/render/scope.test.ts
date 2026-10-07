@@ -213,3 +213,15 @@ describe('sight limit', () => {
     expect(() => limit.set({ x: 0, y: 0, z: 0 }, Number.NaN)).toThrow();
   });
 });
+
+describe('RenderScope frame hooks', () => {
+  it('runs each hook once per update', () => {
+    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true, false);
+    let calls = 0;
+    scope.onFrame(() => calls++);
+    const rig = rigAt(300, 300, 1);
+    scope.update(rig.camera);
+    scope.update(rig.camera);
+    expect(calls).toBe(2);
+  });
+});
