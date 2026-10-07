@@ -8,7 +8,7 @@ SCRIPT = Path(__file__).parent / "factory-incident-watch"
 LISTED = "  a1b2c3 [active]\n    Name:      factory-incidents\n    Monitor:   factory-incidents.sh (agent runs only on output change)\n"
 
 
-def run(tmp_path: Path, listed: str, edit_exit: int = 0) -> tuple[subprocess.CompletedProcess, list[list[str]]]:
+def run(tmp_path: Path, listed: str, edit_exit: int = 0, list_exit: int = 0) -> tuple[subprocess.CompletedProcess, list[list[str]]]:
     calls = tmp_path / "calls"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -17,7 +17,7 @@ def run(tmp_path: Path, listed: str, edit_exit: int = 0) -> tuple[subprocess.Com
     (bin_dir / "hermes").write_text(
         "#!/bin/bash\n"
         f"(IFS=$'\\t'; echo \"$*\") >> {calls}\n"
-        f"if [ \"$2\" = list ]; then cat {tmp_path / 'listed'}; fi\n"
+        f"if [ \"$2\" = list ]; then cat {tmp_path / 'listed'}; exit {list_exit}; fi\n"
         f"if [ \"$2\" = edit ]; then exit {edit_exit}; fi\n"
     )
     (bin_dir / "hermes").chmod(0o755)
@@ -54,3 +54,10 @@ def test_a_failed_edit_is_logged_and_lets_hermes_start(tmp_path):
     assert out.returncode == 0
     assert "factory-incidents" in out.stderr
     assert [c[1] for c in calls] == ["list", "edit"]
+
+
+def test_a_failed_list_creates_no_second_job_and_lets_hermes_start(tmp_path):
+    out, calls = run(tmp_path, "", list_exit=1)
+    assert out.returncode == 0
+    assert "factory-incidents" in out.stderr
+    assert calls == [["cron", "list", "--all"]]

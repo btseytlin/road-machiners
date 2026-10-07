@@ -4,7 +4,12 @@
 # An older start created the job with its failures sent to the chat, so an existing job gets both targets set again. An edit keeps its id, state and last output.
 set -eu
 deliver="telegram:$FACTORY_COMMITTEE_CHAT"
-if hermes cron list --all | grep -q factory-incidents; then
+# A failed list says nothing about the job, so a create could make a second one. The job stays as it is until the next start.
+if ! jobs=$(hermes cron list --all); then
+  echo "factory-incident-watch: could not list cron jobs, so the factory-incidents job stays as it is" >&2
+  exit 0
+fi
+if printf '%s\n' "$jobs" | grep -q factory-incidents; then
   # A failed edit must not stop Hermes. It leaves the old targets and says so in the container log.
   hermes cron edit factory-incidents --deliver "$deliver" --failure-deliver local \
     || echo "factory-incident-watch: could not edit the factory-incidents job, so its old delivery targets stay" >&2
