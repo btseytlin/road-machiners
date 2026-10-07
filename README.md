@@ -54,4 +54,4 @@ The game opens at [http://localhost:5173](http://localhost:5173).
 
 ## Contribute
 
-Run `npm ci` at the root. Then run `npm run hooks:install` from the main checkout. The hook blocks new lint and type debt.
+Run `npm ci` at the root. Then run `npm run hooks:install` from the main checkout.
