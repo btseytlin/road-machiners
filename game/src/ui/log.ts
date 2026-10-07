@@ -57,6 +57,11 @@ export class LogPanel {
     );
   }
 
+  // The session's log text, newest first.
+  get texts(): string[] {
+    return this.book.lines.map((line) => line.text);
+  }
+
   add(turn: number, lines: LogLine[]): void {
     if (lines.length === 0) return;
     const reading = this.box.scrollTop > 0;
