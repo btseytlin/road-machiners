@@ -359,25 +359,36 @@ function pickGear(world: World, rng: Rng, table: NpcLoadoutTable, v: Vehicle, pl
   const base = gearBaseline(v, rival, table.priorities, load);
   const moves = gearMoves(world, table, plan);
   const score = (u: Vehicle) => gearScore(world, u, table.priorities, base);
+  let now = score(v);
   for (;;) {
-    const now = score(v);
     const from = v;
-    const drawn = drawBetter(rng, moves, v, (next) => (score(next) - now) / used(from, next, plan));
+    const drawn = drawBetter(rng, moves, v, (next) => {
+      const scored = score(next);
+      return { score: scored, worth: (scored - now) / used(from, next, plan) };
+    });
     if (!drawn.length) return v;
-    v = nextRandom(rng) < GEAR_WHIM ? drawn[Math.floor(nextRandom(rng) * drawn.length)].v : drawn.reduce((a, b) => (b.worth > a.worth ? b : a)).v;
+    const taken = nextRandom(rng) < GEAR_WHIM ? drawn[Math.floor(nextRandom(rng) * drawn.length)] : drawn.reduce((a, b) => (b.worth > a.worth ? b : a));
+    [v, now] = [taken.v, taken.score];
   }
 }
 
 // The first GEAR_DRAWS moves, in weighted random order, that fit and are worth taking.
-function drawBetter(rng: Rng, moves: Weighted<GearMove>[], v: Vehicle, worth: (next: Vehicle) => number): { v: Vehicle; worth: number }[] {
-  const drawn: { v: Vehicle; worth: number }[] = [];
+function drawBetter(rng: Rng, moves: Weighted<GearMove>[], v: Vehicle, judge: (next: Vehicle) => { score: number; worth: number }): Draw[] {
+  const drawn: Draw[] = [];
   for (const move of weightedOrder(rng, moves)) {
-    const next = move(v);
-    const gain = next ? worth(next) : 0;
-    if (next && gain > 0) drawn.push({ v: next, worth: gain });
+    const draw = judged(move(v), judge);
+    if (draw) drawn.push(draw);
     if (drawn.length === GEAR_DRAWS) break;
   }
   return drawn;
+}
+
+type Draw = { v: Vehicle; score: number; worth: number };
+
+function judged(next: Vehicle | null, judge: (next: Vehicle) => { score: number; worth: number }): Draw | null {
+  if (!next) return null;
+  const result = judge(next);
+  return result.worth > 0 ? { v: next, ...result } : null;
 }
 
 // The values in a random order where heavier weights tend to come first: each sorts by a random key raised to one over
