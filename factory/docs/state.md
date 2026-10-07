@@ -13,7 +13,7 @@ One card position spans several stores. A position is consistent when every stor
 - GitHub branches: `factory/issue-N`, `dev`, `main` and the release branch. Written by implement, approve, ship and `merge`.
 - `state.json`: jobs, queues, card sub-positions, posts, builds, the release and the health records. Written by the tick, every job, and the write commands.
 - Work clone: the task file and stage outputs, like `.factory/approval.json`, the screenshot and `check-failure.md`. Written by the agent stages and checks.
-- Clone backups: `$FACTORY_HOME/clone-backups/issue-N-<time>/` holds a work clone that `repair-clone` replaced, with `repair.json` and `status.txt`. Written only by `repair-clone`. Nothing reads or deletes it.
+- Clone backups: `$FACTORY_HOME/clone-backups/issue-N-<time>/` holds a work clone that `repair-clone` replaced, with `repair.json` and `status.txt`. Written only by `repair-clone`. No code reads or deletes it. Hermes deletes it by hand once the card is past the trouble.
 - Web root: the published builds. Written by checks, approve, ship and the dev build.
 - Telegram: the posts with buttons. Written by checks, candidate, approve and ship.
 - Source maps: `$FACTORY_HOME/sourcemaps/<commit>/` holds the maps of each release, dev and candidate build, and `published.jsonl` lists those builds. Written by ship, hotfix, the dev build and candidate. Read by the error service.
