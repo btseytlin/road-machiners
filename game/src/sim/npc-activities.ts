@@ -23,7 +23,7 @@ import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repai
 import { getResources } from './resources';
 import { standingPressures } from './market';
 import { remember } from './memory';
-import { hashRandom, randInt, randRange } from './rng';
+import { chance, hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
 import { beginSearch } from './search';
@@ -35,6 +35,8 @@ import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Track, Vehicle, World } from './types';
 import { canUseSite, isTerritory, nearestPad, type Site } from './sites';
 import { spotGoal, territoryOfStock, tripGoal } from './territory';
+import { oldSpotOf, oldSpotsNear, oldStockId } from './old-places';
+import { OLD_PLACES } from '../data/salvage';
 import { clamp, dist, pointsAway, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
@@ -274,8 +276,19 @@ function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
 function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
   const sites = salvageSitesAway(vehicle);
   if (sites.length === 0) throw new Error(`${vehicle.id} chose to scavenge with no salvage known`);
+  const old = oldSpotGoal(world, vehicle);
+  if (old) return old;
   const site = sites[randInt(world, 0, sites.length - 1)];
   return isTerritory(site) ? spotGoal(world, site.id) : createSiteActivity('scavenge', site.id, 'search a known salvage site');
+}
+
+// Now and then a scavenger heads off the road for an old-world loot spot near it. Drivers know the old places, not
+// what they hold. With none near, nothing is drawn.
+function oldSpotGoal(world: World, vehicle: Vehicle): NpcActivity | null {
+  const near = oldSpotsNear(world.mapHash, vehicle.pos, OLD_PLACES.npcRange);
+  if (near.length === 0 || !chance(world, OLD_PLACES.npcShare)) return null;
+  const pick = near[randInt(world, 0, near.length - 1)];
+  return createActivity('scavenge', oldStockId(pick), { ...pick.pos }, pick.type === 'hulks' ? 'search old tank hulks' : 'search an old ruin');
 }
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
@@ -458,7 +471,7 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
 
 function scavengeTargetInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
-  const known = world.salvage.some((stock) => stock.id === goal.targetId && territoryOfStock(stock));
+  const known = world.salvage.some((stock) => stock.id === goal.targetId && (territoryOfStock(stock) || oldSpotOf(stock)));
   if (known) return lootTaken(world, vehicle, goal.targetId);
   const seen = world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos));
   return lootTaken(world, vehicle, goal.targetId) ?? (seen ? null : 'lost sight of the salvage');

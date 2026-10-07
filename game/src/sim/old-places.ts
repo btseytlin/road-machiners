@@ -128,7 +128,7 @@ function centreOf(layer: NavLayer, cell: number): Vec {
 }
 
 // The point on today's roads nearest p.
-function nearestRoadPoint(p: Vec): Vec {
+export function nearestRoadPoint(p: Vec): Vec {
   let best = { x: Infinity, y: Infinity };
   for (const road of REGION.roads)
     for (let i = 1; i < road.length; i++) {
