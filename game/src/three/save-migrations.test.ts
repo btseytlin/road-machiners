@@ -384,8 +384,16 @@ describe('save migration 18 to 19', () => {
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
     const next = MIGRATIONS[18](FORMAT_2_18) as { obstacles: { id: string }[] };
 
-    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'pond-dustwell', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
     expect(next.obstacles[0]).toEqual(FORMAT_2_18.obstacles[5]);
+  });
+
+  it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
+    const world = { ...FORMAT_2_18, obstacles: [
+      { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
+    ] };
+    const next = MIGRATIONS[18](world) as { obstacles: { id: string }[] };
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
   });
 
   it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
