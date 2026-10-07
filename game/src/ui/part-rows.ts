@@ -134,19 +134,18 @@ export class PartRows {
     place.scrolls.forEach(([, top], i) => {
       if (boxes[i]) boxes[i].scrollTop = top;
     });
-    if (place.focused !== null) this.refocus(root, place);
+    if (place.focused !== null) this.refocus(root, place.focused, place);
     const detail = this.open === null ? null : root.querySelector(`[id="part-detail-${this.open}"]`);
     if (this.reveal && detail) detail.scrollIntoView({ block: "nearest" });
     this.reveal = false;
   }
 
-  private refocus(root: HTMLElement, place: Place): void {
-    if (place.focused === null) return;
-    const target = focusAfter(place.order, place.focused, rowIds(root));
+  private refocus(root: HTMLElement, focused: string, place: Place): void {
+    const target = focusAfter(place.order, focused, rowIds(root));
     const row = target === null ? null : rowById(root, target);
     if (!row) return;
     row.querySelector<HTMLElement>(".part-sum")?.focus({ preventScroll: true });
-    if (target === place.focused) {
+    if (target === focused) {
       const box = scrollerOf(row);
       if (box) box.scrollTop += row.getBoundingClientRect().top - place.top;
     }
