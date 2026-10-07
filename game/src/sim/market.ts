@@ -314,7 +314,7 @@ export function beatenTemplates(world: World): Set<string> {
   const beaten = new Set(world.events.flatMap((e) => ((e.t === 'destroyed' || e.t === 'npcKnockout') && e.by === world.player.vehicleId ? [e.vehicle] : [])));
   const templates = new Set<string>();
   if (beaten.size === 0) return templates;
-  for (const v of [...world.removed, ...world.vehicles]) if (v.brain && beaten.has(v.id)) templates.add(v.brain.templateId);
+  for (const list of [world.removed, world.vehicles]) for (const v of list) if (v.brain && beaten.has(v.id)) templates.add(v.brain.templateId);
   return templates;
 }
 
