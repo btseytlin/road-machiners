@@ -19,10 +19,11 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
-import { isKnockedOut } from './defeat';
+import { isDefeated, isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
-import { getTradePrice } from './economy';
+import { affordableBuyCount, getTradePrice } from './economy';
+import { cargoRoom } from './inventory';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
@@ -58,6 +59,7 @@ export type NpcProfile = {
   boldness: number;
   fuelMargin: number;
   robs: Trait['robs'];
+  tradeStake: number;
 };
 
 export function npcTraits(v: Vehicle): TraitId[] {
@@ -73,7 +75,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
 }
 
 // Known sites are the union over traits, in trait order. The widest contact radius wins. Boldness and fuel margin
-// multiply. One trait that never robs makes the driver never rob.
+// multiply. One trait that never robs makes the driver never rob. The highest trade stake wins.
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
@@ -93,6 +95,7 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     boldness: defs.reduce((product, t) => product * t.boldness, 1),
     fuelMargin: defs.reduce((product, t) => product * t.fuelMargin, 1),
     robs: defs.some((t) => t.robs === 'never') ? 'never' : 'offDuty',
+    tradeStake: Math.max(...defs.map((t) => t.tradeStake)),
   };
 }
 
@@ -228,23 +231,40 @@ export function getUpkeepReserve(vehicle: Vehicle): number {
 
 export type TradePlan = { source: string; good: string; sellShop: string };
 
-// Every affordable profitable run: a good bought at one shop and sold at another. Its weight is the profit per unit
-// over the tiles of the trip, from the driver to the source and on to the buyer. Near runs win most rolls, but not
-// all, so traders spread over every shop pair instead of all taking the one best run.
+// The money a driver may spend on one trade load: its wallet above the upkeep reserve, capped by its trade stake.
+export function tradeSpend(world: World, vehicle: Vehicle): number {
+  const stake = npcProfile(vehicle).tradeStake;
+  if (!(stake > 0)) throw new Error(`${vehicle.id} weighs a trade with a trade stake of ${stake}`);
+  return Math.min(getResources(world, vehicle).money - getUpkeepReserve(vehicle), stake);
+}
+
+// Every run whose load pays more than its trip fuel: a good bought at one shop and sold at another. Its weight is the
+// load's profit above the fuel over the tiles of the trip, from the driver to the source and on to the buyer. Near runs
+// win most rolls, but not all, so traders spread over every shop pair instead of all taking the one best run.
 export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
-  const spend = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
+  const spend = tradeSpend(world, vehicle);
   const shops = Object.values(SHOPS);
   return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
 }
 
-// The runs from source to buyer, one per good both trade that pays and costs no more than `spend` a unit.
+// The money the fuel for a trip of `tiles` costs the driver at the supply price.
+export function tripFuelCost(world: World, vehicle: Vehicle, tiles: number): number {
+  if (!Number.isFinite(tiles) || tiles < 0) throw new Error(`${vehicle.id} prices the fuel of a trip of ${tiles} tiles`);
+  return tiles * vehicleStats(world, vehicle).fuelPerTile * ECONOMY.supplyPrice.fuel;
+}
+
+// The runs from source to buyer, one per good both trade, sized to the load the driver can afford with `spend` and fit,
+// as the purchase buys it. A run whose load profit does not beat its trip fuel is no offer.
 function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopDef, spend: number): Weighted<TradePlan>[] {
   const sourcePos = getKnownSite(source.id).pos;
   const trip = dist(vehicle.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
+  const fuel = tripFuelCost(world, vehicle, trip);
   return source.goods.filter((good) => buyer.goods.includes(good)).flatMap((good) => {
     const buy = getTradePrice(world, vehicle, source.id, good, 'buy');
     const profit = getTradePrice(world, vehicle, buyer.id, good, 'sell') - buy;
-    return spend >= buy && profit > 0 ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: profit / trip }] : [];
+    if (spend < buy || profit <= 0) return [];
+    const loadProfit = affordableBuyCount(world, vehicle, source.id, good, cargoRoom(vehicle, good), spend) * profit;
+    return loadProfit > fuel ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: (loadProfit - fuel) / trip }] : [];
   });
 }
 
@@ -834,9 +854,20 @@ export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle)
   return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
-// A driver hands its cargo to a threat.
+// A driver hands its cargo to a threat, and seldom while its escort watches.
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+  const threat = danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+  return guardedNow(world, vehicle) ? threat * NPC_BEHAVIOR.guardedComply : threat;
+}
+
+// An escort of the driver that is not knocked out and that the driver sees.
+function guardedNow(world: World, vehicle: Vehicle): boolean {
+  return world.states.some((s) => s.kind === 'escort' && s.other === vehicle.id && seesAwake(world, vehicle, s.holder));
+}
+
+function seesAwake(world: World, vehicle: Vehicle, otherId: string): boolean {
+  const other = world.vehicles.find((v) => v.id === otherId);
+  return !!other && !isDefeated(other) && canVehicleSee(world, vehicle, other.pos);
 }
 
 // A stranded truck that can crawl to a gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown at a

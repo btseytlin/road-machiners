@@ -8,7 +8,7 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
-import { isHostile } from "./combat";
+import { beatenBy, isHostile } from "./combat";
 import { rollCabKnock } from "./cab-knock";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
@@ -23,10 +23,11 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { lootRobbed } from "./npc-activities";
+import { pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
-import type { Vehicle, World } from "./types";
+import type { SalvageStock, Vehicle, World } from "./types";
+import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
 
@@ -124,8 +125,9 @@ export function standDown(world: World, v: Vehicle, winnerId: string): void {
 
 export function knockOutNpc(world: World, v: Vehicle): void {
   layDown(world, v, foesOf(world, v), false);
-  world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
-  if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
+  const by = beatenBy(world, v);
+  world.events.push({ t: "npcKnockout", vehicle: v.id, by });
+  if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
   sendToLoot(world, v, strippers(world, v));
 }
@@ -227,7 +229,7 @@ function answered(world: World, v: Vehicle): boolean {
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 // A free pad of the home site beyond the player's gray vision, nearest the truck first, or null.
@@ -263,4 +265,21 @@ export function refitAtHome(world: World, v: Vehicle): void {
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
   delete v.defeat;
+}
+
+// The victim's truck while it lies knocked out, else its wreck.
+function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  if (victim && isKnockedOut(victim)) return victim;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId));
+}
+
+// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
+// fight loots nothing.
+export function lootRobbed(w: World, robberId: string, victimId: string): void {
+  const robber = w.vehicles.find((v) => v.id === robberId);
+  if (!robber) return;
+  const stock = robbedLoot(w, victimId);
+  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

@@ -15,6 +15,7 @@ import { getLayoutError, installSpot, moveItem, spareParts, storePart, takeFromS
 import { shopAt, shopState } from '../market';
 import { vehicleStats } from '../stats';
 import { getUpkeepReserve } from '../npc-decisions';
+import type { ThreatAnswer } from '../parley';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk, maxHp, partValue } from '../wear';
 
@@ -29,12 +30,20 @@ export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) 
 // Units of the parts good every bot keeps for field repair: what the standard start kit carries.
 export const REPAIR_PARTS = startKit('standard').cargo.parts ?? 0;
 
-// The world after the bot's commands, every event those commands raised, and the money each moved.
-export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger };
+// What the bot did that the events do not say: a demand and the driver's answer, and goods and spares it looted.
+export type BotNote =
+  | { kind: 'demand'; target: string; answer: ThreatAnswer; guarded: boolean }
+  | { kind: 'took'; from: string; goods: Record<string, number>; parts: PartInstance[] };
+
+// The world after the bot's commands, every event those commands raised, the money each moved and the bot's notes.
+export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger; notes: BotNote[] };
 
 export class Orders {
   readonly events: GameEvent[] = [];
   readonly ledger = emptyLedger();
+  readonly notes: BotNote[] = [];
+  // False for a bot that must not spend on gear, so a run measures its trade alone.
+  buysGear = true;
   // A bot that repairs in the field pays the garage only for the built-in parts that keep the truck driving, strips
   // its spare parts into the parts good and spends that on the rest.
   fieldRepair = false;
@@ -46,6 +55,16 @@ export class Orders {
     this.world = command(this.world);
     this.ledger[key] += this.world.player.money - before;
     this.events.push(...this.world.events);
+  }
+
+  // Runs a loot command and notes the goods and spares it brought in from `from`.
+  loot(from: string, command: (w: World) => World): void {
+    const goods = goodsCount(this.me);
+    const spares = new Set(spareParts(this.me).map((p) => p.id));
+    this.run(command);
+    const gained = Object.entries(goodsCount(this.me)).flatMap(([good, n]) => (n > (goods[good] ?? 0) ? [[good, n - (goods[good] ?? 0)] as const] : []));
+    const parts = spareParts(this.me).filter((p) => !spares.has(p.id)).map((p) => structuredClone(p));
+    if (gained.length > 0 || parts.length > 0) this.notes.push({ kind: 'took', from, goods: Object.fromEntries(gained), parts });
   }
 
   get me(): Vehicle {
@@ -78,6 +97,7 @@ type Option = { gain: number; cost: number; take: (o: Orders) => void };
 type Candidate = { part: PartInstance; price: number; acquire: (o: Orders) => void };
 
 export function upgradeGear(o: Orders, style: UpgradeStyle): void {
+  if (!o.buysGear) return;
   for (let option = bestOption(o, style); option; option = bestOption(o, style)) option.take(o);
 }
 
@@ -96,6 +116,7 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
 // A bot with no gun mounts the cheapest one the garage sells or it holds as a spare, from money above the upkeep
 // reserve. Working capital does not hold it back, since every bot shoots back and the hunter earns only with a gun.
 export function rearm(o: Orders): void {
+  if (!o.buysGear) return;
   const shop = shopAt(o.world);
   if (mountedItems(o.me, 'weapon').length > 0 || !shop || shopDef(shop).kind !== 'garage') return;
   const spend = o.world.player.money - getUpkeepReserve(o.me);

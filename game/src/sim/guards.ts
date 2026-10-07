@@ -46,8 +46,8 @@ function fireSite(world: World, site: Site, isTarget: (v: Vehicle) => boolean): 
     const lanes = laneCount(target, side);
     const rounds: ShotRound[] = Array.from({ length: G.rounds }, () =>
       chance(world, G.hitChance)
-        ? { hit: true, crit: false, offset: 0, struck: target.id, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), { ...G.round, damage: G.round.damage * RULES.weaponDamage }), blast: [] }
-        : { hit: false, crit: false, offset: randRange(world, -G.missOffset, G.missOffset), struck: null, hits: [], blast: [] },
+        ? { hit: true, crit: false, offset: 0, struck: target.id, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), { ...G.round, damage: G.round.damage * RULES.weaponDamage }), blast: [], burst: null }
+        : { hit: false, crit: false, offset: randRange(world, -G.missOffset, G.missOffset), struck: null, hits: [], blast: [], burst: null },
     );
     if (rounds.some((r) => r.hits.length > 0)) target.lastHitBy = `guard-${site.id}`;
     world.events.push({ t: 'guardShot', site: site.id, from: { ...gate }, target: target.id, rounds });

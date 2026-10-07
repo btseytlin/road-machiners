@@ -8,7 +8,7 @@ import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
-import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
+import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
@@ -17,7 +17,8 @@ import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
-import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
+import { tirePoints, Ruts } from './ruts';
+import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
 // top speed of 31 m/s on hardpan a truck throws 31 x DUST.perMeter x 3 wheel shares, about
@@ -264,10 +265,14 @@ export class Fx3D {
   private projectiles: Projectiles;
   private pending: Pending[] = [];
   private flashes: MuzzleFlashes;
+  private casings: Casings;
+  readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
     this.flashes = new MuzzleFlashes(scene);
+    this.casings = new Casings(scene);
+    this.ruts = new Ruts(scene);
     this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
@@ -298,9 +303,11 @@ export class Fx3D {
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
   // where it lands, unless it ends unseen. Any other lands with sparks on a truck, dust on the ground and nothing unseen.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues): void {
+  // A gun with a casing throws one as the round fires, stamped with the turn for its life.
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues, turn: number): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
+      this.casings.eject(m, spec.casing, turn);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
       cues.fired(m);
     };
@@ -436,11 +443,14 @@ export class Fx3D {
     slot.el.style.opacity = '1';
   }
 
-  tick(dtMs: number): void {
+  // world gives the ground casings land on and the turn casings and ruts age by.
+  tick(dtMs: number, world: World): void {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.flashes.tick(dt);
+    this.casings.tick(dt, world.terrain, world.turn);
+    this.ruts.tick(world.turn);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;
@@ -495,11 +505,12 @@ export class TruckFx {
 
   constructor(private fx: Fx3D) {}
 
-  // moving: a turn plays, so wheels turn and engines pull. dt: seconds of playback since the last frame.
-  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number): void {
+  // moving: a turn plays, so wheels turn and engines pull. dt: seconds of playback since the last frame. seen: the
+  // player sees the truck, so it may leave ruts.
+  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number, seen: boolean): void {
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
-    if (moving) this.driving(world, v, pose, traits, dt);
+    if (moving) this.driving(world, v, pose, traits, seen, dt);
     if (v.id === world.player.vehicleId) {
       this.overdriveExhaust(world, v, traits, pose, dt);
       this.steam(world.player.engineHeat, pose, dt);
@@ -511,9 +522,9 @@ export class TruckFx {
 
   // Wheel dust, and exhaust from a working engine: puffs grow with forward acceleration, and at high
   // speed an engine at full revs puffs now and then.
-  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, dt: number): void {
+  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, seen: boolean, dt: number): void {
     const back = { x: -Math.cos(pose.h), y: 0, z: -Math.sin(pose.h) };
-    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, dt);
+    this.wheels(world, v, pose, back, seen, dt);
     if (traits.stranded) return;
     const along = -(pose.f.acc.x * back.x + pose.f.acc.z * back.z);
     const cruise = v.speed > traits.maxSpeed * CRUISE_SHARE ? CRUISE_RATE : 0;
@@ -547,16 +558,22 @@ export class TruckFx {
     this.puffs(DOUSE_RATE, dt, () => this.fx.douseSteam(onBody(pose, 0.3 + Math.random() * 0.8, 0.8, Math.random() * 2.4 - 1.2)));
   }
 
+  // Ruts for a seen truck and dust from a fast one, both at each tire's ground contact, found once.
+  private wheels(world: World, v: Vehicle, pose: Pose, back: V3, seen: boolean, dt: number): void {
+    if (!seen && v.speed <= MIN_DUST_SPEED) return;
+    const tires = tirePoints(world.terrain, v.chassisId, pose.f);
+    if (seen) this.fx.ruts.layTracks(world, v, pose.f, tires);
+    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, tires, dt);
+  }
+
   // Dust from each tire's ground contact, thrown back and out to the tire's side.
-  private dust(world: World, v: Vehicle, pose: Pose, back: V3, dt: number): void {
+  private dust(world: World, v: Vehicle, pose: Pose, back: V3, tires: V3[], dt: number): void {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
     // Sim speed is tiles per one-second turn.
     const rate = DUST.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
-    const at = toMap(pose.f.pos);
-    for (const [i, m] of wheelMounts(bodyOf(v.chassisId)).entries()) {
-      const off = rotate(m.x, m.z, pose.h);
-      const tire = groundPoint(world.terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
-      const side = Math.sign(m.z);
+    const mounts = wheelMounts(bodyOf(v.chassisId));
+    for (const [i, tire] of tires.entries()) {
+      const side = Math.sign(mounts[i].z);
       const out = { x: -Math.sin(pose.h) * side, y: 0, z: Math.cos(pose.h) * side };
       this.puffs(rate * (i < 2 ? FRONT_DUST : 1), dt, () => this.fx.wheelDust(tire, back, out));
     }

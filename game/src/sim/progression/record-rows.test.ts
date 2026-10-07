@@ -89,8 +89,8 @@ describe('netWorth with a haul contract', () => {
 describe('turnLedger', () => {
   const start = emptyWorld({ x: 100, y: 100 });
   const meId = start.player.vehicleId;
-  const turnWith = (events: GameEvent[], moved: number): { orders: { world: World; events: GameEvent[]; ledger: ReturnType<typeof emptyLedger> }; next: World } => ({
-    orders: { world: start, events: [], ledger: emptyLedger() },
+  const turnWith = (events: GameEvent[], moved: number): { orders: { world: World; events: GameEvent[]; ledger: ReturnType<typeof emptyLedger>; notes: [] }; next: World } => ({
+    orders: { world: start, events: [], ledger: emptyLedger(), notes: [] },
     next: update(start, (w) => { w.events = events; w.player.money += moved; }),
   });
 

@@ -29,6 +29,7 @@ import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { fadeCraters } from './craters';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { watchStalls } from './npc-watchdog';
@@ -70,6 +71,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     vehicles: [],
     obstacles: [],
     broken: [],
+    craters: [],
     salvage: [],
     shops: {},
     terrain: map.terrain,
@@ -281,6 +283,7 @@ export function endTurn(
     advanceDust(w);
     clearPiles(w);
     renewSalvage(w);
+    fadeCraters(w);
     advanceJobs(w);
     startAutoRepair(w);
     refreshVision(w);

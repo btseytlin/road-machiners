@@ -1,0 +1,17 @@
+{
+  "turn": 500,
+  "weather": [
+    { "id": "wx1", "kind": "storm", "pos": { "x": 120, "y": 80 }, "radius": 90, "vel": { "x": 0.5, "y": -0.3 }, "turnsLeft": 120, "born": 400 },
+    { "id": "wx2", "kind": "storm", "pos": { "x": 300, "y": 300 }, "radius": 60, "vel": { "x": 0, "y": 0 }, "turnsLeft": 200, "born": 490 },
+    { "id": "wx3", "kind": "heatwave", "turnsLeft": 30 }
+  ],
+  "vehicles": [
+    { "id": "v-centre", "pos": { "x": 120, "y": 80 }, "speed": 0 },
+    { "id": "v-edge", "pos": { "x": 197.5, "y": 80 }, "speed": 3 },
+    { "id": "v-building", "pos": { "x": 300, "y": 300 }, "speed": 0 },
+    { "id": "v-out", "pos": { "x": 10, "y": 400 }, "speed": 5 }
+  ],
+  "removed": [
+    { "id": "v-gone", "pos": { "x": 120, "y": 80 }, "speed": 0 }
+  ]
+}
