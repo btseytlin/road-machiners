@@ -38,13 +38,11 @@ import { TruckContext, TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { READY_ARC_BIT } from "./render/models";
 import { timed } from "../perf";
-import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
+import { ModalScreens } from "./screens";
 import { Hud } from "../ui/hud";
-import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
-import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
@@ -178,11 +176,8 @@ export class Game {
   private readonly hud: Hud;
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
-  private readonly town: TownScreen;
+  private readonly screens: ModalScreens;
   private readonly context: TruckContext;
-  private readonly trade: TruckTradeScreen;
-  private readonly character: CharacterScreen;
-  private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
   private readonly death: DeathScreen;
 
@@ -257,10 +252,10 @@ export class Game {
       apply: (next) => this.apply(next),
       pushEvents: () => this.hud.pushEvents(this.world),
       note: (text) => this.hud.note(this.world, text, "bad"),
-      openTrade: () => this.trade.openIfReady(),
-      openTown: () => this.town.open(),
-      openDowned: (id) => this.inventory.openDowned(this.world, id),
-      openLoot: (id) => this.inventory.openLoot(id),
+      openTrade: () => this.screens.trade.openIfReady(),
+      openTown: () => this.screens.town.open(),
+      openDowned: (id) => this.screens.inventory.openDowned(this.world, id),
+      openLoot: (id) => this.screens.inventory.openLoot(id),
     });
     const score = new CombatScore(player, Math.random);
     this.sound = new SoundDirector(player, this.rig, score);
@@ -272,13 +267,11 @@ export class Game {
 
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
-    this.town = new TownScreen(host);
-    this.trade = new TruckTradeScreen(host);
-    this.character = new CharacterScreen(host);
-    this.inventory = new InventoryScreen(host);
+    this.screens = new ModalScreens(host);
     this.hud = new Hud({
       openInventory: () => this.runKey("KeyI"),
       openCharacter: () => this.runKey("KeyC"),
+      openJournal: () => this.runKey("KeyJ"),
       toggleManual: () => this.runKey("KeyR"),
       toggleAutoRepair: () => this.runKey("KeyP"),
       toggleOverdrive: () => this.runKey("KeyO"),
@@ -379,7 +372,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
+    return this.screens.anyOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -410,10 +403,7 @@ export class Game {
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
-    this.town.render();
-    this.trade.render();
-    this.character.render();
-    this.inventory.render();
+    this.screens.render();
     const { action, count, index } = this.context.shown();
     this.hud.renderAction(
       action,
@@ -528,20 +518,11 @@ export class Game {
     KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
     KeyL: { run: () => this.controls.toggleHeadlights(), noModal: true },
     KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
-    KeyC: { run: () => this.toggleScreen(this.character), idle: true },
-    KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
-    Escape: { run: () => this.closeScreens(null) },
+    KeyC: { run: () => !this.anim && this.screens.toggle(this.screens.character), idle: true },
+    KeyJ: { run: () => !this.anim && this.screens.toggle(this.screens.journal), idle: true },
+    KeyI: { run: () => !this.anim && this.screens.toggle(this.screens.inventory), idle: true },
+    Escape: { run: () => this.screens.closeAll(null) },
   };
-
-  private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
-    for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
-  }
-
-  private toggleScreen(screen: CharacterScreen | InventoryScreen): void {
-    if (this.anim) return;
-    this.closeScreens(screen);
-    screen.toggle();
-  }
 
   private updateStopCue(): void {
     if (this.picker.updateCue(this.canClick())) this.renderer.domElement.style.cursor = this.picker.stopCue ? "pointer" : "";
@@ -748,7 +729,7 @@ export class Game {
     this.hud.pushEvents(this.world);
     // A finished search opens the loot beside the truck's grid.
     const searched = this.world.events.find((e) => e.t === "searched");
-    if (searched) this.inventory.openLoot(searched.stock);
+    if (searched) this.screens.inventory.openLoot(searched.stock);
     this.uiStale = true;
     // Last, so a failed lookup in the cosmetic effects cannot skip the rest of the landing.
     for (const b of this.breakCues.rest()) this.playBreak(b);

@@ -1172,7 +1172,8 @@ body {
 /* Header chips: truck, money, free cells and load. */
 #ui .town-screen > h3,
 #ui .inventory-screen > h3,
-#ui .character-screen > h3 {
+#ui .character-screen > h3,
+#ui .journal-screen > h3 {
   display: flex;
   align-items: center;
   gap: 22px;
@@ -1764,6 +1765,85 @@ canvas.view {
 }
 .dialogue .dialogue-option {
   text-align: left;
+}
+
+/* People tab: the town's locals as buttons, then a conversation in the radio dialogue's look. */
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+#ui .people .person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.people .person .icon,
+.talk .talk-head .icon {
+  width: 22px;
+  height: 22px;
+}
+.talk {
+  margin-top: 8px;
+  padding: 10px 12px;
+  max-width: 560px;
+  background: var(--metal);
+  border-left: 4px solid var(--edge);
+}
+.talk .talk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.talk .talk-line {
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.talk .talk-ask {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.talk .talk-ask::before {
+  content: "> ";
+}
+.talk .talk-topics,
+.talk .talk-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.talk .talk-offer {
+  margin-bottom: 10px;
+}
+#ui .talk .talk-topics button,
+#ui .talk .talk-offer button {
+  text-align: left;
+}
+
+/* Journal: one card per note, newest first. */
+#ui .modal.journal-screen {
+  max-width: 640px;
+}
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.journal-note {
+  padding: 8px 12px;
+  background: var(--metal);
+  border-left: 4px solid var(--edge);
+  line-height: 1.4;
+}
+.journal-note .journal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 /* Shop tabs carry an icon beside the label. */

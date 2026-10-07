@@ -48,13 +48,15 @@ import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, cre
 import { el, panel } from "./dom";
 import { contractDue, contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
+import { PeopleView } from "./talk";
+import { localsAt } from "../sim/locals";
 import type { UiHost } from "./host";
 import { fuelLiters } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
 
-type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
+type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
 type StockFilter = "all" | Exclude<PartKind, "core">;
@@ -74,6 +76,7 @@ export class TownScreen {
   private error = "";
 
   private inventory: InventoryView;
+  private people: PeopleView;
 
   constructor(private host: UiHost) {
     this.root.classList.add("town-screen");
@@ -81,6 +84,7 @@ export class TownScreen {
     // The truck grid fits its cells to the window height, so a resize lays the screen out again.
     window.addEventListener("resize", () => this.render());
     this.inventory = new InventoryView(host, () => this.render(), false);
+    this.people = new PeopleView((cmd) => this.run(cmd), () => this.render());
   }
 
   isOpen(): boolean {
@@ -97,6 +101,7 @@ export class TownScreen {
   // Closed windows drop their contents, so hidden copies never answer clicks or drops.
   close(): void {
     this.inventory.clearSelection();
+    this.people.reset();
     this.root.style.display = "none";
     this.root.replaceChildren();
   }
@@ -107,8 +112,8 @@ export class TownScreen {
     const shopId = shopAt(w);
     if (!shopId) return this.close();
     const def = shopDef(shopId);
-    this.normalizeTab(def);
-    const shop = [el("div", { class: "tabs" }, ...this.tabButtons(def))];
+    this.normalizeTab(shopId, def);
+    const shop = [el("div", { class: "tabs" }, ...this.tabButtons(shopId, def))];
     if (this.error) shop.push(el("div", { class: "bad" }, this.error));
     shop.push(this.tabBody(w, shopId, def));
     const truck = el(
@@ -125,13 +130,15 @@ export class TownScreen {
     this.inventory.fitTo(truck);
   }
 
-  // A garage-only tab left over from a garage falls back to Market at a stall.
-  private normalizeTab(def: ShopDef): void {
+  // A garage-only tab left over from a garage, or People where nobody lives, falls back to Market at a stall.
+  private normalizeTab(shopId: string, def: ShopDef): void {
     if (def.kind !== "garage" && GARAGE_ONLY.includes(this.tab)) this.tab = "market";
+    if (this.tab === "people" && localsAt(shopId).length === 0) this.tab = "market";
   }
 
-  private tabButtons(def: ShopDef): HTMLElement[] {
-    const tabs: Tab[] = ["market", "buyParts", "sellParts", ...(def.kind === "garage" ? GARAGE_ONLY : []), "contracts"];
+  private tabButtons(shopId: string, def: ShopDef): HTMLElement[] {
+    const people: Tab[] = localsAt(shopId).length > 0 ? ["people"] : [];
+    const tabs: Tab[] = [...people, "market", "buyParts", "sellParts", ...(def.kind === "garage" ? GARAGE_ONLY : []), "contracts"];
     return tabs.map((t) =>
       el(
         "button",
@@ -150,6 +157,7 @@ export class TownScreen {
 
   private tabBody(w: World, shopId: string, def: ShopDef): HTMLElement {
     const body: Record<Tab, () => HTMLElement> = {
+      people: () => this.people.render(w, shopId),
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
       sellParts: () => this.sellParts(w),
@@ -426,6 +434,7 @@ const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
 };
 
 const TAB_LABEL: Record<Tab, string> = {
+  people: "People",
   market: "Market",
   buyParts: "Buy Parts",
   sellParts: "Sell Parts",
@@ -434,6 +443,7 @@ const TAB_LABEL: Record<Tab, string> = {
 };
 
 const TAB_ICON: Record<Tab, IconName> = {
+  people: "driver",
   market: "salt",
   buyParts: "parts",
   sellParts: "money",

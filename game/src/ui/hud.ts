@@ -62,6 +62,7 @@ export const combatBlocked = (turns: number): string => `Can't do this while in 
 type HudActions = {
   openInventory: () => void;
   openCharacter: () => void;
+  openJournal: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
@@ -209,7 +210,7 @@ export class Hud {
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
       el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
+      el("div", {}, "P: auto patch. C: character. J: journal. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
     );
@@ -425,6 +426,15 @@ export class Hud {
     );
   }
 
+  private journalButton(busy: boolean): HTMLElement {
+    return el(
+      "button",
+      { class: "instrument-button", disabled: busy, onclick: () => this.actions.openJournal(), title: "Journal: rumors and clues you were told [J]" },
+      createIcon("journal"),
+      "[J]",
+    );
+  }
+
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
@@ -526,6 +536,7 @@ export class Hud {
       }),
       ...this.engineButtons(w, busy),
       this.characterButton(w, busy),
+      this.journalButton(busy),
     );
   }
 
