@@ -277,9 +277,11 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts on both sides, and two door leaves hinged at the posts that meet in the middle.
+// Posts on both sides, and two door leaves hinged at the posts that meet in the middle. A post rises a little over
+// its wall, never a tower's height.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
+  const postHeight = style.height + Math.min(style.height * 0.4, SET.gatePostRise);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, postHeight, style.postColor);
   if (style.bannered) addBanner(b, ring, from - ring.step / 2);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;

@@ -469,8 +469,8 @@ describe('the hunter', () => {
     expect(order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestTown(w), me.pos) });
   });
 
-  // A merc camps at the gate. Firing from town makes the guard shoot the bot, so it holds fire and repairs instead.
-  it('has a bot at a town gate in combat hold its fire and repair', () => {
+  // A merc camps at the gate. No gate gun covers the bot there, and none punishes it, so it fires back as anywhere.
+  it('has a bot at a town gate in combat fire back', () => {
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     for (const part of mountedParts(me)) part.hp = Math.floor(maxHp(part) / 4);
@@ -481,16 +481,14 @@ describe('the hunter', () => {
 
     const turn = botOrders(w, 'trader');
 
-    expect(turn.world.player.autoFire).toBe(false);
-    expect(turn.ledger.repairs).toBeLessThan(0);
+    expect(turn.world.player.autoFire).toBe(true);
   });
 
-  it('has a bot at a town gate drop the aim it set while auto fire was on', () => {
+  it('has a bot out of combat drop the aim it set while auto fire was on', () => {
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     const merc = addVehicle(w, 'mercs', 'van', ['mg', 'stockEngine'], { x: me.pos.x + 8, y: me.pos.y });
     merc.brain = npcBrain('merc', merc.pos, NPCS.merc.traits);
-    startCombat(w, merc, me);
     for (const mw of vehicleStats(w, me).weapons) me.weaponOrders[mw.part.id] = { targetId: merc.id, aim: 'body' };
 
     const turn = botOrders(w, 'trader');

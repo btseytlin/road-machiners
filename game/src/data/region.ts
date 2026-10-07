@@ -545,6 +545,7 @@ export const REGION = {
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
+    gatePostRise: 0.4, // most tiles a gate post rises over its wall, so the posts of the tall town wall stay posts
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls
   },
