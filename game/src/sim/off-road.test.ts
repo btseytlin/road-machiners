@@ -10,6 +10,7 @@ import { npcHomeSite } from './tow';
 import type { Faction, NpcActivity, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
+import { worldLine } from './progression/turn-log';
 
 function driver(w: World, faction: Faction, goal: NpcActivity['kind'] | null): Vehicle {
   const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
@@ -49,6 +50,18 @@ describe('keepsOffRoads', () => {
     expect(keepsOffRoads(w, driver(w, 'nose', 'flee'))).toBe(false);
     w.player.fuel = 0;
     expect(keepsOffRoads(w, w.vehicles[0])).toBe(false);
+  });
+});
+
+describe('the recorder world log', () => {
+  it('tells which trucks keep off roads and which stand on a road', () => {
+    const w = emptyWorld();
+    w.turn = 20;
+    const runner = driver(w, 'raiders', 'flee');
+    const healthy = driver(w, 'raiders', 'patrol');
+    const trucks = worldLine(w, [])!.trucks!;
+    expect(trucks.find((t) => t.id === runner.id)).toMatchObject({ offRoad: true, onRoad: true });
+    expect(trucks.find((t) => t.id === healthy.id)).toMatchObject({ offRoad: false, onRoad: true });
   });
 });
 

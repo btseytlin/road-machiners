@@ -17,7 +17,7 @@ One in three NPCs the player knocks out holds a grudge for 10 days. Every hostil
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A raider attacks a truck with little cargo only rarely, and more often as its goods and spare parts are worth more. A feud or a grudge ignores cargo, and a feud still makes a raider fight a stripped truck.
 
-A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a pushed truck makes no sound and raises no dust. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
 
 A stranded NPC never gives up. It heads for a town, or a camp of its own for a raider, even with no money. A broke driver sells its cargo first. A broke driver that can still drive keeps working until its tank is low, then heads for a town, or its own camp for a raider, where it gets scrap fuel up to 40% of its tank. A stranded NPC parked at any town, or for a raider only at a camp of its own, however it got there, buys the service it can pay for. A stranded raider in a town crawls on to its camp. A broke driver in a town or camp gets the same scrap fuel, never at a stall. If it is still stranded, as with a broken engine, it gets fresh gear for its type on the same chassis, as after a knockout. It keeps its money.
 
