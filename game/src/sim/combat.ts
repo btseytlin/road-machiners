@@ -897,9 +897,10 @@ export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, cal
   callLawmen(world, attacker, victim);
 }
 
-// Damage a shot dealt to trucks other than its target. A foe of the shooter was attacked and fights back. Any other
-// NPC sums the unintended damage in a strayFire state, and past RULES.stray.feudDamage takes it as an attack. The
-// player decides its own hostility, and a shooter caught in its own blast blames nobody.
+// Damage a shot dealt to trucks other than its target. A foe of the shooter was attacked and fights back. A faction
+// mate or deal partner of the shooter, like a convoy's own guard, forgives it. Any other NPC sums the unintended
+// damage in a strayFire state, and past RULES.stray.feudDamage takes it as an attack. The player decides its own
+// hostility, and a shooter caught in its own blast blames nobody.
 function noteStray(world: World, s: Shot, e: { rounds: ShotRound[] }): void {
   for (const [id, hits] of shotDamage(e)) {
     if (id === s.target.id || id === s.shooter.id) continue;
@@ -910,7 +911,12 @@ function noteStray(world: World, s: Shot, e: { rounds: ShotRound[] }): void {
 
 function judgeStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
   if (isHostile(world, victim, shooter)) recordAttack(world, shooter, victim);
-  else if (victim.brain) sumStray(world, shooter, victim, damage);
+  else if (victim.brain && !sidesWith(world, victim, shooter)) sumStray(world, shooter, victim, damage);
+}
+
+// Trucks of one faction, or with a deal between them, stand on one side.
+function sidesWith(world: World, a: Vehicle, b: Vehicle): boolean {
+  return a.faction === b.faction || boundTo(world, a.id, b.id);
 }
 
 function sumStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
@@ -959,10 +965,11 @@ function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
 }
 
-// The target and the drivers that stand by it start a feud with the shooter.
+// The target and the drivers that stand by it start a feud with the shooter. The shooter never feuds itself, even as
+// a faction mate of its target.
 export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
-    if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
+    if (v.id === shooter.id || !joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
     addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
     world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
   }
