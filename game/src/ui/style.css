@@ -158,8 +158,52 @@ body {
   align-items: center;
 }
 .speed-max {
+  position: relative;
   font: 10px var(--font-mono);
   color: var(--muted);
+  cursor: help;
+}
+.speed-max:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.speed-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 8px 10px;
+  background: var(--metal);
+  border: 1px solid #838a8d;
+  color: var(--ink);
+  font: 12px var(--font-mono);
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.speed-max:hover .speed-tip,
+.speed-max:focus-within .speed-tip {
+  display: block;
+}
+.speed-row {
+  display: grid;
+  grid-template-columns: 1fr auto 3ch;
+  gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid #5a6165;
+}
+.speed-row span:not(:first-child) {
+  text-align: right;
+}
+.speed-row.total {
+  font-weight: bold;
+  border-bottom: 0;
+}
+.speed-notes p {
+  margin: 2px 0 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -1115,6 +1159,7 @@ body {
 }
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   font: 13px var(--font-mono);
   color: var(--ink);
@@ -1481,6 +1526,11 @@ body {
   }
 }
 @media (max-width: 720px) {
+  .speed-tip {
+    position: fixed;
+    left: 12px;
+    bottom: 200px;
+  }
   .instrument-actions {
     flex-wrap: wrap;
   }
