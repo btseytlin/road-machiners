@@ -22,7 +22,7 @@ import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
-import { salvageUnits } from './salvage';
+import { hiddenUnits, salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
@@ -40,6 +40,11 @@ import { inCombat } from './combat';
 import { refreshVision } from './vision';
 import { emptyHidden } from './salvage';
 import { recall } from './memory';
+
+// Marks every stock as already judged, so no forced roll's leftover chance sends the driver off its own goal.
+function overlookSalvage(w: World, npc: Vehicle): void {
+  for (const stock of w.salvage) npc.brain!.noticed[`salvageSeen:${stock.id}`] = w.turn;
+}
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -508,6 +513,7 @@ describe('NPC activities', () => {
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
       // The other cache on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
+      overlookSalvage(w, npc);
       // Hidden and revealed scrap alike, since the search reveals before the driver takes.
       const scrapIn = (world: World) => {
         const stock = world.salvage.find((s) => s.id === cache.id)!;
@@ -550,6 +556,7 @@ describe('NPC activities', () => {
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
       // A spot seen on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
+      overlookSalvage(w, npc);
       // Hidden and revealed scrap alike, since the search reveals before the driver takes.
       const scrapIn = (world: World) => {
         const stock = world.salvage.find((s) => s.id === spot.id)!;
@@ -599,7 +606,8 @@ describe('NPC activities', () => {
           npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
           // The orchard's spots stand close together, and one in sight would pull the driver off this one.
           forceOption('salvageSeen', 'keep');
-          const unitsBefore = salvageUnits(spot);
+          overlookSalvage(w, npc);
+          const unitsBefore = salvageUnits(spot) + hiddenUnits(spot);
           const carriedBefore = npc.items.length;
           let next = w;
           let searching = false;
@@ -615,7 +623,7 @@ describe('NPC activities', () => {
           expect(took).toBe(true);
           // A searched-out stock leaves the world.
           const after = next.salvage.find((s) => s.id === spotId);
-          expect(after ? salvageUnits(after) : 0).toBeLessThan(unitsBefore);
+          expect(after ? salvageUnits(after) + hiddenUnits(after) : 0).toBeLessThan(unitsBefore);
         } finally {
           restore();
         }

@@ -125,8 +125,16 @@ function spotOf(territory: string, look: string): (o: Obstacle) => boolean {
   return (o) => isLootSpot(o) && o.kind === 'landmark' && o.look === look && territoryAt(o.pos)?.id === territory;
 }
 
-function stockLabel(w: World, id: string): string | undefined {
-  return getContextActions(w, false).find((a) => a.target.kind === 'stock' && a.target.id === id)?.label;
+function stockLabel(w: World, id: string, kind: 'stock' | 'loot' = 'stock'): string | undefined {
+  return getContextActions(w, false).find((a) => a.target.kind === kind && a.target.id === id)?.label;
+}
+
+// Every hidden unit of the stock revealed, so only its loot is left to take.
+function reveal(w: World, id: string): void {
+  const stock = w.salvage.find((s) => s.id === id)!;
+  for (const [good, n] of Object.entries(stock.hidden.goods)) stock.goods[good] = (stock.goods[good] ?? 0) + (n ?? 0);
+  stock.parts.push(...stock.hidden.parts);
+  stock.hidden = emptyHidden();
 }
 
 describe('loot spot wording', () => {
@@ -134,7 +142,8 @@ describe('loot spot wording', () => {
     const { w, id } = parkedAt(spotOf('orchard', look));
     expect(stockLabel(w, id)).toBe('Search');
     w.player.scavenged.push(id);
-    expect(stockLabel(w, id)).toBe('Loot');
+    reveal(w, id);
+    expect(stockLabel(w, id, 'loot')).toBe('Loot');
     w.salvage = w.salvage.filter((s) => s.id === id);
     const stock = w.salvage[0];
     stock.goods = {};
@@ -152,7 +161,8 @@ describe('loot spot wording', () => {
     const { w, id } = parkedAt(find);
     expect(stockLabel(w, id)).toBe('Search the wreck');
     w.player.scavenged.push(id);
-    expect(stockLabel(w, id)).toBe('Loot the wreck');
+    reveal(w, id);
+    expect(stockLabel(w, id, 'loot')).toBe('Loot the wreck');
   }, 30_000);
 
   it('names the driver blocking a shared spot with a plain Search', () => {

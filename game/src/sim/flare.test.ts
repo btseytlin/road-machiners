@@ -9,7 +9,7 @@ import { mountPart } from './inventory';
 import { planNpcOrders } from './ai';
 import { topGoal } from './npc-activities';
 import { sunAt } from './sun';
-import { addVehicle, editableTerrain, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, editableTerrain, emptyWorld, forceOption, npcBrain, settleStorms, testDrive } from './testkit';
 import type { PartInstance, Vehicle, World } from './types';
 import { activateUtilities, advanceUtilityEffects } from './utility';
 import { dist, type Vec } from './vec';
@@ -103,7 +103,8 @@ describe('flare light', () => {
 
   it('still loses sight to a storm around the viewer', () => {
     const { w, npc, east } = viewer(night());
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { ...npc.pos }, radius: 30, vel: { x: 0, y: 0 }, turnsLeft: 5, born: 0 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { ...npc.pos }, radius: 30, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
+    settleStorms(w);
 
     launchFlare(w, w.vehicles[0], east, burn());
 
