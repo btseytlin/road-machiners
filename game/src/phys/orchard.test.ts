@@ -157,8 +157,8 @@ describe('driving through Old Orchard', () => {
     me.heading = UP_ROAD;
     const cache = stockNear(w, 'armyCache', at(32.5, 7.5));
     const up = [at(42, 1), at(39, 5.5), at(36, 7)];
-    // The way back skips the last bend: turning round there, between the crate stack and the ridge edge, rams the stack.
-    const legs = [...up, at(33.5, 10), ...up.slice(0, 2).reverse(), at(30, 0)].map(stopAt);
+    // The truck turns round past the stack, on the open shelf: a U-turn on the track itself swings its tail into the sandbags.
+    const legs = [...up, at(33.5, 10), at(32, 11), ...up.slice().reverse(), at(30, 0)].map(stopAt);
     await driveLegs(w, legs, SHELF_LEG_TURNS, (x, leg) => {
       if (leg === up.length) expect(salvageInRange(player(x), cache)).toBe(true);
     });

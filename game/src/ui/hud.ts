@@ -5,7 +5,7 @@ import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import type { SpeedRow } from "./hud-readout";
-import { el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   contractDue,
@@ -117,7 +117,7 @@ export class MaxSpeedView {
 }
 
 export class Hud {
-  private top = panel("instruments");
+  private top = panel("instruments", bottomLeft());
   private clockSlot = el("div", { class: "instrument-clock", role: "timer", title: "Day and time" });
   private dialSlot = el("div", { class: "speed-dial-slot" });
   private maxSpeed = new MaxSpeedView();
@@ -138,7 +138,7 @@ export class Hud {
   // Stands on top of the part condition panel.
   private stranded = panel("stranded", this.condition.root);
   // Shows only while a pan has left the truck.
-  private recenter = panel("recenter");
+  private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
@@ -155,6 +155,7 @@ export class Hud {
   };
 
   constructor(private actions: HudActions, private radio: RadioPanel) {
+    bottomLeft().append(this.condition.root);
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
@@ -436,7 +437,7 @@ export class Hud {
     this.renderContracts(w);
     this.tips.update(w, this.actions.autoTravel());
     // The panel keeps its slots. Only their contents change, so the max-speed node keeps its hover and focus.
-    if (!this.top.firstChild) this.top.append(this.condition.root, this.clockSlot, this.speedSlot, this.readoutSlot, this.actionSlot);
+    if (!this.top.firstChild) this.top.append(this.clockSlot, this.speedSlot, this.readoutSlot, this.actionSlot);
     this.renderClock(readout.clock);
     this.renderSpeedometer(readout, busy);
     this.renderReadouts(readout);

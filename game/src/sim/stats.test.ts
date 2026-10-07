@@ -312,7 +312,7 @@ describe('max speed steps', () => {
     storm: {
       build: () => {
         const s = base(['stockEngine']);
-        s.w.weather = [{ id: 'w1', kind: 'storm', pos: { ...s.v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+        s.w.weather = [{ id: 'w1', kind: 'storm', pos: { ...s.v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 10, born: s.w.turn }];
         return s;
       },
       kinds: ['chassis', 'engine', 'load', 'guns', 'weather'],

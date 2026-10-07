@@ -26,7 +26,7 @@ const CASES: Record<string, (w: World, v: Vehicle) => void> = {
   transmission: (_w, v) => void (corePart(v, 'transmission').hp = 0),
   brokenEngine: (_w, v) => void (mountedParts(v, 'engine')[0].hp = 0),
   stalled: (w, v) => void (v.stalledUntil = w.turn + 3),
-  storm: (w, v) => void (w.weather = [{ id: 'w1', kind: 'storm', pos: { ...v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 9 }]),
+  storm: (w, v) => void (w.weather = [{ id: 'w1', kind: 'storm', pos: { ...v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 9, born: w.turn }]),
 };
 
 describe('max speed breakdown', () => {

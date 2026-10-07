@@ -15,7 +15,7 @@ import { getResources } from './resources';
 import { isTowing } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 
 // sides: the sides of the truck the weapon can fire toward, past the tall parts around it.
 export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
@@ -89,7 +89,7 @@ function speedSteps(world: World, v: Vehicle, limpSpeed: number, load: number, b
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed.
   const steps = hasWorkingEngine(v) && !isStalled(world, v) ? drivingSteps(world, v, limpSpeed, load, brokenWheels) : [limpStep(v, limpSpeed)];
   let speed = steps[steps.length - 1].speed;
-  const weather = weatherAt(world, v.pos).speed;
+  const weather = weatherOn(world, v).speed;
   if (weather !== 1) {
     speed *= weather;
     steps.push({ kind: 'weather', factor: weather, speed });
