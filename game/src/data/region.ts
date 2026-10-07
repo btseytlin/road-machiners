@@ -241,6 +241,11 @@ export const REGION = {
     // A shortcut may cost this share more than the bends it replaces, so routes take fewer bends. It stays
     // well below the road margin, so roads stay followed.
     straighten: 0.05,
+    // Road cost multiplier for a driver who keeps off roads: a raider that retreats, flees or is stranded. Open
+    // ground costs at most 1.3 x 1.75 / 0.9 = 2.5 per tile on the worst taste, and a road at least 0.7 x 6 = 4.2,
+    // so ground beside a road beats the road even after the heuristic weight's 20% slack. It is a cost, not a
+    // block, so such a route still crosses a road where it must, and the ground beside sites stays priced as road.
+    roadShyCost: 6,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },

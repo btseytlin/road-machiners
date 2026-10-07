@@ -296,16 +296,27 @@ function withBurst_15_16(event: SavedJson): SavedJson {
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
+// Every saved far route was planned with roads, since only newer raiders that retreat, flee or are stranded plan
+// them off roads.
+function withRouteStyle_18_19(world: SavedJson): SavedJson {
+  const styled = (v: SavedJson): SavedJson => {
+    const brain = v.brain as SavedJson | null;
+    if (!brain?.farRoute) return v;
+    return { ...v, brain: { ...brain, farRoute: { ...(brain.farRoute as SavedJson), offRoad: false } } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
+}
+
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
 // wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
-const FORTRESS_OBSTACLES_18_19 = new Set(
+const FORTRESS_OBSTACLES_19_20 = new Set(
   ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
 );
 
-function isGoneObstacle_18_19(o: SavedJson): boolean {
+function isGoneObstacle_19_20(o: SavedJson): boolean {
   const id = o.id as string;
-  return FORTRESS_OBSTACLES_18_19.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
+  return FORTRESS_OBSTACLES_19_20.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
     || id === 'pond-dustwell' || id === 'pond-green-pit' || id.startsWith('cw-salvage-yard-');
 }
 
@@ -385,8 +396,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withStormBorn_16_17,
   // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
   withStormExposure_17_18,
-  // 18 to 19: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
-  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_18_19(o)) }),
+  // 18 to 19: a far route records whether it was planned off roads; every old one was not.
+  withRouteStyle_18_19,
+  // 19 to 20: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_19_20(o)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

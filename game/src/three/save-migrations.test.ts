@@ -25,6 +25,7 @@ import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import FORMAT_2_18 from './save-fixtures/format-2-18.json';
+import FORMAT_2_19 from './save-fixtures/format-2-19.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -381,24 +382,37 @@ describe('save migration 17 to 18', () => {
 });
 
 describe('save migration 18 to 19', () => {
+  const next = MIGRATIONS[18](FORMAT_2_18);
+
+  it('marks every far route of a truck in play or removed as planned with roads', () => {
+    const route = (v: (typeof FORMAT_2_18.vehicles)[number]) => ({ ...v, brain: { ...v.brain, farRoute: { ...v.brain!.farRoute, offRoad: false } } });
+    expect(next).toEqual({
+      ...FORMAT_2_18,
+      vehicles: [FORMAT_2_18.vehicles[0], route(FORMAT_2_18.vehicles[1]), FORMAT_2_18.vehicles[2]],
+      removed: [route(FORMAT_2_18.removed[0])],
+    });
+  });
+});
+
+describe('save migration 19 to 20', () => {
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
-    const next = MIGRATIONS[18](FORMAT_2_18) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[19](FORMAT_2_19) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
-    expect(next.obstacles[0]).toEqual(FORMAT_2_18.obstacles[5]);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_19.obstacles[5]);
   });
 
   it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
-    const world = { ...FORMAT_2_18, obstacles: [
+    const world = { ...FORMAT_2_19, obstacles: [
       { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
     ] };
-    const next = MIGRATIONS[18](world) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[19](world) as { obstacles: { id: string }[] };
     expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
   });
 
   it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
-    const world = { ...FORMAT_2_18, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
-    const next = MIGRATIONS[18](world) as { obstacles: { id: string }[] };
+    const world = { ...FORMAT_2_19, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[19](world) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });

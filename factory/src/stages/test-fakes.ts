@@ -7,7 +7,7 @@ import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
-export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r' } as FactoryConfig;
+export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10 } as FactoryConfig;
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
