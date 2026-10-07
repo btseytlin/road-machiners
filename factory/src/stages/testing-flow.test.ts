@@ -3,22 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
-import type { AgentRun, Ctx } from '../types';
+import { isCleanupTask, type AgentRun, type Ctx } from '../types';
+import type { Finding } from './review';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
+const { runStage: runHarden } = await import('./harden');
 const { runStage: runPatch } = await import('./patch');
+const { judge, readFindings } = await import('./review');
 
-// Runs the Testing column the way the tick does: verify or checks by the card's phase, until the card leaves Testing.
-// Verify, checks, the fix round and the second checks make four jobs at most.
+// Runs the card's column the way the tick does, until the card leaves it. An approved card or a cleanup task is in Hardening,
+// any other in Testing. Checks run by the card's phase. The agent stage, checks, the fix round and the second checks make four jobs at most.
 async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  const key = String(issue);
   for (let job = 0; job < 4; job += 1) {
-    const phase = readState(ctx.statePath).testPhase[String(issue)];
-    await (phase === 'checks' || phase === 'checks-after-fix' ? runChecks(ctx, issue) : runVerify(ctx, issue));
-    if (!(String(issue) in readState(ctx.statePath).testPhase)) return;
+    const state = readState(ctx.statePath);
+    const phase = state.testPhase[key];
+    const hardening = key in state.approvedResolving || isCleanupTask(labels);
+    await (phase === 'checks' || phase === 'checks-after-fix' ? runChecks(ctx, issue) : hardening ? runHarden(ctx, issue) : runVerify(ctx, issue));
+    if (!(key in readState(ctx.statePath).testPhase)) return;
   }
-  throw new Error(`Testing of #${issue} did not leave the column in four jobs`);
+  throw new Error(`#${issue} did not leave its column in four jobs`);
 }
 
 let home = '';
@@ -38,10 +44,16 @@ let bases: string[] = [];
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
 let merged = true;
-// The review agent's outputs in order. A null means it wrote no file. Rounds past the list get a clean review.
-let reviews: (string | null)[] = [];
-const PASSED = 'No blocking issue.\n\nREVIEW_VERDICT: PASS\n';
-const failed = (finding: string): string => `${finding}\n\nREVIEW_VERDICT: FAIL\n`;
+// The files the branch changed since it split from its base.
+let changed: string[] = [];
+// The findings each review run reports, in order. A null means it called no ReportFindings. Rounds past the list report nothing.
+let reviews: (Finding[] | null)[] = [];
+// /code-review reports from its forked agent, as the server's logs show.
+const reportStream = (findings: Finding[]): string => `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'ReportFindings', input: { findings } }] }, parent_tool_use_id: 'forked-command-code-review' })}\n`;
+const bug = (summary: string): Finding => ({ file: 'game/src/sim/far.ts', line: 12, category: 'correctness', summary, failure_scenario: 'A probe shows it.', verdict: 'CONFIRMED' });
+const cleanup = (summary: string): Finding => ({ file: 'game/src/sim/far.ts', line: 30, category: 'simplification', summary, failure_scenario: 'A reader traces a dead branch.', verdict: 'CONFIRMED' });
+// How-to sentences the posts no longer carry. The buttons and the docs explain them.
+const BOILERPLATE = ['Approve runs the review', 'Deny closes the issue', 'Reply to this post'];
 // The prompt of every review round, in order.
 let reviewPrompts: string[] = [];
 
@@ -52,6 +64,7 @@ beforeEach(() => {
   reviewPrompts = [];
   conflicts = [];
   merged = true;
+  changed = ['game/src/sim/far.ts'];
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
@@ -60,7 +73,7 @@ beforeEach(() => {
   openPr = null;
   labels = [];
   bases = [];
-  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -72,6 +85,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat', gpu: false },
     log: () => undefined,
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
@@ -90,14 +104,18 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         return photos.map((_, i) => 110 + i);
       },
       editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
+      sendButtons: async (chat: string, text: string, buttons: unknown) => { calls.push(`buttons ${chat} ${text}`); photoButtons = buttons; return 120; },
     },
     container: {
-      agent: async (run: AgentRun) => {
-        if (!run.prompt.includes('review round')) return agent(run);
+      agent: async (run: AgentRun): Promise<string> => {
+        if (!run.prompt.includes('review round')) {
+          agent(run);
+          return '';
+        }
         calls.push(`review ${run.model} ${run.skill}`);
         reviewPrompts.push(run.prompt);
-        const output = reviews.length > 0 ? reviews.shift() : PASSED;
-        if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
+        const findings = reviews.length > 0 ? reviews.shift() : [];
+        return findings ? reportStream(findings) : '';
       },
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
@@ -122,7 +140,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       headHash: async () => 'abc123',
       fetch: async () => { bases.push('fetch'); },
       mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
+      changedFiles: async () => changed,
     },
   };
   return fake as unknown as Ctx;
@@ -173,11 +193,11 @@ describe('testing stage', () => {
     expect(calls.find((call) => call.startsWith('photo'))).toContain('PR: https://github.com/o/r/pull/12');
   });
 
-  it('plays every turn with the frame rate check when the host has a GPU', async () => {
+  it('plays every turn on the GPU without the frame rate check, which only the release candidate keeps', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
     ctx.cfg.gpu = true;
     await runStage(ctx, 7);
-    expect(shellScript).toContain('\nnpm run playtest\n');
+    expect(shellScript).toContain('\nnpm run playtest -- --no-fps-gate\n');
     expect(shellScript).not.toContain('--cpu');
   });
 
@@ -192,6 +212,8 @@ describe('testing stage', () => {
     expect(photo).toContain('#7 Big horn\n\nPlay: https://play.test/abc123/');
     expect(photo).toContain('How to try: Press H.');
     expect(photo).toContain('Issue: https://github.com/o/r/issues/7\nPR: https://github.com/o/r/pull/50');
+    expect(photo.trimEnd().endsWith('How to try: Press H.')).toBe(true);
+    for (const tail of BOILERPLATE) expect(photo).not.toContain(tail);
     expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(calls.some((call) => call.startsWith('message'))).toBe(false);
     expect(calls).toContain('comment 7');
@@ -203,13 +225,22 @@ describe('testing stage', () => {
     const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) }, 'dev');
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('…');
-    expect(caption).toContain('Deny closes the issue');
+    expect(caption).toContain('How to try: h');
+    expect(caption).not.toContain('Deny closes the issue');
+  });
+
+  it('uses the room of the dropped tail for the notes', () => {
+    const description = 'd'.repeat(800);
+    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description, howToTry: 'Press H.' }, 'dev');
+    expect(caption).toContain(description);
+    expect(caption.endsWith('How to try: Press H.')).toBe(true);
   });
 
   it('says a hotfix approval ships to main and itch.io', () => {
     const caption = approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'main');
     expect(caption.startsWith('⚠️ HOTFIX. Approve merges into main and ships to players at once.')).toBe(true);
-    expect(caption).toContain('Approve ships this hotfix to main and itch.io at once.');
+    for (const tail of BOILERPLATE) expect(caption).not.toContain(tail);
+    expect(caption).not.toContain('Approve ships this hotfix');
     expect(approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'dev')).not.toContain('HOTFIX');
     expect(approvalButtons(7, 'main')[0][0]).toEqual({ text: 'Approve and ship to players', data: 'factory:approve:7' });
   });
@@ -320,6 +351,62 @@ describe('testing stage', () => {
     await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('not ready for checks, its test phase is none');
   });
 
+  describe('post phase', () => {
+    const outDir = (): string => `${home}/work/issue-7/game/.factory`;
+    const leaveOutputs = (approval: string | null): void => {
+      mkdirSync(outDir(), { recursive: true });
+      if (approval !== null) writeFileSync(`${outDir()}/approval.json`, approval);
+      writeFileSync(`${outDir()}/screenshot.png`, 'png');
+    };
+    const setPost = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), testPhase: { 7: 'post' } });
+
+    it('builds once with no test, no playtest and no agent, posts, and moves to Approval', async () => {
+      leaveOutputs(JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' }));
+      setPost();
+      const agents: string[] = [];
+      const ctx = fakeCtx((run) => agents.push(run.prompt));
+      await runChecks(ctx, 7);
+      expect(agents).toEqual([]);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('npm ci');
+      expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('playtest');
+      expect(shellEnv).toEqual({ BUILD_SCOPE: 'abc123' });
+      expect(calls.find((call) => call.startsWith('photo'))).toContain('No factory checks ran on this build.');
+      expect(commentBodies[0]).toContain('No factory checks ran on this build.');
+      expect(readState(ctx.statePath).approvalPosts).toEqual({ 100: 7 });
+      expect(readState(ctx.statePath).testPhase).toEqual({});
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('throws on a failed build, runs it once and keeps the phase', async () => {
+      leaveOutputs(JSON.stringify({ description: 'd', howToTry: 'h' }));
+      setPost();
+      await expect(runChecks(fakeCtx(() => undefined, 1, 'vite build failed'), 7)).rejects.toThrow('The build failed, no factory checks ran');
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(calls).not.toContain('move 7 Approval');
+      expect(readState(`${home}/state.json`).testPhase).toEqual({ 7: 'post' });
+    });
+
+    it('fails naming approval.json when the card has none', async () => {
+      leaveOutputs(null);
+      setPost();
+      await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('approval.json');
+      expect(calls).toEqual([]);
+    });
+
+    it('queues the merge of an already approved card and posts nothing', async () => {
+      leaveOutputs(null);
+      setPost();
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      await runChecks(fakeCtx(() => undefined), 7);
+      expect(calls.some((call) => call.startsWith('photo') || call.startsWith('buttons'))).toBe(false);
+      expect(queued()).toEqual({ 7: 'Ann' });
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+  });
+
   describe('test modes', () => {
     // The first line of each agent prompt names its round.
     let rounds: string[] = [];
@@ -340,17 +427,45 @@ describe('testing stage', () => {
     it('hardens an approved card with the review and no evidence, then queues its merge with no post', async () => {
       writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
       await runStage(fakeCtx(agent), 7);
-      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.']);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.']);
       expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
       expect(existsSync(`${home}/work/issue-7/game/.factory/approval.json`)).toBe(false);
       expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
       expect(queued()).toEqual({ 7: 'Ann' });
     });
 
+    it('hardens an approved card without merging the base, since approve merges it', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(bases).not.toContain('merge dev');
+    });
+
+    it('runs no checks when hardening left the head on the build the committee played', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(calls).not.toContain('checks');
+      expect(calls.at(-1)).toBe('move 7 Approval');
+      expect(queued()).toEqual({ 7: 'Ann' });
+      expect(readState(`${home}/state.json`).testPhase).toEqual({});
+    });
+
+    it('runs the checks when hardening moved the head past the played build', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('refuses to harden a card with no recorded approval', async () => {
+      await expect(runHarden(fakeCtx(agent), 7)).rejects.toThrow('in Hardening with no recorded approval');
+      expect(rounds).toEqual([]);
+    });
+
     it('hardens a hotfix and reviews it before the test round that shows it, then posts it', async () => {
       labels = ['hotfix'];
       await runStage(fakeCtx(agent), 7);
-      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.', 'This is the testing stage of the ROAM factory.']);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.', 'This is the testing stage of the ROAM factory.']);
       expect(calls.findIndex((call) => call.startsWith('review'))).toBeLessThan(calls.indexOf('checks'));
       expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
     });
@@ -391,8 +506,8 @@ describe('testing stage', () => {
       expect(reviewPrompts[0]).toContain('git diff origin/dev...HEAD');
     });
 
-    it('fails on a FAIL verdict, runs one fix round with the review, then passes a second review', async () => {
-      reviews = [failed('propsNear scans every prop per check. R3.')];
+    it('fails on a correctness finding, runs one fix round with the review, then passes a second review', async () => {
+      reviews = [[bug('propsNear scans every prop per check. R3.'), cleanup('A guard can never fire.')]];
       const prompts: string[] = [];
       let seen = '';
       const ctx = fakeCtx((run) => {
@@ -403,14 +518,17 @@ describe('testing stage', () => {
       await runStage(ctx, 7);
       expect(prompts).toHaveLength(2);
       expect(prompts[1]).toContain('second round');
-      expect(seen).toBe('propsNear scans every prop per check. R3.\n\nREVIEW_VERDICT: FAIL\n');
+      expect(seen).toBe([
+        '- [correctness, CONFIRMED] game/src/sim/far.ts:12: propsNear scans every prop per check. R3.\n  A probe shows it.',
+        '- [simplification, CONFIRMED] game/src/sim/far.ts:30: A guard can never fire.\n  A reader traces a dead branch.\n',
+      ].join('\n'));
       expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(2);
       expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
       expect(calls.at(-1)).toBe('move 7 Approval');
     });
 
     it('sends the card back to Design with the review when the second review fails again', async () => {
-      reviews = [failed('First review.'), failed('Hot scan in far.ts. Principle 3.')];
+      reviews = [[bug('First review.')], [bug('Hot scan in far.ts. Principle 3.')]];
       await runStage(fakeCtx(outputs), 7);
       expect(commentBodies).toHaveLength(1);
       expect(commentBodies[0]).toContain('## Review findings');
@@ -424,32 +542,37 @@ describe('testing stage', () => {
 
     it('throws instead of a second redesign when the card already came back from the review once', async () => {
       priorComments = [{ login: 'factory', body: '## Review findings\n\nThe review failed this change twice.' }];
-      reviews = [failed('First review.'), failed('Still scans every prop.')];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review failed the change twice again after a redesign.\nStill scans every prop.');
+      reviews = [[bug('First review.')], [bug('Still scans every prop.')]];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review failed the change twice again after a redesign.\n- [correctness, CONFIRMED] game/src/sim/far.ts:12: Still scans every prop.');
       expect(commentBodies).toHaveLength(0);
       expect(calls).not.toContain('move 7 Design');
       expect(calls).not.toContain('checks');
     });
 
-    it('throws when review.md is missing', async () => {
+    it('passes a review whose findings are all cleanups, with no fix round', async () => {
+      reviews = [[cleanup('A guard can never fire.')]];
+      const prompts: string[] = [];
+      await runStage(fakeCtx((run) => { prompts.push(run.prompt); outputs(run); }), 7);
+      expect(prompts).toHaveLength(1);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('fails a finding with no category, since nothing marks it as a cleanup', async () => {
+      const uncategorized = (summary: string): Finding => ({ file: 'game/src/a.ts', line: 1, summary, failure_scenario: 'A probe shows it.' });
+      reviews = [[uncategorized('Unclear.')], [uncategorized('Still unclear.')]];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.at(-1)).toBe('move 7 Design');
+    });
+
+    it('throws when the review reports no findings with ReportFindings', async () => {
       reviews = [null];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('reported no findings with ReportFindings');
       expect(calls).not.toContain('checks');
     });
 
-    it.each([
-      ['Looks fine.\n', 'must end with REVIEW_VERDICT: PASS or REVIEW_VERDICT: FAIL'],
-      ['REVIEW_VERDICT: PASS\nMore text after the verdict.\n', 'must end with'],
-      ['REVIEW_VERDICT: FAIL\nOn second thought.\nREVIEW_VERDICT: PASS\n', 'names both verdicts'],
-    ])('throws on a review with no clear verdict: %s', async (output, message) => {
-      reviews = [output];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow(message);
-      expect(calls).not.toContain('checks');
-    });
-
-    it('does not reuse the first review file for the second review', async () => {
-      reviews = [failed('First review.'), null];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+    it('reads the last report when a review reports twice', async () => {
+      const stream = `${reportStream([bug('First look.')])}${reportStream([])}`;
+      expect(judge(readFindings(stream))).toEqual({ passed: true, text: 'The review found nothing.' });
     });
   });
 
@@ -459,7 +582,8 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'fetch','merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
-    expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve runs the review and full testing, then merges into release/2026-09-29.');
+    expect(calls.find((call) => call.startsWith('photo'))).not.toContain('Approve runs the review');
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(queued()).toEqual({});
   });
 
@@ -488,10 +612,45 @@ describe('testing stage', () => {
     expect(calls).not.toContain('checks');
   });
 
-  it('merges a cleanup task into the release itself, with no committee post', async () => {
+  it('resolves a conflict that stopped approve with a merge agent alone, then checks and queues the merge', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    conflicts = ['game/src/a.ts'];
+    const prompts: string[] = [];
+    await runStage(fakeCtx((run) => { prompts.push(run.prompt); }), 7);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('This is a merge round of the ROAM factory.');
+    expect(prompts[0]).toContain('merged the current dev into your branch');
+    expect(prompts[0]).toContain('- game/src/a.ts');
+    expect(calls.some((call) => call.startsWith('review'))).toBe(false);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+    expect(queued()).toEqual({ 7: 'Ann' });
+  });
+
+  it('runs no agent when the base merges cleanly after a conflict at approve', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    const prompts: string[] = [];
+    await runStage(fakeCtx((run) => { prompts.push(run.prompt); }), 7);
+    expect(prompts).toEqual([]);
+    expect(calls).toContain('push w1 factory/issue-7');
+    expect(queued()).toEqual({ 7: 'Ann' });
+  });
+
+  it('fails the stage when the merge agent leaves the merge of the base unfinished', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, testPhase: { 7: 'resolve' } });
+    conflicts = ['game/src/a.ts'];
+    merged = false;
+    await expect(runStage(fakeCtx(() => undefined), 7)).rejects.toThrow('left the merge of dev at base000 into factory/issue-7 unfinished');
+    expect(calls).not.toContain('checks');
+  });
+
+  it('merges a cleanup task into the release itself after the review alone, with no harden round and no committee post', async () => {
     labels = ['release-task', 'maintenance'];
-    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    const prompts: string[] = [];
+    const ctx = fakeCtx((run) => { prompts.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); });
     await runStage(ctx, 7);
+    expect(prompts).toEqual([]);
+    expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('openPullRequest') || call === 'comment 7')).toBe(false);
     expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
@@ -520,6 +679,77 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
     expect(queued()).toEqual({});
+  });
+
+  describe('docs change', () => {
+    const rounds: string[] = [];
+    const agent = (run: AgentRun): void => {
+      rounds.push(run.prompt.split('\n')[0]);
+      writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    };
+    const builtOnly = (): void => {
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('typecheck');
+      expect(shellScript).not.toContain('playtest');
+    };
+    beforeEach(() => {
+      rounds.length = 0;
+      changed = ['game/docs/tools.md', 'game/CLAUDE.md'];
+    });
+
+    it('previews with no agent, builds with no tests and posts the changed docs', async () => {
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      builtOnly();
+      expect(calls).toContain('push w1 factory/issue-7');
+      expect(commentBodies[0]).toContain('Docs only, the game does not change: game/docs/tools.md, game/CLAUDE.md');
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('hardens an approved card with the review alone, then builds with no tests', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      builtOnly();
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('reviews a hotfix with no harden or test round', async () => {
+      labels = ['hotfix'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      builtOnly();
+    });
+
+    it('gives a failed build the fix round, like a failed check', async () => {
+      await runStage(fakeCtx(agent, 1, 'vite build failed'), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory, second round.']);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('runs the test round when the base merge conflicts, since only the agent resolves it', async () => {
+      conflicts = ['game/docs/tools.md'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+    });
+
+    it('counts a wiki page as code, since the game tests check its tables', async () => {
+      changed = ['game/docs/wiki/items.md'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+      expect(shellScript).toContain('npm test');
+    });
+
+    it('counts a branch with any other file as code', async () => {
+      changed = ['game/docs/tools.md', 'game/scripts/playtest.mjs'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+      expect(shellScript).toContain('npm test');
+    });
   });
 });
 
@@ -567,34 +797,26 @@ describe('testing stage evidence', () => {
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
   });
 
-  it('fails the stage on more than ten images and posts nothing', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, items(11), each(11))), 7)).rejects.toThrow('limit is 10');
-    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+  it.each<[string, (run: AgentRun) => void, string]>([
+    ['more than ten images', (run) => writeEvidence(run, items(11), each(11)), 'limit is 10'],
+    ['a location no image covers', (run) => writeEvidence(run, [yard, horn], [['Horn']]), 'No evidence image covers "Yard"'],
+    ['coverage of a feature the manifest does not list', (run) => writeEvidence(run, [yard], [['Salvage yard']]), 'by exact name'],
+    ['a duplicate image', (run) => { writeEvidence(run, [yard], [['Yard'], ['Yard']]); writeFileSync(`${run.clone}/${run.dir}/.factory/view1.png`, pngBytes(0)); }, 'duplicates'],
+    ['a missing image file', (run) => { writeEvidence(run, items(2), each(2)); rmSync(`${run.clone}/${run.dir}/.factory/view1.png`); }, 'does not exist'],
+    ['a manifest from an older commit', (run) => writeEvidence(run, [horn], [['Horn']], 'deadbee'), 'Capture the views again'],
+  ])('drops a manifest with %s, posts the one screenshot and says why on the issue', async (_name, write, reason) => {
+    await runStage(fakeCtx(write), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(albums).toEqual([]);
+    expect(commentBodies[0]).toContain('The evidence manifest was dropped');
+    expect(commentBodies[0]).toContain(reason);
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
   it.each([1, 2])('posts a location shown by %i genuine image(s), with no minimum count', async (count) => {
     await runStage(fakeCtx((run) => writeEvidence(run, [yard], Array.from({ length: count }, () => ['Yard']))), 7);
     expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
-  });
-
-  it('rejects a location no image covers and posts nothing', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard, horn], [['Horn']])), 7)).rejects.toThrow('No evidence image covers "Yard"');
-    expect(calls).not.toContain('move 7 Approval');
-  });
-
-  it('rejects an image that claims coverage of a feature the manifest does not list', async () => {
-    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Salvage yard']])), 7)).rejects.toThrow('by exact name');
-    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
-  });
-
-  it('rejects a duplicate image for a location and posts nothing', async () => {
-    const ctx = fakeCtx((run) => {
-      writeEvidence(run, [yard], [['Yard'], ['Yard']]);
-      writeFileSync(`${run.clone}/${run.dir}/.factory/view1.png`, pngBytes(0));
-    });
-    await expect(runStage(ctx, 7)).rejects.toThrow('duplicates');
-    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
   });
 
   it('runs the fresh-clone checks before it posts a one-image location', async () => {
@@ -606,21 +828,6 @@ describe('testing stage evidence', () => {
   it('posts nothing when the fresh-clone checks fail twice, whatever the evidence', async () => {
     await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard']]), 2), 7)).rejects.toThrow('checks failed twice');
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
-    expect(calls).not.toContain('move 7 Approval');
-  });
-
-  it('fails the stage when an image file is missing', async () => {
-    const ctx = fakeCtx((run) => {
-      writeEvidence(run, items(2), each(2));
-      rmSync(`${run.clone}/${run.dir}/.factory/view1.png`);
-    });
-    await expect(runStage(ctx, 7)).rejects.toThrow('does not exist');
-  });
-
-  it('requires evidence from the final head, so a fix round that changed code must capture again', async () => {
-    let round = 0;
-    const ctx = fakeCtx((run) => writeEvidence(run, [horn], [['Horn']], round++ === 0 ? 'abc1234' : 'deadbee'), 1);
-    await expect(runStage(ctx, 7)).rejects.toThrow('Capture the views again');
     expect(calls).not.toContain('move 7 Approval');
   });
 
@@ -746,19 +953,9 @@ describe('visual review of the candidate', () => {
     expect(calls.at(-1)).toBe('move 7 Design');
   });
 
-  it('makes the agent repair a tune-sized mismatch itself instead of sending the card back', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, wrongOil('tune'))), 7)).rejects.toThrow('lists only tune-sized mismatches');
-    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
-    expect(posted()).toBe(false);
-  });
-
   it('sends a tune mismatch that two repair rounds did not fix to Implementation', async () => {
     await runStage(fakeCtx((run) => capture(run, wrongOil('tune', 2))), 7);
     expect(calls.at(-1)).toBe('move 7 Implementation');
-  });
-
-  it('refuses more repair rounds than the limit', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { repairs: 3 })), 7)).rejects.toThrow('the limit is 2');
   });
 
   it('caps the send-backs of a card, then fails with the report and no move', async () => {
@@ -778,21 +975,6 @@ describe('visual review of the candidate', () => {
     expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
-  it('regenerates and re-inspects the evidence of the final head: a reading of an older image fails', async () => {
-    const stale = (run: AgentRun): void => {
-      capture(run);
-      const out = `${run.clone}/${run.dir}/.factory`;
-      writeFileSync(`${out}/screenshot.png`, pngBytes(99));
-      writeFileSync(`${out}/view1.png`, pngBytes(98));
-    };
-    await expect(runStage(fakeCtx(stale), 7)).rejects.toThrow('read an older screenshot.png');
-    expect(posted()).toBe(false);
-  });
-
-  it('fails when the reading is from an older commit', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { commit: 'deadbee' })), 7)).rejects.toThrow('visual-review.json is from commit deadbee');
-  });
-
   it('inspects again after a check-fix round and sends a now-wrong candidate back, with no post', async () => {
     let round = 0;
     await runStage(fakeCtx((run) => capture(run, round++ === 0 ? {} : wrongOil('rebuild')), 1), 7);
@@ -802,38 +984,22 @@ describe('visual review of the candidate', () => {
     expect(state().testPhase).toEqual({});
   });
 
-  it('fails safely, with a diagnostic and no post, when the agent wrote no reading', async () => {
-    await expect(runStage(fakeCtx((run) => { capture(run); rmSync(`${run.clone}/${run.dir}/.factory/visual-review.json`); }), 7)).rejects.toThrow('wrote no .factory/visual-review.json');
-    expect(posted()).toBe(false);
-    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
-  });
-
-  it('fails safely when an image is unreadable', async () => {
-    const run = (r: AgentRun): void => {
-      writeOutputs(r, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: true, images: [{ file: 'screenshot.png', sha256: 'x', observations: 'The truck sits on sand.', verdict: 'correct' }], decisions: [{ verdict: 'correct', notes: 'It fits the issue and the docs.' }] });
-    };
-    await expect(runStage(fakeCtx(run), 7)).rejects.toThrow('The image screenshot.png cannot be inspected');
-    expect(posted()).toBe(false);
-  });
-
-  it.each([
-    ['a missing image reading', { images: [] }, 'has no reading of the shown image screenshot.png'],
-    ['a missing feature decision', { decisions: [] }, 'no decision for the feature "Oil patch"'],
-    ['a thin note', { decisions: [{ feature: 'Oil patch', verdict: 'correct', notes: 'ok' }] }, 'at least 20 characters'],
-    ['a wrong verdict with no mismatch', { decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle.' }] }, 'lists no mismatch'],
-    ['a made-up verdict', { decisions: [{ feature: 'Oil patch', verdict: 'fine', notes: 'The oil looks fine to me.' }] }, 'verdict of correct or wrong'],
-  ])('refuses %s', async (_name, review, message) => {
-    await expect(runStage(fakeCtx((run) => capture(run, review)), 7)).rejects.toThrow(message);
-    expect(posted()).toBe(false);
-  });
-
-  it('refuses the nonvisual exemption when the manifest lists visible features', async () => {
-    await expect(runStage(fakeCtx((run) => capture(run, { visual: false, reason: 'Nothing changed on screen at all.' })), 7)).rejects.toThrow('lists visible features (Oil patch)');
-    expect(posted()).toBe(false);
-  });
-
-  it('refuses the nonvisual exemption without a reason', async () => {
-    await expect(runStage(fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: false })), 7)).rejects.toThrow('without a "reason"');
+  it.each<[string, (run: AgentRun) => void]>([
+    ['only tune-sized mismatches and repair rounds left', (run) => capture(run, wrongOil('tune'))],
+    ['more repair rounds than the limit', (run) => capture(run, { repairs: 3 })],
+    ['a reading of an older image', (run) => { capture(run); writeFileSync(`${run.clone}/${run.dir}/.factory/screenshot.png`, pngBytes(99)); }],
+    ['a reading from an older commit', (run) => capture(run, { commit: 'deadbee' })],
+    ['no reading at all', (run) => { capture(run); rmSync(`${run.clone}/${run.dir}/.factory/visual-review.json`); }],
+    ['a missing image reading', (run) => capture(run, { images: [] })],
+    ['a missing feature decision', (run) => capture(run, { decisions: [] })],
+    ['a thin note', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'correct', notes: 'ok' }] })],
+    ['a wrong verdict with no mismatch', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle.' }] })],
+    ['a made-up verdict', (run) => capture(run, { decisions: [{ feature: 'Oil patch', verdict: 'fine', notes: 'The oil looks fine to me.' }] })],
+    ['the nonvisual exemption while the manifest lists visible features', (run) => capture(run, { visual: false, reason: 'Nothing changed on screen at all.' })],
+  ])('ignores a visual review with %s, and the card goes on to its post', async (_name, write) => {
+    await runStage(fakeCtx(write), 7);
+    expect(posted()).toBe(true);
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
   it('keeps a nonvisual task viable on its stated reason, with no images read', async () => {
@@ -855,5 +1021,44 @@ describe('visual review of the candidate', () => {
     writeState(`${home}/state.json`, { ...state(), approvedResolving: { 7: 'Ann' } });
     await runStage(fakeCtx(() => undefined), 7);
     expect(readState(`${home}/state.json`).pendingApprovals).toEqual({ 7: 'Ann' });
+  });
+});
+
+describe('a round with no screenshot', () => {
+  const APPROVAL = JSON.stringify({ description: 'Salvage yard fights.', howToTry: 'Drive to the yard.' });
+  // The agent leaves an approval and no image at all.
+  const approvalOnly = (run: AgentRun): void => writeFileSync(`${run.clone}/${run.dir}/.factory/approval.json`, APPROVAL);
+
+  it('lets verify accept an approval with no screenshot, evidence or visual review and moves on to the checks', async () => {
+    await runVerify(fakeCtx(approvalOnly), 7);
+    expect(readState(`${home}/state.json`).testPhase).toEqual({ 7: 'checks' });
+    expect(calls).not.toContain('checks');
+  });
+
+  it('runs the same checks, then posts a text approval with buttons, a warning and normal routing', async () => {
+    await runStage(fakeCtx(approvalOnly), 7);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(shellScript).toContain('npm run playtest -- --cpu');
+    expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+    const text = calls.find((call) => call.startsWith('buttons')) ?? '';
+    expect(text).toContain('No screenshot. Judge it by playing.');
+    expect(text).toContain('Play: https://play.test/abc123/');
+    expect(text).toContain('How to try: Drive to the yard.');
+    for (const tail of BOILERPLATE) expect(text).not.toContain(tail);
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
+    expect(commentBodies[0]).toContain('The testing agent wrote no .factory/screenshot.png.');
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 120: 7 });
+    expect(state.textPosts).toEqual(['120']);
+    expect(state.postCaptions['120']).toBe(text.replace('buttons chat ', ''));
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('posts nothing when the checks fail', async () => {
+    await expect(runStage(fakeCtx(approvalOnly, 2), 7)).rejects.toThrow('The factory checks failed twice');
+    expect(calls.some((call) => call.startsWith('buttons') || call.startsWith('photo'))).toBe(false);
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
   });
 });

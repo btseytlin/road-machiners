@@ -15,6 +15,11 @@ spec.loader.exec_module(plugin)
 
 CFG = plugin.Config("/inbox", "/state", "-100", None)
 POSTS = {"55": 12}
+readiness = sys.modules["factory_plugin.readiness"]
+
+
+def make_readiness(tmp_path):
+    return plugin.Readiness(min_words=3, inbox=str(tmp_path / "inbox"))
 
 
 def route(text, reply=None, chat="-100"):
@@ -154,6 +159,7 @@ def env(tmp_path):
         "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": str(tmp_path / "state"), "FACTORY_COMMITTEE_CHAT": "-100",
         "FACTORY_OBSERVATION_HEARTBEAT_MS": "10000",
         "FACTORY_PUBLIC_URL": "https://example.org", "FACTORY_STATUS_TIMEOUT_MS": "10000",
+        "FACTORY_ROUTE_MIN_WORDS": "4", "FACTORY_REPO": "owner/repo",
         "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
         "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
     }
@@ -233,7 +239,7 @@ def dispatch(tmp_path, user, text="/change x", chat="-100", monkeypatch=None):
     gateway = types.SimpleNamespace(adapters={"telegram": adapter})
     source = types.SimpleNamespace(user_id=user, user_name="Ann", chat_id=chat, platform="telegram")
     event = types.SimpleNamespace(text=text, reply_to_message_id=None, source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     return result, adapter, tmp_path / "inbox"
 
 
@@ -248,7 +254,7 @@ def test_hook_routes_release_reply(tmp_path):
     gateway = types.SimpleNamespace(adapters={"telegram": adapter})
     source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
     event = types.SimpleNamespace(text="ship", reply_to_message_id="90", source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     assert result == {"action": "skip", "reason": "factory-ship"}
     (file,) = (tmp_path / "inbox").iterdir()
     assert json.loads(file.read_text())["issue"] == 40
@@ -264,7 +270,7 @@ def test_hook_queues_a_plain_approval_reply_and_hands_it_to_hermes_with_a_header
     gateway = types.SimpleNamespace(adapters={"telegram": Adapter()})
     source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
     event = types.SimpleNamespace(text="show us the top-down atlas", reply_to_message_id="55", source=source, message_id="5")
-    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
     assert result["action"] == "rewrite"
     assert result["text"].startswith("[Factory: a committee reply to the approval post 55 of issue #12.")
     assert "factory_route_reply" in result["text"]
@@ -284,7 +290,7 @@ def route_setup(tmp_path, session=None):
     inbox.mkdir()
     cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
     values = SESSION if session is None else session
-    return inbox, plugin.make_route_handler(cfg, session_env=lambda key: values.get(key, ""))
+    return inbox, plugin.make_route_handler(cfg, make_readiness(tmp_path), session_env=lambda key: values.get(key, ""))
 
 
 @pytest.mark.parametrize("route_name", ["answer", "patch", "redesign"])
@@ -313,6 +319,98 @@ def test_route_tool_refuses_a_closed_post_an_unknown_route_or_no_text(tmp_path, 
 def test_route_tool_refuses_a_non_member(tmp_path):
     inbox, handle = route_setup(tmp_path, {**SESSION, "HERMES_SESSION_USER_ID": "2"})
     assert "error" in json.loads(handle({"post": 55, "route": "patch", "text": "x"}))
+    assert list(inbox.iterdir()) == []
+
+
+def test_route_tool_routes_as_hermes_when_no_member_wrote(tmp_path):
+    inbox, handle = route_setup(tmp_path, {})
+    assert json.loads(handle({"post": 55, "route": "answer", "text": "What is the horn volume?"}))["success"] is True
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text()) == {
+        "kind": "route", "issue": 12, "text": "What is the horn volume?", "route": "answer",
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": 55,
+    }
+
+
+RELEASE_POST_STATE = '{"approvalPosts": {}, "releasePost": {"issue": 40, "day": "d", "changelog": "- [#3] x", "screenshot": "s.png", "postId": 66, "draft": "Old draft"}}'
+
+
+def test_hook_hands_a_reply_to_the_release_post_draft_to_hermes_and_queues_nothing(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text(RELEASE_POST_STATE)
+    (tmp_path / "inbox").mkdir()
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), "-100", committee)
+    gateway = types.SimpleNamespace(adapters={"telegram": Adapter()})
+    source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
+    event = types.SimpleNamespace(text="mention the new map", reply_to_message_id="66", source=source, message_id="5")
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
+    assert result["action"] == "rewrite"
+    assert result["text"].startswith("[Factory: a committee reply to the release post draft 66.")
+    assert plugin.DRAFT_TOOL in result["text"]
+    assert result["text"].endswith("\n\nmention the new map")
+    assert list((tmp_path / "inbox").iterdir()) == []
+
+
+def draft_setup(tmp_path, state, session):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    (tmp_path / "state").mkdir(parents=True)
+    (tmp_path / "state" / "state.json").write_text(state)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
+    return inbox, plugin.make_draft_handler(cfg, session_env=lambda key: session.get(key, ""))
+
+
+def test_draft_tool_queues_hermes_draft_from_the_watch(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    assert json.loads(handle({"text": "  The road got longer.  "})) == {"success": True, "message": plugin.DRAFT_DONE}
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text()) == {
+        "kind": "release-draft", "issue": None, "text": "The road got longer.", "image": None,
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": None,
+    }
+
+
+def test_draft_tool_copies_a_picture_from_the_factory_home_into_the_inbox_media(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    picture = tmp_path / "work" / "shot.png"
+    picture.parent.mkdir()
+    picture.write_bytes(b"png")
+    assert json.loads(handle({"text": "Text", "image": str(picture)}))["success"] is True
+    command = json.loads(next(inbox.glob("*.json")).read_text())
+    assert command["image"].startswith("release-post/") and command["image"].endswith("-shot.png")
+    assert (inbox / "media" / command["image"]).read_bytes() == b"png"
+
+
+@pytest.mark.parametrize("where", ["missing", "outside"])
+def test_draft_tool_refuses_a_picture_that_is_missing_or_outside_the_factory_home(tmp_path, where):
+    inbox, handle = draft_setup(tmp_path / "home", RELEASE_POST_STATE, {}) if where == "outside" else draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    picture = tmp_path / "shot.png" if where == "outside" else tmp_path / "nope.png"
+    if where == "outside":
+        picture.write_bytes(b"png")
+    assert "error" in json.loads(handle({"text": "Text", "image": str(picture)}))
+    assert list(inbox.glob("*.json")) == []
+
+
+def test_draft_tool_queues_a_revision_for_the_member_who_asked(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, SESSION)
+    assert json.loads(handle({"text": "New text"}))["success"] is True
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text())["by"] == "1"
+
+
+@pytest.mark.parametrize("state,text", [
+    ('{"approvalPosts": {}, "releasePost": null}', "Text"),
+    ('{"approvalPosts": {}}', "Text"),
+    (RELEASE_POST_STATE, "  "),
+    (RELEASE_POST_STATE, "x" * (plugin.DRAFT_LIMIT + 1)),
+])
+def test_draft_tool_refuses_with_no_post_due_an_empty_or_a_too_long_draft(tmp_path, state, text):
+    inbox, handle = draft_setup(tmp_path, state, {})
+    assert "error" in json.loads(handle({"text": text}))
     assert list(inbox.iterdir()) == []
 
 
@@ -425,11 +523,49 @@ def test_queue_tool_refuses_non_member(tmp_path):
     assert list(inbox.iterdir()) == []
 
 
-@pytest.mark.parametrize("key", list(SESSION))
+@pytest.mark.parametrize("key", ["HERMES_SESSION_CHAT_ID", "HERMES_SESSION_MESSAGE_ID"])
 def test_queue_tool_refuses_missing_session_value(tmp_path, key):
     inbox, handle = queue_setup(tmp_path, {**SESSION, key: ""})
     assert key in json.loads(handle({"request": "x"}))["error"]
     assert list(inbox.iterdir()) == []
+
+
+def test_queue_tool_queues_a_task_for_hermes_when_no_member_wrote(tmp_path):
+    inbox, handle = queue_setup(tmp_path, {})
+    assert json.loads(handle({"request": "Check the disk."}))["success"] is True
+    [path] = list(inbox.iterdir())
+    assert json.loads(path.read_text()) == {
+        "kind": "adhoc", "issue": None, "text": "Check the disk.",
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": None,
+    }
+
+
+def test_change_tool_refuses_hermes_own_change(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), "/st", "-100", committee)
+    handle = plugin.make_queue_handler(cfg, session_env=lambda key: "", kind="change", done=plugin.CHANGE_DONE)
+    assert "error" in json.loads(handle({"request": "x"}))
+    assert list(inbox.iterdir()) == []
+
+
+def test_sender_tool_returns_the_telegram_id_of_the_member(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config("/in", "/st", "-100", committee)
+    handle = plugin.make_sender_handler(cfg, session_env=lambda key: SESSION.get(key, ""))
+    assert json.loads(handle({})) == {"by": "1", "name": "Ann"}
+
+
+def test_sender_tool_errors_without_a_member_message(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config("/in", "/st", "-100", committee)
+    assert "hermes" in json.loads(plugin.make_sender_handler(cfg, session_env=lambda key: "")({}))["error"]
+    stranger = {**SESSION, "HERMES_SESSION_USER_ID": "2"}
+    assert "no committee member" in json.loads(plugin.make_sender_handler(cfg, session_env=lambda key: stranger.get(key, ""))({}))["error"]
 
 
 def test_queue_tool_refuses_empty_request(tmp_path):
@@ -459,5 +595,8 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     assert calls[0]["schema"]["parameters"]["required"] == ["request"]
     assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"
     assert calls[2]["name"] == "factory_route_reply" and calls[2]["toolset"] == "factory"
-    assert calls[3]["name"] == "factory_status" and calls[3]["toolset"] == "factory"
+    assert calls[3]["name"] == "factory_sender" and calls[3]["toolset"] == "factory"
+    assert calls[4]["name"] == "factory_release_draft" and calls[4]["toolset"] == "factory"
+    assert calls[4]["schema"]["parameters"]["required"] == ["text"]
+    assert calls[5]["name"] == "factory_status" and calls[5]["toolset"] == "factory"
     assert calls[2]["schema"]["parameters"]["required"] == ["post", "route", "text"]

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Runs a factory CLI command on the factory server, from the deployed code. Hermes calls it as `factory <command>`.
+# The arguments travel NUL-separated on stdin, so spaces and non-ASCII text reach the server unchanged, whatever its shell.
+printf '%s\0' "$@" | factory-host 'cd /opt/factory/code/factory && xargs -0 npm run -s factory --'

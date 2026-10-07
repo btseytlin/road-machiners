@@ -1,0 +1,25 @@
+{
+  "turn": 900,
+  "vehicles": [
+    { "id": "player", "pos": { "x": 30, "y": 30 }, "brain": null },
+    {
+      "id": "npc-2",
+      "pos": { "x": 40, "y": 40 },
+      "brain": {
+        "noticed": {},
+        "goals": [],
+        "tracks": {
+          "player": { "at": { "x": 30, "y": 30 }, "turn": 899, "sighted": true, "choice": "flee", "chosenInSight": true },
+          "npc-5": { "at": { "x": 12, "y": 12 }, "turn": 898, "sighted": false, "choice": null, "chosenInSight": false }
+        }
+      }
+    }
+  ],
+  "removed": [
+    {
+      "id": "npc-9",
+      "pos": { "x": 5, "y": 5 },
+      "brain": { "noticed": {}, "goals": [], "tracks": {} }
+    }
+  ]
+}

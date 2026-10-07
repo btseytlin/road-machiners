@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchMedia, mediaSection, requireMedia } from '../media';
+import { fetchMedia, mediaSection } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
+import { readCommitteeMedia } from '../reply-media';
+import { issueReports } from '../error-reports/service';
 import { readState } from '../state';
 import { bundleOf } from './bundle';
 import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
@@ -19,6 +21,16 @@ export function baseBranchFor(ctx: Ctx, labels: string[]): string {
   const release = readState(ctx.statePath).release;
   if (release === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);
   return release.branch;
+}
+
+// The game's tests compare the wiki pages with the data, so a wiki edit is not a docs change here.
+const TESTED_DOCS = `${GAME_DIR}/docs/wiki/`;
+
+// Whether the branch changes only Markdown docs. Such a change cannot change the game, so it skips the harden round,
+// the test round and the factory checks. The review still reads it, and the build still runs for the play link.
+export async function docsOnly(ctx: Ctx, issue: number, base: string): Promise<boolean> {
+  const files = await ctx.repo.changedFiles(base, BRANCH(issue));
+  return files.length > 0 && files.every((file) => file.endsWith('.md') && !file.startsWith(TESTED_DOCS));
 }
 
 export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {
@@ -63,9 +75,11 @@ export async function issueText(ctx: Ctx, issue: number, heading: string): Promi
   return [`${heading} ${item.title}`, item.body, ...comments.flatMap((comment) => [`${heading}# Comment by ${comment.login}`, comment.body])];
 }
 
-// On the GPU the playtest plays all its turns and checks the frame rate. Without one, --cpu draws in software, plays fewer turns and skips the frame rate.
-export function playtestCommand(cfg: FactoryConfig): string {
-  return cfg.gpu ? 'npm run playtest' : 'npm run playtest -- --cpu';
+// On the GPU the playtest plays all its turns. Without one, --cpu draws in software, plays fewer turns and skips the frame rate.
+// Only the release candidate checks the frame rate. Other jobs share the GPU and CPUs, so their frame rate measures the load, not the change.
+export function playtestCommand(cfg: FactoryConfig, fpsGate: boolean): string {
+  if (!cfg.gpu) return 'npm run playtest -- --cpu';
+  return fpsGate ? 'npm run playtest' : 'npm run playtest -- --no-fps-gate';
 }
 
 export function fillPrompt(name: string, vars: Record<string, string>): string {
@@ -104,15 +118,20 @@ async function githubToken(ctx: Ctx): Promise<string | undefined> {
   return out !== null && out.code === 0 && out.stdout.trim() !== '' ? out.stdout.trim() : undefined;
 }
 
-// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder.
-// A failed image throws before the agent starts. Returns the prompt part that lists the images.
+// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder, and adds the committee's Telegram images.
+// A failed image is fetched once more. One that still fails shows as NOT AVAILABLE, and the agent works from the text.
+// Returns the prompt part that lists the images.
 export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
   const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
-  const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
+  const options = { fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined };
+  let entries = await fetchMedia(options);
+  if (entries.some((entry) => entry.status === 'failed')) {
+    ctx.log(stage, issue, 'a reference image failed to fetch, fetching again');
+    entries = await fetchMedia(options);
+  }
   for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
-  requireMedia(issue, entries);
-  return mediaSection(entries);
+  return mediaSection([...entries, ...readCommitteeMedia(mediaDir(ctx, issue))]);
 }
 
 // A resumed round continues its own conversation, so it needs no prompt but this note. A round that had finished ends at once.
@@ -132,7 +151,9 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
-export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean };
+// `evidenceCheck` gives the agent the command that runs the factory's evidence checks on its clone.
+// `disallowedTools` names Claude Code tools the agent cannot use.
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean; disallowedTools?: string[] };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
   const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
@@ -141,16 +162,18 @@ function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, 
 }
 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
+// Returns the run's stream-json output.
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<string> {
   const { labels } = await ctx.github.issue(issue);
   const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
-  const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
+  const reports = issueReports(ctx.cfg.home, issue);
+  const full = session.resume ? RESUME_NOTE : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
@@ -192,7 +215,22 @@ export function factoryPaths(diff: string): string[] {
 }
 
 // Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
+// Members and other jobs push to the branch while an agent works. Their commits are merged in before the push, and again whenever GitHub rejects it.
 export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
+  await catchUpBranch(ctx, issue, stage);
+  for (;;) {
+    const head = await guardedHead(ctx, issue, base, stage);
+    try {
+      await ctx.repo.push(head, BRANCH(issue));
+      return;
+    } catch (error) {
+      if (!(await catchUpBranch(ctx, issue, stage))) throw error;
+    }
+  }
+}
+
+// The work clone's head, once its diff passed the checks.
+async function guardedHead(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<string> {
   const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
   if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
@@ -202,5 +240,21 @@ export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage:
   if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
-  await ctx.repo.push(head, BRANCH(issue));
+  return head;
+}
+
+// Merges the commits that reached the issue branch on GitHub since the work clone last saw it. An agent resolves a conflict at once, in the same job.
+// Returns false when GitHub held nothing new.
+export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): Promise<boolean> {
+  await ctx.repo.fetch();
+  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(workDir(ctx, issue), BRANCH(issue));
+  if (commit === null) return false;
+  ctx.log(stage, issue, `${BRANCH(issue)} moved on GitHub, merged ${commit.slice(0, 7)} into the work${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
+  if (conflicts.length === 0) return true;
+  const files = conflicts.map((file) => `- ${file}`).join('\n');
+  const source = `New commits reached ${BRANCH(issue)} on GitHub while the factory worked on it. A member or another job pushed them.`;
+  await runAgent(ctx, issue, stage, 'branch-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), source, files }));
+  const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
+  if (!(await ctx.repo.isMerged(commit, head))) throw new Error(`The agent left the merge of ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
+  return true;
 }

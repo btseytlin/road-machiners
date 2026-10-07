@@ -18,6 +18,11 @@ export function angleDiff(a: number, b: number): number {
   return d;
 }
 
+// True when the direction from `from` to `to` is more than 90 degrees off the direction to `threat`.
+export function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
+  return (to.x - from.x) * (threat.x - from.x) + (to.y - from.y) * (threat.y - from.y) < 0;
+}
+
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }

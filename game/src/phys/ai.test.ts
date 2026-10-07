@@ -137,6 +137,9 @@ describe('NPC driving', () => {
       w.vehicles[0].pos = { x: 300, y: 200 };
       const a = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 264.24, y: 165.07 }, (-48 * Math.PI) / 180);
       const b = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 283.01, y: 143.29 }, (129 * Math.PI) / 180);
+      // The lower id waits, so which truck swerves follows the ids. Pin them to those of the recorded crash, since the id counter shifts with how many trucks a new world starts with.
+      a.id = 'v1062';
+      b.id = 'v1081';
       a.speed = 6.46;
       b.speed = 4.08;
       a.brain = npcBrain('scavenger', a.pos, ['scavenger']);

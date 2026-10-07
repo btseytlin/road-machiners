@@ -43,11 +43,19 @@ export function gridEl(g: Grid, chassisId: string, cell: number): HTMLElement {
   grid.addEventListener("contextmenu", (e) => e.preventDefault());
   for (let y = 0; y < g.h; y++)
     for (let x = 0; x < g.w; x++) {
-      const c = g.cells[y][x];
-      if (c !== null) grid.append(cellEl(c, x, y, cell));
+      const node = gridCellEl(g, x, y, cell);
+      if (node) grid.append(node);
     }
   grid.append(truckOutline(chassisId, cell));
   return grid;
+}
+
+// A mount or cargo cell, a dead cell of a broken cargo part, or nothing for a hole in the layout.
+function gridCellEl(g: Grid, x: number, y: number, cell: number): HTMLElement | null {
+  const c = g.cells[y][x];
+  if (c !== null) return cellEl(c, x, y, cell);
+  if (y < g.deadFrom) return null;
+  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: "Broken cargo rows. Repair the cargo part to use them." });
 }
 
 export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {

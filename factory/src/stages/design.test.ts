@@ -19,17 +19,18 @@ beforeEach(() => {
   labels = [];
   bases = [];
   earlier = [];
-  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 function fakeCtx(agent: (run: AgentRun) => void): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', designEffort: 'medium', repo: 'o/r', committeeChat: 'chat' },
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
     github: {
       issue: async (number: number) => ({ number, title: number === 7 ? 'Big horn' : 'Louder horn', body: number === 7 ? 'Add a horn' : 'Make it louder', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => [{ login: 'a', body: 'yes please' }, ...earlier.map((body) => ({ login: 'bot', body }))],
@@ -38,6 +39,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
       fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -84,6 +86,12 @@ describe('design stage', () => {
     const models: string[] = [];
     await runStage(fakeCtx((run) => { models.push(run.model); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
     expect(models).toEqual([model]);
+  });
+
+  it('passes the design effort to the agent', async () => {
+    const efforts: Array<string | undefined> = [];
+    await runStage(fakeCtx((run) => { efforts.push(run.effort); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
+    expect(efforts).toEqual(['medium']);
   });
 
   it('comments, labels, closes and moves to Done on won\'t do', async () => {

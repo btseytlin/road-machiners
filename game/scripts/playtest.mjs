@@ -3,7 +3,8 @@
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
 // The GPU is Metal on a Mac and Vulkan on Linux, like the factory's NVIDIA host. A run that falls back to software drawing fails.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
-// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
+// With --no-fps-gate, the GPU run prints the frame rate but does not check it, for hosts shared with other jobs.
+// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu] [--no-fps-gate]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 

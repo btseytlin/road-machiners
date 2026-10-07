@@ -1,11 +1,12 @@
 // Shared types of the game factory. Every module codes against these, so stages, wrappers and tests agree.
 
-export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
+export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Hardening' | 'Done';
 
-// Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
-export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
-export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
+// Stages that run agents on a card. Verify is the agent half of the Testing column, and harden the agent half of the Hardening column.
+// Patch applies a small committee reply to a built card.
+export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'harden';
+export type ReleaseStage = 'release' | 'playtest' | 'candidate' | 'ship' | 'remove';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
 export type FactoryConfig = {
   observationHeartbeatMs: number;
@@ -13,6 +14,9 @@ export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
   projectOwner: string;
   projectNumber: number;
+  githubRetries: number; // retries of a rate-limited GitHub call
+  githubRetryBaseSeconds: number; // wait before the first retry, doubled for each next one
+  githubTimeoutSeconds: number; // a GitHub call that runs longer is killed and fails
   home: string; // $FACTORY_HOME: host clone, work clones, logs, state
   webRoot: string;
   publicUrl: string; // base of play links, no trailing slash
@@ -24,8 +28,11 @@ export type FactoryConfig = {
   designModel: string;
   buildModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
+  designEffort: string; // reasoning effort of the design agent, passed to claude --effort
+  tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
+  needsInfoHours: number; // hours an author has to answer the factory's questions before the card goes on without an answer
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
   committeeBootstrapGithub: string;
   telegramToken: string;
@@ -37,12 +44,16 @@ export type FactoryConfig = {
   verifyTimeoutMinutes: number;
   testTimeoutMinutes: number;
   branchTimeoutMinutes: number;
+  agentJobMaxMinutes: number; // highest time limit an agent may give one factory-job background command
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
+  playtestTurns: number; // turns of the release playtest's progression run
+  playtestRuns: number; // playtest runs a release may spend before it blocks for a member
   wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
+  maxJobsPerCard: number; // public-driven agent jobs one card may start in any 24 hours
   triageWorkers: number; // jobs of the triage queue that run at once
   designWorkers: number; // jobs of the design queue that run at once
   implementWorkers: number; // jobs of the implement queue that run at once
@@ -51,18 +62,31 @@ export type FactoryConfig = {
   minFreeGb: number; // under this much free disk, a tick starts no job
   minAvailableGb: number; // under this much available memory, Hermes gets a memory incident
   logDays: number; // job logs older than this go
+  transcriptDays: number; // archived agent transcripts older than this go
   cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
+  vitestWorkersImplement: number; // workers the game's test runner starts in an implement pool container
+  vitestWorkersTest: number; // workers the game's test runner starts in a test pool container
+  errorDailyIssues: number; // new error-report issues per UTC day
+  errorDiskMb: number; // total size of stored error reports
+  errorMapDays: number; // days dev and candidate source maps stay
+  errorBodyKb: number; // largest gzipped report
+  errorUnzippedMb: number; // largest report after gunzip
+  errorIpPerHour: number; // reports one address may send per hour
+  errorOrigins: string; // page origins, besides the public URL's, that may post reports, separated by spaces
 };
 
-export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
+// Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
+export type TokenPrice = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
+
+export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void; timeoutMs?: number };
 export type RunResult = { code: number; stdout: string; stderr: string };
 // Runs a program without a shell. Tests pass a fake that records calls.
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;
 
 export type Reaction = { login: string; content: string };
-export type IssueComment = { login: string; body: string };
+export type IssueComment = { login: string; body: string; createdAt: string }; // createdAt is an ISO time
 
 export type Issue = {
   number: number;
@@ -75,12 +99,7 @@ export type Issue = {
   thumbsUp: string[]; // logins that reacted +1
 };
 
-export type Card = {
-  itemId: string;
-  issue: number;
-  column: Column;
-  labels: string[];
-};
+export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
@@ -88,14 +107,7 @@ export type Card = {
 // A waste job reviews the factory itself and has no issue.
 export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
 // `id` names the job's containers, so a kill stops only its own.
-export type Job = {
-  id: string;
-  stage: JobStage;
-  issue: number | null;
-  pid: number;
-  startedAt: string;
-  log: string;
-};
+export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
@@ -106,25 +118,31 @@ export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 't
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
-  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify', harden: 'verify',
   // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
   change: 'implement',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
+  // The release playtest runs a long agent review and moves no branch, so it never holds the branch queue.
+  playtest: 'verify',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';
 // `error` is the short summary. The full text is in `log`.
-export type Failure = {
-  stage: Stage;
-  issue: number | null;
-  error: string;
-  log: string | null;
-  at: string;
-};
-export type ChangeRequest = { id: number; text: string; by: string };
+export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
+export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
+
+// The release playtest. Every run of one release plays the same seed, so a rerun after a fix replays what found the bug.
+export type PlaytestState = {
+  seed: number;
+  runs: number; // runs started for this release. It names each run's audit folder and never goes back.
+  streak: number; // runs since the last clean pass or a member's retry, up to FACTORY_PLAYTEST_RUNS
+  passed: string | null; // the release head a clean run approved. The candidate builds only this commit.
+  blocked: { sha: string; reason: string } | null; // the gate stopped the release here until a member's retry
+  notes: string[]; // members' decisions from `factory retry`, which every later review reads
+};
 
 // The open release. Its branch takes the release tasks, and Ship merges it into main.
 export type ReleaseState = {
@@ -132,7 +150,19 @@ export type ReleaseState = {
   branch: string;
   day: string; // YYYY-MM-DD of the cut
   postId: number | null; // Telegram id of the current candidate post. Null while none is current.
+  candidateSha: string | null; // short hash of the release head the current post was built from
   removed: number[]; // feature issues taken out of this release
+  playtest: PlaytestState;
+};
+
+// The public post of a shipped release. Hermes drafts it, and a member publishes the draft from the committee chat.
+export type ReleasePost = {
+  issue: number; // tracking issue of the shipped release
+  day: string; // YYYY-MM-DD of the release cut
+  changelog: string; // the shipped changelog lines, which the draft must cover
+  screenshot: string; // the candidate screenshot, kept under the factory home
+  postId: number | null; // Telegram id of the current draft post in the committee chat. Null until Hermes sends a draft.
+  draft: string | null; // text of the current draft, which Publish posts as it is
 };
 
 export type FactoryState = {
@@ -140,40 +170,45 @@ export type FactoryState = {
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
   release: ReleaseState | null;
+  releasePost: ReleasePost | null; // the public post of the last shipped release, until a member publishes it
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
-  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
+  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card in Hardening. Hardening queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
   bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
-  adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
+  adhocReplies: Record<string, { chat: string; messageId: number | null }>; // ad hoc issue number -> the chat message its report answers. Null for a task of Hermes, whose report is a plain post
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
-  capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
+  cardStarts: Record<string, string[]>; // issue number -> ISO start times of its public-driven jobs in the last 24 hours
   postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
+  devError: string | null; // what broke in that build, for Hermes's incident watch. Cleared with devFailed.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
   testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
   patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
-  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
+  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes an incident for Hermes.
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
+  textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  held: Record<string, Hold>; // issue number -> the hold `factory pause-card` put on its card. The tick starts no job on the issue until `resume-card` lifts it.
 };
 
-export type UnroutedReply = {
-  issue: number;
-  postId: number;
-  text: string;
-  at: string;
-};
+// A card a member or Hermes held. `stage` is the job the hold stopped, which resumes in its sessions, or null when none ran.
+export type Hold = { by: string; reason: string; at: string; stage: JobStage | null };
 
-// `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
+export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
+
+// The phases of a card in Testing or Hardening.
+// `checks`: verify, harden or a patch is done, the factory checks run next. `fix`: the checks failed once, the column's agent stage runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.
-export type TestPhase = 'checks' | 'fix' | 'checks-after-fix';
+// `post`: a control move to Approval. Only the build and the post run, with no tests and no playtest.
+// `resolve`: approve hit a conflict with the base. Harden merges the base, a merge agent resolves the conflict, and the checks run next.
+export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post' | 'resolve';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;
@@ -193,6 +228,11 @@ export interface GitHub {
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;
+  // The issue, open or closed, whose body holds this error fingerprint line, or null.
+  findByFingerprint(fingerprint: string): Promise<FingerprintIssue | null>;
+  // The state of an error-report issue the store already names. Search lags new issues, so a known number is read directly.
+  errorIssue(number: number): Promise<FingerprintIssue>;
+  mergePullRequest(branch: string): Promise<void>; // merges the open pull request of that head branch with a merge commit
 }
 
 // One inline keyboard button. `data` comes back as the callback data of a press.
@@ -202,40 +242,31 @@ export type InlineButton = { text: string; data: string };
 export type AlbumPhoto = { path: string; caption: string };
 
 export interface Telegram {
-  sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
+  sendMessage(chat: string, text: string, replyTo?: number | null): Promise<number>;
   sendButtons(chat: string, text: string, buttons: InlineButton[][]): Promise<number>; // one text message with an inline keyboard
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
   // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
   sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
   sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
+  editText(chat: string, messageId: number, text: string): Promise<void>; // replaces a text message and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
+// `evidenceCheck` mounts the factory's evidence check read only, so the agent can run it before it ends. See `buildCheckBundle` in container.ts.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
+// `disallowedTools` names Claude Code tools the agent cannot use, passed to claude --disallowedTools.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = {
-  clone: string;
-  dir: string;
-  model: string;
-  prompt: string;
-  log: string;
-  openNetwork?: boolean;
-  mediaDir?: string;
-  readOnly?: Record<string, string>;
-  session?: AgentSession;
-  skill?: string;
-  effort?: string;
-};
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; evidenceCheck?: boolean; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
 
 export interface Container {
-  // Runs Claude Code headless in the clone. Throws on a nonzero exit.
-  agent(run: AgentRun): Promise<void>;
+  // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.
+  agent(run: AgentRun): Promise<string>;
   // Runs a bash script in the game folder of the clone with no secret. It only runs game npm scripts. Throws on a nonzero exit.
   shell(clone: string, script: string, log: string, env?: Record<string, string>): Promise<void>;
 }
@@ -249,9 +280,16 @@ export interface HostRepo {
   path: string;
   fetch(): Promise<void>; // fetch GitHub, cloning first when the clone is missing
   createBranch(name: string, from: string): Promise<void>; // throws when the branch exists
-  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws.
-  revertIssueMerge(issue: number, branch: string): Promise<boolean>;
+  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws RevertConflictError.
+  // A resolution that fits the branch's tip and the merge to revert replaces the revert. A branch that moved on GitHub meanwhile gets the revert again.
+  revertIssueMerge(issue: number, branch: string, resolutions?: Resolution[]): Promise<boolean>;
+  // Clones the conflict's target into `dir` at the commit the conflict met, with the merge or revert left open for an agent.
+  openConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<void>;
+  // Takes the agent's finished merge or revert from `dir` into the host clone, without pushing it. Throws when the agent left it unfinished.
+  // `diff` holds only what the agent added beyond the two sides, so the stage can check it like any agent diff.
+  closeConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<{ resolution: Resolution; diff: string }>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
+  // Clones into `dir` unless a working clone is there. A broken clone, with no commit checked out, is replaced.
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
   untrackFactoryFiles(dir: string): Promise<string[]>;
@@ -261,6 +299,9 @@ export interface HostRepo {
   // Merges `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
+  // Merges GitHub's copy of `branch` into the work clone when it holds commits the clone lacks, like a member's push. A null commit means nothing to merge.
+  // A conflicted merge stays open, like in mergeBaseIntoWork.
+  mergeBranchIntoWork(dir: string, branch: string): Promise<{ commit: string | null; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
@@ -268,19 +309,36 @@ export interface HostRepo {
   readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
-  merge(steps: MergeStep[]): Promise<void>;
+  // A resolution that fits a step's two tips replaces that step's merge. A target that moved on GitHub meanwhile gets the steps again on its new tip.
+  merge(steps: MergeStep[], resolutions?: Resolution[]): Promise<void>;
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
 }
 
+// A finished merge or revert that an agent made of a conflict. `head` merges `source` into `base`, or reverts the merge `source` on `base`.
+export type Resolution = { base: string; source: string; head: string };
+
 // A merge that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` and `source` are the commits the merge met, which no branch name may name any more.
+// `done` holds the merges of the steps before it, so a later try reuses them and meets the same commits.
 export class MergeConflictError extends Error {
-  constructor(
-    readonly branch: string,
-    readonly into: string,
-    readonly files: string[],
-    reason: string,
-  ) {
-    super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  constructor(readonly step: MergeStep, readonly files: string[], reason: string, readonly base: string, readonly source: string, readonly done: Resolution[] = []) {
+    super(`merge of ${step.branch} into ${step.into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  }
+
+  get branch(): string {
+    return this.step.branch;
+  }
+
+  get into(): string {
+    return this.step.into;
+  }
+}
+
+// A revert that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` is the branch tip the revert met, and `merge` the commit it reverts.
+export class RevertConflictError extends Error {
+  constructor(readonly issue: number, readonly into: string, readonly files: string[], reason: string, readonly base: string, readonly merge: string) {
+    super(`revert of issue #${issue} on ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
   }
 }
 
@@ -314,12 +372,19 @@ export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
 export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
+// A cleanup task merges into the release with no post, since the committee plays it in the candidate. So it skips Testing and only hardens.
+export const isCleanupTask = (labels: string[]): boolean => labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL);
 export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merged, waiting for a ship to main. The issue closes on ship.
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
-export const WASTE_LABEL = 'factory-review'; // the record of one weekly waste review
+export const WASTE_LABEL = 'factory-review'; // the record of one waste review
 export const BUG_LABEL = 'bug';
+// A bug the error service opened from a game error report. It skips votes like a hotfix, but goes to Triage.
+export const ERROR_REPORT_LABEL = 'error-report';
+// The body line that ties an error-report issue to its fingerprint. GitHub search finds the issue by it.
+export const fingerprintLine = (fingerprint: string): string => `Error fingerprint: ${fingerprint}`;
+export type FingerprintIssue = { number: number; state: 'OPEN' | 'CLOSED'; stateReason: string | null; closedAt: string | null };
 // An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
 export const BUNDLED_LABEL = 'bundled';
 export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];
@@ -339,7 +404,7 @@ export const VISUAL_HEADING = '## Visual review findings';
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
-// Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
+// Model routing. Baseline without labels: design Opus, implementation and testing Sonnet. Triage labels trivial and intermediate cards design-sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
 export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.

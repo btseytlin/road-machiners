@@ -16,6 +16,8 @@ export const PAL = {
   stoneGrey: 0x8a847d, // cool grey stones on road shoulders and in desert stone clusters
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
+  scorch: 0x2a2218, // blast-blackened ground in a crater
+  craterRim: 0x7a6242, // dirt a blast threw up around its crater
   desertStone: 0xb8ab9c, // the main stone of a desert stone cluster, a light warm grey
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   brush: [0x7c7a4c, 0x8c8a58, 0xa49c68], // desert scrub stems: dark core, olive body, dry lit tips
@@ -47,6 +49,7 @@ export const PAL = {
   radio: 0x8fe0c8, // crisp scanner blip
   beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls
   flash: 0xfff0a0,
+  brass: 0xc8a048, // spent casings on the ground
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   radioLight: { on: 0xff3020, off: 0x4a1a14 }, // antenna bulb, lit while the truck is on the radio
   truckGlow: 0xffffff, // faint white light over the player truck at night
@@ -55,6 +58,7 @@ export const PAL = {
   hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
   scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
   dirtRoad: 0x8e7d69, // the Fallen Sun's grey-brown dirt roads: about 0.7 of PAL.sand[0]'s value, as reference 3's #6e5e50 roads over its #a08a70 islands, and greyer than the sand
+  shipGlow: 0x6fe4ff, // cold glow of dead ship tech on debris power cells and pod beacons, unlike the reactor's green
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck
