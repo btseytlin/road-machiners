@@ -42,6 +42,6 @@ A job is work that needs the truck parked for a number of turns: a refit, field 
 
 Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. The parts it spends are worth about the value it restores, so an expensive part costs more parts to fix. Machining shortens the job and raises the cap. A full repair to 100% still needs a shop. Scrap armor is the exception and patches to full on the road. Ceramic armor cannot be patched at all, only repaired at a shop. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost.
 
-Auto patch is on by default and toggles with P. Whenever the player truck is parked and idle, it patches the most damaged part with one unit of parts at a time. It leaves alone parts promised to a roadside patch and parts carried for a haul contract.
+Auto patch is on by default and toggles with P. A new game starts with it off, so the player patches the nearly dead engine by hand once. Whenever the player truck is parked and idle, it patches the most damaged part with one unit of parts at a time. It leaves alone parts promised to a roadside patch and parts carried for a haul contract.
 
 NPCs use the same field repair. New NPCs carry up to two units of parts when their loadout has room. A damaged NPC prefers nearby shade, or repairs where it stopped. Low supplies and low fuel come before a repair detour.

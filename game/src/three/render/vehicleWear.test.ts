@@ -4,10 +4,11 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../../data/start';
 import { wheelMounts } from '../../phys/body';
-import { BODY_PARTS, WEAR_LOOK_STEPS } from '../../render/partLooks';
+import { BODY_PARTS, WEAR_LOOK_STEPS, wearLookStep } from '../../render/partLooks';
 import { bodyOf } from '../../sim/body';
 import { playerVehicle } from '../../sim/damage';
 import { mountedParts } from '../../sim/grid';
+import { PLAIN_KIT } from '../../sim/testkit';
 import type { Vehicle } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import { newWorld } from '../../sim/world';
@@ -23,7 +24,7 @@ await loadModels(async (name) => {
 });
 
 function truck(): Vehicle {
-  return playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP));
+  return playerVehicle(newWorld(1337, PLAIN_KIT, TEST_MAP));
 }
 
 function colors(view: VehicleView): string {
@@ -65,6 +66,14 @@ describe('part wear look', () => {
     part.hp = max;
     view.update(v, true);
     expect(colors(view)).toBe(clean);
+  });
+
+  it('draws the new-game truck with a nearly broken engine and a worn body', () => {
+    const v = playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP));
+    const step = (defId: string) => wearLookStep(mountedParts(v).find((p) => p.defId === defId)!);
+    expect(step('stockEngine')).toBe(WEAR_LOOK_STEPS - 1);
+    expect(step('cabPickup')).toBeGreaterThan(0);
+    expect(colors(new VehicleView(v, true))).not.toBe(colors(new VehicleView(truck(), true)));
   });
 
   it('wears the body with the cab part and restores it on repair', () => {

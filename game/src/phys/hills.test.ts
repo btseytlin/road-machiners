@@ -1,6 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PHYSICS } from '../data/physics';
-import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
 import { randRange } from '../sim/rng';
 import { deckAt } from '../sim/bridge';
@@ -12,6 +11,7 @@ import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { PLAIN_KIT } from '../sim/testkit';
 
 beforeAll(async () => {
   await initPhysics();
@@ -19,7 +19,7 @@ beforeAll(async () => {
 
 // minDeckRise: the lowest chassis center over the Canyon Bridge deck surface, in meters.
 function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: number; minDeckRise: number } {
-  let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+  let w = newWorld(1337, PLAIN_KIT, TEST_MAP);
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   w.vehicles[0].pos = { ...start };
   w.player.fuel = 999;
@@ -63,7 +63,7 @@ it('a truck crosses Canyon Bridge on the deck, above the canyon', () => {
 }, budget(60_000));
 
 it('the Bowl crater exit leans the truck without rolling it onto its side', () => {
-  const start = newWorld(1337, START_KITS.standard, TEST_MAP).vehicles[0].pos;
+  const start = newWorld(1337, PLAIN_KIT, TEST_MAP).vehicles[0].pos;
   const result = driveRoute(start, { x: 101, y: 432 });
   expect(result.remaining).toBeLessThan(3);
   // 45 degrees is halfway to a sideways rollover; the crater is rougher than a road crossing.
@@ -72,7 +72,7 @@ it('the Bowl crater exit leans the truck without rolling it onto its side', () =
 
 it('the terrain collider is a heightfield whose surface matches the corner grid', () => {
   const S = PHYSICS.metersPerTile;
-  const w = newWorld(1, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1, PLAIN_KIT, TEST_MAP);
   const t = w.terrain;
   const drive = buildDrive(w);
   const ground = drive.world.getCollider(drive.terrain);
