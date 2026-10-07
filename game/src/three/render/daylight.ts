@@ -217,6 +217,9 @@ const BEAM_RANGE = 70; // meters where the light fades to nothing
 const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
 const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
 const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
+const SHADOW_BEAMS = 4; // beams that cast shadows: the lamp-on trucks nearest the player truck
+const BEAM_SHADOW_MAP = 1024; // texels per side of a beam's shadow map
+const BEAM_SHADOW_BIAS = 0.3; // meters along the surface normal, against acne on ground the beam grazes
 const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
 
 const GLOW_INTENSITY = 0.5;
@@ -248,13 +251,41 @@ export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "pl
   return !sunAt(turn) || lit.some((v) => !v.player && v.on);
 }
 
-// A change in light count recompiles every material. So the lights exist only at night, and through the night
-// the beam pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
+const scratchRot = new THREE.Quaternion();
+const scratchAt = new THREE.Vector3();
+
+// The lamp-on vehicles nearest the truck first. Ties break by chassis id, then by input order.
+export function beamOrder(lit: LitVehicle[], truck: V3): LitVehicle[] {
+  const dist = (v: LitVehicle) => Math.hypot(v.frame.pos.x - truck.x, v.frame.pos.y - truck.y, v.frame.pos.z - truck.z);
+  return lit
+    .flatMap((v, i) => (v.on ? [{ v, i, d: dist(v) }] : []))
+    .sort((x, y) => x.d - y.d || (x.v.chassisId < y.v.chassisId ? -1 : x.v.chassisId > y.v.chassisId ? 1 : 0) || x.i - y.i)
+    .map((e) => e.v);
+}
+
+// A change in light count recompiles every material, and a change in the count of shadowed lights does too. So the
+// lights exist only at night, and through the night both beam pools only grow. Unused beams stay at zero until dawn.
+// The SHADOW_BEAMS nearest lamp-on vehicles take shadowed beams, so props block their light. The rest take plain
+// beams, which shine through props, because each shadowed beam costs a depth pass per frame.
 export class NightLights {
-  private readonly beams: THREE.SpotLight[] = [];
+  private readonly shadowed: THREE.SpotLight[] = [];
+  private readonly plain: THREE.SpotLight[] = [];
   private glow: THREE.PointLight | null = null;
 
   constructor(private readonly scene: THREE.Scene) {}
+
+  // Lights the vehicles within gray vision. truck: the drawn player truck position.
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
+    const lit = world.vehicles
+      .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
+      .map((v) => ({
+        chassisId: v.chassisId,
+        frame: frames[v.id],
+        on: vehicleLampsOn(world, v, lightTurn),
+        player: v.id === world.player.vehicleId,
+      }));
+    this.update(nightLightsWanted(world.turn, lit), truck, lit);
+  }
 
   // truck: the drawn player truck position. lit: vehicles within gray vision.
   update(night: boolean, truck: V3, lit: LitVehicle[]): void {
@@ -262,7 +293,9 @@ export class NightLights {
       this.clear();
       return;
     }
-    this.aimBeams(lit);
+    const order = beamOrder(lit, truck);
+    this.aim(this.shadowed, order.slice(0, SHADOW_BEAMS), true);
+    this.aim(this.plain, order.slice(SHADOW_BEAMS), false);
     if (!this.glow) {
       this.glow = new THREE.PointLight(PAL.truckGlow, GLOW_INTENSITY, GLOW_RANGE, GLOW_DECAY);
       this.scene.add(this.glow);
@@ -271,7 +304,7 @@ export class NightLights {
   }
 
   private clear(): void {
-    for (const beam of this.beams.splice(0)) {
+    for (const beam of [...this.shadowed.splice(0), ...this.plain.splice(0)]) {
       this.scene.remove(beam, beam.target);
       beam.dispose();
     }
@@ -281,22 +314,33 @@ export class NightLights {
     this.glow = null;
   }
 
-  private aimBeams(lit: LitVehicle[]): void {
-    while (this.beams.length < lit.length) {
-      const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
-      this.beams.push(beam);
-      this.scene.add(beam, beam.target);
+  private newBeam(shadows: boolean): THREE.SpotLight {
+    const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
+    if (shadows) {
+      beam.castShadow = true;
+      beam.shadow.mapSize.set(BEAM_SHADOW_MAP, BEAM_SHADOW_MAP);
+      beam.shadow.normalBias = BEAM_SHADOW_BIAS;
     }
-    this.beams.forEach((beam, i) => {
-      const v = lit[i];
-      beam.intensity = v?.on ? BEAM_INTENSITY : 0;
-      if (!v?.on) return;
-      const f = v.frame;
-      const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-      const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
-      const nose = bodyOf(v.chassisId).half.x;
-      beam.position.copy(new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at));
-      beam.target.position.copy(new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at));
+    this.scene.add(beam, beam.target);
+    return beam;
+  }
+
+  private aim(pool: THREE.SpotLight[], vehicles: LitVehicle[], shadows: boolean): void {
+    while (pool.length < vehicles.length) pool.push(this.newBeam(shadows));
+    pool.forEach((beam, i) => {
+      const v = vehicles[i];
+      beam.intensity = v ? BEAM_INTENSITY : 0;
+      if (shadows) beam.shadow.autoUpdate = v !== undefined;
+      if (v) this.aimAt(beam, v);
     });
+  }
+
+  private aimAt(beam: THREE.SpotLight, v: LitVehicle): void {
+    const f = v.frame;
+    const rot = scratchRot.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
+    const at = scratchAt.set(f.pos.x, f.pos.y, f.pos.z);
+    const nose = bodyOf(v.chassisId).half.x;
+    beam.position.set(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at);
+    beam.target.position.set(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at);
   }
 }

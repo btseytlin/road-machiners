@@ -152,6 +152,7 @@ export type WeatherEvent =
       radius: number;
       vel: Vec;
       turnsLeft: number;
+      born: number; // world turn it spawned on; its strength builds from here, see stormStrength()
     }
   | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
@@ -222,6 +223,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  stormExposure: Record<string, number>; // storm id to how far that storm has got into this truck, in (0, 1]; see advanceExposure()
   strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
   stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading
@@ -230,7 +232,7 @@ export type Vehicle = {
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source, for kill credit
+  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
@@ -361,7 +363,8 @@ export type Player = {
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
 // hit: the round landed on its target. struck: the truck it landed on, or null for the ground. hits: its direct
-// hits on that truck. blast: the part hits its explosion dealt, per truck.
+// hits on that truck. blast: the part hits its explosion dealt, per truck. burst: the ground point in tiles where an
+// exploding round burst, or null for a round that struck a truck or does not explode. Guard rounds never burst.
 export type ShotRound = {
   hit: boolean;
   crit: boolean;
@@ -369,6 +372,7 @@ export type ShotRound = {
   struck: string | null;
   hits: PartHit[];
   blast: VehicleHits[];
+  burst: Vec | null;
 };
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
@@ -420,6 +424,10 @@ export type GameEvent =
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
+// A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
+// dug again. See src/sim/craters.ts.
+export type Crater = { id: string; pos: Vec; radius: number; turn: number };
+
 export type World = {
   seed: number;
   rngState: number;
@@ -431,6 +439,7 @@ export type World = {
   vehicles: Vehicle[];
   obstacles: Obstacle[];
   broken: BrokenProp[]; // props out of obstacles until they grow back; a prop is in one list or the other
+  craters: Crater[]; // blast craters until they fade out of sight; see src/sim/craters.ts
   salvage: SalvageStock[];
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file
