@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { writeFileSync } from 'node:fs';
 import { readState } from '../state';
 import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, OUT_DIR, ROUTING_MARK, WONT_DO_LABEL, type Ctx } from '../types';
@@ -27,7 +28,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(issue, result.reason);
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'triage-wont-do');
 }
 
 async function ready(ctx: Ctx, issue: number, result: Ready): Promise<void> {
@@ -47,7 +48,7 @@ async function pass(ctx: Ctx, issue: number, reason: string, hotfix: boolean, ro
   } else {
     await ctx.github.comment(issue, `Triage passed: ${reason}\n\n${note}`);
   }
-  await ctx.github.move(issue, 'Design');
+  await moveCard(ctx, issue, 'Design', 'accepted', hotfix ? 'hotfix' : undefined);
 }
 
 // Triage picks models by task complexity: trivial gets Sonnet at design (label design-sonnet), hard gets Opus at implementation (label implementation-opus), anything between keeps the default.

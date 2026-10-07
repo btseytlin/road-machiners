@@ -2,7 +2,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { join } from 'node:path';
 import { withLockSync } from './lock';
 import { transcriptUsage } from './transcript';
-import type { JobStage, Route, TokenPrice } from './types';
+import type { CardFlow, CardStep } from './card-events';
+import type { Column, JobStage, Route, TokenPrice } from './types';
 import { reportAttempt, type Observation } from './observability';
 
 // One agent run: its model, its cost in dollars and its run time.
@@ -13,14 +14,15 @@ export type AgentUsage = { model: string; costUsd: number; minutes: number; mode
 export type OpenRun = { model: string; projects: string; sessionId: string; resumed: boolean; startedAt: string };
 export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout' | 'stopped';
 
-// One line per ended job and per routed committee reply. The waste review derives queue wait and reruns from these lines.
+// One line per ended job, per routed committee reply and per card move. The waste review derives queue wait and reruns from these lines.
 // `peakGb` is the highest memory any container of the job used. A job whose containers never ended normally has none.
 export type LedgerLine =
   | Observation
   | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; peakGb?: number; retryOf?: string | null }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
   | { kind: 'post'; id: number; channel?: string; text: string; at: string }
-  | { kind: 'control'; action: string; issue: number | null; by: string; reason: string; at: string };
+  | { kind: 'control'; action: string; issue: number | null; by: string; reason: string; at: string }
+  | { kind: 'card'; issue: number; step: CardStep; to: Column; at: string; flow?: CardFlow };
 
 // An append is one small write, so a writer that waits this long found a stuck lock.
 const LEDGER_LOCK_MS = 30_000;

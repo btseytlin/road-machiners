@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs';
+import { cardFlow, moveCard } from '../card-events';
 import { deployDev } from '../deploy';
 import { appendLedger } from '../ledger';
 import { adoptReplyMedia, dropReplyMedia, replyMediaLines } from '../reply-media';
@@ -39,7 +40,7 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
   if (base !== HOTFIX_BASE && !(String(issue) in readState(ctx.statePath).approvedResolving)) return harden(ctx, issue, by, base);
   const message = await mergeOrResolve(ctx, issue, item.title, by, base);
   if (message === null) return;
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'merged', cardFlow(item.labels));
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
@@ -52,7 +53,7 @@ async function harden(ctx: Ctx, issue: number, by: string, base: string): Promis
   forgetPosts(ctx, issue, true);
   updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
   await ctx.github.comment(issue, `Approved by ${by} in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into ${base} by itself, with no new post.`);
-  await ctx.github.move(issue, 'Testing');
+  await moveCard(ctx, issue, 'Testing', 'approved');
   ctx.log('approve', issue, `approved by ${by}, back to Testing to harden`);
 }
 
@@ -67,7 +68,7 @@ async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string
     forgetPosts(ctx, issue, true);
     updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
     await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Testing merges ${base} again and resolves the conflict. Then the approval by ${by} merges it, with no new post.`);
-    await ctx.github.move(issue, 'Testing');
+    await moveCard(ctx, issue, 'Testing', 'conflict');
     ctx.log('approve', issue, `conflict with ${base}, back to Testing to resolve`);
     return null;
   }
@@ -111,7 +112,7 @@ export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: s
   appendLedger(ctx.cfg.home, { kind: 'route', issue, route, by, at: ctx.now().toISOString() });
   if (route === 'answer') return false;
   if (played !== null) updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));
-  await ctx.github.move(issue, route === 'patch' ? 'Implementation' : 'Design');
+  await moveCard(ctx, issue, route === 'patch' ? 'Implementation' : 'Design', route);
   forgetPosts(ctx, issue, true);
   return String(issue) in state.pendingApprovals;
 }
@@ -131,16 +132,16 @@ function playedBuild(state: FactoryState, issue: number): string {
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
-  await closeCard(ctx, issue, `Denied by ${by} in the committee chat.`);
+  await closeCard(ctx, issue, `Denied by ${by} in the committee chat.`, 'denied');
 }
 
 // Drops the card from the pipeline for good: closed as not planned, in Done, with its bundle sent back to triage.
-export async function closeCard(ctx: Ctx, issue: number, comment: string): Promise<void> {
+export async function closeCard(ctx: Ctx, issue: number, comment: string, step: 'denied' | 'dropped'): Promise<void> {
   await ctx.github.comment(issue, comment);
   if ((await ctx.github.pullRequestFor(BRANCH(issue))) !== null) await ctx.github.closePullRequest(BRANCH(issue), comment);
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', step);
   forgetPosts(ctx, issue, true);
   await releaseBundle(ctx, issue, 'was denied');
 }

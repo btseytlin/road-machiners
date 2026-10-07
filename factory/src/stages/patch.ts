@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { readApproval } from '../clone-checks';
 import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, GAME_DIR, TASK_FILE, type Ctx } from '../types';
@@ -24,14 +25,14 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await requireBaseMerged(ctx, issue, base, merged);
   endPatch(ctx, issue);
   setPhase(ctx, issue, 'checks');
-  await ctx.github.move(issue, 'Testing');
+  await moveCard(ctx, issue, 'Testing', 'patched');
 }
 
 // The agent found that the reply changes the plan. Design reads its reason next to the committee feedback.
 async function toDesign(ctx: Ctx, issue: number, reason: string): Promise<void> {
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nThe patch found that this reply needs a new plan:\n\n${reason.trim()}`);
   endPatch(ctx, issue);
-  await ctx.github.move(issue, 'Design');
+  await moveCard(ctx, issue, 'Design', 'patch-replan');
 }
 
 function endPatch(ctx: Ctx, issue: number): void {

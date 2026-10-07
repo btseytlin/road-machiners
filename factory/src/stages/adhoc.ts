@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { ARTIFACT_DIR, collectArtifacts, holdArtifacts, releaseArtifacts } from '../adhoc-artifacts';
@@ -38,7 +39,7 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   }
   await ctx.github.comment(issue, report);
   await ctx.github.close(issue, 'completed');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'reported', 'adhoc');
   updateState(ctx.statePath, (state) => {
     const adhocReplies = { ...state.adhocReplies };
     delete adhocReplies[String(issue)];

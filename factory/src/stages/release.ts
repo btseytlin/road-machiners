@@ -1,3 +1,4 @@
+import { addCard } from '../card-events';
 import { updateState } from '../state';
 import { MAINTENANCE_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, type Ctx } from '../types';
 import { fillPrompt } from './common';
@@ -28,10 +29,10 @@ export async function release(ctx: Ctx): Promise<void> {
   const tracking = await ctx.github.createIssue(`Release ${day}`, body, [RELEASE_LABEL]);
   // Set at once, so a failure below still names this issue and the tick sees an open release.
   updateState(ctx.statePath, (state) => ({ ...state, release: { issue: tracking, branch, day, postId: null, removed: [] } }));
-  await ctx.github.addCard(tracking, 'Approval');
+  await addCard(ctx, tracking, 'Approval', 'release');
   for (const task of CLEANUP_TASKS) {
     const n = await ctx.github.createIssue(`${task.title} (release ${day})`, fillPrompt(task.prompt, {}), [RELEASE_TASK_LABEL, MAINTENANCE_LABEL]);
-    await ctx.github.addCard(n, 'Design');
+    await addCard(ctx, n, 'Design', 'release-task');
   }
   ctx.log('release', tracking, `cut ${branch} with ${features.length} features`);
 }

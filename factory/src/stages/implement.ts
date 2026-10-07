@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { BRANCH, GAME_DIR, TASK_FILE, type Ctx } from '../types';
 import { agentHome, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
@@ -13,5 +14,5 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
   if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
   await guardAndPush(ctx, issue, base, 'implement');
-  await ctx.github.move(issue, 'Testing');
+  await moveCard(ctx, issue, 'Testing', 'built');
 }

@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { deployDev } from '../deploy';
@@ -93,7 +94,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   queueIncidents(ctx, bugs);
   await ctx.github.comment(issue, `Shipped by ${by} in the committee chat. Release ${release.day} is on main and itch.io.`);
   await ctx.github.close(issue, 'completed');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'shipped', 'release');
   updateState(ctx.statePath, (state) => {
     const builds = { ...state.builds };
     delete builds[String(issue)];

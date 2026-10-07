@@ -1,3 +1,4 @@
+import { cardFlow, moveCard } from '../card-events';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readApproval, type Approval } from '../clone-checks';
 import { readShown, type Shown } from '../evidence';
@@ -76,7 +77,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   recordBuild(ctx.statePath, issue, build);
   if (approval !== null) await post(ctx, issue, approval, readShown(home, build), url, base, phase === 'post');
   clearPhase(ctx, issue);
-  await ctx.github.move(issue, 'Approval');
+  await moveCard(ctx, issue, 'Approval', approver === null ? 'posted' : 'hardened', cardFlow(item.labels));
   if (approver !== null) queueMerge(ctx, issue, approver);
 }
 

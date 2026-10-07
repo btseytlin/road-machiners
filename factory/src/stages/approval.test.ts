@@ -218,6 +218,7 @@ describe('routeFeedback', () => {
     expect(readLedger(home, new Date(0))).toEqual([
       { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
       { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+      { kind: 'card', issue: 7, step: 'patch', to: 'Implementation', at: '2026-09-30T10:00:00.000Z' },
     ]);
   });
 
@@ -301,7 +302,7 @@ describe('deny', () => {
 describe('closeCard', () => {
   it('drops a card from any column with the given comment', async () => {
     column = 'Testing';
-    await closeCard(fakeCtx(), 7, 'Dropped by Ann: dead end');
+    await closeCard(fakeCtx(), 7, 'Dropped by Ann: dead end', 'dropped');
     expect(calls).toEqual([
       'comment 7 Dropped by Ann: dead end',
       'addLabel 7 wont-do',
