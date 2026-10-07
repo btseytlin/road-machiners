@@ -532,13 +532,14 @@ describe('bounty talk', () => {
     expect(w.player.money).toBe(0);
   });
 
-  it('a driver that gave up with the perk pays once, though the player then wrecks it', () => {
+  it('a driver that gave up with the perk fulfils the bounty once, though the player then wrecks it', () => {
     const { w: start, npc } = beggar(['bountyTalk']);
     const gaveUp = standsDown(start, npc.id);
-    expect(gaveUp.player.money).toBe(bounty.reward);
-    const w = wreckGivenUp(update(gaveUp, (d) => { d.player.contracts = [{ ...bounty, id: 'ct-b2' }]; }), npc.id);
-    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'done')).toEqual([]);
-    expect(w.player.money).toBe(bounty.reward);
+    expect(gaveUp.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    const w = wreckGivenUp(gaveUp, npc.id);
+    expect(w.events.filter((e) => e.t === 'contract')).toEqual([]);
+    expect(w.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    expect(w.player.money).toBe(0);
   });
 
   it('pays nothing when the player gives up', () => {
