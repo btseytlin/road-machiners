@@ -28,7 +28,7 @@ import { itemMass } from '../mass';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
-import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, downedHere, needsSearch, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
 import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
@@ -640,7 +640,7 @@ function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-// The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
+// The scavenger loots what it searched, searches the nearest known stock that needs a search, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
 // sellCargo.
@@ -1001,11 +1001,11 @@ function postAfterNearest(pos: Vec): Post {
 
 // ---- Salvage.
 
-// Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// Stocks the player knows of that need a search, since they hide units or it never searched them: at a discovered
+// site, or a wreck on explored ground. So the bot searches a stock again while units stay hidden, as NPCs do.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || !needsSearch(world, stock)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -1255,7 +1255,7 @@ function stripForRepair(o: Orders, partId: string): boolean {
 
 function canStrip(o: Orders, partId: string): boolean {
   const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
-  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(o.me, item.part);
 }
 
 // ---- Driving.

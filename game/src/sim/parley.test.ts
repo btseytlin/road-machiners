@@ -12,7 +12,7 @@ import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, standDownTo, yieldTo } from './parley';
-import { hasCargo, lootBlocker, looterOf } from './salvage';
+import { hasCargo, lootBlocker, looterOf, emptyHidden } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -422,7 +422,7 @@ describe('warning a looter off', () => {
   // The parked player at 30,30 beside a road wreck that a scavenger parked on its other side searches.
   function contested(): { w: World; npc: Vehicle; wreckId: string } {
     const w = quietWorld();
-    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);

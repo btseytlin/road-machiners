@@ -5,6 +5,7 @@
 //   contact circle and travels out, past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
 //   shadow behind a ridge, runs faster downwind, and wobbles a little. So fronts bend around hills.
 // - Radio: a small crisp blip, since a scanner fixes the position.
+// - Flare: the same blip in red, at the burning flare or around a truck seen launching one. Flares are drawn by hazards.ts.
 // Everything here is render-only. The sim's contact circle is the only claim about where the vehicle is.
 
 import * as THREE from 'three';
@@ -90,8 +91,7 @@ export class ContactsView {
       const hearsSound = SHOW_SOUND_WAVES && c.sources.includes('sound');
       m.fronts.forEach((f) => (f.line.visible = hearsSound));
       if (hearsSound) m.fronts.forEach((f, k) => this.advanceFront(terrain, c, listener, f, dt, (nowMs - m.burstMs) / 1000 >= k * WAVE.stagger));
-      m.blip.visible = c.sources.includes('radio');
-      if (m.blip.visible) m.blip.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S + LIFT, c.center.y * S);
+      placeBlip(terrain, m.blip, c);
     }
   }
 
@@ -200,6 +200,22 @@ function makeBlip(): THREE.Group {
   const group = new THREE.Group();
   group.add(ring, dot);
   return group;
+}
+
+// The blip of a contact a scanner or a flare shows, in the scanner's color when it has both. Hidden for any other.
+function placeBlip(terrain: Terrain, blip: THREE.Group, c: Contact): void {
+  const color = blipColor(c);
+  blip.visible = color !== null;
+  if (color === null) return;
+  blip.traverse((o) => {
+    if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setHex(color);
+  });
+  blip.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S + LIFT, c.center.y * S);
+}
+
+function blipColor(c: Contact): number | null {
+  if (c.sources.includes('radio')) return PAL.radio;
+  return c.sources.includes('flare') ? PAL.flare.marker : null;
 }
 
 function disposeMarker(m: Marker): void {
