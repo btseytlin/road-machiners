@@ -251,6 +251,7 @@ export interface HostRepo {
   // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws.
   revertIssueMerge(issue: number, branch: string): Promise<boolean>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
+  // Clones into `dir` unless a working clone is there. A broken clone, with no commit checked out, is replaced.
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
   untrackFactoryFiles(dir: string): Promise<string[]>;

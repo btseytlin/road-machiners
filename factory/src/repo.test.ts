@@ -282,6 +282,26 @@ describe('work clones', () => {
     expect(readFileSync(join(work, 'game', '.factory-tasks', 'issue-10.md'), 'utf8')).toBe('# plan\n');
   });
 
+  it('clones again over a clone cut short with no commit checked out, and keeps a working clone as it is', async () => {
+    const { home, repo, commit } = await setup();
+    await commit('factory/issue-12', 'f.txt', 'twelve\n');
+    await repo.fetch();
+    const broken = join(home, 'work', 'issue-12');
+    const bare = join(home, 'work', 'issue-13');
+    for (const dir of [broken, bare]) {
+      mkdirSync(join(dir, 'game', '.factory'), { recursive: true });
+      writeFileSync(join(dir, 'game', '.factory', 'issue.md'), 'left over\n');
+    }
+    await git(broken, 'init', '--quiet');
+    await repo.prepareWorkClone('factory/issue-12', 'dev', broken);
+    await repo.prepareWorkClone('factory/issue-13', 'dev', bare);
+    expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('twelve\n');
+    expect(readFileSync(join(bare, 'f.txt'), 'utf8')).toBe('base\n');
+    writeFileSync(join(broken, 'f.txt'), 'local work\n');
+    await repo.prepareWorkClone('factory/issue-12', 'dev', broken);
+    expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('local work\n');
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');

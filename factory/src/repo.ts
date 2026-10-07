@@ -134,7 +134,13 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (lines(await git(['ls-remote', '--heads', 'origin', branch])).length > 0) await git(['push', 'origin', '--delete', branch]);
     },
     async prepareWorkClone(branch, base, dir) {
-      if (existsSync(dir)) return;
+      // A clone cut short, like by a full disk, has no commit checked out. It holds no work, so it is cloned again.
+      // The note goes to the job log, so the replacement is on record.
+      if (existsSync(dir)) {
+        if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return;
+        console.error(`${dir} has no commit checked out, so it is cloned again`);
+        rmSync(dir, { recursive: true, force: true });
+      }
       mkdirSync(dir, { recursive: true });
       await gitIn(dir, ['init', '--quiet']);
       await gitIn(dir, ['remote', 'add', 'origin', path]);
