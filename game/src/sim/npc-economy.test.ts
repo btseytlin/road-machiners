@@ -30,7 +30,7 @@ describe('NPC transactions', () => {
     const npc = addVehicle(w, 'traders', 'hauler', [], sitePads(REGION.towns[0])[0]);
     npc.resources!.money = 1;
     const before = structuredClone(npc);
-    expect(() => economy.tradeGoods(w, npc, 'bowl', 'scrap', 2, 'buy')).toThrow('money');
+    expect(() => economy.tradeGoods(w, npc, 'bowl', 'scrap', 2, 'buy')).toThrow('Not enough');
     expect(npc).toEqual(before);
   });
 
