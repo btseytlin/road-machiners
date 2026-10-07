@@ -176,7 +176,11 @@ export type FactoryState = {
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  held: Record<string, Hold>; // issue number -> the hold `factory pause-card` put on its card. The tick starts no job on the issue until `resume-card` lifts it.
 };
+
+// A card a member or Hermes held. `stage` is the job the hold stopped, which resumes in its sessions, or null when none ran.
+export type Hold = { by: string; reason: string; at: string; stage: JobStage | null };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 

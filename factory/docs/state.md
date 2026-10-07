@@ -45,6 +45,7 @@ Fields that belong to one position:
 Flags hold on any position:
 
 - `factory-stuck`: a job failed. The card waits in its column until `retry N` removes the label.
+- Held: `held` in `state.json` holds who held the card, why, when, and the stage of the job the hold stopped. The tick starts no job on the issue, a queued approval included, until `resume-card N` lifts it. A hold is no failure, so the card takes no label and Hermes gets no incident. `move` keeps it but forgets the stopped stage, since the move clears the sessions. `move N done` drops it.
 - `needs-info`: the author owes answers. The tick removes it when someone answers, or when `FACTORY_NEEDS_INFO_HOURS` pass since the questions.
 - Approved: the card merges after hardening. It shows as `approvedResolving` or a queued approval.
 - Routing labels `design-sonnet` and `implementation-opus`, `open-network`, `hotfix`, `adhoc`, `release-task` and `bundled` change how the card runs, never where it stands.
@@ -100,6 +101,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 - An open release whose tracking card is missing.
 - A pending ship with no current candidate post.
 - A candidate post of a commit the playtest did not pass.
+- A held card in Done, a held card with a running job, or a held issue off the board. The line names who held it and why.
 
 `factory audit` skips every card with a running job, because the job owns the card mid-step. A stage changes the column and the post before its job leaves `jobs`, so drift shows for seconds. `card N` still prints all drift lines of the card, and adds a line that a job is running.
 
@@ -118,6 +120,10 @@ Write, each with `--by` and `--reason`:
 - `remove N` takes a feature out of the release.
 - `drop <approval|removal|ship|change|incident> <id>` drops one queued entry.
 - `merge-change <id>` merges a factory change PR into `main`.
+- `pause-card N` holds a card. It stops the card's job, by its process group and the containers with its job id, and leaves every other job running. The job's work clone and agent sessions stay, the issue goes in `interrupted` with its stage marked to resume, and its cap slot frees. Its ledger line has the outcome `held`. A job that ended before the kill keeps its own line. It refuses a card off the board, in Done, already held, the release tracking card, and a card whose approve or remove job runs.
+- `resume-card N` lifts the hold. The next tick runs the card's stage, and a job of the stopped stage continues its agents' sessions with `--resume`. It needs no board, so it also lifts a hold whose card is gone.
+
+`card N`, `cards` and `status` show each hold with who held it and why. The public dashboard shows only the wait reason `held`.
 
 Each target of `move` and `merge` has preconditions:
 
@@ -131,6 +137,6 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `--by` is a committee member, by Telegram id, GitHub login or name, or `hermes`. Hermes passes the Telegram id of the member whose message ordered the action. Its `factory_sender` tool returns that id, since a Telegram display name matches no member.
 
-`hermes` may send mechanical orders: `move` to any position except `harden`, `merge` and `move` to `harden` of a card the committee approved, `cut`, `drop` and `retry`. A member must send the product decisions: `ship`, `remove`, `merge-change`, and `merge` or `move` to `harden` of a card the committee has not approved. The CLI and the tick both refuse a gated order from `hermes`.
+`hermes` may send mechanical orders: `move` to any position except `harden`, `merge` and `move` to `harden` of a card the committee approved, `cut`, `drop`, `retry`, `pause-card` and `resume-card`. A member must send the product decisions: `ship`, `remove`, `merge-change`, and `merge` or `move` to `harden` of a card the committee has not approved. The CLI and the tick both refuse a gated order from `hermes`.
 
 Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.
