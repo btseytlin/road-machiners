@@ -1654,6 +1654,7 @@ canvas.view {
 
 .top-left {
   position: absolute;
+  z-index: 3;
   left: 14px;
   top: 14px;
   display: flex;
