@@ -18,6 +18,8 @@ import { decodeMap, type BakedMap } from '../sim/terrain';
 import type { World } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
+import { BOOT_TEXT } from '../ui/boot-progress';
+import { BootScreen } from '../ui/boot-screen';
 import { uiRoot } from '../ui/dom';
 import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
@@ -48,9 +50,10 @@ async function fetchMap(): Promise<BakedMap> {
 // migrate it or start over.
 async function bootWorld(): Promise<World> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
-  if (request === 'new') return freshRun();
+  if (request === 'new') return boot.track('world', freshRun, BOOT_TEXT.newGame);
   const slot = request ?? newestSlot(window.localStorage, SAVE_KEY, CONFIG.saveSlots);
-  return slot === null ? newGameSaved() : bootSlot(slot);
+  if (slot === null) return boot.track('world', newGameSaved, BOOT_TEXT.newGame);
+  return boot.track('world', () => bootSlot(slot), BOOT_TEXT.loadSave);
 }
 
 async function bootSlot(slot: SlotId): Promise<World> {
@@ -79,10 +82,10 @@ function newGameSaved(): World {
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
   const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  if ((await boot.aside(() => chooseSaveFate(error.message, canMigrate))) === 'new') return freshRun();
   const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
-  await showCarryReport(rescued.report);
+  await boot.aside(() => showCarryReport(rescued.report));
   return rescued.world;
 }
 
@@ -91,25 +94,31 @@ function newGame(): World {
 }
 
 installCrashScreen();
+const boot = BootScreen.adopt();
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
-const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
-const map = await fetchMap();
+const loading = Promise.all([
+  boot.track('physics', initPhysics()),
+  boot.track('models', loadModels(undefined, boot.count('models'))),
+  boot.track('sounds', loadBank(mixer.ctx, SOUNDS, boot.count('sounds'))),
+]);
+const map = await boot.track('map', fetchMap());
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
 const world = await bootWorld();
-groundTexture(world);
+await boot.track('ground', () => groundTexture(world));
 const [, , bank] = await loading;
 // UI code may use Math.random(), and the radio changes no rule.
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
 const overlay = element('overlay');
-const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);
+const game = await boot.track('scene', () => new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio));
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
 performance.mark('roam:ready');
+void boot.finish();
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {
   (window as any).__ROAM__ = game;
