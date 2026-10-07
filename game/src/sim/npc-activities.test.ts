@@ -925,6 +925,8 @@ describe('NPC activities', () => {
       raider.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'long-term goal' }];
       chooseOn(w, raider, player.id, player.pos, 'flee', true);
       w.turn += NPC_BEHAVIOR.fleeCalmTurns + 2;
+      thinkNpc(w, raider);
+      w.turn += 1;
       return { w, player, raider };
     }
 
@@ -943,6 +945,17 @@ describe('NPC activities', () => {
       forceOption('hostileSeen', 'fight');
       thinkNpc(w, raider);
       expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id, reason: 'avoid a truck it ran from' });
+    });
+
+    // A raider parked at the end of its run with the truck still in view ran and stopped every turn.
+    it('is not run from again while it stays in sight after a run that went as far as it could', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      thinkNpc(w, raider);
+      raider.brain!.goals.pop();
+      w.turn += 1;
+      thinkNpc(w, raider);
+      expect(topGoal(raider)?.kind).toBe('raid');
     });
 
     it('is judged fresh once forgotten', () => {

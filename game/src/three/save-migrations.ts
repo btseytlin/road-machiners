@@ -372,6 +372,18 @@ function withTracks_21_22(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(tracked), removed: (world.removed as SavedJson[]).map(tracked) };
 }
 
+// A track records the turn its truck came in sight. A saved track gets null, as out of sight, so the first turn after
+// loading sets it for a truck in sight.
+function withSeenSince_22_23(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const tracks = Object.fromEntries(Object.entries(brain.tracks as Record<string, SavedJson>).map(([id, t]) => [id, { ...t, seenSince: null }]));
+    return { ...v, brain: { ...brain, tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -456,6 +468,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withFightWorn_20_21,
   // 21 to 22: a driver tracks the hostiles it decided on, and a fight reads its target's last place from the track.
   withTracks_21_22,
+  // 22 to 23: a track records the turn its truck came in sight, null after loading.
+  withSeenSince_22_23,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

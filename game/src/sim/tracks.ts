@@ -18,7 +18,13 @@ export function trackOf(vehicle: Vehicle, id: string): Track | undefined {
 // sight. A choice made on a sound alone leaves the sighting roll for when the truck comes in sight.
 export function chooseOn(world: World, vehicle: Vehicle, id: string, at: Vec, choice: TrackChoice, inSight: boolean): void {
   const known = trackOf(vehicle, id);
-  tracksOf(vehicle)[id] = { at: { ...at }, turn: world.turn, sighted: inSight || known?.sighted === true, choice, chosenInSight: inSight };
+  const seenSince = known ? known.seenSince : inSight ? world.turn : null;
+  tracksOf(vehicle)[id] = { at: { ...at }, turn: world.turn, sighted: inSight || known?.sighted === true, seenSince, choice, chosenInSight: inSight };
+}
+
+// Whether the truck came in sight this turn, after a time out of sight or untracked.
+export function comesInSight(world: World, track: Track): boolean {
+  return track.seenSince === world.turn;
 }
 
 // Where the driver senses a truck now: in sight, else at the center of its contact. Undefined when it senses neither.
@@ -31,6 +37,7 @@ export function sensedAt(world: World, vehicle: Vehicle, id: string, contacts: C
 // Tracks every truck the driver sees or detects now, and forgets the ones it has not sensed for their memory.
 export function senseTracks(world: World, vehicle: Vehicle, seen: Vehicle[], contacts: Contact[]): void {
   const tracks = tracksOf(vehicle);
+  loseSight(tracks, seen);
   for (const v of seen) sense(world, tracks, v.id, v.pos, true);
   for (const c of contacts) sense(world, tracks, c.vehicleId, c.center, false);
   for (const [id, track] of Object.entries(tracks)) {
@@ -38,15 +45,24 @@ export function senseTracks(world: World, vehicle: Vehicle, seen: Vehicle[], con
   }
 }
 
+// A tracked truck out of sight now has no turn it came in sight.
+function loseSight(tracks: Record<string, Track>, seen: Vehicle[]): void {
+  const inSight = new Set(seen.map((v) => v.id));
+  for (const [id, track] of Object.entries(tracks)) {
+    if (!inSight.has(id)) track.seenSince = null;
+  }
+}
+
 function sense(world: World, tracks: Record<string, Track>, id: string, at: Vec, inSight: boolean): void {
   const known = tracks[id];
   if (!known) {
-    tracks[id] = { at: { ...at }, turn: world.turn, sighted: inSight, choice: null, chosenInSight: false };
+    tracks[id] = { at: { ...at }, turn: world.turn, sighted: inSight, seenSince: inSight ? world.turn : null, choice: null, chosenInSight: false };
     return;
   }
   known.at = { ...at };
   known.turn = world.turn;
   known.sighted ||= inSight;
+  if (inSight) known.seenSince ??= world.turn;
 }
 
 function memoryOf(track: Track): number {

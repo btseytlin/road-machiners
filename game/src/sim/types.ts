@@ -213,11 +213,11 @@ export type NpcBrain = {
     memories: Memory[];
 };
 
-// A truck a driver senses: where and on which turn it last saw or heard it, and whether it has seen it while
-// tracked. choice is what the driver chose on it as a hostile, null before a choice, and chosenInSight whether it
-// chose with the truck in sight. See src/sim/tracks.ts.
+// A truck a driver senses: where and on which turn it last saw or heard it, whether it has seen it while tracked, and
+// the turn it came in sight, null while out of sight. choice is what the driver chose on it as a hostile, null before
+// a choice, and chosenInSight whether it chose with the truck in sight. See src/sim/tracks.ts.
 export type TrackChoice = 'keep' | 'fight' | 'flee' | 'investigate';
-export type Track = { at: Vec; turn: number; sighted: boolean; choice: TrackChoice | null; chosenInSight: boolean };
+export type Track = { at: Vec; turn: number; sighted: boolean; seenSince: number | null; choice: TrackChoice | null; chosenInSight: boolean };
 
 // A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
 // prices: a shop's standing pressure for each good it trades, when the driver did business there.

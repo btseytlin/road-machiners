@@ -28,6 +28,7 @@ import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import FORMAT_2_19 from './save-fixtures/format-2-19.json';
 import FORMAT_2_20 from './save-fixtures/format-2-20.json';
 import FORMAT_2_21 from './save-fixtures/format-2-21.json';
+import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -456,6 +457,19 @@ describe('save migration 21 to 22', () => {
           brain: { noticed: {}, goals: [untimedRobbery], tracks: { 'npc-5': { at: { x: 10, y: 12 }, turn: 790, sighted: true, choice: 'fight', chosenInSight: true } } },
         },
       ],
+    });
+  });
+});
+
+describe('save migration 22 to 23', () => {
+  it('marks every track out of sight and keeps every other field', () => {
+    const next = MIGRATIONS[22](FORMAT_2_22) as typeof FORMAT_2_22;
+    const [player, runner] = FORMAT_2_22.vehicles;
+    const tracks = runner.brain!.tracks;
+
+    expect(next).toEqual({
+      ...FORMAT_2_22,
+      vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
     });
   });
 });

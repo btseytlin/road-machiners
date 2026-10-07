@@ -32,13 +32,13 @@ import { vehicleById } from './damage';
 import { answersHoldUp, judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
-import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
+import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Track, Vehicle, World } from './types';
 import { canUseSite, isTerritory, nearestPad, type Site } from './sites';
 import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, pointsAway, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { chooseOn, sensedAt, senseTracks, trackOf } from './tracks';
+import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
@@ -625,17 +625,18 @@ function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle
   return option;
 }
 
-// A hostile in sight that the driver ran from, it runs from again with no roll, unless it already runs. One it chose
-// on in sight gets no roll. Any other gets the sighting roll, also one the driver only heard so far.
+// A hostile the driver ran from, it runs from again with no roll when the truck comes back in sight, unless it already
+// runs. A driver that ran as far as it could with the truck still in sight stays put. One it chose on in sight gets
+// no roll. Any other gets the sighting roll, also one the driver only heard so far.
 function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle): DecisionOptions['hostileSeen'] | null {
   const track = trackOf(vehicle, enemy.id);
-  if (track?.choice === 'flee') return runsAgain(vehicle);
+  if (track?.choice === 'flee') return runsAgain(world, vehicle, track);
   if (track?.chosenInSight) return null;
   return rollOnHostile(world, vehicle, 'hostileSeen', enemy.id, enemy.pos);
 }
 
-function runsAgain(vehicle: Vehicle): 'flee' | null {
-  return topGoal(vehicle)?.kind === 'flee' ? null : 'flee';
+function runsAgain(world: World, vehicle: Vehicle, track: Track): 'flee' | null {
+  return comesInSight(world, track) && topGoal(vehicle)?.kind !== 'flee' ? 'flee' : null;
 }
 
 // The driver's first choice on a hostile it hears, or null when it holds a choice on the truck already.
