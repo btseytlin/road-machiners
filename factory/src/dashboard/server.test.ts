@@ -19,7 +19,7 @@ async function startServer(options: { refreshMs?: number; padding?: string } = {
   let refreshes = 0;
   const collector = {
     refreshLocal: async () => { refreshes++; }, refreshGithub: async () => undefined,
-    getSnapshot: () => ({ generatedAt: '2026-01-01', operations: { status: 'ok', value: { jobs: [] } }, padding: options.padding }) as unknown as Snapshot,
+    getSnapshot: () => ({ generatedAt: '2026-01-01', operations: { status: 'ok', value: { jobs: [] } }, github: { status: 'unavailable', value: null, at: null }, padding: options.padding }) as unknown as Snapshot,
   } as unknown as SnapshotCollector;
   const server = new DashboardServer(collector, assets, { refreshMs: options.refreshMs ?? 60_000, githubRefreshMs: 60_000 });
   servers.push(server);
@@ -39,6 +39,9 @@ describe('public dashboard HTTP', () => {
     const snapshot = await fetch(`${url}/factory/api/snapshot`);
     const data = await snapshot.json() as Snapshot;
     expect(data.operations.value?.jobs).toEqual([]);
+    const badge = await fetch(`${url}/factory/api/badges/release`);
+    expect(await badge.json()).toMatchObject({ schemaVersion: 1, label: 'next release', isError: true });
+    expect((await fetch(`${url}/factory/api/badges/unknown`)).status).toBe(404);
   });
   it('rejects mutations, unknown assets, and traversal without leaking files', async () => {
     const { url } = await startServer();
