@@ -94,7 +94,7 @@ Details: [NPCs](wiki/mechanics/npcs.md), [NPC tables](wiki/npcs.md).
 
 ## Social
 
-Every truck has a radio, as in Space Rangers 2. Talk is the main way the wasteland resolves things: directions, trade, tows, patches, aid, demands, truces and mercy. Most fights can end in a deal instead of a wreck. Helping others pays in experience and in goodwill. Robbing pays in cargo and in feuds. A driver's traits decide its voice and what it will talk about.
+Every truck has a radio, as in Space Rangers 2. Talk is the main way the wasteland resolves things: directions, trade, tows, patches, aid, demands, truces and mercy. Most fights can end in a deal instead of a wreck. Drivers argue over loot, and anyone can warn anyone off a wreck. Helping others pays in experience and in goodwill. Robbing pays in cargo and in feuds. A driver's traits decide its voice and what it will talk about.
 
 Details: [social](wiki/mechanics/social.md).
 
