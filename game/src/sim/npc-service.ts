@@ -39,8 +39,8 @@ function parkedStranded(world: World, vehicle: Vehicle): boolean {
   return isStranded(world, vehicle) && !isOnRope(world, vehicle.id) && vehicle.speed <= RULES.parkedSpeed;
 }
 
-// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank. A stall
-// is no serving site.
+// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank, and a
+// holed tank is patched with it. A stall is no serving site.
 function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string): void {
   if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
 }

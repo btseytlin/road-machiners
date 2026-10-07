@@ -127,7 +127,7 @@ export const RULES = {
 
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
-  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town; also the tank share a broke driver with a low tank gets at a serving site
+  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town; also the tank share a broke driver with a low tank gets at a serving site, where a holed tank is patched to it too
   townPatch: 0.15, // share of max hp the engine, transmission, wheels, tank and cab get free when the player enters a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   surrenderParts: 2, // installed parts, best first, a robber takes with the cargo from a stranded player who gives up

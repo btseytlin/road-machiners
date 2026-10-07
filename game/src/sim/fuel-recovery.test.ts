@@ -4,7 +4,11 @@ import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { advanceFar } from './far';
+import { corePart } from './grid';
 import { getResources } from './resources';
+import { tankLeaks } from './supplies';
+import { maxHp } from './wear';
+import { sitePads } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { endTurn } from './world';
 import type { Vec } from './vec';
@@ -56,5 +60,33 @@ describe('a fuelless majority of NPCs', () => {
 
     expect(stalls).toEqual([]);
     expect([...refuelled].sort()).toEqual(broke.map((v) => v.id).sort());
+  });
+});
+
+describe('a broke driver with a holed tank', () => {
+  function holed(site: { pos: Vec; radius: number }, faction: Vehicle['faction'], chassis: string, brainId: string, traits: string[]) {
+    let w = emptyWorld({ x: 5, y: 5 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const pad = sitePads(site as typeof bowl)[0];
+    const v = addVehicle(w, faction, chassis, ['stockEngine'], pad);
+    v.brain = npcBrain(brainId, pad, traits as TraitId[]);
+    const r = getResources(w, v);
+    r.money = 0;
+    r.fuel = 0;
+    corePart(v, 'tank').hp = 0;
+    return { w, id: v.id, run: (turns: number) => { for (let i = 0; i < turns; i++) w = endTurn(w, moveAllFar); return w.vehicles.find((x) => x.id === v.id)!; } };
+  }
+
+  it.each([
+    ['a trader at the Bowl', bowl, 'traders', 'hauler', 'trader', NPCS.trader.traits as string[]],
+    ['a raider at Scrapjaw', camp, 'raiders', 'buggy', 'buggy', ['raider']],
+  ] as const)('%s gets the tank patched and keeps its fuel', (_name, site, faction, chassis, brainId, traits) => {
+    const d = holed(site, faction, chassis, brainId, [...traits]);
+    const v = d.run(3);
+    expect(tankLeaks(v)).toBe(false);
+    expect(corePart(v, 'tank').hp).toBeGreaterThanOrEqual(Math.ceil(maxHp(corePart(v, 'tank')) * RULES.scrapPatch));
+    expect(getResources(d.w, v).fuel).toBeGreaterThan(0);
+    const events = d.w.events.filter((e) => e.t === 'stall');
+    expect(events).toEqual([]);
   });
 });

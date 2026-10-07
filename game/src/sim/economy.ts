@@ -25,6 +25,7 @@ import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
+import { tankLeaks } from "./supplies";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
@@ -295,7 +296,7 @@ function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
 // Runs each turn. It fires when the player is stranded or at or below RULES.lowFuelThreshold of the tank, on a town pad,
 // and money plus everything the town would buy cannot pay for the fix. A stranded player gets the engine, transmission,
 // wheels and tank raised to RULES.scrapPatch of max HP, a junk engine included. A low tank is topped up to RULES.scrapPatch
-// of its cap. A truck with no engine gets nothing, as no patch makes one.
+// of its cap, and a holed tank is patched with it. A truck with no engine gets nothing, as no patch makes one.
 export function scrapPatch(world: World): void {
   const town = needsPatchInTown(world);
   if (!town) return;
@@ -313,9 +314,11 @@ export function scrapFuelNeed(world: World, v: Vehicle): number {
   return fuel <= cap * RULES.lowFuelThreshold ? Math.max(0, cap * RULES.scrapPatch - fuel) : 0;
 }
 
-// Adds the scrap fuel and returns the amount. It checks neither pay nor site, so the caller decides who gets it.
+// Adds the scrap fuel and returns the amount. It checks neither pay nor site, so the caller decides who gets it. Fuel
+// into a holed tank patches the tank to RULES.scrapPatch of its max HP first, so the fuel stays.
 export function scrapFuel(world: World, v: Vehicle): number {
   const fuel = scrapFuelNeed(world, v);
+  if (fuel > 0 && tankLeaks(v)) scrapPatchPart(corePart(v, 'tank'), RULES.scrapPatch);
   getResources(world, v).fuel += fuel;
   return fuel;
 }

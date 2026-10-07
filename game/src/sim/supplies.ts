@@ -1,7 +1,7 @@
 import { consumeVehicleSupplies, fitStores, getResources } from "./resources";
 import { RULES } from "../data/rules";
 import { corePart } from "./grid";
-import type { World } from "./types";
+import type { Vehicle, World } from "./types";
 
 export function consumeSupplies(world: World): void {
   for (const vehicle of world.vehicles) consumeVehicleSupplies(world, vehicle);
@@ -12,10 +12,15 @@ export function fitAllStores(world: World): void {
   for (const vehicle of world.vehicles) fitStores(world, vehicle);
 }
 
+// A tank at 0 HP leaks.
+export function tankLeaks(v: Vehicle): boolean {
+  return corePart(v, "tank").hp <= 0;
+}
+
 export function leakFuel(world: World): void {
   for (const vehicle of world.vehicles) {
     const resources = getResources(world, vehicle);
-    if (corePart(vehicle, "tank").hp > 0 || resources.fuel <= 0) continue;
+    if (!tankLeaks(vehicle) || resources.fuel <= 0) continue;
     const lost = Math.min(resources.fuel, RULES.tankLeak);
     resources.fuel -= lost;
     if (vehicle.id === world.player.vehicleId)

@@ -10,6 +10,7 @@ import { makePart } from './factory';
 import { addGoods, stowPart } from './inventory';
 import { acceptContract, shopState, type Contract } from './market';
 import { sitePads } from './sites';
+import { leakFuel, tankLeaks } from './supplies';
 import { fuelCap, isStranded } from './stats';
 import { emptyWorld } from './testkit';
 import { maxHp } from './wear';
@@ -185,6 +186,29 @@ describe('scrap fuel for a low tank', () => {
 
     expect(w.player.fuel).toBeCloseTo(fuelCap(me) * RULES.scrapPatch);
     expect(engineOf(me).hp).toBe(engineHp);
+  });
+
+  it('patches a holed tank with the fuel, so the fuel stays', () => {
+    const w = lowFuel(0.1);
+    const me = w.vehicles[0];
+    const tank = corePart(me, 'tank');
+    tank.hp = 0;
+    const engineHp = engineOf(me).hp;
+
+    scrapPatch(w);
+    expect(tank.hp).toBeGreaterThanOrEqual(Math.ceil(maxHp(tank) * RULES.scrapPatch));
+    expect(tankLeaks(me)).toBe(false);
+    leakFuel(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(me) * RULES.scrapPatch);
+    expect(engineOf(me).hp).toBe(engineHp);
+  });
+
+  it('gives a holed tank nothing above the low fuel threshold', () => {
+    const w = lowFuel(0.3);
+    const tank = corePart(w.vehicles[0], 'tank');
+    tank.hp = 0;
+    scrapPatch(w);
+    expect(tank.hp).toBe(0);
   });
 
   it('gives nothing above the low fuel threshold, and nothing a second time', () => {

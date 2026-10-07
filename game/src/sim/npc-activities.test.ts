@@ -958,6 +958,34 @@ describe('NPC activities', () => {
       expect(topGoal(raider)?.kind).toBe('raid');
     });
 
+    // A truck at the edge of sight comes into sight every other turn. A driver already at its flee point pushed a flee
+    // that ended in the same turn, each time.
+    it('is not run from when the driver stands where the run would end', () => {
+      const { w, player, raider } = ranFrom();
+      raider.pos = { x: w.size - 1, y: raider.pos.y }; // the map edge ends a run away from the truck
+      const nearby = { x: raider.pos.x - 4, y: raider.pos.y };
+      const far = { x: raider.pos.x - 4 * TERRAIN.vision.radius, y: raider.pos.y };
+      const fled: unknown[] = [];
+      for (let i = 0; i < 6; i++) {
+        w.turn += 1;
+        player.pos = i % 2 === 0 ? nearby : far;
+        w.events = [];
+        thinkNpc(w, raider);
+        fled.push(...w.events.filter((e) => e.t === 'activity' && e.activity === 'flee'));
+        expect(topGoal(raider)?.kind).toBe('raid');
+      }
+      expect(fled).toEqual([]);
+    });
+
+    // An 'arrived' event of an unrelated goal this turn is not the arrival of a run that was never pushed.
+    it('is run from again when the driver arrived somewhere else this turn', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      w.events = [{ t: 'arrived', vehicle: raider.id } as (typeof w.events)[number]];
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id });
+    });
+
     it('is judged fresh once forgotten', () => {
       const { w, player, raider } = ranFrom();
       w.turn += NPC_BEHAVIOR.fleeMemory;
