@@ -13,11 +13,11 @@ import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, getHitchedTowIds, isOnRope, towHeldBy } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
-import { ramsReadily, visibleHostiles } from "./npc-decisions";
+import { canStartFight, ramsReadily, visibleHostiles } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
-import { inArc, inCombat } from "./combat";
+import { inArc, inCombatWith } from "./combat";
 import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
@@ -74,10 +74,11 @@ function noteStuck(world: World, v: Vehicle, goal: Vec | null): void {
   b.stuck = 0;
 }
 
-// A trapped driver fighting or fleeing a visible foe turns back to fight, even if combat state expired while it fled.
+// A trapped driver that can fight turns back on a visible foe it is in combat with, or holds a fight goal on, even if
+// combat state expired while it fled. Any other driver returns false, so the caller's recovery runs.
 export function turnCornered(world: World, vehicle: Vehicle): boolean {
   if (topGoal(vehicle)?.kind === "fight") return false;
-  const foe = visibleHostiles(world, vehicle).find((other) => inCombat(world, vehicle) || vehicle.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id));
+  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
   if (!foe) return false;
   fightCornered(world, vehicle, foe);
   return true;

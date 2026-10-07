@@ -484,10 +484,14 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
 }
 
-// A stranded driver holds off a robbery against a target that is not fighting it.
+// A driver may start a fight when it has a working gun, sees the target, may fire there, and is not holding off a
+// robbery against a target that is not fighting it. A fight goal that passes this one is kept by fightInvalid.
+export function canStartFight(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, target.pos) && findFightImpediment(world, vehicle, target) === null && !holdsOffRobbery(world, vehicle, target);
+}
+
 function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  const target = subjectOf(world, decision, subject);
-  return canFight(world, vehicle, decision, subject) && canNpcOpenFireAt(world, vehicle, target) && !holdsOffRobbery(world, vehicle, target);
+  return canStartFight(world, vehicle, subjectOf(world, decision, subject));
 }
 
 function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
