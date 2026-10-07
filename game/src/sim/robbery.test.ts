@@ -5,6 +5,7 @@ import { addGoods } from './inventory';
 import { getResources } from './resources';
 import { isStranded } from './stats';
 import { thinkNpc } from './npc-activities';
+import { chooseOn } from './tracks';
 import { canRob, decide, wantsLoot, lootAppeal, npcProfile, optionWeights, judgeDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
@@ -726,7 +727,8 @@ describe('stranded robbers', () => {
     for (const fights of [false, true]) {
       const { w, robber, target } = passing();
       addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
-      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'rob cargo', perceived: w.turn, worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'rob cargo', worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+      chooseOn(w, robber, target.id, target.pos, 'fight', true);
       strand(w, robber);
       if (fights) startCombat(w, target, robber);
       thinkNpc(w, robber);
@@ -741,7 +743,8 @@ describe('stranded robbers', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const raider = addRaider(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 15, y: 10 });
-    raider.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'raid', perceived: w.turn, worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+    raider.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'raid', worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+    chooseOn(w, raider, target.id, target.pos, 'fight', true);
     strand(w, raider);
     thinkNpc(w, raider);
     expect(raider.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);

@@ -78,6 +78,10 @@ export const NPC_BEHAVIOR = {
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
+  // Turns a driver remembers a truck it ran from, after it last saw or heard it. Raiders came back to look at a truck
+  // they had run from 1 to 15 turns after the run ended. 30 turns cover that, and are about an hour and a half of the
+  // day. A truck met again after that is judged fresh.
+  fleeMemory: 30,
   // Turns a fighter hunts a target it lost from sight, counted from the last turn it saw it or picked up its sound
   // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
   // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.

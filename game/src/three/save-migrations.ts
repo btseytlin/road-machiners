@@ -330,6 +330,48 @@ function withFightWorn_20_21(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// A driver tracks the trucks it senses and holds its choice on a hostile in the track, instead of noting hostiles
+// per sense. A hostile it noted seen or heard becomes a track it lets be, at the truck's place, on the turn it last
+// perceived it. Seen wins over heard. A fight or flee goal's target becomes a track it fights or runs from, at its
+// place on the goal's perceived turn, and a fight drops that turn. A noted truck no longer in the world is left out.
+// Trucks sensed but not decided on get tracks on the first turn after loading.
+function withTracks_21_22(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const places = new Map((world.vehicles as SavedJson[]).map((v) => [v.id as string, v.pos as SavedJson]));
+  const fromNoticed = (noticed: Record<string, number>): Record<string, SavedJson> => {
+    const tracks: Record<string, SavedJson> = {};
+    for (const decision of ['contactHeard', 'hostileSeen']) {
+      for (const [key, last] of Object.entries(noticed)) {
+        const [kind, id] = key.split(':');
+        const at = places.get(id);
+        const seen = decision === 'hostileSeen';
+        if (kind === decision && at) tracks[id] = { at: { ...at }, turn: last, sighted: seen, choice: 'keep', chosenInSight: seen };
+      }
+    }
+    return tracks;
+  };
+  const fromGoal = (tracks: Record<string, SavedJson>, g: SavedJson): void => {
+    const at = places.get(g.targetId as string);
+    if ((g.kind === 'fight' || g.kind === 'flee') && at) tracks[g.targetId as string] = { at: { ...at }, turn: (g.perceived as number | undefined) ?? turn, sighted: true, choice: g.kind, chosenInSight: true };
+  };
+  const untimed = (g: SavedJson): SavedJson => {
+    if (g.kind !== 'fight') return g;
+    const { perceived: _, ...rest } = g;
+    return rest;
+  };
+  const tracked = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const noticed = brain.noticed as Record<string, number>;
+    const goals = brain.goals as SavedJson[];
+    const tracks = fromNoticed(noticed);
+    for (const g of goals) fromGoal(tracks, g);
+    const kept = Object.fromEntries(Object.entries(noticed).filter(([key]) => !key.startsWith('hostileSeen:') && !key.startsWith('contactHeard:')));
+    return { ...v, brain: { ...brain, noticed: kept, goals: goals.map(untimed), tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(tracked), removed: (world.removed as SavedJson[]).map(tracked) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -412,6 +454,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withFleePerceived_19_20,
   // 20 to 21: a fight records the last turn it wore its target down, taken as the save's turn.
   withFightWorn_20_21,
+  // 21 to 22: a driver tracks the hostiles it decided on, and a fight reads its target's last place from the track.
+  withTracks_21_22,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

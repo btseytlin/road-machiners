@@ -18,6 +18,7 @@ import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
 import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
@@ -837,7 +838,7 @@ describe('NPC activities', () => {
   });
 
   describe('an investigation that finds its truck', () => {
-    function investigating(noticed: Record<string, number> = {}) {
+    function investigating() {
       const w = emptyWorld({ x: 30, y: 30 });
       const player = w.vehicles[0];
       const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
@@ -846,14 +847,13 @@ describe('NPC activities', () => {
         { kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'long-term goal' },
         { kind: 'investigate', targetId: player.id, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' },
       ];
-      raider.brain.noticed = noticed;
+      chooseOn(w, raider, player.id, { x: 30, y: 30 }, 'investigate', false);
       return { w, player, raider };
     }
     const closeIn = (w: World, player: Vehicle, raider: Vehicle) => { player.pos = { x: raider.pos.x - 4, y: raider.pos.y }; };
 
-    it('fights a truck it saw before, whatever it noticed earlier', () => {
+    it('rolls on the sighting of a truck it only heard, however long ago', () => {
       const { w, player, raider } = investigating();
-      raider.brain!.noticed[`hostileSeen:${player.id}`] = w.turn;
       w.turn += NPC_BEHAVIOR.noticeMemory + 2;
       closeIn(w, player, raider);
       forceOption('hostileSeen', 'fight');
@@ -869,7 +869,7 @@ describe('NPC activities', () => {
       thinkNpc(w, raider);
       expect(raider.brain!.goals.some((g) => g.kind === 'investigate')).toBe(false);
       expect(topGoal(raider)?.kind).toBe('raid');
-      expect(raider.brain!.noticed).toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'keep', chosenInSight: true });
     });
 
     it('flees on a flee roll', () => {
@@ -887,7 +887,7 @@ describe('NPC activities', () => {
       forceOption('hostileSeen', 'fight');
       thinkNpc(w, raider);
       expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
-      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'investigate', chosenInSight: false });
     });
 
     it('ends the same way on an NPC target', () => {
@@ -911,7 +911,49 @@ describe('NPC activities', () => {
         expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
         w.turn += 1;
       }
-      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ sighted: false, choice: 'investigate', chosenInSight: false });
+    });
+  });
+
+  // A raider ran from a truck, heard it again a few turns after it calmed down, drove to look, and ran again.
+  describe('a truck the driver ran from', () => {
+    function ranFrom() {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const player = w.vehicles[0];
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      raider.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'long-term goal' }];
+      chooseOn(w, raider, player.id, player.pos, 'flee', true);
+      w.turn += NPC_BEHAVIOR.fleeCalmTurns + 2;
+      return { w, player, raider };
+    }
+
+    it('is not looked for when heard again', () => {
+      const { w, player, raider } = ranFrom();
+      player.speed = 4;
+      forceOption('contactHeard', 'investigate');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)?.kind).toBe('raid');
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'flee', turn: w.turn });
+    });
+
+    it('is run from again on sight, with no roll', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id, reason: 'avoid a truck it ran from' });
+    });
+
+    it('is judged fresh once forgotten', () => {
+      const { w, player, raider } = ranFrom();
+      w.turn += NPC_BEHAVIOR.fleeMemory;
+      thinkNpc(w, raider);
+      expect(trackOf(raider, player.id)).toBeUndefined();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: player.id });
     });
   });
 
@@ -1035,7 +1077,8 @@ describe('hunting a lost fight target', () => {
     const contact = contactsOf(w, raider, Infinity).find((c) => c.vehicleId === player.id)!;
     expect(contact.sources).toContain('sound');
     planNpcOrders(w);
-    expect(topGoal(raider)).toMatchObject({ kind: 'fight', destination: contact.center, perceived: w.turn });
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', destination: contact.center });
+    expect(trackOf(raider, player.id)).toMatchObject({ at: contact.center, turn: w.turn });
   });
 
   it('gives up once the search turns pass with no sight or contact', () => {

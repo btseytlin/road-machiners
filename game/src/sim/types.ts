@@ -173,7 +173,7 @@ export type NpcActivity = {
   reason: string;
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
-  perceived?: number; // the turn a fight last saw or detected its target, or a flee its threat
+  perceived?: number; // a flee: the turn it last saw, heard or took a hit from anything hostile
   worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
@@ -185,6 +185,7 @@ export type NpcBrain = {
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
+    tracks: Record<string, Track>; // trucks the driver senses or remembers, by id; only src/sim/tracks.ts keeps them
     hurt: number; // part damage taken last turn
     fullAt?: number; // free cells when a sale would have made room for a loot the hold could not take, until the hold frees more
     unfit?: string[]; // loot the driver reached and found would not fit its truck even after a sale
@@ -211,6 +212,12 @@ export type NpcBrain = {
     // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
     memories: Memory[];
 };
+
+// A truck a driver senses: where and on which turn it last saw or heard it, and whether it has seen it while
+// tracked. choice is what the driver chose on it as a hostile, null before a choice, and chosenInSight whether it
+// chose with the truck in sight. See src/sim/tracks.ts.
+export type TrackChoice = 'keep' | 'fight' | 'flee' | 'investigate';
+export type Track = { at: Vec; turn: number; sighted: boolean; choice: TrackChoice | null; chosenInSight: boolean };
 
 // A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
 // prices: a shop's standing pressure for each good it trades, when the driver did business there.

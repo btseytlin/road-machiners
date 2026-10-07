@@ -12,6 +12,7 @@ import { dist } from './vec';
 import { vehicleStats } from './stats';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
+import { chooseOn } from './tracks';
 import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
 
@@ -19,7 +20,7 @@ import type { Vehicle, World } from './types';
 function fighting(world: World, raider: Vehicle): Vehicle {
   const me = world.player.vehicleId;
   raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-  raider.brain.noticed[`hostileSeen:${me}`] = world.turn;
+  chooseOn(world, raider, me, world.vehicles[0].pos, 'fight', true);
   raider.brain.goals.push({ kind: 'fight', targetId: me, destination: { x: 35, y: 30 }, phase: 'travel', reason: 'test', worn: { turn: world.turn, condition: 1 } });
   return raider;
 }

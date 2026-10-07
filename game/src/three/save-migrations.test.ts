@@ -27,6 +27,7 @@ import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import FORMAT_2_19 from './save-fixtures/format-2-19.json';
 import FORMAT_2_20 from './save-fixtures/format-2-20.json';
+import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -419,6 +420,42 @@ describe('save migration 20 to 21', () => {
       ...FORMAT_2_20,
       vehicles: [player, { ...raider, brain: { goals: raider.brain!.goals.map(worn) } }, runner],
       removed: [{ ...FORMAT_2_20.removed[0], brain: { goals: FORMAT_2_20.removed[0].brain.goals.map(worn) } }],
+    });
+  });
+});
+
+describe('save migration 21 to 22', () => {
+  it('turns noted hostiles and fight or flee targets into tracks, and keeps every other field', () => {
+    const next = MIGRATIONS[21](FORMAT_2_21) as typeof FORMAT_2_21;
+    const [player, raider, runner] = FORMAT_2_21.vehicles;
+    const [raid, fight] = raider.brain!.goals;
+    const { perceived: _, ...untimedFight } = fight;
+    const robbery = FORMAT_2_21.removed[0].brain.goals[0];
+    const { perceived: __, ...untimedRobbery } = robbery;
+
+    expect(next).toEqual({
+      ...FORMAT_2_21,
+      vehicles: [
+        player,
+        {
+          ...raider,
+          brain: {
+            noticed: { 'preySeen:npc-5': 799 },
+            goals: [raid, untimedFight],
+            tracks: {
+              player: { at: { x: 30, y: 30 }, turn: 797, sighted: true, choice: 'fight', chosenInSight: true },
+              'npc-5': { at: { x: 10, y: 12 }, turn: 797, sighted: false, choice: 'keep', chosenInSight: false },
+            },
+          },
+        },
+        { ...runner, brain: { ...runner.brain, tracks: { 'npc-2': { at: { x: 40, y: 40 }, turn: 799, sighted: true, choice: 'flee', chosenInSight: true } } } },
+      ],
+      removed: [
+        {
+          ...FORMAT_2_21.removed[0],
+          brain: { noticed: {}, goals: [untimedRobbery], tracks: { 'npc-5': { at: { x: 10, y: 12 }, turn: 790, sighted: true, choice: 'fight', chosenInSight: true } } },
+        },
+      ],
     });
   });
 });

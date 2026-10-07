@@ -1,5 +1,5 @@
 {
- "format": "2.21",
+ "format": "2.22",
  "shape": {
   "broken": [],
   "craters": [],
@@ -805,6 +805,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -889,6 +890,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -976,6 +978,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]

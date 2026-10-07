@@ -22,7 +22,7 @@ import { ramFactor, ramImpact } from './crash-contact';
 import { isDefeated, isKnockedOut } from './defeat';
 import { fightOdds, type FightOdds } from './fight-odds';
 import { vehicleById } from './damage';
-import { contactsOf } from './detect';
+import { sensesOf } from './detect';
 import { affordableBuyCount, getTradePrice } from './economy';
 import { cargoRoom } from './inventory';
 import { cargoValue } from './market';
@@ -196,9 +196,15 @@ export function visibleHostiles(world: World, vehicle: Vehicle): Vehicle[] {
 // Vehicles heard, dusted, scanned or on a beacon beyond sight, at any range, while the contact circle is tight
 // enough to act on. A vague distant sound stays audible without redirecting the driver. Nearest first.
 export function usefulContacts(world: World, vehicle: Vehicle): Contact[] {
+  return npcSenses(world, vehicle).contacts;
+}
+
+// The trucks the driver sees, and its useful contacts, from one pass over the trucks.
+export function npcSenses(world: World, vehicle: Vehicle): { seen: Vehicle[]; contacts: Contact[] } {
   const radius = npcProfile(vehicle).contactReactRadius;
-  const useful = contactsOf(world, vehicle, Infinity).filter((contact) => contact.radius <= radius);
-  return useful.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
+  const { seen, contacts } = sensesOf(world, vehicle, Infinity);
+  const useful = contacts.filter((contact) => contact.radius <= radius);
+  return { seen, contacts: useful.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center)) };
 }
 
 // Goals that are work a driver would lose by leaving. Raiding, waiting, towing and danger goals are not.

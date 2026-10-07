@@ -4,6 +4,7 @@ import { afterTurn, exposure, fightOrder, fightPoint, leadOf, scorePoint, noteTa
 import { mountedParts, sideOf, type SideLetter } from './grid';
 import { decide } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
+import { chooseOn } from './tracks';
 import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { dist } from './vec';
@@ -151,7 +152,7 @@ describe('fight driving', () => {
     const v = fighter(w, 'convoyGuard', ['stockEngine', 'shotgun'], { x: 48.3, y: 30 });
     v.heading = Math.PI;
     const range = vehicleStats(w, v).weapons[0].def.range;
-    v.brain!.noticed[`hostileSeen:${me.id}`] = w.turn;
+    chooseOn(w, v, me.id, me.pos, 'fight', true);
     v.brain!.noticed[`ramChance:${me.id}`] = w.turn;
     v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
     v.brain!.whim = { kind: 'keep', until: w.turn + 4, angle: 0 };
@@ -173,7 +174,7 @@ function inFight(): { w: World; v: Vehicle } {
   const w = emptyWorld({ x: 40, y: 30 });
   const v = fighter(w, 'buggy', ['stockEngine', 'mg'], { x: 34, y: 30 }, 'buggy');
   const me = w.player.vehicleId;
-  v.brain!.noticed[`hostileSeen:${me}`] = w.turn;
+  chooseOn(w, v, me, w.vehicles[0].pos, 'fight', true);
   v.brain!.noticed[`ramChance:${me}`] = w.turn;
   v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
   return { w, v };

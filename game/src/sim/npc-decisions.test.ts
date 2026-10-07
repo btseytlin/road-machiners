@@ -11,6 +11,7 @@ import { siteLootTable } from './salvage';
 import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
+import { chooseOn, trackOf } from './tracks';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
@@ -355,7 +356,7 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 50, y: 50 }); // inside the live range, so the cover rock hides the raider
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
-    const key = `hostileSeen:${raider.id}`;
+    const chosen = () => trackOf(npc, raider.id)?.choice ?? null;
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
     // The first sighting rolls. Start from a seed on which it keeps, so later turns show only whether a roll fires.
     const keeps = (seed: number) => {
@@ -369,38 +370,52 @@ describe('decision points', () => {
     w.rngState = seed;
     thinkNpc(w, npc);
     expect(w.rngState).not.toBe(seed);
-    expect(npc.brain!.noticed).toHaveProperty([key]);
+    expect(chosen()).toBe('keep');
     expect(topGoal(npc)?.kind).toBe('scavenge');
     const rng = w.rngState;
     thinkNpc(w, npc);
     thinkNpc(w, npc);
     expect(w.rngState).toBe(rng);
-    // Briefly out of sight, the raider is still remembered, so it fires no new roll.
+    // Briefly out of sight, the raider is still tracked, so it fires no new roll.
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     w.turn += NPC_BEHAVIOR.noticeMemory;
     thinkNpc(w, npc);
-    expect(npc.brain!.noticed).toHaveProperty([key]);
-    // Out of sight past the memory, it is forgotten. Back in sight, it fires again.
+    expect(chosen()).toBe('keep');
+    // Out of sight and earshot past the memory, it is forgotten. Back in sight, it fires again.
     w.turn += 1;
     thinkNpc(w, npc);
-    expect(npc.brain!.noticed).not.toHaveProperty([key]);
+    expect(trackOf(npc, raider.id)).toBeUndefined();
     w.obstacles = [];
     const hidden = w.rngState;
     thinkNpc(w, npc);
     expect(w.rngState).not.toBe(hidden);
-    expect(npc.brain!.noticed).toHaveProperty([key]);
+    expect(chosen()).toBe('keep');
   });
 
-  it('a subject a goal targets stays noticed while out of perception', () => {
+  it('a truck a goal targets stays tracked while out of perception', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.player.vehicleId;
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 70, y: 30 });
     raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
-    raider.brain!.noticed = { [`contactHeard:${me}`]: w.turn };
+    chooseOn(w, raider, me, { x: 30, y: 30 }, 'investigate', false);
     w.turn += NPC_BEHAVIOR.noticeMemory + 1;
     thinkNpc(w, raider);
     expect(raider.brain!.goals.at(-1)).toMatchObject({ kind: 'investigate', targetId: me });
-    expect(raider.brain!.noticed).toHaveProperty([`contactHeard:${me}`]);
+    expect(trackOf(raider, me)?.choice).toBe('investigate');
+  });
+
+  it('knows a truck it drove past and now only hears as the same truck', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 34, y: 30 });
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    thinkNpc(w, trader);
+    expect(trackOf(trader, me.id)).toMatchObject({ sighted: true, choice: null, at: me.pos });
+    me.pos = { x: 34 + TERRAIN.vision.radius + 5, y: 30 };
+    me.speed = 4;
+    w.turn += NPC_BEHAVIOR.noticeMemory + 2;
+    thinkNpc(w, trader);
+    expect(trackOf(trader, me.id)).toMatchObject({ sighted: true, turn: w.turn });
   });
 
   it('a raider investigates a contact, and a scavenger rarely does', () => {
@@ -430,7 +445,7 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
-    npc.brain!.noticed = { [`hostileSeen:${raider.id}`]: w.turn };
+    chooseOn(w, npc, raider.id, raider.pos, 'keep', true);
     npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     forceOption('attacked', 'flee');
     thinkNpc(w, npc);
