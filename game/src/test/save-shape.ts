@@ -34,5 +34,14 @@ export function newGameShape(): Shape {
   world.salvage = [...mixes.values()].flatMap((stock) =>
     [[], [makePart(world, WEAPON_ID, 0)], [makePart(world, PLAIN_ID, 0)]].map((parts) => ({ ...stock, parts })),
   );
+  // An NPC truck's cargo and spares come from its loadout roll. Each gets one goods item, one gun and one plain part, so
+  // the shape does not depend on what the NPCs rolled.
+  for (const v of world.vehicles.filter((truck) => truck.brain)) {
+    v.items = [
+      { id: 'i-goods', x: 0, y: 0, rot: 0, kind: 'good', good: 'g' },
+      { id: 'i-gun', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(world, WEAPON_ID, 0) },
+      { id: 'i-plain', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(world, PLAIN_ID, 0) },
+    ];
+  }
   return shapeOf(JSON.parse(JSON.stringify(saveOf(world).world)));
 }
