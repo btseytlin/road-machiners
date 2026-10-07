@@ -1,6 +1,6 @@
 # Factory dashboard
 
-A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. The code is in `src/dashboard/`, and the page in this folder.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
