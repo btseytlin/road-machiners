@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, headlineStat, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -41,6 +41,21 @@ describe("part stats and their change against the player's part", () => {
   it("compares trucks stat by stat", () => {
     const speed = diffStats(chassisStats("courier"), chassisStats("hauler")).find((d) => d.stat.icon === "speed");
     expect(speed).toMatchObject({ verdict: "better" });
+  });
+});
+
+describe("the headline stat of a shop row", () => {
+  it("is the first stat, with no change without a base", () => {
+    const head = headlineStat(part("turbine"), null);
+    expect(head.stat).toEqual(partStats(part("turbine"))[0]);
+    expect(head.delta).toBeNull();
+  });
+
+  it("carries the change and verdict against a base of the same kind", () => {
+    const head = headlineStat(part("turbine"), part("stockEngine"));
+    const same = diffStats(partStats(part("turbine")), partStats(part("stockEngine")))[0];
+    expect(head).toEqual(same);
+    expect(head.delta).not.toBeNull();
   });
 });
 

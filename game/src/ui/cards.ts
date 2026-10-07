@@ -302,38 +302,34 @@ export function conditionRow(part: PartInstance): HTMLElement | null {
   return el("div", { class: "card-cond" }, conditionTag(part), el("span", { class: status.tone }, status.text));
 }
 
-export type PartCardOptions = {
-  part: PartInstance;
-  base: PartInstance | null; // the part it is weighed against, or null for plain stats
-  action: HTMLElement | null;
-  onHover?: (on: boolean) => void;
-};
+// The stat that best tells parts of one kind apart: the first of partStats(), with its change against the base.
+export function headlineStat(part: PartInstance, base: PartInstance | null): StatDiff {
+  const first = diffStats(partStats(part), base ? partStats(base) : null)[0];
+  if (!first) throw new Error(`${part.defId} has no stats to headline`);
+  return first;
+}
 
-export function partCard(o: PartCardOptions): HTMLElement {
-  const def = partDef(o.part.defId);
-  const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
-  const card = el(
-    "div",
-    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
-    el(
-      "div",
-      { class: "card-head" },
-      partIconEl(o.part),
-      el("div", { class: "card-name" }, el("b", {}, def.name)),
-      footprint(def.w, def.h),
-    ),
-    conditionRow(o.part),
-    ...(o.base ? [compareLine(o.base)] : []),
-    conditionMeter(o.part),
-    statGrid(diffs),
-    el("div", { class: "card-foot" }, el("span"), o.action),
+// One stat as icon, value, unit and change, for a compact row.
+export function statChip(d: StatDiff): HTMLElement {
+  return el(
+    "span",
+    { class: "stat-chip", title: d.stat.label },
+    createIcon(d.stat.icon),
+    el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+    d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
   );
-  if (o.onHover) {
-    const hover = o.onHover;
-    card.addEventListener("mouseenter", () => hover(true));
-    card.addEventListener("mouseleave", () => hover(false));
-  }
-  return card;
+}
+
+// What a shop part shows beyond its compact row: wear, comparison, condition meter, every stat and the action.
+export function partDetail(part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
+  const diffs = diffStats(partStats(part), base ? partStats(base) : null);
+  return [
+    conditionRow(part),
+    ...(base ? [compareLine(base)] : []),
+    conditionMeter(part),
+    statGrid(diffs),
+    el("div", { class: "card-foot" }, el("span"), action),
+  ].filter((n): n is HTMLElement => n !== null);
 }
 
 // The part a shop card is weighed against: the item the player selected. With nothing selected, or the card
