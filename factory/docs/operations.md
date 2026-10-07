@@ -30,7 +30,7 @@ Memory, not CPU, limits how many jobs fit on the host. Each container prints its
 
 ## Daily cap
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, checks, the release cut and the candidate. Approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The first time the cap blocks work, the committee chat gets one notice with the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, checks, the release cut and the candidate. Approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
 
 ## Resume
 

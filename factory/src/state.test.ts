@@ -11,11 +11,18 @@ describe('state', () => {
     expect(readState(path).adhocReplies).toEqual({});
   });
 
-  it('reads an old state file without builds, jobStarts or capNoticed', () => {
+  it('reads an old state file without builds or jobStarts', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
     writeFileSync(path, JSON.stringify({ job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [] }));
     const state = readState(path);
-    expect([state.builds, state.jobStarts, state.capNoticed]).toEqual([{}, [], false]);
+    expect([state.builds, state.jobStarts]).toEqual([{}, []]);
+  });
+
+  it('reads a state file that still holds the dropped capNoticed flag', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    const starts = ['2026-01-10T11:00:00.000Z'];
+    writeFileSync(path, JSON.stringify({ jobs: [], jobStarts: starts, capNoticed: true }));
+    expect(readState(path).jobStarts).toEqual(starts);
   });
 
   it('reads an old state file without the release fields, with lastMaintenance left in it', () => {
