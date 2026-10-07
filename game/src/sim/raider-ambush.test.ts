@@ -8,7 +8,9 @@ import { TERRAIN } from '../data/terrain';
 import { TEST_MAP } from '../test/map';
 import { planNpcOrders } from './ai';
 import { inCombat } from './combat';
+import { playerVehicle } from './damage';
 import { knockOutNpc } from './defeat';
+import { chooseOption, currentOptions } from './dialogue';
 import { contactsOf } from './detect';
 import { campGoodPrice, campPartPrice } from './economy';
 import { corePart, goodsCount } from './grid';
@@ -384,6 +386,26 @@ describe('going home with loot', () => {
     expect(value).toBe(carried * campGoodPrice('electronics'));
     expect(getResources(end, vehicle(end, raider.id)).money).toBe(money + value);
     expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
+  });
+
+  it('takes the cargo the player hands over mid-fight, then drops the raid to sell it', () => {
+    const start = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) start.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    if (addGoods(start, playerVehicle(start), 'electronics', 6) < 6) throw new Error('No room for the player cargo');
+    const raider = addVehicle(start, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 42, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    raider.brain.goals = [raidGoal(raider.pos)];
+    forceOption('hostileSeen', 'fight');
+    const demanded = playUntil(start, 4, (x) => x.player.call?.topic === 'demand');
+    expect(inCombat(demanded, vehicle(demanded, raider.id))).toBe(true);
+    const handed = chooseOption(demanded, currentOptions(demanded).findIndex((o) => o.text === 'Fine. Take it.'));
+    expect(inCombat(handed, vehicle(handed, raider.id))).toBe(false);
+    expect(topGoal(vehicle(handed, raider.id))?.kind).toBe('loot');
+    const end = playUntil(handed, 20, (x) => topGoal(vehicle(x, raider.id))?.kind === 'sell', (x) => {
+      expect(goodsOn(x, raider.id, 'electronics') + pileGoods(x, 'electronics')).toBe(6);
+    });
+    expect(goodsOn(end, raider.id, 'electronics')).toBe(6);
+    expect(vehicle(end, raider.id).brain!.goals.map((g) => g.kind)).toEqual(['sell']);
   });
 
   it('strips a knocked-out victim, drops the raid and sells at its camp, and never attacks the victim again', () => {
