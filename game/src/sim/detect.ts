@@ -19,7 +19,7 @@ import type { Contact, DustCloud, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
@@ -49,12 +49,12 @@ function runsCold(world: World, v: Vehicle): boolean {
   return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed * PERK_NUMBERS.coldRunning.speedShare;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (the storms in the truck shrink it through weatherOn's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.limpSpeed) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-  const weather = weatherAt(world, v.pos);
+  const weather = weatherOn(world, v);
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
 
