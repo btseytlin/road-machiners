@@ -2010,7 +2010,7 @@ canvas.view {
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 132px 132px 44px 64px;
+  grid-template-columns: minmax(130px, 1fr) 148px 148px 44px 64px;
   gap: 10px;
   align-items: center;
   padding: 4px 6px;
@@ -2018,7 +2018,7 @@ canvas.view {
 }
 .goods.truck .goods-head,
 .goods.truck .good-row {
-  grid-template-columns: minmax(120px, 1fr) 48px 132px 132px 44px 64px;
+  grid-template-columns: minmax(110px, 1fr) 48px 148px 148px 44px 64px;
 }
 .goods-head {
   font-size: 12px;
