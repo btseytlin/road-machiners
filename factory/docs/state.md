@@ -15,6 +15,8 @@ One card position spans several stores. A position is consistent when every stor
 - Work clone: the task file and stage outputs, like `.factory/approval.json`, the screenshot and `check-failure.md`. Written by the agent stages and checks.
 - Web root: the published builds. Written by checks, approve, ship and the dev build.
 - Telegram: the posts with buttons. Written by checks, candidate, approve and ship.
+- Source maps: `$FACTORY_HOME/sourcemaps/<commit>/` holds the maps of each release, dev and candidate build, and `published.jsonl` lists those builds. Written by ship, hotfix, the dev build and candidate. Read by the error service.
+- Error reports: `$FACTORY_HOME/error-reports/` holds `store.json`, which ties each error fingerprint to its issue and counts reports and rejects, and `reports/<fingerprint>/<commit>.json.gz`. Written only by the error service. Agent stages of an `error-report` issue read its reports.
 
 ## Card positions
 
@@ -49,6 +51,7 @@ Flags hold on any position:
 - Approved: the card merges after hardening. It shows as `approvedResolving` or a queued approval.
 - Routing labels `design-sonnet` and `implementation-opus`, `open-network`, `hotfix`, `adhoc`, `release-task` and `bundled` change how the card runs, never where it stands.
 - `release-candidate` marks a merged card that waits for Ship.
+- `error-report` marks a bug the error service opened from a game error. Intake takes it with no votes, into Triage.
 
 ## Release positions
 
@@ -84,6 +87,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 - `lastTickError`: the last tick crash. `factory status` shows it.
 - `devFailed`: the short hash of a `dev` whose build failed. The tick skips it until `dev` moves or Hermes clears it.
 - Review pending: `$FACTORY_HOME/review-pending` names the issue of a finished waste review. Hermes's incident watch prints it, and Hermes deletes it once handled.
+- Error service alert: `$FACTORY_HOME/error-reports/alert` holds one line per cap the error service hit that day: the daily issue cap, the disk cap or the per-address limit. Hermes's incident watch prints it, and Hermes deletes it once handled.
 - Pause: the pause file holds the reason and stops the tick. `pause <reason>` writes it and `resume` removes it when `pause` wrote it.
 
 ## Consistency rules

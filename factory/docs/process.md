@@ -11,7 +11,7 @@ The diagrams are Graphviz files in [diagrams/](diagrams/). Agents read the `.dot
 
 ## Overview
 
-The public files and votes on GitHub issues. Agents design, build and test the top ones. The committee plays each result in Telegram and approves it. Approved work collects on `dev` and ships as a release to `main` and itch.io. Hermes handles every failure.
+The public files and votes on GitHub issues. The game's release, dev and candidate builds also report their errors, and each new error becomes a bug issue that needs no votes. Agents design, build and test the top ones. The committee plays each result in Telegram and approves it. Approved work collects on `dev` and ships as a release to `main` and itch.io. Hermes handles every failure.
 
 ![Overview](diagrams/overview.svg)
 
@@ -22,6 +22,7 @@ A card is one GitHub issue on the Project board. Its column is the state. Testin
 ![Card lifecycle](diagrams/lifecycle.svg)
 
 - A bug a collaborator labels `hotfix` skips Triage. Triage can also label a bug `hotfix`. Approve ships a hotfix at once.
+- The error service opens an `error-report` bug for each new game error, at most `FACTORY_ERROR_DAILY_ISSUES` a day. Intake takes it into Triage with no votes. A later report of the same error from a new build comments on its issue, and reopens a fixed one when the build came after the fix. [operations.md](operations.md#error-reports) has the details.
 - Triage labels a fix of an open release's feature `release-task`, until the release's candidate is posted. It runs on the release branch and ships with that release. New work stays on `dev` for the next release.
 - A merged issue stays open with the label `release-candidate`. It closes when its release ships.
 

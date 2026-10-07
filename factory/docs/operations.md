@@ -97,6 +97,16 @@ A triage `unclear` verdict moves nothing, so its wait for the author stays in Tr
 
 Every `FACTORY_WASTE_REVIEW_DAYS`, the tick starts a waste review in the triage queue. `wasteNumbers()` in `src/waste.ts` computes the cost per stage and model, the wait per queue, the stages that ran more than once on one issue, the routes and the most expensive issues. It computes the same numbers for the period before, so a jump shows. A Sonnet agent reads those numbers and the records, and writes `.factory/brief.md` with one bottleneck and one change request. The job records them in a closed issue labeled `factory-review` and writes `$FACTORY_HOME/review-pending`. That file is an incident line for Hermes. Hermes checks the review and posts to the committee only when something matters, then deletes the file. A member queues the change by asking Hermes. The first review waits one full period after the deploy.
 
+## Error reports
+
+The release, dev and candidate builds post each new game error to `/errors` on the public site. Card previews post nothing, since an error there belongs to the card's own review. The build that publishes a reporting build moves its source maps to `$FACTORY_HOME/sourcemaps/<commit>/` first, so no map goes public. Dev and candidate maps go after `FACTORY_ERROR_MAP_DAYS`, and release maps stay.
+
+The error service is its own systemd unit, `roam-factory-errors`, with its log in `logs/errors.log`. `src/error-reports/` holds its code. It refuses a report from another origin, one over the size caps, one past `FACTORY_ERROR_IP_PER_HOUR` for its address, one from a commit it has no maps for, and one whose stack maps to no game source. Each refusal counts by reason in `$FACTORY_HOME/error-reports/store.json`.
+
+A report it takes gets a fingerprint from the error and the top game frames. The issue body holds the fingerprint, so the service finds the issue on GitHub even with a lost store. A new fingerprint opens an issue labeled `bug` and `error-report`, at most `FACTORY_ERROR_DAILY_ISSUES` a day. A report from a commit the fingerprint has not seen comments on its open issue, and reopens a completed one when the build was published after the close. A `not planned` close stays closed. The service keeps one report file per fingerprint and commit, up to `FACTORY_ERROR_DISK_MB`. Agent stages of the issue get those files read-only at `/error-reports/`, and `npm run error:replay` in `game/` reruns their turn.
+
+A daily cap, the disk cap or an address past its limit writes a line to `$FACTORY_HOME/error-reports/alert`. Hermes's incident watch prints it, and Hermes deletes the file once handled.
+
 ## Deploying the factory
 
 The server runs the factory from GitHub's `main`, and only from there. To change factory code or `settings.env`, merge it into `main`. Every 2 minutes, `factory-update` checks `main`. When `main` moved, it builds the new commit in its own release folder, with no pause, and records the commit in `$FACTORY_HOME/deployed`. It refuses a code dir with local edits. [infra/README.md](../infra/README.md) has the details.
