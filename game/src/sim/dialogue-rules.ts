@@ -13,7 +13,7 @@ import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './marke
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
 import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
-import { hasCargo, hasSalvage } from './salvage';
+import { hasCargo, hasSalvage, isStoryWreck } from './salvage';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
@@ -105,7 +105,7 @@ type Rumor = { id: string; pos: Vec; site: { id: string; name: string } | null }
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
   const { scavenged, rumored } = world.player;
-  return stock.id.startsWith('wreck') && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
+  return (stock.id.startsWith('wreck') || isStoryWreck(stock)) && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
 }
 
 // The rumor nearest the driver within its radius, ties broken by id, or null. Nothing here rolls.

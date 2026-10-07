@@ -262,7 +262,7 @@ export type LandmarkLook = Exclude<PropKind, "rock">;
 export type Hulk = { chassisId: string; yaw: number };
 
 export type Obstacle =
-  // Only a kill wreck has a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // Only kill wrecks and story wrecks have a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
   // generic wreck.
   | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   // yaw is the direction a landmark faces, in radians from map +x toward +y.

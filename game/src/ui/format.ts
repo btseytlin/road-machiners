@@ -15,7 +15,7 @@ import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
-import { carriedPart } from '../sim/salvage';
+import { carriedPart, isStoryWreck } from '../sim/salvage';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -126,7 +126,12 @@ export function conditionStatus(part: PartInstance): { text: string; tone: 'dim'
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? npcName(v) : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
+  if (v) return npcName(v);
+  return isObstacleId(id) ? 'an obstacle' : 'something';
+}
+
+function isObstacleId(id: string): boolean {
+  return ['wreck', 'rock', 'bld'].some((prefix) => id.startsWith(prefix)) || isStoryWreck({ id });
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {

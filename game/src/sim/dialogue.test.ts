@@ -829,6 +829,16 @@ describe('rumor mill', () => {
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 
+  it('names a story wreck like any wreck', () => {
+    const { w, npc } = rumorWorld();
+    w.salvage = [wreck('story-wagon-seven', { x: 50, y: 30 })];
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Where?'));
+    next = chooseOption(next, optionIndex(next, 'Thanks. Over and out.'));
+    expect(next.player.rumored).toEqual(['story-wagon-seven']);
+  });
+
   it('is not offered without the perk', () => {
     const { w, npc } = rumorWorld();
     w.player.perks = [];

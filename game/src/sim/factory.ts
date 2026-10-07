@@ -36,8 +36,13 @@ export function newId(world: IdSource, prefix: string): string {
 
 // A part at the given wear step, at full HP for that step.
 export function makePart(world: IdSource, defId: string, wear: number): PartInstance {
+  return partWithId(newId(world, 'p'), defId, wear);
+}
+
+// makePart with a fixed id, for a part placed by data rather than made in play.
+export function partWithId(id: string, defId: string, wear: number): PartInstance {
   if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
-  const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, wear, ...gunFor(defId) };
+  const part: PartInstance = { id, defId, hp: 0, wear, ...gunFor(defId) };
   return { ...part, hp: maxHp(part) };
 }
 

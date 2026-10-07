@@ -1,9 +1,10 @@
-// Obstacle placement: the baked map's props, then seeded site props and road wrecks.
+// Obstacle placement: the baked map's props, then seeded site props and road wrecks, then the fixed story wrecks.
 
 import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
+import { STORY_WRECKS } from '../data/salvage';
 import { TERRAIN } from '../data/terrain';
 import { PROP_KINDS, type BakedMap, type BakedProp, type Terrain } from './terrain';
 import { randInt, randRange } from './rng';
@@ -22,6 +23,7 @@ export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
   const sites = placeSites(world);
   const out = [...baked, ...sites];
   placeRoadWrecks(world, out);
+  for (const w of STORY_WRECKS) out.push({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } });
   return out;
 }
 
@@ -257,7 +259,7 @@ export function propPose(o: Obstacle): PropPose {
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
 }
 
-// A kill wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
+// A kill wreck or story wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
 function wreckPose(o: Exclude<Obstacle, Landmark>, pos: Vec): PropPose {
   if (o.hulk) return { model: 'hulk', chassisId: o.hulk.chassisId, pos, yaw: o.hulk.yaw, scale: even(1) };
   return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };
