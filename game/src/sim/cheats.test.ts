@@ -6,6 +6,7 @@ import { generateNpcLoadout } from './npc-loadout';
 import type { WeaponDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
+import { WEATHER } from '../data/weather';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
@@ -22,6 +23,7 @@ import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
+import { stormStrength } from './weather';
 import { canUseSite, siteGap } from './sites';
 import { endTurn, hostileToPlayer, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
@@ -267,15 +269,34 @@ describe('places and time', () => {
   });
 
   it('starts one storm at the truck', () => {
-    const w = startWeather(startWeather(emptyWorld(), 'storm'), 'storm');
+    const w = startWeather(startWeather(emptyWorld(), 'storm', null, 0), 'storm', null, 0);
     const storms = w.weather.filter((e) => e.kind === 'storm');
     expect(storms).toHaveLength(1);
     expect(storms[0]).toMatchObject({ pos: playerVehicle(w).pos });
-    expect(() => startWeather(w, 'snow')).toThrow(CheatError);
+    expect(() => startWeather(w, 'snow', null, 0)).toThrow(CheatError);
   });
 
   it('starts regional weather', () => {
-    expect(startWeather(emptyWorld(), 'heatwave').weather.map((e) => e.kind)).toContain('heatwave');
+    expect(startWeather(emptyWorld(), 'heatwave', null, 0).weather.map((e) => e.kind)).toContain('heatwave');
+  });
+
+  it('starts a storm for a set number of turns, born this turn', () => {
+    const w = startWeather(emptyWorld(), 'storm', 70, 0);
+    expect(w.weather.find((e) => e.kind === 'storm')).toMatchObject({ turnsLeft: 70, born: w.turn });
+    expect(() => startWeather(w, 'storm', 0, 0)).toThrow(CheatError);
+    expect(() => startWeather(w, 'storm', 2.5, 0)).toThrow(CheatError);
+  });
+
+  it('starts a still storm at full strength the given tiles east of the truck', () => {
+    const w = emptyWorld({ x: 100, y: 100 });
+    w.turn = 50;
+    const next = startWeather(w, 'storm', 400, 80);
+    const storm = next.weather.find((e) => e.kind === 'storm')!;
+    expect(storm).toMatchObject({ pos: { x: 180, y: 100 }, vel: { x: 0, y: 0 }, turnsLeft: 400, born: 50 - WEATHER.sim.stormFadeTurns });
+    if (storm.kind === 'storm') expect(stormStrength(next, storm)).toBe(1);
+    const far = startWeather(w, 'storm', 400, 10 * w.size);
+    expect(far.weather.find((e) => e.kind === 'storm')).toMatchObject({ pos: { x: w.size, y: 100 } });
+    expect(() => startWeather(w, 'storm', 400, -1)).toThrow(CheatError);
   });
 
   it('reveals the whole map', () => {

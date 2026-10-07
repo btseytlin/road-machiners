@@ -24,6 +24,12 @@ body {
   --metal: #33383b;
   --inspection-width: 300px;
   --inspection-height: 340px;
+  --log-width: 282px;
+  --right-column: calc(var(--log-width) + 16px);
+  --weapon-card: 56px;
+  --weapon-gap: 4px;
+  --weapon-icon-w: 40px;
+  --weapon-icon-h: 22px;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -119,8 +125,6 @@ body {
 }
 
 #ui .instruments {
-  left: 14px;
-  bottom: 14px;
   padding: 5px 8px 5px 4px;
   display: grid;
   grid-template-columns: 66px auto;
@@ -154,8 +158,52 @@ body {
   align-items: center;
 }
 .speed-max {
+  position: relative;
   font: 10px var(--font-mono);
   color: var(--muted);
+  cursor: help;
+}
+.speed-max:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.speed-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 8px 10px;
+  background: var(--metal);
+  border: 1px solid #838a8d;
+  color: var(--ink);
+  font: 12px var(--font-mono);
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.speed-max:hover .speed-tip,
+.speed-max:focus-within .speed-tip {
+  display: block;
+}
+.speed-row {
+  display: grid;
+  grid-template-columns: 1fr auto 3ch;
+  gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid #5a6165;
+}
+.speed-row span:not(:first-child) {
+  text-align: right;
+}
+.speed-row.total {
+  font-weight: bold;
+  border-bottom: 0;
+}
+.speed-notes p {
+  margin: 2px 0 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -373,92 +421,81 @@ body {
 }
 
 #ui .weapons {
-  left: 457px;
-  bottom: 14px;
-  max-width: calc(100vw - 587px);
   box-sizing: border-box;
-  padding: 6px 8px 8px;
+  padding: 4px 6px 6px;
 }
 .weapon-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 #ui .weapon-head h3 {
   margin: 0 auto 0 0;
-  font-size: 14px;
+  font-size: 12px;
 }
 #ui .weapon-head button {
-  padding: 2px 7px;
-  font: 11px var(--font-ui);
+  padding: 1px 5px;
+  font: 10px var(--font-ui);
 }
 .weapons fieldset {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
+  display: block;
   border: 0;
   margin: 0;
   padding: 0;
   min-width: 0;
 }
 .weapons .weapon-slots {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(var(--weapon-cols), var(--weapon-card));
+  gap: var(--weapon-gap);
+}
+.weapons .weapon-slots.two-rows {
+  --weapon-card: 46px;
+  --weapon-icon-w: 32px;
+  --weapon-icon-h: 18px;
+  font-size: 9px;
 }
 .weapons .weapon-slot {
-  width: 96px;
-  min-width: 0;
-}
-#ui .weapon-pick {
-  position: relative;
-  width: 100%;
-  padding: 4px;
+  width: var(--weapon-card);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
+}
+.weapons .weapon-slot.broken .weapon-pick {
+  opacity: 0.55;
+}
+#ui .weapon-pick {
+  width: 100%;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 2px;
+  justify-items: center;
   box-shadow: inset 0 0 0 2px #444b4e;
 }
-.weapon-pick .icon {
-  width: 38px;
-  height: 36px;
-}
 .weapon-number {
-  position: absolute;
-  top: 3px;
-  left: 5px;
-  font: 11px var(--font-mono);
+  font: 10px var(--font-mono);
   color: #e5c47c;
 }
-.weapon-name {
-  max-width: 100%;
-  padding-left: 10px;
-  box-sizing: border-box;
-  font-size: 10px;
-  line-height: 1.15;
-  text-align: center;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.weapon-pick .item-icon {
+  grid-column: 1 / 3;
+  width: var(--weapon-icon-w);
+  height: var(--weapon-icon-h);
 }
 .weapon-pick [data-status] {
-  font: 10px / 1.2 var(--font-mono);
-}
-.weapon-ammo-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 2px;
+  font: 9px / 1 var(--font-mono);
+  justify-self: end;
+  white-space: nowrap;
 }
 .weapon-ammo {
+  grid-column: 1 / 3;
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 .ammo-cell {
-  width: 6px;
-  height: 12px;
+  width: 4px;
+  height: 7px;
   border: 1px solid var(--edge);
   background: var(--ink);
 }
@@ -468,23 +505,25 @@ body {
 .ammo-cell.reloading {
   background: #e5c47c;
 }
-#ui .weapon-reload {
-  padding: 1px 4px;
+.weapon-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
 }
-.weapon-reload .icon {
-  width: 16px;
+#ui .weapon-hold,
+#ui .weapon-reload {
+  padding: 0;
+  font-size: 10px;
   height: 16px;
 }
-.weapon-target {
-  font-size: 10px;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.weapon-slots.two-rows .weapon-hold,
+.weapon-slots.two-rows .weapon-reload {
+  height: 14px;
+  font-size: 9px;
 }
-#ui .weapon-hold {
-  padding: 1px 4px;
-  font-size: 11px;
+.weapon-reload .icon {
+  width: 12px;
+  height: 12px;
 }
 #ui .turn-control {
   right: 16px;
@@ -517,7 +556,7 @@ body {
 #ui .log {
   right: 16px;
   bottom: 112px;
-  width: 282px;
+  width: var(--log-width);
   height: 122px;
   box-sizing: border-box;
   display: flex;
@@ -534,7 +573,7 @@ body {
   position: absolute;
   right: 16px;
   bottom: 246px;
-  width: 282px;
+  width: var(--log-width);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -753,9 +792,6 @@ body {
   height: calc(100dvh - 112px - 72px);
 }
 #ui .recenter {
-  left: 50%;
-  bottom: 124px;
-  transform: translateX(-50%);
   padding: 0;
   border: 0;
 }
@@ -1039,10 +1075,12 @@ body {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .instruments,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
 }
@@ -1121,6 +1159,7 @@ body {
 }
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   font: 13px var(--font-mono);
   color: var(--ink);
@@ -1167,6 +1206,9 @@ body {
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
+}
+.town-shop {
+  container-type: inline-size;
 }
 .town-truck {
   padding-right: 24px;
@@ -1478,36 +1520,31 @@ body {
   background: #cc775555;
 }
 @media (max-width: 1100px) {
-  /* Room between the instruments and the narrower log. */
-  #ui .weapons {
-    max-width: calc(100vw - 689px);
+  #ui {
+    --log-width: 246px;
   }
   #ui .log,
   #ui .right-dock {
-    width: 246px;
-  }
-}
-@media (max-width: 900px) {
-  /* Too narrow beside the instruments, so the weapons sit above them. */
-  #ui .weapons {
-    left: 14px;
-    bottom: 224px;
-    max-width: calc(100vw - 30px);
+    width: var(--log-width);
   }
 }
 @media (max-width: 720px) {
+  .speed-tip {
+    position: fixed;
+    left: 12px;
+    bottom: 200px;
+  }
   .instrument-actions {
     flex-wrap: wrap;
   }
-  #ui .weapons {
-    bottom: 196px;
-    max-width: calc(100vw - 30px);
+  #ui {
+    --log-width: 200px;
+    --right-column: calc(var(--log-width) + 14px);
   }
   #ui .log {
     top: auto;
     bottom: 176px;
     right: 14px;
-    width: 200px;
     height: 80px;
   }
   #ui .radio {
@@ -1595,6 +1632,8 @@ canvas.view {
     rgba(157, 121, 84, 0.18),
     rgba(120, 88, 58, 0.55)
   );
+  /* Opacity follows the player's storm exposure each turn; the transition glides between turns. */
+  transition: opacity 1s linear;
 }
 
 /* Progress of a parked job: repair or search. */
@@ -1620,6 +1659,37 @@ canvas.view {
 }
 #ui .top-left > .panel {
   position: static;
+}
+/* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
+.bottom-left {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100vw - 22px - var(--right-column));
+}
+#ui .bottom-left > .panel {
+  position: static;
+}
+#ui .bottom-left > .instruments {
+  order: 1;
+}
+#ui .bottom-left > .weapons {
+  order: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+#ui .bottom-left > .recenter {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  transform: none;
 }
 .top-right {
   position: absolute;
@@ -2047,14 +2117,22 @@ canvas.view {
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 0.9fr;
+  grid-template-columns: minmax(150px, 1fr) 132px 132px 44px 64px;
   gap: 10px;
   align-items: center;
   padding: 4px 6px;
   border-bottom: 1px solid #3b454b;
 }
+.goods.truck .goods-head,
+.goods.truck .good-row {
+  grid-template-columns: minmax(120px, 1fr) 48px 132px 132px 44px 64px;
+}
 .goods-head {
   font-size: 12px;
+}
+.goods-head span:nth-last-child(-n + 2),
+.goods.truck .goods-head span:nth-child(2) {
+  text-align: right;
 }
 .good-row:hover {
   background: #2c3438;
@@ -2095,11 +2173,59 @@ canvas.view {
 .tag.sell {
   color: #e8b86a;
 }
-.held {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
+.count,
+.profit {
+  text-align: right;
+  white-space: nowrap;
+}
+.num {
   font: 13px var(--font-mono);
+}
+.cap {
+  display: none;
+  margin-right: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+@container (max-width: 620px) {
+  .goods-head {
+    display: none;
+  }
+  .good-row {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas:
+      "name held profit"
+      "buy buy sell";
+    row-gap: 6px;
+  }
+  .goods.truck .good-row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas:
+      "name theirs held profit"
+      "buy buy sell sell";
+  }
+  .good-row .good-name {
+    grid-area: name;
+  }
+  .good-row .count.theirs {
+    grid-area: theirs;
+  }
+  .good-row .count.held {
+    grid-area: held;
+  }
+  .good-row .profit {
+    grid-area: profit;
+  }
+  .good-row .trade.buy {
+    grid-area: buy;
+  }
+  .good-row .trade.sell {
+    grid-area: sell;
+    justify-self: end;
+  }
+  .cap {
+    display: inline;
+  }
 }
 
 /* Garage services: fuel, supplies and repair, each a meter and its buttons. */
@@ -2245,6 +2371,10 @@ canvas.view {
 .job > .icon {
   width: 24px;
   height: 24px;
+}
+/* A note in place of an action wraps, so it never squeezes the contract summary. */
+.job > .dim {
+  max-width: 11em;
 }
 #ui .job button {
   padding: 3px 12px;
