@@ -75,15 +75,6 @@ def test_member_approve_writes_command_and_clears_markup(tmp_path):
     assert query.markups == [None]
 
 
-def test_waste_review_button_queues_its_change(tmp_path):
-    query = FakeQuery("factory:waste:301")
-    assert press(tmp_path, query) == [{
-        "kind": "waste-change", "issue": 301, "text": None, "by": "7", "byName": "Ann Lee", "chat": "-100", "messageId": 55, "postId": 55,
-    }]
-    assert query.answers == ["Change queued"]
-    assert query.markups == [None]
-
-
 def test_member_deny(tmp_path):
     query = FakeQuery("factory:deny:9")
     commands = press(tmp_path, query)

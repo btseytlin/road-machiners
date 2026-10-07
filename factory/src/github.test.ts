@@ -2,24 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { ghClient } from './github';
 import type { FactoryConfig, Run, RunResult } from './types';
 
-const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3 } as FactoryConfig;
+const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3, githubRetries: 3, githubRetryBaseSeconds: 15, githubTimeoutSeconds: 60 } as FactoryConfig;
 const ok = (stdout: string): RunResult => ({ code: 0, stdout, stderr: '' });
+const RATE_LIMITED: RunResult = { code: 1, stdout: '', stderr: 'HTTP 403: API rate limit exceeded for user ID 1.' };
 
-const RAW = (number: number) => ({ number, title: `t${number}`, body: '', labels: [{ name: 'bug' }], createdAt: '2026-01-01T00:00:00Z', state: 'OPEN', author: { login: 'anna' } });
+const NODE = (number: number, voters: string[] = []) => ({
+  number, title: `t${number}`, body: '', labels: { nodes: [{ name: 'bug' }] }, createdAt: '2026-01-01T00:00:00Z', state: 'OPEN', author: { login: 'anna' },
+  reactions: { pageInfo: { hasNextPage: false }, nodes: voters.map((login) => ({ user: { login } })) },
+});
+
+function searchPage(nodes: unknown[], endCursor = ''): string {
+  return JSON.stringify({ data: { search: { pageInfo: { hasNextPage: endCursor !== '', endCursor }, nodes } } });
+}
 
 function project(options: string[]): string {
   const field = { id: 'F1', options: options.map((name) => ({ id: `id-${name}`, name })) };
   return JSON.stringify({ data: { user: { projectV2: { id: 'P1', field } } } });
 }
 
-const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 
 function fake(calls: string[][], projectJson: string): Run {
   return async (_cmd, args) => {
     calls.push(args);
     const text = args.join(' ');
-    if (text.startsWith('issue list')) return ok(JSON.stringify(text.includes('--label bug') ? [RAW(1), RAW(2)] : [RAW(2), RAW(3)]));
-    if (text.includes('/reactions')) return ok('anna\nboss\n');
+    if (text.includes('search(type: ISSUE')) return ok(text.includes('cursor=') ? searchPage([NODE(3)]) : searchPage([NODE(1, ['anna', 'boss']), NODE(2)], 'C1'));
     if (text.includes('repos/o/r/issues/1/comments')) return ok('{"login":"a","body":"hi\\nthere"}\n');
     if (text.includes('projectV2(number')) return ok(projectJson);
     if (text.includes('items(first')) {
@@ -35,12 +42,65 @@ function fake(calls: string[][], projectJson: string): Run {
 }
 
 describe('ghClient', () => {
-  it('unions candidates by number and fills thumbs-up', async () => {
-    const found = await ghClient(fake([], project(ALL)), CFG).candidates(['bug', 'feature-request']);
+  it('reads candidates of any label with their thumbs-up in one search, page by page', async () => {
+    const calls: string[][] = [];
+    const found = await ghClient(fake(calls, project(ALL)), CFG).candidates(['bug', 'feature-request']);
     expect(found.map((i) => i.number)).toEqual([1, 2, 3]);
-    expect(found[0].author).toBe('anna');
-    expect(found[0].labels).toEqual(['bug']);
-    expect(found[0].thumbsUp).toEqual(['anna', 'boss']);
+    expect(found[0]).toMatchObject({ author: 'anna', labels: ['bug'], state: 'OPEN', thumbsUp: ['anna', 'boss'] });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain('search=repo:o/r is:issue is:open label:"bug","feature-request"');
+    expect(calls[1]).toContain('cursor=C1');
+  });
+
+  it('stops intake when an issue has more thumbs-up than one search reads', async () => {
+    const node = { ...NODE(1), reactions: { pageInfo: { hasNextPage: true }, nodes: [] } };
+    const client = ghClient(async () => ok(searchPage([node])), CFG);
+    await expect(client.candidates(['bug'])).rejects.toThrow('over 100 thumbs-up');
+  });
+
+  it('waits twice as long before each retry of a rate-limited call', async () => {
+    const waits: number[] = [];
+    let calls = 0;
+    const run: Run = async () => (++calls < 4 ? RATE_LIMITED : ok(''));
+    await ghClient(run, CFG, async (ms) => { waits.push(ms); }).reopen(7);
+    expect(waits).toEqual([15000, 30000, 60000]);
+  });
+
+  it('fails with the rate-limit error once the retries run out', async () => {
+    const waits: number[] = [];
+    const client = ghClient(async () => RATE_LIMITED, CFG, async (ms) => { waits.push(ms); });
+    await expect(client.reopen(7)).rejects.toThrow('rate limit');
+    expect(waits).toHaveLength(3);
+  });
+
+  it('does not retry a failure that is not a rate limit', async () => {
+    let calls = 0;
+    const run: Run = async () => { calls++; return { code: 1, stdout: '', stderr: 'HTTP 404: Not Found' }; };
+    await expect(ghClient(run, CFG, async () => {}).reopen(7)).rejects.toThrow('404');
+    expect(calls).toBe(1);
+  });
+
+  it('gives every call the timeout and does not retry a call that timed out', async () => {
+    const timeouts: (number | undefined)[] = [];
+    const run: Run = async (_cmd, _args, opts) => { timeouts.push(opts?.timeoutMs); return { code: 1, stdout: '', stderr: 'gh timed out after 60000 ms and was killed' }; };
+    await expect(ghClient(run, CFG, async () => {}).reopen(7)).rejects.toThrow('timed out');
+    expect(timeouts).toEqual([60000]);
+  });
+
+  it('sends one call at a time, even after a failed call', async () => {
+    let running = 0;
+    let most = 0;
+    const run: Run = async (_cmd, args) => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((done) => setTimeout(done, 5));
+      running--;
+      return args.includes('1') ? { code: 1, stdout: '', stderr: 'HTTP 404' } : ok('');
+    };
+    const client = ghClient(run, CFG);
+    const results = await Promise.allSettled([client.reopen(1), client.reopen(2), client.reopen(3)]);
+    expect(results.map((result) => result.status)).toEqual(['rejected', 'fulfilled', 'fulfilled']);
+    expect(most).toBe(1);
   });
 
   it('ends every comment with the factory marker on its own line', async () => {

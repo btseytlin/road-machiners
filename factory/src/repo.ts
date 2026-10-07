@@ -74,6 +74,18 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     });
   }
 
+  // Each step merges into the result of the steps before it. `heads` holds the new commit of each target and `started` its tip on GitHub before the first step.
+  async function mergeSteps(steps: MergeStep[]): Promise<{ heads: Map<string, string>; started: Map<string, string> }> {
+    const heads = new Map<string, string>();
+    const started = new Map<string, string>();
+    const tip = async (name: string): Promise<string> => heads.get(name) ?? commitOf(name);
+    for (const step of steps) {
+      if (!started.has(step.into)) started.set(step.into, await commitOf(step.into));
+      heads.set(step.into, await mergeCommit(await tip(step.branch), await tip(step.into), step));
+    }
+    return { heads, started };
+  }
+
   // One push moves every branch or none. A branch that moved on GitHub meanwhile makes it fail, since the push never forces.
   async function pushAll(heads: Map<string, string>): Promise<void> {
     await git(['push', '--atomic', 'origin', ...[...heads].map(([branch, commit]) => `${commit}:refs/heads/${branch}`)]);
@@ -122,7 +134,13 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (lines(await git(['ls-remote', '--heads', 'origin', branch])).length > 0) await git(['push', 'origin', '--delete', branch]);
     },
     async prepareWorkClone(branch, base, dir) {
-      if (existsSync(dir)) return;
+      // A clone cut short, like by a full disk, has no commit checked out. It holds no work, so it is cloned again.
+      // The note goes to the job log, so the replacement is on record.
+      if (existsSync(dir)) {
+        if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return;
+        console.error(`${dir} has no commit checked out, so it is cloned again`);
+        rmSync(dir, { recursive: true, force: true });
+      }
       mkdirSync(dir, { recursive: true });
       await gitIn(dir, ['init', '--quiet']);
       await gitIn(dir, ['remote', 'add', 'origin', path]);
@@ -157,6 +175,17 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
       return { commit, conflicts };
     },
+    async mergeBranchIntoWork(dir, branch) {
+      await gitIn(dir, ['fetch', 'origin']);
+      if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
+      const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
+      if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
+      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
+      if (result.code === 0) return { commit, conflicts: [] };
+      const conflicts = await conflictedFiles(dir);
+      if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
+      return { commit, conflicts };
+    },
     async isMerged(base, branch) {
       const result = await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', await ref(base), await ref(branch)], { cwd: path });
       if (result.code === 0 || result.code === 1) return result.code === 0;
@@ -176,11 +205,16 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       return Number((await git(['rev-list', '--count', `${await ref(base)}..${await ref(branch)}`])).trim()) > 0;
     },
     // Each step merges into the result of the steps before it, so "main into dev" after "issue into main" takes the new main.
+    // Other jobs and members push all the time. A push that GitHub rejects because a target moved merges again from the new tips.
     async merge(steps) {
-      const heads = new Map<string, string>();
-      const tip = async (name: string): Promise<string> => heads.get(name) ?? commitOf(name);
-      for (const step of steps) heads.set(step.into, await mergeCommit(await tip(step.branch), await tip(step.into), step));
-      await pushAll(heads);
+      for (;;) {
+        const { heads, started } = await mergeSteps(steps);
+        const pushed = await run('git', [...NO_HOOKS, 'push', '--atomic', 'origin', ...[...heads].map(([branch, commit]) => `${commit}:refs/heads/${branch}`)], { cwd: path });
+        if (pushed.code === 0) return;
+        await git(['fetch', '--prune', 'origin']);
+        const moved = await Promise.all([...started].map(async ([branch, commit]) => (await commitOf(branch)) !== commit));
+        if (!moved.includes(true)) throw new Error(`push of ${[...heads.keys()].join(', ')} failed: ${(pushed.stderr || pushed.stdout).trim()}`);
+      }
     },
     async mergeLog(from, to) {
       return lines(await git(['log', '--first-parent', '--merges', '--format=%s', `${await ref(to)}..${await ref(from)}`]));

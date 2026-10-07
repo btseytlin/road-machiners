@@ -16,17 +16,10 @@ spec.loader.exec_module(plugin)
 CFG = plugin.Config("/inbox", "/state", "-100", None)
 POSTS = {"55": 12}
 readiness = sys.modules["factory_plugin.readiness"]
-EMPTY_ISSUE = readiness.IssueView("", 0.0, [])
 
 
-def make_readiness(tmp_path, view=EMPTY_ISSUE, fetch=None, now=lambda: 1000.0):
-    """A readiness check on a fake issue. A fetch that is not given fails the test when the check downloads."""
-    def no_fetch(url, headers, timeout):
-        raise AssertionError(f"unexpected download of {url}")
-    return plugin.Readiness(
-        min_words=3, pending=tmp_path / "pending-media.json", view=lambda issue: view, token=lambda: None,
-        fetch=fetch or no_fetch, now=now,
-    )
+def make_readiness(tmp_path):
+    return plugin.Readiness(min_words=3, inbox=str(tmp_path / "inbox"))
 
 
 def route(text, reply=None, chat="-100"):
@@ -288,7 +281,7 @@ def test_hook_queues_a_plain_approval_reply_and_hands_it_to_hermes_with_a_header
     }
 
 
-def route_setup(tmp_path, session=None, **ready):
+def route_setup(tmp_path, session=None):
     committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
     committee.seed()
     (tmp_path / "state").mkdir()
@@ -297,7 +290,7 @@ def route_setup(tmp_path, session=None, **ready):
     inbox.mkdir()
     cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
     values = SESSION if session is None else session
-    return inbox, plugin.make_route_handler(cfg, make_readiness(tmp_path, **ready), session_env=lambda key: values.get(key, ""))
+    return inbox, plugin.make_route_handler(cfg, make_readiness(tmp_path), session_env=lambda key: values.get(key, ""))
 
 
 @pytest.mark.parametrize("route_name", ["answer", "patch", "redesign"])

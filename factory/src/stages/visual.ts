@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { updateState } from '../state';
 import { VISUAL_HEADING, type Ctx } from '../types';
 import { VISUAL_SEND_BACKS, readVisualReview, type SendBack } from '../visual-review';
@@ -41,5 +42,5 @@ async function sendBack(ctx: Ctx, issue: number, back: SendBack): Promise<void> 
   if (sent > VISUAL_SEND_BACKS) throw new Error(`The visual review rejected the build after ${VISUAL_SEND_BACKS} send-backs already. The card stays in Testing for Hermes. Mismatches:\n${report}`);
   await ctx.github.comment(issue, `${VISUAL_HEADING}\n\n${INTROS[back.to]}\n\n${fitComment(report, 'the testing agent log')}`);
   ctx.log('verify', issue, `visual review sent the card back to ${TARGETS[back.to]} (${sent} of ${VISUAL_SEND_BACKS})`);
-  await ctx.github.move(issue, TARGETS[back.to]);
+  await moveCard(ctx, issue, TARGETS[back.to], back.to === 'design' ? 'plan-wrong' : 'rebuild');
 }

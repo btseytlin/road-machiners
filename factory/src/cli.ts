@@ -1,6 +1,8 @@
-// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
+// The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake | command>
+// Any other command is a Hermes command of ctl.ts. `help` lists them.
 import { readEnvFiles } from './config';
 import { realContext } from './context';
+import { runCtl } from './ctl';
 import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
@@ -36,7 +38,17 @@ async function main(args: string[]): Promise<void> {
   }
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
-  throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
+  return manage(ctx, args);
+}
+
+// A refused order is an answer for Hermes, not a crash, so it prints the reason alone and exits nonzero.
+async function manage(ctx: ReturnType<typeof realContext>, args: string[]): Promise<void> {
+  try {
+    await runCtl(ctx, args);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }
 
 // Lifts a pause whose process ended, then tells whether the tick must skip.
