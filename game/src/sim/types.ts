@@ -174,6 +174,7 @@ export type NpcActivity = {
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target, or a flee its threat
+  worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
 };

@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -396,9 +396,32 @@ function steerFight(world: World, vehicle: Vehicle, goal: NpcActivity, _profile:
 // A fight on the player, or a robbery of an NPC, rolls once whether the driver radios for the cargo first or opens
 // fire unwarned.
 function fightGoal(world: World, vehicle: Vehicle, target: Vehicle, reason: string): NpcActivity {
-  const goal: NpcActivity = { ...createActivity('fight', target.id, { ...target.pos }, reason), perceived: world.turn };
+  const worn = { turn: world.turn, condition: bodyCondition(target) };
+  const goal: NpcActivity = { ...createActivity('fight', target.id, { ...target.pos }, reason), perceived: world.turn, worn };
   if (target.id === world.player.vehicleId || robbedFor(world, vehicle, target)) goal.demands = decide(world, vehicle, 'mugging', target.id, null) === 'demand';
   return goal;
+}
+
+// A fighter that has not worn its target down by NPC_BEHAVIOR.fightWearShare of its body condition in
+// NPC_BEHAVIOR.fightStallTurns gives the fight up: it ends its feud with the target and backs off it, as a robbery
+// that went quiet does, and keeps the target noticed so the sighting rolls no new fight. A long fight that wears the
+// target down holds.
+function giveUpStalledFight(world: World, vehicle: Vehicle): void {
+  const goal = topGoal(vehicle);
+  const target = goal?.kind === 'fight' ? world.vehicles.find((v) => v.id === goal.targetId) : undefined;
+  if (!target || !stalls(world, goal!, target)) return;
+  for (const s of statesHeld(world, vehicle.id).filter((x) => x.kind === 'feud' && x.other === target.id)) endState(world, s, 'broken');
+  addState(world, 'backedOff', vehicle.id, target.id, { kind: 'none' });
+  vehicle.brain!.noticed[`hostileSeen:${target.id}`] = world.turn;
+  finishGoal(world, vehicle, 'cannot wear the target down');
+}
+
+// Moves the fight's wear mark to now when the target wore down enough since it, and tells whether the mark is too old.
+function stalls(world: World, goal: NpcActivity, target: Vehicle): boolean {
+  if (!goal.worn) throw new Error(`A fight on ${goal.targetId} has no record of wearing it down`);
+  const condition = bodyCondition(target);
+  if (goal.worn.condition - condition >= NPC_BEHAVIOR.fightWearShare) goal.worn = { turn: world.turn, condition };
+  return world.turn - goal.worn.turn > NPC_BEHAVIOR.fightStallTurns;
 }
 
 // A robber that radios first asks NPC prey once, as soon as it sees it, and the prey answers at once: it hands over
@@ -896,6 +919,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   forgetFullHold(world, vehicle);
   breakOffDeals(world, vehicle);
   giveUpStrandedRobberies(world, vehicle);
+  giveUpStalledFight(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   serveStranded(world, vehicle, profile);
   if (isDefeated(vehicle)) return defeatedActivity(world, vehicle, profile, contacts);

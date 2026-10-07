@@ -26,6 +26,7 @@ import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import FORMAT_2_19 from './save-fixtures/format-2-19.json';
+import FORMAT_2_20 from './save-fixtures/format-2-20.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -404,6 +405,20 @@ describe('save migration 19 to 20', () => {
       ...FORMAT_2_19,
       vehicles: [player, { ...runner, brain: { goals: runner.brain!.goals.map(fled) } }, fighter],
       removed: [{ ...FORMAT_2_19.removed[0], brain: { goals: FORMAT_2_19.removed[0].brain.goals.map(fled) } }],
+    });
+  });
+});
+
+describe('save migration 20 to 21', () => {
+  it('gives every fight goal a fresh wear window from the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[20](FORMAT_2_20);
+    const [player, raider, runner] = FORMAT_2_20.vehicles;
+    const worn = (g: { kind: string }) => (g.kind === 'fight' ? { ...g, worn: { turn: 700, condition: 1 } } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_20,
+      vehicles: [player, { ...raider, brain: { goals: raider.brain!.goals.map(worn) } }, runner],
+      removed: [{ ...FORMAT_2_20.removed[0], brain: { goals: FORMAT_2_20.removed[0].brain.goals.map(worn) } }],
     });
   });
 });

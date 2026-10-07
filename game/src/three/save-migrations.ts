@@ -321,6 +321,15 @@ function withFleePerceived_19_20(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// A fight records the last turn it wore its target down. Taken as the save's turn at full condition, so the first
+// check after loading starts a fresh window.
+function withFightWorn_20_21(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'fight' ? { ...g, worn: { turn, condition: 1 } } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -401,6 +410,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutGuards_18_19,
   // 19 to 20: a flee goal records the turn it last perceived its threat, taken as the save's turn.
   withFleePerceived_19_20,
+  // 20 to 21: a fight records the last turn it wore its target down, taken as the save's turn.
+  withFightWorn_20_21,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

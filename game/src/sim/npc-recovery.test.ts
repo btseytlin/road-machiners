@@ -11,6 +11,7 @@ import { siteGates } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import { cloneWorld } from './world';
+import { addState, stateOf } from './states';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
 
@@ -318,5 +319,31 @@ describe('NPC gameplay recovery', () => {
       return true;
     });
     expect(fled).toBeGreaterThan(0);
+  });
+
+  // A roamer chased a trader for 78 turns at a hit chance under a fifth. Nothing ended a fight that went nowhere.
+  describe('a stalled fight', () => {
+    const stalled = (worn: number) => {
+      const { world, npc } = createScenario('buggy');
+      const target = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
+      addState(world, 'feud', npc.id, target.id, { kind: 'feud', robbery: false });
+      const fight: NpcActivity = { kind: 'fight', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'fight a hostile in sight', perceived: world.turn, worn: { turn: world.turn, condition: worn } };
+      npc.brain!.goals = [workGoal('buggy'), fight];
+      world.turn += NPC_BEHAVIOR.fightStallTurns + 1;
+      thinkNpc(world, npc);
+      return { world, npc, target };
+    };
+
+    it('is given up when the target wore down too little, with the feud ended and the target backed off', () => {
+      const { world, npc, target } = stalled(1);
+      expect(npc.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);
+      expect(stateOf(world, 'feud', npc.id, target.id)).toBeNull();
+      expect(stateOf(world, 'backedOff', npc.id, target.id)).not.toBeNull();
+    });
+
+    it('holds while the target keeps wearing down', () => {
+      const { npc, target } = stalled(1 + NPC_BEHAVIOR.fightWearShare);
+      expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: target.id });
+    });
   });
 });

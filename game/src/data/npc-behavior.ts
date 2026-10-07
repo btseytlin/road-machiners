@@ -85,6 +85,10 @@ export const NPC_BEHAVIOR = {
   // Turns a runner keeps on after it last saw, heard or took a hit from anything hostile. A long gun out of sight
   // fires every 3 or 4 turns, and 6 turns of running carry the truck about 20 tiles farther away.
   fleeCalmTurns: 6,
+  // A fighter gives up a fight that has not worn its target's body condition down by fightWearShare in
+  // fightStallTurns turns. At that pace a knockout would take over 400 turns, so only a fight it cannot win stops.
+  fightStallTurns: 20,
+  fightWearShare: 0.05,
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
