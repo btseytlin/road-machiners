@@ -1,7 +1,7 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
+import { BEATS_PER_BAR, engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
 import { shuffled, spatial } from "../audio/pick";
 import type {
@@ -219,6 +219,11 @@ export class SoundDirector {
     this.player.play(cue, CENTER, 0);
   }
 
+  // Logs the engine strain of a turn that has any.
+  engineStrain(s: Strain): void {
+    if (s.from > 0 || s.to > 0) this.record(`engine-strain ${s.from.toFixed(1)}->${s.to.toFixed(1)}`);
+  }
+
   private record(cue: string): void {
     this.log.push(cue);
     if (this.log.length > LOG_SIZE) this.log.shift();
@@ -335,10 +340,35 @@ export function engineGlide(
   };
 }
 
+// How strained the engine note is over one turn, from 0 healthy to 1 fully strained, at its start and end.
+export type Strain = { from: number; to: number };
+
+// Strain level between turns. A turn with heat damage is fully strained from its start; a turn without it falls by
+// MIX.engine.strainRelease, so the note comes back over two turns and never flips between full and none when damage
+// comes and goes. A turn that does not follow the last played one, like after a parked turn or a load, starts healthy.
+export class EngineStrain {
+  private turn: number | null = null;
+  private level = 0;
+
+  next(turn: number, damaging: boolean): Strain {
+    const before = this.turn === turn - 1 ? this.level : 0;
+    const s = damaging ? { from: 1, to: 1 } : { from: before, to: Math.max(0, before - MIX.engine.strainRelease) };
+    this.turn = turn;
+    this.level = s.to;
+    return s;
+  }
+}
+
+// Splits one engine glide between the healthy and strained loops: same rates, and levels that add up to the glide's.
+export function strainGlides(g: Glide, s: Strain): { healthy: Glide; strained: Glide } {
+  const level = (from: number, to: number): Glide => ({ ...g, gainFrom: g.gainFrom * from, gainTo: g.gainTo * to });
+  return { healthy: level(1 - s.from, 1 - s.to), strained: level(s.from, s.to) };
+}
+
 // Engine, wind, calm music and the combat score bases run for the whole session. Wind and music change gain;
 // the engine sounds only while a turn plays.
 export class SoundLoops {
-  private engine: LoopHandle | null = null;
+  private engine: { healthy: LoopHandle; strained: LoopHandle } | null = null;
   private engineChassis: string | null = null;
   private player: SoundPlayer;
   private wind: LoopHandle;
@@ -362,16 +392,23 @@ export class SoundLoops {
     ];
   }
 
-  drive(g: Glide, chassisId: string): void {
+  // The healthy and strained engine loops start together and take the same rates each turn.
+  drive(g: Glide, chassisId: string, strain: Strain): void {
     let engine = this.engine;
     if (this.engineChassis !== chassisId || !engine) {
-      const file = engineFileFor(chassisId);
-      engine?.stop(0);
-      engine = this.player.loop("engine", { pan: 0, gain: 0 }, file);
+      engine?.healthy.stop(0);
+      engine?.strained.stop(0);
+      const silent = { pan: 0, gain: 0 };
+      engine = {
+        healthy: this.player.loop("engine", silent, engineFileFor(chassisId)),
+        strained: this.player.loop("engine-strain", silent, engineStrainFileFor(chassisId)),
+      };
       this.engine = engine;
       this.engineChassis = chassisId;
     }
-    engine.glide(g);
+    const layers = strainGlides(g, strain);
+    engine.healthy.glide(layers.healthy);
+    engine.strained.glide(layers.strained);
   }
 
   // A throttle blip on the chassis's own engine note when overdrive comes on.

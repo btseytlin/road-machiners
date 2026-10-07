@@ -1,5 +1,6 @@
 import type { Tier } from './market';
 import { UNPRICED_WEAPONS } from './weapons';
+import { CLAYMORE, oilSlickLength, UNPRICED_UTILITIES } from './utilities';
 import { MASS_SCALE } from './mass-scale';
 
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
@@ -11,7 +12,8 @@ export type PartKind =
   | "cargo"
   | "core"
   | "scanner"
-  | "store";
+  | "store"
+  | "utility";
 
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms. For the same job a higher
 // tier weighs less: per cell for armor, weapons and engines, per extra row for cargo.
@@ -68,6 +70,7 @@ export type WeaponDef = PartBase & {
   round: WeaponRound;
   classes: WeaponClass[];
   look: "mg" | "cannon";
+  line?: { turns: number }; // a round that hits ties a line to the part it struck, for this many turns; see src/sim/harpoon.ts
 };
 
 export type EngineDef = PartBase & {
@@ -80,6 +83,19 @@ export type EngineDef = PartBase & {
   heat: number; // multiplies how fast the sun heats the engine
 };
 
+// A ram that holds an explosive charge. Armed, it blasts on the next truck crash on its side at minImpact tiles/turn
+// or more. blast hits the other truck around the contact point, radius in meters; selfBlast hits the owner's struck
+// side. reload is the turns before it can be armed again. See src/sim/claymore.ts.
+export type ClaymoreDef = {
+  minImpact: number;
+  blast: { damage: number; pen: number; radius: number };
+  selfBlast: { damage: number; pen: number };
+  // The blast throws the two trucks apart, or the user back off an obstacle: impulse in N s on each truck, and the
+  // share of it that points up.
+  throw: { impulse: number; lift: number };
+  reload: number;
+};
+
 // full: a field repair lifts it to full HP. capped: to the field cap. none: only a town repairs it.
 export type FieldRepair = "full" | "capped" | "none";
 
@@ -90,6 +106,7 @@ export type ArmorDef = PartBase & {
   fieldRepair: FieldRepair;
   ramMult: number; // multiplies ram damage dealt from the side it is mounted on
   look: "plates" | "cage" | "ram";
+  claymore?: ClaymoreDef;
 };
 
 export type CargoDef = PartBase & {
@@ -117,6 +134,31 @@ export type StoreDef = PartBase & {
   amount: number; // fuel units or supply units added to the cap
 };
 
+// The aim numbers a utility that fires a shot gives hitOdds, as a gun does. See WeaponDef.
+
+// What a utility does. Distances are in tiles and durations in turns. An active effect acts on an order; crane
+// and scraper are passive and work while mounted. See src/sim/utility.ts.
+// behind: tiles from the truck's rear to the near edge of what it drops. fuel: fuel units one use spends. An oil
+// spill's size is in OIL in src/data/utilities.ts.
+// minRange and maxRange: how far from the truck the chosen point may lie.
+export type UtilityEffect =
+  | { type: 'sprout'; radius: number; turns: number }
+  | { type: 'mortar'; radius: number; turns: number; minRange: number; maxRange: number }
+  | { type: 'caltrops'; radius: number; turns: number; behind: number }
+  | { type: 'oil'; turns: number; behind: number; fuel: number }
+  | { type: 'emitter'; radius: number; turns: number }
+  | { type: 'flare'; radius: number; turns: number; minRange: number; maxRange: number }
+  | { type: 'crane' }
+  | { type: 'scraper' };
+export type UtilityEffectType = UtilityEffect['type'];
+
+// A yellow deck part with one job. reload: turns from one use to the next, null for a passive part.
+export type UtilityDef = PartBase & {
+  kind: "utility";
+  effect: UtilityEffect;
+  reload: number | null;
+};
+
 export type PartDef =
   | WeaponDef
   | EngineDef
@@ -124,7 +166,8 @@ export type PartDef =
   | CargoDef
   | CoreDef
   | ScannerDef
-  | StoreDef;
+  | StoreDef
+  | UtilityDef;
 
 // Each def holds a hand-set base. Its value is the base plus a modifier from the stats its kind is
 // bought for, so a better stat always adds to the price. Every price in the game derives from value.
@@ -139,6 +182,7 @@ export const PART_PRICE_MODIFIERS = {
   store: { perAmount: 5 },
   scanner: { perRange: 1 },
   core: { perHp: 1 },
+  utility: { perEffectTurn: 5, perReachTile: 2 }, // per turn the effect lasts, per tile it reaches from the truck
 };
 
 type UnpricedByKind = {
@@ -149,6 +193,7 @@ type UnpricedByKind = {
   store: Omit<StoreDef, 'value'>;
   scanner: Omit<ScannerDef, 'value'>;
   core: Omit<CoreDef, 'value'>;
+  utility: Omit<UtilityDef, 'value'>;
 };
 const m = PART_PRICE_MODIFIERS;
 const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
@@ -159,7 +204,21 @@ const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
   store: (d) => m.store.perAmount * d.amount,
   scanner: (d) => m.scanner.perRange * d.range,
   core: (d) => m.core.perHp * d.hp,
+  utility: (d) => m.utility.perEffectTurn * effectTurns(d.effect) + m.utility.perReachTile * utilityReach(d),
 };
+
+function effectTurns(e: UtilityEffect): number {
+  return 'turns' in e ? e.turns : 0;
+}
+
+// Tiles from the truck the effect reaches: the farthest point it can be sent to, the shot's range, the length of an
+// oil slick or the radius around the truck. A passive part reaches nothing.
+function utilityReach(d: Omit<UtilityDef, 'value'>): number {
+  const e = d.effect;
+  if ('maxRange' in e) return e.maxRange;
+  if (e.type === 'oil') return oilSlickLength();
+  return 'radius' in e ? e.radius : 0;
+}
 
 // Damage per turn over a full magazine: the shots, then the reload.
 export function sustainedDamage(d: Pick<WeaponDef, 'round' | 'rounds' | 'cooldown' | 'magazine' | 'reload'>): number {
@@ -182,6 +241,7 @@ function pricePart(def: Unpriced<PartDef>): PartDef {
 
 const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   ...UNPRICED_WEAPONS,
+  ...UNPRICED_UTILITIES,
   stockEngine: {
     id: "stockEngine",
     kind: "engine",
@@ -450,6 +510,25 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     fieldRepair: "none",
     ramMult: 2.8,
     look: "ram",
+  },
+  // A lighter ram with an explosive charge, armed by the driver. See CLAYMORE in src/data/utilities.ts.
+  claymoreRam: {
+    id: "claymoreRam",
+    kind: "armor",
+    name: "Claymore ram",
+    hp: 80,
+    base: 300,
+    tier: 2,
+    w: 3,
+    h: 1,
+    mass: 380,
+    armor: 14,
+    tall: false,
+    blastArmor: 6,
+    fieldRepair: "capped",
+    ramMult: 1.5,
+    look: "ram",
+    claymore: CLAYMORE,
   },
   // One-cell cuts of the plate lines above. Each keeps its line's armor value, so a single cell patches a gap
   // or a corner that a longer row cannot fill. Per cell they cost a bit more than the long rows.

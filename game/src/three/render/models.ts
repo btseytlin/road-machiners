@@ -68,6 +68,10 @@ const NAMES = [
   'bridge_broken',
   'gas_station',
   'ship_wing',
+  'escape_pod',
+  'habitat_cylinder',
+  'wing_shard',
+  'power_cell',
   'wing_deck',
   'ship_wing_deck',
   'ship_flap',
@@ -82,6 +86,56 @@ const NAMES = [
   'guard_post',
   'army_truck',
   'barrier',
+  'fort_masonry_wall',
+  'fort_masonry_tower',
+  'fort_masonry_gate',
+  'fort_masonry_bastion',
+  'fort_masonry_inner',
+  'fort_ship_wall',
+  'fort_ship_tower',
+  'fort_ship_gate',
+  'fort_scrap_wall',
+  'fort_scrap_tower',
+  'fort_scrap_gate',
+  'fort_scrap_bastion',
+  'fort_scrap_inner',
+  'fort_patchwork_wall',
+  'fort_patchwork_tower',
+  'fort_patchwork_gate',
+  'fort_compound_wall',
+  'fort_compound_tower',
+  'fort_compound_gate',
+  'fort_ring_wall',
+  'fort_ring_gate',
+  'fort_yard_wall',
+  'fort_yard_tower',
+  'fort_yard_gate',
+  'bowl_house_rust',
+  'bowl_house_red',
+  'bowl_house_grey',
+  'windmill_tower',
+  'windmill_rotor',
+  'stilt_tank',
+  'fruit_tree',
+  'pumpjack_base',
+  'pumpjack_beam',
+  'storage_tank',
+  'grain_silo',
+  'grain_elevator',
+  'lean_to',
+  'crane_base',
+  'crane_upper',
+  'crane_grab',
+  'ship_hull_ring',
+  'ship_hull_ribs',
+  'ship_hull_stern',
+  'nose_rise',
+  'nose_crag',
+  'radar_dish',
+  'scrap_shelter_flat',
+  'scrap_shelter_lean',
+  'hull_scaffold',
+  'jib_crane',
 
   'bumper_front',
   'bumper_rear',
@@ -96,6 +150,14 @@ const NAMES = [
   'store_jerrycans',
   'store_locker',
 
+  'util_sprout',
+  'util_caltrops',
+  'util_oil',
+  'util_crane',
+  'util_mortar',
+  'util_flare',
+  'util_scraper',
+  'util_emitter',
   'cab_seat',
   'cab_pickup',
   'cab_hardtop',
@@ -119,6 +181,7 @@ const NAMES = [
   'arm_plate',
   'arm_scrap_sheet',
   'arm_ceramic_tile',
+  'arm_claymore_ram',
 
   'cargo_rack',
   'cargo_trailer_box',
@@ -153,6 +216,7 @@ const NAMES = [
   'wrec_tank',
   'wrec_rocket_pod',
   'wrec_sniper',
+  'wrec_harpoon',
 
   'wbar_mg_short',
   'wbar_mg_long',
@@ -163,6 +227,7 @@ const NAMES = [
   'wbar_tank',
   'wbar_sniper',
   'wbar_rocket_tubes',
+  'wbar_harpoon',
 
   'wext_scope',
   'wext_shield',
@@ -291,6 +356,9 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
   return group;
 }
 
+// A model material with this name is a lit lamp or window. It glows in its own color, so it shows at night.
+const GLOW_MATERIAL = 'glow';
+
 // glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
@@ -299,6 +367,7 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
+      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
       m.dispose();
       return l;
     });

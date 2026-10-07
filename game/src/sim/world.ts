@@ -15,10 +15,11 @@ import { gridOf, placementError } from './grid';
 import { addGoods } from './inventory';
 import { isPerkId, pickedFromPair, skillLevel } from './progress';
 import { fitStores } from './resources';
-import { generateObstacles, obstacleReach } from './mapgen';
+import { generateObstacles, touchesObstacle } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
-import { applyGodMode } from './cheats';
+import { assignUtilityOrders } from './npc-utility';
+import { applyGodMode, freezeDriving, freezeFire } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
@@ -39,23 +40,27 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
-import { vehicleStats } from './stats';
+import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, XpSource } from './types';
+import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
 import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
+import { searchStream } from './search';
+import { cookOffClaymores, settleClaymores } from './claymore';
+import { activateUtilities, advanceUtilityEffects, settleShutdowns, tickCharges, utilityOrderError } from './utility';
+import { caltropHits } from './hazards';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 
 // The world seed and the random streams it starts.
-export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng'> {
+export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng' | 'searchRng'> {
   if (!Number.isInteger(seed)) throw new Error(`Seed must be an integer, got ${seed}`);
-  return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed) };
+  return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed), searchRng: searchStream(seed) };
 }
 
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
@@ -116,6 +121,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       talked: {},
       god: false,
       fullLog: false,
+      frozen: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -128,6 +134,10 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     weather: [],
     dustClouds: [],
     states: [],
+    smoke: [],
+    fields: [],
+    flares: [],
+    lines: [],
   };
   world.obstacles = generateObstacles(world, map);
   const truck = makeVehicle(world, {
@@ -142,7 +152,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     brain: null,
   });
   const blocked = world.obstacles.filter(
-    (o) => dist(o.pos, truck.pos) < obstacleReach(o) + vehicleStats(world, truck).radius,
+    (o) => touchesObstacle(o, world.terrain, truck.pos, vehicleStats(world, truck).radius),
   );
   if (blocked.length > 0)
     throw new Error(
@@ -205,7 +215,15 @@ export function update(world: World, fn: (draft: World) => void): World {
   draft.removed = [];
   fn(draft);
   settleAims(draft);
+  settleOverdrive(draft);
   return draft;
+}
+
+// Overdrive cuts out once the engine is too worn for it, whatever wore it down. Only the player turns it back on.
+function settleOverdrive(w: World): void {
+  if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
+  w.player.overdrive = false;
+  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
 // Whether player commands are allowed now. The UI checks it before issuing one.
@@ -275,13 +293,16 @@ export function endTurn(
     w.turn++;
     advanceWeather(w);
     planNpcOrders(w);
+    freezeDriving(w);
     move(w);
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
+    caltropHits(w);
     applyWear(w);
     spillDeadRows(w);
     advanceEngineHeat(w);
     advanceDust(w);
+    advanceUtilityEffects(w);
     clearPiles(w);
     renewSalvage(w);
     fadeCraters(w);
@@ -290,8 +311,13 @@ export function endTurn(
     refreshVision(w);
     raiseCalls(w);
     assignAutoOrders(w);
+    assignUtilityOrders(w);
+    freezeFire(w);
     settleAims(w);
+    activateUtilities(w);
+    tickCharges(w);
     fireWeapons(w);
+    cookOffClaymores(w);
     consumeSupplies(w);
     applyHazards(w);
     spillDeadRows(w);
@@ -320,6 +346,8 @@ export function endTurn(
     refreshVision(w);
     noteEscape(w);
     noteHurt(w);
+    settleShutdowns(w);
+    settleClaymores(w);
     watchStalls(w);
     endCallIfOut(w);
     raiseCalls(w);
@@ -350,6 +378,20 @@ export function setWeaponOrder(
   });
 }
 
+// Sets or clears the player's order to use a utility or arm a claymore ram this turn. Throws when the part refuses it.
+export function setUtilityOrder(world: World, partId: string, order: UtilityOrder | null): World {
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    if (order === null) {
+      delete me.utilityOrders[partId];
+      return;
+    }
+    const error = utilityOrderError(w, me, partId, order);
+    if (error) throw new Error(error);
+    me.utilityOrders[partId] = order;
+  });
+}
+
 // The player drops the rest of a gun's magazine, so it reloads from empty.
 export function reloadWeapon(world: World, weaponId: string): World {
   return playerCommand(world, (w) => {
@@ -374,6 +416,9 @@ export function setAutoRepair(world: World, on: boolean): World {
 
 export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
+    if (on && !canOverdrive(playerVehicle(w))) {
+      throw new Error(`Cannot overdrive: the engine is at or below ${RULES.overdriveMinEngineShare * 100}% of its max HP`);
+    }
     w.player.overdrive = on;
   });
 }

@@ -18,6 +18,7 @@ import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { cloneWorld } from './world';
+import { emptyHidden } from './salvage';
 import { budget } from '../test/budget';
 
 function siteById(id: string) {
@@ -137,7 +138,7 @@ describe('couriers', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'courier', ['courier'], 'courier', ['mg', 'flatFour'], { x: 30, y: 30 });
     npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...siteById('nose').pos }, phase: 'travel', reason: 'test travel' }];
-    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeCloseTo(MIN_CHANCE, 4);
   });
@@ -159,7 +160,7 @@ describe('mercs', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const pad = sitePads(bowl)[0];
     const npc = createNpc(w, 'merc', ['merc'], 'hauler', ['cannon', 'workhorseDiesel'], pad);
-    w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
     expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 2);
     expect(chances.trade ?? MIN_CHANCE).toBeCloseTo(MIN_CHANCE, 2);
@@ -321,7 +322,7 @@ describe('vultures', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { x: 30, y: 30 });
     npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test prowl' }];
-    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeGreaterThanOrEqual(0.9);
   });

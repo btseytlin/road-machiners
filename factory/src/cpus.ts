@@ -13,7 +13,12 @@ type Shares = Pick<FactoryConfig, 'cpuLight' | 'cpuImplement' | 'cpuTest'>;
 
 const shareOf = (cfg: Shares, pool: Pool): number => ({ light: cfg.cpuLight, implement: cfg.cpuImplement, test: cfg.cpuTest })[pool];
 
-const cpuRange = (first: number, count: number): string => (count === 1 ? String(first) : `${first}-${first + count - 1}`);
+// Light jobs run no test suite, so their containers keep the game's own rule of one test worker per CPU.
+export function vitestWorkersOf(cfg: Pick<FactoryConfig, 'vitestWorkersImplement' | 'vitestWorkersTest'>, pool: Pool): number | null {
+  return { light: null, implement: cfg.vitestWorkersImplement, test: cfg.vitestWorkersTest }[pool];
+}
+
+const cpuRange =(first: number, count: number): string => (count === 1 ? String(first) : `${first}-${first + count - 1}`);
 
 // The CPUs of each pool, as cpuset strings like "2-3". Pools take consecutive CPUs in ORDER, so the light pool sits on CPU 0.
 // Throws when the pools need more CPUs than the server has, since an overlap would void the guarantee.

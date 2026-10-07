@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { withLockSync } from './lock';
 import { transcriptUsage } from './transcript';
 import { archiveTranscripts } from './transcript-archive';
-import type { JobStage, Route, TokenPrice } from './types';
+import type { CardFlow, CardStep } from './card-events';
+import type { Column, JobStage, Route, TokenPrice } from './types';
 import { reportAttempt, type Observation } from './observability';
 
 // One agent run: its model, its cost in dollars and its run time.
@@ -12,21 +13,27 @@ export type ModelUsage = { model: string; input: number; output: number; cacheRe
 export type AgentUsage = { model: string; costUsd: number; minutes: number; modelUsage?: ModelUsage[]; sessionId?: string; resumed?: boolean; fromTranscript?: true };
 // The agent run a job has going. Its file outlives a killed job process, so whoever ends the job prices the run from its transcript.
 export type OpenRun = { model: string; projects: string; sessionId: string; resumed: boolean; startedAt: string };
-export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout';
+export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout' | 'stopped' | 'held';
+// A held job stopped on an order and continues in its sessions, so it neither finished nor failed, and its spend is no waste.
+export const isFailedOutcome = (outcome: JobOutcome): boolean => outcome !== 'done' && outcome !== 'held';
 
-// One line per ended job and per routed committee reply. The waste review derives queue wait and reruns from these lines.
+// One line per ended job, per routed committee reply and per card move. The waste review derives queue wait and reruns from these lines.
+// `peakGb` is the highest memory any container of the job used. A job whose containers never ended normally has none.
 export type LedgerLine =
   | Observation
-  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; retryOf?: string | null }
+  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; peakGb?: number; retryOf?: string | null }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
-  | { kind: 'post'; id: number; channel?: string; text: string; at: string };
+  | { kind: 'post'; id: number; channel?: string; text: string; at: string }
+  | { kind: 'control'; action: string; issue: number | null; by: string; reason: string; at: string }
+  | { kind: 'card'; issue: number; step: CardStep; to: Column; at: string; flow?: CardFlow };
 
 // An append is one small write, so a writer that waits this long found a stuck lock.
 const LEDGER_LOCK_MS = 30_000;
 
 const ledgerPath = (home: string): string => join(home, 'ledger.jsonl');
 const usagePath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.jsonl`);
-const openRunPath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.run.json`);
+const peakPath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.peak`);
+const openRunPath =(home: string, jobId: string): string => join(home, 'usage', `${jobId}.run.json`);
 // A run with no issue session keeps its transcript here, so a cut-off run can still be priced.
 export const runProjectsDir = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.projects`);
 
@@ -109,6 +116,22 @@ function forgetRun(home: string, jobId: string): void {
   rmSync(runProjectsDir(home, jobId), { recursive: true, force: true });
 }
 
+// Each container of a job reports its peak memory when it ends. The file keeps the highest, so the job's ledger line holds the job's peak.
+export function recordPeak(home: string, jobId: string, gb: number): void {
+  mkdirSync(join(home, 'usage'), { recursive: true });
+  const path = peakPath(home, jobId);
+  const before = existsSync(path) ? Number(readFileSync(path, 'utf8')) : 0;
+  writeFileSync(path, String(Math.max(before, gb)));
+}
+
+function takePeak(home: string, jobId: string): number | undefined {
+  const path = peakPath(home, jobId);
+  if (!existsSync(path)) return undefined;
+  const gb = Number(readFileSync(path, 'utf8'));
+  rmSync(path);
+  return gb;
+}
+
 // Returns every agent run the job recorded and removes the file, so the job's ledger line holds them once.
 export function takeUsage(home: string, jobId: string): AgentUsage[] {
   const path = usagePath(home, jobId);
@@ -121,11 +144,16 @@ export function takeUsage(home: string, jobId: string): AgentUsage[] {
 // The ledger line of a job that ended, with the agent runs it recorded. A job run by hand has no id and records no usage.
 // A run still open when the job ends was cut off, so it is priced from its transcript before the issue's sessions go.
 export function recordJob(home: string, prices: Record<string, TokenPrice>, endedAt: Date, job: { id: string | null; stage: JobStage; issue: number | null; startedAt: string }, outcome: JobOutcome): void {
-  const id = job.id ?? 'hand-run';
-  if (job.id !== null) closeRunFromTranscript(home, job.id, prices, endedAt);
-  const agents = job.id === null ? [] : takeUsage(home, job.id);
-  const retryOf = job.id === null ? undefined : reportAttempt(home, { ...job, id }, outcome, endedAt);
-  appendLedger(home, { kind: 'job', id, stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, agents, ...(retryOf === undefined ? {} : { retryOf }) });
+  const records = job.id === null ? { agents: [] } : takeJobRecords(home, prices, endedAt, { ...job, id: job.id }, outcome);
+  appendLedger(home, { kind: 'job', id: job.id ?? 'hand-run', stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, ...records });
+}
+
+function takeJobRecords(home: string, prices: Record<string, TokenPrice>, endedAt: Date, job: { id: string; stage: JobStage; issue: number | null; startedAt: string }, outcome: JobOutcome): { agents: AgentUsage[]; peakGb?: number; retryOf?: string | null } {
+  closeRunFromTranscript(home, job.id, prices, endedAt);
+  const agents = takeUsage(home, job.id);
+  const peakGb = takePeak(home, job.id);
+  const retryOf = reportAttempt(home, job, outcome, endedAt);
+  return { agents, ...(peakGb === undefined ? {} : { peakGb }), ...(retryOf === undefined ? {} : { retryOf }) };
 }
 
 export function appendLedger(home: string, line: LedgerLine): void {

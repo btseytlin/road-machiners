@@ -31,12 +31,12 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm test` runs every Vitest test in `src/`. `npm run typecheck` runs tsc.
 - `npm run playtest` plays turns in headless Chromium and fails on errors or low FPS. It needs the dev server. Use `--cpu` on machines without a GPU. `--no-fps-gate` keeps the GPU run but only prints the FPS. The factory uses it everywhere but the release candidate, since its host runs many jobs at once.
 - `npm run stuck` records a trader bot for 3 seeds of 1000 turns and fails on any stall from any truck. Run it after changes to NPC goals, services or tows.
-- `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level.
+- `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level. `progression:playthrough` writes the full activity log of one markov bot run, which the factory's release playtest reads.
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
 - `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
-- `npm run sfx:board`, `sfx:import`, `sfx:reimport` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
+- `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 
 Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound generation and publishing keys.
@@ -63,6 +63,7 @@ One owner per concept. Use these and do not decide the same thing elsewhere:
 - `talkOf()` in `src/sim/dialogue.ts` is the one place talk reads traits.
 - `propPose()` in `src/sim/mapgen.ts` gives each prop's turn and scale.
 - `src/sim/body.ts` is the only conversion between grid cells and meters.
+- `src/sim/utility.ts` owns utility charge, orders, the activation step and the emitter shutdown. Each utility effect's world object has one owner: `hazards.ts` for smoke, ground fields and flares, and `claymore.ts`. `harpoon.ts` owns the lines of the harpoon, which is a gun.
 - Timed deals between two trucks are states in `src/sim/states.ts`. New group work adds a state kind, not a goal.
 - A `stall` event is always a bug.
 - Truck meshes own stencil bit `TRUCK_BIT` and props `PROP_BIT`. Other views must not write them.
