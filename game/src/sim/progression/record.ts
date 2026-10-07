@@ -45,7 +45,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, kitOf(archetype, options)), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
@@ -61,7 +61,7 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, kitOf(archetype, options)), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
@@ -110,6 +110,14 @@ export function* playTurns(start: World, label: string, policy: Policy, turns: n
 // A day ends on the turn the clock moves to the next day. The last turn of a run closes its day as well.
 function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
+}
+
+// Combat is not for a starter truck: a sensible hunter on the standard kit fights nothing. So the hunter starts geared,
+// and the climber plays the way from the standard kit up to hunting.
+const ARCHETYPE_KITS: Partial<Record<Archetype, string>> = { hunter: 'snowball' };
+
+function kitOf(archetype: Archetype, options: BotOptions): string {
+  return options.kit ?? ARCHETYPE_KITS[archetype] ?? 'standard';
 }
 
 // A new world on the start kit with no XP, every skill at `rank`, and no XP logged today. It picks no perks.

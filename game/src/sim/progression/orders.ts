@@ -44,8 +44,8 @@ export class Orders {
   readonly notes: BotNote[] = [];
   // False for a bot that must not spend on gear, so a run measures its trade alone.
   buysGear = true;
-  // A bot that repairs in the field pays the garage only for the built-in parts that keep the truck driving, strips
-  // its spare parts into the parts good and spends that on the rest.
+  // A bot that repairs in the field strips its spare parts into the parts good instead of selling them, to patch
+  // parts on the road between garages.
   fieldRepair = false;
   constructor(public world: World) {}
 

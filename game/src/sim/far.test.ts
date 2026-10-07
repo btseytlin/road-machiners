@@ -349,6 +349,18 @@ describe('far travel contact', () => {
     expect(mover.speed).toBe(0);
   });
 
+  it('drives through the position of a truck hitched to a tow rope', () => {
+    const { w, mover } = far();
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 300, y: 300 });
+    const towed = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 121, y: 120 });
+    addState(w, 'tow', tower.id, towed.id, { kind: 'tow', site: REGION.towns[0].id, fee: 0, waived: 0, hitched: true });
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+
+    advanceFar(w, mover);
+
+    expect(mover.pos.x).toBeGreaterThan(121);
+  });
+
   it('lets two trucks on the same point drive apart', () => {
     const { w, mover } = far();
     addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
@@ -414,11 +426,12 @@ describe('far tower and its rope', () => {
     expect(tower.order).not.toBeNull();
   });
 
-  it('still counts a parked truck on another tower rope as a blocker', () => {
-    const { w, tower, client } = boxedTower();
+  it('drives out past a truck hanging on another tower rope', () => {
+    const { w, tower } = boxedTower();
     const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 200, y: 200 });
     w.states = w.states.map((s) => (s.kind === 'tow' ? { ...s, holder: other.id } : s));
     advanceFar(w, tower);
-    expect(dist(tower.pos, { x: 120, y: 120 })).toBeLessThan(dist(client.pos, { x: 120, y: 120 }) - 1);
+    expect(tower.pos.x).toBeLessThan(119);
+    expect(tower.order).not.toBeNull();
   });
 });
