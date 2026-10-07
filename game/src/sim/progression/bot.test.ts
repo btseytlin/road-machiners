@@ -1056,6 +1056,14 @@ describe('the climber', () => {
     expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: weak.pos });
   });
 
+  it('buys a gun for its truck from its starting money, though a gun takes cargo cells', () => {
+    const w = parkedAt('bowl');
+    w.shops.bowl.stock = [makePart(w, 'mg', 0)];
+    const guns = (world: World) => mountedParts(playerVehicle(world), 'weapon').length;
+
+    expect(guns(botOrders(w, 'climber').world)).toBe(guns(w) + 1);
+  });
+
   it('trades between fights where the hunter patrols', () => {
     const w = armedClimber(saltGlut(parkedAt('nose')));
     withPrey(w);

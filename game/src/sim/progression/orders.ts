@@ -84,13 +84,14 @@ export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
 
 // job is what the bot earns by, and it takes only parts that raise the job's score. skip names the part kinds a bot
 // also leaves alone. chassis is what a better chassis means to the bot. keepRoom marks a bot that lives off its cargo:
-// it takes no part that leaves less room for goods. keepCapital marks a bot that trades: it keeps the money for a load
-// out of its gear budget, since a bot spent down to the upkeep reserve cannot buy a load and starves. A bot with
+// it takes no part that leaves less room for goods. capital is the money a bot that trades keeps for a load out of its
+// gear budget, since a bot spent down to the upkeep reserve cannot buy a load and starves: a full load of an average
+// good, or a full load of the cheapest good for a bot whose profit must outgrow its capital to buy guns. A bot with
 // chassis keep stays on the chassis it has, since every swap pays the shop's spread.
 // lootRoom is the cells a bot with a fighter's gear keeps free for loot, and minSpeed the top speed it keeps for the
 // chase. A part that leaves fewer free cells, or a top speed below the lower of minSpeed and the current one, stays on
 // the shelf.
-export type UpgradeStyle = { job: GearJob; skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean; keepCapital: boolean; lootRoom?: number; minSpeed?: number };
+export type UpgradeStyle = { job: GearJob; skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean; capital: 'none' | 'average' | 'cheapest'; lootRoom?: number; minSpeed?: number };
 
 // The footprint of the biggest part in the game. A fighter that keeps this many cells free can always take the best
 // part of a wreck it knocked out.
@@ -123,14 +124,15 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
 // What a bot may spend on gear: its money above the upkeep reserve, and above the cost of a load for a bot that trades.
 function gearBudget(o: Orders, style: UpgradeStyle): number {
   const spendable = o.world.player.money - getUpkeepReserve(o.me);
-  return style.keepCapital ? spendable - tradeCapital(o.me) : spendable;
+  return style.capital === 'none' ? spendable : spendable - tradeCapital(o.me, style.capital);
 }
 
-// The money a trader keeps to buy a load: one unit of an average good per free cell at the buy price.
-function tradeCapital(v: Vehicle): number {
+// The money a trader keeps to buy a load: one unit per free cell at the buy price, of an average good or of the
+// cheapest one.
+function tradeCapital(v: Vehicle, capital: 'average' | 'cheapest'): number {
   const values = Object.values(GOODS).map((g) => g.value);
-  const average = values.reduce((a, b) => a + b, 0) / values.length;
-  return goodsRoom(v) * average * (1 + ECONOMY.spread);
+  const unit = capital === 'cheapest' ? Math.min(...values) : values.reduce((a, b) => a + b, 0) / values.length;
+  return goodsRoom(v) * unit * (1 + ECONOMY.spread);
 }
 
 // The number a job grows by, for a truck. A fighter's is the rate its guns stop a truck like the bot's own, head on,

@@ -63,13 +63,13 @@ const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTra
 
 // Each bot buys gear for its job. Traders and scavengers earn with cargo room, so their gear never takes it. Only a
 // trader keeps the money for a load, so a hunter spends its starting money on guns.
-const CARGO_GEAR: UpgradeStyle = { job: 'carrier', skip: [], chassis: 'value', keepRoom: true, keepCapital: false };
+const CARGO_GEAR: UpgradeStyle = { job: 'carrier', skip: [], chassis: 'value', keepRoom: true, capital: 'none' };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
-  trader: { ...CARGO_GEAR, job: 'trader', keepCapital: true },
+  trader: { ...CARGO_GEAR, job: 'trader', capital: 'average' },
   scavenger: CARGO_GEAR,
   // A hunter keeps the chassis it starts with: a swap pays the shop's spread, and gear is where its edge comes from.
-  hunter: { job: 'fighter', skip: [], chassis: 'keep', keepRoom: false, keepCapital: false },
-  fastTrader: { job: 'courier', skip: ['armor'], chassis: 'speed', keepRoom: true, keepCapital: true },
+  hunter: { job: 'fighter', skip: [], chassis: 'keep', keepRoom: false, capital: 'none' },
+  fastTrader: { job: 'courier', skip: ['armor'], chassis: 'speed', keepRoom: true, capital: 'average' },
   hauler: CARGO_GEAR,
   robber: CARGO_GEAR,
   convoyRobber: CARGO_GEAR,
@@ -77,9 +77,10 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
 
 // A hunter's gear keeps room for the loot of a wreck and the speed to catch the foes it fights. Its gear bought once
 // filled every free cell and left the truck slower than the raiders it hunts, so it could neither chase nor strip. The
-// climber buys the hunter's gear from the start, but trades for its living, so it keeps room and the money for a load.
+// climber buys the hunter's gear from the start, but trades for its living, so it keeps room and the money for a full
+// load of the cheapest good. A load of an average good would swallow all of its profit and it would never buy a gun.
 function gearStyle(o: Orders, goal: Goal, archetype: Policy): UpgradeStyle {
-  if (archetype === 'climber') return { ...gearStyle(o, 'hunter', 'hunter'), keepRoom: true, keepCapital: true };
+  if (archetype === 'climber') return { ...gearStyle(o, 'hunter', 'hunter'), capital: 'cheapest' };
   if (goal !== 'hunter') return GEAR_STYLES[goal];
   return { ...GEAR_STYLES.hunter, lootRoom: BIGGEST_PART_CELLS, minSpeed: huntedSpeed(o.world) };
 }

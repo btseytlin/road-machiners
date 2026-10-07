@@ -11,9 +11,9 @@ import { emptyWorld } from '../testkit';
 import type { World } from '../types';
 import { Orders, upgradeGear, type UpgradeStyle } from './orders';
 
-const STYLE: UpgradeStyle = { job: 'courier', skip: [], chassis: 'value', keepRoom: false, keepCapital: false };
+const STYLE: UpgradeStyle = { job: 'courier', skip: [], chassis: 'value', keepRoom: false, capital: 'none' };
 const FIGHTER: UpgradeStyle = { ...STYLE, job: 'fighter' };
-const TRADER: UpgradeStyle = { ...STYLE, job: 'trader', keepRoom: true, keepCapital: true };
+const TRADER: UpgradeStyle = { ...STYLE, job: 'trader', keepRoom: true, capital: 'average' };
 const capital = startKit('standard').money;
 
 // The player parked on a pad of Bowl, which has a garage, with plenty of money.
@@ -63,6 +63,20 @@ describe('upgradeGear', () => {
     expect(mountedParts(playerVehicle(o.world), 'weapon').length).toBeGreaterThan(gunsBefore);
     expect(o.world.player.money).toBeLessThan(capital);
     expect(shopState(o.world, 'bowl').stock).toEqual([]);
+  });
+
+  it('keeps only a load of the cheapest good for a bot that buys guns from its profit', () => {
+    const gunsAfter = (capital: 'average' | 'cheapest') => {
+      const w = atBowl();
+      w.player.money = 1000;
+      shopState(w, 'bowl').stock = [makePart(w, 'heavyMg', 0)];
+      const o = new Orders(w);
+      upgradeGear(o, { ...FIGHTER, capital });
+      return mountedParts(playerVehicle(o.world), 'weapon').length;
+    };
+
+    expect(gunsAfter('average')).toBe(1);
+    expect(gunsAfter('cheapest')).toBe(2);
   });
 
   it('lets a fighter save for a gun instead of spending on armor', () => {
