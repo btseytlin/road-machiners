@@ -2,7 +2,52 @@
 # Prints the open factory incidents, one per line and without times, so the output changes only when an incident opens or closes.
 # Hermes runs it every minute and wakes when the output changes.
 set -euo pipefail
-gh issue list -R "$FACTORY_REPO" --label factory-stuck --state open --json number,title --jq '.[] | "stuck #\(.number) \(.title)"' | sort
+# GitHub and the factory server can hang, so each call to them runs under a time limit. A whole run then ends well inside the one-minute schedule.
+gh_seconds=${FACTORY_WATCH_GH_SECONDS:-20}
+audit_seconds=${FACTORY_WATCH_AUDIT_SECONDS:-30}
+# A source that keeps failing this long while its last answer repeats gets an incident line of its own.
+down_minutes=10
+saved="${0%.sh}.saved"
+mkdir -p "$saved"
+
+# Prints the lines of one source and saves them. A failed or timed-out source prints its saved lines instead.
+# Hermes diffs the whole output, so a dropped line would read as a closed incident.
+# With no saved lines, or after down_minutes of failures, it adds "<name> failed since <time>". The time holds until the source answers, so Hermes wakes once per outage.
+from_source() {
+  local name=$1 out
+  shift
+  if out=$("$@"); then
+    if [ -n "$out" ]; then printf '%s\n' "$out"; fi
+    printf '%s' "${out:+$out$'\n'}" > "$saved/$name.tmp"
+    mv "$saved/$name.tmp" "$saved/$name"
+    rm -f "$saved/$name.down"
+    return
+  fi
+  if [ ! -f "$saved/$name.down" ]; then date -u +%Y-%m-%dT%H:%M:%SZ > "$saved/$name.down"; fi
+  if [ -f "$saved/$name" ]; then cat "$saved/$name"; fi
+  if [ ! -f "$saved/$name" ] || [ -n "$(find "$saved/$name.down" -mmin +"$down_minutes")" ]; then
+    echo "$name failed since $(cat "$saved/$name.down")"
+  fi
+}
+
+stuck() {
+  timeout -k 5 "$gh_seconds" gh issue list -R "$FACTORY_REPO" --label factory-stuck --state open --json number,title --jq '.[] | "stuck #\(.number) \(.title)"' | sort
+}
+
+# Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once.
+# A quick failure, like one ssh or GitHub error, runs once more. A timeout does not, so the run keeps inside its minute.
+drift() {
+  local audit status=0
+  audit=$(timeout -k 5 "$audit_seconds" factory audit 2>/dev/null) || status=$?
+  if [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 137 ]; then
+    status=0
+    audit=$(timeout -k 5 "$audit_seconds" factory audit 2>/dev/null) || status=$?
+  fi
+  if [ "$status" -ne 0 ]; then return "$status"; fi
+  if [ -n "$audit" ]; then printf '%s\n' "$audit" | sed 's/^/drift: /'; fi
+}
+
+from_source "stuck list" stuck
 # Each failed job of the last day, with its first error line and log. The log name holds the start time, so each failure prints once.
 jq -r '.failures // [] | .[] | "failed \(.stage)\(if .issue then " #\(.issue)" else "" end): \(.error | split("\n")[0]) (log \(.log // "none"))"' /factory/home/state/state.json
 jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/home/state/state.json
@@ -18,13 +63,7 @@ if [ -f /factory/home/health ]; then
 else
   echo "tick stalled: no health file, so no tick ran on this code"
 fi
-# Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once.
-# A failed audit runs once more, so one ssh or GitHub error does not open an incident. Two failures print one stable line.
-if audit=$(factory audit 2>/dev/null || factory audit 2>/dev/null); then
-  if [ -n "$audit" ]; then printf '%s\n' "$audit" | sed 's/^/drift: /'; fi
-else
-  echo "audit failed"
-fi
+from_source audit drift
 # A finished waste review waits for Hermes until Hermes deletes the file.
 if [ -f /factory/home/review-pending ]; then echo "factory review ready: $(cat /factory/home/review-pending)"; fi
 # Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.

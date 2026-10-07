@@ -1,7 +1,8 @@
-"""Runs factory-incidents.sh on a temp factory home, with gh stubbed to list no stuck issue."""
+"""Runs factory-incidents.sh on a temp factory home, with gh and factory stubbed."""
 
 import json
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None) -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0") -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
     (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
@@ -25,16 +26,31 @@ def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = Non
         os.utime(paused, (old, old))
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "gh").write_text("#!/bin/sh\n")
-    (bin_dir / "gh").chmod(0o755)
-    # The factory wrapper runs `factory audit`. The stub prints what the test gives.
-    (bin_dir / "factory").write_text(f"#!/bin/sh\n{audit}\n")
-    (bin_dir / "factory").chmod(0o755)
+    # gh runs its own --jq, so the stub prints finished lines. The factory wrapper runs `factory audit`. Each stub runs what the test gives.
+    stub(bin_dir, "gh", gh)
+    stub(bin_dir, "factory", audit)
     script = tmp_path / "factory-incidents.sh"
     script.write_text(SCRIPT.read_text().replace("/factory/home", str(home)))
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FACTORY_REPO": "o/r"}
-    out = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=True)
+    return watch(tmp_path)
+
+
+def stub(bin_dir: Path, name: str, body: str) -> None:
+    (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
+    (bin_dir / name).chmod(0o755)
+
+
+def watch(tmp_path: Path) -> list[str]:
+    """Runs the script that run() set up once more, with short time limits so a slow stub times out fast."""
+    env = {**os.environ, "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}", "FACTORY_REPO": "o/r", "FACTORY_WATCH_GH_SECONDS": "1", "FACTORY_WATCH_AUDIT_SECONDS": "1"}
+    out = subprocess.run(["bash", str(tmp_path / "factory-incidents.sh")], env=env, capture_output=True, text=True, check=True)
     return out.stdout.splitlines()
+
+
+def age(tmp_path: Path, name: str, minutes: int) -> None:
+    """Moves the first failure of a source back in time."""
+    down = tmp_path / "factory-incidents.saved" / f"{name}.down"
+    old = time.time() - minutes * 60
+    os.utime(down, (old, old))
 
 
 def at(minutes_ago: int) -> str:
@@ -81,8 +97,50 @@ def test_each_audit_line_is_a_drift_line(tmp_path):
     assert lines == ["drift: #5 testPhase checks but column Design", "drift: pending ship but no current candidate post"]
 
 
-def test_a_failed_audit_prints_one_stable_line(tmp_path):
-    assert run(tmp_path, health(), audit="echo boom >&2; exit 1") == ["audit failed"]
+SINCE = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
+STUCK = "echo 'stuck #9 Tow fee'; echo 'stuck #7 Broken truck'"
+DRIFT = "echo '#5 testPhase checks but column Design'"
+
+
+def test_a_healthy_run_prints_every_source_in_order(tmp_path):
+    assert run(tmp_path, health(), gh=STUCK, audit=DRIFT) == ["stuck #7 Broken truck", "stuck #9 Tow fee", "drift: #5 testPhase checks but column Design"]
+
+
+def test_a_failed_audit_with_no_known_answer_prints_one_stable_line(tmp_path):
+    lines = run(tmp_path, health(), audit="echo boom >&2; exit 1")
+    assert len(lines) == 1 and re.fullmatch(f"audit failed since {SINCE}", lines[0])
+    assert watch(tmp_path) == lines
+
+
+def test_a_slow_github_with_no_known_answer_prints_one_stable_line_and_the_rest(tmp_path):
+    lines = run(tmp_path, health(), gh="sleep 5", audit=DRIFT)
+    assert len(lines) == 2 and re.fullmatch(f"stuck list failed since {SINCE}", lines[0])
+    assert lines[1] == "drift: #5 testPhase checks but column Design"
+
+
+def test_a_slow_or_failed_source_repeats_its_last_answer_so_no_incident_closes(tmp_path):
+    healthy = run(tmp_path, health(), gh=STUCK, audit=DRIFT)
+    stub(tmp_path / "bin", "gh", "sleep 5")
+    stub(tmp_path / "bin", "factory", "exit 1")
+    assert watch(tmp_path) == healthy
+
+
+def test_a_source_down_past_the_grace_time_adds_one_stable_line(tmp_path):
+    healthy = run(tmp_path, health(), gh=STUCK, audit=DRIFT)
+    stub(tmp_path / "bin", "factory", "sleep 5")
+    assert watch(tmp_path) == healthy
+    age(tmp_path, "audit", 11)
+    down = watch(tmp_path)
+    assert down[:3] == healthy and len(down) == 4 and re.fullmatch(f"audit failed since {SINCE}", down[3])
+    assert watch(tmp_path) == down
+    stub(tmp_path / "bin", "factory", "exit 0")
+    assert watch(tmp_path) == healthy[:2]
+
+
+def test_a_timed_out_audit_is_not_retried(tmp_path):
+    calls = tmp_path / "audit-calls"
+    run(tmp_path, health(), audit=f"echo x >> {calls}; sleep 5; exit 1")
+    assert calls.read_text().splitlines() == ["x"]
 
 
 def test_one_failed_audit_is_retried_and_opens_no_incident(tmp_path):
