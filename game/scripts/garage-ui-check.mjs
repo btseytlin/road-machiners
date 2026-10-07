@@ -26,7 +26,7 @@ async function enter(page, spot) {
       for (let i = 0; i < 40 && !guns(w); i++) w = c.randomKit(w, 5);
     }
     g.apply(w);
-    g.town.open();
+    g.screens.town.open();
   }, spot);
   await page.waitForSelector('.town-shop .tabs button', { timeout: 90000 });
 }
@@ -82,12 +82,12 @@ try {
     r = await read(page);
     assert(/\d+ broken/.test(r.repair), `${spot}: repair bar must show the broken count, got ${r.repair}`);
     await page.locator('.town-repair button', { hasText: 'Repair all' }).waitFor();
-    await page.evaluate(() => window.__ROAM__.town.close());
+    await page.evaluate(() => window.__ROAM__.screens.town.close());
   }
   // Stall and inventory keep the chip.
   await enter(page, 'salvage-yard');
   assert((await read(page)).chips.includes('Free cargo cells'), 'stall header must keep free cells');
-  await page.evaluate(() => window.__ROAM__.town.close());
+  await page.evaluate(() => window.__ROAM__.screens.town.close());
   await page.keyboard.press('i');
   assert((await read(page).then(() => page.locator('.modal:visible h3 .chip[title="Free cargo cells"]').count())) === 1, 'inventory header must keep free cells');
   await page.keyboard.press('Escape');
