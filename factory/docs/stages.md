@@ -139,7 +139,7 @@ The baseline is triage Sonnet, design Opus, implementation Sonnet and testing So
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.
 
 - `trivial` is one file or one small piece of logic, with no new state or cross-system rule. Triage adds `design-sonnet`.
-- `hard` is three or more interacting systems, a change to shared state or a data format, a cross-system bug with no known cause, or real tradeoffs. Triage adds `implementation-opus`.
+- `hard` is a cross-system bug with no known cause, or a change to a save format or to shared data that many systems read. Triage adds `implementation-opus`. A change that only spans several systems is `intermediate`.
 - `intermediate` or in doubt adds no label.
 
 A label already on the issue wins, and triage never changes labels. A later triage run adds nothing once its routing comment exists. A member can add or remove a label at any time, and the next agent run reads it.

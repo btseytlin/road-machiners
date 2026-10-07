@@ -25,6 +25,11 @@ function formatDuration(ms) {
   const minutes = Math.floor(Math.max(0, ms) / 60000);
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
+// The average number of cards waiting at once, over the clock time the scheduler was measured.
+function formatAverageWaiting(summary) {
+  if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
+  return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
+}
 function formatAge(at) {
   if (!at) return 'unknown';
   const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000));
@@ -321,7 +326,7 @@ function renderCounters(summary) {
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
   setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
-  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
+  setCounter('usage-wait', formatAverageWaiting(summary), summary.waitingMs === null ? null : `${formatDuration(summary.waitingMs)} summed card-time`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function renderTokenCounters(tokens) {
