@@ -35,32 +35,37 @@ const LIT_AT = 0.65;
 
 // Line widths in drawing pixels.
 export type BlueprintPen = { outer: number; inner: number };
-// light: the highlight color. Without it the lit faces keep the fill.
+// light: the highlight color. Without it the lit faces keep the fill. Over a blueprint's paints, shadow and light
+// should be see-through, so the paints show under them.
 export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string; light?: string };
 // The material name of window glass, which draws in its own color so cabs show their windows.
 export const GLASS_MATERIAL = 'glass';
 
 type Vec2 = { x: number; y: number };
 
-// One icon in drawing pixels of a size x size square: the filled shape, its shadow, highlight and glass loops and its
-// inner lines.
+// One icon in drawing pixels of a size x size square: the filled shape, its paints, its shadow, highlight and glass
+// loops and its inner lines. A paint is the loops where the model shows one of its own colors, empty unless asked for.
+export type Paint = { color: string; loops: Vec2[][] };
 export type Blueprint = {
   size: number;
   pen: BlueprintPen;
   shape: Vec2[][];
+  paints: Paint[];
   shadow: Vec2[][];
   light: Vec2[][];
   glass: Vec2[][];
   lines: Vec2[][];
 };
 
-// draw renders the scene at size x size with the material, or with its own materials for null.
+// draw renders the scene at size x size with the material, or with its own unlit materials for null. With own, the
+// blueprint keeps the model's colors as paints.
 export function blueprintOf(
   scene: THREE.Scene,
   camera: THREE.OrthographicCamera,
   size: number,
   pen: BlueprintPen,
   draw: (override: THREE.Material | null) => Pixels,
+  own = false,
 ): Blueprint {
   const meshes: THREE.Mesh[] = [];
   scene.traverse((o) => o instanceof THREE.Mesh && meshes.push(o));
@@ -80,7 +85,26 @@ export function blueprintOf(
   const shadow = patchesOf(lightMask(normal, solid, (lit) => lit < SHADE_AT), longest);
   const light = patchesOf(lightMask(normal, solid, (lit) => lit > LIT_AT), longest);
   const glass = patchesOf(glassMask(meshes, draw, solid), longest);
-  return { size, pen, shape, shadow, light, glass, lines };
+  const paints = own ? paintsOf(draw(null), solid, longest) : [];
+  return { size, pen, shape, paints, shadow, light, glass, lines };
+}
+
+// The shape's pixels grouped by their color in the unlit pass, most pixels first, so the largest paint lies at the
+// bottom and smaller ones over it. A color whose every patch is under MIN_SHADOW across drops out.
+function paintsOf(pass: Pixels, solid: Mask, longest: number): Paint[] {
+  const groups = new Map<number, Uint8Array>();
+  for (let i = 0; i < solid.bits.length; i++) {
+    if (!solid.bits[i] || pass.data[i * 4 + 3] === 0) continue;
+    const rgb = (pass.data[i * 4] << 16) | (pass.data[i * 4 + 1] << 8) | pass.data[i * 4 + 2];
+    let bits = groups.get(rgb);
+    if (!bits) groups.set(rgb, (bits = new Uint8Array(solid.bits.length)));
+    bits[i] = 1;
+  }
+  const count = (bits: Uint8Array): number => bits.reduce((n, b) => n + b, 0);
+  return [...groups]
+    .sort((a, b) => count(b[1]) - count(a[1]))
+    .map(([rgb, bits]) => ({ color: `#${rgb.toString(16).padStart(6, '0')}`, loops: patchesOf({ w: solid.w, h: solid.h, bits }, longest) }))
+    .filter((p) => p.loops.length > 0);
 }
 
 // A mask's patches as straightened loops, without those under MIN_SHADOW of the drawing across.
@@ -112,8 +136,16 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.fill(shape, 'evenodd');
   ctx.save();
   ctx.clip(shape, 'evenodd');
+  for (const paint of bp.paints) {
+    ctx.fillStyle = paint.color;
+    ctx.fill(new Path2D(loopsPath(paint.loops)), 'evenodd');
+  }
   ctx.fillStyle = colors.shadow;
   ctx.fill(new Path2D(loopsPath(bp.shadow)), 'evenodd');
+  if (colors.light !== undefined) {
+    ctx.fillStyle = colors.light;
+    ctx.fill(new Path2D(loopsPath(bp.light)), 'evenodd');
+  }
   ctx.fillStyle = colors.glass;
   ctx.fill(new Path2D(loopsPath(bp.glass)), 'evenodd');
   ctx.restore();
@@ -138,6 +170,7 @@ export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string,
   return [
     `<clipPath id="${id}"><path d="${shape}" clip-rule="evenodd"/></clipPath>`,
     `<path d="${shape}" style="fill:${colors.fill}" fill-rule="evenodd"/>`,
+    ...bp.paints.map((p) => `<path d="${loopsPath(p.loops)}" style="fill:${p.color}" fill-rule="evenodd" clip-path="url(#${id})"/>`),
     `<path d="${loopsPath(bp.shadow)}" style="fill:${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
     colors.light === undefined ? '' : `<path d="${loopsPath(bp.light)}" style="fill:${colors.light}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
     `<path d="${loopsPath(bp.glass)}" style="fill:${colors.glass}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
@@ -159,7 +192,8 @@ export function calmed(bp: Blueprint, calm: Calm): Blueprint {
     .map(straight);
   const patches = (loops: Vec2[][]): Vec2[][] =>
     loops.filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= calm.minPatch * bp.size).map(straight);
-  return { ...bp, shape, shadow: patches(bp.shadow), light: patches(bp.light), glass: patches(bp.glass) };
+  const paints = bp.paints.map((p) => ({ ...p, loops: patches(p.loops) })).filter((p) => p.loops.length > 0);
+  return { ...bp, shape, paints, shadow: patches(bp.shadow), light: patches(bp.light), glass: patches(bp.glass) };
 }
 
 // The blueprint's outline alone as SVG for a plan, which the game stretches over grid cells. Its colors come from the

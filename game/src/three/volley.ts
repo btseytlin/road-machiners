@@ -11,23 +11,25 @@ import type { BreakCues, PartBreak, ShotLike } from "./breakCues";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, roundSpec, towardFrom, type Muzzle, type RoundPlan } from "./render/projectiles";
 import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
 // What a volley draws on: the world it lands in, the effects and sounds it plays, and where an event's truck is seen.
+// onBurst hears each blast that lands on the ground, at the sim's burst point in tiles.
 export type VolleyHost = {
   world: World;
   fx: Fx3D;
   sound: SoundDirector;
   eventPoint: (vehicleId: string) => V3 | null;
+  onBurst: (point: Vec) => void;
   breakPart: (brk: PartBreak) => void;
 };
 
 // Plays one volley's bolts from the muzzle and sounds from a to b. The volley starts at its own moment in the
 // first CONFIG.combatFireSpreadMs of the band. Each round sounds as it leaves and as it lands, and each round that
 // damages parts shows its damage over the target as it lands. A part a round breaks breaks as that round lands. A dry
-// volley clunks as its last round lands.
+// volley clunks as its last round lands. A round that burst on the ground tells host.onBurst as its blast lands.
 // Returns when the first round lands.
 export function playVolley(
   host: VolleyHost,
@@ -50,18 +52,25 @@ export function playVolley(
   const fireCue = spec.look === "tracer" ? "mg-fire" : "cannon-fire";
   plans.forEach((plan, k) => {
     const last = dry && k === plans.length - 1;
+    const burst = rounds[k].burst;
     const cues = {
       fired: (m: Muzzle) => host.sound.at(fireCue, m.pos, 0),
       landed: () => {
-        if (plan.impact !== "none") host.sound.at(rounds[k].struck !== null || rounds[k].blast.length > 0 ? "hit-metal" : "miss", plan.land, 0);
+        landSound(host, plan, rounds[k]);
         if (last) host.sound.at("gun-empty", a, 0);
+        if (burst) host.onBurst(burst);
         for (const brk of breaks.ofRound(event, k)) host.breakPart(brk);
       },
     };
-    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues);
+    host.fx.shot(roundSpec(spec, k), muzzle, plan, blastRadiusOf(weapon), cues, host.world.turn);
     showDamage(host, rounds[k], plan.delayMs + plan.flightMs, rows);
   });
   return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs));
+}
+
+// The sound of a round landing: nothing when it ends unseen, a clang when it struck or blasted a truck, else a miss.
+function landSound(host: VolleyHost, plan: RoundPlan, r: ShotRound): void {
+  if (plan.impact !== "none") host.sound.at(r.struck !== null || r.blast.length > 0 ? "hit-metal" : "miss", plan.land, 0);
 }
 
 function showDamage(host: VolleyHost, r: ShotRound, landMs: number, rows: Map<string, number>): void {
