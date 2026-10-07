@@ -374,16 +374,18 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
 }
 
-// A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
+// A plain approval reply that Hermes did not route in time becomes an incident, so the incident watch wakes Hermes and the reply is never lost.
+// The card gets no stuck label, since nothing failed on it. Hermes routes the reply on its best reading.
 async function expireReplies(ctx: Ctx): Promise<void> {
   const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
   for (const [messageId, reply] of late) {
     updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
-    await reportFailure(ctx, 'feedback', reply.issue, `The reply ${messageId} to the approval post ${reply.postId} got no route within ${ctx.cfg.replyRouteMinutes} minutes: ${reply.text}`, null);
+    const text = reply.text.replace(/\s+/g, ' ');
+    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null);
   }
 }
 
-// Late approval replies become failures, and the first tick that sees no waste review starts its period.
+// Late approval replies become incidents for Hermes, and the first tick that sees no waste review starts its period.
 async function settleRouting(ctx: Ctx): Promise<void> {
   await expireReplies(ctx);
   if (readState(ctx.statePath).lastWasteReview === null) updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: ctx.now().toISOString() }));

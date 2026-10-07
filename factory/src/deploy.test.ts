@@ -70,7 +70,7 @@ describe('deployDev', () => {
     const { ctx, webRoot } = setup();
     const home = join(webRoot, '..');
     const statePath = join(home, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234' });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234', devError: 'old error' });
     const repo = {
       prepareWorkClone: async (_branch: string, _base: string, dir: string) => {
         mkdirSync(join(dir, 'game', 'dist'), { recursive: true });
@@ -85,7 +85,7 @@ describe('deployDev', () => {
   it('publishes /dev/ and records the dev commit it serves', async () => {
     const { ctx, statePath } = devSetup(false);
     expect(await deployDev(ctx, '/l')).toBe('http://x/play/dev/');
-    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null });
+    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null, devError: null });
   });
 
   it('posts the dev link to the committee after a rebuild', async () => {
@@ -99,7 +99,7 @@ describe('deployDev', () => {
   it('records a failed dev commit and throws', async () => {
     const { ctx, statePath } = devSetup(true);
     await expect(deployDev(ctx, '/l')).rejects.toThrow('build broke');
-    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234' });
+    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234', devError: 'build broke' });
   });
 });
 

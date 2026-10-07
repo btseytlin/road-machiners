@@ -11,10 +11,10 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0") -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0", dev: dict | None = None) -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
-    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
+    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None, **(dev or {})}))
     if review is not None:
         (home / "review-pending").write_text(review)
     if health is not None:
@@ -63,6 +63,15 @@ def health(minutes_ago: int = 1, free_gb: float = 20.5, available_gb: float | No
 
 def test_fresh_health_with_room_prints_nothing(tmp_path):
     assert run(tmp_path, health()) == []
+
+
+def test_a_failed_dev_build_names_its_commit_and_what_broke(tmp_path):
+    dev = {"devFailed": "abc1234", "devError": "src/x.ts(3,1): error TS2322\nsecond line"}
+    assert run(tmp_path, health(), dev=dev) == ["dev build failed at abc1234: src/x.ts(3,1): error TS2322"]
+
+
+def test_a_failed_dev_build_with_no_recorded_error_still_prints_its_commit(tmp_path):
+    assert run(tmp_path, health(), dev={"devFailed": "abc1234"}) == ["dev build failed at abc1234"]
 
 
 def test_low_disk_prints_a_stable_line(tmp_path):

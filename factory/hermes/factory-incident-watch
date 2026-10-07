@@ -14,6 +14,6 @@ if printf '%s\n' "$jobs" | grep -q factory-incidents; then
   hermes cron edit factory-incidents --deliver "$deliver" --failure-deliver local \
     || echo "factory-incident-watch: could not edit the factory-incidents job, so its old delivery targets stay" >&2
 else
-  hermes cron create "every 1m" "The list of open factory incidents changed. The monitor diff shows how. Follow the Incidents section of your instructions. If the change is only an incident going away, respond with [SILENT]." \
+  hermes cron create "every 1m" "The list of open factory incidents changed. The monitor diff shows how. Fix each new incident yourself, then report what you did. Never ask for permission to fix one. Follow the Incidents section of your instructions. If the change is only an incident going away, respond with [SILENT]." \
     --name factory-incidents --monitor-script factory-incidents.sh --deliver "$deliver" --failure-deliver local
 fi

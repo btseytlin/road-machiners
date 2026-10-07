@@ -378,7 +378,7 @@ describe('tick', () => {
     expect(picks).toEqual([{ stage: 'implement', issue: 3 }, { stage: 'patch', issue: 4 }]);
   });
 
-  it('turns a reply Hermes left unrouted past the limit into a failure, and keeps a fresh one', async () => {
+  it('hands a reply Hermes left unrouted past the limit to Hermes as an incident with no stuck label, and keeps a fresh one', async () => {
     const h = harness(null, false);
     const old = new Date(NOW.getTime() - 20 * 60_000).toISOString();
     const fresh = new Date(NOW.getTime() - 5 * 60_000).toISOString();
@@ -386,8 +386,8 @@ describe('tick', () => {
     await tick(h.ctx, '/code', h.deps);
     const after = readState(h.ctx.statePath);
     expect(after.unroutedReplies).toEqual({ 6: { issue: 5, postId: 43, text: 'x', at: fresh } });
-    expect(after.failures).toMatchObject([{ stage: 'feedback', issue: 4, error: expect.stringContaining('got no route within 15 minutes') }]);
-    expect(h.labels).toEqual([`4:${STUCK_LABEL}`]);
+    expect(after.failures).toMatchObject([{ stage: 'feedback', issue: null, error: expect.stringContaining('issue #4 on your best reading, unrouted for 15 minutes: show the atlas') }]);
+    expect(h.labels).toEqual([]);
   });
 
   it('starts the waste review when its period passed, at the cap too, before card work in the triage queue', () => {
