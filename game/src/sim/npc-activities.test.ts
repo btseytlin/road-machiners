@@ -16,6 +16,7 @@ import { makePart } from './factory';
 import { addGoods } from './inventory';
 import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { beginSearch } from './search';
+import { salvageInRange } from './salvage';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
@@ -791,6 +792,41 @@ describe('point goals', () => {
     const after = w.vehicles.find((v) => v.id === npc.id)!;
     expect(topGoal(after)?.kind).not.toBe('explore');
     expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
+  });
+});
+
+describe('loot out of reach', () => {
+  // A move arrives at the closest point its route reaches. A vulture whose move ended about 4 tiles from a hull cache,
+  // past its search range, waited there for 100 turns until the stall watchdog fired in a progression run.
+  function besideCache(gap: number) {
+    const w = emptyWorld({ x: 10, y: 10 });
+    const stock = w.salvage.find((s) => s.id === 'hullCache-1478')!;
+    const npc = addVehicle(w, 'scavengers', 'van', ['stockEngine'], { x: stock.pos.x, y: stock.pos.y + gap });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.brain.goals = [{ kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot salvage on the way' }];
+    npc.speed = 0;
+    return { w, npc, stock };
+  }
+
+  it('gives the salvage up when the move arrives out of search range', () => {
+    const { w, npc, stock } = besideCache(4.2);
+    expect(salvageInRange(npc, stock)).toBe(false);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toBeNull();
+  });
+
+  it('keeps the goal while the move is still under way', () => {
+    const { w, npc } = besideCache(4.2);
+    resolveNpcActivities(w);
+    expect(topGoal(npc)?.kind).toBe('loot');
+  });
+
+  it('searches when the move arrives in range', () => {
+    const { w, npc } = besideCache(2);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', phase: 'act' });
   });
 });
 
