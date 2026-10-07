@@ -554,6 +554,7 @@ export const REGION = {
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so
   // Bowl is past grey vision. `offset` tiles to the right of that point the road lies in grey vision, past clear
   // sight, near the top edge of the screen at the widest zoom. The ground between is open. A new player drives
-  // ahead and meets the road.
-  playerStart: { road: 0, distance: 125, offset: 45 },
+  // ahead and meets the road. The opening wreck of a new game lies `wreck.ahead` tiles ahead of the start and
+  // `wreck.side` to its right, in clear sight on the open ground.
+  playerStart: { road: 0, distance: 125, offset: 45, wreck: { ahead: 11, side: 3 } },
 };

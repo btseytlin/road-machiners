@@ -48,6 +48,7 @@ import { advanceDust } from './detect';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { nearestPad } from './sites';
+import { openingObstacles, setUpOpening } from './opening';
 import { clamp, dist, type Vec } from './vec';
 
 // The world seed and the random streams it starts.
@@ -95,7 +96,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       fuel: kit.fuel,
       supplies: kit.supplies,
       autoFire: false,
-      autoRepair: true,
+      autoRepair: kit.autoRepair,
       townPatched: false,
       engineHeat: 0,
       overdrive: false,
@@ -126,7 +127,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     dustClouds: [],
     states: [],
   };
-  world.obstacles = generateObstacles(world, map);
+  world.obstacles = generateObstacles(world, map, openingObstacles(kit.opening, start));
   const truck = makeVehicle(world, {
     name: kit.name,
     faction: "player",
@@ -148,6 +149,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
+  setUpOpening(world, truck, kit.opening);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   if (populate) spawnInitial(world);
   initializeShops(world);
@@ -421,7 +423,8 @@ const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.
 export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
   const report: CarryReport = { toGarage: [], sold: [], lost: [] };
   const truckKit = carriedKit(carried, kit, report);
-  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, true, townStart());
+  // A carried save starts at a town, not stranded, and keeps auto patch on unless it saved the switch off.
+  const world = newWorld(pick(carried.seed, freshSeed()), { ...truckKit, opening: null, autoRepair: true }, map, true, townStart());
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);
