@@ -23,8 +23,8 @@ function createScenario(templateId = 'scavenger') {
 
 // Long-term work for each template, far from the test area.
 function workGoal(templateId: string): NpcActivity {
-  if (templateId === 'trader') return { kind: 'sell', targetId: REGION.towns[0].id, destination: { ...REGION.towns[0].pos }, phase: 'travel', reason: 'deliver purchased cargo' };
-  return { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+  if (templateId === 'trader') return { kind: 'sell', targetId: REGION.towns[0].id, destination: { ...REGION.towns[0].pos }, phase: 'travel', reason: 'deliverCargo' };
+  return { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 }
 
 function fireAt(world: World, shooter: Vehicle, target: Vehicle) {
@@ -238,7 +238,7 @@ describe('NPC gameplay recovery', () => {
     corePart(npc, 'cab').hp = 1;
     const calm = cloneWorld(world);
     expect(thinkNpc(calm, byId(calm, npc.id)).kind).toBe('repair');
-    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' });
+    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patchParts' });
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, raider, npc);
     const repairs = shareOfSeeds(world, npc.id, (x, me) => {

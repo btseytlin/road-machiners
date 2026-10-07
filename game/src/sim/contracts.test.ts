@@ -288,7 +288,7 @@ describe('isExpired', () => {
 
 describe('bounty settlement', () => {
   const held = (id: string, template = 'buggy', shop = 'bowl'): Contract =>
-    ({ id, shop, kind: 'bounty', template, targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 });
+    ({ id, shop, kind: 'bounty', template, reward: 100, deadline: 900, window: 900, tier: 1 });
 
   // Settles one turn whose events are the given defeats, of trucks still in the world or removed this turn.
   function settle(w: World, contracts: Contract[], events: GameEvent[], removed: Vehicle[] = []): World {
@@ -546,7 +546,7 @@ describe('contract boards and delivery', () => {
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, window: 900, tier: 2 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 400, deadline: 900, window: 900, tier: 2 };
     const paid = update(base, (d) => {
       d.player.contracts = [bounty];
       d.removed = [raider];
@@ -566,7 +566,7 @@ describe('contract boards and delivery', () => {
   it('pays one held bounty for one kill of the same template', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, window: 900, tier: 2 });
+    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', reward, deadline: 900, window: 900, tier: 2 });
     const bounties = [held('ct-b1', 400), held('ct-b2', 400), held('ct-b3', 400)];
     const result = update(base, (d) => {
       d.player.contracts = bounties;
@@ -628,7 +628,7 @@ describe('contract boards and delivery', () => {
 });
 
 describe('bounties in a real fight', () => {
-  const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 });
+  const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 100, deadline: 900, window: 900, tier: 1 });
   const contractEvents = (w: World) => w.events.filter((e) => e.t === 'contract');
 
   // A raider one hit from breaking its cab, shot at by the player and a Bowl Farmers lawman in the same turn.

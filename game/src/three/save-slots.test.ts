@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from '../text/resolve';
 import { allSlots, listSaves, manualSlots, newestSlot, requestBoot, slotKey, slotLabel, takeBootRequest } from './save-slots';
 
 function makeStorage(): Storage {
@@ -25,7 +26,8 @@ describe('save slots', () => {
   it('lists the autosaves first, then the manual slots, with labels', () => {
     expect(manualSlots(3)).toEqual(['slot1', 'slot2', 'slot3']);
     expect(allSlots(2)).toEqual(['auto', 'day', 'slot1', 'slot2']);
-    expect(['auto', 'day', 'slot3'].map((s) => slotLabel(s as 'auto'))).toEqual(['Autosave', 'Day start', 'Slot 3']);
+    expect(['auto', 'day', 'slot3'].map((s) => resolve(slotLabel(s as 'auto'), 'en'))).toEqual(['Autosave', 'Day start', 'Slot 3']);
+    expect(resolve(slotLabel('slot3'), 'ru')).toBe('Ячейка 3');
   });
 
   it('lists filled slots newest first, counts a missing savedAt as 0 and flags an unreadable row', () => {

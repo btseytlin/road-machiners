@@ -6,13 +6,13 @@
 // truck.
 
 import {
-  MAX_RANK, PERK_IDS, PERK_LEVELS, PERKS, type PerkId, type PerkLevel, RANK_COSTS, SKILL_EFFECTS, SKILL_IDS, SKILL_INFO,
+  MAX_RANK, PERK_IDS, PERK_LEVELS, PERKS, type PerkId, type PerkLevel, RANK_COSTS, SKILL_EFFECTS, SKILL_IDS,
   type SkillEffect, XP_RULES, XP_SOURCES,
 } from '../data/skills';
 import { clockOf } from './sun';
-import type { Player, Repeat, SkillId, Vehicle, World, XpSource } from './types';
+import type { Player, Refusal, Repeat, SkillId, Vehicle, World, XpSource } from './types';
 import type { Vec } from './vec';
-import { update } from './world';
+import { Refused, update } from './world';
 
 export type SkillProgress = Pick<Player, 'xp' | 'xpToday' | 'xpDay' | 'repeats'>;
 
@@ -132,13 +132,13 @@ export function grantXp(world: World, xp: number): void {
 }
 
 // Why the player cannot buy the next rank of a skill now, or null when they can.
-export function canBuyRank(world: World, skill: SkillId): string | null {
+export function canBuyRank(world: World, skill: SkillId): Refusal | null {
   const p = world.player;
-  if (p.state !== 'active') return `You are ${p.state === 'dead' ? 'dead' : 'knocked out'}`;
+  if (p.state !== 'active') return { id: 'notActive', state: p.state };
   const rank = p.ranks[skill];
-  if (rank >= MAX_RANK) return `${SKILL_INFO[skill].name} is at the top rank`;
+  if (rank >= MAX_RANK) return { id: 'topRank', skill };
   const cost = rankCost(rank + 1);
-  if (p.xp < cost) return `Needs ${cost} XP, you have ${Math.floor(p.xp)} XP`;
+  if (p.xp < cost) return { id: 'needsXp', cost, have: Math.floor(p.xp) };
   return null;
 }
 
@@ -146,7 +146,7 @@ export function canBuyRank(world: World, skill: SkillId): string | null {
 // rank's cost in the pool.
 export function buyRank(world: World, skill: SkillId): World {
   const blocked = canBuyRank(world, skill);
-  if (blocked) throw new Error(`Cannot buy a ${skill} rank: ${blocked}`);
+  if (blocked) throw new Refused(blocked);
   return update(world, (w) => {
     const rank = w.player.ranks[skill] + 1;
     w.player.xp -= rankCost(rank);
@@ -212,8 +212,8 @@ export function choosePerk(world: World, perk: PerkId): World {
   if (!isPerkId(perk)) throw new Error(`Unknown perk ${perk}`);
   const def = PERKS[perk];
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
-  if (skillLevel(world, def.skill) < def.level) throw new Error(`${def.name} needs ${def.skill} rank ${def.level}`);
+  if (skillLevel(world, def.skill) < def.level) throw new Error(`${perk} needs ${def.skill} rank ${def.level}`);
   const picked = pickedFromPair(world, perk);
-  if (picked) throw new Error(`${PERKS[picked].name} is already picked from this pair`);
+  if (picked) throw new Error(`${picked} is already picked from this pair`);
   return update(world, (w) => { w.player.perks.push(perk); });
 }

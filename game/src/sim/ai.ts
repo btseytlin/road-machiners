@@ -198,7 +198,7 @@ function rams(world: World, v: Vehicle, target: Vehicle): boolean {
 // without a gun is a decision bug, so it throws.
 function shortestRange(world: World, v: Vehicle): number {
   const weapons = vehicleStats(world, v).weapons;
-  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
+  if (weapons.length === 0) throw new Error(`${v.id} is fighting without a gun`);
   return Math.min(...weapons.map((weapon) => weapon.def.range));
 }
 

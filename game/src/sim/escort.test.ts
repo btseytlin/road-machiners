@@ -104,7 +104,7 @@ describe('the follow goal', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
     const guard = guardAt(w, { x: 50, y: 60 });
-    guard.brain!.goals = [{ kind: 'fight', targetId: 'gone', destination: null, phase: 'act', reason: 'test fight' }];
+    guard.brain!.goals = [{ kind: 'fight', targetId: 'gone', destination: null, phase: 'act', reason: 'fightHostile' }];
     startEscort(w, guard, convoy, null, 0);
     expect(guard.brain!.goals.map((g) => g.kind)).toEqual(['follow', 'fight']);
     forceOption('resume', 'new');
@@ -332,7 +332,7 @@ describe('hiring a merc', () => {
   function onTrip(money: number): { w: World; trader: Vehicle; merc: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const trader = createNpc(w, 'trader', ['trader'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], { x: 60, y: 60 });
-    trader.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...NOSE.pos }, phase: 'travel', reason: 'test trip' }];
+    trader.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...NOSE.pos }, phase: 'travel', reason: 'tripToSite' }];
     trader.resources!.money = money;
     const merc = createNpc(w, 'merc', ['merc'], 'scout', ['mg', 'stockEngine'], { x: 66, y: 60 });
     refreshVision(w);
@@ -399,7 +399,7 @@ describe('a leader with escorts', () => {
   function pair(escortX: number): { w: World; convoy: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
-    convoy.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }];
+    convoy.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'tripToSite' }];
     const guard = guardAt(w, { x: escortX, y: 60 });
     startEscort(w, guard, convoy, null, 0);
     return { w, convoy };
@@ -420,7 +420,7 @@ describe('a leader with escorts', () => {
   it('drives on while a lagging escort is busy with a goal of its own', () => {
     const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap - 1);
     const guard = escortsOf(w, convoy.id)[0];
-    guard.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
+    guard.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'lowFuel' });
     planNpcOrders(w);
     expect(convoy.order?.kind).not.toBe('brake');
   });

@@ -35,12 +35,12 @@ export function advanceEngineHeat(world: World): void {
   practiceHeat(world, me.speed, sunHeat);
 
   if (before < ENGINE_HEAT.warnAt && world.player.engineHeat >= ENGINE_HEAT.warnAt) {
-    world.events.push({ t: 'info', text: 'Engine running hot.' });
+    world.events.push({ t: 'info', note: { id: 'engineHot' } });
   }
   if (world.player.engineHeat < 1 || me.speed <= RULES.parkedSpeed) return;
   const engines = mountedParts(me).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
   for (const e of engines) damagePart(e, ENGINE_HEAT.overheatDamage, 0);
-  if (engines.length > 0) world.events.push({ t: 'info', text: `Engine overheated: engine -${ENGINE_HEAT.overheatDamage} HP` });
+  if (engines.length > 0) world.events.push({ t: 'info', note: { id: 'engineOverheat', hp: ENGINE_HEAT.overheatDamage } });
 }
 
 // Whether dousing would help: enough supplies and a warm engine.
@@ -54,7 +54,7 @@ export function douseEngine(world: World): World {
     if (!canDouse(w)) throw new Error('Cannot douse: needs supplies and a warm engine');
     w.player.supplies -= ENGINE_HEAT.douseSupplies;
     w.player.engineHeat = Math.max(0, w.player.engineHeat - ENGINE_HEAT.douseCool);
-    w.events.push({ t: 'supply', what: 'supplies', text: `Doused the engine: supplies -${ENGINE_HEAT.douseSupplies}` });
+    w.events.push({ t: 'supply', what: 'supplies', note: { id: 'engineDoused', supplies: ENGINE_HEAT.douseSupplies } });
   });
 }
 

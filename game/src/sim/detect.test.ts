@@ -446,20 +446,20 @@ describe('the spotter perk', () => {
 
   it('refuses to mark without the perk', () => {
     const { w, target } = spotterWorld();
-    expect(() => markVehicle(w, target.id)).toThrow('spotter');
+    expect(() => markVehicle(w, target.id)).toThrow('Refused: needsSpotter');
   });
 
   it('refuses to mark an unseen truck', () => {
     const { w, target } = spotterWorld();
     w.player.perks.push('spotter');
     driveOff(w, target.id);
-    expect(() => markVehicle(w, target.id)).toThrow('does not see');
+    expect(() => markVehicle(w, target.id)).toThrow('Refused: unseen');
   });
 
   it('refuses to mark an unknown truck', () => {
     const { w } = spotterWorld();
     w.player.perks.push('spotter');
-    expect(() => markVehicle(w, 'ghost')).toThrow('ghost');
+    expect(() => markVehicle(w, 'ghost')).toThrow('Refused: noTruck');
   });
 
   it('tracks a marked truck out of sight with a scanner-tight circle', () => {

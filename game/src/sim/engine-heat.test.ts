@@ -40,7 +40,7 @@ describe('engine heat', () => {
       expect(turns).toBeLessThan(60);
     }
     expect(turns).toBeGreaterThan(20);
-    expect(w.events.some((e) => e.t === 'info' && e.text.startsWith('Engine running hot'))).toBe(true);
+    expect(w.events.some((e) => e.t === 'info' && e.note.id === 'engineHot')).toBe(true);
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);
     expect(engine(w).hp).toBe(hp - 2 * ENGINE_HEAT.overheatDamage);

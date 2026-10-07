@@ -32,6 +32,9 @@ import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
+import { bindAttr, setText } from "../text/language";
+import { num, t, verbatim, type Msg } from "../text/msg";
+import { factionName, templateName, vehicleTitle } from "../text/names";
 
 // The E key action. ready is false while the truck must stop first.
 // A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
@@ -44,20 +47,20 @@ export type ContextTarget =
   | { kind: 'oasis' }
   | { kind: 'stock'; id: string }
   | { kind: 'empty' };
-export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
+export type ContextAction = { label: Msg; ready: boolean; target: ContextTarget; hint?: Msg; combat?: number };
 
 // Identifies an action across renders, so a selection can stay on it.
 export function contextKey(target: ContextTarget): string {
   return 'id' in target ? `${target.kind}:${target.id}` : target.kind;
 }
 
-function actionTitle(action: ContextAction): string {
+function actionTitle(action: ContextAction): Msg | undefined {
   if (action.hint) return action.hint;
   if (action.combat !== undefined) return combatBlocked(action.combat);
-  return action.ready ? "" : "Stop to use";
+  return action.ready ? undefined : t("hud.stopToUse");
 }
 
-export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
+export const combatBlocked = (turns: number): Msg => t("hud.combatBlocked", { n: turns });
 
 type HudActions = {
   openInventory: () => void;
@@ -76,6 +79,9 @@ type HudActions = {
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
 };
+// The lines of the ? guide, in order.
+const GUIDE = ["hud.guide.drive", "hud.guide.space", "hud.guide.manual", "hud.guide.pads", "hud.guide.radio", "hud.guide.combat", "hud.guide.keys", "hud.guide.camera"] as const;
+
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
 
@@ -96,15 +102,15 @@ export class MaxSpeedView {
 
   private shown = '';
 
-  render(maxSpeed: string, rows: SpeedRow[], notes: string[]): void {
-    this.text.textContent = `max ${maxSpeed}`;
+  render(maxSpeed: number, rows: SpeedRow[], notes: Msg[]): void {
+    setText(this.text, t("hud.maxSpeed", { n: maxSpeed }));
     // The breakdown changes rarely, so most refreshes leave its nodes alone.
     const key = JSON.stringify([rows, notes]);
     if (key === this.shown) return;
     this.shown = key;
     this.rows.replaceChildren(
       ...rows.map((row) =>
-        el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, String(row.kph))),
+        el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, num(row.kph, 'int'))),
       ),
     );
     this.notes.replaceChildren(...notes.map((note) => el('p', {}, note)));
@@ -113,7 +119,7 @@ export class MaxSpeedView {
 
 export class Hud {
   private top = panel("instruments", bottomLeft());
-  private clockSlot = el("div", { class: "instrument-clock", role: "timer", title: "Day and time" });
+  private clockSlot = el("div", { class: "instrument-clock", role: "timer", title: t("hud.clockTitle") });
   private dialSlot = el("div", { class: "speed-dial-slot" });
   private maxSpeed = new MaxSpeedView();
   private speedSlot = el("div", { class: "speedometer" }, this.dialSlot, this.maxSpeed.root);
@@ -164,7 +170,7 @@ export class Hud {
     this.rescue.style.display = "none";
     this.stranded.style.display = "none";
     this.recenter.style.display = "none";
-    this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
+    this.recenter.append(el("button", { onclick: () => actions.recenter() }, t("hud.recenter")));
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
@@ -172,11 +178,11 @@ export class Hud {
     const guide = el(
       "details",
       {},
-      el("summary", { title: "Driving and combat controls" }, "?"),
+      el("summary", { title: t("hud.guideTitle") }, t("hud.guideMark")),
     );
     this.help.append(guide);
     const feedbackMenu = el("details", {});
-    const feedbackLink = (href: string, text: string) =>
+    const feedbackLink = (href: string, text: Msg) =>
       el(
         "a",
         {
@@ -190,11 +196,11 @@ export class Hud {
     feedbackMenu.append(
       el(
         "summary",
-        { title: "Report a bug or request a feature", "aria-label": "Report a bug or request a feature" },
-        "!",
+        { title: t("hud.feedbackTitle"), "aria-label": t("hud.feedbackTitle") },
+        t("hud.feedbackMark"),
       ),
-      feedbackLink(bugReportUrl(versionLabel()), "Report a bug"),
-      feedbackLink(featureRequestUrl(), "Request a feature"),
+      feedbackLink(bugReportUrl(versionLabel()), t("hud.reportBug")),
+      feedbackLink(featureRequestUrl(), t("hud.requestFeature")),
     );
     this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
@@ -203,15 +209,8 @@ export class Hud {
       feedbackMenu.removeAttribute("open");
     });
     guide.append(
-      el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
-      el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual driving, straight at the point."),
-      el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
-      el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
-      el("div", { class: "version" }, versionLabel()),
+      ...GUIDE.map((key) => el("div", {}, t(key))),
+      el("div", { class: "version" }, verbatim(versionLabel())),
     );
   }
 
@@ -223,11 +222,11 @@ export class Hud {
   private showCameraMode(): void {
     this.cameraSwitch.replaceChildren(
       createSwitch({
-        on: "Cam auto",
-        off: "Centered",
+        on: t("hud.camAuto"),
+        off: t("hud.camCentered"),
         checked: this.cameraMode === "auto",
         key: "V",
-        title: "Camera mode: lead toward the order point, or stay centered on the truck [V]",
+        title: t("hud.camTitle"),
         onclick: () => this.toggleCameraMode(),
       }),
     );
@@ -241,8 +240,8 @@ export class Hud {
     return this.info;
   }
 
-  private toast(text: string): void {
-    this.toastBox.textContent = text;
+  private toast(text: Msg): void {
+    setText(this.toastBox, text);
     this.toastBox.style.display = "";
     if (this.toastTimer !== null) window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(
@@ -268,20 +267,20 @@ export class Hud {
     else if (action) this.renderActionButton(action, count, index, onUse, onCycle);
   }
 
-  private renderWork(work: Work, label: string): void {
+  private renderWork(work: Work, label: Msg): void {
     const progress = Math.round(workProgress(work) * 100);
     this.action.replaceChildren(
       el(
         "span",
         { class: "job-label" },
-        `${label}, ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
+        t("hud.workLeft", { label, n: work.turnsLeft }),
       ),
       el(
         "span",
         {
           class: "job-bar",
           role: "progressbar",
-          "aria-label": `${label} progress`,
+          "aria-label": t("hud.workProgress", { label }),
           "aria-valuemin": "0",
           "aria-valuemax": "100",
           "aria-valuenow": String(progress),
@@ -300,14 +299,14 @@ export class Hud {
         class: action.combat !== undefined ? "combat" : "",
         title: actionTitle(action),
       },
-      action.hint ? action.label : `[E] ${action.label}`,
+      action.hint ? action.label : t("hud.actionKey", { label: action.label }),
     );
     // With several actions in reach, arrow buttons and a count show that the arrow keys choose between them.
-    const cycle = (step: 1 | -1, glyph: string, key: string) =>
-      el("button", { class: "cycle", title: `[${key}]`, onclick: () => onCycle(step) }, glyph);
+    const cycle = (step: 1 | -1, glyph: Msg, key: string) =>
+      el("button", { class: "cycle", title: t("hud.cycleKey", { key }), onclick: () => onCycle(step) }, glyph);
     this.action.replaceChildren(
       ...(count > 1
-        ? [cycle(-1, "‹", "←"), use, el("span", { class: "count" }, `${index + 1}/${count}`), cycle(1, "›", "→")]
+        ? [cycle(-1, t("hud.prevMark"), "←"), use, el("span", { class: "count" }, t("hud.count", { n: index + 1, of: count })), cycle(1, t("hud.nextMark"), "→")]
         : [use]),
     );
   }
@@ -325,15 +324,15 @@ export class Hud {
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
     if (r.kind === "knockedOut")
-      return this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
+      return this.rescue.replaceChildren(el("h3", { class: "bad" }, t("hud.knockedOut")));
     this.rescue.replaceChildren(
-      el("h3", {}, "Under tow"),
-      el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival.`),
+      el("h3", {}, t("hud.underTow")),
+      el("div", {}, t("hud.towsYou", { who: r.tower, town: r.town })),
+      el("div", { class: "dim" }, t("hud.towFee", { fee: moneyLabel(r.fee) })),
       el(
         "div",
         { class: "rescue-buttons" },
-        el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
+        el("button", { onclick: () => this.actions.unhitch() }, t("hud.unhitch")),
       ),
     );
   }
@@ -342,16 +341,16 @@ export class Hud {
     this.stranded.style.display = r ? "" : "none";
     if (!r) return this.stranded.replaceChildren();
     this.stranded.replaceChildren(
-      el("h3", {}, "Stranded"),
-      el("div", { class: "dim" }, r.beacon ? "Calling for a tow." : r.reason),
+      el("h3", {}, t("hud.stranded")),
+      el("div", { class: "dim" }, r.beacon ? t("hud.callingTow") : r.reason),
       el(
         "div",
         { class: "rescue-buttons" },
         createSwitch({
-          on: "Beacon on",
-          off: "Beacon off",
+          on: t("hud.beaconOn"),
+          off: t("hud.beaconOff"),
           checked: r.beacon,
-          title: "Call for a tow by radio.",
+          title: t("hud.beaconTitle"),
           onclick: () => this.actions.setBeacon(!r.beacon),
         }),
       ),
@@ -366,12 +365,12 @@ export class Hud {
     }
     this.contracts.style.display = "";
     this.contracts.replaceChildren(
-      el("h3", {}, "Contracts"),
+      el("h3", {}, t("hud.contracts")),
       ...w.player.contracts.map((c) =>
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          t("hud.contractLine", { what: contractSummary(c), due: contractDue(c) }),
         ),
       ),
     );
@@ -380,20 +379,20 @@ export class Hud {
   // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
     const headlights = createSwitch({
-      on: "Lights on",
-      off: "Lights off",
+      on: t("hud.lightsOn"),
+      off: t("hud.lightsOff"),
       checked: this.actions.headlightsOn(),
       key: "L",
-      title: "Headlights [L]",
+      title: t("hud.lightsTitle"),
       onclick: () => this.actions.toggleHeadlights(),
     });
     const overdrive = createSwitch({
-      on: "Overdrive",
-      off: "Normal",
+      on: t("hud.overdrive"),
+      off: t("hud.normal"),
       checked: w.player.overdrive,
       key: "O",
       disabled: busy,
-      title: "Engine overdrive: faster, but the engine heats fast [O]",
+      title: t("hud.overdriveTitle"),
       onclick: () => this.actions.toggleOverdrive(),
     });
     const douse = el(
@@ -402,9 +401,9 @@ export class Hud {
         class: "instrument-button",
         disabled: busy || !canDouse(w),
         onclick: () => this.actions.douseEngine(),
-        title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
+        title: t("hud.douseTitle", { n: ENGINE_HEAT.douseSupplies }),
       },
-      "Cool engine [G]",
+      t("hud.douse"),
     );
     return [headlights, overdrive, douse];
   }
@@ -418,10 +417,10 @@ export class Hud {
         class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
-        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
+        title: marked ? t("hud.characterMarked") : t("hud.character"),
       },
       createIcon("driver"),
-      marked ? "! [C]" : "[C]",
+      marked ? t("hud.characterKeyMarked") : t("hud.characterKey"),
     );
   }
 
@@ -439,10 +438,9 @@ export class Hud {
     this.renderActions(w, readout.manual, busy);
   }
 
-  private renderClock(clock: string): void {
-    const timeStart = clock.lastIndexOf(" ");
-    this.clockSlot.setAttribute("aria-label", `Time: ${clock}`);
-    this.clockSlot.replaceChildren(el("span", { class: "clock-day" }, clock.slice(0, timeStart)), el("span", { class: "clock-time" }, clock.slice(timeStart + 1)));
+  private renderClock(clock: ReturnType<typeof getHudReadout>["clock"]): void {
+    bindAttr(this.clockSlot, "aria-label", t("hud.clockLabel", { when: clock.full }));
+    this.clockSlot.replaceChildren(el("span", { class: "clock-day" }, clock.day), el("span", { class: "clock-time" }, clock.time));
   }
 
   private renderSpeedometer(readout: ReturnType<typeof getHudReadout>, busy: boolean): void {
@@ -450,13 +448,13 @@ export class Hud {
       "button",
       {
         class: "truck-instrument",
-        title: "Truck inventory [I]",
-        "aria-label": "Open truck inventory",
+        title: t("hud.inventoryTitle"),
+        "aria-label": t("hud.inventoryLabel"),
         disabled: busy,
         onclick: () => this.actions.openInventory(),
       },
-      createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
-      el("span", { class: "speed-value" }, readout.speed),
+      createSpeedDial(readout.speed, readout.maxSpeed),
+      el("span", { class: "speed-value" }, num(readout.speed, "int")),
       createIcon("truck"),
     );
     this.dialSlot.replaceChildren(dial);
@@ -471,11 +469,11 @@ export class Hud {
           {
             class: `resource ${resource.warning ? "bad" : ""}`,
             title: resource.label,
-            "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
-            "data-resource": resource.label,
+            "aria-label": resource.warning ? t("hud.readoutWarning", { label: resource.label, value: resource.value }) : t("hud.readout", { label: resource.label, value: resource.value }),
+            "data-resource": resource.id,
           },
           el("small", {}, resource.label),
-          el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
+          el("strong", {}, resource.warning ? t("hud.warned", { value: resource.value }) : resource.value),
         ),
       ),
       ...readout.survival.map((entry) =>
@@ -484,11 +482,11 @@ export class Hud {
           {
             class: `resource ${entry.warning ? "bad" : ""}`,
             title: entry.label,
-            "data-resource": entry.label,
+            "data-resource": entry.id,
           },
           el("small", {}, entry.label),
           el("strong", {}, entry.value),
-          "progress" in entry && entry.progress !== undefined
+          entry.progress !== undefined
             ? el(
                 "span",
                 {
@@ -507,21 +505,21 @@ export class Hud {
   private renderActions(w: World, manual: boolean, busy: boolean): void {
     this.actionSlot.replaceChildren(
       createSwitch({
-        on: "Manual",
-        off: "Route",
+        on: t("hud.manual"),
+        off: t("hud.route"),
         checked: manual,
         key: "R",
         disabled: busy,
-        title: "Manual driving: straight at the point, or follow the roads [R]",
+        title: t("hud.manualTitle"),
         onclick: () => this.actions.toggleManual(),
       }),
       createSwitch({
-        on: "Auto patch",
-        off: "No patch",
+        on: t("hud.autoPatch"),
+        off: t("hud.noPatch"),
         checked: w.player.autoRepair,
         key: "P",
         disabled: busy,
-        title: "Patch damaged parts while parked [P]",
+        title: t("hud.autoPatchTitle"),
         onclick: () => this.actions.toggleAutoRepair(),
       }),
       ...this.engineButtons(w, busy),
@@ -547,7 +545,7 @@ export class Hud {
   }
 
   // A log line from the UI itself, not from a sim event.
-  note(w: World, text: string, cls: string): void {
+  note(w: World, text: Msg, cls: string): void {
     this.log.add(w.turn, [{ text, cls }]);
   }
 
@@ -563,33 +561,34 @@ export class Hud {
       return;
     }
     this.inspected.render(v, this.aimOf(w, v));
-    const stance =
-      v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
       ...infoHeading(w, v),
-      el(
-        "div",
-        { class: hostile ? "bad" : "dim" },
-        `${v.faction} ${stance}`.trim(),
-      ),
-      el("div", {}, `Speed ${kph(v.speed)} km/h`),
+      el("div", { class: hostile ? "bad" : "dim" }, stanceText(v, hostile)),
+      el("div", {}, t("hud.speed", { n: kph(v.speed) })),
       ...npcLines(w, v),
       this.inspected.root,
-      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, "Click a part to aim the selected gun at it")] : []),
+      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, t("hud.aimHint"))] : []),
     );
   }
+}
+
+// A truck's faction and how it stands toward the player.
+function stanceText(v: Vehicle, hostile: boolean): Msg {
+  const faction = factionName(v.faction);
+  if (v.faction === "player") return faction;
+  return hostile ? t("hud.hostile", { faction }) : t("hud.neutral", { faction });
 }
 
 // An NPC reads as its driver's name, what it is doing now, then its template name. The player's truck keeps its own
 // name.
 function infoHeading(w: World, v: Vehicle): HTMLElement[] {
-  if (!v.brain) return [el("h3", {}, v.name)];
+  if (!v.brain) return [el("h3", {}, vehicleTitle(w, v))];
   const activity = formatNpcActivity(w, v);
   return [
-    el("h3", {}, v.brain.driver),
+    el("h3", {}, verbatim(v.brain.driver)),
     ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
-    el("div", { class: "dim" }, v.name),
+    el("div", { class: "dim" }, templateName(v.brain.templateId)),
   ];
 }
 

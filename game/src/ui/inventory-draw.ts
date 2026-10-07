@@ -12,16 +12,18 @@ import { truckOutline } from "./plans";
 import { wearLabel } from "./format";
 import { gridItemIcon, toneStyle } from "./cards";
 import { hp, kg } from "./units";
+import { byId, t, type Msg } from "../text/msg";
+import { goodName, partName } from "../text/names";
 
-const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner, cargo frame or store",
-  E: "engine mount",
-  F: "front armor mount",
-  B: "back armor mount",
-  L: "left armor mount",
-  R: "right armor mount",
-  X: "built-in part",
-  ".": "",
+const CELL_TITLE: Record<Cell, Msg | undefined> = {
+  D: t("cell.deck"),
+  E: t("cell.engine"),
+  F: t("cell.front"),
+  B: t("cell.back"),
+  L: t("cell.left"),
+  R: t("cell.right"),
+  X: t("cell.builtIn"),
+  ".": undefined,
 };
 
 // The item a garage storage chip stands for. Its id starts with store- so it never clashes with a grid item.
@@ -120,16 +122,14 @@ export function footprint(it: GridItem): { w: number; h: number } {
   };
 }
 
-export function itemLabel(it: GridItem): { short: string } {
-  if (it.kind === "good") return { short: GOODS[it.good].name.slice(0, 5) };
-  return { short: partDef(it.part.defId).name };
+export function itemLabel(it: GridItem): { short: Msg } {
+  if (it.kind === "good") return { short: byId(`good.${it.good}.short`) };
+  return { short: partName(it.part.defId) };
 }
 
-export function itemTitle(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return GOODS[it.good].name;
-  if (partDef(it.part.defId).kind === "core")
-    return `${partTitle(it.part)}\nBuilt in`;
-  return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
+export function itemTitle(it: GridItem, mounted: boolean): Msg {
+  if (it.kind === "good") return goodName(it.good);
+  return t("item.title", { part: partTitle(it.part), state: itemState(it, mounted) });
 }
 
 // Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.
@@ -142,19 +142,19 @@ export function conditionBar(p: PartInstance): HTMLElement {
   );
 }
 
-export function partTitle(p: PartInstance): string {
+export function partTitle(p: PartInstance): Msg {
   const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
+  return t("item.partTitle", { name: partName(d.id), kind: t(`kind.${d.kind}`), wear: wearLabel(p), hp: hp(p.hp), max: hp(maxHp(p)), w: d.w, h: d.h });
 }
 
-export function itemName(it: GridItem): string {
-  return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
+export function itemName(it: GridItem): Msg {
+  return it.kind === "good" ? goodName(it.good) : partName(it.part.defId);
 }
 
-export function itemState(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
-  if (partDef(it.part.defId).kind === "core") return "Built in";
-  return mounted ? "Mounted" : "Spare";
+export function itemState(it: GridItem, mounted: boolean): Msg {
+  if (it.kind === "good") return t("item.cargo", { mass: kg(GOODS[it.good].mass) });
+  if (partDef(it.part.defId).kind === "core") return t("item.builtIn");
+  return mounted ? t("item.mounted") : t("item.spare");
 }
 
 // Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range

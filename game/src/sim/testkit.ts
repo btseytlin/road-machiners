@@ -54,7 +54,7 @@ export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
 }
 
 export function addVehicle(w: World, faction: Faction, chassisId: string, parts: string[], pos: Vec, heading = 0): Vehicle {
-  const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
+  const v = makeVehicle(w, { faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
 }

@@ -39,7 +39,7 @@ import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GoalReason, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -291,9 +291,9 @@ function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boole
 
 // Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
 // job the driver already runs there keeps going. Null for no target, which nobody can claim.
-export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
+export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): GoalReason | null {
   if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
-  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+  return lootBlocker(world, vehicle, targetId) ? 'lootTaken' : null;
 }
 
 // The driver's job works the target.
@@ -302,19 +302,19 @@ export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
 }
 
 // Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
-export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): GoalReason | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the loot is gone';
-  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
-  if (!hasSalvage(stock)) return 'nothing left to loot';
-  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
+  if (!stock) return 'lootGone';
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargoFullLoot' : null;
+  if (!hasSalvage(stock)) return 'nothingToLoot';
+  return canTakeAny(world, vehicle, stock) ? null : 'cargoFullLoot';
 }
 
 // Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
-export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
-  if (!isKnockedOut(truck)) return 'the truck got away';
+export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): GoalReason | null {
+  if (!isKnockedOut(truck)) return 'truckGotAway';
   if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargoFullLoot';
 }
 
 // Whether the vehicle is where a site's services work: on a pad, or inside a territory, which has none.

@@ -1,5 +1,5 @@
 {
- "format": "2.19",
+ "format": "2.20",
  "shape": {
   "broken": [],
   "craters": [],
@@ -408,7 +408,6 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
       "template": "string",
       "tier": "number",
       "window": "number"
@@ -479,7 +478,6 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
       "template": "string",
       "tier": "number",
       "window": "number"
@@ -542,7 +540,6 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
       "template": "string",
       "tier": "number",
       "window": "number"
@@ -613,7 +610,6 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
       "template": "string",
       "tier": "number",
       "window": "number"
@@ -676,7 +672,6 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
       "template": "string",
       "tier": "number",
       "window": "number"
@@ -778,7 +773,6 @@
     ],
     "job": "null",
     "lastHitBy": "null",
-    "name": "string",
     "order": "null",
     "pos": {
      "x": "number",
@@ -857,7 +851,6 @@
     ],
     "job": "null",
     "lastHitBy": "null",
-    "name": "string",
     "order": "null",
     "pos": {
      "x": "number",
@@ -933,7 +926,6 @@
     ],
     "job": "null",
     "lastHitBy": "null",
-    "name": "string",
     "order": "null",
     "pos": {
      "x": "number",
@@ -1028,7 +1020,6 @@
     ],
     "job": "null",
     "lastHitBy": "null",
-    "name": "string",
     "order": "null",
     "pos": {
      "x": "number",

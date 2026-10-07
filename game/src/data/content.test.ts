@@ -113,7 +113,6 @@ describe("equipment variety", () => {
         const fits = PLAYER_CHASSIS.some((chassisId) => {
           const w = structuredClone(world);
           const v = makeVehicle(w, {
-            name: "Fit test",
             faction: "player",
             chassisId,
             parts: [],

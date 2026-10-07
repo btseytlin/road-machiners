@@ -19,7 +19,7 @@ import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
-import { clockLabel, vehicleName } from "./format";
+import { clock, vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kg, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
@@ -32,14 +32,14 @@ import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
-import { npcName } from '../sim/spawn';
+import { list, num, t, type Msg } from '../text/msg';
+import { partName, siteName, vehicleTitle } from '../text/names';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
-function shopNear(world: World): { id: string; name: string } | null {
+function shopNear(world: World): string | null {
   const pos = playerVehicle(world).pos;
   const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
-  const site = sites.find((s) => canUseSite(pos, s));
-  return site ? { id: site.id, name: site.name } : null;
+  return sites.find((s) => canUseSite(pos, s))?.id ?? null;
 }
 
 // Holds which of the actions in reach the E key runs. The selection is UI state only and is never saved.
@@ -74,23 +74,23 @@ export function getContextActions(world: World, playing: boolean): ContextAction
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
   if (!s || !aidData(s).agreed || aidData(s).started) return null;
-  const npc = npcName(vehicleById(world, s.holder));
-  const label = aidData(s).giver === "player" ? `Give ${aidGoods(s)} to ${npc}` : `Take ${aidGoods(s)} from ${npc}`;
+  const words = { goods: aidGoods(s), truck: vehicleTitle(world, vehicleById(world, s.holder)) };
+  const label = aidData(s).giver === "player" ? t("action.giveAid", words) : t("action.takeAid", words);
   return { label, ready: readyAid(world) !== null, target: { kind: 'aid' } };
 }
 
 function getTradeAction(world: World): ContextAction | null {
   const partner = tradePartner(world);
-  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null, target: { kind: 'trade' } };
+  return partner && { label: t("action.trade", { truck: vehicleTitle(world, partner) }), ready: tradeReady(world) !== null, target: { kind: 'trade' } };
 }
 
 function getPlaceActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   const shop = shopNear(world);
-  if (shop) actions.push({ label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id, target: { kind: 'shop' } });
+  if (shop) actions.push({ label: t("action.enter", { site: siteName(shop) }), ready: shopAt(world) === shop, target: { kind: 'shop' } });
   // A knocked-out truck stays open to looting while a removal from it runs.
   for (const downed of downedListNear(world)) {
-    actions.push({ label: `Loot ${npcName(downed)}`, ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
+    actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
   if (!isBusy(playerVehicle(world))) actions.push(...getSiteActions(world));
   return actions;
@@ -99,12 +99,12 @@ function getPlaceActions(world: World): ContextAction[] {
 function getSiteActions(world: World): ContextAction[] {
   const oasis = locationAt(world);
   const actions: ContextAction[] = [];
-  if (oasis?.kind === 'oasis') actions.push({ label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world), target: { kind: 'oasis' } });
+  if (oasis?.kind === 'oasis') actions.push({ label: t("action.refill", { site: siteName(oasis.id) }), ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
   actions.push(...stocks.map((stock) => getStockAction(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
-    if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
+    if (empty) actions.push({ label: stockLabel('empty', empty), ready: false, hint: t("action.noLoot"), target: { kind: 'empty' } });
   }
   return actions;
 }
@@ -114,37 +114,19 @@ function getStockAction(world: World, stock: SalvageStock): ContextAction {
   const target = { kind: 'stock', id: stock.id } as const;
   const searched = world.player.scavenged.includes(stock.id);
   const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: stockLabel(searched ? 'Loot' : 'Search', stock), ready: false, hint: `${blocker.name} is looting it`, target };
+  if (blocker) return { label: stockLabel(searched ? 'loot' : 'search', stock), ready: false, hint: t("action.lootingIt", { truck: vehicleTitle(world, blocker) }), target };
   const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: stockLabel('Loot', stock), ready: reachable, target };
+  if (searched) return { label: stockLabel('loot', stock), ready: reachable, target };
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: stockLabel('Search', stock), ready: combat === undefined && reachable, combat, target };
+  return { label: stockLabel('search', stock), ready: combat === undefined && reachable, combat, target };
 }
 
-// The verb alone at a loot spot that has no name, else the verb and the stock's name.
-function stockLabel(verb: 'Search' | 'Loot', stock: SalvageStock): string {
-  const name = getSalvageName(stock);
-  return name === null ? verb : `${verb} ${name}`;
-}
-
-function emptyLabel(stock: SalvageStock): string {
-  const name = getSalvageName(stock);
-  return name === null ? 'Picked clean' : `${name} is picked clean`;
-}
-
-// What the prompt calls the stock, or null for a loot spot that is no wreck: a farmhouse or a hangar needs no name.
-function getSalvageName(stock: SalvageStock): string | null {
+// What the prompt does with the stock: the verb alone at a loot spot that has no name, since a farmhouse or a hangar
+// needs none, else the verb and what the stock is.
+function stockLabel(verb: 'search' | 'loot' | 'empty', stock: SalvageStock): Msg {
   const place = salvagePlace(stock);
-  if (place === 'pile') return 'the pile';
-  if (place === 'wreck') return 'the wreck';
-  if (place === 'spot') return null;
-  return siteName(stock.id);
-}
-
-function siteName(id: string): string {
-  const site = REGION.locations.find((l) => l.id === id);
-  if (!site) throw new Error(`Unknown site ${id}`);
-  return site.name;
+  if (place === 'pile' || place === 'wreck' || place === 'spot') return t(`stock.${verb}.${place}`);
+  return t(`stock.${verb}.site`, { site: siteName(stock.id) });
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
@@ -161,8 +143,8 @@ function getConditionState(ratio: number): string {
 
 
 // The tooltip of a part tile: the part's name and condition.
-export function conditionLabel(part: { name: string; percent: number }): string {
-  return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
+export function conditionLabel(part: { name: Msg; percent: number }): Msg {
+  return part.percent === 0 ? t("condition.broken", { part: part.name }) : t("condition.percent", { part: part.name, pct: part.percent });
 }
 
 export class TruckConditionReadout {
@@ -186,7 +168,7 @@ export class TruckConditionReadout {
         const ratio = hp / maxHp(item.part);
         return {
           id: item.part.id,
-          name: def.name,
+          name: partName(def.id),
           icon: getConditionIcon(def),
           defId: def.id,
           x: item.x,
@@ -201,37 +183,34 @@ export class TruckConditionReadout {
   }
 }
 
-const REGION_WEATHER: Record<"heatwave" | "overcast", string> = {
-  heatwave: "Heat wave",
-  overcast: "Overcast",
-};
 const HOT = 2; // heat at or above this shows as a warning
 
-// Storms are local: one shows only when the truck is inside it, or when its edge is within sight.
-function weatherLabel(w: World, pos: Vec): string {
-  const names: string[] = [];
+type WeatherWord = 'heatwave' | 'overcast' | 'storm' | 'stormNear';
+
+// Storms are local: one shows only when the truck is inside it, or when its edge is within sight. clear is true
+// when no weather shows.
+function weatherLabel(w: World, pos: Vec): { text: Msg; clear: boolean } {
+  const words = new Set<WeatherWord>();
   for (const e of w.weather) {
-    if (e.kind !== "storm") names.push(REGION_WEATHER[e.kind]);
-    else if (dist(pos, e.pos) <= e.radius) names.push("Dust storm");
-    else if (dist(pos, e.pos) - e.radius <= TERRAIN.vision.radius)
-      names.push("Storm near");
+    if (e.kind !== "storm") words.add(e.kind);
+    else if (dist(pos, e.pos) <= e.radius) words.add("storm");
+    else if (dist(pos, e.pos) - e.radius <= TERRAIN.vision.radius) words.add("stormNear");
   }
-  return names.length ? [...new Set(names)].join(", ") : "Clear";
+  if (words.size === 0) return { text: t("weather.clear"), clear: true };
+  return { text: list([...words].map((word) => t(`weather.${word}`))), clear: false };
 }
 
 // Negative money is debt. It shows as a positive amount owed.
-export function moneyLabel(money: number): string {
-  return money < 0
-    ? `Debt ${(-money).toLocaleString("en-US")}`
-    : money.toLocaleString("en-US");
+export function moneyLabel(money: number): Msg {
+  return money < 0 ? t("money.debt", { n: -money }) : t("money.amount", { n: money });
 }
 
 // What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
 // when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
   | { kind: "knockedOut" }
-  | { kind: "towed"; tower: string; town: string; fee: number }
-  | { kind: "stranded"; beacon: boolean; reason: string };
+  | { kind: "towed"; tower: Msg; town: Msg; fee: number }
+  | { kind: "stranded"; beacon: boolean; reason: Msg | null };
 
 export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
@@ -240,7 +219,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
   const state = playerTow(w);
   if (state && towData(state).hitched) {
     const data = towData(state);
-    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.site), fee: data.fee };
+    return { kind: "towed", tower: vehicleName(w, state.holder), town: siteName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
     return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w) };
@@ -248,90 +227,77 @@ export function getRescueReadout(w: World): RescueReadout | null {
 }
 
 // What stops the truck, and what the player can do about it.
-function strandedReason(w: World): string {
+function strandedReason(w: World): Msg | null {
   const me = playerVehicle(w);
   if (!hasWorkingEngine(me)) {
     const spare = spareParts(me).some((part) => partDef(part.defId).kind === "engine");
-    return spare ? "No working engine. Install the spare [I]." : "No working engine.";
+    return spare ? t("stranded.spareEngine") : t("stranded.noEngine");
   }
-  if (!isWorking(corePart(me, "transmission"))) return "The transmission is broken.";
-  if (w.player.fuel <= 0) return "Out of fuel.";
-  return "";
-}
-
-function townName(id: string): string {
-  const town = REGION.towns.find((t) => t.id === id);
-  if (!town) throw new Error(`Unknown town ${id}`);
-  return town.name;
+  if (!isWorking(corePart(me, "transmission"))) return t("stranded.transmission");
+  if (w.player.fuel <= 0) return t("stranded.noFuel");
+  return null;
 }
 
 // Max-speed rows and the power chip: the sim's steps and power facts, worded tersely for the HUD tooltip and the truck headers.
 // Each row shows its cause, its effect and the running km/h. The last row is the total the HUD shows.
-export type SpeedRow = { label: string; effect: string; kph: number; total: boolean };
+export type SpeedRow = { label: Msg; effect: Msg; kph: number; total: boolean };
 
-export type PowerChip = { text: string; detail: string; over: boolean };
+export type PowerChip = { text: Msg; detail: Msg; over: boolean };
 
-const MINUS = '−';
-
-function signed(n: number, unit: string): string {
-  return `${n < 0 ? MINUS : '+'}${Math.abs(n)}${unit}`;
+function percent(factor: number): Msg {
+  const pct = Math.round((factor - 1) * 100);
+  if (pct === 0) return t("speed.pctZero");
+  return pct < 0 ? t("speed.pctDown", { n: -pct }) : t("speed.pctUp", { n: pct });
 }
 
-function percent(factor: number): string {
-  const pct = Math.round((factor - 1) * 100);
-  return pct === 0 ? '0%' : signed(pct, '%');
+function byKph(delta: number): Msg {
+  return delta < 0 ? t("speed.kphDown", { n: -delta }) : t("speed.kphUp", { n: delta });
 }
 
 // Power figures in the same one-decimal style as the item cards.
-export function powerNumber(n: number): string {
-  return String(Number(n.toFixed(1)));
+export function powerNumber(n: number): number {
+  return Number(n.toFixed(1));
 }
 
 type Kind<K extends SpeedStep['kind']> = Extract<SpeedStep, { kind: K }>;
-type Words = { label: string; effect: (deltaKph: number) => string };
+type Words = { label: Msg; effect: (deltaKph: number) => Msg };
 // What each step is called and how its effect reads. A new step kind fails typecheck until it has an entry here.
-type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: string) => Words };
+type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: Msg) => Words };
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-const byKph = (delta: number) => signed(delta, ' km/h');
 const byFactor = (factor: number) => () => percent(factor);
 
 const WORDING: Wording = {
-  chassis: () => ({ label: 'Chassis', effect: () => 'base' }),
-  engine: (s) => ({ label: s.worn ? 'Engine worn' : 'Engine', effect: byKph }),
-  load: (s) => ({ label: `Load ${kg(s.mass)} / ${kg(s.rated)}`, effect: byFactor(s.factor) }),
-  wheels: (s) => ({ label: plural(s.broken, 'broken wheel'), effect: byFactor(s.factor) }),
-  guns: (s) => ({ label: `Gun power ${powerNumber(s.draw)} / ${powerNumber(s.capacity)}`, effect: byFactor(s.factor) }),
-  floor: () => ({ label: 'Minimum speed', effect: byKph }),
-  overdrive: (s) => ({ label: 'Overdrive', effect: byFactor(s.factor) }),
-  transmission: () => ({ label: 'Broken transmission: crawl', effect: byKph }),
-  limp: (s) => ({ label: { noEngine: 'No engine: crawl', brokenEngine: 'Engine broken: crawl', stalled: 'Engine stalled: pushed at crawl speed' }[s.cause], effect: () => 'crawl' }),
-  weather: (s, weather) => ({ label: `Weather: ${weather}`, effect: byFactor(s.factor) }),
-  towing: (s) => ({ label: 'Towing', effect: byFactor(s.factor) }),
+  chassis: () => ({ label: t("speed.chassis"), effect: () => t("speed.base") }),
+  engine: (s) => ({ label: s.worn ? t("speed.engineWorn") : t("speed.engine"), effect: byKph }),
+  load: (s) => ({ label: t("speed.load", { mass: kg(s.mass), rated: kg(s.rated) }), effect: byFactor(s.factor) }),
+  wheels: (s) => ({ label: t("speed.wheels", { n: s.broken }), effect: byFactor(s.factor) }),
+  guns: (s) => ({ label: t("speed.guns", { draw: powerNumber(s.draw), capacity: powerNumber(s.capacity) }), effect: byFactor(s.factor) }),
+  floor: () => ({ label: t("speed.floor"), effect: byKph }),
+  overdrive: (s) => ({ label: t("speed.overdrive"), effect: byFactor(s.factor) }),
+  transmission: () => ({ label: t("speed.transmission"), effect: byKph }),
+  limp: (s) => ({ label: t(`speed.limp.${s.cause}`), effect: () => t("speed.crawl") }),
+  weather: (s, weather) => ({ label: t("speed.weather", { weather }), effect: byFactor(s.factor) }),
+  towing: (s) => ({ label: t("speed.towing"), effect: byFactor(s.factor) }),
 };
 
 // One row per step, each with its effect and the running km/h of the rounded speed, so the rows chain to the total.
 // weather is the HUD's label for the weather at the truck.
-export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
+export function speedRows(weather: Msg, steps: SpeedStep[]): SpeedRow[] {
   return steps.map((step, i) => {
-    const words = (WORDING[step.kind] as (step: SpeedStep, weather: string) => Words)(step, weather);
+    const words = (WORDING[step.kind] as (step: SpeedStep, weather: Msg) => Words)(step, weather);
     const speed = kph(step.speed);
     return { label: words.label, effect: words.effect(i === 0 ? 0 : speed - kph(steps[i - 1].speed)), kph: speed, total: i === steps.length - 1 };
   });
 }
 
 // Short notes for what the number leaves out: a low or empty tank, and how gun power works.
-export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
-  const notes: string[] = [];
+export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): Msg[] {
+  const notes: Msg[] = [];
   const driving = steps.some((s) => s.kind === 'guns');
-  if (driving) {
-    notes.push(
-      `Guns draw engine power, and the draw is not a mounting limit. As the draw nears the engine's capacity, top speed and acceleration fall faster: the first guns cost little, and from full capacity on the cost stays at ${Math.round((1 - RULES.gunDragMax) * 100)}%. It is one total, not a cost per gun.`,
-    );
-  }
+  if (driving) notes.push(t("speed.gunNote", { pct: Math.round((1 - RULES.gunDragMax) * 100) }));
   const fuel = fuelLimit(w, v, driving);
-  if (fuel === 'low') notes.push(`Low fuel: ${percent(RULES.lowFuelSpeedFactor)} on the road, not counted`);
-  if (fuel === 'empty') notes.push('Empty tank: crawl, not counted');
+  if (fuel === 'low') notes.push(t("speed.lowFuel", { pct: percent(RULES.lowFuelSpeedFactor) }));
+  if (fuel === 'empty') notes.push(t("speed.emptyTank"));
   return notes;
 }
 
@@ -343,29 +309,33 @@ function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | n
 }
 
 // What the draw costs: the short chip text and the full-sentence form.
-function gunCost(steps: SpeedStep[]): { short: string; long: string } {
+function gunCost(steps: SpeedStep[]): { short: Msg; long: Msg } {
   const guns = gunStep(steps);
-  if (!guns) return { short: 'no speed cost while stalled', long: 'none while stalled' };
+  if (!guns) return { short: t("power.noCostStalled"), long: t("power.noneStalled") };
   const lost = kph(guns.before) - kph(guns.step.speed);
-  if (lost === 0) return { short: 'no speed cost', long: 'none' };
-  const pct = `${percent(guns.step.factor)} speed`;
-  return { short: pct, long: `${pct}, ${MINUS}${lost} km/h` };
+  if (lost === 0) return { short: t("power.noCost"), long: t("power.none") };
+  const pct = percent(guns.step.factor);
+  return { short: t("power.cost", { pct }), long: t("power.costLong", { pct, n: lost }) };
 }
 
 // The header chip: working-gun draw against engine capacity, and what the draw costs in top speed.
 export function powerChip(steps: SpeedStep[], v: Vehicle): PowerChip {
   const capacity = workingEngineCapacity(v);
   if (capacity === null) {
-    return { text: 'No working engine', detail: 'No working engine: guns cost no speed.', over: false };
+    return { text: t("power.noEngine"), detail: t("power.noEngineDetail"), over: false };
   }
   const draw = gunDraw(v);
   const over = draw > capacity;
-  const balance = over ? `over by ${powerNumber(draw - capacity)}` : `${powerNumber(capacity - draw)} spare`;
+  const balance = over ? t("power.over", { n: powerNumber(draw - capacity) }) : t("power.spare", { n: powerNumber(capacity - draw) });
   const cost = gunCost(steps);
-  const detail = `Guns draw ${powerNumber(draw)} of ${powerNumber(capacity)} power, ${balance}. Cost: ${cost.long}.`;
-  const text = `${powerNumber(draw)} / ${powerNumber(capacity)} power${over ? `, ${balance}` : ''}, ${cost.short}`;
+  const power = { draw: powerNumber(draw), capacity: powerNumber(capacity) };
+  const detail = t("power.detail", { ...power, balance, cost: cost.long });
+  const text = over ? t("power.chipOver", { ...power, balance, cost: cost.short }) : t("power.chip", { ...power, cost: cost.short });
   return { text, detail, over };
 }
+
+// A HUD readout. id names the resource for data-resource, so scripts find it in any language.
+export type Readout = { id: string; label: Msg; value: Msg; warning: boolean; progress?: number };
 
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
@@ -375,55 +345,27 @@ export function getHudReadout(w: World) {
   const heat = heatAt(w, me.pos);
   const weather = weatherLabel(w, me.pos);
   const steps = maxSpeedSteps(w, me);
+  const resources: Readout[] = [
+    { id: "money", label: t("readout.money"), value: moneyLabel(p.money), warning: p.money < 0 },
+    { id: "fuel", label: t("readout.fuel"), value: t("readout.liters", { n: fuelLiters(p.fuel), max: fuelLiters(capacity) }), warning: p.fuel < capacity * RULES.lowFuelThreshold },
+    { id: "supplies", label: t("readout.supplies"), value: num(p.supplies, "dec1"), warning: p.supplies <= RULES.suppliesLow },
+    { id: "driver", label: t("readout.driver"), value: t("readout.ofMax", { n: hp(p.health), max: maxHealth }), warning: p.health < maxHealth },
+  ];
+  const storm = w.weather.some((e) => e.kind === "storm" && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius);
+  const survival: Readout[] = [
+    { id: "heat", label: t("readout.heat"), value: t("readout.celsius", { n: celsius(heat) }), warning: heat >= HOT },
+    { id: "engine", label: t("readout.engine"), value: t("readout.celsius", { n: engineCelsius(p.engineHeat) }), warning: p.engineHeat >= ENGINE_HEAT.warnAt, progress: p.engineHeat },
+    { id: "weather", label: t("readout.weather"), value: weather.text, warning: !weather.clear && storm },
+  ];
   return {
-    speed: String(kph(me.speed)),
-    maxSpeed: String(kph(steps[steps.length - 1].speed)),
-    maxSpeedRows: speedRows(weather, steps),
+    speed: kph(me.speed),
+    maxSpeed: kph(steps[steps.length - 1].speed),
+    maxSpeedRows: speedRows(weather.text, steps),
     maxSpeedNotes: speedNotes(w, me, steps),
     manual: me.direct,
-    clock: clockLabel(w.turn),
-    resources: [
-      {
-        label: "Money",
-        value: moneyLabel(p.money),
-        warning: p.money < 0,
-      },
-      {
-        label: "Fuel",
-        value: `${fuelLiters(p.fuel)} / ${fuelLiters(capacity)} L`,
-        warning: p.fuel < capacity * RULES.lowFuelThreshold,
-      },
-      {
-        label: "Supplies",
-        value: p.supplies.toFixed(1),
-        warning: p.supplies <= RULES.suppliesLow,
-      },
-      {
-        label: "Driver",
-        value: `${hp(p.health)} / ${maxHealth}`,
-        warning: p.health < maxHealth,
-      },
-    ],
-    survival: [
-      { label: "Heat", value: `${celsius(heat)} °C`, warning: heat >= HOT },
-      {
-        label: "Engine",
-        value: `${engineCelsius(p.engineHeat)} °C`,
-        warning: p.engineHeat >= ENGINE_HEAT.warnAt,
-        progress: p.engineHeat,
-      },
-      {
-        label: "Weather",
-        value: weather,
-        warning:
-          weather !== "Clear" &&
-          w.weather.some(
-            (e) =>
-              e.kind === "storm" &&
-              dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius,
-          ),
-      },
-    ],
+    clock: clock(w.turn),
+    resources,
+    survival,
   };
 }
 
@@ -437,7 +379,7 @@ function issueFormUrl(template: string, fields: Record<string, string>): string 
   return url.href;
 }
 
-// The text the ? menu shows.
+// The version the ? menu shows and bug reports name, like "v0.4.1". It is a code, the same in every language.
 export function versionLabel(): string {
   return `v${GAME_VERSION}`;
 }

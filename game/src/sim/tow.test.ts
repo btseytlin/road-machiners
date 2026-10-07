@@ -22,6 +22,11 @@ import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, cloneWorld, endTurn, setDirect, setMoveOrder } from './world';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 type Setup = { w: World; trader: Vehicle };
 
@@ -78,8 +83,8 @@ function offered(s: Setup, topic: 'tow' | 'towFree' = 'tow'): World {
 }
 
 function answer(w: World, text: string): World {
-  const i = currentOptions(w).findIndex((o) => o.text === text);
-  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+  const i = currentOptions(w).findIndex((o) => en(o.line) === text);
+  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => en(o.line)).join(' | ')}`);
   return chooseOption(w, i);
 }
 
@@ -217,7 +222,7 @@ describe('tow offer', () => {
     const s = stranded();
     s.w.player.fuel = 30;
     const w = callVehicle(s.w, s.trader.id);
-    expect(currentOptions(w).map((o) => o.text)).not.toContain('I am stranded. Can you tow me?');
+    expect(currentOptions(w).map((o) => en(o.line))).not.toContain('I am stranded. Can you tow me?');
   });
 
   it('raiders never tow', () => {
@@ -540,7 +545,7 @@ describe('answering a stranded truck', () => {
     endState(s.w, claimOf(s.w, s.trader.id)!, 'expired');
     s.trader.pos = { x: client.pos.x + 4, y: client.pos.y };
     const goal = topGoal(s.trader)!;
-    expect(runTow(s.w, s.trader, goal)).toBe('could not get through to the truck');
+    expect(runTow(s.w, s.trader, goal)).toBe('towUnanswered');
     expect(playerTow(s.w)).toBeNull();
   });
 
@@ -646,7 +651,7 @@ describe('free tow for a broke player', () => {
     let w = offered(s, 'towFree');
     expect(feeOf(w)).toBe(0);
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'towOffer', fee: 0 }));
-    expect(w.events.some((e) => e.t === 'say' && /No charge/.test(e.text))).toBe(true);
+    expect(w.events.some((e) => e.t === 'say' && e.line === 'pullFree')).toBe(true);
     const traderMoney = getResources(w, find(w, s.trader.id)).money;
     w = acceptTow(w);
     const r = runUntil(w, 150, (x) => playerTow(x) === null);
@@ -863,8 +868,8 @@ describe('the player towing an NPC', () => {
   }
 
   function pick(w: World, text: string): World {
-    const i = currentOptions(w).findIndex((o) => o.text === text);
-    if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+    const i = currentOptions(w).findIndex((o) => en(o.line) === text);
+    if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => en(o.line)).join(' | ')}`);
     return chooseOption(w, i);
   }
 
@@ -1009,16 +1014,16 @@ describe('the player towing an NPC', () => {
     playerVehicle(w).pos = { x: npc.pos.x + out.x * 3, y: npc.pos.y + out.y * 3 };
     refreshVision(w);
     expect(canUseSite(npc.pos, bowl)).toBe(true);
-    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => en(o.line))).not.toContain(OFFER);
   });
 
   it('is not offered to a driver that can drive or parks out of reach', () => {
     const { w, npc } = strandedNpc();
     npc.resources!.fuel = 50;
-    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => en(o.line))).not.toContain(OFFER);
     const far = strandedNpc();
     far.npc.pos = at(35);
-    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => o.text)).not.toContain(OFFER);
+    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => en(o.line))).not.toContain(OFFER);
   });
 });
 
@@ -1168,7 +1173,7 @@ describe('a truck stranded for good', () => {
   it('heads for a town even when broke and on his way to loot salvage', () => {
     const { w, npc } = engineless(far);
     getResources(w, npc).money = 0;
-    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck', destination: { x: far.x + 40, y: far.y }, phase: 'travel', reason: 'loot salvage on the way' });
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck', destination: { x: far.x + 40, y: far.y }, phase: 'travel', reason: 'lootOnTheWay' });
     expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply' });
     expect(topGoal(npc)?.kind).toBe('resupply');
   });

@@ -15,14 +15,14 @@ import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
 import { hasWorkingEngine, isStalled, isStranded, vehicleStats } from './stats';
 import { sunAt } from './sun';
-import type { Contact, DustCloud, Vehicle, World } from './types';
+import type { Contact, DustCloud, Refusal, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
 import { weatherOn } from './weather';
 import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
-import { playerCanAct, update } from './world';
+import { playerCanAct, Refused, update } from './world';
 
 // Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or stranded, since a
 // stranded truck is pushed, not driven. A healthy truck at a crawl is still heard.
@@ -123,19 +123,19 @@ function isMarkedFor(world: World, observer: Vehicle, v: Vehicle): boolean {
 }
 
 // Why the player cannot mark a truck now, or null when it can.
-export function markError(world: World, vehicleId: string): string | null {
-  if (!hasPerk(world, 'spotter')) return 'Marking a truck needs the spotter perk';
-  if (!playerCanAct(world)) return 'The player cannot act now';
+export function markError(world: World, vehicleId: string): Refusal | null {
+  if (!hasPerk(world, 'spotter')) return { id: 'needsSpotter' };
+  if (!playerCanAct(world)) return { id: 'cannotAct' };
   const v = world.vehicles.find((x) => x.id === vehicleId && x.id !== world.player.vehicleId);
-  if (!v) return `No other truck ${vehicleId} to mark`;
-  return playerSees(world, v.pos) ? null : `The player does not see ${vehicleId}`;
+  if (!v) return { id: 'noTruck' };
+  return playerSees(world, v.pos) ? null : { id: 'unseen' };
 }
 
 // Spotter: marks a truck the player sees, so it stays a contact for PERK_NUMBERS.spotter.turns. A new mark on the
 // same truck replaces the old one.
 export function markVehicle(world: World, vehicleId: string): World {
   const error = markError(world, vehicleId);
-  if (error) throw new Error(error);
+  if (error) throw new Refused(error);
   return update(world, (w) => {
     const others = w.player.marked.filter((m) => m.vehicleId !== vehicleId);
     w.player.marked = [...others, { vehicleId, until: w.turn + PERK_NUMBERS.spotter.turns }];

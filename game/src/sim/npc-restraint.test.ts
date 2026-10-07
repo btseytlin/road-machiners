@@ -29,7 +29,7 @@ function createNpc(templateId = 'scavenger') {
   return { world, npc };
 }
 
-const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 
 // Runs `check` on a copy of the world for each seed and returns the share of seeds where it holds. Seeds are
 // spread over the RNG state, since neighboring states give correlated first draws.
@@ -338,7 +338,7 @@ describe('NPC field repairs', () => {
     expect(thinkNpc(world, npc).kind).not.toBe('sell');
     addGoods(world, npc, 'scrap', 1);
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
-    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' }];
+    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sellCargo' }];
     resolveNpcActivities(world);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
     expect(goodsCount(npc).parts).toBe(2);

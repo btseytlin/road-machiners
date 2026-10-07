@@ -2,6 +2,7 @@
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { UNITS } from '../data/units';
+import { t, type Msg } from '../text/msg';
 
 const MS_TO_KPH = 3.6;
 
@@ -30,8 +31,8 @@ export function celsius(heat: number): number {
   return Math.round(UNITS.shadeCelsius + (heat - 1) * UNITS.celsiusPerHeat);
 }
 
-export function kg(mass: number): string {
-  return `${Math.round(mass).toLocaleString('en-US')} kg`;
+export function kg(mass: number): Msg {
+  return t('units.kg', { n: Math.round(mass) });
 }
 
 export function engineCelsius(engineHeat: number): number {

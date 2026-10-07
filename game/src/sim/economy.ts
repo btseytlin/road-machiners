@@ -24,7 +24,7 @@ import { canUseSite, requireTown, townAt, townNear } from "./sites";
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
-import { playerCommand } from "./world";
+import { playerCommand, Refused } from "./world";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
@@ -97,8 +97,8 @@ export function tradeGoods(
 
 function buyGoods(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
   const resources = getResources(world, vehicle);
-  if (resources.money < total) throw new Error("Not enough money");
-  if (cargoRoom(vehicle, good) < count) throw new Error("Not enough cargo space");
+  if (resources.money < total) throw new Refused({ id: "noMoney" });
+  if (cargoRoom(vehicle, good) < count) throw new Refused({ id: "noCargoRoom" });
   if (vehicle.id === world.player.vehicleId) noteCostBasis(world, good, total / count, count);
   const added = addGoods(world, vehicle, good, count);
   if (added !== count) throw new Error("Cargo capacity invariant failed");
@@ -399,9 +399,8 @@ function repairMult(world: World): number {
 }
 
 // A player in debt cannot buy anything, even at no cost.
-function pay(world: World, amount: number, reason: string): void {
-  if (world.player.money < 0 || amount > world.player.money)
-    throw new Error(`Not enough money for ${reason}`);
+function pay(world: World, amount: number): void {
+  if (world.player.money < 0 || amount > world.player.money) throw new Refused({ id: 'noMoney' });
   world.player.money -= amount;
 }
 
@@ -433,7 +432,7 @@ export function buySupply(world: World, kind: Supply, n: number): World {
       throw new Error(`${shopId} does not sell ${kind}`);
     if (n <= 0 || n > supplyRoom(w, kind))
       throw new Error(`Cannot buy ${n} ${kind}`);
-    pay(w, ECONOMY.supplyPrice[kind] * n, kind);
+    pay(w, ECONOMY.supplyPrice[kind] * n);
     w.player[kind] += n;
   });
 }
@@ -444,7 +443,7 @@ export function buySupply(world: World, kind: Supply, n: number): World {
 export function partRepairCost(world: World, part: PartInstance): number {
   if (isJunk(part)) {
     if (!canRebuild(world, part))
-      throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+      throw new Error(`${part.defId} is junk and cannot be rebuilt`);
     return partRepairCost(world, { ...part, wear: CONDITION.maxWear, hp: 0 });
   }
   const missingShare = 1 - part.hp / maxHp(part);
@@ -458,7 +457,7 @@ export function repairPart(world: World, partId: string): World {
     requireShop(w);
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
-    pay(w, partRepairCost(w, part), "repairs");
+    pay(w, partRepairCost(w, part));
     garageRepair(part);
   });
 }
@@ -478,7 +477,7 @@ function repairParts(world: World, pick: (w: World, v: Vehicle) => PartInstance[
   return playerCommand(world, (w) => {
     requireShop(w);
     const parts = pick(w, playerVehicle(w));
-    pay(w, costOf(w, parts), "repairs");
+    pay(w, costOf(w, parts));
     for (const p of parts) garageRepair(p);
   });
 }
@@ -526,7 +525,7 @@ export function buyStockPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
     const shopId = requireShop(w);
     const part = takeStockPart(shopState(w, shopId), partId);
-    pay(w, partTradePrice(w, playerVehicle(w), part, "buy"), partDef(part.defId).name);
+    pay(w, partTradePrice(w, playerVehicle(w), part, "buy"));
     if (!stowPart(w, playerVehicle(w), part)) w.player.storage.push(part);
   });
 }
@@ -606,7 +605,7 @@ function basicParts(world: World, v: Vehicle): PartInstance[] {
 // difference instead of charging nothing.
 function payChassisCost(world: World, chassisId: string): void {
   const cost = chassisDef(chassisId).value - chassisTradeIn(world);
-  if (cost >= 0) pay(world, cost, chassisDef(chassisId).name);
+  if (cost >= 0) pay(world, cost);
   else world.player.money -= cost;
 }
 
@@ -667,7 +666,7 @@ export function tradeWith(world: World, npc: Vehicle): NpcState | null {
 
 export function startTrade(world: World, npc: Vehicle): void {
   addState(world, "trade", npc.id, world.player.vehicleId, { kind: "none" });
-  meetGoal(world, npc, playerVehicle(world), "pull over to trade");
+  meetGoal(world, npc, playerVehicle(world), "pullOver");
 }
 
 // Both trucks of the meeting are parked in reach. It keeps the meeting from lapsing.
@@ -700,7 +699,7 @@ export function tradeReady(world: World): Vehicle | null {
 function requireMeeting(world: World, npcId: string): { npc: Vehicle; state: NpcState } {
   const npc = vehicleById(world, npcId);
   const state = tradeWith(world, npc);
-  if (!state) throw new Error(`No trade agreed with ${npc.name}`);
+  if (!state) throw new Error(`No trade agreed with ${npc.id}`);
   if (!isMeeting(world, state)) throw new Error("Both trucks must be parked side by side");
   return { npc, state };
 }
@@ -752,7 +751,9 @@ function requireCount(n: number): void {
 // Moves money from payer to payee. A payer in debt or short of the amount throws.
 export function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
   const from = getResources(world, payer);
-  if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? 'Not enough money' : `${payer.name} cannot pay that much`);
+  const short = from.money < 0 || from.money < amount;
+  if (short && payer.id === world.player.vehicleId) throw new Refused({ id: 'noMoney' });
+  if (short) throw new Error(`${payer.id} cannot pay that much`);
   from.money -= amount;
   getResources(world, payee).money += amount;
 }
@@ -762,8 +763,8 @@ export function buyTruckGood(world: World, npcId: string, good: string, n: numbe
     const { npc } = requireMeeting(w, npcId);
     const me = playerVehicle(w);
     requireCount(n);
-    if (truckGoodsForSale(npc, good) < n) throw new Error(`${npc.name} will not sell ${n} ${GOODS[good].name}`);
-    if (freeCells(me) < n) throw new Error("Not enough cargo space");
+    if (truckGoodsForSale(npc, good) < n) throw new Error(`${npc.id} will not sell ${n} ${good}`);
+    if (freeCells(me) < n) throw new Refused({ id: "noCargoRoom" });
     const price = truckGoodPrice(w, good, "buy");
     transfer(w, me, npc, price * n);
     noteCostBasis(w, good, price, n);
@@ -777,8 +778,8 @@ export function sellTruckGood(world: World, npcId: string, good: string, n: numb
     const { npc } = requireMeeting(w, npcId);
     const me = playerVehicle(w);
     requireCount(n);
-    if ((goodsCount(me)[good] ?? 0) < n) throw new Error(`Cannot sell ${n} ${GOODS[good].name}`);
-    if (cargoRoom(npc, good) < n) throw new Error(`No room on ${npc.name}'s truck`);
+    if ((goodsCount(me)[good] ?? 0) < n) throw new Error(`Cannot sell ${n} ${good}`);
+    if (cargoRoom(npc, good) < n) throw new Refused({ id: 'theyHaveNoRoom' });
     const price = truckGoodPrice(w, good, "sell");
     transfer(w, npc, me, price * n);
     removeGoods(me, good, n);
@@ -789,7 +790,7 @@ export function sellTruckGood(world: World, npcId: string, good: string, n: numb
 
 function takeSpare(v: Vehicle, partId: string): PartInstance {
   const part = spareParts(v).find((p) => p.id === partId);
-  if (!part) throw new Error(`${v.name} has no spare part ${partId}`);
+  if (!part) throw new Error(`${v.id} has no spare part ${partId}`);
   v.items = v.items.filter((it) => it.kind !== "part" || it.part.id !== partId);
   return part;
 }
@@ -800,7 +801,7 @@ export function buyTruckPart(world: World, npcId: string, partId: string): World
     const me = playerVehicle(w);
     const part = takeSpare(npc, partId);
     transfer(w, me, npc, truckPartPrice(w, part, "buy"));
-    if (!stowPart(w, me, part)) throw new Error(`No room in the truck for ${partDef(part.defId).name}`);
+    if (!stowPart(w, me, part)) throw new Refused({ id: 'noCargoRoom' });
   });
 }
 
@@ -810,7 +811,7 @@ export function sellTruckPart(world: World, npcId: string, partId: string): Worl
     const me = playerVehicle(w);
     const part = takeSpare(me, partId);
     transfer(w, npc, me, truckPartPrice(w, part, "sell"));
-    if (!stowPart(w, npc, part)) throw new Error(`No room on ${npc.name}'s truck for ${partDef(part.defId).name}`);
+    if (!stowPart(w, npc, part)) throw new Refused({ id: 'theyHaveNoRoom' });
   });
 }
 
@@ -818,8 +819,8 @@ export function buyTruckSupply(world: World, npcId: string, kind: Supply, n: num
   return playerCommand(world, (w) => {
     const { npc } = requireMeeting(w, npcId);
     requireCount(n);
-    if (n > truckSupplyForSale(npc, kind)) throw new Error(`${npc.name} will not sell that much ${kind}`);
-    if (n > supplyRoom(w, kind)) throw new Error(`No room for ${n} ${kind}`);
+    if (n > truckSupplyForSale(npc, kind)) throw new Error(`${npc.id} will not sell that much ${kind}`);
+    if (n > supplyRoom(w, kind)) throw new Refused({ id: 'noSupplyRoom' });
     transfer(w, playerVehicle(w), npc, truckSupplyPrice(w, kind) * n);
     npc.resources![kind] -= n;
     w.player[kind] += n;

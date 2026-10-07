@@ -12,5 +12,5 @@ export type UiHost = {
   releaseTurn(): void; // as Space keyup
   runKey(code: string): void; // runs a key's action under that key's gates
   autoTravel(): boolean;
-  getTurnPhase(): "Moving" | "Firing" | "Results" | null;
+  getTurnPhase(): "moving" | "firing" | "results" | null;
 };

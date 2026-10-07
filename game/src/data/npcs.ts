@@ -119,8 +119,6 @@ export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; 
 
 export type NpcTemplate = {
   id: string;
-  name: string;
-  profession: string; // the noun texts put before the driver's name
   faction: Faction;
   traits: TraitId[]; // every NPC of the template has these
   extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
@@ -693,7 +691,7 @@ export const OPPOSED_TRAITS: readonly [TraitId, TraitId][] = [['coward', 'brave'
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: 'buggy', name: 'Raider outrider', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'buggy', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
@@ -706,7 +704,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Gunwagon', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
@@ -718,7 +716,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   trader: {
-    id: 'trader', name: 'Trader caravan', profession: 'Trader', faction: 'traders', traits: ['trader'],
+    id: 'trader', faction: 'traders', traits: ['trader'],
     // One trader in four is a scumbag, and one in four a coward, as with every neutral driver.
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
@@ -734,7 +732,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   scavenger: {
-    id: 'scavenger', name: 'Scavenger', profession: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
+    id: 'scavenger', faction: 'scavengers', traits: ['scavenger'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
@@ -746,7 +744,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   bowlFarmer: {
-    id: 'bowlFarmer', name: 'Bowl Farmers patrol', profession: 'Bowl Farmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'bowlFarmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -759,7 +757,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl"] },
   },
   noseArmy: {
-    id: 'noseArmy', name: 'Nose Army patrol', profession: 'Nose soldier', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'noseArmy', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -771,7 +769,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["nose"] },
   },
   courier: {
-    id: 'courier', name: 'Courier', profession: 'Courier', faction: 'couriers', traits: ['courier'],
+    id: 'courier', faction: 'couriers', traits: ['courier'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
     aggroRange: 0,
@@ -784,7 +782,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   roamer: {
-    id: 'roamer', name: 'Roamer', profession: 'Roamer', faction: 'roamers', traits: ['roamer'],
+    id: 'roamer', faction: 'roamers', traits: ['roamer'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
@@ -797,7 +795,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   vulture: {
-    id: 'vulture', name: 'Vulture', profession: 'Vulture', faction: 'vultures', traits: ['vulture'],
+    id: 'vulture', faction: 'vultures', traits: ['vulture'],
     extraTraits: VULTURE_EXTRAS,
     loadout: LOADOUTS.vulture,
     aggroRange: 0,
@@ -810,7 +808,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   convoy: {
-    id: 'convoy', name: 'Supply convoy', profession: 'Convoy driver', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'convoy', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
     preferredRange: 0,
@@ -823,7 +821,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
   convoyGuard: {
-    id: 'convoyGuard', name: 'Convoy guard', profession: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
+    id: 'convoyGuard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     preferredRange: 0,
@@ -835,7 +833,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "escort", of: "convoy" },
   },
   merc: {
-    id: 'merc', name: 'Merc', profession: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
     aggroRange: 0,
     preferredRange: 0,

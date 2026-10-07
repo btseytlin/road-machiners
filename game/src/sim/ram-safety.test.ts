@@ -18,7 +18,7 @@ function fighting(world: World, raider: Vehicle): Vehicle {
   const me = world.player.vehicleId;
   raider.brain = npcBrain('buggy', raider.pos, ['raider']);
   raider.brain.noticed[`hostileSeen:${me}`] = world.turn;
-  raider.brain.goals.push({ kind: 'fight', targetId: me, destination: { x: 35, y: 30 }, phase: 'travel', reason: 'test' });
+  raider.brain.goals.push({ kind: 'fight', targetId: me, destination: { x: 35, y: 30 }, phase: 'travel', reason: 'tripToSite' });
   return raider;
 }
 

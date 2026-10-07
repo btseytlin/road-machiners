@@ -2,10 +2,15 @@
 @import "@fontsource/barlow-semi-condensed/700.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/700.css";
+/* Barlow has no Cyrillic, so Russian text falls back glyph by glyph to Fira Sans Condensed, a condensed face like it. */
+@import "@fontsource/fira-sans-condensed/cyrillic-400.css";
+@import "@fontsource/fira-sans-condensed/cyrillic-700.css";
+@import "@fontsource/fira-sans-condensed/cyrillic-ext-400.css";
+@import "@fontsource/fira-sans-condensed/cyrillic-ext-700.css";
 
 html,
 body {
-  --font-ui: "Barlow Semi Condensed", sans-serif;
+  --font-ui: "Barlow Semi Condensed", "Fira Sans Condensed", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   margin: 0;
   height: 100%;
@@ -1737,8 +1742,34 @@ canvas.view {
 }
 .game-menu {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   font-size: 12px;
+}
+
+/* The language control: the menu's last row, a small label and two equal buttons. */
+.language-switch {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.language-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.language-option {
+  min-width: 64px;
+}
+
+/* The pressed style of every on button. */
+#ui .language-option[aria-pressed="true"] {
+  border-color: #e0be77;
+  box-shadow: inset 0 0 0 1px #af9658;
 }
 
 #ui .dialogue {

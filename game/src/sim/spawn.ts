@@ -75,9 +75,9 @@ function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, resp
 // spot throws.
 function spawnRequired(world: World, tpl: NpcTemplate, site: Site, gate: Vec | null): void {
   const leader = spawnOne(world, tpl, () => site, false, gate);
-  if (!leader) throw new Error(`No free spot to spawn ${tpl.name} at ${site.id} in the new world`);
+  if (!leader) throw new Error(`No free spot to spawn ${tpl.id} at ${site.id} in the new world`);
   const missed = spawnEscorts(world, tpl, leader);
-  if (missed.length > 0) throw new Error(`No free spot to spawn ${missed[0].name} beside ${tpl.name} in the new world`);
+  if (missed.length > 0) throw new Error(`No free spot to spawn ${missed[0].id} beside ${tpl.id} in the new world`);
 }
 
 // One of each escort template that follows the leader's template, while the escort is under its cap. Each escort
@@ -107,7 +107,7 @@ function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle |
     if (!isFree(world, pos, radius, null)) continue;
     return spawnAt(world, tpl, loadout, pos);
   }
-  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}`, debug: true });
+  world.events.push({ t: 'info', note: { id: 'spawnBlocked', template: tpl.id }, debug: true });
   return null;
 }
 
@@ -134,7 +134,7 @@ function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boo
     if (!isFree(world, pos, radius, null)) continue;
     return spawnAt(world, tpl, loadout, pos);
   }
-  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}`, debug: true });
+  world.events.push({ t: 'info', note: { id: 'spawnBlocked', template: tpl.id }, debug: true });
   return null;
 }
 
@@ -142,7 +142,6 @@ function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boo
 // free.
 export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos: Vec): Vehicle {
   const v = makeVehicle(world, {
-    name: tpl.name,
     faction: tpl.faction,
     ...loadout,
     pos,
@@ -179,14 +178,6 @@ function driverName(names: Rng): string {
   const first = FIRST_NAMES[randInt(names, 0, FIRST_NAMES.length - 1)];
   const last = SURNAMES[randInt(names, 0, SURNAMES.length - 1)];
   return `${first} ${last}`;
-}
-
-// The name texts give an NPC truck: its template's profession and its driver's name, like "Roamer Silas Kane".
-export function npcName(v: Vehicle): string {
-  if (!v.brain) return v.name;
-  const template = NPCS[v.brain.templateId];
-  if (!template) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
-  return `${template.profession} ${v.brain.driver}`;
 }
 
 // Territories have no gates to spawn at.

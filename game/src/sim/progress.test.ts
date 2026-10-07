@@ -58,7 +58,7 @@ describe('buying a rank', () => {
   it('refuses a rank the pool cannot pay, and leaves the world as it was', () => {
     const w = emptyWorld();
     w.player.xp = RANK_COSTS[0] - 1;
-    expect(canBuyRank(w, 'driving')).toMatch(/XP/);
+    expect(canBuyRank(w, 'driving')).toEqual({ id: 'needsXp', cost: RANK_COSTS[0], have: RANK_COSTS[0] - 1 });
     expect(() => buyRank(w, 'driving')).toThrow();
     expect(w.player.xp).toBe(RANK_COSTS[0] - 1);
     expect(w.player.ranks.driving).toBe(0);
@@ -277,8 +277,8 @@ describe('choosing a perk', () => {
     const w = emptyWorld();
     w.player.ranks.driving = 2;
     const next = choosePerk(w, 'rammer');
-    expect(() => choosePerk(next, 'coldRunning')).toThrow(/Rammer/);
-    expect(() => choosePerk(next, 'rammer')).toThrow(/Rammer/);
+    expect(() => choosePerk(next, 'coldRunning')).toThrow(/rammer/);
+    expect(() => choosePerk(next, 'rammer')).toThrow(/rammer/);
   });
 
   it('refuses an unknown perk', () => {

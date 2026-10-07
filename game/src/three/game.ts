@@ -75,7 +75,7 @@ import { BeaconPulseView } from "./render/beaconPulse";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
 import type { SlotId } from "./save-slots";
-import { SAVE_FULL_NOTE, SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
+import { SAVE_FULL_NOTE, SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, TURN_FAILED_NOTE } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -123,8 +123,8 @@ export class Game {
   private readonly fog: FogView;
   private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
-  // A turn step changed what the UI shows. advanceTurn refreshes it once at its end.
-  private uiStale = false;
+  // A turn step or a language switch changed what the UI shows. advanceTurn refreshes it once at its end.
+  uiStale = false;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
@@ -667,7 +667,7 @@ export class Game {
   private failTurn(err: unknown): void {
     this.travel.abandon(this.world);
     this.saves.noteError();
-    this.hud.note(this.world, turnFailedNote(err), "bad");
+    this.hud.note(this.world, TURN_FAILED_NOTE, "bad");
     reportError(err);
     this.refreshUi();
   }
@@ -712,7 +712,7 @@ export class Game {
     });
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
-    this.phase = "Moving";
+    this.phase = "moving";
     this.path.clear();
     this.uiStale = true;
   }
@@ -726,7 +726,7 @@ export class Game {
     for (const [id, fs] of Object.entries(a.result.frames))
       this.frames[id] = fs[fs.length - 1];
     this.live = null;
-    this.phase = a.combat ? "Firing" : "Results";
+    this.phase = a.combat ? "firing" : "results";
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     const host = this.combatHost();
     playCrashes(host, this.crashCues, null);
@@ -738,7 +738,7 @@ export class Game {
   // Shots land: explosions, new wrecks, the log and the new part values.
   private landImpacts(a: Playback): void {
     a.impacts = true;
-    this.phase = "Results";
+    this.phase = "results";
     this.craters.revealAll(this.world.turn);
     for (const e of this.world.events) {
       if (e.t !== "destroyed") continue;

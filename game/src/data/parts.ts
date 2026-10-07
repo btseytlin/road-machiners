@@ -18,7 +18,6 @@ export type PartKind =
 // A tall part stands higher than a gun, so a mounted weapon cannot fire across it. See openSides() in src/sim/armor.ts.
 type PartBase = {
   id: string;
-  name: string;
   hp: number;
   base: number; // hand-set part of the value. See partModifier().
   value: number; // money value of a pristine part, base plus a stat modifier; every price derives from it
@@ -184,7 +183,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   stockEngine: {
     id: "stockEngine",
     kind: "engine",
-    name: "Stock engine",
     hp: 50,
     base: 150,
     tier: 1,
@@ -203,7 +201,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   tunedEngine: {
     id: "tunedEngine",
     kind: "engine",
-    name: "Tuned V8",
     hp: 40,
     base: 230,
     tier: 2,
@@ -222,7 +219,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   flatFour: {
     id: "flatFour",
     kind: "engine",
-    name: "Light flat-four",
     hp: 36,
     base: 180,
     tier: 1,
@@ -241,7 +237,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   workhorseDiesel: {
     id: "workhorseDiesel",
     kind: "engine",
-    name: "Workhorse diesel",
     hp: 80,
     base: 270,
     tier: 2,
@@ -260,7 +255,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   racingV6: {
     id: "racingV6",
     kind: "engine",
-    name: "Racing V6",
     hp: 32,
     base: 280,
     tier: 2,
@@ -279,7 +273,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   heavyDiesel: {
     id: "heavyDiesel",
     kind: "engine",
-    name: "Heavy diesel",
     hp: 110,
     base: 470,
     tier: 3,
@@ -298,7 +291,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   turbine: {
     id: "turbine",
     kind: "engine",
-    name: "Turbine",
     hp: 44,
     base: 510,
     tier: 3,
@@ -317,7 +309,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   plates: {
     id: "plates",
     kind: "armor",
-    name: "Steel plates",
     hp: 80,
     base: 160,
     tier: 2,
@@ -334,7 +325,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   cage: {
     id: "cage",
     kind: "armor",
-    name: "Rebar cage",
     hp: 60,
     base: 130,
     tier: 1,
@@ -351,7 +341,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   ram: {
     id: "ram",
     kind: "armor",
-    name: "Ram bar",
     hp: 100,
     base: 160,
     tier: 2,
@@ -368,7 +357,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   scrapPanels: {
     id: "scrapPanels",
     kind: "armor",
-    name: "Scrap panels",
     hp: 44,
     base: 110,
     tier: 1,
@@ -385,7 +373,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   ceramicPlates: {
     id: "ceramicPlates",
     kind: "armor",
-    name: "Ceramic plates",
     hp: 36,
     base: 330,
     tier: 2,
@@ -402,7 +389,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   spacedArmor: {
     id: "spacedArmor",
     kind: "armor",
-    name: "Spaced armor",
     hp: 110,
     base: 120,
     tier: 2,
@@ -419,7 +405,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   reinforcedCage: {
     id: "reinforcedCage",
     kind: "armor",
-    name: "Reinforced cage",
     hp: 130,
     base: 170,
     tier: 2,
@@ -436,7 +421,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   plowRam: {
     id: "plowRam",
     kind: "armor",
-    name: "Plow ram",
     hp: 170,
     base: 380,
     tier: 3,
@@ -455,7 +439,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   steelPlate: {
     id: "steelPlate",
     kind: "armor",
-    name: "Steel plate",
     hp: 28,
     base: 150,
     tier: 2,
@@ -472,7 +455,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   scrapSheet: {
     id: "scrapSheet",
     kind: "armor",
-    name: "Scrap sheet",
     hp: 22,
     base: 80,
     tier: 1,
@@ -489,7 +471,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   ceramicTile: {
     id: "ceramicTile",
     kind: "armor",
-    name: "Ceramic tile",
     hp: 18,
     base: 200,
     tier: 2,
@@ -506,7 +487,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   rack: {
     id: "rack",
     kind: "cargo",
-    name: "Roof rack",
     hp: 30,
     base: 70,
     tier: 1,
@@ -521,7 +501,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   trailerBox: {
     id: "trailerBox",
     kind: "cargo",
-    name: "Cargo box",
     hp: 60,
     base: 150,
     tier: 2,
@@ -536,7 +515,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   panniers: {
     id: "panniers",
     kind: "cargo",
-    name: "Panniers",
     hp: 20,
     base: 50,
     tier: 1,
@@ -551,7 +529,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   flatbed: {
     id: "flatbed",
     kind: "cargo",
-    name: "Flatbed extension",
     hp: 50,
     base: 100,
     tier: 1,
@@ -566,7 +543,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   lightFrame: {
     id: "lightFrame",
     kind: "cargo",
-    name: "Light cargo frame",
     hp: 24,
     base: 230,
     tier: 2,
@@ -581,7 +557,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   enclosedFrame: {
     id: "enclosedFrame",
     kind: "cargo",
-    name: "Enclosed cargo frame",
     hp: 110,
     base: 290,
     tier: 2,
@@ -596,7 +571,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   heavyFrame: {
     id: "heavyFrame",
     kind: "cargo",
-    name: "Heavy cargo frame",
     hp: 90,
     base: 400,
     tier: 3,
@@ -611,7 +585,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   jerrycans: {
     id: "jerrycans",
     kind: "store",
-    name: "Jerrycan rack",
     hp: 30,
     base: 70,
     tier: 1,
@@ -626,7 +599,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   supplyLocker: {
     id: "supplyLocker",
     kind: "store",
-    name: "Supply locker",
     hp: 30,
     base: 80,
     tier: 1,
@@ -641,55 +613,54 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   // Each chassis has one cab. A closed cab is tall, so guns cannot fire across it. An open seat is not.
   // The open seat of the buggy, courier, jeep and gunwagon.
   cab: {
-    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+    id: "cab", kind: "core", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
   },
   // The closed cab of every regular chassis.
   cabPickup: {
-    id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
+    id: "cabPickup", kind: "core", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   // The convertible's closed hardtop cabin.
   cabHardtop: {
-    id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
+    id: "cabHardtop", kind: "core", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   transmission: {
-    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
+    id: "transmission", kind: "core", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   transmissionMid: {
-    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
+    id: "transmissionMid", kind: "core", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
   },
   transmissionHeavy: {
-    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
+    id: "transmissionHeavy", kind: "core", hp: 90, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
   },
   wheel: {
-    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
+    id: "wheel", kind: "core", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   wheelMid: {
-    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
+    id: "wheelMid", kind: "core", hp: 50, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
   },
   wheelHeavy: {
-    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
+    id: "wheelHeavy", kind: "core", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
   },
   // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank. All tanks lie two cells along the truck.
   tank: {
-    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tank", kind: "core", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
   // The convertible's and the Lincoln's tank.
   tankLong: {
-    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tankLong", kind: "core", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   tankMid: {
-    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
+    id: "tankMid", kind: "core", hp: 50, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
   },
   tankHeavy: {
-    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
+    id: "tankHeavy", kind: "core", hp: 80, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
   },
   scanner: {
     id: "scanner",
     kind: "scanner",
-    name: "Radio scanner",
     hp: 30,
     base: 190,
     tier: 2,

@@ -87,7 +87,7 @@ export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: numbe
     targetId: null,
     destination,
     phase: destination ? 'travel' : 'act',
-    reason: 'patch damaged parts',
+    reason: 'patchParts',
   };
 }
 

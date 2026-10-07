@@ -8,7 +8,30 @@ import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
-import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, shortStatus, weaponGrid, BLOCK_SHORT, toggleTarget, vehicleMarks } from "./weapons";
+import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, shortStatus, weaponGrid, toggleTarget, vehicleMarks } from "./weapons";
+import { EN } from "../text/en";
+import type { Msg } from "../text/msg";
+import { entryText, resolve } from "../text/resolve";
+
+// The weapon readout with its status in English.
+function readout(world: World, gun: Parameters<typeof getWeaponReadout>[1]) {
+  const r = getWeaponReadout(world, gun);
+  return { ...r, status: en(r.status) };
+}
+
+// A vehicle's marks with their words in English.
+function marksEn(world: World, id: string) {
+  const mark = vehicleMarks(world, null).get(id);
+  return mark && { ...mark, weapons: mark.weapons.map((w) => ({ ...w, status: en(w.status) })), job: mark.job && { ...mark.job, label: en(mark.job.label) } };
+}
+
+const jobEn = (world: World, id: string) => marksEn(world, id)?.job;
+
+function en(msg: Msg): string;
+function en(msg: Msg | null | undefined): string | null;
+function en(msg: Msg | null | undefined): string | null {
+  return msg ? resolve(msg, "en") : null;
+}
 
 function createDuel() {
   const world = emptyWorld();
@@ -26,7 +49,7 @@ function createDuel() {
 describe("weapon readout at current positions", () => {
   it("shows the simulation hit chance for a ready weapon", () => {
     const { world, me, target, gun } = createDuel();
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target,
       status: "ready",
       chance: hitOdds(world, me, gun, target, "body").damageChance,
@@ -38,7 +61,7 @@ describe("weapon readout at current positions", () => {
   it("labels hold fire without a hit chance", () => {
     const { world, me, gun } = createDuel();
     me.weaponOrders = {};
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "hold fire",
       chance: null,
@@ -50,7 +73,7 @@ describe("weapon readout at current positions", () => {
   it("shows remaining cooldown turns without implying a shot can fire", () => {
     const { world, gun } = createDuel();
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: "ready in 2 turns",
       chance: null,
       canFire: false,
@@ -60,7 +83,7 @@ describe("weapon readout at current positions", () => {
   it("shows remaining reload turns for an empty gun", () => {
     const { world, gun } = createDuel();
     gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: `reloading ${gun.def.reload - 1} ${gun.def.reload - 1 === 1 ? "turn" : "turns"}`,
       chance: null,
       canFire: false,
@@ -71,7 +94,7 @@ describe("weapon readout at current positions", () => {
     const { world, target, gun } = createDuel();
     target.pos.x = 30 + gun.def.range + 1;
     refreshVision(world);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target,
       status: "out of range",
       chance: null,
@@ -85,7 +108,7 @@ describe("weapon readout at current positions", () => {
     const forward = { ...gun, def: { ...gun.def, arc: 60 } };
     target.pos = { x: 30, y: 33 };
     refreshVision(world);
-    expect(getWeaponReadout(world, forward)).toMatchObject({
+    expect(readout(world, forward)).toMatchObject({
       status: "out of arc",
       chance: null,
       canFire: false,
@@ -98,7 +121,7 @@ describe("weapon readout at current positions", () => {
       { id: "rock", kind: "rock", pos: { x: 31.5, y: 30 }, r: 0.8 },
     ];
     refreshVision(world);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "not in sight",
       chance: null,
@@ -121,7 +144,7 @@ describe("weapon readout at current positions", () => {
     const { world, gun } = createDuel();
     gun.part.hp = 0;
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: "disabled",
       chance: null,
       canFire: false,
@@ -131,7 +154,7 @@ describe("weapon readout at current positions", () => {
   it("handles a removed target as hold fire", () => {
     const { world, target, gun } = createDuel();
     world.vehicles = world.vehicles.filter((v) => v !== target);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "hold fire",
       chance: null,
@@ -162,7 +185,7 @@ describe("targeting by click", () => {
 describe("vehicle marks", () => {
   it("shows each aimed weapon on its target with slot, look and status", () => {
     const { world, target, gun } = createDuel();
-    expect(vehicleMarks(world, null).get(target.id)).toEqual({
+    expect(marksEn(world, target.id)).toEqual({
       weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
       radio: false,
       job: null,
@@ -186,7 +209,7 @@ describe("vehicle marks", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
+    expect(jobEn(world, target.id)).toEqual({ label: "Search", progress: 0.25 });
   });
 
   it("shows the patch a seen NPC does with its progress", () => {
@@ -196,7 +219,7 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 3 });
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
+    expect(jobEn(world, target.id)).toEqual({ label: 'Patch Your truck', progress: 0.25 });
   });
 
   it("shows the patch a seen NPC gets with its patcher", () => {
@@ -206,7 +229,7 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 1 });
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
+    expect(jobEn(world, target.id)).toEqual({ label: 'Patched by Your truck', progress: 0.75 });
   });
 
   it("marks a seen knocked-out NPC and offers no radio key on it", () => {
@@ -277,8 +300,8 @@ describe("aiming at parts", () => {
 
   it("names the aimed part or a body shot", () => {
     const { target } = createDuel();
-    expect(aimName(target, "body")).toBe("body shot");
-    expect(aimName(target, wheelOf(target).id)).toBe("Wheel");
+    expect(en(aimName(target, "body"))).toBe("body shot");
+    expect(en(aimName(target, wheelOf(target).id))).toBe("Wheel");
   });
 
   it("rejects a part the target does not have", () => {
@@ -369,7 +392,7 @@ describe("weapon panel keys and the turn button", () => {
   function build(auto = false, setup: (w: World) => void = () => {}) {
     ui.children = [];
     win.listeners.clear();
-    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }), getElementById: () => ui });
     vi.stubGlobal("window", win);
     const { world, gun } = createDuel();
     setup(world);
@@ -476,17 +499,17 @@ describe("compact gun grid", () => {
 
   it("gives a short state: nothing without an order, a chance, or a short reason", () => {
     const { world, me, gun } = createDuel();
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toMatch(/^\d+%$/);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toMatch(/^\d+%$/);
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("wait 2");
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("wait 2");
     gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe(`load ${gun.def.reload - 1}`);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe(`load ${gun.def.reload - 1}`);
     gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
     gun.part.hp = 0;
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("broken");
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("broken");
     gun.part.hp = 10;
     me.weaponOrders = {};
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("");
-    for (const word of Object.values(BLOCK_SHORT)) expect(word.length).toBeLessThanOrEqual(7);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("");
+    for (const key of Object.keys(EN).filter((k) => k.startsWith('blockShort.') && !k.endsWith('In'))) expect(entryText('en', key).length).toBeLessThanOrEqual(7);
   });
 });

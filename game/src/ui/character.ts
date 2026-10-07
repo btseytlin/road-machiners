@@ -2,7 +2,7 @@
 // family against the daily cap, and perks. An open perk pair shows both perks as buttons, a picked pair shows its perk
 // and a pair above the rank shows what it needs.
 
-import { MAX_RANK, PERK_LEVELS, PERKS, type PerkId, SKILL_IDS, SKILL_INFO, XP_RULES } from '../data/skills';
+import { MAX_RANK, PERK_LEVELS, type PerkId, SKILL_IDS, XP_RULES } from '../data/skills';
 import { maxHealthOf } from '../sim/health';
 import { buyRank, canBuyRank, choosePerk, hasPerk, pendingPerkPairs, perkPair, type PerkPair, rankCost, xpTodayOf } from '../sim/progress';
 import type { SkillId, World } from '../sim/types';
@@ -10,6 +10,8 @@ import { createIcon, type IconName } from './cards';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 import { hp } from './units';
+import { t } from '../text/msg';
+import { perkName, perkRule, refusalText, skillGrows, skillName } from '../text/names';
 
 export class CharacterScreen {
   private root = panel('modal');
@@ -40,11 +42,11 @@ export class CharacterScreen {
     const world = this.host.world();
     const p = world.player;
     this.root.replaceChildren(
-      el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
-      el('h3', {}, 'Character', el('span', { class: 'chips' },
-        el('span', { class: 'chip', title: 'Health' }, createIcon('driver'), `${hp(p.health)} / ${maxHealthOf(world)}`),
-        el('span', { class: 'chip', title: 'Knockouts' }, createIcon('damage'), `${p.knockouts} knockouts`),
-        el('span', { class: 'chip xp-pool', title: 'XP earned by doing things, to spend on skill ranks' }, `XP to spend: ${Math.floor(p.xp)}`),
+      el('button', { class: 'close', onclick: () => this.close() }, t('character.close')),
+      el('h3', {}, t('character.title'), el('span', { class: 'chips' },
+        el('span', { class: 'chip', title: t('character.health') }, createIcon('driver'), t('readout.ofMax', { n: hp(p.health), max: maxHealthOf(world) })),
+        el('span', { class: 'chip', title: t('character.knockoutsTitle') }, createIcon('damage'), t('character.knockouts', { n: p.knockouts })),
+        el('span', { class: 'chip xp-pool', title: t('character.xpTitle') }, t('character.xp', { n: Math.floor(p.xp) })),
       )),
       el('div', { class: 'cards skill-cards' }, ...SKILL_IDS.map((id) => this.card(world, id))),
     );
@@ -56,12 +58,12 @@ export class CharacterScreen {
     return el('div', { class: 'card skill-card' },
       el('div', { class: 'card-head' },
         createIcon(SKILL_ICON[id]),
-        el('div', { class: 'card-name' }, el('b', {}, SKILL_INFO[id].name), el('span', { class: 'dim' }, `Earns XP from ${SKILL_INFO[id].grows}`)),
-        el('div', { class: 'skill-level', title: `Rank ${rank} of ${MAX_RANK}` },
+        el('div', { class: 'card-name' }, el('b', {}, skillName(id)), el('span', { class: 'dim' }, t('character.grows', { what: skillGrows(id) }))),
+        el('div', { class: 'skill-level', title: t('character.rankOf', { rank, max: MAX_RANK }) },
           ...Array.from({ length: MAX_RANK }, (_, i) => el('i', { class: i < rank ? 'on' : '' }))),
       ),
-      el('div', { class: 'skill-line' }, el('span', {}, `Rank ${rank}`), this.buy(world, id, rank)),
-      el('div', { class: 'skill-line dim' }, el('span', {}, 'Earned today'), el('span', {}, `${Math.floor(today)} / ${XP_RULES.dailyCap} XP`)),
+      el('div', { class: 'skill-line' }, el('span', {}, t('character.rank', { rank })), this.buy(world, id, rank)),
+      el('div', { class: 'skill-line dim' }, el('span', {}, t('character.today')), el('span', {}, t('character.todayXp', { n: Math.floor(today), cap: XP_RULES.dailyCap }))),
       el('div', { class: 'meter today' }, el('div', { style: `width:${Math.min(today / XP_RULES.dailyCap, 1) * 100}%` })),
       ...this.perks(world, id),
     );
@@ -69,14 +71,15 @@ export class CharacterScreen {
 
   // The button that buys the next rank, disabled with its reason when it cannot, or "max" at the top rank.
   private buy(world: World, skill: SkillId, rank: number): HTMLElement {
-    if (rank >= MAX_RANK) return el('span', {}, 'max');
+    if (rank >= MAX_RANK) return el('span', {}, t('character.max'));
     const blocked = canBuyRank(world, skill);
+    const next = { rank: rank + 1, cost: rankCost(rank + 1) };
     return el('button', {
       class: 'buy-rank',
       disabled: blocked !== null,
-      title: blocked ?? `Spend ${rankCost(rank + 1)} XP on ${SKILL_INFO[skill].name} rank ${rank + 1}`,
+      title: blocked ? refusalText(world, blocked) : t('character.spendTitle', { ...next, skill: skillName(skill) }),
       onclick: () => this.host.announce(buyRank(this.host.world(), skill)),
-    }, `Buy rank ${rank + 1} — ${rankCost(rank + 1)} XP`);
+    }, t('character.buy', next));
   }
 
   // One line per perk pair: the picked perk, both perks as buttons once the rank is reached, or what it needs.
@@ -84,9 +87,10 @@ export class CharacterScreen {
     const open = pendingPerkPairs(world);
     return PERK_LEVELS.map((level) => perkPair(skill, level)).map((pair) => {
       const picked = pair.perks.find((id) => hasPerk(world, id));
-      if (picked) return el('div', { class: 'perk picked' }, el('b', {}, PERKS[picked].name), el('span', {}, PERKS[picked].rule));
+      if (picked) return el('div', { class: 'perk picked' }, el('b', {}, perkName(picked)), el('span', {}, perkRule(picked)));
       if (open.some((o) => o.skill === pair.skill && o.level === pair.level)) return this.choice(world, pair);
-      return el('div', { class: 'perk locked dim' }, `Rank ${pair.level}: ${pair.perks.map((id) => PERKS[id].name).join(' or ')}`);
+      const [a, b] = pair.perks;
+      return el('div', { class: 'perk locked dim' }, t('character.locked', { rank: pair.level, a: perkName(a), b: perkName(b) }));
     });
   }
 
@@ -96,8 +100,8 @@ export class CharacterScreen {
       class: 'perk',
       disabled: !canPick,
       onclick: () => this.host.apply(choosePerk(this.host.world(), id)),
-    }, el('b', {}, PERKS[id].name), el('span', {}, PERKS[id].rule));
-    return el('div', { class: 'perk-choice' }, el('span', { class: 'good' }, `Rank ${pair.level} perk: pick one`), ...pair.perks.map(button));
+    }, el('b', {}, perkName(id)), el('span', {}, perkRule(id)));
+    return el('div', { class: 'perk-choice' }, el('span', { class: 'good' }, t('character.pick', { rank: pair.level })), ...pair.perks.map(button));
   }
 }
 

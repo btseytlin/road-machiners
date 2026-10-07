@@ -19,7 +19,8 @@ import type { World } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
-import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
+import { loadLanguage, relocalize } from '../text/language';
+import { chooseSaveFate, saveErrorText, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
@@ -79,7 +80,7 @@ function newGameSaved(): World {
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
   const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  if ((await chooseSaveFate(saveErrorText(error), canMigrate)) === 'new') return freshRun();
   const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);
@@ -91,6 +92,15 @@ function newGame(): World {
 }
 
 installCrashScreen();
+// The language comes first, so the boot screens already speak it. A switch rewrites bound text in place, then the game
+// redraws what it draws with resolved words.
+const language = loadLanguage(window.localStorage, window.location.search, import.meta.env.DEV, document.documentElement);
+let relocalizeGame: (() => void) | null = null;
+language.subscribe(() => {
+  relocalize(uiRoot());
+  relocalize(element('overlay'));
+  relocalizeGame?.();
+});
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
@@ -105,6 +115,10 @@ const soundSettings = new SoundSettings(mixer, window.localStorage, radio.facepl
 radio.hear(world);
 const overlay = element('overlay');
 const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);
+relocalizeGame = () => {
+  radio.relocalize();
+  game.uiStale = true;
+};
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
@@ -112,7 +126,8 @@ onEveryError(() => game.holdSaves());
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {
-  (window as any).__ROAM__ = game;
+  // The layout check and the playtest switch the language through it.
+  (window as any).__ROAM__ = Object.assign(game, { language });
   (window as any).__ROAM_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
 }
 

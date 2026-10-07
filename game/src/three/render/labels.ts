@@ -1,6 +1,6 @@
 // HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
 // follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
-// undiscovered sites show ???, discovered sites show their name. A wreck a driver told of shows a rumor label,
+// undiscovered sites show ???, discovered sites show their name. setText writes a label only when its words change. A wreck a driver told of shows a rumor label,
 // also under fog, until its stock is gone.
 
 import { REGION } from '../../data/region';
@@ -14,11 +14,12 @@ import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
 import { playerExplored } from '../../sim/vision';
 import type { CameraRig } from './camera';
 import type { SightLimit } from './scope';
+import { setText } from '../../text/language';
+import { num, t } from '../../text/msg';
+import { siteName } from '../../text/names';
 
 const LABEL_LIFT_PX = 90; // pixels above the ground point, matches the old 2D label offset
-const RUMOR_TEXT = 'Wreck (rumor)';
-
-type Site = { id: string; name: string; pos: { x: number; y: number } };
+type Site = { id: string; pos: { x: number; y: number } };
 
 function labelEl(container: HTMLElement): HTMLDivElement {
   const el = document.createElement('div');
@@ -56,7 +57,7 @@ export class Labels {
   update(world: World, rig: CameraRig, limit: SightLimit): void {
     for (const s of sites()) {
       const el = this.els.get(s.id)!;
-      el.textContent = world.player.discovered.includes(s.id) ? s.name : '???';
+      setText(el, world.player.discovered.includes(s.id) ? siteName(s.id) : t('map.unknownSite'));
       place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
     }
     this.updateRumors(world, rig, limit);
@@ -74,7 +75,7 @@ export class Labels {
       let el = this.rumors.get(stock.id);
       if (!el) {
         el = labelEl(this.container);
-        el.textContent = RUMOR_TEXT;
+        setText(el, t('map.rumor'));
         this.rumors.set(stock.id, el);
       }
       place(el, world, stock.pos, rig, limit, true);
@@ -89,7 +90,7 @@ function sites(): Site[] {
 function weaponChip(mark: WeaponMark): HTMLElement {
   return el('div', { class: `marker-weapon ${mark.ready ? 'ready' : 'blocked'}`, title: mark.status },
     createIcon(mark.look),
-    el('span', { class: 'marker-slot' }, String(mark.slot)),
+    el('span', { class: 'marker-slot' }, num(mark.slot, 'int')),
     el('span', { class: 'marker-status' }, mark.status),
   );
 }
@@ -108,8 +109,8 @@ function weaponsRow(weapons: WeaponMark[]): HTMLElement | null {
 function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     weaponsRow(mark.weapons),
-    mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
-    mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? 'Gave up' : 'Knocked out') : null,
+    mark.radio ? el('div', { class: 'marker-radio' }, t('map.radio')) : null,
+    mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? t('npc.gaveUp') : t('npc.knockedOut')) : null,
     mark.job ? jobChip(mark.job) : null,
   );
 }

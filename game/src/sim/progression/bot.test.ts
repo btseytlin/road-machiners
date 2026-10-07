@@ -513,7 +513,7 @@ describe('the hunter', () => {
   it('has a hunter take the bounty on the board it is parked at, and a trader leave it', () => {
     const heldAfter = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 700, deadline: 5000, window: 600, tier: 1 }];
       return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
     };
 
@@ -570,7 +570,7 @@ describe('the hunter', () => {
   it('has a climber with fewer than three guns haul, and take no bounty', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [
-      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
+      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 700, deadline: 5000, window: 600, tier: 1 },
       { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 
@@ -606,7 +606,7 @@ describe('the hunter', () => {
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       expect(vehicleStats(w, raider).maxSpeed).toBeGreaterThanOrEqual(vehicleStats(w, me).maxSpeed);
       startCombat(w, raider, me);
-      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { text: 'Dump your cargo and roll on.', vars: {} } };
+      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
       return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
     };
 
@@ -683,7 +683,7 @@ describe('the fast trader', () => {
 function addTrader(w: World, pos: Vec, parts: string[] = ['stockEngine']): Vehicle {
   const v = addVehicle(w, 'traders', 'hauler', parts, pos);
   v.brain = npcBrain('trader', pos, ['trader']);
-  v.brain.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'deliver purchased cargo' }];
+  v.brain.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'deliverCargo' }];
   if (addGoods(w, v, 'electronics', 4) < 4) throw new Error('No room for trader cargo');
   return v;
 }
@@ -692,7 +692,7 @@ function addTrader(w: World, pos: Vec, parts: string[] = ['stockEngine']): Vehic
 function addGuardedConvoy(w: World, pos: Vec): { convoy: Vehicle; guard: Vehicle } {
   const convoy = addVehicle(w, 'convoys', 'hauler', ['stockEngine'], pos);
   convoy.brain = npcBrain('convoy', pos, ['supplier']);
-  convoy.brain.goals = [{ kind: 'haul', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'load cargo at its source' }];
+  convoy.brain.goals = [{ kind: 'haul', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'loadCargo' }];
   if (addGoods(w, convoy, 'water', 4) < 4) throw new Error('No room for convoy cargo');
   const guardPos = { x: pos.x, y: pos.y + 3 };
   const guard = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], guardPos);
@@ -738,9 +738,9 @@ describe('botOrders for robbers', () => {
   it('radios a trader whose goal line says it sells carried cargo, and skips one going for repairs', () => {
     const w = robberWorld();
     const seller = addTrader(w, { x: 64, y: 60 });
-    seller.brain!.goals[0].reason = 'sell carried cargo';
+    seller.brain!.goals[0].reason = 'sellCargo';
     expect(radioed(botOrders(w, 'robber'), seller)).toBe(true);
-    seller.brain!.goals[0].reason = 'needs repairs';
+    seller.brain!.goals[0].reason = 'needsRepairs';
     expect(radioed(botOrders(w, 'robber'), seller)).toBe(false);
   });
 

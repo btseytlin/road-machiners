@@ -1,6 +1,8 @@
 // The save slots in local storage and the request that tells boot which one to load. A slot is one key that holds
 // one save envelope. The Autosave keeps the key a single save had before slots, so an old save shows up as it.
 
+import { t, type Msg } from '../text/msg';
+
 export type SlotId = 'auto' | 'day' | `slot${number}`;
 
 export function manualSlots(count: number): SlotId[] {
@@ -15,10 +17,10 @@ export function slotKey(base: string, slot: SlotId): string {
   return slot === 'auto' ? base : `${base}:${slot}`;
 }
 
-export function slotLabel(slot: SlotId): string {
-  if (slot === 'auto') return 'Autosave';
-  if (slot === 'day') return 'Day start';
-  return `Slot ${slot.slice('slot'.length)}`;
+export function slotLabel(slot: SlotId): Msg {
+  if (slot === 'auto') return t('save.slot.auto');
+  if (slot === 'day') return t('save.slot.day');
+  return t('save.slot.manual', { n: Number(slot.slice('slot'.length)) });
 }
 
 // A filled slot. The turn is null when the save's JSON or its world turn does not read.

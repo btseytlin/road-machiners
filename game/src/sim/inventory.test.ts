@@ -52,8 +52,8 @@ describe('inventory grid', () => {
   it('items cannot overlap or leave the grid', () => {
     const w = emptyWorld();
     const g = good(w);
-    expect(() => moveItem(w, g.id, { x: 1, y: 1, rot: 0 })).toThrow(/Built-in/);
-    expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
+    expect(() => moveItem(w, g.id, { x: 1, y: 1, rot: 0 })).toThrow('Refused: builtInFixed');
+    expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow('Refused: badLayout');
   });
 
   it('unmounting takes three turns in the field and is instant in town', () => {
@@ -116,7 +116,7 @@ describe('inventory grid', () => {
   it('removing the panniers is blocked while their row holds items', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
-    expect(() => storePart(w, item(w, 'panniers').id)).toThrow(/fall off/);
+    expect(() => storePart(w, item(w, 'panniers').id)).toThrow('Refused: badLayout');
   });
 
   it('more parts mean less cargo room', () => {
@@ -189,10 +189,10 @@ describe('stores', () => {
     w.player.supplies = suppliesCap(me);
     const noCans = storePart(w, item(w, 'jerrycans').id);
     expect(noCans.player.fuel).toBe(CHASSIS.scout.fuelCap);
-    expect(noCans.events.filter((e) => e.t === 'supply').map((e) => e.text)).toEqual(['No room for fuel: fuel -12.0']);
+    expect(noCans.events.filter((e) => e.t === 'supply').map((e) => e.note)).toEqual([{ id: 'noRoomFuel', fuel: 12 }]);
     const noLocker = storePart(noCans, item(noCans, 'supplyLocker').id);
     expect(noLocker.player.supplies).toBe(RULES.baseSupplies);
-    expect(noLocker.events.filter((e) => e.t === 'supply').map((e) => e.text)).toEqual(['No room for supplies: supplies -10.0']);
+    expect(noLocker.events.filter((e) => e.t === 'supply').map((e) => e.note)).toEqual([{ id: 'noRoomSupplies', supplies: 10 }]);
   });
 
   it('unmounting a store with room to spare keeps every drop', () => {

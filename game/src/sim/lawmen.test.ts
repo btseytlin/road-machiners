@@ -102,7 +102,7 @@ describe('lawmen', () => {
   it('a robbery start calls lawmen', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addNpc(w, 'scavengers', ['scavenger', 'scumbag'], { x: 10, y: 10 });
-    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     const prey = addVehicle(w, 'traders', 'scout', [], { x: 15, y: 10 });
     prey.brain = npcBrain('trader', prey.pos, ['trader']);
     if (addGoods(w, prey, 'scrap', 2) < 2) throw new Error('No room for prey goods');

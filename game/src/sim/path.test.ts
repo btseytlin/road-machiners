@@ -410,11 +410,11 @@ describe('raiders that keep off roads', () => {
   function raider(w: World, pos: Vec): Vehicle {
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], pos);
     v.brain = npcBrain('test', pos, []);
-    v.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    v.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     return v;
   }
   function flee(v: Vehicle): void {
-    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'test flee' });
+    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'escapeAttacker' });
   }
 
   // Lengths of the stretches of a route on road tiles that keep-off-road drivers pay for, sampled every quarter tile.

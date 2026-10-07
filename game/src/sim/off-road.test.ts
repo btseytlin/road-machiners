@@ -15,7 +15,7 @@ import { worldLine } from './progression/turn-log';
 function driver(w: World, faction: Faction, goal: NpcActivity['kind'] | null): Vehicle {
   const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
   v.brain = npcBrain('test', { x: 60, y: 60 }, []);
-  if (goal) v.brain.goals = [{ kind: goal, targetId: null, destination: { x: 60, y: 60 }, phase: 'travel', reason: 'test' }];
+  if (goal) v.brain.goals = [{ kind: goal, targetId: null, destination: { x: 60, y: 60 }, phase: 'travel', reason: 'tripToSite' }];
   return v;
 }
 
@@ -130,7 +130,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
     trader.resources!.fuel = 0;
     const patrol = raider(w, { x: 325, y: 220 });
-    patrol.brain!.goals = [{ kind: 'patrol', targetId: 'kiln', destination: { x: 325, y: 370 }, phase: 'travel', reason: 'test patrol' }];
+    patrol.brain!.goals = [{ kind: 'patrol', targetId: 'kiln', destination: { x: 325, y: 370 }, phase: 'travel', reason: 'patrolTown' }];
     w = play(w, 7, (w) => {
       expect(byId(w, trader.id).brain!.farRoute?.offRoad).toBe(false);
       expect(byId(w, patrol.id).brain!.farRoute?.offRoad).toBe(false);

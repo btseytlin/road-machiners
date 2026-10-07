@@ -1,4 +1,5 @@
 import { CONFIG } from "../config";
+import type { Msg } from '../text/msg';
 import { PHYSICS } from "../data/physics";
 import { REGION } from "../data/region";
 import { PAL } from "../render/palette";
@@ -79,7 +80,7 @@ function showDamage(host: VolleyHost, r: ShotRound, landMs: number, rows: Map<st
 }
 
 // Damage text over a truck that shows, stacked in rows per truck.
-function damageLabel(host: VolleyHost, vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
+function damageLabel(host: VolleyHost, vehicleId: string, label: Msg | null, rows: Map<string, number>, atMs: number): void {
   const p = host.eventPoint(vehicleId);
   if (!label || !p) return;
   const row = rows.get(vehicleId) ?? 0;

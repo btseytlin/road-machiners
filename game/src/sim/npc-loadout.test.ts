@@ -63,7 +63,7 @@ describe('NPC equipment generation', () => {
       const beforeId = world.nextId;
       const loadout = generateNpcLoadout(world, template);
       expect(world.nextId).toBe(beforeId);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
       expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(template.loadout.minGuns);
       for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
@@ -104,7 +104,7 @@ describe('NPC equipment generation', () => {
       for (let seed = 1; seed <= 12; seed++) {
         const world = { ...fixture, rngState: seed };
         const loadout = generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded');
-        const v = makeVehicle(world, { ...loadout, name: 'test', faction: 'raiders', brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const v = makeVehicle(world, { ...loadout, faction: 'raiders', brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         const engine = mountedItems(v, 'engine')[0];
         expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
       }
@@ -116,7 +116,7 @@ describe('NPC equipment generation', () => {
       for (let seed = 1; seed <= 12; seed++) {
         const world = { ...fixture, rngState: seed };
         const loadout = generateNpcLoadout(world, template, null, level);
-        const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         const engine = mountedItems(v, 'engine')[0];
         const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
         expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
@@ -142,7 +142,7 @@ describe('NPC equipment generation', () => {
     for (let seed = 1; seed <= 32; seed++) {
       const world = { ...fixture, rngState: seed };
       const loadout = generateNpcLoadout(world, template);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(everyGunFires(v), describeLoadout(v)).toBe(true);
     }
   });
@@ -293,7 +293,7 @@ describe('trader spare parts', () => {
     template.loadout.goods = [{ value: null, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 0, weight: 1 }] };
     const bare = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
-    const free = freeCells(makeVehicle(fixture, { ...bare, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
+    const free = freeCells(makeVehicle(fixture, { ...bare, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
     template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 3, weight: 1 }] };
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);

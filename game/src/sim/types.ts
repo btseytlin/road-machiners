@@ -4,7 +4,7 @@ import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
 import type { PropKind, Terrain } from "./terrain";
 import type { Vec } from "./vec";
-import type { TopicId } from "../data/dialogue";
+import type { LineId, TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
@@ -156,6 +156,78 @@ export type WeatherEvent =
     }
   | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
+// ---- The sim's vocabulary for text. The sim keeps ids and numbers, and src/text/ turns them into words.
+
+// Why a driver took up or ended a goal. 'legacy' stands for a phrase from an old save that no id matches.
+export type GoalReason =
+  | 'arrived' | 'avoidCostlyFight' | 'bringAid' | 'buyCargo' | 'cannotAffordCargo' | 'cannotDrive' | 'cargoFullLoad'
+  | 'cargoFullLoot' | 'cargoFullSalvage' | 'choseNew' | 'collectSalvage' | 'combatStopsLooting' | 'combatStopsRepair'
+  | 'combatStopsSearch' | 'contactGone' | 'damagedThreatened' | 'defendLoot' | 'deliverCargo' | 'droppedTow'
+  | 'escapeAttacker' | 'escapeThreat' | 'explore' | 'exploredSpot' | 'fightBack' | 'fightHostile' | 'finishedRepairs'
+  | 'finishedService' | 'fitAgain' | 'followLeader' | 'foundNothing' | 'heardHostile' | 'helpStranded'
+  | 'homeToLieUp' | 'idle' | 'inCombat' | 'keepWord' | 'leftLeader' | 'legacy' | 'lieUp' | 'loadCargo'
+  | 'lootClaimed' | 'lootDowned' | 'lootGone' | 'lootOnTheWay' | 'lootRobbed' | 'lootTaken' | 'lostSalvage'
+  | 'lostTarget' | 'lowFuel' | 'lowSupplies' | 'meetingOff' | 'needsRepairs' | 'noExplorePoint' | 'noGun'
+  | 'noHostile' | 'noProgress' | 'nothingToDo' | 'nothingToLoot' | 'nowhereToRun' | 'patchOff' | 'patchParts'
+  | 'patchTruck' | 'patrolCamp' | 'patrolTown' | 'patrolledRoad' | 'pickUpAid' | 'prowl' | 'prowledRoad' | 'pullOver'
+  | 'raid' | 'reachedGround' | 'refitted' | 'refuseThreat' | 'retreatHome' | 'robCargo' | 'salvageExhausted'
+  | 'salvageGone' | 'searchSite' | 'searchSpot' | 'sellCargo' | 'soldCargo' | 'spottedHeard' | 'strandedRobbery'
+  | 'takeClaimedLoot' | 'takeHandedCargo' | 'towNotNeeded' | 'towOff' | 'towOfferLeft' | 'towPlayer' | 'towStranded'
+  | 'towUnanswered' | 'towedPlayer' | 'towedStranded' | 'tripToSite' | 'truckGotAway' | 'unfitToHunt' | 'waitPatch'
+  | 'waitTow' | 'waitTowAnswer' | 'warnedOff';
+
+// A note the sim adds to the player's log. Numbers are raw sim units.
+export type SimNote =
+  | { id: 'engineHot' }
+  | { id: 'engineOverheat'; hp: number }
+  | { id: 'engineDoused'; supplies: number }
+  | { id: 'outOfSupplies'; health: number }
+  | { id: 'noRoomFuel'; fuel: number }
+  | { id: 'noRoomSupplies'; supplies: number }
+  | { id: 'tankLeak'; fuel: number }
+  | { id: 'filledSupplies'; site: string }
+  | { id: 'hazard' }
+  | { id: 'spawnBlocked'; template: string };
+
+// Why money moved in a money event. towing: the towed truck's id.
+export type MoneyReason = { kind: 'contract' } | { kind: 'failedHaul' } | { kind: 'towing'; vehicle: string };
+
+// Why an item cannot sit at a spot on the grid.
+export type PlacementRefusal = { id: 'noFit' } | { id: 'inTheWay' } | { id: 'armorOnly' };
+
+// Why the sim turns down a player command. The UI shows it in words.
+export type Refusal =
+  | PlacementRefusal
+  | { id: 'badLayout'; cause: PlacementRefusal }
+  | { id: 'itemGone' }
+  | { id: 'refitRunning' }
+  | { id: 'twoInTheWay' }
+  | { id: 'refitItemMoved' }
+  | { id: 'builtInFixed' }
+  | { id: 'salvageOutOfReach' }
+  | { id: 'salvagePartGone' }
+  | { id: 'builtInStays' }
+  | { id: 'emptyRackFirst' }
+  | { id: 'truckOutOfReach' }
+  | { id: 'truckPartGone' }
+  | { id: 'looting'; by: string; place: 'here' | 'wreck' | 'truck' }
+  | { id: 'needsSpotter' }
+  | { id: 'cannotAct' }
+  | { id: 'noTruck' }
+  | { id: 'unseen' }
+  | { id: 'notActive'; state: 'dead' | 'knockedOut' }
+  | { id: 'topRank'; skill: SkillId }
+  | { id: 'needsXp'; cost: number; have: number }
+  | { id: 'noMoney' }
+  | { id: 'noCargoRoom' }
+  | { id: 'theyHaveNoRoom' }
+  | { id: 'noSupplyRoom' }
+  | { id: 'inCombat' }
+  | { id: 'stopFirst' };
+
+// The unit of a counted call value, shown with its plural form.
+export type UnitId = 'part';
+
 export type DriverResources = {
   money: number;
   fuel: number;
@@ -170,7 +242,7 @@ export type NpcActivity = {
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
-  reason: string;
+  reason: GoalReason;
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target
@@ -217,7 +289,6 @@ export type Memory = { turn: number; fact: MemoryFact }; // turn: when the drive
 
 export type Vehicle = {
   id: string;
-  name: string;
   faction: Faction;
   chassisId: string;
   items: GridItem[]; // inventory grid contents: parts, mounted or spare, and goods
@@ -304,7 +375,7 @@ export type CallVar =
   | { kind: "money"; amount: number }
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
-  | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
+  | { kind: "count"; n: number; unit: UnitId } // shown as "1 part" or "2 parts"
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
@@ -317,7 +388,7 @@ export type CallVars = Record<string, CallVar>;
 // Earlier practice events on one target: `count` of them as of turn `turn`.
 export type Repeat = { count: number; turn: number };
 
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { line: LineId; vars: CallVars } };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -378,9 +449,9 @@ export type ShotRound = {
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
 export type GameEvent =
-  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
+  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: GoalReason }
   // A driver made no progress for NPC_BEHAVIOR.stallTurns turns and gave up its goal, null when it had none. Always a bug.
-  | { t: 'stall'; vehicle: string; goal: NpcActivity['kind'] | null; reason: string }
+  | { t: 'stall'; vehicle: string; goal: NpcActivity['kind'] | null; reason: GoalReason }
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
@@ -395,10 +466,10 @@ export type GameEvent =
   | { t: 'hostile'; vehicle: string; against: string }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
-  | { t: 'money'; amount: number; reason: string }
+  | { t: 'money'; amount: number; reason: MoneyReason }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
-  | { t: 'supply'; what: string; text: string }
+  | { t: 'supply'; what: string; note: SimNote }
   | { t: 'death' }
   | { t: 'knockout' }
   | { t: 'wake' }
@@ -416,14 +487,14 @@ export type GameEvent =
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
-  | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
+  | { t: 'say'; speaker: string; line: LineId; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
   | { t: 'aidStarted'; giver: string; receiver: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
-  | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
+  | { t: 'info'; note: SimNote; debug?: true }; // a debug line shows only with the full log flag
 
 // A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
 // dug again. See src/sim/craters.ts.

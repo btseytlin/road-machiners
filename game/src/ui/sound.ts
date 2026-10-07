@@ -2,12 +2,14 @@
 
 import { MIX, type Bus } from "../data/sounds";
 import type { Mixer } from "../audio/mixer";
+import { bindAttr, setText } from "../text/language";
+import { t, type Msg } from "../text/msg";
 import { el } from "./dom";
 import { createSwitch } from "./switch";
 
 const KEY = "roam-sound";
 const BUSES: Bus[] = ["music", "sfx", "ambient", "ui"];
-const LABEL: Record<Bus, string> = { music: "Music", sfx: "Effects", ambient: "Wind", ui: "Interface" };
+const LABEL: Record<Bus, Msg> = { music: t("sound.music"), sfx: t("sound.sfx"), ambient: t("sound.ambient"), ui: t("sound.ui") };
 
 type Settings = { muted: boolean; volume: Record<Bus, number> };
 
@@ -54,7 +56,7 @@ export function knobAngle(value: number): number {
 
 // A plastic transport key from an old CD player, with the skip-forward mark.
 function nextButton(onclick: () => void): HTMLElement {
-  const button = el("button", { class: "radio-next", title: "Next track", "aria-label": "Next track", onclick });
+  const button = el("button", { class: "radio-next", title: t("sound.next"), "aria-label": t("sound.next"), onclick });
   button.innerHTML = `<svg viewBox="0 0 14 8" focusable="false"><path d="M0 0L5 4L0 8ZM5 0L10 4L5 8Z"/><rect x="10.5" width="1.6" height="8"/></svg>`;
   return button;
 }
@@ -86,7 +88,7 @@ export class SoundSettings {
   // The whole column under a knob is its handle: drag it, turn the wheel, or use the arrow keys while the knob is focused.
   private knob(bus: Bus): HTMLElement {
     const dial = el("div", { class: "knob-dial" }, el("span", { class: "knob-notch" }));
-    const knob = el("div", { class: "knob", role: "slider", tabindex: 0, "aria-label": `${LABEL[bus]} volume`, "aria-valuemin": 0, "aria-valuemax": 100 }, dial);
+    const knob = el("div", { class: "knob", role: "slider", tabindex: 0, "aria-label": t("sound.volume", { bus: LABEL[bus] }), "aria-valuemin": 0, "aria-valuemax": 100 }, dial);
     this.knobs.set(bus, knob);
     const readout = el("span", { class: "knob-readout" });
     this.readouts.set(bus, readout);
@@ -148,8 +150,8 @@ export class SoundSettings {
     const knob = this.knobs.get(bus)!;
     const percent = Math.round(volume * 100);
     knob.setAttribute("aria-valuenow", String(percent));
-    knob.setAttribute("aria-valuetext", `${percent}%`);
-    this.readouts.get(bus)!.textContent = `${percent}%`;
+    bindAttr(knob, "aria-valuetext", t("sound.percent", { n: percent }));
+    setText(this.readouts.get(bus)!, t("sound.percent", { n: percent }));
     knob.style.setProperty("--knob-angle", `${knobAngle(volume)}deg`);
   }
 
@@ -158,7 +160,7 @@ export class SoundSettings {
     this.mixer.setMuted(this.settings.muted);
     const muted = this.settings.muted;
     this.muteSwitch.replaceChildren(
-      createSwitch({ on: "Sound", off: "Mute", checked: !muted, key: "M", title: muted ? "Unmute [M]" : "Mute [M]", onclick: () => this.toggleMute() }),
+      createSwitch({ on: t("sound.on"), off: t("sound.mute"), checked: !muted, key: "M", title: muted ? t("sound.unmuteTitle") : t("sound.muteTitle"), onclick: () => this.toggleMute() }),
     );
   }
 

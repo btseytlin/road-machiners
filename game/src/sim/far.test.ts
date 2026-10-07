@@ -199,8 +199,8 @@ describe('far NPC travel', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30 + LIVE + 40, y: 80 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     const goals = [
-      { kind: 'raid' as const, targetId: null, destination: { x: 30 + LIVE + 70, y: 80 }, phase: 'travel' as const, reason: 'long-term goal' },
-      { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'interruption' },
+      { kind: 'raid' as const, targetId: null, destination: { x: 30 + LIVE + 70, y: 80 }, phase: 'travel' as const, reason: 'tripToSite' as const },
+      { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'heardHostile' as const },
     ];
     npc.brain.goals = structuredClone(goals);
     // The investigation needs a hostile target, so the NPC holds a feud toward the player.
@@ -239,7 +239,7 @@ describe('far NPC travel', () => {
     for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
     const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
     far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
-    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
     advanceFar(w, far);
     expect(far.brain.farRoute!.offRoad).toBe(false);

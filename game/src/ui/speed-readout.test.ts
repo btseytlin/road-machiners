@@ -8,6 +8,11 @@ import type { Vehicle, World } from '../sim/types';
 import { getHudReadout, powerChip, speedNotes, speedRows } from './hud-readout';
 import { kph } from './units';
 import { vehicleStats } from '../sim/stats';
+import { t, type Msg } from '../text/msg';
+import { resolve } from '../text/resolve';
+
+const en = (msg: Msg): string => resolve(msg, 'en');
+const CLEAR = t('weather.clear');
 
 // The test world's player truck, with the given change applied.
 function playerWith(tweak: (w: World, v: Vehicle) => void = () => undefined): { w: World; v: Vehicle } {
@@ -38,7 +43,7 @@ describe('max speed breakdown', () => {
       const { w, v } = playerWith(tweak);
       const rows = getHudReadout(w).maxSpeedRows;
       const last = rows[rows.length - 1];
-      expect(String(last.kph), name).toBe(getHudReadout(w).maxSpeed);
+      expect(last.kph, name).toBe(getHudReadout(w).maxSpeed);
       expect(last.kph, name).toBe(kph(vehicleStats(w, v).maxSpeed));
       expect(rows.filter((r) => r.total), name).toHaveLength(1);
     }
@@ -46,9 +51,9 @@ describe('max speed breakdown', () => {
 
   it('starts from the chassis base and shows engine effects as km/h', () => {
     const { w, v } = playerWith();
-    const rows = speedRows('Clear', maxSpeedSteps(w, v));
-    expect(rows[0]).toMatchObject({ label: 'Chassis', effect: 'base' });
-    expect(rows[1].effect).toMatch(/^[+−]\d+ km\/h$/);
+    const rows = speedRows(CLEAR, maxSpeedSteps(w, v));
+    expect([en(rows[0].label), en(rows[0].effect)]).toEqual(['Chassis', 'base']);
+    expect(en(rows[1].effect)).toMatch(/^[+−]\d+ km\/h$/);
   });
 
   it('words each cause with its numbers', () => {
@@ -56,38 +61,39 @@ describe('max speed breakdown', () => {
       CASES.wheels(world, truck);
       CASES.guns(world, truck);
     });
-    const labels = speedRows('Clear', maxSpeedSteps(w, v)).map((r) => r.label);
+    const labels = speedRows(CLEAR, maxSpeedSteps(w, v)).map((r) => en(r.label));
     expect(labels.some((l) => /^Load [\d,]+ kg \/ [\d,]+ kg$/.test(l))).toBe(true);
     expect(labels.some((l) => /^Gun power [\d.]+ \/ [\d.]+$/.test(l))).toBe(true);
     expect(labels).toContain('2 broken wheels');
     const stalled = playerWith(CASES.stalled);
-    expect(speedRows('Clear', maxSpeedSteps(stalled.w, stalled.v)).map((r) => r.label)).toContain('Engine stalled: pushed at crawl speed');
+    expect(speedRows(CLEAR, maxSpeedSteps(stalled.w, stalled.v)).map((r) => en(r.label))).toContain('Engine stalled: pushed at crawl speed');
   });
 
   it('keeps the limp cases consistent with the HUD number', () => {
     for (const name of ['brokenEngine', 'stalled', 'transmission']) {
       const { w, v } = playerWith(CASES[name]);
-      const rows = speedRows('Clear', maxSpeedSteps(w, v));
-      expect(String(rows[rows.length - 1].kph), name).toBe(getHudReadout(w).maxSpeed);
+      const rows = speedRows(CLEAR, maxSpeedSteps(w, v));
+      expect(rows[rows.length - 1].kph, name).toBe(getHudReadout(w).maxSpeed);
     }
   });
 
   it('notes low and empty fuel apart from the number', () => {
     const { w, v } = playerWith();
     w.player.fuel = 0;
-    expect(speedNotes(w, v, maxSpeedSteps(w, v)).join(' ')).toContain('Empty tank');
+    expect(speedNotes(w, v, maxSpeedSteps(w, v)).map(en).join(' ')).toContain('Empty tank');
   });
 
   it('explains gun power without a cost per gun', () => {
     const { w, v } = playerWith(CASES.guns);
-    expect(speedNotes(w, v, maxSpeedSteps(w, v)).join(' ')).toContain('one total, not a cost per gun');
+    expect(speedNotes(w, v, maxSpeedSteps(w, v)).map(en).join(' ')).toContain('one total, not a cost per gun');
   });
 });
 
 describe('power chip', () => {
+  const words = (c: ReturnType<typeof powerChip>) => ({ ...c, text: en(c.text), detail: en(c.detail) });
   const chip = (tweak: (w: World, v: Vehicle) => void) => {
     const { w, v } = playerWith(tweak);
-    return powerChip(maxSpeedSteps(w, v), v);
+    return words(powerChip(maxSpeedSteps(w, v), v));
   };
 
   it('shows no speed cost without guns', () => {
@@ -108,7 +114,7 @@ describe('power chip', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
     for (let i = 0; i < 16; i++) mountPart(w, v, makePart(w, 'mg', 0));
-    const c = powerChip(maxSpeedSteps(w, v), v);
+    const c = words(powerChip(maxSpeedSteps(w, v), v));
     expect(gunDraw(v)).toBeGreaterThan(workingEngineCapacity(v)!);
     expect(c.over).toBe(true);
     expect(c.text).toContain('over by');
@@ -116,10 +122,10 @@ describe('power chip', () => {
 
   it('counts no draw from a broken gun', () => {
     const { w, v } = playerWith((world, truck) => void mountPart(world, truck, makePart(world, 'mg', 0)));
-    const working = powerChip(maxSpeedSteps(w, v), v).text;
+    const working = en(powerChip(maxSpeedSteps(w, v), v).text);
     mountedParts(v, 'weapon')[0].hp = 0;
-    expect(powerChip(maxSpeedSteps(w, v), v).text).not.toBe(working);
-    expect(powerChip(maxSpeedSteps(w, v), v).text).toMatch(/^0 \//);
+    expect(en(powerChip(maxSpeedSteps(w, v), v).text)).not.toBe(working);
+    expect(en(powerChip(maxSpeedSteps(w, v), v).text)).toMatch(/^0 \//);
   });
 
   it('names a broken engine instead of showing power', () => {

@@ -79,7 +79,7 @@ describe('local game save', () => {
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 100, deadline: 900, window: 900, tier: 1 };
     world.player.contracts = [bounty];
     writeSave(storage, 'auto', world, 1000);
     const loaded = loadWorld(storage, 'auto', TEST_MAP);
@@ -176,11 +176,11 @@ describe('local game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
     const cases = [
-      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
-      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /incompatible/],
+      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /incompatible/],
       [{ major: SAVE_MAJOR, minor: MIGRATIONS.length + 1 }, saved, /newer/],
-      [{ major: SAVE_MAJOR, minor: -1 }, saved, /format/],
-      [SAVE_FORMAT, { turn: 21 }, /world/],
+      [{ major: SAVE_MAJOR, minor: -1 }, saved, /noFormat/],
+      [SAVE_FORMAT, { turn: 21 }, /invalidWorld/],
     ] as const;
     for (const [format, savedWorld, error] of cases) {
       storage.setItem('roam.save', JSON.stringify({ format, world: savedWorld }));
@@ -203,7 +203,7 @@ describe('local game save', () => {
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
       storage.setItem('roam.save', JSON.stringify({ format: SAVE_FORMAT, world: saved }));
-      expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(/world/);
+      expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(/invalidWorld/);
     }
   });
 

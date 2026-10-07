@@ -56,7 +56,7 @@ function addPrey(w: World, pos: Vec, parts: string[] = [], goods = 2): Vehicle {
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
 function isRob(goal: NpcActivity | undefined, target: string): boolean {
-  return goal?.kind === 'fight' && goal.targetId === target && goal.reason === 'rob cargo';
+  return goal?.kind === 'fight' && goal.targetId === target && goal.reason === 'robCargo';
 }
 
 type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
@@ -324,7 +324,7 @@ describe('scumbag robbery', () => {
 
   it('a robbery keeps the scavenge goal below it', () => {
     const { w, robber, target } = passing();
-    const scavenge: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+    const scavenge: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
     robber.brain!.goals = [scavenge];
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
@@ -338,7 +338,7 @@ describe('scumbag robbery', () => {
 
   it('a robber keeps its rob goal while its victim stays in sight, with no hostileSeen roll on the victim', () => {
     const { w, robber, target } = passing();
-    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     forceOption('preySeen', 'rob');
     // A hostileSeen roll on the victim would almost surely flee.
     forceOption('hostileSeen', 'flee');
@@ -356,7 +356,7 @@ describe('scumbag robbery', () => {
     const { w, robber, target } = passing();
     // An open tow offer to the player, waiting for an answer.
     addState(w, 'tow', robber.id, w.player.vehicleId, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
-    robber.brain!.goals = [{ kind: 'tow', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' }];
+    robber.brain!.goals = [{ kind: 'tow', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'waitTowAnswer' }];
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
     expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
@@ -366,7 +366,7 @@ describe('scumbag robbery', () => {
   it('a driver in a trade meeting does not rob its partner', () => {
     const { w, robber, target } = passing();
     addState(w, 'trade', robber.id, target.id, { kind: 'none' });
-    robber.brain!.goals = [{ kind: 'meet', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    robber.brain!.goals = [{ kind: 'meet', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'pullOver' }];
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
     expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
@@ -397,7 +397,7 @@ describe('scumbag robbery', () => {
 
   it('a robber stops its search to rob', () => {
     const { w, robber, target } = passing();
-    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'act', reason: 'search a known salvage site' }];
+    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'act', reason: 'searchSite' }];
     robber.job = { kind: 'search', stockId: 'salvage-yard', turnsLeft: 3, total: 3 };
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
@@ -437,7 +437,7 @@ describe('prey rolls', () => {
   it('a scavenger without scumbag rolls once on a weak loaded truck', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const scav = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
-    scav.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    scav.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     const target = addPrey(w, { x: 15, y: 10 });
     const rng = w.rngState;
     thinkNpc(w, scav);
@@ -447,7 +447,7 @@ describe('prey rolls', () => {
 });
 
 describe('looting', () => {
-  const SCAVENGE: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+  const SCAVENGE: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 
   // Runs the part of a turn that ends states after a kill.
   function killTurn(w: World): void {
@@ -665,19 +665,19 @@ describe('stranded robbers', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const raider = addRaider(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 15, y: 10 });
-    raider.brain!.goals = [{ kind: 'investigate', targetId: target.id, destination: { x: 15, y: 10 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
+    raider.brain!.goals = [{ kind: 'investigate', targetId: target.id, destination: { x: 15, y: 10 }, phase: 'travel', reason: 'heardHostile' }];
     strand(w, raider);
     thinkNpc(w, raider);
     expect(raider.brain!.goals.some((g) => g.kind === 'investigate' || (g.kind === 'fight' && g.targetId === target.id))).toBe(false);
-    expect(w.events.some((e) => JSON.stringify(e).includes('stranded, gave up the robbery'))).toBe(true);
-    expect(w.events.some((e) => JSON.stringify(e).includes('spotted the truck it heard'))).toBe(false);
+    expect(w.events.some((e) => JSON.stringify(e).includes('strandedRobbery'))).toBe(true);
+    expect(w.events.some((e) => JSON.stringify(e).includes('spottedHeard'))).toBe(false);
   });
 
   it('a scumbag stranded mid-robbery gives it up and backs off, unless the prey fights it', () => {
     for (const fights of [false, true]) {
       const { w, robber, target } = passing();
       addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
-      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'rob cargo', perceived: w.turn } as NpcActivity);
+      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'robCargo', perceived: w.turn } as NpcActivity);
       strand(w, robber);
       if (fights) startCombat(w, target, robber);
       thinkNpc(w, robber);

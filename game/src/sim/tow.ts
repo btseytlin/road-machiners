@@ -36,7 +36,7 @@ import { canUseSite, nearestPad, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import { getResources } from './resources';
-import type { GameEvent, NpcActivity, NpcState, Pose, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
+import type { GameEvent, GoalReason, NpcActivity, NpcState, Pose, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { playerCommand, update } from './world';
@@ -235,9 +235,9 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
   const tow = towHeldBy(world, vehicle.id);
   if (!tow) throw new Error(`${vehicle.id} holds no tow`);
   const data = towData(tow);
-  if (!data.hitched) return { kind: 'tow', targetId: tow.other, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' };
+  if (!data.hitched) return { kind: 'tow', targetId: tow.other, destination: null, phase: 'act', reason: 'waitTowAnswer' };
   const site = getKnownSite(data.site);
-  const reason = tow.other === world.player.vehicleId ? 'tow the player to town' : 'tow a stranded truck';
+  const reason = tow.other === world.player.vehicleId ? 'towPlayer' : 'towStranded';
   return { kind: 'tow', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason };
 }
 
@@ -285,27 +285,27 @@ export function checkBeacon(world: World): void {
 }
 
 // Runs a parked tower's activity. Returns why the activity ended, or null while it goes on.
-export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): string | null {
+export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): GoalReason | null {
   const held = towHeldBy(world, vehicle.id);
   if (held && !towData(held).hitched) {
     if (inTowReach(vehicle, vehicleById(world, held.other))) return null;
     refuse(world, held);
-    return 'the player drove away from the tow offer';
+    return 'towOfferLeft';
   }
   if (held) {
     if (!canUseSite(vehicle.pos, getKnownSite(towData(held).site))) return null;
     activity.phase = 'act';
     endState(world, held, 'fulfilled');
-    return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
+    return held.other === world.player.vehicleId ? 'towedPlayer' : 'towedStranded';
   }
   return reachClient(world, vehicle, activity, vehicleById(world, activity.targetId!));
 }
 
 // The tower offers or hitches once in reach. The client may have got going or reached its home while the tower drove
 // over, and then the job ends. So does a claim that lapsed this turn, before the goal drops.
-function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
-  if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
-  if (!stateOf(world, 'answering', tower.id, client.id)) return 'could not get through to the truck';
+function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): GoalReason | null {
+  if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'towNotNeeded';
+  if (!stateOf(world, 'answering', tower.id, client.id)) return 'towUnanswered';
   if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, tower, client);
@@ -404,7 +404,7 @@ export function dropStrandedTowers(world: World): void {
     const tower = world.vehicles.find((v) => v.id === tow.holder);
     if (!tower || !isStranded(world, tower)) continue;
     dropTow(world, tow, 'stranded');
-    if (tower.brain && popGoal(world, tower, 'cannot drive').kind !== 'tow') throw new Error(`${tower.id} held a tow without a tow goal on top`);
+    if (tower.brain && popGoal(world, tower, 'cannotDrive').kind !== 'tow') throw new Error(`${tower.id} held a tow without a tow goal on top`);
   }
 }
 
@@ -509,7 +509,7 @@ export function follows(world: World, follower: Vehicle, leaderId: string): bool
 }
 
 export function followGoal(leader: Vehicle): NpcActivity {
-  return { kind: 'follow', targetId: leader.id, destination: { ...leader.pos }, phase: 'travel', reason: 'follow its leader' };
+  return { kind: 'follow', targetId: leader.id, destination: { ...leader.pos }, phase: 'travel', reason: 'followLeader' };
 }
 
 // The escort takes the job and puts the follow goal at the bottom of its stack. Returns that goal.

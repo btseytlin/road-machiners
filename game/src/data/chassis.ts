@@ -43,7 +43,6 @@ import { PARTS } from './parts';
 
 export type ChassisDef = {
   id: string;
-  name: string;
   maxSpeed: number;
   accel: number;
   brake: number;
@@ -100,7 +99,6 @@ function finishChassis(def: ChassisInput): ChassisDef {
 const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   scout: {
     id: 'scout',
-    name: 'Scout pickup',
     maxSpeed: 7.8,
     accel: 2,
     brake: 3,
@@ -128,7 +126,6 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   hauler: {
     id: 'hauler',
-    name: 'Hauler',
     maxSpeed: 5.2,
     accel: 1,
     brake: 2,
@@ -156,7 +153,6 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   buggy: {
     id: 'buggy',
-    name: 'Buggy',
     maxSpeed: 9.1,
     accel: 3,
     brake: 3,
@@ -184,7 +180,6 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   wagon: {
     id: 'wagon',
-    name: 'Gunwagon',
     maxSpeed: 3.9,
     accel: 1,
     brake: 2,
@@ -211,7 +206,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     look: 'wagon',
   },
   courier: {
-    id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
+    id: 'courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
     mass: 280, handlingMass: 1100, radius: 0.5,
     // The grid has nine rows. The transmission stands in the low nose, the seat fills the rear and the tank sits in a wheel column, since the 2 by 2 deck block takes the rest.
     layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDEEXR', 'LDEEXR', 'LDXXDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
@@ -227,7 +222,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     fuelCap: 24, fuelPerTile: 0.18, base: 400, showsCores: true, tier: 1, look: 'courier',
   },
   van: {
-    id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
+    id: 'van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
     mass: 1100, handlingMass: 3000, radius: 0.7,
     // The closed cab lies behind the engine bay, two across and three along. The transmission and the tank lie in the box, out of sight.
     layout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
@@ -243,7 +238,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     fuelCap: 55, fuelPerTile: 0.24, base: 1180, showsCores: false, tier: 2, look: 'van',
   },
   longbed: {
-    id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
+    id: 'longbed', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
     mass: 2900, handlingMass: 7200, radius: 0.95,
     // The cab stands behind the engine bay. The transmission and the tank lie on the flat deck behind it, out of sight in the frame.
     layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDDXXXDDR', 'LDDXXXDDR', 'LDDDDDDDR', 'LDDXXXDDR', 'LDDXXXDDR', 'LXDDDDDXR', 'LXDDDDDXR', ' BBBBBBB '],
@@ -259,7 +254,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     fuelCap: 100, fuelPerTile: 0.48, base: 1720, showsCores: false, tier: 3, look: 'longbed',
   },
   carrier: {
-    id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
+    id: 'carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
     mass: 3200, handlingMass: 5200, radius: 0.85,
     // The closed cab lies beside the engine bay, the transmission in the front hull and the tank in the rear hull, out of sight.
     layout: [' FFFFFF ', 'LXDXXDXR', 'LXDXXDXR', 'LDEEXXDR', 'LDEEXXDR', 'LDDDXXDR', 'LXDDXXXR', 'LXDDDDXR', ' BBBBBB '],
@@ -275,7 +270,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     fuelCap: 70, fuelPerTile: 0.5, base: 2600, showsCores: false, tier: 3, look: 'carrier',
   },
   tractor: {
-    id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
+    id: 'tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
     mass: 3600, handlingMass: 6500, radius: 0.9,
     // The cab stands behind the engine bay. The transmission and the tank lie behind it, out of sight.
     layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDDXXXDDR', 'LDDXXXDDR', 'LDDDDXDDR', 'LXDXXXDXR', 'LXDXXDDXR', ' BBBBBBB '],
@@ -292,7 +287,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A VW Kübelwagen: open seats, a flat hood over the tank and the air-cooled engine under a rear lid.
   jeep: {
-    id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
+    id: 'jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
     mass: 450, handlingMass: 1400, radius: 0.55,
     // The engine bay is on the rear deck and the cabin roof is a gun deck. The model has no low place for the transmission and the tank, so they sit inside the body.
     layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDXDDR', 'LDXDDR', 'LXEEXR', 'LXEEXR', 'LDXXDR', ' BBBB '],
@@ -309,7 +304,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
   convertible: {
-    id: 'convertible', name: 'Convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
+    id: 'convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
     mass: 750, handlingMass: 2000, radius: 0.6,
     // The engine bay lies under the rear deck lid. The transmission and the tank lie in the front trunk, out of sight, and the hardtop cab stands two across between the seats.
     layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
@@ -326,7 +321,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A LAZ-695 city bus: guns and frames ride on the roof.
   bus: {
-    id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
+    id: 'bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
     mass: 3000, handlingMass: 6800, radius: 0.9,
     // The engine hatch is on the roof. The cab is at the front, and the transmission and the tank lie inside the body, out of sight.
     layout: [' FFFFFF ', 'LXXXXDXR', 'LXXXXDXR', 'LDDDDDDR', 'LDDDDDDR', 'LDDDDDDR', 'LDDXXXDR', 'LDDXXXDR', 'LDDEEDDR', 'LXDEEDXR', 'LXDDDDXR', ' BBBBBB '],
@@ -343,7 +338,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
   loader: {
-    id: 'loader', name: 'Wheel loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
+    id: 'loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
     mass: 4200, handlingMass: 7000, radius: 0.9,
     // The cab stands two across on the left, over the hood, and the transmission and the tank lie under it, out of sight.
     layout: [' FFFFFFF ', 'LXDDDDDXR', 'LXXXDDDXR', 'LDXXXXDDR', 'LDXXXXDDR', 'LDXEEDDDR', 'LXXEEDDXR', 'LXDDDDDXR', ' BBBBBBB '],
@@ -360,7 +355,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A Lada Niva 4x4: a nimble, frugal two-box off-roader with a small deck and tank.
   niva: {
-    id: 'niva', name: 'Niva', maxSpeed: 7.6, accel: 2.2, brake: 3, turnSlow: 115, turnFast: 40, reverseTurn: 80,
+    id: 'niva', maxSpeed: 7.6, accel: 2.2, brake: 3, turnSlow: 115, turnFast: 40, reverseTurn: 80,
     mass: 520, handlingMass: 1700, radius: 0.55,
     // The engine sits under the front hood. The transmission and the tank lie inside the body, and the open seat takes the cab cells.
     layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LXXXXR', 'LXXXXR', ' BBBB '],
@@ -377,7 +372,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A UAZ-452 Bukhanka: a cab-over loaf van with a big roof deck. The cab sits right behind the front armor row.
   bukhanka: {
-    id: 'bukhanka', name: 'Bukhanka', maxSpeed: 6.0, accel: 1.4, brake: 2.5, turnSlow: 95, turnFast: 30, reverseTurn: 60,
+    id: 'bukhanka', maxSpeed: 6.0, accel: 1.4, brake: 2.5, turnSlow: 95, turnFast: 30, reverseTurn: 60,
     mass: 1250, handlingMass: 3300, radius: 0.65,
     // The engine bay lies behind the cab, in a hatch in the roof. The transmission and the tank lie under the rear box.
     layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDEEDDR', 'LDEEDDR', 'LDDDDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],
@@ -394,7 +389,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   // A Lincoln Continental Mark III: the fast, light tier 3 gunboat with a long hood and a long thirsty body.
   lincoln: {
-    id: 'lincoln', name: 'Lincoln', maxSpeed: 8.6, accel: 2.0, brake: 2.2, turnSlow: 80, turnFast: 26, reverseTurn: 45,
+    id: 'lincoln', maxSpeed: 8.6, accel: 2.0, brake: 2.2, turnSlow: 80, turnFast: 26, reverseTurn: 45,
     mass: 900, handlingMass: 2400, radius: 0.85,
     // The engine sits under the long hood. The hardtop cab stands two across between the seats, and the transmission and the tank lie in the trunk.
     layout: [' FFFFF ', 'LXDDDXR', 'LXEEDXR', 'LDEEDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],

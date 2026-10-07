@@ -15,7 +15,6 @@ import type { Vec } from './vec';
 export type PartSpec = { defId: string; wear: number; at?: Pick<GridItem, 'x' | 'y' | 'rot'> };
 
 export type VehicleSpec = {
-  name: string;
   faction: Faction;
   chassisId: string;
   parts: PartSpec[]; // mounted in order on the first free fitting mount
@@ -54,8 +53,8 @@ export function addCoreParts(world: IdSource, v: Vehicle): void {
     if (def.kind !== 'core') throw new Error(`${c.defId} on ${v.chassisId} is not a core part`);
     const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: c.rot ?? 0, kind: 'part', part: makePart(world, c.defId, 0) };
     const err = placementError(gridOf(v), v.items, item, null);
-    if (err) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId}: ${err}`);
-    if (!isMounted(v.chassisId, item)) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId} is not on built-in cells`);
+    if (err) throw new Error(`${c.defId} at ${c.x},${c.y} on ${v.chassisId}: ${err.id}`);
+    if (!isMounted(v.chassisId, item)) throw new Error(`${c.defId} at ${c.x},${c.y} on ${v.chassisId} is not on built-in cells`);
     v.items.push(item);
   }
 }
@@ -71,7 +70,6 @@ export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | '
   chassisDef(spec.chassisId);
   const v: Vehicle = {
     id: newId(world, 'v'),
-    name: spec.name,
     faction: spec.faction,
     chassisId: spec.chassisId,
     items: [],
@@ -105,7 +103,7 @@ function loadVehicle(world: World, v: Vehicle, spec: VehicleSpec): void {
 function placeAt(world: World, v: Vehicle, part: PartInstance, at: NonNullable<PartSpec['at']>): void {
   const item: GridItem = { id: newId(world, 'i'), kind: 'part', part, ...at };
   const error = placementError(gridOf(v), v.items, item, item.id);
-  if (error) throw new Error(`Cannot place ${part.defId} at ${at.x},${at.y} on ${v.chassisId}: ${error}`);
+  if (error) throw new Error(`Cannot place ${part.defId} at ${at.x},${at.y} on ${v.chassisId}: ${error.id}`);
   v.items.push(item);
 }
 

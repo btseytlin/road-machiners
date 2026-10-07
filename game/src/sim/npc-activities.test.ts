@@ -91,7 +91,7 @@ describe('NPC activities', () => {
     const town = REGION.towns[0];
     const gate = siteGates(town)[0];
     npc.pos = { x: town.pos.x - (gate.x - town.pos.x) * 1.3, y: town.pos.y - (gate.y - town.pos.y) * 1.3 };
-    const stop = getActivityDestination(w, npc, { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' })!;
+    const stop = getActivityDestination(w, npc, { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tripToSite' })!;
     expect(canUseSite(stop, town)).toBe(true);
     expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
   });
@@ -102,7 +102,7 @@ describe('NPC activities', () => {
     const gate = siteGates(town)[0];
     npc.pos = { x: gate.x + (gate.x - town.pos.x), y: gate.y + (gate.y - town.pos.y) };
     const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
-      getActivityDestination(w, { ...npc, id }, { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' })!,
+      getActivityDestination(w, { ...npc, id }, { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tripToSite' })!,
     );
     for (const stop of stops) expect(canUseSite(stop, town)).toBe(true);
     const gaps = stops.flatMap((a, i) => stops.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
@@ -114,7 +114,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     const site = REGION.locations.find((l) => l.kind === 'oasis')!;
     const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
-      getActivityDestination(w, { ...npc, id }, { kind: 'resupply', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'test activity' })!,
+      getActivityDestination(w, { ...npc, id }, { kind: 'resupply', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'tripToSite' })!,
     );
     for (const stop of stops) expect(canUseSite(stop, site)).toBe(true);
     expect(new Set(stops.map((p) => `${p.x},${p.y}`)).size).toBe(stops.length);
@@ -123,7 +123,7 @@ describe('NPC activities', () => {
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
-    npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     w.events = [];
     resolveNpcActivities(w);
     resolveNpcActivities(w);
@@ -136,7 +136,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     const town = REGION.towns[1].id;
     npc.pos = { ...sitePads(REGION.towns[1])[0] };
-    npc.brain!.goals = [{ kind, targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind, targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     resolveNpcActivities(w);
     expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: w.shops[town].pressure } }]);
   });
@@ -145,7 +145,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     const granary = REGION.locations.find((l) => l.id === 'granary')!;
     npc.pos = { ...sitePads(granary)[0] };
-    npc.brain!.goals = [{ kind: 'resupply', targetId: granary.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind: 'resupply', targetId: granary.id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     resolveNpcActivities(w);
     expect(recall(npc, 'prices').map((m) => m.fact.shop)).toEqual(['granary']);
   });
@@ -155,7 +155,7 @@ describe('NPC activities', () => {
     const town = REGION.towns[1].id;
     const visit = () => {
       npc.pos = { ...sitePads(REGION.towns[1])[0] };
-      npc.brain!.goals = [{ kind: 'resupply', targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+      npc.brain!.goals = [{ kind: 'resupply', targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
       resolveNpcActivities(w);
     };
     visit();
@@ -171,7 +171,7 @@ describe('NPC activities', () => {
   it('leaves the goal of a knocked-out NPC with a working cab untouched', () => {
     const { w, npc } = createScavenger();
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
-    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
     resolveNpcActivities(w);
     expect(npc.brain!.goals).toHaveLength(1);
@@ -181,7 +181,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     npc.pos = { ...sitePads(oasis)[0] };
-    npc.brain!.goals = [{ kind: 'resupply', targetId: oasis.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.brain!.goals = [{ kind: 'resupply', targetId: oasis.id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     w.events = [];
     resolveNpcActivities(w);
     expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
@@ -190,10 +190,10 @@ describe('NPC activities', () => {
 
   it('records failure when a salvage target disappears', () => {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
     w.events = [];
     resolveNpcActivities(w);
-    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvage no longer available' })]);
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvageGone' })]);
   });
 
   it('drops a scavenge goal when nothing left in the stock fits its cargo', () => {
@@ -201,11 +201,11 @@ describe('NPC activities', () => {
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
     w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
     npc.speed = 0;
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
     w.events = [];
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
-    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargo cannot hold salvage' })]);
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargoFullSalvage' })]);
   });
 
   it('does not see a reachable stock as salvage when nothing in it fits', () => {
@@ -220,7 +220,7 @@ describe('NPC activities', () => {
 
   it('drops a scavenge goal on a cargo pile once the pile is gone, before it drives', () => {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collect visible salvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collectSalvage' }];
     expect(() => planNpcOrders(w)).not.toThrow();
     expect(npc.brain!.goals.some((goal) => goal.targetId === 'cargo-v9-1')).toBe(false);
   });
@@ -498,7 +498,7 @@ describe('NPC activities', () => {
       const offAxis = (p: Vec) => Math.abs((p.x - cage.pos.x) * along.y - (p.y - cage.pos.y) * along.x);
       const cache = w.salvage.find((s) => s.id.startsWith('hullCache-') && dist(s.pos, cage.pos) < cage.r && alongOf(s.pos) > 0)!;
       expect(cache).toBeDefined();
-      npc.brain.goals = [{ kind: 'scavenge', targetId: cache.id, destination: { ...cache.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      npc.brain.goals = [{ kind: 'scavenge', targetId: cache.id, destination: { ...cache.pos }, phase: 'travel', reason: 'searchSpot' }];
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
       // The other cache on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
@@ -536,7 +536,7 @@ describe('NPC activities', () => {
       const inFurrow = territorySpots(w, 'fallen-sun').filter((s) => polylineDist(s.pos, furrow.path) < furrow.width);
       expect(inFurrow.length).toBeGreaterThan(0);
       const spot = inFurrow.reduce((a, b) => (dist(b.pos, start) > dist(a.pos, start) ? b : a));
-      npc.brain.goals = [{ kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      npc.brain.goals = [{ kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'searchSpot' }];
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
       // A spot seen on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
@@ -557,7 +557,7 @@ describe('NPC activities', () => {
 
     it('ends a trip to a territory at its road end, not at its centre', () => {
       const { w, npc } = createScavenger();
-      const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'make a trip to another site' };
+      const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'tripToSite' };
       expect(getActivityDestination(w, npc, goal)).toEqual(entry());
     });
 
@@ -662,7 +662,7 @@ describe('NPC activities', () => {
       npc.speed = 0;
     };
     const goal = (kind: NpcActivity['kind'], siteId: string, over: Partial<NpcActivity> = {}): NpcActivity =>
-      ({ kind, targetId: siteId, destination: { x: 0, y: 0 }, phase: 'travel', reason: 'test activity', ...over });
+      ({ kind, targetId: siteId, destination: { x: 0, y: 0 }, phase: 'travel', reason: 'tripToSite', ...over });
     const tankAt = (w: World, npc: Vehicle, share: number, money: number) => {
       getResources(w, npc).fuel = Math.floor(share * fuelCap(npc));
       getResources(w, npc).money = money;
@@ -836,8 +836,8 @@ describe('NPC activities', () => {
       const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       raider.brain.goals = [
-        { kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'long-term goal' },
-        { kind: 'investigate', targetId: player.id, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' },
+        { kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'tripToSite' },
+        { kind: 'investigate', targetId: player.id, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heardHostile' },
       ];
       raider.brain.noticed = noticed;
       return { w, player, raider };
@@ -1049,7 +1049,7 @@ describe('salvage on the way', () => {
   function passingWreck(traits: TraitId[] = ['scavenger']) {
     const { w, npc } = createScavenger();
     npc.brain = npcBrain('scavenger', npc.pos, traits);
-    npc.brain.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'search a known salvage site' }];
+    npc.brain.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'searchSite' }];
     w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
     return { w, npc };
   }
@@ -1087,7 +1087,7 @@ describe('salvage on the way', () => {
   it('ignores salvage while an interruption is on top', () => {
     forceOption('salvageSeen', 'loot');
     const { w, npc } = passingWreck();
-    npc.brain!.goals.push({ kind: 'resupply', targetId: 'dustwell', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test' });
+    npc.brain!.goals.push({ kind: 'resupply', targetId: 'dustwell', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'tripToSite' });
     thinkNpc(w, npc);
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
@@ -1117,7 +1117,7 @@ describe('point goals', () => {
     const w0 = emptyWorld({ x: 10, y: 10 });
     const npc = addVehicle(w0, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 150, y: 150 });
     npc.brain = npcBrain('roamer', npc.pos, ['roamer']);
-    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 150 }, phase: 'travel', reason: 'test spot' }];
+    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 150 }, phase: 'travel', reason: 'searchSpot' }];
     addVehicle(w0, 'traders', 'hauler', [], { x: 170, y: 150 });
     const moveFar = (w: World) => w.vehicles.forEach((v) => advanceFar(w, v));
     // Salvage on the way would pull the driver off its point.
@@ -1143,7 +1143,7 @@ describe('a trader too poor to trade', () => {
 describe('repair goal in combat', () => {
   it('is given up when no repair is under way, since none can start', () => {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' }];
+    npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patchParts' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
     startCombat(w, foe, npc);
@@ -1158,7 +1158,7 @@ describe('salvage in combat', () => {
   it('is given up at the stock when no search runs, since none can start', () => {
     const { w, npc } = createScavenger();
     w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [] });
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collect visible salvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collectSalvage' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
     startCombat(w, foe, npc);
@@ -1170,10 +1170,10 @@ describe('salvage in combat', () => {
 });
 
 describe('one looter per target', () => {
-  const GONE = 'someone else is looting it';
+  const GONE = 'lootTaken';
 
   function lootGoal(kind: 'scavenge' | 'loot', targetId: string, phase: NpcActivity['phase'], at: { x: number; y: number }): NpcActivity {
-    return { kind, targetId, destination: { ...at }, phase, reason: 'test loot' };
+    return { kind, targetId, destination: { ...at }, phase, reason: 'lootDowned' };
   }
 
   function parkedScavenger(w: World, pos: { x: number; y: number }): Vehicle {
@@ -1260,7 +1260,7 @@ describe('one looter per target', () => {
     const { w, second, wreck } = contestedWreck();
     second.pos = { x: 16, y: 10 };
     second.speed = 3;
-    second.brain!.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'search a known salvage site' }];
+    second.brain!.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'searchSite' }];
     thinkNpc(w, second);
     expect(second.brain!.goals.map((g) => g.targetId)).toEqual(['podfield']);
     expect(`salvageSeen:${wreck.id}` in second.brain!.noticed).toBe(false);
@@ -1326,7 +1326,7 @@ describe('one looter per target', () => {
       expect(first.job).toBeNull();
       expect(first.brain!.goals.some((g) => g.targetId === wreck.id)).toBe(false);
       expect(first.brain!.noticed[`salvageSeen:${wreck.id}`]).toBe(7);
-      expect(w.events).toContainEqual(expect.objectContaining({ vehicle: first.id, previous: 'scavenge', reason: 'warned off the loot' }));
+      expect(w.events).toContainEqual(expect.objectContaining({ vehicle: first.id, previous: 'scavenge', reason: 'warnedOff' }));
     });
 
     it('ends the strip of a knocked-out truck', () => {
@@ -1341,7 +1341,7 @@ describe('one looter per target', () => {
 
     it('throws for a driver with no loot claim', () => {
       const { w, second } = contestedWreck();
-      second.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test goal' }];
+      second.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'tripToSite' }];
       expect(() => backOffLoot(w, second)).toThrow('no loot claim');
     });
   });
@@ -1351,7 +1351,7 @@ describe('stall watchdog', () => {
   // A scavenger pinned to one tile with a goal it never works on.
   function frozen() {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test goal' }];
+    npc.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'tripToSite' }];
     return { w, npc };
   }
 
@@ -1366,10 +1366,10 @@ describe('stall watchdog', () => {
     const { w, npc } = frozen();
     const start = { ...npc.pos };
     run(w, NPC_BEHAVIOR.stallTurns);
-    expect(topGoal(npc)?.reason).toBe('test goal');
+    expect(topGoal(npc)?.reason).toBe('tripToSite');
     run(w, 1);
-    expect(w.events).toContainEqual({ t: 'stall', vehicle: npc.id, goal: 'travel', reason: 'test goal' });
-    expect(npc.brain!.goals.some((g) => g.reason === 'test goal')).toBe(false);
+    expect(w.events).toContainEqual({ t: 'stall', vehicle: npc.id, goal: 'travel', reason: 'tripToSite' });
+    expect(npc.brain!.goals.some((g) => g.reason === 'tripToSite')).toBe(false);
     expect(topGoal(npc)).not.toBeNull();
     expect(topGoal(npc)!.kind).not.toBe('wait');
     expect(dist(npc.pos, start)).toBeGreaterThan(0);
@@ -1415,7 +1415,7 @@ describe('parking beside a truck', () => {
     tower.brain = npcBrain('trader', tower.pos, NPCS.trader.traits);
     const client = w.vehicles[0];
     const stop = (): { x: number; y: number } =>
-      getActivityDestination(w, tower, { kind: 'tow', targetId: client.id, destination: { ...client.pos }, phase: 'travel', reason: 'test activity' })!;
+      getActivityDestination(w, tower, { kind: 'tow', targetId: client.id, destination: { ...client.pos }, phase: 'travel', reason: 'tripToSite' })!;
     return { w, tower, client, stop };
   }
 

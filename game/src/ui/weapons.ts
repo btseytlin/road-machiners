@@ -1,4 +1,3 @@
-import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
@@ -14,34 +13,25 @@ import type { UiHost } from "./host";
 import { createIcon, createItemIcon } from './cards';
 import { canCall } from "./dialogue";
 import { workLabel, workProgress } from "./format";
+import { num, t, type Msg, type PlainKey } from "../text/msg";
+import { partName, vehicleTitle } from "../text/names";
 
-export const BLOCK_TEXT: Record<FireBlock, string> = {
-  disabled: "disabled",
-  cooldown: "cooling down",
-  empty: "reloading",
-  range: "out of range",
-  arc: "out of arc",
-  blocked: "view blocked on truck",
-  noTarget: "hold fire",
-  unseen: "not in sight",
-  covered: "behind cover",
-  talking: "on the radio",
-  out: "driver knocked out",
-};
+// Why a gun cannot fire, in words.
+export const blockWords = (block: FireBlock): Msg => t(`block.${block}`);
 
 // The same reasons in one short word for the compact panel. A gun with no order shows nothing.
-export const BLOCK_SHORT: Record<FireBlock, string> = {
-  disabled: "broken",
-  cooldown: "wait",
-  empty: "load",
-  range: "range",
-  arc: "arc",
-  blocked: "blocked",
-  noTarget: "",
-  unseen: "unseen",
-  covered: "cover",
-  talking: "radio",
-  out: "out",
+const BLOCK_SHORT: Record<FireBlock, PlainKey | null> = {
+  disabled: "blockShort.disabled",
+  cooldown: "blockShort.cooldown",
+  empty: "blockShort.empty",
+  range: "blockShort.range",
+  arc: "blockShort.arc",
+  blocked: "blockShort.blocked",
+  noTarget: null,
+  unseen: "blockShort.unseen",
+  covered: "blockShort.covered",
+  talking: "blockShort.talking",
+  out: "blockShort.out",
 };
 
 export const WEAPONS_PER_ROW = 5;
@@ -53,9 +43,9 @@ export function weaponGrid(count: number): { cols: number; small: boolean } {
 }
 
 // One weapon aimed at a vehicle, as its marker shows it.
-export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
+export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: Msg; ready: boolean };
 // Timed work a seen NPC does, with its progress from 0 to 1.
-export type JobMark = { label: string; progress: number };
+export type JobMark = { label: Msg; progress: number };
 export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
 
 // Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
@@ -128,26 +118,22 @@ export function aimMarks(w: World, targetId: string): Map<string, number[]> {
 }
 
 // The aimed spot in words: "body shot" or the part's name.
-export function aimName(target: Vehicle, aim: Aim): string {
+export function aimName(target: Vehicle, aim: Aim): Msg {
   const part = aim === "body" ? null : findPart(target, aim);
-  return part ? partDef(part.defId).name : "body shot";
-}
-
-function turns(n: number): string {
-  return `${n} ${n === 1 ? "turn" : "turns"}`;
+  return part ? partName(part.defId) : t("weapon.bodyShot");
 }
 
 // Why a gun cannot fire, with the turns left for a cooldown or a reload.
-export function blockText(mw: MountedWeapon, block: FireBlock): string {
+export function blockText(mw: MountedWeapon, block: FireBlock): Msg {
   const gun = gunOf(mw.part);
-  if (block === "cooldown") return `ready in ${turns(gun.cooldown)}`;
-  if (block === "empty") return `reloading ${turns(mw.def.reload - gun.reloadWork)}`;
-  return BLOCK_TEXT[block];
+  if (block === "cooldown") return t("weapon.readyIn", { n: gun.cooldown });
+  if (block === "empty") return t("weapon.reloadingFor", { n: mw.def.reload - gun.reloadWork });
+  return blockWords(block);
 }
 
 // Rounds left in the magazine, like "3/5".
-export function ammoText(mw: MountedWeapon): string {
-  return `${gunOf(mw.part).ammo}/${mw.def.magazine}`;
+export function ammoText(mw: MountedWeapon): Msg {
+  return t("weapon.ammo", { n: gunOf(mw.part).ammo, of: mw.def.magazine });
 }
 
 export type AmmoCell = "loaded" | "spent" | "reloading";
@@ -162,10 +148,10 @@ export function ammoCells(magazine: number, ammo: number, reloadWork: number, re
 }
 
 // Ammo status for the tooltip and screen readers.
-export function ammoLabel(mw: MountedWeapon): string {
+export function ammoLabel(mw: MountedWeapon): Msg {
   const gun = gunOf(mw.part);
-  if (gun.reloadWork > 0) return `reloading, ${turns(mw.def.reload - gun.reloadWork)} left`;
-  return `${gun.ammo}/${mw.def.magazine} rounds`;
+  if (gun.reloadWork > 0) return t("weapon.reloadingLeft", { n: mw.def.reload - gun.reloadWork });
+  return t("weapon.rounds", { n: gun.ammo, of: mw.def.magazine });
 }
 
 // A forced reload helps only a gun with a partly spent magazine.
@@ -183,7 +169,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
     : null;
   const target = assigned && playerSees(w, assigned.pos) ? assigned : null;
   const block = fireBlock(w, me, mw, assigned);
-  const status = block ? blockText(mw, block) : "ready";
+  const status = block ? blockText(mw, block) : t("weapon.ready");
   return {
     target,
     status,
@@ -197,15 +183,21 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
 }
 
 // The visible state of a gun in a word: the hit chance when it can fire at a target, else why it cannot.
-export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWeaponReadout>): string {
-  if (readout.chance !== null) return `${Math.round(readout.chance * 100)}%`;
-  const { block } = readout;
-  if (block === null) return "";
-  const gun = gunOf(mw.part);
-  if (block === "cooldown") return `${BLOCK_SHORT[block]} ${gun.cooldown}`;
-  if (block === "empty") return `${BLOCK_SHORT[block]} ${mw.def.reload - gun.reloadWork}`;
-  return BLOCK_SHORT[block];
+export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWeaponReadout>): Msg | null {
+  if (readout.chance !== null) return t("hit.chance", { pct: Math.round(readout.chance * 100) });
+  const block = readout.block;
+  if (block === null) return null;
+  const withTurns = SHORT_WITH_TURNS[block];
+  if (withTurns) return withTurns(mw);
+  const short = BLOCK_SHORT[block];
+  return short && t(short);
 }
+
+// The short reasons that count down, with the turns left.
+const SHORT_WITH_TURNS: Partial<Record<FireBlock, (mw: MountedWeapon) => Msg>> = {
+  cooldown: (mw) => t("blockShort.cooldownIn", { n: gunOf(mw.part).cooldown }),
+  empty: (mw) => t("blockShort.emptyIn", { n: mw.def.reload - gunOf(mw.part).reloadWork }),
+};
 
 // Hold has something to do while the gun has an order or auto fire is on.
 function canHold(w: World, mw: MountedWeapon): boolean {
@@ -226,10 +218,10 @@ export class WeaponPanel {
     const head = el(
       "div",
       { class: "weapon-head" },
-      el("h3", {}, "Weapons"),
+      el("h3", {}, t("weapon.title")),
       this.expanded ? this.renderAutoButton(w, locked) : null,
       this.expanded ? this.renderAllButton(locked) : null,
-      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
+      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: t("weapon.toggleTitle") }, this.expanded ? t("weapon.hide") : t("weapon.show")),
     );
     this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
     this.turn.replaceChildren(this.renderTurnButton(phase));
@@ -239,13 +231,13 @@ export class WeaponPanel {
   private renderTurnButton(phase: ReturnType<UiHost["getTurnPhase"]>): HTMLElement {
     if (this.host.autoTravel())
       return el('button', {
-        class: 'end-turn auto', title: 'Automatic travel. Space or click to stop.',
-        'aria-label': 'Stop automatic travel', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
-      }, createIcon('turn'), el('span', {}, 'Auto'));
+        class: 'end-turn auto', title: t('turn.autoTitle'),
+        'aria-label': t('turn.stopAuto'), onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
+      }, createIcon('turn'), el('span', {}, t('turn.auto')));
     return el('button', {
-      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]. Hold to fast-forward.',
-      'aria-label': phase ? `${phase} in progress` : 'End turn', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
-    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space'));
+      class: 'end-turn', disabled: phase !== null, title: t('turn.endTitle'),
+      'aria-label': phase ? t('turn.inProgress', { phase: t(`phase.${phase}`) }) : t('turn.end'), onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
+    }, createIcon('turn'), el('span', {}, phase ? t('turn.running', { phase: t(`phase.${phase}`) }) : t('turn.space')));
   }
 
   // Presses like Space keydown now and releases like Space keyup when this press ends, even if the button is redrawn.
@@ -268,10 +260,10 @@ export class WeaponPanel {
         class: w.player.autoFire ? "on" : "",
         "aria-pressed": String(w.player.autoFire),
         disabled: locked,
-        title: "Auto fire: guns shoot at hostiles on their own [Q]",
+        title: t("weapon.autoTitle"),
         onclick: () => this.host.runKey("KeyQ"),
       },
-      "Auto fire [Q]",
+      t("weapon.auto"),
     );
   }
 
@@ -283,10 +275,10 @@ export class WeaponPanel {
         class: all ? "on" : "",
         "aria-pressed": String(all),
         disabled: locked,
-        title: "Aim all weapons with the next click [0]",
+        title: t("weapon.allTitle"),
         onclick: () => this.host.runKey("Digit0"),
       },
-      "All [0]",
+      t("weapon.all"),
     );
   }
 
@@ -303,7 +295,7 @@ export class WeaponPanel {
       "fieldset",
       { disabled: locked },
       slots,
-      weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
+      weapons.length === 0 ? el("div", { class: "dim" }, t("weapon.none")) : null,
     );
   }
 
@@ -311,7 +303,9 @@ export class WeaponPanel {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
     const order = playerVehicle(w).weaponOrders[mw.part.id];
-    const target = readout.target?.name ?? (order ? "target unavailable" : "no target");
+    const target = readout.target ? vehicleTitle(w, readout.target) : order ? t("weapon.targetGone") : t("weapon.noTarget");
+    const name = partName(mw.def.id);
+    const status = { name, status: readout.status, target };
     return el(
       "div",
       { class: mw.part.hp <= 0 ? "weapon-slot broken" : "weapon-slot", "data-weapon": mw.part.id },
@@ -320,11 +314,11 @@ export class WeaponPanel {
         {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
-          'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s). ${readout.status}, ${target}`,
+          'aria-label': t("weapon.slotLabel", status),
+          title: t("weapon.slotTitle", { ...status, rounds: mw.def.rounds, damage: mw.def.round.damage * RULES.weaponDamage, pen: mw.def.round.pen, range: meters(mw.def.range), arc: mw.def.arc, cooldown: mw.def.cooldown, magazine: mw.def.magazine, reload: mw.def.reload }),
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
-        el('span', { class: 'weapon-number' }, `${i + 1}`),
+        el('span', { class: 'weapon-number' }, num(i + 1, 'int')),
         el("span", { class: readout.canFire ? "good" : "dim", "data-status": "" }, shortStatus(mw, readout)),
         createItemIcon(mw.part.defId),
         this.renderAmmo(mw),
@@ -356,18 +350,18 @@ export class WeaponPanel {
         {
           class: "weapon-hold",
           disabled: !canHold,
-          title: "Hold fire: stop auto fire and clear this gun's target",
+          title: t("weapon.holdTitle"),
           onclick: () => this.holdWeapon(mw.part.id),
         },
-        "Hold",
+        t("weapon.hold"),
       ),
       el(
         "button",
         {
           class: "weapon-reload",
           disabled: locked || !canForceReload(mw),
-          title: `Reload: drop the magazine and refill it in ${turns(mw.def.reload)}`,
-          "aria-label": `Reload ${mw.def.name}`,
+          title: t("weapon.reloadTitle", { n: mw.def.reload }),
+          "aria-label": t("weapon.reloadLabel", { name: partName(mw.def.id) }),
           onclick: () => this.forceReload(mw.part.id),
         },
         createIcon("reload"),

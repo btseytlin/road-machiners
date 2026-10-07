@@ -33,7 +33,7 @@ export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   const lost = Math.max(0, Math.min(RULES.starveDamage, resources.health - RULES.starveFloor));
   if (lost === 0) return;
   resources.health -= lost;
-  if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', text: `Out of supplies: health -${lost}` });
+  if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', note: { id: 'outOfSupplies', health: lost } });
 }
 
 // Fuel and supplies above the caps spill out, after a refit or a looter takes a store off.
@@ -44,6 +44,6 @@ export function fitStores(world: World, vehicle: Vehicle): void {
   if (fuel > 0) resources.fuel -= fuel;
   if (supplies > 0) resources.supplies -= supplies;
   if (vehicle.id !== world.player.vehicleId) return;
-  if (fuel > 0) world.events.push({ t: 'supply', what: 'fuel', text: `No room for fuel: fuel -${fuel.toFixed(1)}` });
-  if (supplies > 0) world.events.push({ t: 'supply', what: 'supplies', text: `No room for supplies: supplies -${supplies.toFixed(1)}` });
+  if (fuel > 0) world.events.push({ t: 'supply', what: 'fuel', note: { id: 'noRoomFuel', fuel } });
+  if (supplies > 0) world.events.push({ t: 'supply', what: 'supplies', note: { id: 'noRoomSupplies', supplies } });
 }

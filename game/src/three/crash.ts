@@ -2,6 +2,9 @@
 // Outside dev, once boot is done, the game keeps running: an error goes to the browser log and the debug console.
 // A failed command changes nothing, since commands mutate a clone of the world. Boot errors still crash.
 
+import { setText } from '../text/language';
+import { t } from '../text/msg';
+
 let shown = false;
 let report: ((text: string) => void) | null = null;
 const reported = new Set<string>();
@@ -47,12 +50,13 @@ function showCrash(err: unknown): void {
     'font:14px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;';
   const title = document.createElement('div');
   title.style.cssText = 'font-size:28px;color:#ff7058;margin-bottom:20px;';
-  title.textContent = 'The game crashed';
+  setText(title, t('crash.title'));
+  // The error itself stays as the code wrote it, for a bug report.
   const body = document.createElement('div');
   body.textContent = text;
   const hint = document.createElement('div');
   hint.style.cssText = 'margin-top:24px;color:#c8a898;';
-  hint.textContent = 'Reload the page to start again.';
+  setText(hint, t('crash.hint'));
   box.append(title, body, hint);
   document.body.appendChild(box);
 }

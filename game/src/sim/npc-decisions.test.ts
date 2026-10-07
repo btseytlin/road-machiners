@@ -303,7 +303,7 @@ describe('fight back', () => {
   function shotTrader(traits: TraitId[], damage: number) {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'tripToSite' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
     w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
@@ -323,7 +323,7 @@ describe('fight back', () => {
       x.rngState = seed;
       const top = thinkNpc(x, find(x, trader.id));
       if (top.kind === 'fight') {
-        expect(top).toMatchObject({ targetId: raider.id, reason: 'fight back' });
+        expect(top).toMatchObject({ targetId: raider.id, reason: 'fightBack' });
         back++;
       }
       if (top.kind === 'flee') fled++;
@@ -349,7 +349,7 @@ describe('fight back', () => {
   it('a guard shot fires no attacked decision', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'tripToSite' }];
     w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(trader.id, 8)] }];
     noteHurt(w);
     w.events = [];
@@ -366,7 +366,7 @@ describe('decision points', () => {
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const key = `hostileSeen:${raider.id}`;
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     // The first sighting rolls. Start from a seed on which it keeps, so later turns show only whether a roll fires.
     const keeps = (seed: number) => {
       const x = cloneWorld(w);
@@ -405,7 +405,7 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.player.vehicleId;
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 70, y: 30 });
-    raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
+    raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heardHostile' }];
     raider.brain!.noticed = { [`contactHeard:${me}`]: w.turn };
     w.turn += NPC_BEHAVIOR.noticeMemory + 1;
     thinkNpc(w, raider);
@@ -441,7 +441,7 @@ describe('decision points', () => {
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     npc.brain!.noticed = { [`hostileSeen:${raider.id}`]: w.turn };
-    npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'tripToSite' }];
     forceOption('attacked', 'flee');
     thinkNpc(w, npc);
     expect(npc.brain!.goals.some((g) => g.kind === 'flee')).toBe(false);
@@ -640,7 +640,7 @@ describe('a driver that gave its word', () => {
     const passer = addVehicle(w, 'traders', 'scout', [], { x: 44, y: 34 });
     if (addGoods(w, passer, 'scrap', 2) < 2) throw new Error('No room for the passer goods');
     addState(w, 'trade', npc.id, me.id, { kind: 'none' });
-    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pullOver' }];
     return { w, me, npc, passer };
   }
 

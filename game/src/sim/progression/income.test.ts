@@ -40,10 +40,10 @@ describe('sampleWorld', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 160, y: 60 });
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
-    trader.brain.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 0, y: 0 }, phase: 'travel', reason: 'deliver purchased cargo' }];
+    trader.brain.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 0, y: 0 }, phase: 'travel', reason: 'deliverCargo' }];
     addGoods(w, trader, 'electronics', 4);
     expect(sampleWorld(w).targets).toEqual([expect.objectContaining({ kind: 'trader', guarded: false, qualifies: true, boughtGoods: 4 })]);
-    trader.brain.goals[0].reason = 'load cargo at its source';
+    trader.brain.goals[0].reason = 'loadCargo';
     expect(sampleWorld(w).targets[0].boughtGoods).toBe(0);
   });
 });

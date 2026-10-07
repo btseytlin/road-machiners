@@ -124,7 +124,7 @@ describe('fight driving', () => {
     const range = vehicleStats(w, v).weapons[0].def.range;
     v.brain!.noticed[`hostileSeen:${me.id}`] = w.turn;
     v.brain!.noticed[`ramChance:${me.id}`] = w.turn;
-    v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test' });
+    v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite' });
     v.brain!.whim = { kind: 'keep', until: w.turn + 4, angle: 0 };
     planNpcOrders(w);
     const dest = v.order?.kind === 'stopAt' ? v.order.dest : null;
@@ -146,7 +146,7 @@ function inFight(): { w: World; v: Vehicle } {
   const me = w.player.vehicleId;
   v.brain!.noticed[`hostileSeen:${me}`] = w.turn;
   v.brain!.noticed[`ramChance:${me}`] = w.turn;
-  v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'test' });
+  v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'tripToSite' });
   return { w, v };
 }
 

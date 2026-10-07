@@ -8,15 +8,16 @@ import { vehicleStats } from "../sim/stats";
 import { playerSees } from "../sim/vision";
 import { dist } from "../sim/vec";
 import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
+import { t } from "../text/msg";
 import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 
 export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "aim" | "honk" | "farewell";
 
+// A tip's words live in src/text/ as hint.<id>.
 type Tip = {
   id: TipId;
-  text: string;
   after?: TipId; // shows only once this tip is seen
   seenWhenOver?: true; // counts as seen once its moment ends while it shows
   when: (w: World, auto: boolean) => boolean; // auto: turns follow each other without a key press
@@ -43,20 +44,17 @@ const hasWaypoint = (w: World): boolean => {
 const TIPS: readonly Tip[] = [
   {
     id: "waypoint",
-    text: "Click the ground to set a waypoint.",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => hasWaypoint(w),
   },
   {
     id: "drive",
-    text: "[Space] to drive to the waypoint.",
     after: "waypoint",
     when: (w) => !playerVehicle(w).direct && hasWaypoint(w),
     done: (w) => playerVehicle(w).speed > 0,
   },
   {
     id: "autoStop",
-    text: "[Space] to stop automatic travel.",
     after: "drive",
     when: (_w, auto) => auto,
     done: () => false,
@@ -64,46 +62,39 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "stop",
-    text: "Click your truck to stop.",
     after: "drive",
     when: (w) => playerVehicle(w).speed > 0,
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
     id: "stopAt",
-    text: "[Shift]-click to set a waypoint your truck stops at. Click a waypoint to switch it.",
     after: "stop",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).order?.kind === "stopAt",
   },
   {
     id: "manual",
-    text: "[R] to drive in manual mode.",
     after: "stopAt",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).direct,
   },
   {
     id: "zones",
-    text: "Manual mode: click a zone to drive. Green speeds up. Yellow holds speed. Red slows down.",
     when: (w) => playerVehicle(w).direct,
     done: () => false,
   },
   {
     id: "aim",
-    text: "Click an enemy truck, then click one of its parts to aim your guns at it.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },
   {
     id: "honk",
-    text: "[H] to honk.",
     when: npcInSight,
     done: (w) => w.events.some((e) => e.t === "honk" && e.vehicle === w.player.vehicleId),
   },
   {
     id: "farewell",
-    text: "That's it, good luck.",
     after: "honk",
     when: (w) => dist(playerVehicle(w).pos, spawn) >= FAREWELL_DISTANCE,
     done: () => false,
@@ -182,8 +173,8 @@ export class Tips {
     this.box.style.display = tip ? "" : "none";
     if (!tip) return;
     this.box.replaceChildren(
-      el("span", {}, tip.text),
-      el("button", { class: "tip-close", title: "Close", onclick: () => this.close() }, "×"),
+      el("span", {}, t(`hint.${tip.id}`)),
+      el("button", { class: "tip-close", title: t("menu.close"), onclick: () => this.close() }, t("hint.closeMark")),
     );
   }
 }

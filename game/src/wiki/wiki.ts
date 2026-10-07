@@ -2,7 +2,8 @@
 // `<!-- /wiki:<id> -->`. fillPage() rewrites the blocks from code and leaves the prose alone. `npm run wiki` writes
 // the pages and src/wiki/wiki.test.ts fails when a committed page differs from the fresh fill.
 // What each table shows is below the engine: rows read src/data and two read-only lookups, the binds flag in
-// src/sim/states.ts and the models in src/render/partLooks.ts. Nothing in the game imports this file.
+// src/sim/states.ts, the models in src/render/partLooks.ts and the English names in src/text/. Nothing in the game
+// imports this file.
 import { CHASSIS } from '../data/chassis';
 import { DETECT } from '../data/detect';
 import { GOODS, ECONOMY } from '../data/goods';
@@ -15,7 +16,7 @@ import { PARTS, PART_PRICE_MODIFIERS } from '../data/parts';
 import type { PartDef, PartKind } from '../data/parts';
 import { RULES } from '../data/rules';
 import { SALVAGE, STRIP } from '../data/salvage';
-import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
+import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_IDS, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
 import { SOUNDS } from '../data/sounds';
 import { TIME } from '../data/time';
 import { TOW } from '../data/tow';
@@ -23,6 +24,12 @@ import { UNITS } from '../data/units';
 import { CONDITION, PATCH, REPAIR, WEAR } from '../data/wear';
 import { baseModel, PART_MODELS, WEAPON_POOLS } from '../render/partLooks';
 import { STATE_KINDS } from '../sim/states';
+import { chassisName, goodName, partName, perkName, perkRule, professionName, skillGrows, skillName, templateName } from '../text/names';
+import type { Msg } from '../text/msg';
+import { resolve } from '../text/resolve';
+
+// The wiki is English. Names come from the English catalog.
+const en = (msg: Msg): string => resolve(msg, 'en');
 
 export type Cell = string | number | boolean | null | readonly unknown[] | object;
 export type WikiTable = { id: string; headers: string[]; rows: () => Cell[][] };
@@ -122,7 +129,7 @@ const partsOf = <K extends PartKind>(kind: K): Extract<PartDef, { kind: K }>[] =
 const partTable = <K extends PartKind>(id: string, kind: K, headers: string[], stats: (p: Extract<PartDef, { kind: K }>) => Cell[]): WikiTable => ({
   id,
   headers: ['id', 'name', 'tier', 'value', 'cells (w x h)', 'mass (kg)', 'hp', 'armor', 'tall', ...headers],
-  rows: () => partsOf(kind).map((p) => [p.id, p.name, p.tier, p.value, `${p.w} x ${p.h}`, p.mass, p.hp, p.armor, p.tall, ...stats(p)]),
+  rows: () => partsOf(kind).map((p) => [p.id, en(partName(p.id)), p.tier, p.value, `${p.w} x ${p.h}`, p.mass, p.hp, p.armor, p.tall, ...stats(p)]),
 });
 
 const change = (option: string, c: WeightChange): string => {
@@ -144,7 +151,7 @@ const TABLES: WikiTable[] = [
     id: 'chassis',
     headers: ['id', 'name', 'tier', 'value', 'max speed (tiles/turn)', 'accel', 'brake', 'mass (kg)', 'rated mass (kg)', 'radius (tiles)', 'fuel cap', 'fuel per tile', 'grid (w x h)', 'core parts'],
     rows: () => Object.values(CHASSIS).map((c) => [
-      c.id, c.name, c.tier, c.value, c.maxSpeed, c.accel, c.brake, c.mass, c.ratedMass, c.radius, c.fuelCap, c.fuelPerTile,
+      c.id, en(chassisName(c.id)), c.tier, c.value, c.maxSpeed, c.accel, c.brake, c.mass, c.ratedMass, c.radius, c.fuelCap, c.fuelPerTile,
       `${Math.max(...c.layout.map((r) => r.length))} x ${c.layout.length}`,
       c.core.map((k) => k.defId),
     ]),
@@ -164,7 +171,7 @@ const TABLES: WikiTable[] = [
   {
     id: 'goods',
     headers: ['id', 'name', 'tier', 'value', 'mass per unit (kg)'],
-    rows: () => Object.values(GOODS).map((g) => [g.id, g.name, g.tier, g.value, g.mass]),
+    rows: () => Object.values(GOODS).map((g) => [g.id, en(goodName(g.id)), g.tier, g.value, g.mass]),
   },
   {
     id: 'shops',
@@ -174,7 +181,7 @@ const TABLES: WikiTable[] = [
   {
     id: 'npc-templates',
     headers: ['id', 'name', 'profession', 'faction', 'traits', 'extra traits (chance)', 'fight style', 'aggro range (tiles)', 'preferred range (tiles)', 'cap', 'spawn interval (turns)', 'spawn place'],
-    rows: () => Object.values(NPCS).map((n) => [n.id, n.name, n.profession, n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.preferredRange, n.cap, n.interval, n.spawn]),
+    rows: () => Object.values(NPCS).map((n) => [n.id, en(templateName(n.id)), en(professionName(n.id)), n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.preferredRange, n.cap, n.interval, n.spawn]),
   },
   {
     id: 'traits',
@@ -195,7 +202,7 @@ const TABLES: WikiTable[] = [
   {
     id: 'skills',
     headers: ['id', 'name', 'earns XP from', 'effects per rank'],
-    rows: () => entries(SKILL_INFO).map(([id, s]) => [id, s.name, s.grows, SKILL_EFFECTS[id as keyof typeof SKILL_EFFECTS]]),
+    rows: () => SKILL_IDS.map((id) => [id, en(skillName(id)), en(skillGrows(id)), SKILL_EFFECTS[id]]),
   },
   { id: 'rank-costs', headers: ['rank', 'xp cost'], rows: () => RANK_COSTS.map((xp, i) => [i + 1, xp]) },
   {
@@ -206,7 +213,7 @@ const TABLES: WikiTable[] = [
   {
     id: 'perks',
     headers: ['id', 'name', 'skill', 'rank', 'rule'],
-    rows: () => entries(PERKS).map(([id, p]) => [id, p.name, p.skill, p.level, p.rule]),
+    rows: () => entries(PERKS).map(([id, p]) => [id, en(perkName(id as keyof typeof PERKS)), p.skill, p.level, en(perkRule(id as keyof typeof PERKS))]),
   },
   {
     id: 'models',

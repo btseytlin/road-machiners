@@ -6,25 +6,27 @@ import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
 import { DEG } from '../sim/vec';
+import { concat, list, t, type Msg } from '../text/msg';
+import { partName, vehicleTitle } from '../text/names';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
 // `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
-export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
-export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
+export type HitRow = { label: Msg; odds: HitOdds | null; text: Msg; cause: Msg | null; detail: Msg | null };
+export type HitCardData = { name: Msg; mine: HitRow[]; theirs: HitRow[] };
 
-function deg(r: number): string {
-  return (Math.abs(r) / DEG).toFixed(1);
+function deg(r: number): number {
+  return Math.round((Math.abs(r) / DEG) * 10) / 10;
 }
 
 // "18 m, shows 4.1 m wide, scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
-function detailLine(o: HitOdds): string {
-  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.still, 'still target']] as const)
-    .filter(([r]) => deg(r) !== '0.0')
-    .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
-    .join('');
-  return `${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon${extra}`;
+function detailLine(o: HitOdds): Msg {
+  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'skill'], [o.causes.weather, 'weather'], [o.causes.still, 'still']] as const)
+    .filter(([r]) => deg(r) !== 0)
+    .map(([r, name]) => t(r < 0 ? 'hit.causeLess' : 'hit.causeMore', { deg: deg(r), cause: t(`hit.cause.${name}`) }));
+  const head = t('hit.detail', { pct: Math.round(o.chance * 100), m: Math.round(o.distance), wide: o.width, deg: deg(o.causes.weapon) });
+  return concat([head, ...extra]);
 }
 
 // A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.
@@ -33,25 +35,25 @@ const MAX_REASONS = 2;
 
 // The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
 // An aimed part that other parts shield from this side leads.
-function reasonLine(o: HitOdds, aim: Aim): string {
+function reasonLine(o: HitOdds, aim: Aim): Msg {
   const c = o.causes;
   const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
-  const reasons: string[] = ([[c.range, 'far'], [c.crossing, 'target crossing fast'], [c.own, 'you are moving'], [c.recoil, 'gun kick'], [c.weather, 'bad weather'], [c.weapon, 'loose gun']] as const)
+  const reasons: Msg[] = ([[c.range, 'far'], [c.crossing, 'crossing'], [c.own, 'moving'], [c.recoil, 'kick'], [c.weather, 'weather'], [c.weapon, 'loose']] as const)
     .filter(([r]) => r / o.spread >= MAIN_SHARE)
     .sort((a, b) => b[0] - a[0])
     .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
-    .map(([, name]) => name);
-  if (covered) reasons.unshift('parts in the way');
-  if (deg(c.still) !== '0.0') reasons.unshift('target is parked: easy');
-  return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
+    .map(([, name]) => t(`hit.reason.${name}`));
+  if (covered) reasons.unshift(t('hit.reason.covered'));
+  if (deg(c.still) !== 0) reasons.unshift(t('hit.reason.parked'));
+  return reasons.length > 0 ? list(reasons) : t('hit.reason.clear');
 }
 
-function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {
+function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: Msg): HitRow {
   const block = fireBlock(world, shooter, mw, target);
-  const label = `${name} ${ammoText(mw)}`;
+  const label = t('hit.label', { name, ammo: ammoText(mw) });
   if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null, detail: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
-  return { label, odds, text: `${Math.round(odds.damageChance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
+  return { label, odds, text: t('hit.chance', { pct: Math.round(odds.damageChance * 100) }), cause: reasonLine(odds, aim), detail: detailLine(odds) };
 }
 
 // A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.
@@ -67,9 +69,9 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
   return {
-    name: it.name,
-    mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
-    theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), mw.def.name)),
+    name: vehicleTitle(world, it),
+    mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), t('hit.slot', { n: i + 1, gun: partName(mw.def.id) }))),
+    theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), partName(mw.def.id))),
   };
 }
 
@@ -88,14 +90,14 @@ export class HitCard {
       this.root.replaceChildren();
       return this.hide();
     }
-    const section = (title: string, rows: HitRow[]) => [
+    const section = (title: Msg, rows: HitRow[]) => [
       el('div', { class: 'hc-head' }, title),
-      ...(rows.length === 0 ? [el('div', { class: 'dim' }, 'No weapons')] : rows.flatMap((r) => [
+      ...(rows.length === 0 ? [el('div', { class: 'dim' }, t('hit.noWeapons'))] : rows.flatMap((r) => [
         el('div', { class: 'hc-row', ...(r.detail ? { title: r.detail } : {}) }, el('span', {}, r.label), el('span', { class: r.odds ? 'hc-chance' : 'dim' }, r.text)),
-        ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? '' }, r.cause)] : []),
+        ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? undefined }, r.cause)] : []),
       ])),
     ];
-    this.root.replaceChildren(...section('You → it', card.mine), ...section('It → you', card.theirs));
+    this.root.replaceChildren(...section(t('hit.mine'), card.mine), ...section(t('hit.theirs'), card.theirs));
   }
 
   hide(): void {

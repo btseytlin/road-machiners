@@ -13,6 +13,8 @@ import { itemTone } from "../render/partLooks";
 import { hashStr } from "../render/noise";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
+import { num, t, type Msg } from "../text/msg";
+import { chassisName, goodName, partName } from "../text/names";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -74,57 +76,13 @@ const ART = {
 
 export type IconName = keyof typeof ART;
 
-const ICON_NAMES: Record<IconName, string> = {
-  star: "Pristine",
-  money: "Money",
-  fuel: "Fuel",
-  supplies: "Supplies",
-  driver: "Driver",
-  truck: "Truck inventory",
-  cannon: "Forward cannon",
-  mg: "MG turret",
-  engine: "Engine",
-  armor: "Armor",
-  cargo: "Cargo",
-  wheel: "Wheel",
-  transmission: "Transmission",
-  cab: "Cab",
-  salt: "Salt",
-  turn: "End turn",
-  tools: "Machine tools",
-  parts: "Parts",
-  scanner: "Radio scanner",
-  damage: "Damage",
-  pen: "Penetration",
-  range: "Range",
-  reload: "Reload",
-  cooldown: "Cooldown",
-  magazine: "Magazine",
-  spread: "Spread",
-  arc: "Firing arc",
-  speed: "Speed",
-  accel: "Acceleration",
-  noise: "Noise",
-  ram: "Ram",
-  rows: "Cargo rows",
-  hp: "HP",
-  mass: "Mass",
-  turning: "Turning",
-  cells: "Cargo cells",
-  load: "Rated load",
-  recoil: "Recoil",
-  power: "Power",
-  blast: "Blast armor",
-  heat: "Heat",
-  patch: "Field repair",
-  tall: "Tall",
-  clock: "Time left",
-};
+// What each icon stands for, named on hover.
+const iconName = (name: IconName): Msg => t(`icon.${name}`);
 
 export function createIcon(name: IconName): HTMLElement {
   const icon = el("span", {
     class: `icon icon-${name}`,
-    title: ICON_NAMES[name],
+    title: iconName(name),
     "aria-hidden": "true",
   });
   icon.innerHTML = `<svg viewBox="0 0 40 40" focusable="false">${ART[name]}</svg>`;
@@ -150,7 +108,7 @@ export type Box = { x: number; y: number; w: number; h: number };
 // the cell that holds its drawn pixels, and view how npm run icons drew it.
 export type IconCell = {
   sheet: Sheet;
-  label: string;
+  label: Msg;
   col: number;
   row: number;
   cols: number;
@@ -163,7 +121,7 @@ type ManifestCell = { index: number; box: number[] };
 
 export function itemIconCell(id: string): IconCell {
   const good = id in GOODS;
-  const label = good ? GOODS[id].name : partDef(id).name;
+  const label = good ? goodName(id) : partName(partDef(id).id);
   const icons: Record<string, ManifestCell> = ICONS.items;
   const icon = icons[id];
   if (!icon) throw new Error(`No items icon for ${id}. Run npm run icons.`);
@@ -174,7 +132,7 @@ export function chassisPortraitCell(chassisId: string): IconCell {
   const icons: Record<string, ManifestCell> = ICONS.chassis;
   const icon = icons[chassisId];
   if (!icon) throw new Error(`No chassis icon for ${chassisId}. Run npm run icons.`);
-  return { ...sheetCell("chassis", icon, chassisDef(chassisId).name), view: viewOf(ICONS.views.chassis) };
+  return { ...sheetCell("chassis", icon, chassisName(chassisDef(chassisId).id)), view: viewOf(ICONS.views.chassis) };
 }
 
 function viewOf(view: string): View {
@@ -182,7 +140,7 @@ function viewOf(view: string): View {
   return view;
 }
 
-function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCell, "view"> {
+function sheetCell(sheet: Sheet, icon: ManifestCell, label: Msg): Omit<IconCell, "view"> {
   const cols = ICONS.cols[sheet];
   const rows = Math.ceil(Object.keys(ICONS[sheet]).length / cols);
   const [x, y, w, h] = icon.box;
@@ -261,9 +219,9 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
         "div",
         { class: "stat", title: d.stat.label },
         createIcon(d.stat.icon),
-        el("span", { class: "stat-name" }, ICON_NAMES[d.stat.icon]),
+        el("span", { class: "stat-name" }, iconName(d.stat.icon)),
         el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
-        d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
+        d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? t("stat.same") : d.text),
       ),
     ),
   );
@@ -273,7 +231,7 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
 export function footprint(w: number, h: number): HTMLElement {
   return el(
     "div",
-    { class: "footprint", title: `${w}×${h} cells`, style: `grid-template-columns:repeat(${w},1fr)` },
+    { class: "footprint", title: t("stat.footprint", { w, h }), style: `grid-template-columns:repeat(${w},1fr)` },
     ...Array.from({ length: w * h }, () => el("i")),
   );
 }
@@ -283,7 +241,7 @@ export function conditionMeter(part: PartInstance): HTMLElement {
   const broken = part.hp === 0;
   return el(
     "div",
-    { class: `meter${broken ? " broken" : ""}`, title: `Condition: ${hp(part.hp)} of ${hp(max)} HP` },
+    { class: `meter${broken ? " broken" : ""}`, title: t("stat.condition", { hp: hp(part.hp), max: hp(max) }) },
     el("div", { style: `width:${(part.hp / max) * 100}%` }),
   );
 }
@@ -319,7 +277,7 @@ export function partCard(o: PartCardOptions): HTMLElement {
       "div",
       { class: "card-head" },
       partIconEl(o.part),
-      el("div", { class: "card-name" }, el("b", {}, def.name)),
+      el("div", { class: "card-name" }, el("b", {}, partName(def.id))),
       footprint(def.w, def.h),
     ),
     conditionRow(o.part),
@@ -344,7 +302,7 @@ export function compareBase(selected: PartInstance | null, part: PartInstance): 
 
 // What the changes in the stat table are against.
 function compareLine(base: PartInstance): HTMLElement {
-  return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name} `, conditionTag(base));
+  return el("div", { class: "card-compare" }, t("stat.compared", { part: partName(base.defId) }), conditionTag(base));
 }
 
 // A truck's grid seen from above, nose up, one colored square per cell.
@@ -352,7 +310,7 @@ export function chassisMap(chassisId: string): HTMLElement {
   const g = baseGrid(chassisId);
   return el(
     "div",
-    { class: "chassis-map", title: `${chassisDef(chassisId).name} layout`, style: `grid-template-columns:repeat(${g.w},1fr)` },
+    { class: "chassis-map", title: t("stat.layout", { chassis: chassisName(chassisDef(chassisId).id) }), style: `grid-template-columns:repeat(${g.w},1fr)` },
     ...g.cells.flat().map((c) => el("i", { class: cellClass(c) })),
   );
 }
@@ -397,35 +355,39 @@ export type StatIcon =
 // better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
   icon: StatIcon;
-  label: string;
+  label: Msg;
   value: number;
-  text: string;
-  unit: string;
-  decimals: number;
+  text: Msg;
+  unit: Msg | null;
+  decimals: 0 | 1;
   better: "more" | "less" | null;
 };
 
 export type Verdict = "better" | "worse" | "same";
 
-export type StatDiff = { stat: Stat; delta: number; text: string; verdict: Verdict } | { stat: Stat; delta: null };
+export type StatDiff = { stat: Stat; delta: number; text: Msg; verdict: Verdict } | { stat: Stat; delta: null };
 
-function stat(icon: StatIcon, label: string, value: number, unit: string, better: Stat["better"], decimals = 0): Stat {
-  return { icon, label, value, text: formatNumber(value, decimals), unit, decimals, better };
+type StatUnit = "kg" | "m" | "t" | "deg" | "kph" | "mps2" | "times" | "liters" | "blast";
+
+function stat(icon: StatIcon, label: Msg, value: number, unit: StatUnit | null, better: Stat["better"], decimals: 0 | 1 = 0): Stat {
+  return { icon, label, value, text: formatNumber(value, decimals), unit: unit && t(`unit.${unit}`), decimals, better };
 }
 
-function formatNumber(value: number, decimals: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function formatNumber(value: number, decimals: 0 | 1): Msg {
+  return num(value, decimals === 0 ? "int" : "dec1");
 }
 
-function signed(value: number, decimals: number): string {
-  return `${value < 0 ? "−" : "+"}${formatNumber(Math.abs(value), decimals)}`;
+function signed(value: number, decimals: 0 | 1): Msg {
+  const n = Math.abs(value);
+  if (decimals === 1) return value < 0 ? t("stat.minus1", { n }) : t("stat.plus1", { n });
+  return value < 0 ? t("stat.minus0", { n }) : t("stat.plus0", { n });
 }
 
 // The few stats that decide a part's job and weakness, most important first, with its wear applied.
 // The condition meter already shows HP.
 export function partStats(part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](part), stat("mass", t("stat.mass"), def.mass, "kg", "less")];
 }
 
 const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
@@ -433,30 +395,30 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
   engine: engineStats,
   armor: armorStats,
   cargo: cargoStats,
-  scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  scanner: (part) => [stat("scanner", t("stat.detection"), meters(wornDef<ScannerDef>(part).range), "m", "more")],
   store: storeStats,
   core: () => [],
 };
 
 function storeStats(part: PartInstance): Stat[] {
   const d = partDefOf<StoreDef>(part);
-  if (d.holds === "fuel") return [{ ...stat("fuel", "Extra fuel", fuelLiters(d.amount), "L", "more"), text: `+${fuelLiters(d.amount)}` }];
-  return [{ ...stat("supplies", "Extra supplies", d.amount, "", "more"), text: `+${d.amount}` }];
+  if (d.holds === "fuel") return [{ ...stat("fuel", t("stat.extraFuel"), fuelLiters(d.amount), "liters", "more"), text: signed(fuelLiters(d.amount), 0) }];
+  return [{ ...stat("supplies", t("stat.extraSupplies"), d.amount, null, "more"), text: signed(d.amount, 0) }];
 }
 
 function cargoStats(part: PartInstance): Stat[] {
   const d = partDefOf<CargoDef>(part);
-  return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
+  return [{ ...stat("rows", t("stat.extraRows"), d.extraRows, null, "more"), text: signed(d.extraRows, 0), unit: t("stat.rowsUnit", { n: d.extraRows }) }, tallStat(d)];
 }
 
 // Blast rounds meet an armor part's blast armor instead of its plain armor.
 function penStat(d: WeaponDef): Stat {
-  return { ...stat("pen", "Penetration", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
+  return { ...stat("pen", t("stat.pen"), d.round.pen, d.round.blast ? "blast" : null, "more") };
 }
 
 // Tall parts stand higher than a gun, so guns cannot fire across them.
 function tallStat(d: PartDef): Stat {
-  return { ...stat("tall", "Height", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
+  return { ...stat("tall", t("stat.height"), d.tall ? 1 : 0, null, "less"), text: d.tall ? t("stat.tall") : t("stat.low") };
 }
 
 function partDefOf<T>(part: PartInstance): T {
@@ -466,65 +428,60 @@ function partDefOf<T>(part: PartInstance): T {
 function weaponStats(part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
   const round = d.round.damage * RULES.weaponDamage;
-  const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
-  if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
+  const shot = { ...stat("damage", t("stat.damage"), d.rounds * round, null, "more", 1) };
+  if (d.rounds > 1) shot.text = t("stat.roundsTimes", { n: d.rounds, damage: round });
   return [
     shot,
     penStat(d),
-    stat("range", "Range", meters(d.range), "m", "more"),
-    stat("cooldown", "Turns between shots", d.cooldown, "t", "less"),
-    stat("magazine", "Shots per magazine", d.magazine, "", "more"),
-    stat("reload", "Turns to reload", d.reload, "t", "less"),
-    stat("arc", "Firing arc", d.arc, "°", "more"),
-    stat("recoil", "Recoil", d.recoil, "°", "less", 1),
-    stat("power", "Power draw", d.draw, "", "less", 1),
+    stat("range", t("stat.range"), meters(d.range), "m", "more"),
+    stat("cooldown", t("stat.cooldown"), d.cooldown, "t", "less"),
+    stat("magazine", t("stat.magazine"), d.magazine, null, "more"),
+    stat("reload", t("stat.reload"), d.reload, "t", "less"),
+    stat("arc", t("stat.arc"), d.arc, "deg", "more"),
+    stat("recoil", t("stat.recoil"), d.recoil, "deg", "less", 1),
+    stat("power", t("stat.draw"), d.draw, null, "less", 1),
   ];
 }
 
 function engineStats(part: PartInstance): Stat[] {
   const d = wornDef<EngineDef>(part);
-  const speed = stat("speed", "Top speed", kph(d.speedBonus), "km/h", "more");
-  const accel = stat("accel", "Acceleration", mps2(d.accelBonus), "m/s²", "more", 1);
+  const speed = stat("speed", t("stat.topSpeed"), kph(d.speedBonus), "kph", "more");
+  const accel = stat("accel", t("stat.accel"), mps2(d.accelBonus), "mps2", "more", 1);
   return [
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
-    stat("power", "Gun power", d.capacity, "", "more"),
-    stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
-    stat("heat", "Heat", d.heat, "×", "less", 1),
+    stat("power", t("stat.gunPower"), d.capacity, null, "more"),
+    stat("fuel", t("stat.fuelUse"), d.fuelMult, "times", "less", 1),
+    stat("heat", t("stat.heat"), d.heat, "times", "less", 1),
   ];
 }
 
 function armorStats(part: PartInstance): Stat[] {
   const d = wornDef<ArmorDef>(part);
-  const armor = stat("armor", "Armor", Math.round(d.armor), "", "more");
-  const blast = stat("blast", "Blast armor", Math.round(d.blastArmor), "", "more");
+  const armor = stat("armor", t("stat.armor"), Math.round(d.armor), null, "more");
+  const blast = stat("blast", t("stat.blastArmor"), Math.round(d.blastArmor), null, "more");
   const stats = [armor, blast, fieldRepairStat(d.fieldRepair)];
-  return d.ramMult > 1 ? [...stats, stat("ram", "Ram damage", d.ramMult, "×", "more", 1)] : stats;
+  return d.ramMult > 1 ? [...stats, stat("ram", t("stat.ram"), d.ramMult, "times", "more", 1)] : stats;
 }
 
-const FIELD_REPAIR: Record<FieldRepair, { rank: number; text: string; label: string }> = {
-  none: { rank: 0, text: "shop", label: "Repair: shop only" },
-  capped: { rank: 1, text: "cap", label: "Field repair: partial" },
-  full: { rank: 2, text: "full", label: "Field repair: full" },
-};
+const FIELD_REPAIR_RANK: Record<FieldRepair, number> = { none: 0, capped: 1, full: 2 };
 
 function fieldRepairStat(repair: FieldRepair): Stat {
-  const r = FIELD_REPAIR[repair];
-  return { ...stat("patch", r.label, r.rank, "", "more"), text: r.text };
+  return { ...stat("patch", t(`stat.repair.${repair}`), FIELD_REPAIR_RANK[repair], null, "more"), text: t(`stat.repairShort.${repair}`) };
 }
 
 // A truck's own numbers, without parts.
 export function chassisStats(chassisId: string): Stat[] {
   const c = chassisDef(chassisId);
-  const turning = stat("turning", "Turning",(c.turnFast + c.turnSlow) / 2, "°", "more");
+  const turning = stat("turning", t("stat.turning"), (c.turnFast + c.turnSlow) / 2, "deg", "more");
   return [
-    stat("speed", "Base top speed", kph(c.maxSpeed), "km/h", "more"),
-    stat("accel", "Acceleration", mps2(c.accel), "m/s²", "more", 1),
-    { ...turning, text: `${c.turnFast}–${c.turnSlow}` },
-    stat("cells", "Cargo cells", cellCount(baseGrid(chassisId)), "", "more"),
-    stat("load", "Rated load", c.ratedMass, "kg", "more"),
-    stat("mass", "Empty mass", c.mass, "kg", "less"),
-    stat("fuel", "Fuel tank", fuelLiters(c.fuelCap), "L", "more"),
+    stat("speed", t("stat.baseSpeed"), kph(c.maxSpeed), "kph", "more"),
+    stat("accel", t("stat.accel"), mps2(c.accel), "mps2", "more", 1),
+    { ...turning, text: t("stat.span", { a: c.turnFast, b: c.turnSlow }) },
+    stat("cells", t("stat.cells"), cellCount(baseGrid(chassisId)), null, "more"),
+    stat("load", t("stat.ratedLoad"), c.ratedMass, "kg", "more"),
+    stat("mass", t("stat.emptyMass"), c.mass, "kg", "less"),
+    stat("fuel", t("stat.fuelTank"), fuelLiters(c.fuelCap), "liters", "more"),
   ];
 }
 

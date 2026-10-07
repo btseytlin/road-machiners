@@ -28,14 +28,16 @@ import {
   toggleFullLog,
   toggleGod,
 } from "../sim/cheats";
-import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
+import { SKILL_IDS, XP_RULES } from "../data/skills";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { partDef } from "../data/parts";
 import { xpTodayOf } from "../sim/progress";
 import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
-import { el, panel } from "./dom";
+import { devEl, el, panel } from "./dom";
+import { partName, perkName } from "../text/names";
+import { resolve } from "../text/resolve";
 
 // `toggleFps` asks the console to show or hide the frame rate panel, and `noclip` to switch noclip flight.
 // Both live outside the world.
@@ -105,7 +107,7 @@ export const COMMANDS: readonly Command[] = [
   command("perk <perk id>", "Grant a perk at any skill rank.", { min: 1, max: 1 }, (world, [id]) => {
     const next = grantPerk(world, id);
     const granted = next.player.perks[next.player.perks.length - 1];
-    return changed(next, `perk granted: ${PERKS[granted].name}`);
+    return changed(next, `perk granted: ${resolve(perkName(granted), 'en')}`);
   }),
   command("skills", "Show the XP pool, skill ranks, today's XP per activity and XP per source.", { min: 0, max: 0 }, (world) => ({
     world: null,
@@ -160,11 +162,11 @@ export const COMMANDS: readonly Command[] = [
   command("randomkit [level 1-5]", "Swap the truck for a random NPC truck at a gear level from 1 poor to 5 loaded, or a random level.", { min: 0, max: 1 }, (world, [level]) => {
     const next = randomKit(world, level === undefined ? null : Number(level));
     const me = next.vehicles.find((v) => v.id === next.player.vehicleId)!;
-    return changed(next, `randomkit: ${me.chassisId} with ${mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').map((p) => partDef(p.defId).name).join(', ')}`);
+    return changed(next, `randomkit: ${me.chassisId} with ${mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').map((p) => resolve(partName(p.defId), 'en')).join(', ')}`);
   }),
   command("battle", "Place a random hostile NPC of any kind near the truck.", { min: 0, max: 0 }, (world) => {
     const next = startBattle(world);
-    return changed(next, `battle: ${next.vehicles[next.vehicles.length - 1].name} is hostile`);
+    return changed(next, `battle: ${next.vehicles[next.vehicles.length - 1].id} is hostile`);
   }),
   command("hostile <vehicle id>", "Make a vehicle hostile to the player.", { min: 1, max: 1 }, (world, [id]) =>
     changed(makeHostile(world, id), `${id} is hostile`),
@@ -176,7 +178,7 @@ export const COMMANDS: readonly Command[] = [
     const rows = nearbyVehicles(world);
     if (rows.length === 0) return { world: null, lines: ["no vehicles nearby"] };
     const lines = rows.map(
-      (r) => `${r.id}  ${r.name}  ${r.templateId ?? "-"}  ${r.faction}  ${Math.round(r.distance)} tiles${r.hostile ? "  hostile" : ""}`,
+      (r) => `${r.id}  ${r.driver ?? "-"}  ${r.templateId ?? "-"}  ${r.faction}  ${Math.round(r.distance)} tiles${r.hostile ? "  hostile" : ""}`,
     );
     return { world: null, lines };
   }),
@@ -377,7 +379,7 @@ export class DebugConsole {
   }
 
   private print(text: string, cls?: "dim" | "bad"): void {
-    this.log.append(el("div", { class: cls }, text));
+    this.log.append(devEl("div", { class: cls }, text));
     while (this.log.children.length > LOG_LINES) this.log.children[0].remove();
     this.log.scrollTop = this.log.scrollHeight;
   }

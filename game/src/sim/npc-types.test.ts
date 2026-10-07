@@ -74,7 +74,7 @@ describe('patrols', () => {
   it('finishes a patrol parked on its point', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'bowlFarmer', ['lawman'], 'tractor', ['cannon', 'workhorseDiesel'], { x: 60, y: 60 });
-    npc.brain!.goals = [{ kind: 'patrol', targetId: 'bowl', destination: { x: 60.2, y: 60 }, phase: 'travel', reason: 'test patrol' }];
+    npc.brain!.goals = [{ kind: 'patrol', targetId: 'bowl', destination: { x: 60.2, y: 60 }, phase: 'travel', reason: 'patrolTown' }];
     npc.speed = 0;
     resolveNpcActivities(w);
     expect(topGoal(npc)).toBeNull();
@@ -98,7 +98,7 @@ describe('patrols', () => {
       expect(goals.length).toBeGreaterThan(25);
       for (const goal of goals) {
         expect(goal.targetId).toBe(id);
-        expect(goal.reason).toBe('patrol the roads near camp');
+        expect(goal.reason).toBe('patrolCamp');
         expect(Math.min(...siteGates(camp).map((gate) => dist(gate, goal.destination!)))).toBeLessThanOrEqual(NPC_BEHAVIOR.patrolRadius);
       }
     }
@@ -136,7 +136,7 @@ describe('couriers', () => {
   it('stop for salvage on the way only at about the minimum chance', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'courier', ['courier'], 'courier', ['mg', 'flatFour'], { x: 30, y: 30 });
-    npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...siteById('nose').pos }, phase: 'travel', reason: 'test travel' }];
+    npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...siteById('nose').pos }, phase: 'travel', reason: 'tripToSite' }];
     w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeCloseTo(MIN_CHANCE, 4);
@@ -146,7 +146,7 @@ describe('couriers', () => {
     const nose = siteById('nose');
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'courier', ['courier'], 'courier', ['mg', 'flatFour'], sitePads(nose)[0]);
-    npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...nose.pos }, phase: 'travel', reason: 'test travel' }];
+    npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...nose.pos }, phase: 'travel', reason: 'tripToSite' }];
     npc.speed = 0;
     resolveNpcActivities(w);
     expect(topGoal(npc)).toBeNull();
@@ -197,7 +197,7 @@ describe('supply convoys', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'convoy', ['supplier'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], sitePads(pump)[0]);
     const money = npc.resources!.money;
-    npc.brain!.goals = [{ kind: 'haul', targetId: pump.id, destination: { ...pump.pos }, phase: 'travel', reason: 'test haul', load: { good: 'fuelDrums' } }];
+    npc.brain!.goals = [{ kind: 'haul', targetId: pump.id, destination: { ...pump.pos }, phase: 'travel', reason: 'loadCargo', load: { good: 'fuelDrums' } }];
     npc.speed = 0;
     resolveNpcActivities(w);
     const loaded = goodsCount(npc).fuelDrums ?? 0;
@@ -320,7 +320,7 @@ describe('vultures', () => {
   it('stop for a wreck they pass nearly every time', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { x: 30, y: 30 });
-    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test prowl' }];
+    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { x: 200, y: 200 }, phase: 'travel', reason: 'prowl' }];
     w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeGreaterThanOrEqual(0.9);
@@ -338,7 +338,7 @@ describe('vultures', () => {
     for (const goal of goals) {
       expect(huntingGrounds().some((p) => p.x === goal.destination!.x && p.y === goal.destination!.y)).toBe(true);
       expect(dist(goal.destination!, start)).toBeGreaterThan(RULES.arriveRadius * 2);
-      expect(goal.reason).toBe('prowl the roads for wrecks');
+      expect(goal.reason).toBe('prowl');
     }
   });
 
@@ -348,7 +348,7 @@ describe('vultures', () => {
     expect(optionChances(optionWeights(w, other, 'idle', null, null)).prowl).toBeCloseTo(MIN_CHANCE, 2);
     const point = huntingGrounds()[0];
     const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { ...point });
-    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { ...point }, phase: 'travel', reason: 'test prowl' }];
+    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { ...point }, phase: 'travel', reason: 'prowl' }];
     npc.speed = 0;
     resolveNpcActivities(w);
     expect(topGoal(npc)).toBeNull();

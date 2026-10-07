@@ -25,6 +25,7 @@ import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import FORMAT_2_18 from './save-fixtures/format-2-18.json';
+import FORMAT_2_19 from './save-fixtures/format-2-19.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -390,5 +391,44 @@ describe('save migration 18 to 19', () => {
       vehicles: [FORMAT_2_18.vehicles[0], route(FORMAT_2_18.vehicles[1]), FORMAT_2_18.vehicles[2]],
       removed: [route(FORMAT_2_18.removed[0])],
     });
+  });
+});
+
+describe('save migration 19 to 20', () => {
+  type Goal = { reason: string };
+  type Saved = {
+    vehicles: { id: string; name?: string; brain: { goals: Goal[] } | null }[];
+    removed: { name?: string; brain: { goals: Goal[] } }[];
+    player: { call: { line: unknown } | null; contracts: Record<string, unknown>[] };
+    shops: Record<string, { contracts: Record<string, unknown>[] }>;
+    events: { t: string }[];
+  };
+  const next = MIGRATIONS[19](FORMAT_2_19) as unknown as Saved;
+  const reasons = (v: { brain: { goals: Goal[] } | null }) => v.brain?.goals.map((g) => g.reason);
+
+  it('turns known goal reasons into ids, an old phrase into the id that replaced it, and an unknown one into legacy', () => {
+    expect(reasons(next.vehicles[1])).toEqual(['buyCargo', 'lowFuel']);
+    expect(reasons(next.vehicles[2])).toEqual(['explore', 'legacy']);
+    expect(reasons(next.removed[0])).toEqual(['raid']);
+  });
+
+  it('removes the names of trucks and bounty targets', () => {
+    expect([...next.vehicles, ...next.removed].some((v) => 'name' in v)).toBe(false);
+    expect(next.player.contracts.map((c) => 'targetName' in c)).toEqual([false, false]);
+    expect('targetName' in next.shops.nose.contracts[0]).toBe(false);
+    expect(next.player.contracts[0]).toEqual({ id: 'c1', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 400, deadline: 990, window: 300, tier: 2 });
+  });
+
+  it('keeps an open call on a known line as its id', () => {
+    expect(next.player.call?.line).toEqual({ line: 'dealTerms', vars: FORMAT_2_19.player.call.line.vars });
+  });
+
+  it('hangs up a call on a line no table knows', () => {
+    const unknown = { ...FORMAT_2_19, player: { ...FORMAT_2_19.player, call: { ...FORMAT_2_19.player.call, line: { text: 'Words from a mod', vars: {} } } } };
+    expect((MIGRATIONS[19](unknown) as unknown as Saved).player.call).toBeNull();
+  });
+
+  it('drops the last turn\'s text events and keeps the rest', () => {
+    expect(next.events).toEqual([{ t: 'arrived', vehicle: 'npc1' }]);
   });
 });

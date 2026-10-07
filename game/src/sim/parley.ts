@@ -61,7 +61,7 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) {
-    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'takeHandedCargo' });
     claimPile(world, stock, winner, [loser.id]);
   }
   creditYield(world, loser, winner);
@@ -205,7 +205,7 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
 
 // The claimant fights a trespasser that refuses to back off, or runs when it has no firepower.
 export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
-  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defend its claimed loot');
+  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defendLoot');
 }
 
 // An NPC about to search a claimed pile that its claimant sees answers the warning. True when it does not search.
@@ -215,13 +215,13 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
   if (!backedOff(stock, vehicle.id)) {
     const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
     if (answer === 'fightBack') {
-      defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
+      defyThreat(world, vehicle, claimant, 'fightBack', 'takeClaimedLoot');
       defendClaim(world, claimant, vehicle);
       return true;
     }
     stock.pile!.claim!.warned.push(vehicle.id);
   }
-  finishGoal(world, vehicle, 'the loot is claimed');
+  finishGoal(world, vehicle, 'lootClaimed');
   return true;
 }
 
@@ -339,7 +339,7 @@ export function judgeStrandedFoe(world: World, npc: Vehicle): void {
 }
 
 function spare(world: World, npc: Vehicle, prey: Vehicle): void {
-  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, text: SPARE_LINE, vars: {} });
+  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, line: SPARE_LINE, vars: {} });
   makePeace(world, npc, prey);
 }
 

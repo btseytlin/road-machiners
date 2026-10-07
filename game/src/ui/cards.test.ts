@@ -11,6 +11,11 @@ import { GOODS } from "../data/goods";
 import { PARTS } from "../data/parts";
 import { BODY_PARTS } from "../render/partLooks";
 import { TEST_MAP } from "../test/map";
+import type { Msg } from "../text/msg";
+import { resolve } from "../text/resolve";
+import { chassisName, goodName, partName } from "../text/names";
+
+const en = (msg: Msg): string => resolve(msg, "en");
 
 const boxOf = ([x, y, w, h]: number[]) => ({ x, y, w, h });
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
@@ -71,7 +76,7 @@ describe("item icons", () => {
   const items = [...Object.keys(PARTS).filter((id) => !BODY_PARTS.has(id)), ...Object.keys(GOODS)];
 
   it.each(items)("names the %s icon after its def", (id) => {
-    expect(itemIconCell(id).label).toBe(id in GOODS ? GOODS[id].name : PARTS[id].name);
+    expect(en(itemIconCell(id).label)).toBe(en(id in GOODS ? goodName(id) : partName(id)));
   });
 
   it("gives every item its own cell on the sheet", () => {
@@ -95,11 +100,11 @@ describe("item icons", () => {
   });
 
   it("has an item icon for every cab", () => {
-    expect(["cab", "cabPickup", "cabHardtop"].map((id) => itemIconCell(id).label)).toEqual(["Driver seat", "Cab", "Hardtop cab"]);
+    expect(["cab", "cabPickup", "cabHardtop"].map((id) => en(itemIconCell(id).label))).toEqual(["Driver seat", "Cab", "Hardtop cab"]);
   });
 
   it.each(Object.keys(CHASSIS))("names the %s portrait after its chassis", (id) => {
-    expect(chassisPortraitCell(id).label).toBe(CHASSIS[id].name);
+    expect(en(chassisPortraitCell(id).label)).toBe(en(chassisName(id)));
   });
 });
 

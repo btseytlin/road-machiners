@@ -172,7 +172,7 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 export type Contract =
   | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; window: number; rush: boolean; tier: Tier }
   | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; window: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier };
+  | { id: string; shop: string; kind: 'bounty'; template: string; reward: number; deadline: number; window: number; tier: Tier };
 
 // Estimated turns to travel between two points: straight distance stretched to a road-like route,
 // at cruise speed, plus the turns spent handling the stop.
@@ -282,7 +282,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
   const reward = bountyReward(target);
-  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier };
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, reward, deadline: world.turn + turns, window: turns, tier };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -504,7 +504,7 @@ export function deliverContract(world: World, contractId: string): World {
 function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   requireParkedAt(world, c.to);
   const v = playerVehicle(world);
-  if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${GOODS[c.good].name}`);
+  if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${c.good}`);
   removeGoods(v, c.good, c.units);
 }
 
@@ -523,7 +523,7 @@ function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): voi
     return;
   }
   const stored = world.player.storage.findIndex((p) => fitsFetch(c, p));
-  if (stored < 0) throw new Error(`Needs a spare ${PARTS[c.defId].name}, working and rebuilt at most ${CONTRACTS.fetch.maxWear} time${CONTRACTS.fetch.maxWear === 1 ? '' : 's'}`);
+  if (stored < 0) throw new Error(`Needs a spare ${c.defId}, working and rebuilt at most ${CONTRACTS.fetch.maxWear} time${CONTRACTS.fetch.maxWear === 1 ? '' : 's'}`);
   world.player.storage.splice(stored, 1);
 }
 
@@ -540,13 +540,13 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
   world.events.push({ t: 'contract', contract: { ...c }, outcome });
   if (outcome === 'done') {
     world.player.money += c.reward;
-    world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
+    world.events.push({ t: 'money', amount: c.reward, reason: { kind: 'contract' } });
     practice(world, 'contract', contractXp(c), null, c.shop);
   }
   if (outcome === 'failed' && c.kind === 'haul') {
     const penalty = haulPenalty(c, goodValue(c.good));
     world.player.money -= penalty;
-    world.events.push({ t: 'money', amount: -penalty, reason: 'failed haul contract' });
+    world.events.push({ t: 'money', amount: -penalty, reason: { kind: 'failedHaul' } });
   }
 }
 

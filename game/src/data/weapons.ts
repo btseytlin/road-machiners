@@ -10,7 +10,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   mg: {
     id: "mg",
     kind: "weapon",
-    name: "MG turret",
     hp: 40,
     base: 100,
     tier: 1,
@@ -47,7 +46,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   shotgun: {
     id: "shotgun",
     kind: "weapon",
-    name: "Shotgun",
     hp: 36,
     base: 69,
     tier: 1,
@@ -84,7 +82,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   longRifle: {
     id: "longRifle",
     kind: "weapon",
-    name: "Long rifle",
     hp: 30,
     base: 98,
     tier: 1,
@@ -121,7 +118,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   flamer: {
     id: "flamer",
     kind: "weapon",
-    name: "Flamer",
     hp: 34,
     base: 93,
     tier: 1,
@@ -158,7 +154,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   pneumobolter: {
     id: "pneumobolter",
     kind: "weapon",
-    name: "Pneumobolter",
     hp: 44,
     base: 104,
     tier: 1,
@@ -195,7 +190,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   slugCannon: {
     id: "slugCannon",
     kind: "weapon",
-    name: "Slug cannon",
     hp: 46,
     base: 138,
     tier: 1,
@@ -232,7 +226,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   heavyMg: {
     id: "heavyMg",
     kind: "weapon",
-    name: "Heavy MG",
     hp: 50,
     base: 208,
     tier: 2,
@@ -269,7 +262,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   cannon: {
     id: "cannon",
     kind: "weapon",
-    name: "Forward cannon",
     hp: 60,
     base: 219,
     tier: 2,
@@ -306,7 +298,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   amRifle: {
     id: "amRifle",
     kind: "weapon",
-    name: "Anti-materiel rifle",
     hp: 40,
     base: 160,
     tier: 2,
@@ -343,7 +334,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   autocannon: {
     id: "autocannon",
     kind: "weapon",
-    name: "Autocannon",
     hp: 56,
     base: 281,
     tier: 2,
@@ -380,7 +370,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   recoilless: {
     id: "recoilless",
     kind: "weapon",
-    name: "Recoilless rifle",
     hp: 40,
     base: 225,
     tier: 2,
@@ -417,7 +406,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   battleRifle: {
     id: "battleRifle",
     kind: "weapon",
-    name: "Battle rifle",
     hp: 44,
     base: 256,
     tier: 2,
@@ -454,7 +442,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   gatling: {
     id: "gatling",
     kind: "weapon",
-    name: "Gatling MG",
     hp: 70,
     base: 432,
     tier: 3,
@@ -491,7 +478,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   rocketRack: {
     id: "rocketRack",
     kind: "weapon",
-    name: "Rocket rack",
     hp: 32,
     base: 345,
     tier: 3,
@@ -528,7 +514,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   sniperCannon: {
     id: "sniperCannon",
     kind: "weapon",
-    name: "Sniper cannon",
     hp: 40,
     base: 498,
     tier: 3,
@@ -565,7 +550,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   grenadeLauncher: {
     id: "grenadeLauncher",
     kind: "weapon",
-    name: "Grenade launcher",
     hp: 50,
     base: 481,
     tier: 3,
@@ -602,7 +586,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   tankGun: {
     id: "tankGun",
     kind: "weapon",
-    name: "Tank gun",
     hp: 90,
     base: 458,
     tier: 3,
@@ -639,7 +622,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   flechette: {
     id: "flechette",
     kind: "weapon",
-    name: "Flechette gun",
     hp: 44,
     base: 539,
     tier: 3,

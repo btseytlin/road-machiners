@@ -14,9 +14,11 @@ import { botOrders } from './bot';
 import { DayTally, netWorth } from './record';
 
 // Every truck drives far, except the pinned raider, which stays where it stands so the fight is certain.
+let pinned = '';
+
 function moveAllFar(w: World): void {
   const towed = isTowed(w);
-  for (const v of w.vehicles) if (!(towed && v.id === w.player.vehicleId) && v.name !== 'pinned raider') advanceFar(w, v);
+  for (const v of w.vehicles) if (!(towed && v.id === w.player.vehicleId) && v.id !== pinned) advanceFar(w, v);
 }
 
 describe('the hunter against one weak raider', () => {
@@ -24,7 +26,7 @@ describe('the hunter against one weak raider', () => {
     let w = emptyWorld({ x: 100, y: 100 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const raider = addVehicle(w, 'raiders', 'buggy', ['scanner'], { x: 118, y: 100 });
-    raider.name = 'pinned raider';
+    pinned = raider.id;
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     addGoods(w, raider, 'scrap', 3);
     const start = netWorth(w);

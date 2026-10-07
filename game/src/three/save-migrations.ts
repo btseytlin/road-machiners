@@ -2,6 +2,7 @@
 // it, load runs every step from the save's minor format on, so the minor format is the number of steps.
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
+import { GOAL_REASONS_2_19, LINES_2_19 } from './save-text-2-19';
 
 // A saved world as raw JSON. Steps read it without game types, since those change after a step is written.
 export type SavedJson = Record<string, unknown>;
@@ -307,6 +308,54 @@ function withRouteStyle_18_19(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
 }
 
+// The sim keeps ids where it kept English. Goal reasons become ids, and a phrase no table knows becomes 'legacy',
+// since an old save must load over a display phrase. An open call's line becomes its id, and a call on a line no
+// table knows hangs up, as do counted values of a unit other than parts. Trucks and bounty contracts lose their
+// names, which texts now derive. The last turn's text events go, since nothing reads them after a load.
+const UNITS_2_19 = new Set(['part']);
+const TEXT_EVENTS_2_19 = new Set(['info', 'supply', 'money', 'say', 'activity', 'stall']);
+
+function withGoalIds_19_20(v: SavedJson): SavedJson {
+  const { name: _name, ...rest } = v;
+  const brain = v.brain as SavedJson | null;
+  if (!brain) return rest;
+  const goals = (brain.goals as SavedJson[]).map((g) => ({ ...g, reason: GOAL_REASONS_2_19[g.reason as string] ?? 'legacy' }));
+  return { ...rest, brain: { ...brain, goals } };
+}
+
+function knownUnits_19_20(vars: SavedJson): boolean {
+  return Object.values(vars).every((v) => (v as SavedJson).kind !== 'count' || UNITS_2_19.has((v as SavedJson).unit as string));
+}
+
+// The open call with its line as an id, or null when the call hangs up.
+function callWithLineId_19_20(call: SavedJson | null): SavedJson | null {
+  if (!call) return null;
+  const said = call.line as SavedJson;
+  const line = LINES_2_19[said.text as string];
+  if (!line || !knownUnits_19_20(call.vars as SavedJson) || !knownUnits_19_20(said.vars as SavedJson)) return null;
+  return { ...call, line: { line, vars: said.vars } };
+}
+
+const withoutTargetName_19_20 = (c: SavedJson): SavedJson => {
+  const { targetName: _targetName, ...rest } = c;
+  return rest;
+};
+
+function withTextIds_19_20(world: SavedJson): SavedJson {
+  const player = world.player as SavedJson;
+  const shops = Object.fromEntries(
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_19_20) }]),
+  );
+  return {
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_19_20),
+    removed: (world.removed as SavedJson[]).map(withGoalIds_19_20),
+    player: { ...player, call: callWithLineId_19_20(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_19_20) },
+    shops,
+    events: (world.events as SavedJson[]).filter((e) => !TEXT_EVENTS_2_19.has(e.t as string)),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -385,6 +434,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withStormExposure_17_18,
   // 18 to 19: a far route records whether it was planned off roads; every old one was not.
   withRouteStyle_18_19,
+  // 19 to 20: the sim keeps ids where it kept English text, so every language can show it.
+  withTextIds_19_20,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

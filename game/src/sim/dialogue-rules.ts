@@ -101,7 +101,7 @@ function offerBy(world: World, npc: Vehicle) {
 
 // Something a driver can tell of with the Rumor mill perk: an undiscovered site, or a wreck stock the player has not
 // searched or heard of that still holds loot. `site` is null for a wreck.
-type Rumor = { id: string; pos: Vec; site: { id: string; name: string } | null };
+type Rumor = { id: string; pos: Vec; site: { id: string } | null };
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
   const { scavenged, rumored } = world.player;

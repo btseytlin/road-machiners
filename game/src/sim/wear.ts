@@ -154,7 +154,7 @@ export function damagePart(part: PartInstance, amount: number, floor: number): v
 export function restorePart(part: PartInstance, hp: number): void {
   const next = Math.min(maxHp(part), hp);
   if (next < part.hp) throw new Error(`Restore of ${part.id} to ${hp} HP would lower it from ${part.hp}`);
-  if (part.hp === 0 && next > 0 && isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  if (part.hp === 0 && next > 0 && isJunk(part)) throw new Error(`${part.defId} is junk and cannot be rebuilt`);
   part.hp = next;
 }
 
@@ -166,7 +166,7 @@ export function carryHp(part: PartInstance, hp: number): void {
 
 // A junk part goes back to the last wear step at full HP, once per part. The Rebuild perk's town garage work.
 export function rebuildJunk(part: PartInstance): void {
-  const name = partDef(part.defId).name;
+  const name = part.defId;
   if (!isJunk(part)) throw new Error(`${name} is not junk`);
   if (part.rebuilt) throw new Error(`${name} was rebuilt before`);
   part.wear = CONDITION.maxWear;

@@ -1,5 +1,7 @@
 import { baseGrid } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
+import { bindAttr, setText } from "../text/language";
+import { t, verbatim } from "../text/msg";
 import { el } from "./dom";
 import { conditionLabel, TruckConditionReadout } from "./hud-readout";
 import { tintedIcon, truckOutline } from "./plans";
@@ -15,7 +17,7 @@ export type ConditionAim = { marks: ReadonlyMap<string, number[]>; pick: (partId
 export class TruckConditionView {
   readonly root = el("div", {
     class: "truck-condition",
-    "aria-label": "Truck part condition, nose up",
+    "aria-label": t("condition.panel"),
   });
   private body = el("div", { class: "condition-chassis" });
   private readout = new TruckConditionReadout();
@@ -62,7 +64,7 @@ export class TruckConditionView {
     const part = this.tiles.find((p) => p.id === this.hoverId);
     this.tip.style.display = part ? "" : "none";
     if (!part) return;
-    this.tip.textContent = conditionLabel(part);
+    setText(this.tip, conditionLabel(part));
     this.tip.style.left = `${part.x * CELL}px`;
     this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL + 2 : part.y * CELL - 22}px`;
   }
@@ -77,7 +79,7 @@ export class TruckConditionView {
     node.dataset.condition = part.state;
     node.classList.toggle("broken", part.broken);
     markAim(node, part.id, aim);
-    node.setAttribute("aria-label", conditionLabel(part));
+    bindAttr(node, "aria-label", conditionLabel(part));
     node.onmouseenter = () => {
       this.hoverId = part.id;
       this.showTip();
@@ -113,7 +115,7 @@ function markAim(node: HTMLElement, partId: string, aim?: ConditionAim): void {
   node.onclick = aim ? () => aim.pick(partId) : null;
   node.querySelector(".condition-aim")?.remove();
   const guns = aim?.marks.get(partId);
-  if (guns) node.append(el("span", { class: "condition-aim", title: `Aimed by gun ${guns.join(", ")}` }, guns.join(" ")));
+  if (guns) node.append(el("span", { class: "condition-aim", title: t("condition.aimedBy", { guns: verbatim(guns.join(", ")) }) }, verbatim(guns.join(" "))));
 }
 
 // Condition colors by HP share, from black when broken through red and yellow to green when whole.

@@ -22,7 +22,7 @@ export function leakFuel(world: World): void {
       world.events.push({
         t: "supply",
         what: "fuel",
-        text: `Fuel tank leaks: fuel -${lost.toFixed(1)}`,
+        note: { id: 'tankLeak', fuel: lost },
       });
   }
 }

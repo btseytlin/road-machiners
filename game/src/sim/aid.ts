@@ -109,14 +109,14 @@ export function offerAid(world: World, npc: Vehicle): void {
 // for the player when it cannot drive.
 export function agreeAid(world: World, npc: Vehicle, terms: AidTerms): NpcState {
   const s = addState(world, 'aid', npc.id, world.player.vehicleId, { kind: 'aid', ...terms, agreed: true, ...HANDOVER });
-  meetGoal(world, npc, playerVehicle(world), terms.giver === 'npc' ? 'bring fuel and supplies' : 'pick up fuel and supplies');
+  meetGoal(world, npc, playerVehicle(world), terms.giver === 'npc' ? 'bringAid' : 'pickUpAid');
   return s;
 }
 
 // The player turned the driver's offer down.
 export function refuseAid(world: World, npc: Vehicle): void {
   const s = stateOf(world, 'aid', npc.id, world.player.vehicleId);
-  if (!s || aidData(s).agreed) throw new Error(`${npc.name} has no aid offer pending`);
+  if (!s || aidData(s).agreed) throw new Error(`${npc.id} has no aid offer pending`);
   endState(world, s, 'broken');
 }
 

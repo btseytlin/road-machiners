@@ -71,11 +71,9 @@ describe("trade", () => {
   it("enforces cargo capacity and money", () => {
     const w = startAtBowl();
     w.player.money = 10000;
-    expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow(
-      /cargo space/,
-    );
+    expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow("Refused: noCargoRoom");
     w.player.money = 300;
-    expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
+    expect(() => buyGood(w, "meds", 10)).toThrow('Refused: noMoney');
   });
 
   it("the salt route from Nose to Bowl pays and trains Social", () => {
@@ -402,7 +400,7 @@ describe("garage", () => {
     w.player.storage.push({ ...cab, id: "stored" });
     expect(() => repairPart(w, "stored")).toThrow(/part/);
     w.player.money = 0;
-    expect(() => repairPart(w, cab.id)).toThrow(/money/);
+    expect(() => repairPart(w, cab.id)).toThrow('Refused: noMoney');
     expect(cab.hp).toBe(10);
   });
 
@@ -629,7 +627,7 @@ describe("locations", () => {
     expect(canUseOasis(w)).toBe(true);
     const after = useOasis(w);
     expect(after.player.supplies).toBe(RULES.baseSupplies);
-    expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
+    expect(after?.events).toContainEqual({ t: "info", note: { id: "filledSupplies", site: oasis.id } });
   });
 
   it("rejects refilling away from an oasis", () => {
@@ -687,13 +685,13 @@ describe("debt", () => {
     const w = startAtBowl();
     w.player.money = -100;
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
-    expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
-    expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
-    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
-    expect(() => repairAll(w)).toThrow(/money/);
+    expect(() => buyGood(w, "scrap", 1)).toThrow('Refused: noMoney');
+    expect(() => buySupply(w, "fuel", 1)).toThrow('Refused: noMoney');
+    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow('Refused: noMoney');
+    expect(() => repairAll(w)).toThrow('Refused: noMoney');
     // A chassis swap that costs nothing is still a purchase.
     w.player.money = -1;
-    expect(() => buyChassis(w, "courier")).toThrow(/money/);
+    expect(() => buyChassis(w, "courier")).toThrow('Refused: noMoney');
   });
 
   it("sales pay the debt down", () => {
@@ -742,7 +740,7 @@ describe("garage storage at a stall", () => {
     w.player.money = 0;
     const part = w.shops["pump-station"].stock[0];
     fillGrid(w, part.defId);
-    expect(() => buyStockPart(w, part.id)).toThrow(/money/);
+    expect(() => buyStockPart(w, part.id)).toThrow('Refused: noMoney');
   });
 
   it("buys a stored part into the stall stock", () => {

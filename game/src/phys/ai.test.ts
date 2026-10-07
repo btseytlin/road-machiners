@@ -37,7 +37,7 @@ describe('NPC driving', () => {
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
     // A goal east through the rock, so the first turn drives instead of rolling an idle choice.
-    npc.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 300, y: 30 }, reason: 'look for prey at known hunting grounds', phase: 'travel' }];
+    npc.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 300, y: 30 }, reason: 'raid', phase: 'travel' }];
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
     let d = buildDrive(w);
@@ -53,7 +53,7 @@ describe('NPC driving', () => {
     let w = emptyWorld({ x: 60, y: 40 });
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 60, y: 30 });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
-    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 5, y: 30 }, reason: 'look around', phase: 'travel' }];
+    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 5, y: 30 }, reason: 'explore', phase: 'travel' }];
     npc.brain.recovery = 2;
     npc.brain.recoveryGoal = { x: 56, y: 30 };
     let d = buildDrive(w);
@@ -99,7 +99,7 @@ describe('NPC driving', () => {
     // A delivery to Nose, so the trader does not stop at a Bowl pad beside it.
     const nose = REGION.towns[1];
     addGoods(w, npc, 'scrap', 1);
-    npc.brain.goals = [{ kind: 'sell', targetId: nose.id, destination: { ...nose.pos }, phase: 'travel', reason: 'test delivery' }];
+    npc.brain.goals = [{ kind: 'sell', targetId: nose.id, destination: { ...nose.pos }, phase: 'travel', reason: 'deliverCargo' }];
     let d = buildDrive(w);
     const trader = () => w.vehicles.find((v) => v.id === npc.id)!;
     // The trader gets up to cruising speed on its way out of Bowl.
@@ -141,8 +141,8 @@ describe('NPC driving', () => {
       b.speed = 4.08;
       a.brain = npcBrain('scavenger', a.pos, ['scavenger']);
       b.brain = npcBrain('roamer', b.pos, ['roamer']);
-      a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
-      b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'tripToSite' }];
+      b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'tripToSite' }];
       let d = buildDrive(w);
       let touches = 0;
       for (let i = 0; i < 10; i++) {

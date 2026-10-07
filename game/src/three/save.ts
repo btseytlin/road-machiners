@@ -1,3 +1,4 @@
+import { t } from '../text/msg';
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
@@ -18,8 +19,19 @@ export function saveKey(scope: string): string {
 // The Autosave's key, and the base of every other slot's key.
 export const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 
-// A stored save the game cannot load. Boot offers to migrate it to a new world or to start over.
-export class SaveError extends Error {}
+// Why a stored save does not load. The boot screen shows it in words. format is the save's format for the codes that
+// name it.
+export type SaveErrorCode =
+  | 'unreadable' | 'otherMap' | 'bakedProps' | 'brokenProp' | 'invalidWorld' | 'invalidSave'
+  | 'incompatible' | 'newer' | 'notMigrated' | 'noFormat' | 'badExplored';
+
+// A stored save the game cannot load. Boot offers to migrate it to a new world or to start over. The message carries
+// the detail for the console. The player reads the code's words.
+export class SaveError extends Error {
+  constructor(readonly code: SaveErrorCode, readonly format: { major: number; minor: number } | null = null, detail = '') {
+    super(`Save error ${code}${detail ? `: ${detail}` : ''}`);
+  }
+}
 
 // Local storage has no room for a save. The save in the slot stays as it was.
 export class SaveQuotaError extends Error {}
@@ -44,7 +56,7 @@ function parsedSave(raw: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new SaveError('Game save is unreadable');
+    throw new SaveError('unreadable');
   }
 }
 
@@ -70,9 +82,9 @@ export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World 
   const raw = storage.getItem(slotKey(SAVE_KEY, slot));
   if (raw === null) return null;
   const world = savedWorld(parsedSave(raw));
-  if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
+  if (world.mapHash !== map.hash) throw new SaveError('otherMap', null, `map ${world.mapHash}, not ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
-  if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
+  if (world.obstacles.some(isBakedObstacle)) throw new SaveError('bakedProps');
   const player = { ...world.player, explored };
   const loaded = { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
   settleAims(loaded);
@@ -84,28 +96,28 @@ function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[]
   const baked = mapObstacles(map);
   const ids = new Set(baked.map((o) => o.id));
   const bad = broken.find(({ obstacle }) => !isBreakable(obstacle) || !ids.has(obstacle.id));
-  if (bad) throw new SaveError(`Game save holds broken prop ${bad.obstacle.id}, which is no breakable prop of the map`);
+  if (bad) throw new SaveError('brokenProp', null, bad.obstacle.id);
   const gone = new Set(broken.map(({ obstacle }) => obstacle.id));
   return baked.filter((o) => !gone.has(o.id));
 }
 
 function savedWorld(save: unknown): Omit<World, 'terrain'> {
   const world = migratedWorld(save);
-  if (!isWorld(world)) throw new SaveError('Invalid saved world');
+  if (!isWorld(world)) throw new SaveError('invalidWorld');
   return world;
 }
 
 // The saved world carried through every step from the save's minor format to the current one.
 function migratedWorld(save: unknown): unknown {
-  if (!isJsonObject(save)) throw new SaveError('Invalid game save');
+  if (!isJsonObject(save)) throw new SaveError('invalidSave');
   const { major, minor } = formatOf(save);
-  if (major !== SAVE_MAJOR) throw new SaveError(`Game save format ${major}.${minor} is from an incompatible game version. Start a new game.`);
-  if (minor > MIGRATIONS.length) throw new SaveError(`Game save format ${major}.${minor} is from a newer game version`);
-  if (!isJsonObject(save.world)) throw new SaveError('Invalid saved world');
+  if (major !== SAVE_MAJOR) throw new SaveError('incompatible', { major, minor });
+  if (minor > MIGRATIONS.length) throw new SaveError('newer', { major, minor });
+  if (!isJsonObject(save.world)) throw new SaveError('invalidWorld');
   try {
     return MIGRATIONS.slice(minor).reduce((world, step) => step(world), save.world);
-  } catch {
-    throw new SaveError(`Game save format ${major}.${minor} could not be migrated`);
+  } catch (err) {
+    throw new SaveError('notMigrated', { major, minor }, String(err));
   }
 }
 
@@ -113,7 +125,7 @@ function migratedWorld(save: unknown): unknown {
 function formatOf(save: SavedJson): { major: number; minor: number } {
   if (save.version === '1.0.0') return { major: 1, minor: 0 };
   const format = save.format;
-  if (!isJsonObject(format) || !isCount(format.major) || !isCount(format.minor)) throw new SaveError('Game save has no valid format version');
+  if (!isJsonObject(format) || !isCount(format.major) || !isCount(format.minor)) throw new SaveError('noFormat');
   return { major: format.major, minor: format.minor };
 }
 
@@ -184,7 +196,7 @@ export function writeSave(storage: Storage, slot: SlotId, world: World, savedAt:
     storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
   } catch (err) {
     if (err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22)) {
-      throw new SaveQuotaError('Not saved: the browser storage is full. Delete a save slot to make room.');
+      throw new SaveQuotaError('Local storage is full');
     }
     throw err;
   }
@@ -213,14 +225,14 @@ export function packExplored(explored: Uint8Array): string {
 }
 
 export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
-  if (typeof packed !== 'string') throw new SaveError('Invalid saved explored tiles');
+  if (typeof packed !== 'string') throw new SaveError('badExplored');
   let binary: string;
   try {
     binary = atob(packed);
   } catch {
-    throw new SaveError('Invalid saved explored tiles');
+    throw new SaveError('badExplored');
   }
-  if (binary.length !== Math.ceil(tiles / 8)) throw new SaveError('Invalid saved explored tiles');
+  if (binary.length !== Math.ceil(tiles / 8)) throw new SaveError('badExplored');
   const explored = new Uint8Array(tiles);
   for (let i = 0; i < tiles; i++) explored[i] = (binary.charCodeAt(i >> 3) >> (i & 7)) & 1;
   return explored;
@@ -266,9 +278,7 @@ export class SaveHold {
   }
 }
 
-export const SAVE_FULL_NOTE = 'Not saved: the browser storage is full. Delete a save slot to make room.';
-export const SAVE_HELD_NOTE = 'Not saved: an error happened since the last good turn.';
-
-export function turnFailedNote(err: unknown): string {
-  return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
-}
+export const SAVE_FULL_NOTE = t('save.full');
+export const SAVE_HELD_NOTE = t('save.held');
+// The error itself goes to the console and the bug report. The player reads only that the turn failed.
+export const TURN_FAILED_NOTE = t('save.turnFailed');
