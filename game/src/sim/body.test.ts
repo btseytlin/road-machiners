@@ -3,7 +3,7 @@ import { CHASSIS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { partDef, type CoreDef } from '../data/parts';
 import BASELINE from './body-baseline.json';
-import { bodyOf, cellCenter, cellRect, engineAnchor, hulkBoxes, lanesAt, restOn, surfaceAt, surfaceSamples } from './body';
+import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, hulkBoxes, lanesAt, restOn, surfaceAt, surfaceSamples } from './body';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
 
@@ -181,6 +181,25 @@ describe('grid and model correspondence', () => {
       const top = Math.max(...inner.map((c) => surfaceAt(id, cellRect(id, [c]))));
       expect(top - engineAnchor(id).y, id).toBeGreaterThanOrEqual(CLEAR);
     }
+  });
+
+  it.each(ids)('%s: seats the drawn engine footprint on its bay floor, with nothing lower and no air under it', (id) => {
+    const { rect } = restOn(id, cellRect(id, cellsOf(id, 'E')));
+    const anchor = engineAnchor(id);
+    const half = { x: (rect.x1 - rect.x0) / 2, z: (rect.z1 - rect.z0) / 2 };
+    const step = 0.1;
+    const nx = Math.ceil((2 * half.x) / step);
+    const nz = Math.ceil((2 * half.z) / step);
+    const low: string[] = [];
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        const x0 = anchor.x - half.x + (i * 2 * half.x) / nx;
+        const z0 = anchor.z - half.z + (j * 2 * half.z) / nz;
+        const top = highestUnder(id, { x0, x1: x0 + (2 * half.x) / nx, z0, z1: z0 + (2 * half.z) / nz });
+        if (top < anchor.y - CLIP_TOLERANCE) low.push(`${x0.toFixed(2)},${z0.toFixed(2)}: ${top === -Infinity ? 'air' : top.toFixed(2)} under a floor at ${anchor.y.toFixed(2)}`);
+      }
+    }
+    expect(low).toEqual([]);
   });
 
   it('projects each wheel core into its corner of the truck', () => {

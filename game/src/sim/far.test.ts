@@ -7,9 +7,9 @@ import { TERRAIN } from '../data/terrain';
 import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
 import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
-import { advanceFar, fuelLimited, isNear } from './far';
+import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
-import { vehicleStats } from './stats';
+import { fuelCap, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
@@ -144,6 +144,18 @@ describe('far NPC travel', () => {
     w.player.ranks.driving = 5;
     const crawl = RULES.limpSpeed * (1 + 5 * SKILL_EFFECTS.driving.crawl);
     expect(fuelLimited(w, me, vehicleStats(w, me), 0, order).maxSpeed).toBeCloseTo(crawl);
+  });
+
+  it('names the fuel limit: low, empty or none', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const s = vehicleStats(w, me);
+    w.player.fuel = fuelCap(me);
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBeNull();
+    w.player.fuel = fuelCap(me) * RULES.lowFuelThreshold * 0.5;
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBe('low');
+    w.player.fuel = 0;
+    expect(fuelLimit(w, me, s.fuelPerTile > 0)).toBe('empty');
   });
 
   it('a brake order or no order slows a far vehicle where it stands', () => {
