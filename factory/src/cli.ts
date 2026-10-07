@@ -7,13 +7,11 @@ import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
+import { parseStage } from './jobs';
 import { liftEndedPause, pausedReason } from './pause';
 import { reportScheduler } from './observability';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
-import type { JobStage } from './types';
-
-const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'patch', 'verify', 'checks', 'release', 'candidate', 'ship', 'remove', 'approve', 'change', 'adhoc', 'incident', 'dev', 'waste'];
 
 // The process env wins, like loadEnvFile, so a job keeps what its tick passed down.
 function loadEnv(): void {
@@ -58,11 +56,6 @@ function paused(ctx: ReturnType<typeof realContext>): boolean {
   const reason = pausedReason(ctx.cfg.home);
   if (reason !== null) ctx.log('tick', null, `paused: ${reason}`);
   return reason !== null;
-}
-
-function parseStage(value: string | undefined): JobStage {
-  if (!JOB_STAGES.includes(value as JobStage)) throw new Error(`Unknown stage "${value}". Use one of ${JOB_STAGES.join(', ')}.`);
-  return value as JobStage;
 }
 
 function parseIssue(value: string | undefined): number {
