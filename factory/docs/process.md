@@ -99,7 +99,9 @@ Members, other jobs and releases push all the time, so any branch may move while
 
 ![Release](diagrams/release.svg)
 
-Every merge into the release drops the Ship button of the current post. A reply can open a release task while a candidate builds. That candidate lacks the task, so it is not posted.
+The playtest plays one seed of the progression harness on the release head, after every release task merged and before the candidate. An Opus agent reviews the whole log. A clean run passes that commit. Findings open a release fix task, and the same seed plays again on the new head. A blocked verdict or the run limit blocks the release for a member. [stages.md](stages.md#release-playtest) has the rules.
+
+The candidate builds only the commit the playtest passed, and its post records it. Every move of the release drops the Ship button of the current post, and the playtest runs again on the new head. A reply can open a release task while a candidate builds. That candidate lacks the task, so it is not posted.
 
 ## Side jobs
 
@@ -119,7 +121,7 @@ A timer runs one tick at a time. A tick never waits for a job. Each job runs as 
 
 Jobs pick in this order. A job starts when its queue has a free worker and no other job works on its issue.
 
-1. Branch jobs: queued approve, remove, ship, incident, then a stale `/dev/`, the release cut and the candidate.
+1. Branch jobs: queued approve, remove, ship, incident, then a stale `/dev/`, the release cut, and the release playtest or the candidate. The playtest runs in the verify queue.
 2. The waste review, when due.
 3. Card jobs: hotfixes, ad hoc tasks, factory changes, release tasks, then other cards. Within each, the card furthest along goes first.
 
@@ -128,6 +130,6 @@ Queues:
 - triage: triage and the waste review.
 - design: design.
 - implement: implementation, patch, ad hoc and change.
-- verify: the testing agent.
+- verify: the testing agent and the release playtest.
 - test: the checks.
 - branch: approve, remove, ship, incident, release cut, candidate and dev, one at a time.

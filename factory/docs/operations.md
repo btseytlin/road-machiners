@@ -30,7 +30,7 @@ Memory, not CPU, limits how many jobs fit on the host. Each container prints its
 
 ## Daily cap
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, the release cut and the candidate. Checks, approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, the release cut, the release playtest and the candidate. Checks, approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
 
 One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 hours. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window, and other cards keep the daily cap. Hotfix jobs count but run at the limit.
 
@@ -43,7 +43,7 @@ A job whose process dies within its time limit resumes once. This covers a crash
 Every tick, after it checks the running jobs:
 
 - It deletes each folder in the web root except `dev`, `concepts` and the builds of cards in Approval. It skips this while a checks or branch job runs, since those deploy builds.
-- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, and `release-candidate` with no release open. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
+- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, `release-playtest`, and `release-candidate` with no release open. The playtest audit in `$FACTORY_HOME/playtest/` stays. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
 - It deletes job logs older than `FACTORY_LOG_DAYS`, except `tick.log`, `update.log` and the logs that `failures` names.
 
 Every tick writes `$FACTORY_HOME/health` with its time, the free disk and the available memory, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Memory under `FACTORY_MIN_AVAILABLE_GB` blocks nothing, and a host with no `/proc/meminfo` records none.

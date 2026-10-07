@@ -31,6 +31,12 @@ async function requireShippable(ctx: Ctx, issue: number, by: string | null): Pro
   return release;
 }
 
+// The committee played the commit of the candidate post. A release that moved since then ships nothing, and the tick drops the post.
+async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
+  const head = await ctx.repo.headHash(release.branch);
+  if (release.candidateSha !== head) throw new Error(`The release moved to ${head} after the candidate of ${release.candidateSha ?? 'an unknown commit'} was posted, so the committee has not played it. A new candidate follows.`);
+}
+
 // The release merges into main with no conflict once it holds all of main. The cut and hotfixes keep it so, but factory
 // work lands on main directly. A game change on main was never in the played candidate, so Ship stops on it. Anything
 // else merges into the release first. Returns that merge, or nothing when the release holds main already.
@@ -63,6 +69,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const notesPath = join(clone, 'release.md');
   if (!existsSync(screenshot) || !existsSync(notesPath)) throw new Error('The candidate screenshot or notes are gone from its work clone, so the public post cannot be made.');
   await ctx.repo.fetch();
+  await requirePlayed(ctx, release);
   const features = await releaseFeatures(ctx, release);
   // A changelog that does not match the release fails here, before anything public happens.
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');

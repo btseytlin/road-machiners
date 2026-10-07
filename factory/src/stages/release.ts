@@ -1,5 +1,5 @@
 import { addCard } from '../card-events';
-import { updateState } from '../state';
+import { newPlaytest, updateState } from '../state';
 import { MAINTENANCE_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, type Ctx } from '../types';
 import { fillPrompt } from './common';
 import { featureLine, featureMerges } from './release-common';
@@ -25,10 +25,10 @@ export async function release(ctx: Ctx): Promise<void> {
   const day = now.toISOString().slice(0, 10);
   const branch = `release/${day}`;
   await ctx.repo.createBranch(branch, 'dev');
-  const body = `The factory cut branch ${branch} from dev.\n\nFeatures:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}\n\nThe candidate post in the committee chat comes when the cleanup tasks are done.`;
+  const body = `The factory cut branch ${branch} from dev.\n\nFeatures:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}\n\nThe candidate post in the committee chat comes when the cleanup tasks are done and the release playtest passes.`;
   const tracking = await ctx.github.createIssue(`Release ${day}`, body, [RELEASE_LABEL]);
   // Set at once, so a failure below still names this issue and the tick sees an open release.
-  updateState(ctx.statePath, (state) => ({ ...state, release: { issue: tracking, branch, day, postId: null, removed: [] } }));
+  updateState(ctx.statePath, (state) => ({ ...state, release: { issue: tracking, branch, day, postId: null, candidateSha: null, removed: [], playtest: newPlaytest(day) } }));
   await addCard(ctx, tracking, 'Approval', 'release');
   for (const task of CLEANUP_TASKS) {
     const n = await ctx.github.createIssue(`${task.title} (release ${day})`, fillPrompt(task.prompt, {}), [RELEASE_TASK_LABEL, MAINTENANCE_LABEL]);

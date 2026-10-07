@@ -47,7 +47,7 @@ describe('sweepWork', () => {
 
   it('keeps queued changes and incidents and the candidate of an open release', () => {
     const root = work('change-12', 'incident-6', 'release-candidate');
-    const release = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [] };
+    const release = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
     const swept = sweepWork(root, state({ pendingChanges: [{ id: 12, text: 't', by: 'u' }], pendingIncidents: [6], release }), []);
     expect(swept.removed).toEqual([]);
     expect(swept.stripped.sort()).toEqual(['change-12', 'incident-6', 'release-candidate']);

@@ -83,11 +83,14 @@ describe('CARD_JOBS', () => {
 });
 
 describe('releaseDrift', () => {
-  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [] };
+  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 1, passed: 'abc1234', blocked: null, notes: [] } };
   it('prints nothing with no release or a healthy one', () => {
     expect(releaseDrift(EMPTY_STATE, [])).toEqual([]);
     expect(releaseDrift(withState({ release }), [card('Approval', 300)])).toEqual([]);
-    expect(releaseDrift(withState({ release: { ...release, postId: 5 }, pendingShip: 'bob' }), [card('Approval', 300)])).toEqual([]);
+    expect(releaseDrift(withState({ release: { ...release, postId: 5, candidateSha: 'abc1234' }, pendingShip: 'bob' }), [card('Approval', 300)])).toEqual([]);
+  });
+  it('flags a candidate post of a commit the playtest did not pass', () => {
+    expect(releaseDrift(withState({ release: { ...release, postId: 5, candidateSha: 'def5678' } }), [card('Approval', 300)])).toEqual(['candidate post of def5678 that the playtest did not pass']);
   });
   it('flags a missing tracking card', () => {
     expect(releaseDrift(withState({ release }), [])).toEqual(['release tracking card #300 missing']);

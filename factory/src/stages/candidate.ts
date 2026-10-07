@@ -4,7 +4,7 @@ import { buildAndDeploy, recordBuild } from '../deploy';
 import { readEvidence, type Evidence } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { readState, updateState } from '../state';
-import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
+import { GAME_DIR, OUT_DIR, type Ctx, type ReleaseState } from '../types';
 import { bundleOf } from './bundle';
 import { agentHome, fillPrompt, playtestCommand, readOutput, resetOutputs } from './common';
 import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink, type Feature } from './release-common';
@@ -38,11 +38,12 @@ shot=$(ls -t .playtest/*.png | head -n 1)
 cp "$shot" ${OUT_DIR}/screenshot.png
 `;
 
-// Posts the release branch as a playable candidate. Ship acts on this post alone.
+// Posts the release branch as a playable candidate. Ship acts on this post alone. It builds only the commit the release
+// playtest passed, and the post records that commit, so a later move of the release drops it.
 export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const release = requireRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
-  await ctx.repo.fetch();
+  const sha = await requirePlaytested(ctx, release);
   const features = await releaseFeatures(ctx, release);
   const dir = candidateDir(ctx);
   rmSync(dir, { recursive: true, force: true });
@@ -59,19 +60,41 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const url = await buildAndDeploy(ctx, dir, CANDIDATE_SCOPE, log);
   recordBuild(ctx.statePath, issue, CANDIDATE_SCOPE);
   const pr = (await ctx.github.pullRequestFor(release.branch)) ?? await ctx.github.openPullRequest(release.branch, 'main', `Release ${release.day}`, `The release candidate of ${release.day}. The factory merges it when the committee presses Ship.`);
-  // A reply to the old post can open a release task while this build runs. This build lacks that task, so it is not posted.
-  const open = await openReleaseTasks(ctx);
-  if (open.length > 0) return ctx.log('candidate', issue, `not posted, release tasks opened during the build: ${open.map((n) => `#${n}`).join(', ')}`);
+  if (await staleBuild(ctx, release, sha)) return;
   await ctx.github.comment(issue, `Release candidate: ${url}\n\n${changes}`);
   const caption = candidateCaption(release.day, url, trackingLink(ctx, issue), pr, features.length);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];
   const evidence = await candidateEvidence(ctx, issue, home, release.branch);
   const photoId = await postWithEvidence(ctx, evidence, caption, buttons, {
-    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id }, postCaptions: { ...state.postCaptions, [id]: caption } })),
-    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
+    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id, candidateSha: sha }, postCaptions: { ...state.postCaptions, [id]: caption } })),
+    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null, candidateSha: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
   });
   // A caption holds 1024 characters, so the whole changelog goes in a message under the post. It splits only past Telegram's message limit.
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, changes, photoId);
+}
+
+// The candidate builds only the release head the playtest passed. Returns that commit.
+async function requirePlaytested(ctx: Ctx, release: ReleaseState): Promise<string> {
+  await ctx.repo.fetch();
+  const sha = await ctx.repo.headHash(release.branch);
+  const passed = release.playtest.passed;
+  if (passed !== sha) throw new Error(`The release playtest has not passed the release head ${sha}${passed ? `, only ${passed}` : ''}, so no candidate builds`);
+  return sha;
+}
+
+// A reply to the old post can open a release task while this build runs. This build lacks that task, so it is not posted.
+// A merge during the build moved the release past the played commit, so the tick plays the new head first.
+async function staleBuild(ctx: Ctx, release: ReleaseState, sha: string): Promise<boolean> {
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) {
+    ctx.log('candidate', release.issue, `not posted, release tasks opened during the build: ${open.map((n) => `#${n}`).join(', ')}`);
+    return true;
+  }
+  await ctx.repo.fetch();
+  const head = await ctx.repo.headHash(release.branch);
+  if (head === sha) return false;
+  ctx.log('candidate', release.issue, `not posted, the release moved from ${sha} to ${head} during the build`);
+  return true;
 }
 
 // The release agent may add views of the changes in `.factory/evidence.json`. Those are optional, so a manifest that fails a rule is logged and the one screenshot stands.

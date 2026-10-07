@@ -69,11 +69,28 @@ A patch or a redesign goes on the issue under "## Committee feedback", closes th
 
 The release cut opens two cleanup issues, for optimization and code janitor work, labeled `release-task` and `maintenance`. Release tasks run the card stages against the release branch.
 
-When no release task is open, the candidate job builds the release at `/rc/`. The release agent writes the changelog, one line `- [#N] what changed` per change, and the job fails when the lines do not name the release's changes exactly. The post has a screenshot, the play link, the pull request, the count of changes and a Ship button. The changelog follows in a message under it, since a caption holds only 1024 characters. Any reply other than `ship` or `remove #N` opens a new `release-task` issue with the reply as its body.
+## Release playtest
+
+The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue and counts against the daily cap.
+
+- The factory clones the release head and runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the mixed bot plays its trader, scavenger and fighter days among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
+- Every truck travels in far mode and a scripted bot drives, so physics, close driving and choices the bot never makes do not happen. The log header, the prompt and the report say so.
+- The factory reads the facts from the log: its seed, turns and commit, how it ended, and which kinds of activity never happened. A log of another run fails the job.
+- An Opus agent reads the whole log and writes `.factory/playtest.json` and the report `.factory/playtest.md`: observations, suspected issues, limitations, findings with severity and evidence, and a fix plan with priorities.
+- A clean verdict passes only with no important finding, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
+- A fix verdict opens one `release-task` and `maintenance` issue with the findings and the plan. It asks for the smallest fixes, and it forbids removing or disabling a feature or changing unrelated behavior. The task runs the card stages and merges into the release like a cleanup task. The playtest then replays the same seed on the new head.
+- A blocked verdict, or findings on the last of `FACTORY_PLAYTEST_RUNS` runs, blocks the release. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block, gives the runs back and hands the decision to the next review.
+- Each run keeps its log, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`, and comments the report on the tracking issue.
+
+## Candidate
+
+When no release task is open and the playtest passed the release head, the candidate job builds that commit at `/rc/`. The release agent writes the changelog, one line `- [#N] what changed` per change, and the job fails when the lines do not name the release's changes exactly. The post has a screenshot, the play link, the pull request, the count of changes and a Ship button. The changelog follows in a message under it, since a caption holds only 1024 characters. Any reply other than `ship` or `remove #N` opens a new `release-task` issue with the reply as its body.
+
+The post records the commit it was built from. The candidate does not post when the release moved during its build. Each tick compares the release head with that commit and drops the post and a queued Ship once the release moved, by any path.
 
 ## Ship
 
-Ship runs on the current candidate post only, with no release task open. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks fails Ship, since the committee did not play it. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
+Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks fails Ship, since the committee did not play it. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
 
 ## Hotfix
 
@@ -97,7 +114,7 @@ The baseline is triage Sonnet, design Opus, implementation Sonnet and testing So
 
 - `design-sonnet` runs design on Sonnet.
 - `implementation-opus` runs implementation on Opus. Every testing round and the review stay on Sonnet.
-- The candidate, incident and factory change agents always run Opus. Triage, patch, ad hoc and waste review agents always run Sonnet.
+- The release playtest, candidate, incident and factory change agents always run Opus. Triage, patch, ad hoc and waste review agents always run Sonnet.
 - The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.

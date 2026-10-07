@@ -6,6 +6,7 @@ import { change } from './stages/change';
 import { runStage as design } from './stages/design';
 import { runStage as implement } from './stages/implement';
 import { candidate } from './stages/candidate';
+import { playtest } from './stages/playtest';
 import { release } from './stages/release';
 import { runStage as incident } from './stages/incident';
 import { remove } from './stages/remove';
@@ -24,7 +25,7 @@ type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
 const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste'>, Handler> = {
-  triage, design, implement, patch, verify, checks, change, adhoc, candidate, remove, incident,
+  triage, design, implement, patch, verify, checks, change, adhoc, playtest, candidate, remove, incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };

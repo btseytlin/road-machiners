@@ -51,11 +51,16 @@ Flags hold on any position:
 `factory release` prints the release position.
 
 - None: `release` is null. `cut` makes one.
-- Cut with open tasks: `release` is set, and release tasks are not all done. The candidate waits.
-- Candidate posted: `release.postId` holds the current candidate post. Ship runs when a member presses Ship, or on `ship`.
+- Cut with open tasks: `release` is set, and release tasks are not all done. The playtest and the candidate wait.
+- Playtest: every release task is done, and `release.playtest.passed` is not the release head. The playtest runs.
+- Playtest blocked: `release.playtest.blocked` holds the commit and the reason. The tracking card has `factory-stuck`. `retry <tracking> [decision]` lifts it.
+- Candidate building: `release.playtest.passed` is the release head and no post is current. The candidate runs.
+- Candidate posted: `release.postId` holds the current candidate post, and `release.candidateSha` the commit it plays. Ship runs when a member presses Ship, or on `ship`. A tick that finds the release head past `candidateSha` drops the post and a queued Ship.
+
+`release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs` started, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
 
-`factory audit` and `card N` flag two drifts: an open release whose tracking card is missing, and a pending ship with no current candidate post. `factory release` flags nothing.
+`factory audit` and `card N` flag three drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, and a candidate post of a commit the playtest did not pass. `factory release` flags nothing.
 
 The release tracking card has the label `release`. It waits in Approval for the whole release, and its post is `release.postId`. It never shows card drift.
 
@@ -88,6 +93,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 - A running job whose stage differs from the stage the position runs. The stage of `post` is checks, of `approval` is approve, and `done` runs none.
 - An open release whose tracking card is missing.
 - A pending ship with no current candidate post.
+- A candidate post of a commit the playtest did not pass.
 
 `factory audit` skips every card with a running job, because the job owns the card mid-step. A stage changes the column and the post before its job leaves `jobs`, so drift shows for seconds. `card N` still prints all drift lines of the card, and adds a line that a job is running.
 
@@ -119,4 +125,4 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `merge` of a card the committee has not approved, `ship` and `merge-change` are gated by a rule Hermes keeps. Hermes names the member who ordered the action in `--by`. The CLI does not check who sent the message.
 
-Immediate, with no tick wait: `retry N`, `pause <reason>` and `resume`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.
+Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its runs to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.

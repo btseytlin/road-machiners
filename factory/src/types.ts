@@ -4,7 +4,7 @@ export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Appro
 
 // Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
 export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
-export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
+export type ReleaseStage = 'release' | 'playtest' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
 export type FactoryConfig = {
@@ -44,6 +44,8 @@ export type FactoryConfig = {
   agentJobMaxMinutes: number; // highest time limit an agent may give one factory-job background command
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
+  playtestTurns: number; // turns of the release playtest's progression run
+  playtestRuns: number; // playtest runs a release may spend before it blocks for a member
   wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
@@ -111,6 +113,8 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
+  // The release playtest runs a long agent review and moves no branch, so it never holds the branch queue.
+  playtest: 'verify',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
 export type Route = 'answer' | 'patch' | 'redesign';
@@ -119,13 +123,24 @@ export type Failure = { stage: Stage; issue: number | null; error: string; log: 
 export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
+// The release playtest. Every run of one release plays the same seed, so a rerun after a fix replays what found the bug.
+export type PlaytestState = {
+  seed: number;
+  runs: number; // runs started for this release, up to FACTORY_PLAYTEST_RUNS
+  passed: string | null; // the release head a clean run approved. The candidate builds only this commit.
+  blocked: { sha: string; reason: string } | null; // the gate stopped the release here until a member's retry
+  notes: string[]; // members' decisions from `factory retry`, which every later review reads
+};
+
 // The open release. Its branch takes the release tasks, and Ship merges it into main.
 export type ReleaseState = {
   issue: number; // tracking issue
   branch: string;
   day: string; // YYYY-MM-DD of the cut
   postId: number | null; // Telegram id of the current candidate post. Null while none is current.
+  candidateSha: string | null; // short hash of the release head the current post was built from
   removed: number[]; // feature issues taken out of this release
+  playtest: PlaytestState;
 };
 
 export type FactoryState = {

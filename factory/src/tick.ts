@@ -14,7 +14,7 @@ import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
-import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
+import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, PlaytestState, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
@@ -85,21 +85,30 @@ function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
 }
 
-// The candidate waits until the tracking issue is healthy and every release task is done.
-export type ReleaseGate = { reason: 'uncut' | 'tracking-missing' | 'failed' | 'release-tasks' | 'candidate' | 'ship-approval'; issues: number[] };
-export function readReleaseGate(state: FactoryState, cards: Card[]): ReleaseGate {
+// The candidate waits until the tracking issue is healthy, every release task is done and the playtest passed the release head.
+// `releaseHead` is the short hash of the release branch on origin, or null when it is unknown, which holds both the playtest and the candidate.
+export type ReleaseGate = { reason: 'uncut' | 'tracking-missing' | 'failed' | 'release-tasks' | 'playtest' | 'playtest-blocked' | 'candidate' | 'ship-approval'; issues: number[] };
+export function readReleaseGate(state: FactoryState, cards: Card[], releaseHead: string | null = null): ReleaseGate {
   const release = state.release;
   if (release === null) return { reason: 'uncut', issues: [] };
   if (release.postId !== null) return { reason: 'ship-approval', issues: [] };
   const tracking = cards.find((card) => card.issue === release.issue);
   if (!tracking) return { reason: 'tracking-missing', issues: [] };
   if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
-  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
-  return issues.length ? { reason: 'release-tasks', issues } : { reason: 'candidate', issues: [] };
+  return playtestGate(cards, release.playtest, releaseHead);
 }
-function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
-  if (readReleaseGate(state, cards).reason !== 'candidate' || state.release === null) return null;
-  return { stage: 'candidate', issue: state.release.issue };
+function playtestGate(cards: Card[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
+  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+  if (issues.length) return { reason: 'release-tasks', issues };
+  if (playtest.blocked !== null) return { reason: 'playtest-blocked', issues: [] };
+  return releaseHead !== null && playtest.passed === releaseHead ? { reason: 'candidate', issues: [] } : { reason: 'playtest', issues: [] };
+}
+// The playtest and the candidate both need a known release head.
+function releaseJob(state: FactoryState, cards: Card[], releaseHead: string | null): JobPick | null {
+  if (state.release === null || releaseHead === null) return null;
+  const reason = readReleaseGate(state, cards, releaseHead).reason;
+  if (reason !== 'playtest' && reason !== 'candidate') return null;
+  return { stage: reason, issue: state.release.issue };
 }
 
 // An empty lastWasteReview waits: the tick sets it to now, so the first review covers a full period of ledger.
@@ -118,9 +127,10 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
   return { stage: 'dev', issue: null };
 }
 
-// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the candidate.
-function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null): Candidate[] {
-  const picks = [queued(state), devJob(state, devHead), releaseCut(state, now, cfg), candidateJob(state, cards)];
+// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the
+// release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
+function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
+  const picks = [queued(state), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
@@ -185,14 +195,18 @@ function countCardPick(picked: Map<number, number>, capped: number, issue: numbe
   if (capped > 0 && issue !== null) picked.set(issue, (picked.get(issue) ?? 0) + 1);
 }
 
+// The short hashes of dev and the release branch on origin. A null skips the /dev/ check or holds the release jobs.
+export type Heads = { dev: string | null; release: string | null };
+const NO_HEADS: Heads = { dev: null, release: null };
+
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
-// At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
-export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
+// At the daily cap only the uncapped jobs start.
+export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads = NO_HEADS): ScheduleReport {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const picks: JobPick[] = [];
   const pickedForCard = new Map<number, number>();
   const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
-  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
+  for (const candidate of [...branchCandidates(state, cards, now, cfg, heads), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
     const cardLeft = readCardLeft(state, now, cfg, pickedForCard, pick.issue);
@@ -203,10 +217,10 @@ export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, 
     countCardPick(pickedForCard, capped, pick.issue);
     picks.push(pick);
   }
-  return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards) };
+  return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards, heads.release) };
 }
-export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
-  return evaluateSchedule(state, cards, now, cfg, devHead).picks;
+export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads = NO_HEADS): JobPick[] {
+  return evaluateSchedule(state, cards, now, cfg, heads).picks;
 }
 
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
@@ -379,6 +393,20 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   await intake(ctx);
 }
 
+async function releaseHead(ctx: Ctx): Promise<string | null> {
+  const release = readState(ctx.statePath).release;
+  return release === null ? null : ctx.repo.headHash(release.branch);
+}
+
+// A candidate post plays one commit. Once the release branch moves, by any path, the post and a queued Ship go, and the
+// playtest and a new candidate follow on the new head.
+export function dropStaleCandidate(ctx: Ctx, head: string | null): void {
+  const release = readState(ctx.statePath).release;
+  if (release === null || head === null || release.postId === null || release.candidateSha === head) return;
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
+  ctx.log('tick', release.issue, `release moved from ${release.candidateSha ?? 'an unknown commit'} to ${head}, dropped candidate post ${release.postId}`);
+}
+
 async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
@@ -391,8 +419,9 @@ async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<voi
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
   }
   await ctx.repo.fetch();
-  const devHead = await ctx.repo.headHash('dev');
-  const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
+  const heads = { dev: await ctx.repo.headHash('dev'), release: await releaseHead(ctx) };
+  dropStaleCandidate(ctx, heads.release);
+  const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, heads);
   reportScheduler(ctx.cfg.home, 'ready', ctx.now(), report, cards);
   if (report.picks.length === 0) return ctx.log('tick', null, 'nothing to start');
   for (const pick of report.picks) startJob(ctx, codeDir, pick, deps);

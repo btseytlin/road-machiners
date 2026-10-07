@@ -185,7 +185,7 @@ function formatReleaseGate(gate) {
   if (readOperations()?.release === null) return 'Release not cut';
   if (!gate) return 'Readiness not checked';
   if (gate.reason === 'release-tasks') return `${gate.issues.length} release tasks remain: ${gate.issues.map((issue) => `#${issue}`).join(', ')}`;
-  const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
+  const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', playtest: 'Release playtest pending', 'playtest-blocked': 'Release playtest blocked', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
   return labels[gate.reason];
 }
 function renderRelease() {

@@ -4,7 +4,7 @@ import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, t
 import { pauseFile, pausedReason } from './pause';
 import { MOVE_TARGETS, cardDrift, cardPosition, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
-import { STUCK_LABEL, type Card, type Ctx, type FactoryState } from './types';
+import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type PlaytestState, type ReleaseState } from './types';
 
 // The dashboard refuses a browser agent, so the CLI uses the same agent Hermes' status tool uses.
 const SNAPSHOT_AGENT = 'curl/8.0';
@@ -31,7 +31,7 @@ const READ: Record<string, { usage: string; help: string; run: Handler }> = {
 };
 
 const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> = {
-  retry: { usage: 'retry N', help: 'remove the stuck label and the failures of a card', run: retry },
+  retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, gives the playtest its runs back and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
 };
@@ -179,8 +179,20 @@ function release(ctx: Ctx): void {
   console.log(`last release: ${state.lastRelease ?? 'none'}`);
   if (state.release === null) return console.log('open release: none');
   console.log(`open release: #${state.release.issue} branch ${state.release.branch} cut ${state.release.day}`);
-  console.log(`candidate post: ${state.release.postId ?? 'none'}`);
+  console.log(`candidate post: ${candidatePost(state.release)}`);
   console.log(`removed: ${state.release.removed.map((issue) => `#${issue}`).join(', ') || 'none'}`);
+  for (const line of playtestLines(state.release.playtest, ctx.cfg.playtestRuns)) console.log(line);
+}
+
+function candidatePost(release: ReleaseState): string {
+  if (release.postId === null) return 'none';
+  return `${release.postId} of ${release.candidateSha ?? 'no commit'}`;
+}
+
+function playtestLines(playtest: PlaytestState, runs: number): string[] {
+  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} of ${runs} runs, passed ${playtest.passed ?? 'none'}`];
+  if (playtest.blocked) lines.push(`playtest blocked at ${playtest.blocked.sha}: ${playtest.blocked.reason}`);
+  return [...lines, ...playtest.notes.map((note) => `playtest decision: ${note}`)];
 }
 
 function failures(ctx: Ctx): void {
@@ -210,9 +222,22 @@ async function audit(ctx: Ctx): Promise<void> {
 
 async function retry(ctx: Ctx, args: string[]): Promise<void> {
   const issue = number(args[0]);
+  const decision = args.slice(1).join(' ').trim();
   await ctx.github.removeLabel(issue, STUCK_LABEL);
   updateState(ctx.statePath, (state: FactoryState) => ({ ...state, failures: state.failures.filter((row) => row.issue !== issue) }));
   console.log(`Removed ${STUCK_LABEL} and the failures of #${issue}. The next tick continues the card.`);
+  if (readState(ctx.statePath).release?.issue === issue) console.log(retryPlaytest(ctx, decision));
+}
+
+// A member decided on a blocked playtest. The playtest runs again with a fresh budget of runs, and its review reads the decision.
+function retryPlaytest(ctx: Ctx, decision: string): string {
+  updateState(ctx.statePath, (state: FactoryState) => {
+    if (state.release === null) return state;
+    const playtest = state.release.playtest;
+    const notes = decision === '' ? playtest.notes : [...playtest.notes, decision];
+    return { ...state, release: { ...state.release, playtest: { ...playtest, runs: 0, blocked: null, notes } } };
+  });
+  return `Lifted the playtest block of the release. It plays again with ${ctx.cfg.playtestRuns} runs${decision === '' ? '' : ' and reads the decision'}.`;
 }
 
 function pause(ctx: Ctx, args: string[]): void {

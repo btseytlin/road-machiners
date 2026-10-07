@@ -339,7 +339,7 @@ describe('base branch', () => {
   const statePath = 'tmp/factory-common-test/state.json';
   const withRelease = () => {
     mkdirSync('tmp/factory-common-test', { recursive: true });
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
   };
   const ctxWith = (labels: string[]) => ({ statePath, github: { issue: async () => ({ labels }) } }) as unknown as Ctx;
 

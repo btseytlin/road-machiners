@@ -189,6 +189,8 @@ describe('read commands', () => {
   });
 });
 
+const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [] };
+
 describe('immediate commands', () => {
   it('retry removes the stuck label and only that card failures', async () => {
     const f = fake();
@@ -197,6 +199,24 @@ describe('immediate commands', () => {
     await run(f, 'retry', '5');
     expect(f.calls).toContain('removeLabel 5 factory-stuck');
     expect(readState(f.ctx.statePath).failures.map((row) => row.issue)).toEqual([6]);
+  });
+
+  it('retry of the release tracking card lifts a playtest block, gives back the runs and keeps the decision', async () => {
+    const f = fake();
+    f.ctx.cfg = { ...f.ctx.cfg, playtestRuns: 4 };
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
+    await run(f, 'retry', String(RELEASE.issue), 'Raiders', 'may', 'chase', 'at', 'night.');
+    expect(f.calls).toContain(`removeLabel ${RELEASE.issue} factory-stuck`);
+    expect(readState(f.ctx.statePath).release?.playtest).toEqual({ seed: 1, runs: 0, passed: null, blocked: null, notes: ['Raiders may chase at night.'] });
+  });
+
+  it('retry of another card leaves the playtest alone', async () => {
+    const f = fake();
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
+    await run(f, 'retry', '5', 'note');
+    expect(readState(f.ctx.statePath).release?.playtest).toEqual(playtest);
   });
 
   it('pause writes the pause file and resume removes it', async () => {
