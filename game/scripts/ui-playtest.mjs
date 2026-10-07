@@ -24,6 +24,35 @@ async function checkVisibleReadouts(page) {
   }
 }
 
+async function checkCoins(page, where) {
+  const result = await page.evaluate(() => {
+    const titlePattern = /^(Debt )?\d{1,3}(,\d{3})* M('s)?$/;
+    const coinSizeProblem = (text, coin, amount) => {
+      if (!coin) return [`${text}: no coin`];
+      const size = parseFloat(getComputedStyle(amount).fontSize);
+      const height = coin.getBoundingClientRect().height;
+      const sized = height >= 0.9 * size && height <= 1.4 * size;
+      const fits = height <= amount.getBoundingClientRect().height + 1;
+      return [sized ? '' : `${text}: coin ${height}px beside ${size}px text`, fits ? '' : `${text}: coin taller than its line`];
+    };
+    const titleProblems = (text, amount) => [
+      amount.querySelector('[title]') ? `${text}: a nested title shadows the amount` : '',
+      titlePattern.test(amount.title) ? '' : `${text}: bad title "${amount.title}"`,
+      amount.getAttribute('aria-label') === amount.title ? '' : `${text}: aria-label differs from title`,
+    ];
+    const amountProblems = amount => {
+      const text = amount.innerText.trim();
+      const coin = [...amount.children].find(child => child.classList.contains('coin'));
+      return [...coinSizeProblem(text, coin, amount), ...titleProblems(text, amount)];
+    };
+    const shown = [...document.querySelectorAll('.amount')].filter(node => node.offsetParent !== null);
+    const icons = [...document.querySelectorAll('.icon[title="M\'s"]')].map(icon => `icon says M's: ${icon.outerHTML.slice(0, 60)}`);
+    return { problems: [...shown.flatMap(amountProblems), ...icons].filter(Boolean), count: shown.length };
+  });
+  assert.deepEqual(result.problems, [], `Coin check failed (${where})`);
+  return result.count;
+}
+
 async function checkInstruments(page) {
   const clock = page.locator('.instrument-clock');
   assert(await clock.isVisible(), 'Clock strip must be visible');
@@ -516,6 +545,7 @@ try {
   await page.keyboard.press('Escape');
   // The truck starts in the wasteland now, so the town frame is checked only when E opens a modal.
   await page.keyboard.press('e');
+  await checkCoins(page, 'HUD');
   if (await page.locator('.modal:visible').count()) {
     await checkVisibleReadouts(page);
     assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Town and inventory must share one frame');
@@ -523,6 +553,16 @@ try {
     await page.keyboard.press('i');
     await checkVisibleReadouts(page);
   }
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const g = window.__ROAM__;
+    const c = await import('/src/sim/cheats.ts');
+    g.apply(c.teleport(g.state, c.placeSpot(g.state, 'bowl')));
+    g.town.open();
+  });
+  await page.waitForSelector('.town-shop .tabs button', { timeout: 90000 });
+  assert((await checkCoins(page, 'town market')) > 1, 'The town market must show amounts');
+  await page.keyboard.press('Escape');
   for (const width of [1024, 800, 700]) {
     await page.setViewportSize({ width, height: 800 });
     await checkVisibleReadouts(page);
@@ -550,7 +590,7 @@ try {
   for (const viewport of [{ width: 1280, height: 720 }, { width: 700, height: 800 }]) await checkKnobs(url, viewport);
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
+  console.log('PASS: hover names, coins sized by their text with one hover amount, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
 } finally {
   await browser.close();
 }
