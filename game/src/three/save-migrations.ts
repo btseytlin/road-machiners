@@ -220,6 +220,44 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
 
 // A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
 // pressure stands in for what it saw, and the saved turn for when.
+// Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
+// keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 16.
+const STORM_FADE_TURNS_16_17 = 30;
+
+function withStormBorn_16_17(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_16_17;
+  const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
+  return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
+}
+
+// 17 to 18: a truck records how far each storm has got into it. A saved truck gets the share it would have settled to
+// where it stands, so loading inside a storm neither flashes nor drops. These are copies of WEATHER.sim.stormEdge and
+// stormFadeTurns, and of the stormDepth rule, at format 17.
+const STORM_EDGE_17_18 = 25;
+const STORM_FADE_TURNS_17_18 = 30;
+
+function settledShare_17_18(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
+  const centre = storm.pos as { x: number; y: number };
+  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_17_18);
+  if (edge <= 0) return 0;
+  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_17_18, (storm.turnsLeft as number) / STORM_FADE_TURNS_17_18);
+  return edge * strength;
+}
+
+function withStormExposure_17_18(world: SavedJson): SavedJson {
+  const storms = (world.weather as SavedJson[]).filter((e) => e.kind === 'storm');
+  const exposed = (v: SavedJson): SavedJson => {
+    const stormExposure: Record<string, number> = {};
+    for (const s of storms) {
+      const share = settledShare_17_18(world.turn as number, s, v.pos as { x: number; y: number });
+      if (share > 0) stormExposure[s.id as string] = share;
+    }
+    return { ...v, stormExposure };
+  };
+  const clear = (v: SavedJson): SavedJson => ({ ...v, stormExposure: {} });
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(exposed), removed: (world.removed as SavedJson[]).map(clear) };
+}
+
 function withMemories_11_12(world: SavedJson): SavedJson {
   const shops = world.shops as Record<string, SavedJson>;
   const turn = world.turn as number;
@@ -233,35 +271,60 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
-// Step 13 to 14: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
+// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
+// 0 HP. Settling keeps only those that are still patchable and below the target.
+function withPatchParts_13_14(world: SavedJson): SavedJson {
+  const vehicles = world.vehicles as SavedJson[];
+  const brokenIds = (id: string): string[] => {
+    const client = vehicles.find((v) => v.id === id);
+    const items = client ? (client.items as SavedJson[]) : [];
+    return items.flatMap((item) => (item.kind === 'part' && (item.part as SavedJson).hp === 0 ? [(item.part as SavedJson).id as string] : []));
+  };
+  const recording = (s: SavedJson): SavedJson => {
+    const data = s.data as SavedJson;
+    return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
+  };
+  return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
+}
+
+// Step 18 to 19: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
 // 3 money, so every money number grows by 100 / 3. Balances, rewards, fees and prices round to a cent. Cost bases and
 // the money a profit, free tow or aid practice counted are averages or XP inputs, so they scale exactly.
-export const CENTS_PER_MONEY_13_14 = 100 / 3;
-const MONEY_PRACTICE_13_14 = ['profit', 'freeTow', 'aid'];
+export const CENTS_PER_MONEY_18_19 = 100 / 3;
+const MONEY_PRACTICE_18_19 = ['profit', 'freeTow', 'aid'];
 
-function scaled_13_14(value: unknown, what: string): number {
+function scaled_18_19(value: unknown, what: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Saved ${what} is ${String(value)}, not a number`);
-  return value * CENTS_PER_MONEY_13_14;
+  return value * CENTS_PER_MONEY_18_19;
 }
 
-function cents_13_14(value: unknown, what: string): number {
-  return Math.round(scaled_13_14(value, what));
+function cents_18_19(value: unknown, what: string): number {
+  return Math.round(scaled_18_19(value, what));
 }
 
-function scaledRecord_13_14(record: SavedJson, what: string): SavedJson {
-  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_13_14(v, `${what} ${k}`)]));
+function scaledRecord_18_19(record: SavedJson, what: string): SavedJson {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_18_19(v, `${what} ${k}`)]));
 }
 
-function contractCents_13_14(c: SavedJson): SavedJson {
-  return { ...c, reward: cents_13_14(c.reward, `contract ${String(c.id)} reward`) };
+function contractCents_18_19(c: SavedJson): SavedJson {
+  return { ...c, reward: cents_18_19(c.reward, `contract ${String(c.id)} reward`) };
 }
 
-function callVarsCents_13_14(vars: SavedJson): SavedJson {
+function callVarsCents_18_19(vars: SavedJson): SavedJson {
   const centsVar = (v: SavedJson): SavedJson => {
-    if (v.kind === 'money') return { ...v, amount: cents_13_14(v.amount, 'call money') };
-    if (v.kind === 'deal') return { ...v, price: cents_13_14(v.price, 'call deal price') };
+    if (v.kind === 'money') return { ...v, amount: cents_18_19(v.amount, 'call money') };
+    if (v.kind === 'deal') return { ...v, price: cents_18_19(v.price, 'call deal price') };
     if (v.kind === 'prices') {
-      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_13_14(g.buy, 'call buy price'), sell: cents_13_14(g.sell, 'call sell price') }));
+      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_18_19(g.buy, 'call buy price'), sell: cents_18_19(g.sell, 'call sell price') }));
       return { ...v, goods };
     }
     return v;
@@ -269,71 +332,71 @@ function callVarsCents_13_14(vars: SavedJson): SavedJson {
   return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, centsVar(v as SavedJson)]));
 }
 
-function callCents_13_14(call: SavedJson): SavedJson {
+function callCents_18_19(call: SavedJson): SavedJson {
   const line = call.line as SavedJson;
-  return { ...call, vars: callVarsCents_13_14(call.vars as SavedJson), line: { ...line, vars: callVarsCents_13_14(line.vars as SavedJson) } };
+  return { ...call, vars: callVarsCents_18_19(call.vars as SavedJson), line: { ...line, vars: callVarsCents_18_19(line.vars as SavedJson) } };
 }
 
-function stateCents_13_14(state: SavedJson): SavedJson {
+function stateCents_18_19(state: SavedJson): SavedJson {
   const data = state.data as SavedJson;
   const what = `${String(data.kind)} state ${String(state.id)}`;
-  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_13_14(data.fee, `${what} fee`), waived: cents_13_14(data.waived, `${what} waived fee`) } };
-  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_13_14(data.fee, `${what} fee`) } };
-  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_13_14(data.price, `${what} price`) } };
+  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_18_19(data.fee, `${what} fee`), waived: cents_18_19(data.waived, `${what} waived fee`) } };
+  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_18_19(data.fee, `${what} fee`) } };
+  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_18_19(data.price, `${what} price`) } };
   return state;
 }
 
-function feeCents_13_14(e: SavedJson): SavedJson {
-  return { ...e, fee: cents_13_14(e.fee, `${String(e.t)} fee`) };
+function feeCents_18_19(e: SavedJson): SavedJson {
+  return { ...e, fee: cents_18_19(e.fee, `${String(e.t)} fee`) };
 }
 
-const EVENT_CENTS_13_14: Record<string, (e: SavedJson) => SavedJson> = {
-  money: (e) => ({ ...e, amount: cents_13_14(e.amount, 'money event') }),
-  practice: (e) => (MONEY_PRACTICE_13_14.includes(e.source as string) ? { ...e, amount: scaled_13_14(e.amount, `${String(e.source)} practice`) } : e),
-  contract: (e) => ({ ...e, contract: contractCents_13_14(e.contract as SavedJson) }),
-  towOffer: feeCents_13_14,
-  towDone: feeCents_13_14,
-  escortPaid: feeCents_13_14,
-  escortHired: feeCents_13_14,
-  aid: (e) => ({ ...e, paid: cents_13_14(e.paid, 'aid paid') }),
-  stateEnded: (e) => ({ ...e, state: stateCents_13_14(e.state as SavedJson) }),
-  say: (e) => ({ ...e, vars: callVarsCents_13_14(e.vars as SavedJson) }),
+const EVENT_CENTS_18_19: Record<string, (e: SavedJson) => SavedJson> = {
+  money: (e) => ({ ...e, amount: cents_18_19(e.amount, 'money event') }),
+  practice: (e) => (MONEY_PRACTICE_18_19.includes(e.source as string) ? { ...e, amount: scaled_18_19(e.amount, `${String(e.source)} practice`) } : e),
+  contract: (e) => ({ ...e, contract: contractCents_18_19(e.contract as SavedJson) }),
+  towOffer: feeCents_18_19,
+  towDone: feeCents_18_19,
+  escortPaid: feeCents_18_19,
+  escortHired: feeCents_18_19,
+  aid: (e) => ({ ...e, paid: cents_18_19(e.paid, 'aid paid') }),
+  stateEnded: (e) => ({ ...e, state: stateCents_18_19(e.state as SavedJson) }),
+  say: (e) => ({ ...e, vars: callVarsCents_18_19(e.vars as SavedJson) }),
 };
 
-function eventCents_13_14(e: SavedJson): SavedJson {
-  const convert = EVENT_CENTS_13_14[e.t as string];
+function eventCents_18_19(e: SavedJson): SavedJson {
+  const convert = EVENT_CENTS_18_19[e.t as string];
   return convert ? convert(e) : e;
 }
 
-function vehicleCents_13_14(v: SavedJson): SavedJson {
+function vehicleCents_18_19(v: SavedJson): SavedJson {
   const resources = v.resources as SavedJson | null;
   if (!resources) return v;
-  return { ...v, resources: { ...resources, money: cents_13_14(resources.money, `vehicle ${String(v.id)} money`) } };
+  return { ...v, resources: { ...resources, money: cents_18_19(resources.money, `vehicle ${String(v.id)} money`) } };
 }
 
-function withCents_13_14(world: SavedJson): SavedJson {
+function withCents_18_19(world: SavedJson): SavedJson {
   const player = world.player as SavedJson;
   const call = player.call as SavedJson | null;
   return {
     ...world,
     player: {
       ...player,
-      money: cents_13_14(player.money, 'player money'),
-      costBasis: scaledRecord_13_14(player.costBasis as SavedJson, 'cost basis'),
-      contracts: (player.contracts as SavedJson[]).map(contractCents_13_14),
-      call: call ? callCents_13_14(call) : null,
+      money: cents_18_19(player.money, 'player money'),
+      costBasis: scaledRecord_18_19(player.costBasis as SavedJson, 'cost basis'),
+      contracts: (player.contracts as SavedJson[]).map(contractCents_18_19),
+      call: call ? callCents_18_19(call) : null,
     },
     shops: Object.fromEntries(
-      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_13_14) }]),
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_18_19) }]),
     ),
-    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_13_14),
-    removed: (world.removed as SavedJson[]).map(vehicleCents_13_14),
+    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_18_19),
+    removed: (world.removed as SavedJson[]).map(vehicleCents_18_19),
     salvage: (world.salvage as SavedJson[]).map((stock) => {
       const pile = stock.pile as SavedJson | undefined;
-      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_13_14(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
+      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_18_19(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
     }),
-    states: (world.states as SavedJson[]).map(stateCents_13_14),
-    events: (world.events as SavedJson[]).map(eventCents_13_14),
+    states: (world.states as SavedJson[]).map(stateCents_18_19),
+    events: (world.events as SavedJson[]).map(eventCents_18_19),
   };
 }
 
@@ -402,8 +465,19 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
-  // 13 to 14: money becomes integer cents of M, 1 M per 5 L of fuel.
-  withCents_13_14,
+  // 13 to 14: a patch records the parts it lifts.
+  withPatchParts_13_14,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  // 16 to 17: a storm records the turn it was born, already past its build-up.
+  withStormBorn_16_17,
+  // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
+  withStormExposure_17_18,
+  // 18 to 19: money becomes integer cents of M, 1 M per 5 L of fuel.
+  withCents_18_19,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

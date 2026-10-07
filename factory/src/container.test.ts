@@ -1,14 +1,15 @@
-import { rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dockerContainer } from './container';
+import { EVIDENCE_CHECK_COMMAND, dockerContainer } from './container';
 import { takeUsage } from './ledger';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
 
 const HOME = resolve('tmp/factory-container-test');
-const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME } as FactoryConfig;
+const tokenPrices: FactoryConfig['tokenPrices'] = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
+const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME, tokenPrices } as FactoryConfig;
 
 // A finished agent run ends with this event, which the job's ledger line reads.
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
@@ -48,7 +49,10 @@ describe('dockerContainer', () => {
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
     expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' });
-    expect(call.opts?.input).toBe('Your folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+    expect(call.opts?.input).toMatch(/^Your folder is \/work\/game\./);
+    expect(call.opts?.input).toContain('When your activity changes, run factory-status');
+    expect(call.opts?.input).toContain('factory-status milestone');
+    expect(call.opts?.input).toMatch(/\n\ndo it$/);
     expect(call.opts?.logPath).toBe('/l.log');
     expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
     expect(call.args).toContain('/w/c:/work');
@@ -64,6 +68,23 @@ describe('dockerContainer', () => {
     const args = runCall(calls).args;
     expect(args.filter((a) => a === '-v')).toHaveLength(3);
     expect(args).toContain('/h/state:/factory/state:ro');
+  });
+
+  it('mounts the bundled evidence check read only, and only when the run asks for it', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', evidenceCheck: true });
+    const args = runCall(calls).args;
+    expect(args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
+    expect(existsSync(`${HOME}/agent-check/check.mjs`)).toBe(true);
+    const plain = fakeRun();
+    await dockerContainer(plain.run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
+  });
+
+  it('tells the agents that write evidence to run the mounted command as their last step', () => {
+    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch']]) {
+      expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
+    }
   });
 
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
@@ -101,7 +122,8 @@ describe('dockerContainer', () => {
   it('puts a skill command on the first line, before the outputs note', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });
-    expect(runCall(calls).opts?.input).toBe('/code-review\n\nYour folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+    expect(runCall(calls).opts?.input).toMatch(/^\/code-review\n\nYour folder is \/work\/game\./);
+    expect(runCall(calls).opts?.input).toMatch(/\n\ndo it$/);
   });
 
   it('puts a restricted agent on the internal network with the proxy env', async () => {
@@ -229,9 +251,27 @@ describe('agent usage', () => {
     await expect(dockerContainer(agentRun(0, ''), cfg, 'job-8').agent(run)).rejects.toThrow(/no result event/);
   });
 
-  it('records nothing for a run that died before its result', async () => {
+  it('records nothing for a run that died before Claude Code saved its transcript', async () => {
     rmSync(`${HOME}/usage`, { recursive: true, force: true });
     await expect(dockerContainer(agentRun(1, ''), cfg, 'job-9').agent(run)).rejects.toThrow('boom');
     expect(takeUsage(HOME, 'job-9')).toEqual([]);
+  });
+
+  it('prices a run that failed before its result from the transcript in its own session folder', async () => {
+    rmSync(`${HOME}/usage`, { recursive: true, force: true });
+    const transcriptRun: Run = async (cmd, args, opts) => {
+      if (args[0] === 'run' && args[1] === '--rm') {
+        const projects = args[args.findIndex((arg) => arg.endsWith(':/home/pwuser/.claude/projects'))].split(':')[0];
+        const id = args[args.indexOf('--session-id') + 1];
+        mkdirSync(`${projects}/-work-game`, { recursive: true });
+        const usage = { input_tokens: 0, output_tokens: 100_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } };
+        writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'opus', usage } })}\n`);
+      }
+      return agentRun(1, '')(cmd, args, opts);
+    };
+    await expect(dockerContainer(transcriptRun, cfg, 'job-10').agent(run)).rejects.toThrow('boom');
+    const [usage] = takeUsage(HOME, 'job-10');
+    expect([usage.costUsd, usage.fromTranscript]).toEqual([2, true]);
+    expect(existsSync(`${HOME}/usage/job-10.projects`)).toBe(false);
   });
 });

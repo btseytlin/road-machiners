@@ -3,7 +3,7 @@
 
 import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
-import { spatial } from "../audio/pick";
+import { shuffled, spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
   Glide,
@@ -14,6 +14,9 @@ import type {
 import type { V3, VehicleFrame } from "../phys/frames";
 import { PHYSICS } from "../data/physics";
 import type { GameEvent, ShotRound } from "../sim/types";
+import { isTownGuarded } from "../sim/guards";
+import { isInTerritory, isNearOutpost } from "../sim/sites";
+import type { Vec } from "../sim/vec";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
@@ -38,7 +41,7 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
 
 // Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
-const BASE_CUES = ["score-drums", "score-bass"] as const;
+const BASE_CUES = ["score-drums", "score-bass", "score-horns", "score-trombone"] as const;
 type BaseCue = (typeof BASE_CUES)[number];
 type Base = { loop: BeatLoopHandle; grid: Grid };
 
@@ -236,24 +239,48 @@ export class SoundDirector {
   }
 }
 
+// A place with its own music, or null on the open road.
+export type MusicPlace = "town" | "outpost" | "abandoned" | null;
+
+// Town music plays inside town guard range, outpost music near outpost gates, and abandoned music inside territories.
+export function musicPlaceAt(pos: Vec): MusicPlace {
+  if (isTownGuarded(pos)) return "town";
+  if (isNearOutpost(pos, MIX.music.outpostReachTiles)) return "outpost";
+  return isInTerritory(pos) ? "abandoned" : null;
+}
+
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
+// stormShare is the player's storm exposure in [0, 1], from stormShare() in src/sim/weather.ts; it sets the storm's share of the wind.
+export type LoopState = { stormShare: number; inCombat: boolean; place: MusicPlace; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
+  townGain: number;
+  outpostGain: number;
+  abandonedGain: number;
   combatGain: number;
   musicCutoffHz: number;
   paused: boolean;
 };
 
+// Which music plays: combat wins, then the place's music, then calm road music.
+function musicOf(s: LoopState): "calm" | "combat" | NonNullable<MusicPlace> {
+  if (s.inCombat) return "combat";
+  return s.place ?? "calm";
+}
+
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
-  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const near = s.stormShare;
+  const music = musicOf(s);
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
-    calmGain: s.inCombat ? 0 : 1,
-    combatGain: s.inCombat ? 1 : 0,
+    calmGain: Number(music === "calm"),
+    townGain: Number(music === "town"),
+    outpostGain: Number(music === "outpost"),
+    abandonedGain: Number(music === "abandoned"),
+    combatGain: Number(music === "combat"),
     musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
     paused: s.paused,
   };
@@ -318,13 +345,23 @@ export class SoundLoops {
   private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
+  // Each place's music loop, by the LoopLevels gain that drives it.
+  private places: [LoopHandle, "townGain" | "outpostGain" | "abandonedGain"][];
+  // Calm tracks play in a playlist shuffled once per session, so every track plays before any repeats.
+  private playlist = shuffled(SOUNDS["music-calm"].files, Math.random);
+  private track = 0;
   private last: LoopLevels | null = null;
 
   constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "setPaused" | "tick">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
-    this.calm = player.loop("music-calm", silent);
+    this.calm = player.loop("music-calm", silent, this.playlist[0]);
+    this.places = [
+      [player.loop("music-town", silent), "townGain"],
+      [player.loop("music-outpost", silent), "outpostGain"],
+      [player.loop("music-abandoned", silent), "abandonedGain"],
+    ];
   }
 
   drive(g: Glide, chassisId: string): void {
@@ -355,9 +392,10 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight as a new random track.
+  // Calm music comes back after a fight or a place with its own music as the next playlist track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
+    this.updatePlaces(l, was);
     if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);
     this.score.setPaused(l.paused);
     if (was?.combatGain !== l.combatGain) this.score.setCombat(l.combatGain > 0, MIX.music.fadeSeconds);
@@ -370,8 +408,20 @@ export class SoundLoops {
     this.calm.setGain(gain, fade);
 }
 
+  private updatePlaces(l: LoopLevels, was: LoopLevels | null): void {
+    for (const [loop, key] of this.places) if (was?.[key] !== l[key]) loop.setGain(l[key], MIX.music.fadeSeconds);
+  }
+
+  // The radio's next button crossfades to another calm track at the current calm level.
+  nextTrack(): void {
+    const fade = MIX.music.fadeSeconds;
+    this.nextCalm(fade);
+    this.calm.setGain(this.last?.calmGain ?? 0, fade);
+  }
+
   private nextCalm(fadeSeconds: number): void {
     this.calm.stop(fadeSeconds * 1000);
-    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 });
+    this.track = (this.track + 1) % this.playlist.length;
+    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 }, this.playlist[this.track]);
   }
 }

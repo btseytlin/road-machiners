@@ -4,7 +4,8 @@ import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
 import { emptyWorld } from '../sim/testkit';
-import type { Obstacle, Player, Vehicle } from '../sim/types';
+import type { Obstacle, Player, Vehicle, WeatherEvent, World } from '../sim/types';
+import { stormStrength, weatherAt, weatherOn } from '../sim/weather';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -19,6 +20,11 @@ import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
+import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
+import FORMAT_2_16 from './save-fixtures/format-2-16.json';
+import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
@@ -301,7 +307,82 @@ describe('save migration 12 to 13', () => {
 });
 
 describe('save migration 13 to 14', () => {
-  const next = MIGRATIONS[13](structuredClone(FORMAT_2_13)) as typeof FORMAT_2_13;
+  const before = structuredClone(FORMAT_2_13);
+  const next = MIGRATIONS[13](FORMAT_2_13) as { states: { data: { partIds?: string[] } }[] };
+
+  it('gives a patch the ids of its client parts at 0 HP, in item order', () => {
+    expect(next.states[0].data.partIds).toEqual(['p1', 'p2']);
+  });
+
+  it('gives a patch whose client is gone an empty list', () => {
+    expect(next.states[1].data.partIds).toEqual([]);
+  });
+
+  it('leaves other states alone and does not mutate its input', () => {
+    expect(next.states[2]).toEqual(FORMAT_2_13.states[2]);
+    expect(FORMAT_2_13).toEqual(before);
+  });
+});
+
+describe('save migration 14 to 15', () => {
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[15](FORMAT_2_15);
+    const [shot, guard, arrived] = FORMAT_2_15.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_15,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
+  });
+});
+
+describe('save migration 16 to 17', () => {
+  const next = MIGRATIONS[16](FORMAT_2_16) as { turn: number; weather: WeatherEvent[] };
+
+  it('gives a storm a birth turn past its build-up and changes nothing else', () => {
+    expect(next).toEqual({ ...FORMAT_2_16, weather: [{ ...FORMAT_2_16.weather[0], born: 470 }, FORMAT_2_16.weather[1]] });
+  });
+
+  it('leaves a storm with a long way to go at full strength', () => {
+    const storm = next.weather[0];
+    if (storm.kind !== 'storm') throw new Error('expected the storm first');
+    expect(stormStrength(next as unknown as World, storm)).toBe(1);
+  });
+});
+
+describe('save migration 17 to 18', () => {
+  const next = MIGRATIONS[17](FORMAT_2_17) as unknown as World;
+  const shares = (id: string) => next.vehicles.find((v) => v.id === id)!.stormExposure;
+
+  it('gives each truck the share each storm has settled to where it stands, and nothing outside', () => {
+    expect(shares('v-centre')).toEqual({ wx1: 1 });
+    expect(shares('v-edge').wx1).toBeCloseTo(0.5);
+    expect(Object.keys(shares('v-edge'))).toEqual(['wx1']);
+    expect(shares('v-building').wx2).toBeCloseTo(11 / 30);
+    expect(shares('v-out')).toEqual({});
+  });
+
+  it('gives a removed truck no shares and changes nothing else', () => {
+    expect(next.removed[0].stormExposure).toEqual({});
+    const strip = (vs: Vehicle[]) => vs.map((v) => Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stormExposure')));
+    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_17);
+  });
+
+  it('loads every truck feeling exactly the settled weather where it stands', () => {
+    for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  const next = MIGRATIONS[18](structuredClone(FORMAT_2_18)) as typeof FORMAT_2_18;
   const cents = (money: number) => Math.round((money * 100) / 3);
 
   it('turns player money, debt included, cost basis and contract rewards into cents', () => {
@@ -309,35 +390,35 @@ describe('save migration 13 to 14', () => {
     expect(next.player.costBasis).toEqual({ scrap: 350, salt: 700 });
     expect(next.player.contracts[0].reward).toBe(4000);
     expect(next.shops.bowl.contracts[0].reward).toBe(10000);
-    expect(next.shops.bowl.pressure).toEqual(FORMAT_2_13.shops.bowl.pressure);
+    expect(next.shops.bowl.pressure).toEqual(FORMAT_2_18.shops.bowl.pressure);
   });
 
   it('turns the open call\'s money, deal and prices into cents and leaves other vars alone', () => {
     const { vars, line } = next.player.call;
     expect(vars.fee).toEqual({ kind: 'money', amount: 1500 });
-    expect(vars.deal).toEqual({ ...FORMAT_2_13.player.call.vars.deal, price: 1000 });
-    expect(vars.town).toEqual(FORMAT_2_13.player.call.vars.town);
+    expect(vars.deal).toEqual({ ...FORMAT_2_18.player.call.vars.deal, price: 1000 });
+    expect(vars.town).toEqual(FORMAT_2_18.player.call.vars.town);
     expect(line.vars.prices.goods).toEqual([{ good: 'salt', buy: cents(31), sell: 700 }]);
-    expect(line.vars.far).toEqual(FORMAT_2_13.player.call.line.vars.far);
-    expect(line.text).toBe(FORMAT_2_13.player.call.line.text);
+    expect(line.vars.far).toEqual(FORMAT_2_18.player.call.line.vars.far);
+    expect(line.text).toBe(FORMAT_2_18.player.call.line.text);
   });
 
   it('turns driver wallets and pile bases into cents and keeps fuel, memories and stock', () => {
-    expect(next.vehicles[0]).toEqual(FORMAT_2_13.vehicles[0]);
-    expect(next.vehicles[1]).toEqual({ ...FORMAT_2_13.vehicles[1], resources: { ...FORMAT_2_13.vehicles[1].resources, money: cents(1250) } });
+    expect(next.vehicles[0]).toEqual(FORMAT_2_18.vehicles[0]);
+    expect(next.vehicles[1]).toEqual({ ...FORMAT_2_18.vehicles[1], resources: { ...FORMAT_2_18.vehicles[1].resources, money: cents(1250) } });
     expect(next.removed[0].resources.money).toBe(233);
-    expect(next.salvage[0]).toEqual(FORMAT_2_13.salvage[0]);
-    expect(next.salvage[1].pile).toEqual({ ...FORMAT_2_13.salvage[1].pile, basis: { salt: 750 } });
+    expect(next.salvage[0]).toEqual(FORMAT_2_18.salvage[0]);
+    expect(next.salvage[1].pile).toEqual({ ...FORMAT_2_18.salvage[1].pile, basis: { salt: 750 } });
   });
 
   it('turns every fee and price in a deal state into cents and nothing else', () => {
     const data = next.states.map((s) => s.data as Record<string, unknown>);
-    expect(data[0]).toEqual({ ...FORMAT_2_13.states[0].data, fee: cents(55), waived: 0 });
-    expect(data[1]).toEqual({ ...FORMAT_2_13.states[1].data, fee: 600 });
-    expect(data[2]).toEqual({ ...FORMAT_2_13.states[2].data, fee: 2600 });
-    expect(data[3]).toEqual({ ...FORMAT_2_13.states[3].data, price: cents(32) });
-    expect(data[4]).toEqual({ ...FORMAT_2_13.states[4].data, price: cents(22) });
-    expect(next.states[5]).toEqual(FORMAT_2_13.states[5]);
+    expect(data[0]).toEqual({ ...FORMAT_2_18.states[0].data, fee: cents(55), waived: 0 });
+    expect(data[1]).toEqual({ ...FORMAT_2_18.states[1].data, fee: 600 });
+    expect(data[2]).toEqual({ ...FORMAT_2_18.states[2].data, fee: 2600 });
+    expect(data[3]).toEqual({ ...FORMAT_2_18.states[3].data, price: cents(32) });
+    expect(data[4]).toEqual({ ...FORMAT_2_18.states[4].data, price: cents(22) });
+    expect(next.states[5]).toEqual(FORMAT_2_18.states[5]);
   });
 
   it('turns money in events into cents, and scales only money practice amounts', () => {
@@ -346,24 +427,24 @@ describe('save migration 13 to 14', () => {
     expect(e[1].amount).toBeCloseTo(450);
     expect(e[2].amount).toBeCloseTo(1000);
     expect(e[3].amount).toBeCloseTo(300);
-    expect(e[4]).toEqual(FORMAT_2_13.events[4]);
+    expect(e[4]).toEqual(FORMAT_2_18.events[4]);
     expect((e[5].contract as { reward: number }).reward).toBe(5000);
     expect([e[6].fee, e[7].fee, e[8].fee, e[9].fee]).toEqual([cents(55), 600, 2600, 2600]);
     expect(e[10].paid).toBe(cents(22));
     expect(((e[11].state as { data: { price: number } }).data).price).toBe(500);
     expect(e[12].vars).toEqual({ fee: { kind: 'money', amount: 100 } });
-    expect(e[13]).toEqual(FORMAT_2_13.events[13]);
-    for (const [i, ev] of e.entries()) if (ev.t === 'practice') expect(ev.xp, `event ${i}`).toBe(FORMAT_2_13.events[i].xp);
+    expect(e[13]).toEqual(FORMAT_2_18.events[13]);
+    for (const [i, ev] of e.entries()) if (ev.t === 'practice') expect(ev.xp, `event ${i}`).toBe(FORMAT_2_18.events[i].xp);
   });
 
   it('keeps the turn and touches nothing outside money', () => {
-    expect(next.turn).toBe(FORMAT_2_13.turn);
-    expect(next.player.fuel).toBe(FORMAT_2_13.player.fuel);
+    expect(next.turn).toBe(FORMAT_2_18.turn);
+    expect(next.player.fuel).toBe(FORMAT_2_18.player.fuel);
   });
 
   it('throws on a money field that is not a number', () => {
-    const bad = { ...structuredClone(FORMAT_2_13), player: { ...structuredClone(FORMAT_2_13.player), money: 'x' } };
-    expect(() => MIGRATIONS[13](bad)).toThrow(/player money/);
+    const bad = { ...structuredClone(FORMAT_2_18), player: { ...structuredClone(FORMAT_2_18.player), money: 'x' } };
+    expect(() => MIGRATIONS[18](bad)).toThrow(/player money/);
   });
 
   // A money-named key in the saved shape that the step neither converts nor lists here as not money stays in the old

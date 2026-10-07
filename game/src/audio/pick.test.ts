@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { loudestAt, pickVariant, spatial, VoiceLimiter } from "./pick";
+import { loudestAt, pickVariant, shuffled, spatial, VoiceLimiter } from "./pick";
+
+describe("shuffled", () => {
+  it("reorders a copy by its rolls and keeps every item", () => {
+    const items = ["a", "b", "c", "d"];
+    expect(shuffled(items, () => 0)).toEqual(["b", "c", "d", "a"]);
+    expect(shuffled(items, () => 0.99)).toEqual(items);
+    expect(items).toEqual(["a", "b", "c", "d"]);
+  });
+});
 
 describe("pickVariant", () => {
   it("never repeats the last variant", () => {

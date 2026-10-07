@@ -199,7 +199,7 @@ describe('auto patch and promised parts', () => {
     addGoods(w, me, 'parts', held);
     const other = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 5, y: 0 }, 0);
     const [holder, client] = playerIsPatcher ? [me, other] : [other, me];
-    const data = { kind: 'patch' as const, deal, parts: 2, price: 333, work: 4, workLeft: 4 };
+    const data = { kind: 'patch' as const, deal, parts: 2, partIds: [], price: 333, work: 4, workLeft: 4 };
     return { w, me, add: () => addState(w, 'patch', holder.id, client.id, data) };
   }
 

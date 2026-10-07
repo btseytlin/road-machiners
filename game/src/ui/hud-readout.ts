@@ -8,8 +8,9 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { baseGrid, corePart, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
-import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
+import { corePart, mountedItems, itemSize } from "../sim/grid";
+import { fuelCap, gunDraw, hasWorkingEngine, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
+import { fuelLimit } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
@@ -19,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kph, moneyAmount } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyAmount } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -27,7 +28,7 @@ import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedListNear, emptySalvageNear, lootBlockerHere, salvageListNear } from '../sim/locations';
-import { canLootTruck, canReachSalvage } from '../sim/salvage';
+import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
@@ -103,7 +104,7 @@ function getSiteActions(world: World): ContextAction[] {
   actions.push(...stocks.map((stock) => getStockAction(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
-    if (empty) actions.push({ label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left', target: { kind: 'empty' } });
+    if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
   }
   return actions;
 }
@@ -113,16 +114,37 @@ function getStockAction(world: World, stock: SalvageStock): ContextAction {
   const target = { kind: 'stock', id: stock.id } as const;
   const searched = world.player.scavenged.includes(stock.id);
   const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: `${searched ? 'Loot' : 'Search'} ${getSalvageName(stock)}`, ready: false, hint: `${blocker.name} is looting it`, target };
+  if (blocker) return { label: stockLabel(searched ? 'Loot' : 'Search', stock), ready: false, hint: `${blocker.name} is looting it`, target };
   const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: `Loot ${getSalvageName(stock)}`, ready: reachable, target };
+  if (searched) return { label: stockLabel('Loot', stock), ready: reachable, target };
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: `Search ${getSalvageName(stock)}`, ready: combat === undefined && reachable, combat, target };
+  return { label: stockLabel('Search', stock), ready: combat === undefined && reachable, combat, target };
 }
 
-function getSalvageName(stock: SalvageStock): string {
-  if (stock.pile) return 'the pile';
-  return REGION.locations.find((site) => site.id === stock.id)?.name ?? 'the wreck';
+// The verb alone at a loot spot that has no name, else the verb and the stock's name.
+function stockLabel(verb: 'Search' | 'Loot', stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? verb : `${verb} ${name}`;
+}
+
+function emptyLabel(stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? 'Picked clean' : `${name} is picked clean`;
+}
+
+// What the prompt calls the stock, or null for a loot spot that is no wreck: a farmhouse or a hangar needs no name.
+function getSalvageName(stock: SalvageStock): string | null {
+  const place = salvagePlace(stock);
+  if (place === 'pile') return 'the pile';
+  if (place === 'wreck') return 'the wreck';
+  if (place === 'spot') return null;
+  return siteName(stock.id);
+}
+
+function siteName(id: string): string {
+  const site = REGION.locations.find((l) => l.id === id);
+  if (!site) throw new Error(`Unknown site ${id}`);
+  return site.name;
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
@@ -137,24 +159,10 @@ function getConditionState(ratio: number): string {
   return ratio < 1 ? "damaged" : "healthy";
 }
 
-// Armor edge cells with no armor mounted on them: the stripped spots of a truck.
-export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
-  const covered = new Set<string>();
-  for (const item of mountedItems(vehicle, "armor")) {
-    const { w, h } = itemSize(item);
-    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) covered.add(`${item.x + dx},${item.y + dy}`);
-  }
-  const open: { x: number; y: number }[] = [];
-  baseGrid(vehicle.chassisId).cells.forEach((row, y) =>
-    row.forEach((cell, x) => {
-      if (cell && MOUNT_CELLS.armor.includes(cell) && !covered.has(`${x},${y}`)) open.push({ x, y });
-    }));
-  return open;
-}
 
 // The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
-  return part.percent === 0 ? `${part.name} · broken` : `${part.name} · ${part.percent}%`;
+  return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
 }
 
 export class TruckConditionReadout {
@@ -180,6 +188,7 @@ export class TruckConditionReadout {
           id: item.part.id,
           name: def.name,
           icon: getConditionIcon(def),
+          defId: def.id,
           x: item.x,
           y: item.y,
           ...itemSize(item),
@@ -256,6 +265,108 @@ function townName(id: string): string {
   return town.name;
 }
 
+// Max-speed rows and the power chip: the sim's steps and power facts, worded tersely for the HUD tooltip and the truck headers.
+// Each row shows its cause, its effect and the running km/h. The last row is the total the HUD shows.
+export type SpeedRow = { label: string; effect: string; kph: number; total: boolean };
+
+export type PowerChip = { text: string; detail: string; over: boolean };
+
+const MINUS = '−';
+
+function signed(n: number, unit: string): string {
+  return `${n < 0 ? MINUS : '+'}${Math.abs(n)}${unit}`;
+}
+
+function percent(factor: number): string {
+  const pct = Math.round((factor - 1) * 100);
+  return pct === 0 ? '0%' : signed(pct, '%');
+}
+
+// Power figures in the same one-decimal style as the item cards.
+export function powerNumber(n: number): string {
+  return String(Number(n.toFixed(1)));
+}
+
+type Kind<K extends SpeedStep['kind']> = Extract<SpeedStep, { kind: K }>;
+type Words = { label: string; effect: (deltaKph: number) => string };
+// What each step is called and how its effect reads. A new step kind fails typecheck until it has an entry here.
+type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: string) => Words };
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+const byKph = (delta: number) => signed(delta, ' km/h');
+const byFactor = (factor: number) => () => percent(factor);
+
+const WORDING: Wording = {
+  chassis: () => ({ label: 'Chassis', effect: () => 'base' }),
+  engine: (s) => ({ label: s.worn ? 'Engine worn' : 'Engine', effect: byKph }),
+  load: (s) => ({ label: `Load ${kg(s.mass)} / ${kg(s.rated)}`, effect: byFactor(s.factor) }),
+  wheels: (s) => ({ label: plural(s.broken, 'broken wheel'), effect: byFactor(s.factor) }),
+  guns: (s) => ({ label: `Gun power ${powerNumber(s.draw)} / ${powerNumber(s.capacity)}`, effect: byFactor(s.factor) }),
+  floor: () => ({ label: 'Minimum speed', effect: byKph }),
+  overdrive: (s) => ({ label: 'Overdrive', effect: byFactor(s.factor) }),
+  transmission: () => ({ label: 'Broken transmission: crawl', effect: byKph }),
+  limp: (s) => ({ label: { noEngine: 'No engine: crawl', brokenEngine: 'Engine broken: crawl', stalled: 'Engine stalled: pushed at crawl speed' }[s.cause], effect: () => 'crawl' }),
+  weather: (s, weather) => ({ label: `Weather: ${weather}`, effect: byFactor(s.factor) }),
+  towing: (s) => ({ label: 'Towing', effect: byFactor(s.factor) }),
+};
+
+// One row per step, each with its effect and the running km/h of the rounded speed, so the rows chain to the total.
+// weather is the HUD's label for the weather at the truck.
+export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
+  return steps.map((step, i) => {
+    const words = (WORDING[step.kind] as (step: SpeedStep, weather: string) => Words)(step, weather);
+    const speed = kph(step.speed);
+    return { label: words.label, effect: words.effect(i === 0 ? 0 : speed - kph(steps[i - 1].speed)), kph: speed, total: i === steps.length - 1 };
+  });
+}
+
+// Short notes for what the number leaves out: a low or empty tank, and how gun power works.
+export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
+  const notes: string[] = [];
+  const driving = steps.some((s) => s.kind === 'guns');
+  if (driving) {
+    notes.push(
+      `Guns draw engine power, and the draw is not a mounting limit. As the draw nears the engine's capacity, top speed and acceleration fall faster: the first guns cost little, and from full capacity on the cost stays at ${Math.round((1 - RULES.gunDragMax) * 100)}%. It is one total, not a cost per gun.`,
+    );
+  }
+  const fuel = fuelLimit(w, v, driving);
+  if (fuel === 'low') notes.push(`Low fuel: ${percent(RULES.lowFuelSpeedFactor)} on the road, not counted`);
+  if (fuel === 'empty') notes.push('Empty tank: crawl, not counted');
+  return notes;
+}
+
+// The guns step, and the speed before it. Null while a stalled or missing engine skips the engine path.
+function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | null {
+  const i = steps.findIndex((s) => s.kind === 'guns');
+  const step = steps[i];
+  return step?.kind === 'guns' ? { step, before: steps[i - 1].speed } : null;
+}
+
+// What the draw costs: the short chip text and the full-sentence form.
+function gunCost(steps: SpeedStep[]): { short: string; long: string } {
+  const guns = gunStep(steps);
+  if (!guns) return { short: 'no speed cost while stalled', long: 'none while stalled' };
+  const lost = kph(guns.before) - kph(guns.step.speed);
+  if (lost === 0) return { short: 'no speed cost', long: 'none' };
+  const pct = `${percent(guns.step.factor)} speed`;
+  return { short: pct, long: `${pct}, ${MINUS}${lost} km/h` };
+}
+
+// The header chip: working-gun draw against engine capacity, and what the draw costs in top speed.
+export function powerChip(steps: SpeedStep[], v: Vehicle): PowerChip {
+  const capacity = workingEngineCapacity(v);
+  if (capacity === null) {
+    return { text: 'No working engine', detail: 'No working engine: guns cost no speed.', over: false };
+  }
+  const draw = gunDraw(v);
+  const over = draw > capacity;
+  const balance = over ? `over by ${powerNumber(draw - capacity)}` : `${powerNumber(capacity - draw)} spare`;
+  const cost = gunCost(steps);
+  const detail = `Guns draw ${powerNumber(draw)} of ${powerNumber(capacity)} power, ${balance}. Cost: ${cost.long}.`;
+  const text = `${powerNumber(draw)} / ${powerNumber(capacity)} power${over ? `, ${balance}` : ''}, ${cost.short}`;
+  return { text, detail, over };
+}
+
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
   const capacity = fuelCap(me);
@@ -263,9 +374,12 @@ export function getHudReadout(w: World) {
   const maxHealth = maxHealthOf(w);
   const heat = heatAt(w, me.pos);
   const weather = weatherLabel(w, me.pos);
+  const steps = maxSpeedSteps(w, me);
   return {
     speed: String(kph(me.speed)),
-    maxSpeed: String(kph(vehicleStats(w, me).maxSpeed)),
+    maxSpeed: String(kph(steps[steps.length - 1].speed)),
+    maxSpeedRows: speedRows(weather, steps),
+    maxSpeedNotes: speedNotes(w, me, steps),
     manual: me.direct,
     clock: clockLabel(w.turn),
     resources: [

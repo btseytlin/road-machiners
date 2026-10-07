@@ -6,17 +6,18 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
-import { goodsCount } from './grid';
+import { corePart, goodsCount, mountedItems } from './grid';
 import { stowPart } from './inventory';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld, npcBrain, practiceOf } from './testkit';
-import type { Vehicle, World } from './types';
-import { update } from './world';
+import { addVehicle, emptyWorld, npcBrain, practiceOf, testDrive } from './testkit';
+import { vehicleStats } from './stats';
+import { fireWeapons, resolveDestroyed } from './combat';
+import type { GameEvent, Vehicle, World } from './types';
+import { endTurn, update } from './world';
 import {
   acceptContract,
   advanceContracts,
   advanceShops,
-  bountyFulfilled,
   bountyReward,
   deliverContract,
   goodValue,
@@ -29,6 +30,7 @@ import {
   haulWindow,
   initializeShops,
   isExpired,
+  playerDefeats,
   partPristineBuyPrice,
   rollContract,
   vehicleValue,
@@ -284,31 +286,106 @@ describe('isExpired', () => {
   });
 });
 
-describe('bountyFulfilled', () => {
-  it('is true for the player\'s kill of any truck of the template', () => {
+describe('bounty settlement', () => {
+  const held = (id: string, template = 'buggy', shop = 'bowl'): Contract =>
+    ({ id, shop, kind: 'bounty', template, targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 });
+
+  // Settles one turn whose events are the given defeats, of trucks still in the world or removed this turn.
+  function settle(w: World, contracts: Contract[], events: GameEvent[], removed: Vehicle[] = []): World {
+    return update(w, (d) => {
+      d.player.contracts = contracts;
+      d.removed = removed;
+      d.events = events;
+      advanceContracts(d);
+    });
+  }
+
+  const done = (w: World) => w.events.flatMap((e) => (e.t === 'contract' && e.outcome === 'done' ? [e.contract.id] : []));
+
+  it('counts the player\'s kill of any truck of the template', () => {
     const w = emptyWorld();
     const outrider = addRaider(w, 'buggy');
     const other = addRaider(w, 'warband');
-    const c = { kind: 'bounty', template: 'buggy' } as Contract;
     const kill = (v: Vehicle, by: string) => {
       w.removed = [v];
       w.events = [{ t: 'destroyed', vehicle: v.id, by }];
-      return bountyFulfilled(w, c);
+      return playerDefeats(w);
     };
-    expect(kill(outrider, w.player.vehicleId)).toBe(true);
-    expect(kill(outrider, 'other-npc')).toBe(false);
-    expect(kill(other, w.player.vehicleId)).toBe(false);
+    expect(kill(outrider, w.player.vehicleId)).toEqual(new Map([['buggy', 1]]));
+    expect(kill(outrider, 'other-npc')).toEqual(new Map());
+    expect(kill(other, w.player.vehicleId)).toEqual(new Map([['warband', 1]]));
   });
 
-  it('is true for the player\'s knockout of a truck of the template, which stays in the world', () => {
+  it('counts the player\'s knockout of a truck of the template, which stays in the world', () => {
     const w = emptyWorld();
     const outrider = addRaider(w, 'buggy');
-    const c = { kind: 'bounty', template: 'buggy' } as Contract;
     w.removed = [];
     w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: 'other-npc' }];
-    expect(bountyFulfilled(w, c)).toBe(false);
+    expect(playerDefeats(w)).toEqual(new Map());
     w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: w.player.vehicleId }];
-    expect(bountyFulfilled(w, c)).toBe(true);
+    expect(playerDefeats(w)).toEqual(new Map([['buggy', 1]]));
+  });
+
+  it('two knockouts in one turn finish two held bounties from two shops, each paid once', () => {
+    const w = emptyWorld();
+    const a = addRaider(w, 'buggy');
+    const b = addRaider(w, 'buggy', { x: 20, y: 5 });
+    const me = w.player.vehicleId;
+    const after = settle(w, [held('b1', 'buggy', 'bowl'), held('b2', 'buggy', 'nose')], [
+      { t: 'npcKnockout', vehicle: a.id, by: me },
+      { t: 'npcKnockout', vehicle: b.id, by: me },
+    ]);
+    expect(done(after)).toEqual(['b1', 'b2']);
+    expect(after.player.money).toBe(w.player.money + 200);
+    expect(after.player.contracts).toEqual([]);
+  });
+
+  it('one knockout finishes only the first held bounty', () => {
+    const w = emptyWorld();
+    const a = addRaider(w, 'buggy');
+    addRaider(w, 'buggy', { x: 20, y: 5 });
+    const after = settle(w, [held('b1'), held('b2')], [{ t: 'npcKnockout', vehicle: a.id, by: w.player.vehicleId }]);
+    expect(done(after)).toEqual(['b1']);
+    expect(after.player.contracts.map((c) => c.id)).toEqual(['b2']);
+  });
+
+  it('a wreck of a truck already lying defeated or heading home finishes nothing, and of one still fighting finishes one', () => {
+    for (const phase of ['out', 'retreat'] as const) {
+      const w = emptyWorld();
+      const a = addRaider(w, 'buggy');
+      addRaider(w, 'buggy', { x: 20, y: 5 });
+      a.defeat = { phase, turns: 0, unseen: 0, foes: [], gaveUp: false };
+      w.vehicles = w.vehicles.filter((v) => v.id !== a.id);
+      const after = settle(w, [held('b1')], [{ t: 'destroyed', vehicle: a.id, by: w.player.vehicleId }], [a]);
+      expect(done(after)).toEqual([]);
+      delete a.defeat;
+      expect(done(settle(w, [held('b1')], [{ t: 'destroyed', vehicle: a.id, by: w.player.vehicleId }], [a]))).toEqual(['b1']);
+    }
+  });
+
+  it('a defeat of another template, or by another truck or a guard, finishes nothing', () => {
+    const w = emptyWorld();
+    const gunwagon = addRaider(w, 'gunwagon');
+    const outrider = addRaider(w, 'buggy', { x: 20, y: 5 });
+    expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: gunwagon.id, by: w.player.vehicleId }]))).toEqual([]);
+    expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: outrider.id, by: 'other-npc' }]))).toEqual([]);
+    expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: outrider.id, by: 'guard-bowl' }]))).toEqual([]);
+  });
+
+  it('a bounty fulfilled on its deadline turn is done, and one past it fails', () => {
+    const w = emptyWorld();
+    const outrider = addRaider(w, 'buggy');
+    w.turn = 900;
+    expect(done(settle(w, [held('b1')], [{ t: 'npcKnockout', vehicle: outrider.id, by: w.player.vehicleId }]))).toEqual(['b1']);
+    w.turn = 901;
+    const late = settle(w, [held('b1')], []);
+    expect(late.events).toContainEqual(expect.objectContaining({ t: 'contract', outcome: 'failed' }));
+  });
+
+  it('throws on a defeat of a truck in neither list', () => {
+    const w = emptyWorld();
+    w.events = [{ t: 'npcKnockout', vehicle: 'ghost', by: w.player.vehicleId }];
+    expect(() => playerDefeats(w)).toThrow(/ghost/);
   });
 });
 
@@ -486,7 +563,7 @@ describe('contract boards and delivery', () => {
     expect(lapsed.player.contracts).toHaveLength(0);
   });
 
-  it('pays out at most one held bounty per kill of the same template', () => {
+  it('pays one held bounty for one kill of the same template', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
     const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, window: 900, tier: 2 });
@@ -547,5 +624,69 @@ describe('contract boards and delivery', () => {
     let w = atBowlWithOffer(haul('nose', 3));
     w = update(w, (d) => { d.turn = 501; });
     expect(() => acceptContract(w, 'ct-haul')).toThrow(/expired/);
+  });
+});
+
+describe('bounties in a real fight', () => {
+  const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 });
+  const contractEvents = (w: World) => w.events.filter((e) => e.t === 'contract');
+
+  // A raider one hit from breaking its cab, shot at by the player and a Bowl Farmers lawman in the same turn.
+  function sharedFight(seed: number) {
+    const w = emptyWorld();
+    w.rngState = seed;
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const ally = addVehicle(w, 'bowl', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 33 }, -Math.PI / 2);
+    ally.brain = npcBrain('bowlFarmer', ally.pos, ['lawman']);
+    for (const it of mountedItems(raider)) if (it.part.id !== corePart(raider, 'cab').id && it.part.defId !== 'stockEngine') it.part.hp = 0;
+    corePart(raider, 'cab').hp = 1;
+    me.weaponOrders[vehicleStats(w, me).weapons[0].part.id] = { targetId: raider.id, aim: corePart(raider, 'cab').id };
+    ally.weaponOrders[vehicleStats(w, ally).weapons[0].part.id] = { targetId: raider.id, aim: 'body' };
+    w.player.contracts = [bounty('b1'), bounty('b2')];
+    return { w, raider, ally };
+  }
+
+  // The first seed whose shots end with the player credited for knocking the raider out while the lawman also hit it.
+  // The fire, fate and settlement steps of the turn run alone, so the lawman's gun stays on the raider.
+  function playerKnockout() {
+    for (let seed = 1; seed <= 40; seed++) {
+      const { w, raider, ally } = sharedFight(seed * 7919);
+      const after = update(w, (d) => {
+        fireWeapons(d);
+        resolveDestroyed(d);
+        advanceContracts(d);
+      });
+      const allyHit = after.events.some((e) => e.t === 'shot' && e.shooter === ally.id && e.rounds.some((r) => r.struck === raider.id && r.hits.some((h) => h.damage > 0)));
+      const ko = after.events.some((e) => e.t === 'npcKnockout' && e.vehicle === raider.id && e.by === w.player.vehicleId);
+      if (allyHit && ko) return { w, after, raider };
+    }
+    throw new Error('No seed gives a shared knockout');
+  }
+
+  it('a shared fight the player wins finishes one held bounty that turn, and the next turn pays nothing more', () => {
+    const { w, after } = playerKnockout();
+    expect(contractEvents(after).map((e) => e.t === 'contract' && [e.contract.id, e.outcome])).toEqual([['b1', 'done']]);
+    expect(after.player.money).toBe(w.player.money + 100);
+    const next = endTurn(after, testDrive);
+    expect(contractEvents(next)).toEqual([]);
+    expect(next.player.money).toBe(after.player.money);
+  });
+
+  it('shooting the knocked-out raider into a wreck pays no second held bounty', () => {
+    const { after: out, raider } = playerKnockout();
+    let w = out;
+    const money = w.player.money;
+    for (let turn = 0; turn < 30 && w.vehicles.some((v) => v.id === raider.id); turn++) {
+      w = update(w, (d) => {
+        const me = playerVehicle(d);
+        me.weaponOrders[vehicleStats(d, me).weapons[0].part.id] = { targetId: raider.id, aim: 'body' };
+      });
+      w = endTurn(w, testDrive);
+      expect(contractEvents(w).filter((e) => e.t === 'contract' && e.outcome === 'done')).toEqual([]);
+    }
+    expect(w.vehicles.some((v) => v.id === raider.id)).toBe(false);
+    expect(w.player.money).toBe(money);
   });
 });
