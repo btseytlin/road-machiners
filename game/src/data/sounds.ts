@@ -216,7 +216,7 @@ export const MIX = {
     { at: 1.5, rate: 0.9, gain: 0 },
   ],
   // Wind bed: a base level, rising near dust storms.
-  wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
+  wind: { baseGain: 0.4, stormGain: 1, fadeSeconds: 1 },
   // Music crossfades to combat while the player is in combat, as the sim's combat state defines it.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.

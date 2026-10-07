@@ -6,7 +6,7 @@ import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, writeSave } from './save';
+import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, SaveQuotaError, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
@@ -54,10 +54,10 @@ describe('local game save', () => {
   it('saves a command on a town pad at once, and not out in the open', () => {
     const storage = makeStorage();
     const open = emptyWorld({ x: 30, y: 30 });
-    saveInTown(storage, open, 1000);
+    saveInTown(storage, open, 1000, () => {});
     expect(hasSave(storage, SLOTS)).toBe(false);
     const inTown = emptyWorld(sitePads(REGION.towns[0])[0]);
-    saveInTown(storage, inTown, 1000);
+    saveInTown(storage, inTown, 1000, () => {});
     expect(hasSave(storage, SLOTS)).toBe(true);
   });
 
@@ -132,7 +132,7 @@ describe('local game save', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const expanded = { ...world, futureFeature: { progress: 7 } };
-    saveWorld(storage, { ...expanded, turn: 21 }, 20, 1000);
+    saveWorld(storage, { ...expanded, turn: 21 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'auto', TEST_MAP)).toEqual({ ...expanded, turn: 21 });
   });
 
@@ -246,23 +246,23 @@ describe('local game save', () => {
   it('saves only after each twentieth completed turn', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    saveWorld(storage, { ...world, turn: 20 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 20 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'auto', TEST_MAP)).toBeNull();
-    saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'auto', TEST_MAP)?.turn).toBe(21);
-    saveWorld(storage, { ...world, turn: 22 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 22 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'auto', TEST_MAP)?.turn).toBe(21);
-    saveWorld(storage, { ...world, turn: 41 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 41 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'auto', TEST_MAP)?.turn).toBe(41);
   });
 
   it('never saves a dead world', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
     const previous = storage.getItem('roam.save');
     const dead = { ...world, turn: 41, player: { ...world.player, health: 0, state: 'dead' as const } };
-    saveWorld(storage, dead, 20, 1000);
+    saveWorld(storage, dead, 20, 1000, () => {});
     expect(storage.getItem('roam.save')).toBe(previous);
     expect(() => writeSave(storage, 'auto', dead, 1000)).toThrow(/dead/);
     expect(storage.getItem('roam.save')).toBe(previous);
@@ -271,16 +271,16 @@ describe('local game save', () => {
   it('rejects an invalid interval instead of skipping saves', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    expect(() => saveWorld(storage, world, 0, 1000)).toThrow(/interval/);
+    expect(() => saveWorld(storage, world, 0, 1000, () => {})).toThrow(/interval/);
   });
 
   it('leaves the last save intact when storage rejects a write', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
     const previous = storage.getItem('roam.save');
     storage.setItem = () => { throw new Error('Quota exceeded'); };
-    expect(() => saveWorld(storage, { ...world, turn: 41 }, 20, 1000)).toThrow(/Quota exceeded/);
+    expect(() => saveWorld(storage, { ...world, turn: 41 }, 20, 1000, () => {})).toThrow(/Quota exceeded/);
     expect(storage.getItem('roam.save')).toBe(previous);
   });
 
@@ -290,7 +290,7 @@ describe('local game save', () => {
     const npc = world.vehicles.find((v) => v.brain);
     if (!npc?.brain) throw new Error('The start world needs an NPC');
     npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }] };
-    saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
     expect(JSON.parse(storage.getItem('roam.save')!).world).not.toHaveProperty('terrain');
     const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
     expect(loaded).toEqual({ ...world, turn: 21 });
@@ -311,18 +311,18 @@ describe('local game save', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     expect([319, 320, 321, 770].map(isDayStart)).toEqual([false, true, false, true]);
-    saveWorld(storage, { ...world, turn: 319 }, 20, 1000);
-    saveWorld(storage, { ...world, turn: 321 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 319 }, 20, 1000, () => {});
+    saveWorld(storage, { ...world, turn: 321 }, 20, 1000, () => {});
     expect(storage.getItem('roam.save:day')).toBeNull();
-    saveWorld(storage, { ...world, turn: 320 }, 20, 1000);
+    saveWorld(storage, { ...world, turn: 320 }, 20, 1000, () => {});
     expect(loadWorld(storage, 'day', TEST_MAP)?.turn).toBe(320);
   });
 
   it('writes only the autosave on the interval and in town, and never a manual slot', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
-    saveInTown(storage, emptyWorld(sitePads(REGION.towns[0])[0]), 1000);
+    saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
+    saveInTown(storage, emptyWorld(sitePads(REGION.towns[0])[0]), 1000, () => {});
     const written = SLOTS.filter((slot: SlotId) => hasSave(storage, [slot]));
     expect(written).toEqual(['auto']);
   });
@@ -331,7 +331,7 @@ describe('local game save', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const dead = { ...world, turn: 320, player: { ...world.player, health: 0, state: 'dead' as const } };
-    saveWorld(storage, dead, 20, 1000);
+    saveWorld(storage, dead, 20, 1000, () => {});
     expect(hasSave(storage, SLOTS)).toBe(false);
   });
 
@@ -433,5 +433,34 @@ describe('SaveHold', () => {
     hold.finishTurn();
     hold.noteError();
     expect(hold.held).toBe(true);
+  });
+});
+
+describe('full local storage', () => {
+  function fullStorage(): Storage {
+    const storage = makeStorage();
+    storage.setItem = () => { throw new DOMException('quota', 'QuotaExceededError'); };
+    return storage;
+  }
+
+  it('keeps the old save, and other keys, when a write hits the quota', () => {
+    const storage = makeStorage();
+    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 21 };
+    writeSave(storage, 'auto', world, 1000);
+    storage.setItem('roam.sound', 'x');
+    const full = fullStorage();
+    full.getItem = storage.getItem;
+    expect(() => writeSave(full, 'auto', { ...world, turn: 22 }, 2000)).toThrow(SaveQuotaError);
+    expect(loadWorld(storage, 'auto', TEST_MAP)).toEqual(world);
+    expect(storage.getItem('roam.sound')).toBe('x');
+  });
+
+  it('lets automatic saves report the failure instead of throwing', () => {
+    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 21 };
+    let full = 0;
+    saveWorld(fullStorage(), world, 20, 1000, () => full++);
+    saveWorld(fullStorage(), { ...world, turn: 22 }, 20, 1000, () => full++);
+    saveInTown(fullStorage(), world, 1000, () => full++);
+    expect(full).toBe(1);
   });
 });

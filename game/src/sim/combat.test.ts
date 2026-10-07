@@ -13,7 +13,7 @@ import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, settleStorms, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { PHYSICS } from '../data/physics';
@@ -689,7 +689,8 @@ describe('aim perks', () => {
 
   // A storm over both trucks.
   const storm = (w: World) => {
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
+    settleStorms(w);
   };
 
   it('storm rider takes the storm scatter away from the player', () => {
@@ -837,7 +838,7 @@ describe('who beat a truck', () => {
   }
 
   function shotAt(shooter: string, target: string, part: string, damage: number): GameEvent {
-    return { t: 'shot', shooter, weapon: 'gun', target, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [{ hit: true, crit: false, offset: 0, struck: target, hits: [{ part, damage }], blast: [] }] };
+    return { t: 'shot', shooter, weapon: 'gun', target, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [{ hit: true, crit: false, offset: 0, struck: target, hits: [{ part, damage }], blast: [], burst: null }] };
   }
 
   it('the player who dealt the most damage in the final turn gets the knockout, though a lawman hit last', () => {
@@ -886,7 +887,7 @@ describe('who beat a truck', () => {
   it('a guard shot counts for its gate, a ram for the other truck, and a crash into a rock for nobody', () => {
     const { w, me, buggy } = duel();
     const cab = corePart(buggy, 'cab').id;
-    w.events.push({ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: buggy.id, rounds: [{ hit: true, crit: false, offset: 0, struck: buggy.id, hits: [{ part: cab, damage: 6 }], blast: [] }] });
+    w.events.push({ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: buggy.id, rounds: [{ hit: true, crit: false, offset: 0, struck: buggy.id, hits: [{ part: cab, damage: 6 }], blast: [], burst: null }] });
     w.events.push({ t: 'collision', a: me.id, b: buggy.id, hitsA: [], hitsB: [{ part: cab, damage: 4 }] });
     w.events.push({ t: 'collision', a: buggy.id, b: 'rock', hitsA: [{ part: cab, damage: 20 }], hitsB: [] });
     expect(beatenBy(w, buggy)).toBe('guard-bowl');

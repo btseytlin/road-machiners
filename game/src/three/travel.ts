@@ -3,15 +3,17 @@ import {
   restoreDrive,
   type DriveSnapshot,
   restFrames,
+  restWheels,
   trailFrames,
   type Drive,
   type TurnResult,
 } from "../phys/drive";
+import type { VehicleFrame, WheelFrame } from "../phys/frames";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { mergePerf } from "../perf";
 import { reportError } from "./crash";
 import { playerVehicle } from "../sim/damage";
-import type { GameEvent, World } from "../sim/types";
+import type { GameEvent, Vehicle, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
 import { isOnRope, isTowed } from "../sim/tow";
 import { playerSees } from "../sim/vision";
@@ -76,11 +78,16 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
 // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
 // off the rope at the end of the turn, like on arrival in town, rode the rope during the step too. One that
 // jumped this turn, like a retreating truck sent home, has no trail and stands at its new pose.
-export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"]): void {
+export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"], shown: Record<string, VehicleFrame>): void {
   for (const v of after.vehicles) {
     if (!isOnRope(after, v.id) && (frames[v.id] || !isOnRope(before, v.id))) continue;
-    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v);
+    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v, startWheels(v, shown));
   }
+}
+
+// The wheels a rope truck starts the turn with: as last shown, or at rest when nothing of it was shown.
+function startWheels(v: Vehicle, shown: Record<string, VehicleFrame>): WheelFrame[] {
+  return shown[v.id]?.wheels ?? restWheels(v.chassisId);
 }
 
 export function canTravel(world: World): boolean {
@@ -239,10 +246,11 @@ export class Travel {
     prepared: PreparedTurn,
     now: number,
     elapsed: number,
+    shown: Record<string, VehicleFrame>,
   ): { world: World; playback: Playback; towed: boolean } {
     const world = { ...prepared.world, terrain: before.terrain };
     // Frames first: a throw here must not leave a restored Rapier world behind.
-    addRopeFrames(before, world, prepared.result.frames);
+    addRopeFrames(before, world, prepared.result.frames, shown);
     const nextSnapshot = prepared.result.next;
     const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
     if (!playerCanAct(world)) this.pause();
