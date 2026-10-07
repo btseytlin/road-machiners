@@ -1,6 +1,6 @@
 # Stages
 
-The rules of each step in [process.md](process.md). Each card stage comments on its issue when it finishes or fails, with the time it took. Every agent stage that ends with an `.factory/needs-committee.md` fails, so Hermes asks the committee.
+The rules of each step in [process.md](process.md). Each card stage comments on its issue when it finishes or fails, with the time it took. Every agent stage that ends with an `.factory/needs-committee.md` fails, so Hermes asks the committee. Agents write that file only for a game design fork or a major save bump.
 
 ## Intake
 
@@ -14,7 +14,7 @@ Triage runs Sonnet at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear go
 
 - `ready` moves the card to Design and rates its complexity, as Model routing says.
 - `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done.
-- `unclear` comments up to three questions, labels the issue `needs-info` and leaves the card in Triage. The committee chat gets one notice per new question set, with no quotes. The tick removes `needs-info` once someone answers on GitHub, and triage runs again.
+- `unclear` comments up to three questions, labels the issue `needs-info` and leaves the card in Triage. The committee chat gets one notice per new question set, with no quotes. The tick removes `needs-info` once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass since the questions, and triage runs again. Without an answer, triage and design go on with the most sensible reading, and design writes the assumptions into its comment.
 - A request for a new authored location needs a reference image. Without one, triage is `unclear` and asks once for an upload.
 - Triage can label a bug `hotfix` when it loses saves, crashes the game or blocks play. The committee chat gets a warning.
 - Triage can label a card `release-task` when it fixes a feature of the open release. This works only while the release has no candidate post. New work waits for the next release. The release fix runs on the release branch and merges into it.
@@ -142,5 +142,5 @@ Before every agent stage, the host fetches the images of the issue body and ever
 - It takes PNG, JPEG, GIF and WebP from GitHub's attachment hosts, and first-party images at `https://roam-game.online/<name>` or `/concepts/<name>`.
 - It follows redirects only to GitHub's storage hosts, or from a first-party image to another one.
 - Each file is at most 10 MB, and an issue has at most 12.
-- An image that fails to fetch or decode fails the stage before any agent runs, except in a patch. A patch acts on committee text about a build they played, so it lists the image as not available and goes on. An image on another host is listed as not seen.
+- An image that fails to fetch or decode is fetched once more. If it still fails, the prompt lists it as not available, and the agent works from the text and notes what it could not see. No stage fails for it. An image on another host is listed as not seen.
 - The images a member sent in Telegram with a patch or redesign reply are listed too, from `$FACTORY_HOME/media/issue-N/committee/`. They stay private: the issue gets only their type, size and sha256. [process.md](process.md) says how they arrive.

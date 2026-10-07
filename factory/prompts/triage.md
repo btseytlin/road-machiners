@@ -42,7 +42,7 @@ For a new location, look in the issue body and in every comment for a reference 
 A usable reference image is one in the image list at the end of this prompt that is not marked NOT AVAILABLE.
 A verbal description or a link you cannot open is not a reference image.
 - No usable image: the verdict is `unclear`. Ask one short question that asks the author to upload a reference image of the location on the GitHub issue.
-- An image the list marks NOT AVAILABLE: the verdict is `unclear`. Ask one short question that asks the author to upload it again. Never go on with the text alone.
+- An image the list marks NOT AVAILABLE: the verdict is `unclear`. Ask one short question that asks the author to upload it again. Never go on with the text alone, unless the author already got this question and did not answer.
 - A usable image exists, also from an earlier answer: never ask for one again. Score the issue with the normal rubric.
 Never pick `wont-do` only because the image is missing.
 This question counts toward the cap of three questions.
@@ -51,6 +51,11 @@ The author may have answered earlier questions.
 Look in the comments under the heading "Questions from the factory".
 Use those answers.
 Never ask again what they answered.
+A set of questions with no reply after it means the author did not answer in time.
+Never ask those questions again, and never pick `unclear` for them.
+Pick `ready` or `wont-do` on the most sensible reading of the request.
+The reason names each open question and the reading you took, so design can write it down as an assumption.
+This holds for the visual-reference gate too.
 
 For `unclear`, ask at most three questions.
 Each question is one line the author can answer in one line.

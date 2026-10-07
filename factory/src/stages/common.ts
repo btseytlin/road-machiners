@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchMedia, mediaSection, requireMedia } from '../media';
+import { fetchMedia, mediaSection } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
@@ -108,14 +108,18 @@ async function githubToken(ctx: Ctx): Promise<string | undefined> {
 }
 
 // Fetches the images of the issue body and every comment, feedback included, into the issue's media folder, and adds the committee's Telegram images.
-// A failed issue image throws before the agent starts, except in a patch. A patch acts on committee text about a build they played,
-// so a dead image only shows as NOT AVAILABLE. Returns the prompt part that lists the images.
+// A failed image is fetched once more. One that still fails shows as NOT AVAILABLE, and the agent works from the text.
+// Returns the prompt part that lists the images.
 export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
   const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
-  const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
+  const options = { fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined };
+  let entries = await fetchMedia(options);
+  if (entries.some((entry) => entry.status === 'failed')) {
+    ctx.log(stage, issue, 'a reference image failed to fetch, fetching again');
+    entries = await fetchMedia(options);
+  }
   for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
-  if (stage !== 'patch') requireMedia(issue, entries);
   return mediaSection([...entries, ...readCommitteeMedia(mediaDir(ctx, issue))]);
 }
 
