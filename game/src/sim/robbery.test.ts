@@ -11,7 +11,8 @@ import { RULES } from '../data/rules';
 import { SKILL_EFFECTS } from '../data/skills';
 import { isHostile, resolveDestroyed } from './combat';
 import { cargoValue, goodValue } from './market';
-import { checkKnockout } from './defeat';
+import { checkKnockout, knockOutNpc } from './defeat';
+import { playerVehicle } from './damage';
 import { corePart, hasLoot, mountedParts } from './grid';
 import { addState, advanceStates, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere , startCombat } from './testkit';
@@ -701,5 +702,65 @@ describe('stranded robbers', () => {
     const raider = addRaider(w2, { x: 10, y: 10 });
     const loaded = addPrey(w2, { x: 15, y: 10 });
     expect(optionWeights(w2, raider, 'hostileSeen', loaded.id, vehicleDanger(w2, loaded)).fight).toBeGreaterThan(0);
+  });
+});
+
+describe('a guarded driver', () => {
+  // A convoy with goods and its guard beside it, away from towns, and a raider who threatens it.
+  function guardedConvoy() {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 10, y: 10 });
+    convoy.brain = npcBrain('convoy', convoy.pos, ['supplier']);
+    addGoods(w, convoy, 'electronics', 4);
+    const guard = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], { x: 10, y: 13 });
+    guard.brain = npcBrain('convoyGuard', guard.pos, ['guard', 'brave']);
+    startEscort(w, guard, convoy, null, 0);
+    const raider = addScumbag(w, { x: 16, y: 10 }, ['mg', 'stockEngine'], ['raider']);
+    return { w, convoy, guard, raider };
+  }
+  const comply = (w: World, v: Vehicle, by: Vehicle, decision: 'threatened' | 'warnedOff' = 'threatened') =>
+    optionWeights(w, v, decision, by.id, lowest(w, by)).comply!;
+
+  it('hands over its cargo a tenth as often while its escort is in sight', () => {
+    const { w, convoy, guard, raider } = guardedConvoy();
+    const guarded = comply(w, convoy, raider);
+    const warned = comply(w, convoy, raider, 'warnedOff');
+    endState(w, stateOf(w, 'escort', guard.id, convoy.id)!, 'broken');
+    expect(guarded).toBeCloseTo(comply(w, convoy, raider) * NPC_BEHAVIOR.guardedComply);
+    expect(warned).toBeCloseTo(comply(w, convoy, raider, 'warnedOff') * NPC_BEHAVIOR.guardedComply);
+  });
+
+  // Each case compares the same trucks with and without the escort, since a guard nearby also adds to the group
+  // danger the driver weighs.
+  it('does not count an escort out of sight or knocked out', () => {
+    const unguarded = (w: World, convoy: Vehicle, guard: Vehicle) => {
+      const x = cloneWorld(w);
+      endState(x, stateOf(x, 'escort', guard.id, convoy.id)!, 'broken');
+      return x;
+    };
+    const far = guardedConvoy();
+    far.guard.pos = { x: 150, y: 150 };
+    expect(comply(far.w, far.convoy, far.raider)).toBeCloseTo(comply(unguarded(far.w, far.convoy, far.guard), far.convoy, far.raider));
+    const down = guardedConvoy();
+    knockOutNpc(down.w, down.guard);
+    expect(comply(down.w, down.convoy, down.raider)).toBeCloseTo(comply(unguarded(down.w, down.convoy, down.guard), down.convoy, down.raider));
+  });
+
+  it('complies with at most a quarter of its threatened weight when the player threatens it with its guard in sight', () => {
+    const { w, convoy } = guardedConvoy();
+    const me = playerVehicle(w);
+    me.pos = { x: 16, y: 10 };
+    const weights = optionWeights(w, convoy, 'threatened', me.id, lowest(w, me));
+    const total = Object.values(weights).reduce((sum, n) => sum + (n ?? 0), 0);
+    expect(weights.comply! / total).toBeLessThanOrEqual(0.25);
+  });
+
+  it('weighs a player threat the same as an NPC threat', () => {
+    const { w, convoy, guard } = guardedConvoy();
+    const me = playerVehicle(w);
+    me.pos = { x: 16, y: 10 };
+    const guarded = comply(w, convoy, me);
+    endState(w, stateOf(w, 'escort', guard.id, convoy.id)!, 'broken');
+    expect(guarded).toBeCloseTo(comply(w, convoy, me) * NPC_BEHAVIOR.guardedComply);
   });
 });

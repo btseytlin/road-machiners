@@ -67,6 +67,14 @@ describe('triage stage', () => {
     expect(calls.filter((call) => call.startsWith('push') || call.startsWith('message') || call.startsWith('addLabel'))).toEqual([]);
   });
 
+  it('explains the 20/80 model target and the routing effects without replacing the complexity rubric', async () => {
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(prompt).toContain('20% Opus and 80% Sonnet');
+    expect(prompt).toContain('`trivial` moves design to Sonnet');
+    expect(prompt).toContain('`hard` moves implementation to Opus');
+    expect(prompt).toContain('Do not change a complexity rating to chase the target');
+  });
+
   it('labels a hotfix, warns the committee and moves to Design', async () => {
     await runStage(fakeCtx(verdict({ hotfix: true, reason: 'Saves from 0.3 fail to load.' })), 7);
     expect(calls.slice(-4)).toEqual([

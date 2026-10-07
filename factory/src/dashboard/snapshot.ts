@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { ghClient } from '../github';
@@ -7,6 +7,7 @@ import { must } from '../exec';
 import { readState } from '../state';
 import { featureMerges, type Feature } from '../stages/release-common';
 import { DashboardHistory } from './history';
+import { createWorkerKey, readLiveOperations } from './live';
 import { ADHOC_LABEL, QUEUE_OF, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
 import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
 import type { DashboardConfig } from './config';
@@ -14,13 +15,15 @@ import type { HostSampler, HostLoad } from './host';
 
 const runFile = promisify(execFile);
 export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'stale' | 'unavailable' };
-export type Operations = ReturnType<typeof buildOperations>;
+type PauseReason = 'agent-usage-limit' | 'operator';
+export type Operations = ReturnType<typeof buildOperations> & { pauseReason: PauseReason | null };
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
 export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
 export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
 export type Snapshot = {
-  generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string;
+  generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
   operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
+  live: Source<ReturnType<typeof readLiveOperations>>;
 };
 export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
 type ComparePage = { total_commits: number; commits: Commit[] };
@@ -50,7 +53,7 @@ function getFactoryStatus(state: FactoryState, paused: boolean): string {
   return 'idle';
 }
 export function buildOperations(state: FactoryState, paused: boolean, config: Pick<DashboardConfig, 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers' | 'publicUrl'>) {
-  const jobs = state.jobs.map((job) => ({ stage: job.stage, issue: getPublicIssue(job.stage, job.issue), startedAt: job.startedAt, queue: QUEUE_OF[job.stage] }));
+  const jobs = state.jobs.map((job) => ({ key: createWorkerKey(job.id), stage: job.stage, issue: getPublicIssue(job.stage, job.issue), startedAt: job.startedAt, queue: QUEUE_OF[job.stage] }));
   const count = (queue: Queue, total: number) => ({ busy: jobs.filter((job) => job.queue === queue).length, total });
   const candidateUrl = state.release?.postId != null ? `${config.publicUrl}/rc/` : null;
   const release = state.release === null ? null : { issue: state.release.issue, day: state.release.day };
@@ -90,7 +93,8 @@ export class PublicGitHub {
     return selectReleaseFeatures(commits, head, state.release?.removed ?? []);
   }
   private async readComparison(base: string, head: string): Promise<Commit[]> {
-    const pages = JSON.parse(await this.query(['api', `repos/${this.config.repo}/compare/${base}...${head}?per_page=100`, '--paginate', '--slurp'])) as ComparePage[];
+    const output = await this.query(['api', `repos/${this.config.repo}/compare/${base}...${head}?per_page=100`, '--paginate', '--jq', '{total_commits,commits:[.commits[]|{sha,parents:[.parents[]|{sha}],commit:{message:.commit.message}}]}']);
+    const pages = output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as ComparePage);
     const commits = pages.flatMap((page) => page.commits);
     if (!pages.length || commits.length !== pages[0].total_commits) throw new Error('Incomplete GitHub comparison');
     return commits;
@@ -129,22 +133,39 @@ export function createGithubRun(timeoutMs: number, env: NodeJS.ProcessEnv): Run 
   };
 }
 
+function readPauseReason(home: string): PauseReason | null {
+  let note: string;
+  try { note = readFileSync(join(home, 'paused'), 'utf8'); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  return /^Hermes: Claude weekly usage limit(?:[;.\n]|$)/i.test(note) ? 'agent-usage-limit' : 'operator';
+}
+function projectHostResources(host: HostLoad): HostLoad {
+  if (!host.containers?.value) return host;
+  const value = host.containers.value.map((row) => ({ ...row, jobId: row.jobId === null ? null : createWorkerKey(row.jobId) }));
+  return { ...host, containers: { ...host.containers, value } };
+}
+
 export class SnapshotCollector {
   private state: FactoryState | null = null;
   private operations = createSource<Operations>();
   private github = createSource<GithubSnapshot>();
   private analytics = createSource<Analytics>();
   private host = createSource<HostLoad>();
+  private live = createSource<ReturnType<typeof readLiveOperations>>();
   private readonly history: DashboardHistory;
   constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler) {
-    this.history = new DashboardHistory(config.home);
+    this.history = new DashboardHistory(config.home, config.tickIntervalMs);
   }
   private refreshState(): void {
     try {
       const path = join(this.config.home, 'state', 'state.json');
       if (!existsSync(path)) throw new Error('Factory state missing');
       this.state = readState(path);
-      this.operations = recordSuccess(buildOperations(this.state, existsSync(join(this.config.home, 'paused')), this.config));
+      const pauseReason = readPauseReason(this.config.home);
+      this.operations = recordSuccess({ ...buildOperations(this.state, pauseReason !== null, this.config), pauseReason });
     } catch (error) { this.operations = recordFailure(this.operations, 'state', error); }
   }
   private async refreshAnalytics(): Promise<void> {
@@ -152,13 +173,19 @@ export class SnapshotCollector {
       const now = new Date();
       await this.history.refresh(now);
       const ranges = [1, 7, 30].map((days) => this.history.summarize(now, days));
-      this.analytics = recordSuccess({ ranges, posts: this.history.readPosts(now) });
+      this.analytics = recordSuccess({ ranges, posts: this.config.publicChannel === null ? [] : this.history.readPosts(now, this.config.publicChannel) });
     } catch (error) { this.analytics = recordFailure(this.analytics, 'analytics', error); }
+  }
+  private refreshLive(): void {
+    if (this.state === null) return;
+    try { this.live = recordSuccess(readLiveOperations(this.config.home, this.state, new Date(), this.config.observationHeartbeatMs, this.config.tickIntervalMs)); }
+    catch (error) { this.live = recordFailure(this.live, 'observations', error); }
   }
   async refreshLocal(): Promise<void> {
     this.refreshState();
+    this.refreshLive();
     await this.refreshAnalytics();
-    try { this.host = recordSuccess(await this.hostSampler.sample()); }
+    try { this.host = recordSuccess(projectHostResources(await this.hostSampler.sample())); }
     catch (error) { this.host = recordFailure(this.host, 'host', error); }
   }
   async refreshGithub(): Promise<void> {
@@ -170,7 +197,7 @@ export class SnapshotCollector {
     const localBudget = this.config.refreshMs + this.config.commandTimeoutMs;
     return {
       generatedAt: new Date().toISOString(), repoUrl: `https://github.com/${this.config.repo}`, playUrl: this.config.playUrl, channelUrl: this.config.channelUrl,
-      operations: expireSource(this.operations, localBudget), analytics: expireSource(this.analytics, localBudget), host: expireSource(this.host, localBudget),
+      live: expireSource(this.live, localBudget), operations: expireSource(this.operations, localBudget), analytics: expireSource(this.analytics, localBudget), host: expireSource(this.host, localBudget),
       github: expireSource(this.github, this.config.githubRefreshMs + this.config.commandTimeoutMs),
     };
   }

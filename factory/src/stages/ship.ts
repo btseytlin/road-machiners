@@ -75,7 +75,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
   const postId = await ctx.telegram.sendMessage(channel, changelog);
-  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, text: changelog, at: ctx.now().toISOString() });
+  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, channel, text: changelog, at: ctx.now().toISOString() });
   // Only the factory pushes main, so main still holds the release merge here.
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));

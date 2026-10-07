@@ -1,0 +1,34 @@
+{
+  "turn": 1000,
+  "vehicles": [
+    {
+      "id": "retreating",
+      "chassisId": "buggy",
+      "defeat": {
+        "phase": "retreat",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ],
+        "gaveUp": true
+      },
+      "brain": {
+        "templateId": "buggy",
+        "goals": [
+          {
+            "kind": "retreat",
+            "targetId": "kiln",
+            "destination": {
+              "x": 100,
+              "y": 100
+            },
+            "phase": "travel",
+            "reason": "retreat home after a defeat"
+          }
+        ]
+      }
+    }
+  ],
+  "removed": []
+}
