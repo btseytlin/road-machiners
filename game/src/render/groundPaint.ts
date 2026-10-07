@@ -122,29 +122,14 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
-// Discs of worn ground painted under locations, in paint order. A location with an outline gets none: its edge is
-// not a circle, and its own marks show its ground.
-export function groundDiscs(): { id: string; pos: Vec; radius: number; style: string }[] {
-  return REGION.locations
-    .filter((l) => !("outline" in l && l.outline))
-    .flatMap((l) => {
-      const farm = l.id === "granary";
-      const wear = css(l.kind === "oasis" || farm ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45);
-      return [
-        ...(farm ? [{ id: l.id, pos: l.pos, radius: l.radius + 3, style: css(PAL.scrub[0], 0.2) }] : []),
-        { id: l.id, pos: l.pos, radius: l.radius + 0.5, style: wear },
-      ];
-    });
-}
-
-// Paints ground, oasis/convoy discs and terrain features onto the canvas. The caller uploads the texture.
+// Paints the ground, the canyon and dry river, and the Fallen Sun scree onto the canvas. The caller uploads the texture.
+// No town, site or crater gets a painted disc: its models and relief mark it.
 export function paintGroundCanvas(
   c: PaintCanvas,
   t: Terrain,
   opts: PaintOptions = DEFAULT_OPTIONS,
 ): void {
   paintGround(c, t, opts.hillshade);
-  for (const d of groundDiscs()) disc(c, d.pos, d.radius, d.style);
   const { canyon, dryRiver } = TERRAIN.features;
   stroke(
     c,
@@ -162,17 +147,7 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
-  paintCraters(c);
   paintScree(c);
-}
-
-// Each crater's bank is rust-tinted and its floor scorched. A basin gets no paint: its floor takes the wasteland's own
-// ground, so nothing marks where it starts, and its swells show through hillshade.
-function paintCraters(c: PaintCanvas): void {
-  for (const crater of TERRAIN.features.craters) {
-    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
-    disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
-  }
 }
 
 // Bands a scree slope is painted in, each reaching a step further up the bank, so the colour is densest at the foot
@@ -451,13 +426,6 @@ function stroke(
     ctx.lineTo(c.toPx(b.x + nx), c.toPx(b.y + ny));
   }
   ctx.stroke();
-}
-
-function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
-  c.ctx.fillStyle = style;
-  c.ctx.beginPath();
-  c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);
-  c.ctx.fill();
 }
 
 // A filled closed polygon in map units.
