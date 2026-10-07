@@ -114,8 +114,7 @@ export class PartRows {
 
   // A tab or filter change shows its new list from the top.
   toTop(root: HTMLElement): void {
-    const box = root.querySelector<HTMLElement>(".town-shop");
-    if (box) box.scrollTop = 0;
+    for (const box of scrollBoxes(root)) box.scrollTop = 0;
   }
 
   private record(root: HTMLElement): Place {
