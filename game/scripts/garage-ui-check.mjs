@@ -67,7 +67,7 @@ try {
     assert(r.compares.length === r.cards && r.cards > 0, `${spot}: Enter must select and compare`);
     // Labels.
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
-    for (const t of ['Money', 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
+    for (const t of ["M's", 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
     assert(!r.repair.includes('Nothing broken'), `${spot}: no idle Nothing broken label`);
     // One broken part shows the count and an enabled repair.
     await page.evaluate(async () => {
