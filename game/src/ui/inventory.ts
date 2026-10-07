@@ -1,5 +1,5 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
-// In a town the garage storage shows beside the grid.
+// At a shop the garage storage shows beside the grid.
 
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
@@ -29,7 +29,6 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
-import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
@@ -64,7 +63,8 @@ import {
   footprint,
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
-import { moneyLabel } from "./hud-readout";
+import { maxSpeedSteps } from "../sim/stats";
+import { moneyLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -167,7 +167,7 @@ export class InventoryView {
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     this.showFan(me, this.selectedGun(me));
-    const inTown = townAt(w) !== null;
+    const atShop = shopAt(w) !== null;
     this.root.replaceChildren(
       el(
         "div",
@@ -184,12 +184,12 @@ export class InventoryView {
           ...this.refitBanner(me),
           this.loot
             ? this.lootEl(w, this.loot)
-            : inTown
+            : atShop
               ? this.storageEl(w)
               : el(
                   "div",
                   { class: "dim" },
-                  "Park to install or remove parts.",
+                  "Park at a shop to use garage storage. Drag onto a mount to start a refit.",
                 ),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           // Below the lists, so selecting an item never moves the chips a second click aims at.
@@ -232,12 +232,10 @@ export class InventoryView {
     const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
-    const inspect = () => this.showItem(w, it, mounted);
     const click = () => this.clickItem(this.clicked("grid", it.id, it));
     node.addEventListener("click", (e) => {
       if (core || e.detail === 0) click();
     });
-    node.addEventListener("focus", inspect);
     node.addEventListener("keydown", (e) => {
       if (e.key === "Enter") click();
     });
@@ -390,7 +388,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
+      ...(item.kind === "part" && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -662,9 +660,12 @@ export class InventoryView {
     const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
-    node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
+    const select = () => this.clickItem(this.clicked("truck", it.id, it));
+    node.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") select();
+    });
     if (it.kind === "part" && partDef(it.part.defId).kind === "core") {
-      node.addEventListener("click", () => this.clickItem(this.clicked("truck", it.id, it)));
+      node.addEventListener("click", select);
       return node;
     }
     node.addEventListener("pointerdown", (e) => {
@@ -955,8 +956,8 @@ export class InventoryScreen {
   }
 }
 
-// Header chips for the player's truck: chassis, money, free cells and load.
-export function truckChips(w: World): HTMLElement {
+// Header chips for the player's truck: chassis, money, free cells (unless left out), load and power.
+export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells: true }): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
   const rated = chassisDef(me.chassisId).ratedMass;
@@ -965,14 +966,21 @@ export function truckChips(w: World): HTMLElement {
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
     el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
-    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
+    opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",
       { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
+    powerChipNode(w, me),
   );
+}
+
+// Engine power against the working guns' draw, and what the draw costs in top speed.
+function powerChipNode(w: World, me: Vehicle): HTMLElement {
+  const chip = powerChip(maxSpeedSteps(w, me), me);
+  return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
 // Why a Patch button is disabled, or null when the patch can start.

@@ -4,7 +4,7 @@ Skills, XP and perks. The principles behind them are in [DESIGN.md](../../DESIGN
 
 The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities, and several activities earn XP in its family.
 
-- Driving improves handling, crash damage, rough ground and crawling. It earns XP from driving off the road, rams and escapes from hostiles.
+- Driving improves handling, crash damage, rough ground and crawling. It earns XP from driving off the road, rams and escapes from hostiles. An escape counts only from a hostile that was in combat with the player or hunting it, not from one that was merely in sight.
 - Perception improves aim, sight, hearing and contact circles. It earns XP from hits, new contacts and discovered places.
 - Machining improves repair and refit time, the field repair cap, search time and engine heat. It earns XP from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
 - Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It earns XP from driving in heat, health lost and knockouts with a hostile truck in sight.

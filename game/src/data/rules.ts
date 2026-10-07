@@ -60,14 +60,14 @@ export const RULES = {
   // A truck body hitting the ground takes crash damage times this. Falls are slow next to driving: a roll off a 3 m
   // drop lands at about 2.7 tiles per turn, and 3 makes that as hard as a wall crash at about 4.3.
   groundCrash: 3,
-  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × landing speed² in
-  // tiles per turn × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
+  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × (landing speed into the ground in
+  // tiles per turn)² × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
   landingDamage: 0.25,
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 1.2375, // every weapon round and splash, guard guns included
+  weaponDamage: 1.2375, // every weapon round and splash
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Stray fire. A round that misses its target may hit another truck whose center lies within reach of the line
@@ -75,16 +75,6 @@ export const RULES = {
   stray: {
     reach: 1.5, // tiles
     feudDamage: 40, // about one cannon hit or ten MG rounds
-  },
-
-  // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
-  // Each round hits with a flat chance and enters a random lane of the side facing the gate.
-  guards: {
-    range: 12,
-    rounds: 4,
-    hitChance: 0.5,
-    missOffset: 1.5,
-    round: { damage: 6, pen: 8, blast: false, armorShare: 1 },
   },
 
   // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or
@@ -172,4 +162,14 @@ export const BREAKABLE = {
   damage: 2, // HP a break deals to the part that hit before armor: a scrape, a third of the softest wall crash (ramDamage × crashDamage × collisionMinImpact², about 6)
   regrowDays: 3, // game days before a broken prop may grow back, like a looted road wreck's wreckClearDays
   routeCost: 8, // step cost multiplier of a route cell under a breakable prop, so a detour of a few cells beats smashing through
+};
+
+// Craters that exploding rounds dig, see src/sim/craters.ts. The crater size is craterRadius on each weapon round.
+// The ground is never dug, since the terrain heights are frozen: the rim is the bump a truck feels.
+export const CRATER = {
+  days: 2, // game days before a crater may fade, once out of the player's gray vision and clear of trucks
+  rimRatio: 0.15, // rim height above the ground as a share of the crater radius
+  rimWidthRatio: 0.3, // rim width as a share of the crater radius
+  rimSegments: 10, // straight pieces in the rim ring, shared by physics and the view
+  rimJitter: 0.25, // the most a rim corner sits inside the radius, as a share of it, so the ring is ragged
 };

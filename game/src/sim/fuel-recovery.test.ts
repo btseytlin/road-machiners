@@ -46,14 +46,15 @@ describe('a fuelless majority of NPCs', () => {
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
     const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    const refueled = new Set<string>();
+    // A recovered driver goes back to work and may run dry again before the end, so recovery is any turn with fuel.
+    const refuelled = new Set<string>();
     for (let turn = 0; turn < bound; turn++) {
       w = endTurn(w, moveAllFar);
       stalls.push(...w.events.filter((e) => e.t === 'stall'));
-      for (const v of w.vehicles) if (getResources(w, v).fuel > 0) refueled.add(v.id);
+      for (const v of broke) if (getResources(w, w.vehicles.find((x) => x.id === v.id)!).fuel > 0) refuelled.add(v.id);
     }
 
     expect(stalls).toEqual([]);
-    expect(broke.filter((v) => !refueled.has(v.id)).map((v) => v.id)).toEqual([]);
+    expect([...refuelled].sort()).toEqual(broke.map((v) => v.id).sort());
   });
 });

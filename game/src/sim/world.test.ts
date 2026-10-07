@@ -5,8 +5,8 @@ import { TIME } from '../data/time';
 import { TEST_MAP } from '../test/map';
 import { playerVehicle } from './damage';
 import { townAt } from './sites';
+import { endTurn, isAtRest, newWorld, setHeadlights, setOverdrive, startPose, townStart, update } from './world';
 import { dist } from './vec';
-import { endTurn, newWorld, setHeadlights, setOverdrive, startPose, townStart, update } from './world';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { ENGINE_HEAT } from '../data/wear';
@@ -109,6 +109,25 @@ describe('the overdrive cutoff', () => {
 function stockHp(): number {
   return partDef('stockEngine').hp;
 }
+
+describe('isAtRest', () => {
+  const truck = () => playerVehicle(newWorld(7, START_KITS.standard, TEST_MAP, false));
+  const slow = RULES.parkedSpeed / 2;
+  const fast = RULES.parkedSpeed * 2;
+
+  it('is true when slow with no order or a brake order', () => {
+    expect(isAtRest({ ...truck(), speed: slow, order: null })).toBe(true);
+    expect(isAtRest({ ...truck(), speed: slow, order: { kind: 'brake' } })).toBe(true);
+  });
+
+  it('is false with a move order even at speed 0', () => {
+    expect(isAtRest({ ...truck(), speed: 0, order: { kind: 'through', dest: { x: 1, y: 1 } } })).toBe(false);
+  });
+
+  it('is false when faster than parked speed even while braking', () => {
+    expect(isAtRest({ ...truck(), speed: fast, order: { kind: 'brake' } })).toBe(false);
+  });
+});
 
 describe('the headlight switch', () => {
   const duskTurn = Math.ceil(((TIME.sunset - TIME.startHour) * TIME.turnsPerDay) / 24) + 1;

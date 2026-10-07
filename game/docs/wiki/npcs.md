@@ -5,25 +5,25 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 ## Templates
 
 <!-- wiki:npc-templates -->
-| id | name | profession | faction | traits | extra traits (chance) | fight style | aggro range (tiles) | preferred range (tiles) | cap | spawn interval (turns) | spawn place |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| buggy | Raider outrider | Raider | raiders | raider | brave (0.15) | circle | 11 | 3 | 6 | 50 | {"kind":"camp"} |
-| gunwagon | Gunwagon | Raider | raiders | raider | brave (0.15) | hold | 12 | 6 | 2 | 150 | {"kind":"camp"} |
-| trader | Trader caravan | Trader | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 5 | 12 | {"kind":"town"} |
-| scavenger | Scavenger | Scavenger | scavengers | scavenger | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 4 | 12 | {"kind":"town"} |
-| bowlFarmer | Bowl Farmers patrol | Bowl Farmer | bowl | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl"]} |
-| noseArmy | Nose Army patrol | Nose soldier | nose | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
-| courier | Courier | Courier | couriers | courier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| roamer | Roamer | Roamer | roamers | roamer | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| vulture | Vulture | Vulture | vultures | vulture | coward (0.6), scumbag (0.35), brave (0.1) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| convoy | Supply convoy | Convoy driver | convoys | supplier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 2 | 100 | {"kind":"sites","ids":["bowl","nose"]} |
-| convoyGuard | Convoy guard | Convoy guard | convoys | guard, brave | scumbag (0.25) | hold | 0 | 0 | 2 | 100 | {"kind":"escort","of":"convoy"} |
-| merc | Merc | Merc | mercs | merc | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl","nose"]} |
+| id | name | profession | faction | traits | extra traits (chance) | fight style | aggro range (tiles) | cap | spawn interval (turns) | spawn place |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| buggy | Raider outrider | Raider | raiders | raider | brave (0.15) | circle | 11 | 6 | 50 | {"kind":"camp"} |
+| gunwagon | Gunwagon | Raider | raiders | raider | brave (0.15) | hold | 12 | 2 | 150 | {"kind":"camp"} |
+| trader | Trader caravan | Trader | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 8 | 12 | {"kind":"town"} |
+| scavenger | Scavenger | Scavenger | scavengers | scavenger | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 4 | 12 | {"kind":"town"} |
+| bowlFarmer | Bowl Farmers patrol | Bowl Farmer | bowl | lawman, brave |  | hold | 0 | 3 | 70 | {"kind":"sites","ids":["bowl"]} |
+| noseArmy | Nose Army patrol | Nose soldier | nose | lawman, brave |  | hold | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
+| courier | Courier | Courier | couriers | courier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 3 | 30 | {"kind":"town"} |
+| roamer | Roamer | Roamer | roamers | roamer | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 3 | 30 | {"kind":"town"} |
+| vulture | Vulture | Vulture | vultures | vulture | coward (0.6), scumbag (0.35), brave (0.1) | hold | 0 | 3 | 30 | {"kind":"town"} |
+| convoy | Supply convoy | Convoy driver | convoys | supplier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 2 | 100 | {"kind":"sites","ids":["bowl","nose"]} |
+| convoyGuard | Convoy guard | Convoy guard | convoys | guard, brave | scumbag (0.25) | hold | 0 | 2 | 100 | {"kind":"escort","of":"convoy"} |
+| merc | Merc | Merc | mercs | merc | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 3 | 70 | {"kind":"sites","ids":["bowl","nose"]} |
 <!-- /wiki:npc-templates -->
 
 ## Traits
 
-`robs` says when the driver may rob. Boldness multiplies the driver's own danger when it judges another truck.
+`robs` says when the driver may rob. Boldness is the most danger, how many times stronger the other side looks, that the driver will take on.
 
 <!-- wiki:traits -->
 | id | robs | boldness | fuel margin | weight changes |
@@ -37,7 +37,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, warnedOff.comply +1, escortSeen.hire +0.5 |
 | roamer | offDuty | 1 | 1 | idle.explore +10, idle.trade +3, idle.scavenge +2, salvageSeen.loot +3, strandedSeen.tow +3, escortSeen.hire +0.2, aidAsked.give  x2, needySeen.aid +0.02 |
 | vulture | offDuty | 1 | 1 | idle.prowl +10, idle.scavenge +2, salvageSeen.loot +20, crashed.retaliate +0.5 |
-| supplier | never | 1 | 1 | idle.haul +30, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1 |
+| supplier | never | 1 | 1 | idle.haul +30, idle.trade +15, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1 |
 | guard | never | 1 | 1 | idle.escort +30, idle.wait +5, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +8, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
 | merc | offDuty | 1 | 1 | idle.wait +10, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +4, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
 | brave | offDuty | 1.5 | 1 | hostileSeen.flee  x0.05, contactHeard.flee  x0.05, attacked.flee  x0.05, parley.truce  x0.05, parley.beg  x0.05, threatened.flee  x0.05, threatened.comply  x0.05, warnedOff.comply  x0.05, fightWhim.rush  x3 |
@@ -79,6 +79,7 @@ Base weights of every option at each decision point. Traits and states add or mu
 | parley | keep | 8 |
 | parley | truce | 0.5 |
 | parley | beg | 0.1 |
+| parley | flee | 0.1 |
 | truceOffered | accept | 2 |
 | truceOffered | refuse | 1 |
 | mercyBegged | spare | 3 |
@@ -144,17 +145,34 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 
 ## Gear levels
 
-`src/sim/npc-loadout.ts` rolls each NPC a level and fills its truck toward it within budget and rated mass. The gun fill chance is the base chance that each free deck spot gets a gun after the main gun and the template minimum. The template's `gunFill` scales it.
+`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The gear money is the level's share of what the template budget leaves past this base build. The driver then adds one gun, or covers one side with one armor type, at a time, by the fight model in `src/sim/npc-gear-score.ts`. It expects a fight with a truck like its own and counts each side's guns and the rounds that side takes before the truck stops. A faster attacker picks the weakest side, and a faster driver gets away if its rear holds. The template's priorities weigh firepower, armor, the speed it keeps and the room for its biggest load.
 
 <!-- wiki:gear-levels -->
-| level | gun fill chance | armor share | budget mult | wear shift | cargo mult |
-| --- | --- | --- | --- | --- | --- |
-| poor | 0 | 0.5 | 0.6 | 1 | 0.5 |
-| light | 0.1 | 0.75 | 0.85 | 0 | 0.75 |
-| standard | 0.25 | 1 | 1.15 | 0 | 1 |
-| heavy | 0.45 | 1 | 1.6 | -1 | 1 |
-| loaded | 0.8 | 1 | 2.4 | -2 | 1.5 |
+| level | budget mult | wear shift | cargo mult |
+| --- | --- | --- | --- |
+| poor | 0.6 | 1 | 0.5 |
+| light | 0.85 | 0 | 0.75 |
+| standard | 1.15 | 0 | 1 |
+| heavy | 1.6 | 0 | 1 |
+| loaded | 2.4 | 0 | 1.5 |
 <!-- /wiki:gear-levels -->
+
+<!-- wiki:loadout-priorities -->
+| template | speed | firepower | armor | cargo |
+| --- | --- | --- | --- | --- |
+| buggy | 3 | 3 | 3 | 1 |
+| gunwagon | 0 | 3 | 3 | 0 |
+| trader | 1 | 1 | 3 | 3 |
+| scavenger | 1 | 1 | 3 | 3 |
+| bowlFarmer | 0 | 3 | 3 | 0 |
+| noseArmy | 0 | 3 | 3 | 0 |
+| courier | 3 | 1 | 3 | 2 |
+| roamer | 2 | 1 | 3 | 2 |
+| vulture | 1 | 1 | 3 | 3 |
+| convoy | 1 | 1 | 3 | 3 |
+| convoyGuard | 1 | 3 | 2 | 0 |
+| merc | 1 | 3 | 2 | 0 |
+<!-- /wiki:loadout-priorities -->
 
 ## Numbers
 

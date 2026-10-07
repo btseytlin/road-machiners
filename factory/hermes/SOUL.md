@@ -63,6 +63,8 @@ When you fixed the incident yourself, like a retry after a passing glitch, respo
 4. When the right action depends on what people want, ask in the committee chat. Name the options in one short list, and say what each does. Act on the answer.
 5. When a fix fails, or the same step fails twice, stop. Post what you know and ask the committee.
 
+Push finished work through. When the code is done and only an agent's paperwork failed, like a missing file, a bad format or a skipped step, the card must not wait for the committee. Write the missing piece yourself, retry with a direct instruction, or move the card on by hand. The committee judges the build by playing it.
+
 A tap and a reply on one post can race. Say the committee pressed Approve, then replied with a change. A later patch or redesign wins, and the queued approval drops.
 
 A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedback` failure that quotes it. Read the chat around it, route it with `factory_route_reply` if its post is still open, and remove the stuck label. If the post is closed, ask the member what they want.
@@ -84,7 +86,7 @@ Every tick writes `/factory/home/health` with its time, the free disk space and 
 - `disk low`. Free space is under the minimum, so no job starts. Fix it yourself, then respond with [SILENT].
   1. Find what grew with `du -sh /opt/factory/home/* /opt/factory/home/work/* /var/lib/docker` through `factory-host`.
   2. Pause the factory and wait until `jobs` is empty.
-  3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
+  3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, archived transcripts in `transcripts/` older than `FACTORY_TRANSCRIPT_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
   4. Never delete these: the clone of an issue whose card is open, since its `.factory-tasks/` holds the design, plus `sessions/`, `state/`, `committee/`, `inbox/`, `media/`, `release-candidate` while a release is open, and the images in use.
   5. Remove the pause. Escalate to the committee when free space stays under the minimum after the cleanup. Name what holds the space.
 - `memory low`. Available memory is under the minimum, so jobs swap or the kernel may kill a container. No job is blocked, and the line closes by itself once memory frees.
@@ -132,7 +134,8 @@ The server runs the factory from GitHub's `main` and deploys each new commit wit
 
 A member may ask for one-off work that needs running code, like a simulation, a balance check or an investigation. Answer a current-status question with `factory_status`, and use the logs and the board to investigate a cause. Queue an ad hoc task only when the answer needs real work, with the `factory_queue_task` tool. Do not guess the answer.
 
-- The agent works in a clone of the game repo on `dev`, with the state file and the job logs read only. It may build any tool it needs.
+- The agent works in a clone of the game repo on `dev`, with the state file, the job logs, the ledger and the archived agent transcripts read only. It may build any tool it needs.
+- A question about what factory agents did, where they got stuck or what cost the most is an ad hoc task. The agent reads the transcripts of the last `FACTORY_TRANSCRIPT_DAYS` days. Name the issues, stages or period to look at.
 - Write the request so a coding agent can act on it alone, since it sees nothing of this chat. Say what to run, what to measure and what to report. Queue one request per task.
 - Tell the member in one sentence that it is queued and the report will reply to their message, with any files under it.
 - The factory delivers each file to the member's chat as a Telegram document. Never publish such a file yourself or put one behind a link, even when asked. Reports hold private data.
@@ -151,6 +154,7 @@ Rules:
 - A tentative wish, like "most likely we want", is no order. Answer it and ask.
 - Write the patch or redesign text so an agent can act on it alone. Quote the member's words and name what to change.
 - When you are unsure between patch and redesign, ask the member.
+- When `factory_route_reply` refuses a patch or a redesign, nothing was queued. Ask the member for what the error lists, as the section Committee inputs of `docs/process.md` says, and route again once it is on the issue.
 - After a patch or a redesign, the post is closed. A member who wants the other route asks you. Move the card with your shell, as the incident fixes say.
 
 Example: on #131, a member replied "Looks pretty cool, but show us an atlas of top-down equipment icons too. Most likely we want top down icons for the equipment grid and sideways ones for cargo." The atlas already sat on the branch at `game/docs/icons/atlas-top.png`. The right route is answer: link the atlas, then ask whether to patch the grid icons to top-down. Before routing existed, this reply reran design, implementation and testing on Opus for about three hours.

@@ -16,12 +16,12 @@ import { siteGap } from '../sim/sites';
 import { basinUnder, isTerritory, landingStrips, reactorPos, territoryCaches, territoryPieces, territoryRoads, type BakedPiece, type LandingStrip } from '../sim/territory';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, segmentDist, type Vec } from '../sim/vec';
-import { tileSteepness, type MapDraft } from './bake';
+import { footprintRelief, tileSteepness, type MapDraft } from './bake';
 import { fillFarm, touchesMarks } from './farm';
 import { at, markRoads, type Touch } from './marks';
 import { prop, ruleRng, tileOf } from './oldworld';
 
-const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
+export const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
 // Draws for one prop before the layer gives up: the orchard's groves leave little open band. The Fallen Sun's
 // draws succeed early, so its bake does not depend on this number.
 const TRIES = 1000;
@@ -37,7 +37,7 @@ export function territoryLayer(seed: number, d: MapDraft): MapDraft {
 }
 
 // What every draw reads: the draft, the territory and its draws.
-type Draws = { d: MapDraft; t: TerritoryDef; rng: Rng };
+type Draws = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng };
 // pieces are the authored piece props: drawn props keep clear of their boxes, not of their placement circles, which
 // are half a long piece's length. onRoad touches the dirt roads and spurs, and strips are the decks' landing strips.
 type Ground = Draws & {
@@ -52,8 +52,8 @@ type Ground = Draws & {
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
   const pieces = rules.wreck ? placePieces(d, t, rules.wreck) : [];
   if (rules.reactor) d.props.push(prop(rules.reactor.look, reactorPos(t), rules.reactor.radius, 0));
-  if (rules.wreck) fillWreck({ d, t, rng }, rules, rules.wreck, pieces);
-  if (rules.farm) fillFarmBand({ d, t, rng }, rules, rules.farm);
+  if (rules.wreck) fillWreck({ d, t, rules, rng }, rules, rules.wreck, pieces);
+  if (rules.farm) fillFarmBand({ d, t, rules, rng }, rules, rules.farm);
 }
 
 // The wreck's pieces on their seated ground. Returns the piece props.
@@ -254,8 +254,9 @@ function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () => Vec,
     const pos = pick();
     const r = randRange(g.rng, radius[0], radius[1]);
     const yaw = randRange(g.rng, 0, Math.PI * 2);
-    if (!standable(g.d, pos, r) || !ok(pos, r)) continue;
-    return prop(look, pos, r, yaw);
+    const p = prop(look, pos, r, yaw);
+    if (!standable(g.d, p, g.rules.relief) || !ok(pos, r)) continue;
+    return p;
   }
   throw new Error(`Territory ${g.t.id} has no room for a ${look} ${where}`);
 }
@@ -265,13 +266,16 @@ function clearOfPieces(g: Ground, pos: Vec, r: number): boolean {
   return g.pieceBoxes.every((b) => boxDistance(b, pos) >= r + REGION.obstacles.gap);
 }
 
-// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs.
-function standable(d: MapDraft, pos: Vec, r: number): boolean {
+// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs. With a relief limit,
+// also on ground that lies no farther than it off the prop's seat under its footprint.
+function standable(d: MapDraft, p: BakedProp, relief: number | null): boolean {
+  const { pos, r } = p;
   if (Math.min(pos.x, pos.y, d.size - pos.x, d.size - pos.y) < REGION.obstacles.edgeMargin + r) return false;
   const reach = REGION.roadWidth / 2 + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
   if (touchesMarks(d, pos, r)) return false;
-  return tileSteepness(d.heights, d.size, tileOf(d.size, pos)) <= TERRAIN.drive.maxSlope;
+  if (tileSteepness(d.heights, d.size, tileOf(d.size, pos)) > TERRAIN.drive.maxSlope) return false;
+  return relief === null || footprintRelief(d.heights, d.size, p, false) <= relief;
 }
 
 // Whether no prop of the list stands within gap tiles of a circle at pos with radius r.
