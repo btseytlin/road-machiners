@@ -54,6 +54,8 @@ Do not add suppressions.
 Do not raise its limits.
 
 Run up:uexecute on {{taskFile}}.
+Implement every phase inline in this session.
+Subagents are off.
 Then stop.
 Do not run up:uverify.
 The next stage does that.

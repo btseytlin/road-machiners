@@ -119,6 +119,15 @@ describe('dockerContainer', () => {
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
   });
 
+  it('passes disallowed tools only when a stage names them', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', disallowedTools: ['Agent'] });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log' });
+    const [blocked, open] = calls.filter((call) => call.args.includes('--model')).map((call) => call.args);
+    expect(blocked.slice(blocked.indexOf('--disallowedTools'), blocked.indexOf('--disallowedTools') + 2)).toEqual(['--disallowedTools', 'Agent']);
+    expect(open).not.toContain('--disallowedTools');
+  });
+
   it('puts a skill command on the first line, before the outputs note', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });

@@ -13,14 +13,14 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function fakeCtx(labels: string[], models: string[], prompts: string[] = []): Ctx {
+function fakeCtx(labels: string[], models: string[], prompts: string[] = [], runs: AgentRun[] = []): Ctx {
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet' },
     log: () => undefined,
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
     github: { issue: async () => ({ labels, title: 'Oil spiller', body: 'Drop oil behind the truck.' }), comments: async () => [], move: async () => undefined },
-    container: { agent: async (run: AgentRun) => { models.push(run.model); prompts.push(run.prompt); mkdirSync(`${run.clone}/${run.dir}/.factory`, { recursive: true }); } },
+    container: { agent: async (run: AgentRun) => { runs.push(run); models.push(run.model); prompts.push(run.prompt); mkdirSync(`${run.clone}/${run.dir}/.factory`, { recursive: true }); } },
     repo: {
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
       fetchFromWork: async () => 'w1', isMerged: async () => false, untrackFactoryFiles: async () => [], diff: async () => '', push: async () => undefined,
@@ -39,6 +39,14 @@ describe('implement stage model', () => {
     const models: string[] = [];
     await runStage(fakeCtx(labels, models), 7);
     expect(models).toEqual([model]);
+  });
+
+  it('turns subagents off and says so in the prompt', async () => {
+    const prompts: string[] = [];
+    const runs: AgentRun[] = [];
+    await runStage(fakeCtx(['implementation-opus'], [], prompts, runs), 7);
+    expect(runs[0].disallowedTools).toEqual(['Agent']);
+    expect(prompts[0]).toContain('Subagents are off.');
   });
 });
 
