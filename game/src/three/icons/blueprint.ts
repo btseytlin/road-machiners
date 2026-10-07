@@ -27,28 +27,45 @@ const SHADOW_TOLERANCE = 1.5;
 const SNAP_GRID = 4;
 // Shadow patches smaller across than this share of the drawing's longer side drop out.
 const MIN_SHADOW = 0.04;
-// The light in view space, from over the viewer's left shoulder. A face lit less than SHADE_AT of full is in shadow.
+// The light in view space, from over the viewer's left shoulder. A face lit less than SHADE_AT of full is in shadow,
+// and one lit more than LIT_AT is in highlight.
 const LIGHT = new THREE.Vector3(-0.6, 0.45, 0.65).normalize();
 const SHADE_AT = 0.35;
+const LIT_AT = 0.65;
 
 // Line widths in drawing pixels.
 export type BlueprintPen = { outer: number; inner: number };
-export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string };
+// light: the highlight color. Without it the lit faces keep the fill. Over a blueprint's paints, shadow and light
+// should be see-through, so the paints show under them.
+export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string; light?: string };
 // The material name of window glass, which draws in its own color so cabs show their windows.
 export const GLASS_MATERIAL = 'glass';
 
 type Vec2 = { x: number; y: number };
 
-// One icon in drawing pixels of a size x size square: the filled shape, its shadow and glass loops and its inner lines.
-export type Blueprint = { size: number; pen: BlueprintPen; shape: Vec2[][]; shadow: Vec2[][]; glass: Vec2[][]; lines: Vec2[][] };
+// One icon in drawing pixels of a size x size square: the filled shape, its paints, its shadow, highlight and glass
+// loops and its inner lines. A paint is the loops where the model shows one of its own colors, empty unless asked for.
+export type Paint = { color: string; loops: Vec2[][] };
+export type Blueprint = {
+  size: number;
+  pen: BlueprintPen;
+  shape: Vec2[][];
+  paints: Paint[];
+  shadow: Vec2[][];
+  light: Vec2[][];
+  glass: Vec2[][];
+  lines: Vec2[][];
+};
 
-// draw renders the scene at size x size with the material, or with its own materials for null.
+// draw renders the scene at size x size with the material, or with its own unlit materials for null. With own, the
+// blueprint keeps the model's colors as paints.
 export function blueprintOf(
   scene: THREE.Scene,
   camera: THREE.OrthographicCamera,
   size: number,
   pen: BlueprintPen,
   draw: (override: THREE.Material | null) => Pixels,
+  own = false,
 ): Blueprint {
   const meshes: THREE.Mesh[] = [];
   scene.traverse((o) => o instanceof THREE.Mesh && meshes.push(o));
@@ -64,9 +81,30 @@ export function blueprintOf(
   const lines = visibleRuns(meshes, tris, camera, toPx, near)
     .filter((r) => lengthOf(r) >= MIN_INNER * longest)
     .map((r) => (r.length > 2 ? douglasPeucker(r, LINE_TOLERANCE) : r));
-  const shadow = patchesOf(shadeMask(draw(new THREE.MeshNormalMaterial({ flatShading: true })), solid), longest);
+  const normal = draw(new THREE.MeshNormalMaterial({ flatShading: true }));
+  const shadow = patchesOf(lightMask(normal, solid, (lit) => lit < SHADE_AT), longest);
+  const light = patchesOf(lightMask(normal, solid, (lit) => lit > LIT_AT), longest);
   const glass = patchesOf(glassMask(meshes, draw, solid), longest);
-  return { size, pen, shape, shadow, glass, lines };
+  const paints = own ? paintsOf(draw(null), solid, longest) : [];
+  return { size, pen, shape, paints, shadow, light, glass, lines };
+}
+
+// The shape's pixels grouped by their color in the unlit pass, most pixels first, so the largest paint lies at the
+// bottom and smaller ones over it. A color whose every patch is under MIN_SHADOW across drops out.
+function paintsOf(pass: Pixels, solid: Mask, longest: number): Paint[] {
+  const groups = new Map<number, Uint8Array>();
+  for (let i = 0; i < solid.bits.length; i++) {
+    if (!solid.bits[i] || pass.data[i * 4 + 3] === 0) continue;
+    const rgb = (pass.data[i * 4] << 16) | (pass.data[i * 4 + 1] << 8) | pass.data[i * 4 + 2];
+    let bits = groups.get(rgb);
+    if (!bits) groups.set(rgb, (bits = new Uint8Array(solid.bits.length)));
+    bits[i] = 1;
+  }
+  const count = (bits: Uint8Array): number => bits.reduce((n, b) => n + b, 0);
+  return [...groups]
+    .sort((a, b) => count(b[1]) - count(a[1]))
+    .map(([rgb, bits]) => ({ color: `#${rgb.toString(16).padStart(6, '0')}`, loops: patchesOf({ w: solid.w, h: solid.h, bits }, longest) }))
+    .filter((p) => p.loops.length > 0);
 }
 
 // A mask's patches as straightened loops, without those under MIN_SHADOW of the drawing across.
@@ -98,8 +136,16 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.fill(shape, 'evenodd');
   ctx.save();
   ctx.clip(shape, 'evenodd');
+  for (const paint of bp.paints) {
+    ctx.fillStyle = paint.color;
+    ctx.fill(new Path2D(loopsPath(paint.loops)), 'evenodd');
+  }
   ctx.fillStyle = colors.shadow;
   ctx.fill(new Path2D(loopsPath(bp.shadow)), 'evenodd');
+  if (colors.light !== undefined) {
+    ctx.fillStyle = colors.light;
+    ctx.fill(new Path2D(loopsPath(bp.light)), 'evenodd');
+  }
   ctx.fillStyle = colors.glass;
   ctx.fill(new Path2D(loopsPath(bp.glass)), 'evenodd');
   ctx.restore();
@@ -115,17 +161,46 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.restore();
 }
 
-// The blueprint as one SVG group in drawing pixels, for a sheet or a file. id names its clip path.
-export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string): string {
+// The blueprint as one SVG group in drawing pixels, for a sheet or a file. id names its clip path. Colors go in style,
+// so they may be CSS variables. With screenPen, line widths are CSS values in screen pixels whatever the scale.
+export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string, screenPen?: { outer: string; inner: string }): string {
   const shape = shapePath(bp.shape);
+  const width = (drawn: number, screen: string | undefined): string =>
+    screen === undefined ? `stroke-width:${num(drawn)}` : `stroke-width:${screen};vector-effect:non-scaling-stroke`;
   return [
     `<clipPath id="${id}"><path d="${shape}" clip-rule="evenodd"/></clipPath>`,
-    `<path d="${shape}" fill="${colors.fill}" fill-rule="evenodd"/>`,
-    `<path d="${loopsPath(bp.shadow)}" fill="${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
-    `<path d="${loopsPath(bp.glass)}" fill="${colors.glass}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
-    `<path d="${linesPath(bp.lines)}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.inner)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-    `<path d="${shape}" fill="none" stroke="${colors.line}" stroke-width="${num(bp.pen.outer)}" stroke-linejoin="miter" stroke-miterlimit="3"/>`,
+    `<path d="${shape}" style="fill:${colors.fill}" fill-rule="evenodd"/>`,
+    ...bp.paints.map((p) => `<path d="${loopsPath(p.loops)}" style="fill:${p.color}" fill-rule="evenodd" clip-path="url(#${id})"/>`),
+    `<path d="${loopsPath(bp.shadow)}" style="fill:${colors.shadow}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    colors.light === undefined ? '' : `<path d="${loopsPath(bp.light)}" style="fill:${colors.light}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    `<path d="${loopsPath(bp.glass)}" style="fill:${colors.glass}" fill-rule="evenodd" clip-path="url(#${id})"/>`,
+    `<path d="${linesPath(bp.lines)}" style="fill:none;stroke:${colors.line};${width(bp.pen.inner, screenPen?.inner)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${shape}" style="fill:none;stroke:${colors.line};${width(bp.pen.outer, screenPen?.outer)}" stroke-linejoin="miter" stroke-miterlimit="3"/>`,
   ].join('');
+}
+
+// The blueprint calmer for small screens. Its shape keeps outer loops only, without holes, and drops loops under
+// minArea of the largest. Shading and glass patches narrower than minPatch of the drawing drop out. Every loop
+// straightens steps under tolerance of the drawing, so diagonal edges draw as one line.
+export type Calm = { tolerance: number; minArea: number; minPatch: number };
+export function calmed(bp: Blueprint, calm: Calm): Blueprint {
+  const areas = bp.shape.map(areaOf);
+  const largest = areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
+  const straight = (loop: Vec2[]): Vec2[] => simplifyPath(loop, calm.tolerance * bp.size);
+  const shape = bp.shape
+    .filter((_, i) => Math.sign(areas[i]) === Math.sign(largest) && Math.abs(areas[i]) >= calm.minArea * Math.abs(largest))
+    .map(straight);
+  const patches = (loops: Vec2[][]): Vec2[][] =>
+    loops.filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= calm.minPatch * bp.size).map(straight);
+  const paints = bp.paints.map((p) => ({ ...p, loops: patches(p.loops) })).filter((p) => p.loops.length > 0);
+  return { ...bp, shape, paints, shadow: patches(bp.shadow), light: patches(bp.light), glass: patches(bp.glass) };
+}
+
+// The blueprint's outline alone as SVG for a plan, which the game stretches over grid cells. Its colors come from the
+// CSS variables --plan-line and --plan-fill, and the line keeps its width in screen pixels whatever the stretch.
+export function blueprintPlanSvg(bp: Blueprint, stroke: number): string {
+  const shape = shapePath(bp.shape);
+  return `<path d="${shape}" style="fill:var(--plan-fill);stroke:var(--plan-line);stroke-width:${stroke}px;vector-effect:non-scaling-stroke" fill-rule="evenodd" stroke-linejoin="miter" stroke-miterlimit="3"/>`;
 }
 
 // Drawing pixels are a quarter of a sheet pixel, so one decimal is finer than any screen shows.
@@ -182,12 +257,13 @@ function maskOf(shape: readonly Vec2[][], size: number): Mask {
 }
 
 // Pixels inside the shape whose face, by the normal pass, is lit less than SHADE_AT.
-function shadeMask(normal: Pixels, solid: Mask): Mask {
+// The solid pixels whose face's light share passes the test.
+function lightMask(normal: Pixels, solid: Mask, test: (lit: number) => boolean): Mask {
   const bits = new Uint8Array(solid.bits.length);
   for (let i = 0; i < bits.length; i++) {
     if (!solid.bits[i] || normal.data[i * 4 + 3] === 0) continue;
     const n = [0, 1, 2].map((c) => (normal.data[i * 4 + c] / 255) * 2 - 1);
-    bits[i] = n[0] * LIGHT.x + n[1] * LIGHT.y + n[2] * LIGHT.z < SHADE_AT ? 1 : 0;
+    bits[i] = test(n[0] * LIGHT.x + n[1] * LIGHT.y + n[2] * LIGHT.z) ? 1 : 0;
   }
   return { w: solid.w, h: solid.h, bits };
 }

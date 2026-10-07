@@ -1,6 +1,6 @@
 // Towing a stranded truck. An NPC that sees a stranded truck may choose to help at its strandedSeen decision. It
 // drives over and claims the job, so no other driver answers. A tow is a `tow` state held by the tower toward its
-// client. Once hitched, the client leaves physics and trails the tower along its path. Arrival fulfils the state,
+// client. Once hitched, the client leaves physics and is pulled by the tower on a tow bar. Arrival fulfils the state,
 // and its hook in src/sim/states.ts takes the fee, even into debt.
 // A player client gets an offer over the radio, for a fee (free when the player has no money) to the tower's known town nearest it. Refusing, driving
 // away or unhitching breaks it for free, and the tower holds `turnedDown` toward the player, so it rarely offers
@@ -19,10 +19,12 @@
 // top and the follow resumes after them.
 
 import { chassisDef } from '../data/chassis';
+import { PHYSICS } from '../data/physics';
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { BEACON, TOW } from '../data/tow';
 import { inCombat, inCombatWithOther, isHostile } from './combat';
+import { bodyOf } from './body';
 import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
@@ -88,6 +90,11 @@ export function getHitchedTowIds(world: World): Set<string> {
 // The vehicle hangs on a tow rope, so it has no physics body and trails its tower.
 export function isOnRope(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.other === id);
+}
+
+// The truck on this tower's rope, or null. It trails the tower, so the tower never routes around it or stops for it.
+export function ropeClientOf(world: World, towerId: string): string | null {
+  return hitchedTows(world).find((s) => s.holder === towerId)?.other ?? null;
 }
 
 // The vehicle pulls a truck on its tow rope.
@@ -398,39 +405,62 @@ export function dropStrandedTowers(world: World): void {
   }
 }
 
-// Places each hitched truck TOW.gap tiles behind its tower along the path both trucks drive: the towed truck's own
-// last pose, then the tower's trail. Each trail pose of the towed truck trails the matching pose of the tower.
+// Pulls each hitched truck behind its tower on a tow bar. The towed truck is a trailer: its front axle is drawn toward
+// the tower's rear axle and its rear axle follows, so it rolls on its rear wheels and cuts a little inside on bends.
+// It needs only its own last pose and the tower's trail, so it is continuous across turns.
 export function followTower(world: World): void {
   for (const tow of hitchedTows(world)) follow(vehicleById(world, tow.holder), vehicleById(world, tow.other));
 }
 
 function follow(tower: Vehicle, towed: Vehicle): void {
   if (tower.trail.length === 0) throw new Error(`Tower ${tower.id} has no trail to follow`);
-  const path: Pose[] = [{ x: towed.pos.x, y: towed.pos.y, heading: towed.heading }, ...tower.trail];
-  towed.trail = tower.trail.map((_, i) => poseBehind(path, i + 1, TOW.gap));
-  const end = towed.trail[towed.trail.length - 1];
+  const towerAxle = axleTiles(tower.chassisId);
+  const towedAxle = axleTiles(towed.chassisId);
+  const bar = TOW.gap - towerAxle - towedAxle;
+  if (bar <= 0) throw new Error(`Tow bar of ${tower.chassisId} and ${towed.chassisId} is ${bar} tiles, not above 0`);
+  const start: Pose = { x: towed.pos.x, y: towed.pos.y, heading: towed.heading };
+  let front = axlePoint(start, towedAxle);
+  let rear = axlePoint(start, -towedAxle);
+  let prevHitch = axlePoint(tower.trail[0], -towerAxle);
+  const trail: Pose[] = [start];
+  for (let i = 1; i < tower.trail.length; i++) {
+    const hitch = axlePoint(tower.trail[i], -towerAxle);
+    ({ front, rear } = trailerStep(front, rear, hitch, bar, TOW.takeUp * dist(hitch, prevHitch), towedAxle));
+    prevHitch = hitch;
+    trail.push({ x: (front.x + rear.x) / 2, y: (front.y + rear.y) / 2, heading: bearing(rear, front) });
+  }
+  towed.trail = trail;
+  const end = trail[trail.length - 1];
   towed.pos = { x: end.x, y: end.y };
   towed.heading = end.heading;
   towed.speed = tower.speed;
 }
 
-// The pose `gap` tiles back along the path from path[k], facing along the path. A path shorter than the gap is
-// extended straight back from its first pose.
-function poseBehind(path: Pose[], k: number, gap: number): Pose {
-  let left = gap;
-  for (let j = k; j > 0; j--) {
-    const a = path[j - 1];
-    const b = path[j];
-    const len = dist(a, b);
-    if (len === 0) continue;
-    if (len >= left) {
-      const t = left / len;
-      return { x: b.x + (a.x - b.x) * t, y: b.y + (a.y - b.y) * t, heading: bearing(a, b) };
-    }
-    left -= len;
+// Distance from a truck's center to its axles, in tiles.
+function axleTiles(chassisId: string): number {
+  return bodyOf(chassisId).wheelX / PHYSICS.metersPerTile;
+}
+
+// The point `offset` tiles ahead of the pose's center along its heading, behind it when negative.
+function axlePoint(p: Pose, offset: number): Vec {
+  return { x: p.x + Math.cos(p.heading) * offset, y: p.y + Math.sin(p.heading) * offset };
+}
+
+// One substep of the trailer. The front axle is drawn toward the spot a bar length from the hitch, at most `maxMove`
+// tiles. The rear axle then follows it at the wheelbase, so it only ever moves along the truck's heading.
+function trailerStep(front: Vec, rear: Vec, hitch: Vec, bar: number, maxMove: number, towedAxle: number): { front: Vec; rear: Vec } {
+  const away = dist(hitch, front);
+  let nextFront = front;
+  if (away > 0) {
+    const target = { x: hitch.x + ((front.x - hitch.x) / away) * bar, y: hitch.y + ((front.y - hitch.y) / away) * bar };
+    const want = dist(front, target);
+    const t = want === 0 ? 0 : Math.min(1, maxMove / want);
+    nextFront = { x: front.x + (target.x - front.x) * t, y: front.y + (target.y - front.y) * t };
   }
-  const first = path[0];
-  return { x: first.x - Math.cos(first.heading) * left, y: first.y - Math.sin(first.heading) * left, heading: first.heading };
+  const span = dist(rear, nextFront);
+  const wheelbase = 2 * towedAxle;
+  if (span === 0) return { front: nextFront, rear };
+  return { front: nextFront, rear: { x: nextFront.x + ((rear.x - nextFront.x) / span) * wheelbase, y: nextFront.y + ((rear.y - nextFront.y) / span) * wheelbase } };
 }
 
 // The player takes the open offer over the radio. Runs inside the dialogue command.

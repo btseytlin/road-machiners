@@ -220,6 +220,44 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
 
 // A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
 // pressure stands in for what it saw, and the saved turn for when.
+// Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
+// keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 16.
+const STORM_FADE_TURNS_16_17 = 30;
+
+function withStormBorn_16_17(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_16_17;
+  const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
+  return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
+}
+
+// 17 to 18: a truck records how far each storm has got into it. A saved truck gets the share it would have settled to
+// where it stands, so loading inside a storm neither flashes nor drops. These are copies of WEATHER.sim.stormEdge and
+// stormFadeTurns, and of the stormDepth rule, at format 17.
+const STORM_EDGE_17_18 = 25;
+const STORM_FADE_TURNS_17_18 = 30;
+
+function settledShare_17_18(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
+  const centre = storm.pos as { x: number; y: number };
+  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_17_18);
+  if (edge <= 0) return 0;
+  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_17_18, (storm.turnsLeft as number) / STORM_FADE_TURNS_17_18);
+  return edge * strength;
+}
+
+function withStormExposure_17_18(world: SavedJson): SavedJson {
+  const storms = (world.weather as SavedJson[]).filter((e) => e.kind === 'storm');
+  const exposed = (v: SavedJson): SavedJson => {
+    const stormExposure: Record<string, number> = {};
+    for (const s of storms) {
+      const share = settledShare_17_18(world.turn as number, s, v.pos as { x: number; y: number });
+      if (share > 0) stormExposure[s.id as string] = share;
+    }
+    return { ...v, stormExposure };
+  };
+  const clear = (v: SavedJson): SavedJson => ({ ...v, stormExposure: {} });
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(exposed), removed: (world.removed as SavedJson[]).map(clear) };
+}
+
 function withMemories_11_12(world: SavedJson): SavedJson {
   const shops = world.shops as Record<string, SavedJson>;
   const turn = world.turn as number;
@@ -247,6 +285,15 @@ function withPatchParts_13_14(world: SavedJson): SavedJson {
     return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
   };
   return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
@@ -316,6 +363,15 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
   // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  // 16 to 17: a storm records the turn it was born, already past its build-up.
+  withStormBorn_16_17,
+  // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
+  withStormExposure_17_18,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

@@ -37,6 +37,8 @@ export type WeaponClass = "damager" | "chip" | "precision";
 // One round. pen is the armor it gets through. speed in m/s. A round with a splashRadius above 0 explodes where it
 // lands, and every lane of any truck within splashRadius meters takes splashDamage and splashPen. A blast round
 // meets blastArmor on armor parts. Splash always counts as blast. Armor parts take damage and splash times armorShare.
+// craterRadius is the radius in meters of the crater an exploding round digs where it bursts on open ground, 0 for
+// none. See digCrater() in src/sim/craters.ts.
 export type WeaponRound = {
   damage: number;
   pen: number;
@@ -46,6 +48,7 @@ export type WeaponRound = {
   splashDamage: number;
   splashPen: number;
   armorShare: number;
+  craterRadius: number;
 };
 
 export type WeaponDef = PartBase & {

@@ -6,12 +6,11 @@ import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
 import { fightCornered, getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { clearLines, route, routeLength, type Blocker } from "./path";
-import { towData } from "./states";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, getHitchedTowIds, isOnRope, towHeldBy } from "./tow";
+import { escortsOf, followPace, getHitchedTowIds, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
 import { canStartFight, ramsReadily, visibleHostiles } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
@@ -446,8 +445,7 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
 }
 
 function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
-  const tow = towHeldBy(world, tower.id);
-  return tow !== null && towData(tow).hitched && tow.other === x.id;
+  return ropeClientOf(world, tower.id) === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.

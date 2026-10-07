@@ -14,6 +14,8 @@ const UNATTRIBUTED = 'unattributed';
 type Summary = {
   days: number; since: string | null; completed: number; failed: number; timeouts: number; workerMs: number;
   cost: number | null; tokens: Counts | null; missingUsage: number; collectionFaults: number;
+  // Spend of jobs that failed, died or timed out, including runs priced from their transcripts.
+  wasted: { cost: number | null; tokens: Counts | null };
   models: ModelUsage[]; stageModels: (ModelUsage & { stage: JobStage })[]; stages: { stage: string; workerMs: number; cost: number | null }[];
   issues: { issue: number; workerMs: number; cost: number | null }[];
   buckets: Bucket[];
@@ -35,15 +37,20 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
   stage.cost = (stage.cost ?? 0) + cost;
   if (issue) issue.cost = (issue.cost ?? 0) + cost;
 }
+function addWaste(summary: Summary, agent: AgentUsage): void {
+  summary.wasted.cost = (summary.wasted.cost ?? 0) + agent.costUsd;
+  for (const usage of agent.modelUsage ?? []) addCounts(summary.wasted.tokens ??= createCounts(), usage);
+}
 function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage, stage: StageRow, issue: IssueRow | null): void {
   addCost(summary, stage, issue, agent.costUsd);
+  if (job.outcome !== 'done') addWaste(summary, agent);
   const bucket = getBucket(totals, job.endedAt.slice(0, summary.days === 1 ? 13 : 10));
   bucket.cost += agent.costUsd;
   addSegment(bucket.stages, job.stage, agent.costUsd, 0);
@@ -114,8 +121,11 @@ function getJobRows(totals: Totals, job: Job, publicIssue: number | null, durati
   return { stage, issue };
 }
 
+// A run cut off and then resumed is priced once from its transcript and once by Claude Code. Both price the same tokens, but sum the floats in another order.
+const COST_ROUNDING = 1e-6;
 function subtractMeasurement(current: number, previous: number): number {
   const value = current - previous;
+  if (value < 0 && value > -COST_ROUNDING) return 0;
   if (!Number.isFinite(value) || value < 0) throw new Error('Cumulative usage decreased');
   return value;
 }

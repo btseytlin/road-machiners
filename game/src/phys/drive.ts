@@ -7,7 +7,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
 import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
-import { BREAKABLE, RULES } from '../data/rules';
+import { BREAKABLE, CRATER, RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
 import { blockingBoxes, isBreakable, isDriveObstacle, obstacleReach } from '../sim/mapgen';
 import { playerVehicle } from '../sim/damage';
@@ -19,12 +19,13 @@ import { routeBlockers } from '../sim/ai';
 import { DECKS, propBase, railOffset, type Deck } from '../sim/bridge';
 import { deckSegments, groundAt, heightAt, tileAt, type DeckSegment, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
-import type { MoveOrder, Obstacle, Vehicle, World } from '../sim/types';
+import { craterReach, craterRimPoints } from '../sim/craters';
+import type { Crater, MoveOrder, Obstacle, Pose, Vehicle, World } from '../sim/types';
 import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, upOf, toPhys, type Quat, type TurnFrames, type V3, type VehicleFrame, type WheelFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -56,6 +57,7 @@ export type Drive = {
   world: RAPIER.World;
   bodies: Record<string, number>; // vehicle id to rigid body handle
   obstacles: Record<string, number[]>; // obstacle id to its collider handles
+  craters: Record<string, number[]>; // crater id to its rim collider handles
   memory: Record<string, Memory>;
   terrain: number; // terrain collider handle
   decks: DeckColliders[]; // one per deck in DECKS, in order
@@ -67,7 +69,7 @@ export type DeckColliders = { plates: number[]; rails: number[]; lips: number[] 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s downward
+export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s: the speed into the ground along the contact normal, counted only while also moving downward
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -89,7 +91,7 @@ export async function initPhysics(): Promise<void> {
 
 export function buildDrive(w: World): Drive {
   const world = new RAPIER.World({ x: 0, y: -PHYSICS.gravity, z: 0 });
-  const d: Drive = { world, bodies: {}, obstacles: {}, memory: {}, terrain: addTerrain(world, w), decks: addDecks(world, w) };
+  const d: Drive = { world, bodies: {}, obstacles: {}, craters: {}, memory: {}, terrain: addTerrain(world, w), decks: addDecks(world, w) };
   syncDrive(d, w);
   return d;
 }
@@ -114,6 +116,7 @@ export function syncDrive(d: Drive, w: World): void {
   }
   for (const v of near) syncVehicle(d, w, v);
   syncObstacles(d, w);
+  syncCraters(d, w);
   for (const v of w.vehicles) {
     if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
@@ -125,11 +128,12 @@ function checkHandles(d: Drive): void {
     if (d.world.getRigidBody(handle)?.handle !== handle) throw new Error(`Vehicle ${id} has no body ${handle}`);
   }
   for (const [id, handles] of Object.entries(d.obstacles)) checkColliders(d, id, handles);
+  for (const [id, handles] of Object.entries(d.craters)) checkColliders(d, id, handles);
 }
 
 function checkColliders(d: Drive, id: string, handles: number[]): void {
   for (const handle of handles) {
-    if (d.world.getCollider(handle)?.handle !== handle) throw new Error(`Obstacle ${id} has no collider ${handle}`);
+    if (d.world.getCollider(handle)?.handle !== handle) throw new Error(`Obstacle or crater ${id} has no collider ${handle}`);
   }
 }
 
@@ -137,18 +141,75 @@ function checkColliders(d: Drive, id: string, handles: number[]): void {
 // physics step costs time per collider in the world, so a prop gets colliders only while a truck with a body could
 // reach it this turn: bodies stay within the near radius of the player, and PHYSICS.propLiveMargin covers a turn.
 function syncObstacles(d: Drive, w: World): void {
-  const center = playerVehicle(w).pos;
-  const range = TERRAIN.vision.radius + PERF.liveMargin + PHYSICS.propLiveMargin;
-  const live = w.obstacles.filter((o) => isDriveObstacle(o) && dist(o.pos, center) <= range + obstacleReach(o));
-  const liveIds = new Set(live.map((o) => o.id));
-  for (const [id, handles] of Object.entries(d.obstacles)) {
-    if (liveIds.has(id)) continue;
-    for (const handle of handles) d.world.removeCollider(d.world.getCollider(handle), false);
-    delete d.obstacles[id];
-  }
+  const live = w.obstacles.filter((o) => isDriveObstacle(o) && inLiveRange(w, o.pos, obstacleReach(o)));
+  dropColliders(d, d.obstacles, new Set(live.map((o) => o.id)));
   for (const o of live) {
-    if (d.obstacles[o.id] === undefined) d.obstacles[o.id] = obstacleColliders(w.terrain, o).map((desc) => d.world.createCollider(desc).handle);
+    if (d.obstacles[o.id] === undefined) d.obstacles[o.id] = addColliders(d, obstacleColliders(w.terrain, o));
   }
+}
+
+// Whether something at pos, reaching `reach` tiles around it, lies where a truck with a body could touch it this turn.
+function inLiveRange(w: World, pos: Vec, reach: number): boolean {
+  const range = TERRAIN.vision.radius + PERF.liveMargin + PHYSICS.propLiveMargin;
+  return dist(pos, playerVehicle(w).pos) <= range + reach;
+}
+
+// Removes the colliders of every entry of `record` whose id is not in `keep`.
+function dropColliders(d: Drive, record: Record<string, number[]>, keep: Set<string>): void {
+  for (const [id, handles] of Object.entries(record)) {
+    if (keep.has(id)) continue;
+    for (const handle of handles) d.world.removeCollider(d.world.getCollider(handle), false);
+    delete record[id];
+  }
+}
+
+function addColliders(d: Drive, descs: RAPIER.ColliderDesc[]): number[] {
+  return descs.map((desc) => d.world.createCollider(desc).handle);
+}
+
+// A crater's rim gets colliders in the same range as props. A rim made under a truck would pop it into the air, so
+// it waits while any truck body stands within the crater's reach, and each sync tries again.
+function syncCraters(d: Drive, w: World): void {
+  const live = w.craters.filter((c) => inLiveRange(w, c.pos, craterReach(c)));
+  dropColliders(d, d.craters, new Set(live.map((c) => c.id)));
+  for (const c of live) {
+    if (d.craters[c.id] === undefined && clearOfBodies(d, w, c)) d.craters[c.id] = addColliders(d, craterColliders(w.terrain, c));
+  }
+}
+
+// Whether every vehicle body's centre is farther from the crater than the vehicle's radius plus the crater's reach.
+function clearOfBodies(d: Drive, w: World, c: Crater): boolean {
+  return w.vehicles.every((v) => {
+    const handle = d.bodies[v.id];
+    if (handle === undefined) return true;
+    const t = d.world.getRigidBody(handle).translation();
+    return dist({ x: t.x / S, y: t.z / S }, c.pos) > chassisDef(v.chassisId).radius + craterReach(c);
+  });
+}
+
+// A ring of capsules, one between each pair of neighbouring rim points on the ground, sunk so CRATER.rimRatio of
+// the crater's radius shows above it. The ring follows the slope. The bowl is not dug: the heightfield is static.
+export function craterColliders(t: Terrain, c: Crater): RAPIER.ColliderDesc[] {
+  const rim = craterRimPoints(c).map((p) => toPhys(p, groundAt(t, p.x, p.y)));
+  const radius = (CRATER.rimWidthRatio * c.radius) / 2;
+  const lift = CRATER.rimRatio * c.radius - radius;
+  return rim.map((a, k) => capsuleBetween(a, rim[(k + 1) % rim.length], radius, lift));
+}
+
+// A capsule of the given radius whose axis runs from a to b, raised `lift` meters.
+function capsuleBetween(a: V3, b: V3, radius: number, lift: number): RAPIER.ColliderDesc {
+  const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const len = Math.hypot(u.x, u.y, u.z);
+  if (!(len > 0)) throw new Error('Capsule between one point');
+  const desc = RAPIER.ColliderDesc.capsule(len / 2, radius).setTranslation((a.x + b.x) / 2, (a.y + b.y) / 2 + lift, (a.z + b.z) / 2);
+  return desc.setRotation(upOnto({ x: u.x / len, y: u.y / len, z: u.z / len }));
+}
+
+// The quaternion that turns +y onto the unit vector u, about the axis +y x u. Not for u pointing straight down.
+function upOnto(u: V3): Quat {
+  const w = 1 + u.y;
+  const n = Math.hypot(u.z, u.x, w);
+  return { x: u.z / n, y: 0, z: -u.x / n, w: w / n };
 }
 
 // A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
@@ -266,7 +327,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
   const obstacles = Object.fromEntries(Object.entries(d.obstacles).filter(([id]) => !contacts.isBroken(id)));
-  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
+  return { next: { world, bodies: { ...d.bodies }, obstacles, craters: { ...d.craters }, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
 }
 
 // The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.
@@ -279,14 +340,35 @@ class Landings {
 
   private noteCar(c: Car, motion: ImpactMotion, step: number): void {
     const touching = wheelsTouch(c.ctl);
-    const impact = Math.max(0, -motion.velocity.y);
-    if (c.mem.airborne && touching && impact > (this.hardest.get(c.v.id)?.impact ?? 0)) this.hardest.set(c.v.id, { impact, step });
+    if (c.mem.airborne && touching) {
+      const impact = landingImpact(c, motion);
+      if (impact > (this.hardest.get(c.v.id)?.impact ?? 0)) this.hardest.set(c.v.id, { impact, step });
+    }
     c.mem.airborne = !touching;
   }
 
   all(): Landing[] {
     return [...this.hardest].map(([vehicle, h]) => ({ vehicle, ...h }));
   }
+}
+
+// The hardest speed into the ground over the wheels touching it, from the body's motion before the step: the
+// motion at each contact point against that wheel's contact normal. Only motion that is also downward counts, so a
+// truck meeting a slope along it lands softly, and one whose wheels meet a rising bump face drives up it.
+function landingImpact(c: Car, motion: ImpactMotion): number {
+  const com = c.body.worldCom();
+  const { velocity: v, spin: w } = motion;
+  let impact = 0;
+  for (let i = 0; i < c.ctl.numWheels(); i++) {
+    if (!c.ctl.wheelIsInContact(i)) continue;
+    const point = c.ctl.wheelContactPoint(i);
+    const normal = c.ctl.wheelContactNormal(i);
+    if (!point || !normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact point or normal`);
+    const r = { x: point.x - com.x, y: point.y - com.y, z: point.z - com.z };
+    const at = { x: v.x + w.y * r.z - w.z * r.y, y: v.y + w.z * r.x - w.x * r.z, z: v.z + w.x * r.y - w.y * r.x };
+    impact = Math.max(impact, Math.min(-(at.x * normal.x + at.y * normal.y + at.z * normal.z), -at.y));
+  }
+  return impact;
 }
 
 function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
@@ -355,9 +437,13 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   if (a === undefined) return null;
   const [first, other] = owner.get(h1) === a ? [h1, h2] : [h2, h1];
   const va = before.get(a)!;
-  // A deck is ground, like the terrain.
-  if (other === d.terrain || d.decks.some((c) => c.plates.includes(other))) return captureGroundCrash(physics, state, a, first, other, va);
+  if (isGround(d, other)) return captureGroundCrash(physics, state, a, first, other, va);
   return captureCrash(physics, state, before, { a, b: crashTarget(other, owner, obstacleOf, d), first, other }, va);
+}
+
+// A deck and a crater rim are ground, like the terrain.
+function isGround(d: Drive, handle: number): boolean {
+  return handle === d.terrain || d.decks.some((c) => c.plates.includes(handle)) || Object.values(d.craters).some((handles) => handles.includes(handle));
 }
 
 // The name of what a truck hit: a vehicle id, an obstacle id, a rail or the map edge.
@@ -610,19 +696,59 @@ function turnWheels(c: Car, steerTo: number): void {
 // so a truck holds its speed on a slope. Without engine push the truck brakes.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
-  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
+  const cap = climbForce(c, target);
+  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target, cap), -1, 1);
   const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
   const brake = brakeOf(plan, u, target, pushing);
-  const force = pushing ? u * plan.engineForce : 0;
+  const force = pushing ? u * cap : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
-function slopeThrottle(c: Car, target: number): number {
+// Throttle share that holds the truck against gravity along its nose, at cap force per driven wheel. A truck holding still brakes instead.
+function slopeThrottle(c: Car, target: number, cap: number): number {
   if (target === 0) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
-  return pull / (2 * c.plan.engineForce);
+  return pull / (2 * cap);
+}
+
+// Full-throttle force of each driven wheel: the plan's engine force, plus a reserve against a climb in the direction
+// the engine pushes. The reserve is at most climbReserve of the engine force and never more than gravity's pull along
+// the ground the wheels stand on, so flat ground, downhill and the air get none.
+function climbForce(c: Car, target: number): number {
+  if (target === 0) return c.plan.engineForce;
+  const pull = (T.gravityScale * PHYSICS.gravity * c.s.mass * climbSine(c, Math.sign(target))) / 2;
+  return c.plan.engineForce + Math.min(T.climbReserve * c.plan.engineForce, Math.max(0, pull));
+}
+
+// Sum of the contact normals of the wheels touching the ground, as of the last vehicle update.
+function contactNormals(c: Car): { x: number; y: number; z: number } {
+  const n = { x: 0, y: 0, z: 0 };
+  for (let i = 0; i < c.ctl.numWheels(); i++) {
+    if (!c.ctl.wheelIsInContact(i)) continue;
+    const normal = c.ctl.wheelContactNormal(i);
+    if (!normal) throw new Error(`Wheel ${i} of ${c.v.id} is in contact without a contact normal`);
+    n.x += normal.x;
+    n.y += normal.y;
+    n.z += normal.z;
+  }
+  return n;
+}
+
+// Sine of the grade under the wheels along the nose, or along the tail for a sign of -1: positive uphill. The ground
+// is the mean contact normal of the wheels touching it. 0 when no wheel touches.
+function climbSine(c: Car, sign: number): number {
+  const n = contactNormals(c);
+  const length = Math.hypot(n.x, n.y, n.z);
+  if (length === 0) return 0;
+  const heading = headingOf(c.body.rotation());
+  const way = { x: Math.cos(heading) * sign, z: Math.sin(heading) * sign };
+  // The travel direction laid onto the ground plane; its vertical share is the grade's sine.
+  const into = (way.x * n.x + way.z * n.z) / (length * length);
+  const along = { x: way.x - into * n.x, y: -into * n.y, z: way.z - into * n.z };
+  const run = Math.hypot(along.x, along.y, along.z);
+  // A wall contact normal parallel to the travel direction leaves no ground direction to climb along.
+  return run === 0 ? 0 : along.y / run;
 }
 
 // No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
@@ -719,7 +845,7 @@ export function forwardSpeed(body: RAPIER.RigidBody): number {
 function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, velocityBefore: V3): VehicleFrame {
   const wheels = [];
   for (let i = 0; i < car.numWheels(); i++) {
-    wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest });
+    wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest, ground: car.wheelIsInContact(i) });
   }
   const t = body.translation();
   const r = body.rotation();
@@ -731,10 +857,13 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
 // A vehicle standing on the ground at its sim pose, wheels at rest. For vehicles that have not
 // driven a turn yet, such as ones that spawned at the end of the last turn.
 export function restFrame(w: World, v: Vehicle): VehicleFrame {
-  const b = bodyOf(v.chassisId);
   const q = headingQuat(v.heading);
-  const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
-  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
+  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels: restWheels(v.chassisId) };
+}
+
+// Wheels standing still at rest height, in wheelMounts order.
+export function restWheels(chassisId: string): WheelFrame[] {
+  return wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest, ground: true }));
 }
 
 // Frames for a vehicle that jumped this turn, with no trail to follow: it stands at its sim pose all turn.
@@ -743,21 +872,44 @@ export function restFrames(w: World, v: Vehicle): VehicleFrame[] {
 }
 
 // Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
-// ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
-export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
+// ending on its sim pose. Far vehicles and trucks on a rope get these so the view moves them smoothly, like driven
+// ones. Each wheel rolls by the distance its mount travels along the body's heading, from the `start` wheels.
+export function trailFrames(w: World, v: Vehicle, start: WheelFrame[]): VehicleFrame[] {
   const last = v.trail.length - 1;
   if (last < 1) throw new Error(`Vehicle ${v.id} has no trail to frame`);
+  const b = bodyOf(v.chassisId);
+  const mounts = wheelMounts(b);
+  if (start.length !== mounts.length) throw new Error(`Vehicle ${v.id} starts with ${start.length} wheels, not ${mounts.length}`);
+  const spin = start.map((wheel) => wheel.spin);
+  let prev = mounts.map((m) => mountPoint(v.trail[0], m));
   const frames: VehicleFrame[] = [];
   for (let i = 1; i <= TURN_STEPS; i++) {
     const t = (i / TURN_STEPS) * last;
     const k = Math.min(Math.floor(t), last - 1);
     const f = t - k;
     const a = v.trail[k];
-    const b = v.trail[k + 1];
-    const heading = a.heading + angleDiff(a.heading, b.heading) * f;
-    frames.push(restFrame(w, { ...v, pos: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, heading }));
+    const c = v.trail[k + 1];
+    const pose = { x: a.x + (c.x - a.x) * f, y: a.y + (c.y - a.y) * f, heading: a.heading + angleDiff(a.heading, c.heading) * f };
+    const at = mounts.map((m) => mountPoint(pose, m));
+    const frame = restFrame(w, { ...v, pos: { x: pose.x, y: pose.y }, heading: pose.heading });
+    frame.wheels = frame.wheels.map((wheel, n) => {
+      spin[n] += (((at[n].x - prev[n].x) * Math.cos(pose.heading) + (at[n].y - prev[n].y) * Math.sin(pose.heading)) * S * ROLL_SIGN) / b.wheelRadius;
+      return { ...wheel, spin: spin[n] };
+    });
+    prev = at;
+    frames.push(frame);
   }
   return frames;
+}
+
+// Rapier's wheelRotation grows by this sign when a wheel rolls forward.
+const ROLL_SIGN = 1;
+
+// A wheel mount in map tiles for a truck at a pose. Body +x is the nose and +z the truck's right.
+function mountPoint(p: Pose, m: { x: number; z: number }): Vec {
+  const x = m.x / S;
+  const z = m.z / S;
+  return { x: p.x + Math.cos(p.heading) * x - Math.sin(p.heading) * z, y: p.y + Math.sin(p.heading) * x + Math.cos(p.heading) * z };
 }
 
 // Height of the body center for a truck standing at its sim position with springs at rest.

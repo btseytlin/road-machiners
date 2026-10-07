@@ -1,6 +1,6 @@
 // Draws one item or chassis icon from the game's own models, for npm run icons.
-// The style follows the category. An item icon is a vector blueprint from blueprint.ts, in shades of its category tone.
-// A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
+// The style follows the category. An item icon is a vector blueprint from blueprint.ts. A part draws in shades of its
+// category tone, and a good fills its outline with its model's own colors under see-through shading. A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
 // dark outline and darkened creases. Chassis drawn by the same model are told apart by 45° stripes.
 // Body space as in vehicle.ts: +x is the nose, +z the truck's right, +y up.
 
@@ -12,13 +12,15 @@ import { model, socket, type ModelName } from '../render/models';
 import { wheelMounts } from '../../phys/body';
 import { bareVehicle } from '../../sim/factory';
 import { bodyOf } from '../../sim/body';
+import { baseGrid } from '../../sim/grid';
+import { PLAN_PAD } from '../../render/partLooks';
 import { VehicleView } from '../render/vehicle';
 import { weaponHead } from '../render/weaponHead';
-import { blueprintOf, blueprintSvg, GLASS_MATERIAL, paintBlueprint, type BlueprintColors } from './blueprint';
+import { blueprintOf, blueprintPlanSvg, blueprintSvg, calmed, GLASS_MATERIAL, paintBlueprint, type BlueprintColors, type Calm } from './blueprint';
 import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 9;
+export const ICON_STYLE_VERSION = 11;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -31,9 +33,10 @@ export const DIAGONAL_PITCH_DEG = 30;
 export type IconCategory = 'part' | 'good' | 'chassis';
 export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'diagonal', good: 'diagonal', chassis: 'diagonal' };
 
-// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon.
-export type IconStyle = 'line' | 'toon';
-export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'line', chassis: 'toon' };
+// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon. A line
+// blueprint fills in its tone, and a color blueprint in its model's own colors.
+export type IconStyle = 'line' | 'color' | 'toon';
+export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'color', chassis: 'toon' };
 
 // The one owner of which view the game shows for an entry.
 export function iconView(entry: IconEntry): IconView {
@@ -60,11 +63,17 @@ const OUTER_CELLS = 0.04;
 const INNER_CELLS = 0.022;
 // Armor is built as a front plate with its outer face at +x. It turns this far about y, so the face looks at the camera.
 const ARMOR_YAW = -Math.PI / 2;
+// A plan's outline width in screen pixels, and the condition panel's cell size it is judged at.
+const PLAN_STROKE = 2;
+const PLAN_CELL_PX = 30;
 const TOON_OUTLINE_PX = 4; // toon silhouette outline width at cell size
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 // The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
 const CREASE = { normal: 0.3, depth: 4 };
 const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
+// How much a color blueprint's shadow darkens and its light brightens the paints under them.
+const COLOR_SHADE = 0.35;
+const COLOR_LIGHT = 0.15;
 const INK = PAL.outline;
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
 const PAINT = 'paint';
@@ -90,20 +99,27 @@ function renderer(): { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } 
 }
 
 // The icon at size x size pixels with a transparent background, and for an item its blueprint as one SVG group in
-// size x size units.
-export function renderIcon(entry: IconEntry, view: IconView, size: number): { icon: HTMLCanvasElement; svg: string | null } {
+// size x size units, once in its tone and once in TINT_COLORS.
+export type RenderedIcon = { icon: HTMLCanvasElement; svg: string | null; tint: string | null };
+export function renderIcon(entry: IconEntry, view: IconView, size: number): RenderedIcon {
   const big = size * SUPERSAMPLE;
   const { scene, camera } = stage(entry, view);
-  if (iconStyle(entry) === 'line') {
+  const style = iconStyle(entry);
+  if (style !== 'toon') {
     const perMeter = CELL.along * (big / (camera.right - camera.left));
     const pen = { outer: OUTER_CELLS * perMeter, inner: INNER_CELLS * perMeter };
-    const bp = blueprintOf(scene, camera, big, pen, (m) => draw(scene, camera, big, m));
+    const bp = blueprintOf(scene, camera, big, pen, (m) => draw(scene, camera, big, m), style === 'color');
     const colors = blueprintColors(entry);
     const icon = document.createElement('canvas');
     icon.width = size;
     icon.height = size;
     paintBlueprint(context(icon), bp, colors);
-    return { icon, svg: `<g transform="scale(${size / big})">${blueprintSvg(bp, colors, `clip-${entry.id}`)}</g>` };
+    const group = (svg: string): string => `<g transform="scale(${size / big})">${svg}</g>`;
+    return {
+      icon,
+      svg: group(blueprintSvg(bp, colors, `clip-${entry.id}`)),
+      tint: group(blueprintSvg(calmed(bp, TINT_CALM), TINT_COLORS, `tint-clip-${entry.id}`, TINT_PEN)),
+    };
   }
   const color = draw(scene, camera, big, null);
   const normal = draw(scene, camera, big, new THREE.MeshNormalMaterial({ flatShading: true }));
@@ -111,14 +127,51 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): { ic
   toonInk(color, creaseMask(color, normal, depth), TOON_OUTLINE_PX * SUPERSAMPLE);
   const solid = solidMask(color);
   if (entry.rank > 1) paint(color, stripes(solid, boundsOf(solid), entry.rank - 1, TOON_OUTLINE_PX * SUPERSAMPLE), [...rgbOf(INK), 255]);
-  return { icon: shrink(color, size), svg: null };
+  return { icon: shrink(color, size), svg: null, tint: null };
 }
 
-// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue.
+// Blueprint colors from CSS variables, so a screen sets them: the condition panel draws a part in its condition color.
+const TINT_COLORS: BlueprintColors = { line: 'var(--tint-line)', fill: 'var(--tint-fill)', shadow: 'var(--tint-shadow)', glass: 'var(--tint-glass)', light: 'var(--tint-light)' };
+// How much the small drawings calm down, see calmed(). A chassis plan straightens harder, so the truck reads as one
+// clean outline. A tinted icon straightens the small steps of dents and bevels.
+const PLAN_CALM: Calm = { tolerance: 0.012, minArea: 0.03, minPatch: 0 };
+const TINT_CALM: Calm = { tolerance: 0.015, minArea: 0.03, minPatch: 0.08 };
+const TINT_PEN = { outer: 'var(--tint-outer)', inner: 'var(--tint-inner)' };
+
+// A chassis plan: the bare truck's outline from straight above, nose up, as SVG in size x size units. Its box is the
+// inner grid columns and every row, with PLAN_PAD cells around it, so the game can stretch it over those cells.
+export function renderPlan(entry: IconEntry, size: number): string {
+  if (entry.section !== 'chassis') throw new Error(`Plan of ${entry.id}: only a chassis has a plan`);
+  const { root } = build(entry);
+  toon(root, 'line');
+  const scene = new THREE.Scene();
+  scene.add(root);
+  const grid = baseGrid(entry.id);
+  const { half } = bodyOf(entry.id);
+  const col = (2 * half.z) / (grid.w - 2);
+  const x = half.x + (PLAN_PAD * 2 * half.x) / grid.h;
+  const z = half.z + PLAN_PAD * col;
+  const camera = new THREE.OrthographicCamera(-z, z, x, -x, 0.01, 100);
+  camera.position.set(0, 30, 0);
+  camera.up.set(1, 0, 0);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  camera.updateProjectionMatrix();
+  // Drawing pixels per screen pixel, with the panel's cells PLAN_CELL_PX across.
+  const scale = size / ((2 * z) / col) / PLAN_CELL_PX;
+  const pen = { outer: PLAN_STROKE * scale, inner: PLAN_STROKE * scale };
+  const bp = blueprintOf(scene, camera, size, pen, (m) => draw(scene, camera, size, m));
+  return blueprintPlanSvg(calmed(bp, PLAN_CALM), PLAN_STROKE);
+}
+
+// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue. Over a
+// color blueprint's paints the shadow darkens and the light brightens whatever lies under them.
 export function blueprintColors(entry: IconEntry): BlueprintColors {
   const tone = new THREE.Color(ITEM_TONES[itemTone(entry.id)]);
   const mix = (to: number, t: number): string => `#${tone.clone().lerp(new THREE.Color(to), t).getHexString()}`;
-  return { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
+  const colors = { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
+  if (iconStyle(entry) !== 'color') return colors;
+  return { ...colors, shadow: `rgba(0,0,0,${COLOR_SHADE})`, light: `rgba(255,255,255,${COLOR_LIGHT})` };
 }
 
 // Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
@@ -182,7 +235,7 @@ function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THRE
 function bareTruck(chassisId: string): THREE.Object3D {
   const v = bareVehicle({ nextId: 0 }, { name: chassisId, faction: 'player', chassisId, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const view = new VehicleView(v, false);
-  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest }));
+  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest, ground: true }));
   view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels }, 0);
   return view.root;
 }

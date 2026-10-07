@@ -224,7 +224,7 @@ describe('NPC gameplay recovery', () => {
 
   it('investigates an accurate scanner contact far beyond hearing', () => {
     const world = emptyWorld({ x: 200, y: 200 });
-    const npc = addVehicle(world, 'raiders', 'scout', ['scanner', 'stockEngine'], { x: 30, y: 30 });
+    const npc = addVehicle(world, 'raiders', 'scout', ['mg', 'scanner', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
     const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 150, y: 30 });
     prey.speed = 4;
