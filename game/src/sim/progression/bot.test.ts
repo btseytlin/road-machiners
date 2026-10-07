@@ -840,7 +840,7 @@ describe('haulMarginAt', () => {
 
   it('grows with the money and room of the load', () => {
     const w = robberWorld();
-    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 200, 20));
-    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 2000, 2));
+    expect(haulMarginAt(w, 66667, 20)).toBeGreaterThan(haulMarginAt(w, 6667, 20));
+    expect(haulMarginAt(w, 66667, 20)).toBeGreaterThan(haulMarginAt(w, 66667, 2));
   });
 });
