@@ -1074,7 +1074,10 @@ export class RadioLights {
   }
 
   lit(id: string, now: number): boolean {
-    return this.cues.get(id)?.some((c) => radioLit(c, now)) ?? false;
+    const list = this.cues.get(id);
+    if (!list) return false;
+    for (const cue of list) if (radioLit(cue, now)) return true;
+    return false;
   }
 
   private open(id: string, now: number): void {
@@ -1112,9 +1115,8 @@ export class RadioLights {
 
   private prune(now: number): void {
     for (const [id, list] of this.cues) {
-      const live = list.filter((c) => cueEnd(c) > now);
-      if (live.length === 0) this.cues.delete(id);
-      else if (live.length < list.length) this.cues.set(id, live);
+      while (list.length > 0 && cueEnd(list[0]) <= now) list.shift();
+      if (list.length === 0) this.cues.delete(id);
     }
   }
 }
