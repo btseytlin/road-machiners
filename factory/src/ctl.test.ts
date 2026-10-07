@@ -230,7 +230,7 @@ describe('immediate commands', () => {
 
   it('resume keeps a pause written by hand', async () => {
     writeFileSync(join(ROOT, 'paused'), 'Hermes fixing #5\npid: 12\n');
-    await expect(run(fake(), 'resume')).rejects.toThrow('This pause was written by hand or by a member. Ask the committee before removing it.');
+    await expect(run(fake(), 'resume')).rejects.toThrow('This pause was written by hand or by a member. Once its reason is gone, delete the pause file.');
     expect(existsSync(join(ROOT, 'paused'))).toBe(true);
   });
 });

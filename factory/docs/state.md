@@ -131,4 +131,4 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `merge` of a card the committee has not approved, `ship` and `merge-change` are gated by a rule Hermes keeps. Hermes names the member who ordered the action in `--by`. The CLI does not check who sent the message.
 
-Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.
+Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.

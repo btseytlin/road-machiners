@@ -250,7 +250,7 @@ function pause(ctx: Ctx, args: string[]): void {
 
 function resume(ctx: Ctx): void {
   const paused = pausedReason(ctx.cfg.home);
-  if (paused !== null && !paused.startsWith(PAUSE_PREFIX)) throw new Error('This pause was written by hand or by a member. Ask the committee before removing it.');
+  if (paused !== null && !paused.startsWith(PAUSE_PREFIX)) throw new Error('This pause was written by hand or by a member. Once its reason is gone, delete the pause file.');
   rmSync(pauseFile(ctx.cfg.home), { force: true });
   console.log('Resumed.');
 }
