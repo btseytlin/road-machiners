@@ -80,16 +80,19 @@ describe('NPC restraint', () => {
     expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
-  it('mostly attacks an isolated manageable target', () => {
+  it('mostly sets on an isolated manageable target, and robs it or fights it', () => {
     const { world, npc } = createNpc('buggy');
-    const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
+    const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 33, y: 30 });
+    prey.brain = npcBrain('trader', prey.pos, ['trader']);
     addGoods(world, prey, 'electronics', 3);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       assignAutoOrders(x);
       const fights = topGoal(me)?.kind === 'fight';
       if (fights) expect(Object.keys(me.weaponOrders)).toHaveLength(1);
-      return fights;
+      // Prey that pays at the hold-up leaves the raider a loot goal over its fight.
+      const paid = topGoal(me)?.kind === 'loot' && topGoal(me)?.reason === 'take the handed-over cargo';
+      return fights || paid;
     });
     expect(fought).toBeGreaterThan(0.9);
   }, budget(90_000)); // many seeds of planning take a few seconds alone and near 30s when the whole suite shares the cores

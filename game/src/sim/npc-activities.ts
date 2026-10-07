@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -29,7 +29,7 @@ import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isS
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
-import { judgeStrandedFoe, plead, warnedOff } from './parley';
+import { answersHoldUp, judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -393,11 +393,29 @@ function steerFight(world: World, vehicle: Vehicle, goal: NpcActivity, _profile:
   goal.perceived = world.turn;
 }
 
-// A fight on the player rolls once whether the driver radios for the cargo first or opens fire unwarned.
+// A fight on the player, or a robbery of an NPC, rolls once whether the driver radios for the cargo first or opens
+// fire unwarned.
 function fightGoal(world: World, vehicle: Vehicle, target: Vehicle, reason: string): NpcActivity {
   const goal: NpcActivity = { ...createActivity('fight', target.id, { ...target.pos }, reason), perceived: world.turn };
-  if (target.id === world.player.vehicleId) goal.demands = decide(world, vehicle, 'mugging', target.id, null) === 'demand';
+  if (target.id === world.player.vehicleId || robbedFor(world, vehicle, target)) goal.demands = decide(world, vehicle, 'mugging', target.id, null) === 'demand';
   return goal;
+}
+
+// A robber that radios first asks NPC prey once, as soon as it sees it, and the prey answers at once: it hands over
+// its cargo, fights or runs. Prey that is outgunned mostly pays, so a robbery need not cost either truck a shot.
+function onHoldUp(world: World, vehicle: Vehicle): void {
+  const goal = topGoal(vehicle);
+  const prey = goal ? preyToAsk(world, vehicle, goal) : null;
+  if (!goal || !prey) return;
+  goal.demands = false;
+  answersHoldUp(world, prey, vehicle, decide(world, prey, 'threatened', vehicle.id, perceiveDanger(world, prey, vehicle)));
+}
+
+// The NPC a robbing fight still means to radio, once the robber sees it and still holds it up.
+function preyToAsk(world: World, vehicle: Vehicle, goal: NpcActivity): Vehicle | null {
+  if (goal.kind !== 'fight' || !goal.demands || goal.targetId === world.player.vehicleId) return null;
+  const prey = vehicleById(world, goal.targetId!);
+  return canVehicleSee(world, vehicle, prey.pos) && holdsUp(world, vehicle, prey, null) ? prey : null;
 }
 
 // A driver keeps running until it has not seen, heard or been hit by anything for NPC_BEHAVIOR.fleeCalmTurns, so a
@@ -891,6 +909,8 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
+  // After the robbery rolls, so a robber asks in the turn it sets out, before its first shot.
+  onHoldUp(world, vehicle);
   onStrandedSeen(world, vehicle);
   onNeedySeen(world, vehicle);
   onSalvageSeen(world, vehicle);
