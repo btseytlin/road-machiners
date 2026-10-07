@@ -16,6 +16,7 @@
     "loadouts": "vite-node scripts/loadouts.mjs",
     "stuck": "vite-node scripts/stuck.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
+    "progression:playthrough": "vite-node scripts/progression-playthrough.mjs",
     "progression:report": "vite-node scripts/progression-report.mjs",
     "map:bake": "vite-node scripts/map-bake.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs && node scripts/truck-shapes.mjs",
