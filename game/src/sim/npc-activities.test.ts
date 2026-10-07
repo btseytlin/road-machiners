@@ -977,6 +977,15 @@ describe('NPC activities', () => {
       expect(fled).toEqual([]);
     });
 
+    // An 'arrived' event of an unrelated goal this turn is not the arrival of a run that was never pushed.
+    it('is run from again when the driver arrived somewhere else this turn', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      w.events = [{ t: 'arrived', vehicle: raider.id } as (typeof w.events)[number]];
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id });
+    });
+
     it('is judged fresh once forgotten', () => {
       const { w, player, raider } = ranFrom();
       w.turn += NPC_BEHAVIOR.fleeMemory;

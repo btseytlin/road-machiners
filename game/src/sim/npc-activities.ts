@@ -639,7 +639,7 @@ function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle, profile: NpcP
 function runsAgain(world: World, vehicle: Vehicle, track: Track, enemy: Vehicle, profile: NpcProfile): 'flee' | null {
   if (!comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
   const run = fleeGoal(world, vehicle, profile, enemy.id, enemy.pos, 'avoid a truck it ran from');
-  return reachedDestination(world, vehicle, run) ? null : 'flee';
+  return withinReach(vehicle, run) ? null : 'flee';
 }
 
 // The driver's first choice on a hostile it hears, or null when it holds a choice on the truck already.
