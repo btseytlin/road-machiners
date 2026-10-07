@@ -24,6 +24,7 @@ COPY --chmod=755 factory-incidents.sh /opt/hermes-factory/factory-incidents.sh
 COPY plugin /opt/hermes-factory/plugin
 COPY --chmod=755 factory-host /usr/local/bin/factory-host
 COPY --chmod=755 factory /usr/local/bin/factory
+COPY --chmod=755 factory-incident-watch /usr/local/bin/factory-incident-watch
 
 # The image supervises the gateway with s6, and the gateway reads its env from $HERMES_HOME/.env.
 # So the start script writes the repo's config, identity and committee allow list there, then hands over.
@@ -47,10 +48,6 @@ printenv GH_TOKEN | env -u GH_TOKEN gh auth login --with-token
 env -u GH_TOKEN gh auth setup-git
 git config --global user.name "ROAM Factory Hermes"
 git config --global user.email "hermes@roam.invalid"
-# The incident watch wakes Hermes when the list of open incidents changes. SOUL.md holds what to do, so the job itself never changes.
-if ! hermes cron list --all | grep -q factory-incidents; then
-  hermes cron create "every 1m" "The list of open factory incidents changed. The monitor diff shows how. Follow the Incidents section of your instructions. If the change is only an incident going away, respond with [SILENT]." \
-    --name factory-incidents --monitor-script factory-incidents.sh --deliver "telegram:$FACTORY_COMMITTEE_CHAT" --failure-deliver "telegram:$FACTORY_COMMITTEE_CHAT"
-fi
+factory-incident-watch
 exec hermes gateway run
 EOF2

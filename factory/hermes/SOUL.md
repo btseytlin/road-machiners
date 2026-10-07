@@ -132,7 +132,7 @@ Common fixes:
 
 ## Server health
 
-Every tick writes `/factory/home/health` with its time, the free disk space and the available memory, also while paused. The watch adds four incident lines from it.
+Every tick writes `/factory/home/health` with its time, the free disk space and the available memory, also while paused. The watch adds four incident lines from it, and one when GitHub or `factory audit` stops answering.
 
 - `disk low`. Free space is under the minimum, so no job starts. Fix it yourself, then respond with [SILENT].
   1. Find what grew with `du -sh /opt/factory/home/* /opt/factory/home/work/* /var/lib/docker` through `factory-host`.
@@ -151,6 +151,10 @@ Every tick writes `/factory/home/health` with its time, the free disk space and 
   3. Remove a lock only when its owner pid is dead, or it is alive but has held the lock longer than its timeout: 15 minutes for the repo lock and 30 seconds for the state lock. The tick runs as the factory user, so stop a hung tick with `factory-host "pkill -f 'src/cli.ts -- tick'"` before you remove its lock. Jobs run as `src/cli.ts -- run`, so this leaves them alone.
   4. Check that the next tick runs. Record what held the factory in an issue comment or the chat.
   5. A missing health file after a deploy means no tick ran on the new code. Read the timer status and the update log.
+- `stuck list failed since <time>` or `audit failed since <time>`. The watch got no answer from GitHub or from `factory audit` for 10 minutes, or never got one since Hermes started. Meanwhile it repeats the last answer, so a stuck label or a drift opened in that time stays hidden.
+  1. Run `gh issue list --label factory-stuck` or `factory audit` yourself and read the error.
+  2. Fix what you can, like an expired `gh` login or a dead ssh key. A GitHub outage passes by itself.
+  3. The line closes once the source answers. Respond with [SILENT], and post only when it stays down for an hour.
 - `paused over an hour`. Finish your own pause and remove it. A pause someone else wrote stays. Ask the committee whether it can go, since it is their call.
 - `paused over an hour: Hermes: Claude weekly usage limit; ...`. The factory wrote it when an agent hit the limit, and it is yours. Its failure left no stuck label. Run `factory resume` once the reset time in the note has passed, and not before.
 
