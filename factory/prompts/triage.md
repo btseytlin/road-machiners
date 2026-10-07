@@ -81,6 +81,17 @@ A new feature is never a hotfix.
 When in doubt, it is not a hotfix.
 A hotfix ships alone, so it never bundles other requests.
 
+For `ready`, also decide whether it is a release fix.
+`.factory/release.md` says whether a release takes fixes now, and lists its features.
+A release fix branches from the release and goes out with it.
+Mark a release fix only when the request fixes or corrects one of those features.
+A bug in a listed feature, or a small change to how it looks or works, counts.
+New work never counts, also when it builds on a listed feature.
+New work waits for the next release.
+When no release takes fixes, `releaseFix` is false.
+A hotfix is never a release fix.
+When in doubt, it is not a release fix.
+
 For `ready`, also rate the task complexity.
 It picks the models for the later stages.
 Aim for 20% Opus and 80% Sonnet in measured factory-agent tokens.
@@ -98,10 +109,11 @@ Read the code the issue touches to answer them.
 A committee member reads it to audit the choice.
 
 Write `.factory/triage.json` with this shape.
-`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."], "hotfix": true | false, "complexity": "trivial" | "intermediate" | "hard", "complexityReason": "...", "bundle": [12, 15]}`
+`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."], "hotfix": true | false, "releaseFix": true | false, "complexity": "trivial" | "intermediate" | "hard", "complexityReason": "...", "bundle": [12, 15]}`
 The reason is one or two plain sentences.
 For a hotfix, the reason says what breaks for players.
+For a release fix, the reason names the release feature it fixes.
 When you bundle, the reason also says what the bundled requests share.
 The questions list is empty unless the verdict is `unclear`.
-The fields `hotfix`, `complexity`, `complexityReason` and `bundle` are required for `ready`.
+The fields `hotfix`, `releaseFix`, `complexity`, `complexityReason` and `bundle` are required for `ready`.
 The bundle lists issue numbers from `.factory/related.md` only, and is empty when nothing fits.

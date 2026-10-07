@@ -22,6 +22,7 @@ A card is one GitHub issue on the Project board. Its column is the state. A card
 ![Card lifecycle](diagrams/lifecycle.svg)
 
 - A bug a collaborator labels `hotfix` skips Triage. Triage can also label a bug `hotfix`. Approve ships a hotfix at once.
+- Triage labels a fix of an open release's feature `release-task`, until the release's candidate is posted. It runs on the release branch and ships with that release. New work stays on `dev` for the next release.
 - A merged issue stays open with the label `release-candidate`. It closes when its release ships.
 
 The loops:
