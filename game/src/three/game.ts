@@ -356,6 +356,7 @@ export class Game {
   }
 
   get state(): World { return this.world; }
+  logTexts(): string[] { return this.hud.logTexts(); }
 
   // Whether a turn is playing, so the debug console waits instead of changing the world under it.
   get busy(): boolean { return this.anim !== null; }
