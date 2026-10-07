@@ -2026,14 +2026,6 @@ canvas.view {
   gap: 3px;
   font: 11px var(--font-mono);
 }
-.delta .price,
-.dim .price,
-.priced .price,
-.note .price {
-  min-width: 0;
-  font: inherit;
-  vertical-align: middle;
-}
 
 .delta.better {
   color: #b9d27f;
@@ -2090,6 +2082,29 @@ canvas.view {
 #ui .trade button {
   padding: 2px 8px;
   font: 12px var(--font-mono);
+}
+.coin {
+  display: inline-block;
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+.coin svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.trade > .amount,
+.job > .amount {
+  min-width: 52px;
+  font: 13px var(--font-mono);
 }
 .price {
   display: inline-flex;

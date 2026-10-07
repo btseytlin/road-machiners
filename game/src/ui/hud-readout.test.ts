@@ -296,9 +296,14 @@ describe("rescue readout", () => {
     w.player.money = -1200;
     expect(getHudReadout(w).resources[0]).toMatchObject({
       value: "Debt 1,200",
-      icon: "money",
+      balance: -1200,
       warning: true,
     });
+  });
+  it("gives only the M's entry a balance", () => {
+    const { resources } = getHudReadout(emptyWorld());
+    expect(resources[0]).toHaveProperty("balance");
+    expect(resources.slice(1).every((r) => !("balance" in r))).toBe(true);
   });
   it("tells a stranded player to install a spare engine it carries", () => {
     const w = newWorld(1337, startKit("combat"), TEST_MAP);

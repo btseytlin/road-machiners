@@ -380,24 +380,21 @@ export function getHudReadout(w: World) {
       {
         label: "M's",
         value: balanceNumber(p.money),
-        icon: "money" as IconName | null,
+        balance: p.money,
         warning: p.money < 0,
       },
       {
         label: "Fuel",
-        icon: null as IconName | null,
         value: `${fuelLiters(p.fuel)} / ${fuelLiters(capacity)} L`,
         warning: p.fuel < capacity * RULES.lowFuelThreshold,
       },
       {
         label: "Supplies",
-        icon: null as IconName | null,
         value: p.supplies.toFixed(1),
         warning: p.supplies <= RULES.suppliesLow,
       },
       {
         label: "Driver",
-        icon: null as IconName | null,
         value: `${hp(p.health)} / ${maxHealth}`,
         warning: p.health < maxHealth,
       },

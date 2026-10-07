@@ -106,5 +106,5 @@ const SKILL_ICON: Record<SkillId, IconName> = {
   perception: 'scanner',
   machining: 'tools',
   toughness: 'armor',
-  social: 'money',
+  social: 'trade',
 };

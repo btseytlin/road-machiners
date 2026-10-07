@@ -434,7 +434,7 @@ const TAB_LABEL: Record<Tab, string> = {
 const TAB_ICON: Record<Tab, IconName> = {
   market: "salt",
   buyParts: "parts",
-  sellParts: "money",
+  sellParts: "trade",
   trucks: "truck",
   contracts: "clock",
 };

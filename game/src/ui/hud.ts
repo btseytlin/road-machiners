@@ -20,7 +20,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { balanceText } from "./money";
+import { balanceEl, balanceText } from "./money";
 import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
@@ -476,7 +476,7 @@ export class Hud {
             "data-resource": resource.label,
           },
           el("small", {}, resource.label),
-          el("strong", {}, ...(resource.icon ? [createIcon(resource.icon)] : []), `${resource.warning ? "! " : ""}${resource.value}`),
+          el("strong", {}, resource.warning ? "! " : "", resource.balance === undefined ? resource.value : balanceEl(resource.balance)),
         ),
       ),
       ...readout.survival.map((entry) =>

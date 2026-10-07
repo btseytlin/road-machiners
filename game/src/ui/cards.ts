@@ -18,8 +18,7 @@ import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./for
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
 
 const ART = {
-  money:
-    '<circle cx="20" cy="20" r="17" fill="#4a4338" stroke="#e8c76a" stroke-width="3"/><path d="M12 28V12l8 10 8-10v16" fill="none" stroke="#f4e3a8" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>',
+  trade: '<ellipse cx="18" cy="9" rx="11" ry="5"/><path d="M7 9v15c0 7 22 7 22 0V9M7 16c0 7 22 7 22 0"/>',
   fuel: '<path d="M8 10h16v23H8zM11 4h10v6M15 15l6 6-9 8M24 12h7v18h5V15l-5-5"/>',
   supplies: '<path d="M5 13h30v22H5zM5 13l6-8h18l6 8M15 6v28M25 6v28"/>',
   driver:
@@ -76,7 +75,7 @@ export type IconName = keyof typeof ART;
 
 const ICON_NAMES: Record<IconName, string> = {
   star: "Pristine",
-  money: "M's",
+  trade: "Trade",
   fuel: "Fuel",
   supplies: "Supplies",
   driver: "Driver",
