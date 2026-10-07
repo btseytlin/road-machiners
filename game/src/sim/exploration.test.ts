@@ -64,7 +64,7 @@ describe('Icarus exploration distances', () => {
     expect(next.player).not.toBe(world.player);
     expect(next.vehicles).not.toBe(world.vehicles);
     expect(world.vehicles[0].order).toBeNull();
-  }, budget(15_000));
+  }, budget(60_000)); // a new 600-tile world takes about 9 s alone on a loaded machine and longer beside the suite
 });
 
 describe('discovering an outlined territory', () => {

@@ -23,6 +23,9 @@ export const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 // A stored save the game cannot load. Boot offers to migrate it to a new world or to start over.
 export class SaveError extends Error {}
 
+// Local storage has no room for a save. The save in the slot stays as it was.
+export class SaveQuotaError extends Error {}
+
 export function clearSlot(storage: Storage, slot: SlotId): void {
   storage.removeItem(slotKey(SAVE_KEY, slot));
 }
@@ -134,7 +137,7 @@ function isCount(value: unknown): value is number {
 }
 
 // World fields a save must hold as arrays.
-const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
+const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states', 'craters'] as const;
 
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {
   if (!value || typeof value !== 'object') return false;
@@ -154,22 +157,48 @@ export function isDayStart(turn: number): boolean {
   return clockOf(turn).day !== clockOf(turn - 1).day;
 }
 
-export function saveWorld(storage: Storage, world: World, interval: number, savedAt: number): void {
+// Writes a save for the automatic paths. Returns false when storage is full, so the caller can tell the player. The old
+// save in the slot stays, and no other key is touched.
+export function tryWriteSave(storage: Storage, slot: SlotId, world: World, savedAt: number): boolean {
+  try {
+    writeSave(storage, slot, world, savedAt);
+    return true;
+  } catch (err) {
+    if (err instanceof SaveQuotaError) return false;
+    throw err;
+  }
+}
+
+function dueSlots(turn: number, interval: number): SlotId[] {
+  const due: SlotId[] = [];
+  if ((turn - 1) % interval === 0) due.push('auto');
+  if (isDayStart(turn)) due.push('day');
+  return due;
+}
+
+// Writes the autosaves due this turn. A full storage calls onFull instead of throwing.
+export function saveWorld(storage: Storage, world: World, interval: number, savedAt: number, onFull: () => void): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
   // A dead run keeps its last saves, so the player can load them.
   if (world.player.state === 'dead') return;
-  if ((world.turn - 1) % interval === 0) writeSave(storage, 'auto', world, savedAt);
-  if (isDayStart(world.turn)) writeSave(storage, 'day', world, savedAt);
+  if (dueSlots(world.turn, interval).map((slot) => tryWriteSave(storage, slot, world, savedAt)).includes(false)) onFull();
 }
 
 // A UI command in town, like a purchase, saves at once, so a reload does not undo it.
-export function saveInTown(storage: Storage, world: World, savedAt: number): void {
-  if (world.player.state === 'active' && townAt(world)) writeSave(storage, 'auto', world, savedAt);
+export function saveInTown(storage: Storage, world: World, savedAt: number, onFull: () => void): void {
+  if (world.player.state === 'active' && townAt(world) && !tryWriteSave(storage, 'auto', world, savedAt)) onFull();
 }
 
 export function writeSave(storage: Storage, slot: SlotId, world: World, savedAt: number): void {
   if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
-  storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
+  try {
+    storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22)) {
+      throw new SaveQuotaError('Not saved: the browser storage is full. Delete a save slot to make room.');
+    }
+    throw err;
+  }
 }
 
 // The save of a world as it goes into JSON.
@@ -210,12 +239,14 @@ export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
 
 // What the menus do with the saves: the game's world in, the slots of local storage out. Loading and starting a new
 // game reload the page, so they leave a boot request in session storage.
-export function saveStore(storage: Storage, session: Storage, world: () => World, slotCount: number) {
+export function saveStore(storage: Storage, session: Storage, world: () => World, slotCount: number, onFull: () => void) {
   return {
     list: () => listSaves(storage, SAVE_KEY, slotCount),
     manualSlots: () => manualSlots(slotCount),
     hasSave: () => hasSave(storage, allSlots(slotCount)),
-    save: (slot: SlotId) => writeSave(storage, slot, world(), Date.now()),
+    save: (slot: SlotId) => {
+      if (!tryWriteSave(storage, slot, world(), Date.now())) onFull();
+    },
     requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
     newGame: browserNewGame((request) => requestBoot(session, SAVE_KEY, request)),
   };
@@ -247,6 +278,7 @@ export class SaveHold {
   }
 }
 
+export const SAVE_FULL_NOTE = 'Not saved: the browser storage is full. Delete a save slot to make room.';
 export const SAVE_HELD_NOTE = 'Not saved: an error happened since the last good turn.';
 
 export function turnFailedNote(err: unknown): string {

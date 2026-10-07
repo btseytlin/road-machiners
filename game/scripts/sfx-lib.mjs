@@ -1,6 +1,7 @@
 // Shared sound import: every file, whatever its source, gets the same treatment before the game uses it.
 // 1. Free music loses its quiet intro and outro and loops through a crossfade. A beat loop is stretched to its exact
 //    bar length, so layers stay locked.
+//    Every music loop then gets the palette finish, so tracks from different generations sound like one set.
 // 2. One-shots lose silence at both ends and get short fades. Score stingers are cut to STINGER_MAX_S with soft edges,
 //    so they sit in the music instead of cutting in, and get a warmer top end.
 // 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
@@ -49,7 +50,7 @@ export function importFile(source, id, cue, level) {
   const name = nextName(id);
   const out = `${SFX_DIR}/${name}`;
   if (existsSync(out)) throw new Error(`${out} exists`);
-  const src = playable(source, name, cue);
+  const src = paletteFinish(playable(source, name, cue), name, cue);
   const base = [...shapeFilters(src, cue), channels(src, cue), EQ];
   const family = (cue.prompts?.length ?? 0) > 1;
   const shaped = [...base, ...(family ? [] : toneMatch(src, base.join(','), id))].join(',');
@@ -181,4 +182,74 @@ function loudSpan(src) {
   const loud = points.filter((p) => p.s >= loudest - MUSIC_EDGE_DB);
   if (loud.length === 0) throw new Error(`${src} has no loud part`);
   return { start: loud[0].t, end: loud[loud.length - 1].t };
+}
+
+// ---- The music palette. Tone moves part of the way toward one target curve and width goes to one level. All loops
+// share glue compression, one room and one soft top end. The loop runs twice through the chain and the second pass
+// is kept, so the room tail and the compressor wrap across the seam.
+const OCTAVES = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+// Octave levels in dB around their mean, from octaveCurve() of the town and outpost tracks, which set the palette's tone.
+const PALETTE_TONE = [9.5, 9.9, 4.6, -0.2, -1.5, -1.7, -7.1, -13.6];
+const TONE_SHARE = 0.6; // share of the way each track moves toward PALETTE_TONE; the full way makes every track alike
+const WIDTH = 0.35; // side to mid level ratio every track moves toward
+const SIDE_GAIN = [0.5, 2.5]; // side gain limits, so a near-mono track is not blown up into noise
+const GLUE = 'acompressor=threshold=-26dB:ratio=2:attack=30:release=300:makeup=3';
+const SOFT_TOP = 'lowpass=f=9000';
+const ROOM = { wet: 0.18, seconds: 0.9, predelayMs: 15, cutoffHz: 6000 };
+const ROOM_IR = 'tmp/sfx-raw/palette-room.wav';
+const PALETTE_SR = 48000;
+
+function paletteFinish(src, name, cue) {
+  if (cue.bus !== 'music' || !cue.loop) return src;
+  const seconds = durationOf(src);
+  const stereo = `aresample=${PALETTE_SR},aformat=channel_layouts=stereo`;
+  const chain = [toneToward(src, stereo), `stereotools=slev=${sideGain(src, stereo).toFixed(3)}`, GLUE, SOFT_TOP].join(',');
+  const graph = [
+    `[0]${stereo},asplit[a][b];[a][b]concat=n=2:v=0:a=1,${chain},asplit[dry][send]`,
+    `[send][1]afir=dry=1:wet=1,volume=${ROOM.wet}[room];[dry]volume=${1 - ROOM.wet}[direct]`,
+    `[direct][room]amix=inputs=2:normalize=0,atrim=start=${seconds.toFixed(6)}:end=${(2 * seconds).toFixed(6)},asetpts=N/SR/TB`,
+  ].join(';');
+  const out = `tmp/sfx-raw/${name.replace('.ogg', '')}.palette.wav`;
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-i', roomIr(), '-filter_complex', graph, out]);
+  return out;
+}
+
+// Octave levels in dB around their mean.
+export function octaveCurve(src, shaped = 'anull') {
+  const levels = OCTAVES.map((f) => statValue(ffmpegLog(src, `${shaped},bandpass=f=${f}:width_type=o:w=1,astats=measure_perchannel=0:measure_overall=RMS_level`), 'RMS level dB'));
+  const mean = levels.reduce((a, b) => a + b, 0) / levels.length;
+  return levels.map((l) => l - mean);
+}
+
+// A smooth EQ curve that moves this track's octaves part of the way toward the palette tone. Linear phase with its
+// delay removed, so beat loops keep their first beat.
+function toneToward(src, shaped) {
+  const have = octaveCurve(src, shaped);
+  const gains = have.map((h, i) => Math.max(-MAX_MATCH_DB, Math.min(MAX_MATCH_DB, (PALETTE_TONE[i] - h) * TONE_SHARE)));
+  console.log(`  palette tone: ${gains.map((g) => g.toFixed(1)).join(' ')} dB`);
+  return `firequalizer=zero_phase=on:gain_entry='${OCTAVES.map((f, i) => `entry(${f},${gains[i].toFixed(2)})`).join(';')}'`;
+}
+
+// Side gain that brings the side to mid ratio to WIDTH. A mono source has no side, so the gain does nothing there.
+function sideGain(src, shaped) {
+  const rms = (pan) => {
+    const m = ffmpegLog(src, `${shaped},pan=mono|c0=0.5*c0${pan}0.5*c1,astats=measure_perchannel=0:measure_overall=RMS_level`).match(/RMS level dB: *(-?[\d.]+|-inf)/);
+    if (!m) throw new Error(`Could not measure the width of ${src}`);
+    return m[1] === '-inf' ? -Infinity : Number(m[1]);
+  };
+  const width = dbToLinear(rms('-') - rms('+'));
+  return Math.max(SIDE_GAIN[0], Math.min(SIDE_GAIN[1], WIDTH / width));
+}
+
+// A stereo room impulse: two seeded noise tails with an exponential decay, darkened and delayed. Same seeds, same room.
+function roomIr() {
+  if (existsSync(ROOM_IR)) return ROOM_IR;
+  const tail = (seed) => `anoisesrc=d=${ROOM.seconds}:c=white:seed=${seed}:r=${PALETTE_SR}:a=1`;
+  const graph = `${tail(7)}[l];${tail(8)}[r];[l][r]join=inputs=2:channel_layout=stereo,aeval='val(ch)*exp(-6.9*t/${ROOM.seconds})':c=same,lowpass=f=${ROOM.cutoffHz},adelay=${ROOM.predelayMs}|${ROOM.predelayMs}`;
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-filter_complex', graph, ROOM_IR]);
+  return ROOM_IR;
+}
+
+function durationOf(src) {
+  return Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', src], { encoding: 'utf8' }));
 }

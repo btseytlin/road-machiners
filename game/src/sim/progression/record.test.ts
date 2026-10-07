@@ -11,11 +11,13 @@ const SHORT_RUN = 60;
 // handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
 // to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 300_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which made a 16s run take over 120s on a loaded machine
+const RUN_TIMEOUT = 360_000; // one world turn takes about 40 ms and a new world about 400 ms; a loaded machine running the whole suite made the 60-turn run take over 120 s
 
 describe('record', () => {
-  it('gives the same trace for the same seed and archetype', () => {
+  it('gives the same trace for the same seed and archetype', async () => {
     const first = record(1337, 'trader', DETERMINISM_RUN);
+    // Each run takes about half a minute on a loaded machine, so the worker's status messages get a turn between them.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const second = record(1337, 'trader', DETERMINISM_RUN);
 
     expect(first.lines.length).toBeGreaterThan(0);

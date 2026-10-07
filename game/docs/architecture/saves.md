@@ -11,6 +11,7 @@
 - The terrain comes from the map file on load. A save records the map file's hash and does not load on another map.
 - A build with `SAVE_SCOPE` set stores its save under its own key, so builds served from one site keep separate saves.
 - A dead world is never saved.
+- A write that hits the storage quota throws `SaveQuotaError` and leaves the slot's old save and every other key alone. The manual Save and the automatic saves note "Not saved" in the log. Boot and rescue continue unsaved. Nothing is cleared to make room.
 
 ## Versions
 

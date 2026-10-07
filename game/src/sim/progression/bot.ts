@@ -5,7 +5,7 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, TRAITS } from '../../data/npcs';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
@@ -17,28 +17,30 @@ import { startStrip, stripYield } from '../jobs';
 import { aimGuns, isSoftTarget } from './aim';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
-import { isKnockedOut } from '../defeat';
+import { isDefeated, isKnockedOut } from '../defeat';
 import { isTownGuarded } from '../guards';
-import { callVehicle, chooseOption, currentOptions } from '../dialogue';
-import { offeredSurrenderBy } from '../parley';
+import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
+import { offeredSurrenderBy, type ThreatAnswer } from '../parley';
 import { hashRandom } from '../rng';
-import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getLotTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
-import { getLayoutError, stowSpot, storePart } from '../inventory';
+import { cargoMassRoom, getLayoutError, stowSpot, storePart } from '../inventory';
+import { itemMass } from '../mass';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
-import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
-import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
+import { topGoal } from '../npc-activities';
+import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger, getKnownSite, tripFuelCost } from '../npc-decisions';
+import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
-import { inTowReach, playerTow, setBeacon } from '../tow';
+import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
-import type { Call, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
-import { playerExplored, playerSees } from '../vision';
+import { canVehicleSee, playerExplored, playerSees } from '../vision';
 import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
 // Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
@@ -48,7 +50,11 @@ import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyl
 // The climber plays a player's snowball: it hauls and scavenges until the truck mounts CLIMB_GUNS guns, then hunts.
 export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
 export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
-type Goal = Exclude<Archetype, 'markov' | 'climber'>;
+// A policy is an archetype or a robber of the income harness. The selective robber skips guarded targets, and the
+// convoy robber demands from guarded convoys too.
+export type Policy = Archetype | 'robber' | 'convoyRobber';
+export const POLICIES: readonly Policy[] = [...ARCHETYPES, 'robber', 'convoyRobber'];
+type Goal = Exclude<Policy, 'markov' | 'climber'>;
 
 // A player who snowballed hunted raiders from a convertible with two machine guns, a slug cannon and a shotgun.
 const CLIMB_GUNS = 3;
@@ -63,33 +69,40 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   hunter: { skip: [], chassis: 'keep', keepRoom: false },
   fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
   hauler: CARGO_GEAR,
+  robber: CARGO_GEAR,
+  convoyRobber: CARGO_GEAR,
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
 // settings are world settings for the run's Roaming world, each missing one at its default.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; settings?: Record<string, number> };
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean; settings?: Record<string, number> };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
+
+export function isPolicy(value: string): value is Policy {
+  return (POLICIES as readonly string[]).includes(value);
+}
 
 export function isArchetype(value: string): value is Archetype {
   return (ARCHETYPES as readonly string[]).includes(value);
 }
 
 // The player's commands for this turn. A knocked-out or towed player gets none, and turns still run.
-export function botOrders(world: World, archetype: Archetype, options: BotOptions = {}): BotTurn {
+export function botOrders(world: World, archetype: Policy, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
   o.fieldRepair = goal === 'hunter';
+  o.buysGear = options.noGear !== true;
   const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
   answerCall(o, takesTowOffer(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
     keepSwitches(o);
     act(o, goal);
   }
-  return { world: o.world, events: o.events, ledger: o.ledger };
+  return { world: o.world, events: o.events, ledger: o.ledger, notes: o.notes };
 }
 
 // A hold, a service stop and a fight each take the turn's command before the goal does.
@@ -109,7 +122,7 @@ function climberGoal(world: World): Goal {
   return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'hauler';
 }
 
-function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
+function goalOf(world: World, archetype: Policy, options: BotOptions): Goal {
   if (archetype === 'climber') return climberGoal(world);
   if (archetype !== 'markov') return archetype;
   const { markovTurns } = options;
@@ -429,7 +442,7 @@ function repairAtGarage(o: Orders): void {
 
 // ---- Goals.
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal, hauler: haulerGoal };
+const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal, hauler: haulerGoal, robber: (o) => robberGoal(o, false), convoyRobber: (o) => robberGoal(o, true) };
 
 // A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
 // grows back, so a bot with neither left waits in the nearest town.
@@ -536,16 +549,40 @@ function bestMarket(world: World): TownDef {
 function bestPurchase(world: World): Purchase | null {
   const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
-  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend }))));
+  const room = freeCells(playerVehicle(world));
+  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
   return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
 }
 
-// Buying as much of a good at the source as fits and the money allows, to sell at the market.
-function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
+// The hauling margin of the world's prices: the most a load bought with `spend` into `room` cells earns between any
+// two towns, less the player truck's fuel for the haul from source to market. Every town counts as known, so it
+// measures the market and not what the bot found.
+export function haulMarginAt(world: World, spend: number, room: number): number {
   const me = playerVehicle(world);
-  const buy = getTradePrice(world, me, source.id, good, 'buy');
-  const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
-  return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
+  const pairs = REGION.towns.flatMap((source) => REGION.towns.filter((t) => t.id !== source.id).map((market) => ({ source, market })));
+  return Math.max(...pairs.flatMap(({ source, market }) => {
+    const fuel = tripFuelCost(world, me, dist(source.pos, market.pos));
+    return GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }).profit - fuel);
+  }));
+}
+
+// Buying the lot of a good at the source that sells at the market for the most profit, within what fits and the
+// money allows. Each unit bought raises the price and each unit sold lowers it, so a big lot can lose money that a
+// smaller one makes; the lot prices count that.
+function purchase(world: World, { source, market, good, spend, room }: { source: TownDef; market: TownDef; good: string; spend: number; room: number }): Purchase {
+  const me = playerVehicle(world);
+  const none = { town: source, good, count: 0, profit: 0 };
+  if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
+  const lotProfit = (count: number) => (count === 0 ? 0 : getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy'));
+  // Each extra unit adds less profit than the one before, so the best lot is the last one whose last unit still pays.
+  let low = 0;
+  let high = affordableBuyCount(world, me, source.id, good, room, spend);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (lotProfit(mid) > lotProfit(mid - 1)) low = mid;
+    else high = mid - 1;
+  }
+  return low > 0 && lotProfit(low) > 0 ? { ...none, count: low, profit: lotProfit(low) } : none;
 }
 
 function sellAt(world: World, town: TownDef, good: string): number {
@@ -793,7 +830,7 @@ function lootHere(o: Orders): void {
   const stock = salvageHere(o.world);
   if (!stock || !canLoot(o.world, stock.id) || freeCells(o.me) === 0) return;
   if (lootBlocker(o.world, o.me, stock.id)) return;
-  o.run((w) => takeAllLoot(w, stock.id));
+  o.loot(stock.id, (w) => takeAllLoot(w, stock.id));
 }
 
 // A player cannot start a search with a hostile in sight or while another truck loots the stock, so the bot waits
@@ -806,6 +843,172 @@ function visitStock(o: Orders, stock: SalvageStock): void {
   const site = REGION.locations.find((l) => l.id === stock.id);
   driveTo(o, site ? nearestPad(site, o.me.pos) : besideStop(o.world, stock.pos, stock.radius));
 }
+
+// ---- Robbery.
+
+// The goal lines under a seen driver that say it carries cargo or goes to load it. They are the reasons
+// src/sim/npc-activities.ts gives the trade, sell and haul goals.
+export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'sell carried cargo', 'buy profitable cargo', 'load cargo at its source'];
+// The factions a robber demands cargo from.
+const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
+// The sites a robber drives between while it looks for a target: the towns for the selective robber, and for the
+// convoy robber the sites supply convoys haul between, their haul sources and their towns.
+function robPatrol(guarded: boolean): readonly string[] {
+  return guarded ? [...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns] : ['bowl', 'nose'];
+}
+
+// A careful robber. It sells at its best market once its cells are full, and in any town it stops at. Otherwise it
+// takes what lies in reach, fights a foe it is engaged with, demands cargo from a target in sight, goes for a pile, a
+// wreck or a knocked-out target it sees, or drives between the towns. With `guarded`, it also demands from targets
+// whose escort is in sight.
+function robberGoal(o: Orders, guarded: boolean): void {
+  if (freeCells(o.me) === 0 && hasCargo(o.world, o.me)) {
+    sellAtMarket(o);
+    return;
+  }
+  sellInTown(o);
+  lootHere(o);
+  const foe = engagedFoe(o.world);
+  if (foe) return driveTo(o, foe);
+  demandInSight(o, guarded);
+  if (freeCells(o.me) > 0) collectOrPatrol(o, guarded);
+}
+
+function sellInTown(o: Orders): void {
+  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
+}
+
+// Demands cargo from the nearest target in sight, unless the player is in a fight.
+function demandInSight(o: Orders, guarded: boolean): void {
+  const target = inCombat(o.world, o.me) ? null : robTarget(o.world, guarded);
+  if (target) demand(o, target);
+  if (o.world.player.call) throw new Error(`The robber left a call with ${o.world.player.call.with} open`);
+}
+
+// Strips a knocked-out target in sight, or goes for a pile or wreck in sight, or drives on along its patrol.
+function collectOrPatrol(o: Orders, guarded: boolean): void {
+  const downed = downedTarget(o.world);
+  if (downed) return takeFromTarget(o, downed);
+  const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => !isSiteStock(s) && playerSees(o.world, s.pos)));
+  if (stock) return visitStock(o, stock);
+  patrol(o, robPatrol(guarded));
+}
+
+// The nearest truck in a fight with the player: a hostile in sight, or one heard while their combat lasts. Combat
+// lapses after STATE_TURNS.combat turns with no hostile act, so a target that got out of sight is given up then.
+function engagedFoe(world: World): Vec | null {
+  const me = playerVehicle(world);
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && !isDefeated(v) && hostileToPlayer(world, v));
+  const seen = hostile.filter((v) => playerSees(world, v.pos)).map((v) => v.pos);
+  const fighting = new Set(world.states.filter((s) => s.kind === 'combat' && (s.holder === me.id || s.other === me.id)).map((s) => (s.holder === me.id ? s.other : s.holder)));
+  const heard = world.player.contacts.filter((c) => fighting.has(c.vehicleId) && hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center);
+  return nearest(me.pos, seen) ?? nearest(me.pos, heard);
+}
+
+// The nearest truck the robber would demand cargo from. It reads only what the player sees: a driver in sight, at
+// peace and awake, of a trader or convoy faction, whose goal line says it carries cargo, with no more mounted guns
+// than the player's truck, that the player has not robbed before. Without `guarded`, a target with an awake escort
+// in sight is skipped.
+export function robTarget(world: World, guarded: boolean): Vehicle | null {
+  const me = playerVehicle(world);
+  const targets = world.vehicles.filter((v) => isRobberyPrey(world, v) && (guarded || !guardedInSight(world, v)));
+  return targets.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+// An awake trader or convoy driver in sight and radio reach, at peace with the player, not robbed by it before.
+function isRobberyPrey(world: World, v: Vehicle): boolean {
+  return inRadioSight(world, v) && wouldRob(world, v);
+}
+
+// The robber's rules for a target, all but sight: an awake trader or convoy driver at peace with the player, not
+// robbed by it before, whose goal line says it carries cargo, with no more mounted guns than the player's truck.
+export function wouldRob(world: World, v: Vehicle): boolean {
+  if (!isAwakeDriverOf(world, v, ROB_FACTIONS) || hostileToPlayer(world, v) || world.player.talked[v.id]?.rob !== undefined) return false;
+  return saysCarriesCargo(v) && mountedParts(v, 'weapon').length <= mountedParts(playerVehicle(world), 'weapon').length;
+}
+
+function isAwakeDriverOf(world: World, v: Vehicle, factions: readonly Faction[]): boolean {
+  return v.id !== world.player.vehicleId && v.brain !== null && !isDefeated(v) && factions.includes(v.faction);
+}
+
+function inRadioSight(world: World, v: Vehicle): boolean {
+  return playerSees(world, v.pos) && canVehicleSee(world, playerVehicle(world), v.pos);
+}
+
+// The goal line under the driver says it carries cargo or goes to load it.
+function saysCarriesCargo(v: Vehicle): boolean {
+  const reason = topGoal(v)?.reason;
+  return reason !== undefined && CARGO_REASONS.includes(reason);
+}
+
+function guardedInSight(world: World, v: Vehicle): boolean {
+  return escortsOf(world, v.id).some((e) => !isDefeated(e) && playerSees(world, e.pos));
+}
+
+// Radios the target and demands its cargo. The driver answers with its one reply, which the bot notes. A driver whose
+// hub offers no demand, like one with nothing on its grid or one busy fighting another truck, gets a hang up.
+function demand(o: Orders, target: Vehicle): void {
+  o.run((w) => callVehicle(w, target.id));
+  const rob = currentOptions(o.world).findIndex((opt) => opt.topic === 'rob' && opt.option === null);
+  if (rob < 0) {
+    o.run(hangUp);
+    return;
+  }
+  o.run((w) => chooseOption(w, rob));
+  const replies = currentOptions(o.world).filter((opt) => opt.option !== null);
+  if (replies.length !== 1) throw new Error(`A demand on ${target.id} offers ${replies.length} replies, not one`);
+  o.run((w) => chooseOption(w, 0));
+  const call = o.world.player.call;
+  if (call?.topic !== 'rob') throw new Error(`A demand on ${target.id} left the rob topic`);
+  const answer = threatAnswerOf(call.node);
+  o.notes.push({ kind: 'demand', target: target.id, answer, guarded: guardedInSight(o.world, target) });
+  answerCall(o);
+}
+
+function threatAnswerOf(node: string): ThreatAnswer {
+  if (node === 'comply' || node === 'fightBack' || node === 'flee') return node;
+  throw new Error(`Unknown rob call node ${node}`);
+}
+
+// A knocked-out trader or convoy in sight with loose items on its grid, which the player strips on the loot grid.
+function downedTarget(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  const downed = world.vehicles.filter((v) => ROB_FACTIONS.includes(v.faction) && isKnockedOut(v) && playerSees(world, v.pos) && hasLooseItems(v) && !lootBlocker(world, me, v.id));
+  return downed.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+function hasLooseItems(v: Vehicle): boolean {
+  return v.items.some((it) => !isMounted(v.chassisId, it));
+}
+
+// Parks beside a knocked-out target, then takes each loose good and spare that fits, one command each.
+function takeFromTarget(o: Orders, target: Vehicle): void {
+  if (!canLootTruck(o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
+    const spot = looseSpot(o.me, item);
+    if (spot) o.loot(target.id, (w) => takeFromTruck(w, target.id, item.id, spot));
+  }
+}
+
+// A free spot off the mounts for a looted item, or null when it does not fit by cells or mass.
+function looseSpot(me: Vehicle, item: GridItem): Spot | null {
+  if (itemMass(item) > cargoMassRoom(me)) return null;
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(me), me.items, { ...item, id: 'loot-probe' }, null, avoid);
+}
+
+// Drives between the patrol sites: on to the next one from a site, to the nearest one from the road, and on with an
+// order already bound for one of them.
+function patrol(o: Orders, ids: readonly string[]): void {
+  const sites = ids.map(getKnownSite);
+  const order = o.me.order;
+  if (order?.kind === 'stopAt' && sites.some((t) => canUseSite(order.dest, t))) return;
+  const at = sites.findIndex((t) => canUseSite(o.me.pos, t));
+  driveToSite(o, at >= 0 ? sites[(at + 1) % sites.length] : byDistance(o.world, sites)[0]);
+}
+
+// The convoy robber's patrol sites, for tests.
+export const CONVOY_ROB_PATROL: readonly string[] = robPatrol(true);
 
 // ---- Cargo.
 

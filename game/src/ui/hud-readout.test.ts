@@ -21,9 +21,12 @@ import { newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
-import { dumpOnPile } from "../sim/salvage";
+import { dumpOnPile, isRoadWreck } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
 import { defaultSetup } from "../sim/settings";
+import { isLootSpot, territoryAt } from "../sim/territory";
+import { propReach } from "../sim/mapgen";
+import type { Obstacle, World } from "../sim/types";
 
 describe('knocked-out truck interaction', () => {
   it('offers looting a knocked-out truck in reach only while stopped', () => {
@@ -66,6 +69,66 @@ describe('salvage interaction', () => {
     w.salvage[0].goods.scrap = 0;
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
   });
+});
+
+// A real world with the player parked beside the first prop of this look in this territory, or the first road wreck.
+function parkedAt(find: (o: Obstacle) => boolean): { w: World; id: string } {
+  const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+  const o = w.obstacles.find(find);
+  if (!o) throw new Error('No such prop on the test map');
+  const me = playerVehicle(w);
+  me.pos = { x: o.pos.x + propReach(o) + 1, y: o.pos.y };
+  me.speed = 0;
+  return { w, id: o.id };
+}
+
+function spotOf(territory: string, look: string): (o: Obstacle) => boolean {
+  return (o) => isLootSpot(o) && o.kind === 'landmark' && o.look === look && territoryAt(o.pos)?.id === territory;
+}
+
+function stockLabel(w: World, id: string): string | undefined {
+  return getContextActions(w, false).find((a) => a.target.kind === 'stock' && a.target.id === id)?.label;
+}
+
+describe('loot spot wording', () => {
+  it.each(['farmhouse', 'quonset'])('says Search, then Loot, then Picked clean at an orchard %s', (look) => {
+    const { w, id } = parkedAt(spotOf('orchard', look));
+    expect(stockLabel(w, id)).toBe('Search');
+    w.player.scavenged.push(id);
+    expect(stockLabel(w, id)).toBe('Loot');
+    w.salvage = w.salvage.filter((s) => s.id === id);
+    const stock = w.salvage[0];
+    stock.goods = {};
+    stock.parts = [];
+    stock.fuel = 0;
+    stock.supplies = 0;
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual(['Picked clean']);
+  }, 30_000);
+
+  it.each([
+    ['an orchard army truck', spotOf('orchard', 'armyTruck')],
+    ['a Fallen Sun ship cache', spotOf('fallen-sun', 'shipCache')],
+    ['a road wreck', (o: Obstacle) => isRoadWreck(o)],
+  ])('keeps the wreck wording at %s', (_name, find) => {
+    const { w, id } = parkedAt(find);
+    expect(stockLabel(w, id)).toBe('Search the wreck');
+    w.player.scavenged.push(id);
+    expect(stockLabel(w, id)).toBe('Loot the wreck');
+  }, 30_000);
+
+  it('names the driver blocking a shared spot with a plain Search', () => {
+    const { w, id } = parkedAt(spotOf('orchard', 'farmhouse'));
+    const me = playerVehicle(w);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: me.pos.x + 2, y: me.pos.y });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    beginSearch(w, npc, id);
+    expect(getContextActions(w, false).find((a) => a.target.kind === 'stock' && a.target.id === id)).toMatchObject({
+      label: 'Search',
+      ready: false,
+      hint: `${npc.name} is looting it`,
+    });
+  }, 30_000);
 });
 
 describe('every interaction in reach', () => {

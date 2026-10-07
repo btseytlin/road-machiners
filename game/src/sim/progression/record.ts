@@ -6,6 +6,7 @@
 
 import { startKit } from '../../data/start';
 import { partDef } from '../../data/parts';
+import { MAX_RANK } from '../../data/skills';
 import { TIME } from '../../data/time';
 import type { Tier } from '../../data/market';
 import { isHostile } from '../combat';
@@ -20,12 +21,12 @@ import { isStranded } from '../stats';
 import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
-import type { GameEvent, NpcActivity, Vehicle, World, XpSource } from '../types';
+import type { GameEvent, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
 import { endTurn, newWorld, update } from '../world';
-import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
+import { botOrders, parkedOnPurpose, type Archetype, type BotOptions, type Policy } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
 import { defaultSetup, parseSetup } from '../settings';
@@ -45,7 +46,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed, options), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, options.kit, 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
@@ -61,43 +62,49 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed, options), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, options.kit, 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
 // it. A stall or any other error fails loud.
-export function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
+export function* stepsFrom(start: World, label: string, archetype: Policy, turns: number, options: BotOptions = {}): Generator<RecordStep> {
+  const tally = new DayTally();
+  let carried: DayRow[] = [tally.close(0, start)]; // the starting state rides on the first step
+  let i = 0;
+  for (const played of playTurns(start, label, archetype, turns, options)) {
+    const { before, next: world } = played;
+    tally.note(before, world, played.events, played.ledger);
+    const dead = world.player.state === 'dead';
+    const closed = dayEnds(before, world, ++i === turns || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
+    const rows = [...carried, ...closed];
+    carried = [];
+    yield { world, lines: played.lines, rows, death: dead ? { end: 'death', turn: world.turn } : null, events: played.events, ledger: played.ledger };
+  }
+}
+
+// Plays the turns one at a time on far travel and yields each one with the bot's commands. The player's death ends the
+// run after its turn. A stall of the player truck or any error fails loud, with the label, turn and position.
+export function* playTurns(start: World, label: string, policy: Policy, turns: number, options: BotOptions = {}): Generator<PlayedTurn> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   setHeadless(true);
   clearFarRoutes();
   try {
-    yield* playSteps(start, label, archetype, turns, options);
+    let world = start;
+    const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
+    for (let i = 0; i < turns; i++) {
+      const before = world;
+      const played = inContext(label, before, () => playTurn(before, policy, options));
+      world = played.next;
+      if (world.player.state === 'dead') {
+        yield played;
+        return;
+      }
+      watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
+      yield played;
+    }
   } finally {
     setHeadless(false);
     clearFarRoutes();
-  }
-}
-
-function* playSteps(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions): Generator<RecordStep> {
-  let world = start;
-  const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
-  const tally = new DayTally();
-  let carried: DayRow[] = [tally.close(0, world)]; // the starting state rides on the first step
-  for (let i = 0; i < turns; i++) {
-    const before = world;
-    const played = inContext(label, before, () => playTurn(before, archetype, options));
-    world = played.next;
-    tally.note(before, world, played.events, played.ledger);
-    const dead = world.player.state === 'dead';
-    const closed = dayEnds(before, world, i === turns - 1 || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
-    const rows = [...carried, ...closed];
-    carried = [];
-    if (dead) {
-      yield { world, lines: played.lines, rows, death: { end: 'death', turn: world.turn }, events: played.events, ledger: played.ledger };
-      return;
-    }
-    watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
-    yield { world, lines: played.lines, rows, death: null, events: played.events, ledger: played.ledger };
   }
 }
 
@@ -106,13 +113,19 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-function startWorld(seed: number, { kit = 'standard', settings = {} }: BotOptions): World {
-  const setup = parseSetup({ mode: 'roaming', settings: { ...defaultSetup('roaming').settings, ...settings } });
-  return update(newWorld(seed, startKit(kit), TEST_MAP, setup), (w) => {
+// Roaming with the named settings changed and the rest at their defaults.
+function roamingSetup(settings: Record<string, number> = {}): WorldSetup {
+  return parseSetup({ mode: 'roaming', settings: { ...defaultSetup('roaming').settings, ...settings } });
+}
+
+// A new world on the start kit with no XP, every skill at `rank`, and no XP logged today. It picks no perks.
+export function startWorld(seed: number, kit = 'standard', rank = 0, settings?: Record<string, number>): World {
+  if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
+  return update(newWorld(seed, startKit(kit), TEST_MAP, roamingSetup(settings)), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
-      p.ranks[skill] = 0;
+      p.ranks[skill] = rank;
       p.xpToday[skill] = 0;
     }
     for (const source of Object.keys(p.xpBySource) as XpSource[]) p.xpBySource[source] = 0;
@@ -121,7 +134,7 @@ function startWorld(seed: number, { kit = 'standard', settings = {} }: BotOption
 }
 
 // events is everything the bot's commands and the turn raised on the way to next.
-type PlayedTurn = { next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
+export type PlayedTurn = { before: World; orders: BotTurn; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
 
 // The money the turn moved by itself, after the bot's commands: contract pay, else tow, patch and escort fees.
 function turnLedger(orders: BotTurn, next: World): Ledger {
@@ -131,7 +144,7 @@ function turnLedger(orders: BotTurn, next: World): Ledger {
   return ledger;
 }
 
-function playTurn(world: World, archetype: Archetype, options: BotOptions): PlayedTurn {
+function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {
   const orders = botOrders(buyCheapestRanks(world), archetype, options);
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
@@ -139,7 +152,7 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
   const lines = [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)];
-  return { next, lines, events, ledger: turnLedger(orders, next) };
+  return { before: world, orders, next, lines, events, ledger: turnLedger(orders, next) };
 }
 
 // Adds the seed, archetype, turn and truck position to any error of the turn.

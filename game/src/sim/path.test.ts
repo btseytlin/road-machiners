@@ -747,7 +747,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, budget(60_000));
+  }, budget(180_000)); // ten reference searches take seconds alone and over a minute when the whole suite shares the cores
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;

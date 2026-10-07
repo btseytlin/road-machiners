@@ -45,10 +45,10 @@ export function supplyUseScale(world: World): number {
   return world.setup.settings.supplyUse;
 }
 
-// "Roaming · Damage 150% · Fuel use 100% · Supply use 100%", for the help menu and bug reports.
+// "Roaming, Damage 150%, Fuel use 100%, Supply use 100%", for the help menu and bug reports.
 export function setupLabel(setup: WorldSetup): string {
   const parts = SETTING_IDS.map((id) => `${WORLD_SETTINGS[id].name} ${percent(setup.settings[id])}`);
-  return [GAME_MODES[setup.mode].name, ...parts].join(' · ');
+  return [GAME_MODES[setup.mode].name, ...parts].join(', ');
 }
 
 export function percent(value: number): string {

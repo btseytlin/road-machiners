@@ -8,7 +8,7 @@ export const realRun: Run = (cmd, args, opts = {}) => new Promise((done, fail) =
   const log = opts.logPath ? createWriteStream(opts.logPath, { flags: 'a' }) : null;
   let stdout = '';
   let stderr = '';
-  child.stdout.on('data', (chunk: Buffer) => { stdout += chunk; log?.write(chunk); });
+  child.stdout.on('data', (chunk: Buffer) => { stdout += chunk; log?.write(chunk); opts.onStdout?.(chunk.toString()); });
   child.stderr.on('data', (chunk: Buffer) => { stderr += chunk; log?.write(chunk); });
   child.on('error', fail);
   child.on('close', (code) => { log?.end(); done({ code: code ?? 1, stdout, stderr }); });

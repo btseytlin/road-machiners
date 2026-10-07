@@ -64,6 +64,16 @@ describe('NPC spawns', () => {
     expect(atGate.length).toBeGreaterThanOrEqual(SPAWN.startTraffic.templates.length);
   }, budget(15_000));
 
+  it('starts each driver with its template wallet', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
+    const wallets = (templateId: string) => w.vehicles.filter((v) => v.brain?.templateId === templateId).map((v) => v.resources!.money);
+    for (const id of ['trader', 'convoy', 'scavenger']) {
+      expect(wallets(id).length).toBeGreaterThan(0);
+      for (const money of wallets(id)) expect(money).toBe(NPCS[id].money);
+    }
+    expect(NPCS.trader.money).toBeGreaterThan(NPCS.scavenger.money);
+  }, 15_000);
+
   it('never respawns a driver close to the player', () => {
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const w = emptyWorld(sitePads(bowl)[0]);

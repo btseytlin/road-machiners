@@ -7,7 +7,7 @@ import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type Ca
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
 import { pooledSkills_9_10 } from './save-migrations';
-import { storedSave, writeSave } from './save';
+import { storedSave, tryWriteSave } from './save';
 
 type Json = Record<string, unknown>;
 
@@ -119,6 +119,6 @@ export function rescueSave(storage: Storage, slot: SlotId, map: BakedMap, kit: S
   const parsed = storedSave(storage, slot);
   if (objectOf(parsed) === null) return null;
   const rescued = carriedWorld(readCarried(parsed), kit, map, freshSeed);
-  writeSave(storage, slot, rescued.world, savedAt);
+  tryWriteSave(storage, slot, rescued.world, savedAt);
   return rescued;
 }

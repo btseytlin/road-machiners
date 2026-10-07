@@ -36,5 +36,5 @@ describe('invariants under AI traffic', () => {
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
     }
     freeDrive(d);
-  }, budget(120_000)); // Eighty turns include long-distance traffic across the 600-tile region.
+  }, budget(360_000)); // Eighty turns include long-distance traffic across the 600-tile region. They took over 120 s alone on a loaded machine.
 });

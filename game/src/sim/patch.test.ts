@@ -10,7 +10,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods, removeGoods } from './inventory';
 import { thinkNpc, topGoal } from './npc-activities';
-import { dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
+import { agreePatch, dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
 import { makePeace } from './parley';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
@@ -389,7 +389,7 @@ describe('patch practice', () => {
   function settle(w: World, patcher: Vehicle, client: Vehicle): void {
     setParts(w, patcher, 1);
     breakEngine(client);
-    settlePatch(w, addState(w, 'patch', patcher.id, client.id, { kind: 'patch', deal: 'free', parts: 1, price: 0, work: 1, workLeft: 0 }));
+    settlePatch(w, addState(w, 'patch', patcher.id, client.id, { kind: 'patch', deal: 'free', parts: 1, partIds: [mountedParts(client, 'engine')[0].id], price: 0, work: 1, workLeft: 0 }));
   }
 
   it('pays the player for patching another truck', () => {
@@ -509,5 +509,199 @@ describe('road mechanic', () => {
   it('does not change the price the player pays an NPC patcher', () => {
     const { w, trader } = brokenPlayer(3);
     expect(priceWith(w, trader.id, 'paid', ['roadMechanic'])).toBe(priceWith(w, trader.id, 'paid', []));
+  });
+});
+
+describe('patching a worn truck that still drives', () => {
+  const OFFER = 'Your engine sounds rough. Want me to patch it before it quits?';
+  const offered = (w: World, id: string) => currentOptions(callVehicle(cloneWorld(w), id)).map((o) => o.text).includes(OFFER);
+  const target = (p: { defId: string; hp: number }) => Math.max(1, Math.round(partDef(p.defId).hp * PATCH.share));
+
+  // A scavenger drives on with a worn engine and no parts, in sight of a player who carries parts.
+  function wornNpc(): { w: World; npc: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    w.player.autoRepair = false;
+    setParts(w, playerVehicle(w), 4);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    setParts(w, npc, 0);
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = Math.round(partDef(engine.defId).hp * 0.1);
+    const driving = endTurn(w, testDrive); // the driver picks the goal it will return to
+    return { w: driving, npc: find(driving, npc.id) };
+  }
+
+  function agree(w: World, npcId: string, deal: PatchDeal): World {
+    forceOption('patchDeal', deal);
+    w = callVehicle(w, npcId);
+    w = answer(w, OFFER);
+    w = answer(w, 'What can you offer?');
+    return answer(w, 'Deal. Pull over and wait.');
+  }
+  const patchOpen = (w: World, npcId: string) => stateOf(w, 'patch', w.player.vehicleId, npcId) !== null;
+
+  it('lifts a worn engine to the patch target, once paid', () => {
+    const { w: start, npc } = wornNpc();
+    expect(isStranded(start, npc)).toBe(false);
+    const before = topGoal(npc)?.kind;
+    let w = agree(start, npc.id, 'paid');
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    expect(topGoal(find(w, npc.id))?.kind).toBe('patch');
+    const money = w.player.money;
+    const npcMoney = find(w, npc.id).resources!.money;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    w = runUntil(w, 60, (x) => !patchOpen(x, npc.id)).w;
+    const engine = mountedParts(find(w, npc.id), 'engine')[0];
+    expect(engine.hp).toBe(target(engine));
+    expect(parts(playerVehicle(w))).toBe(4 - deal.parts);
+    expect(w.player.money).toBe(money + deal.price);
+    expect(find(w, npc.id).resources!.money).toBe(npcMoney - deal.price);
+    expect(practiceOf(w, 'patch')).toHaveLength(1);
+    w = runUntil(w, 3, (x) => topGoal(find(x, npc.id))?.kind !== 'patch').w;
+    expect(topGoal(find(w, npc.id))?.kind).toBe(before);
+  });
+
+  it('gives the goal back when the deal lapses unworked', () => {
+    const { w: start, npc } = wornNpc();
+    const before = topGoal(npc)?.kind;
+    let w = agree(start, npc.id, 'paid');
+    w = runUntil(w, 80, (x) => !patchOpen(x, npc.id)).w;
+    expect(mountedParts(find(w, npc.id), 'engine')[0].hp).toBeLessThan(target(mountedParts(npc, 'engine')[0]));
+    w = runUntil(w, 3, (x) => topGoal(find(x, npc.id))?.kind !== 'patch').w;
+    expect(topGoal(find(w, npc.id))?.kind).toBe(before);
+  });
+
+  it('gives the goal back when combat breaks the deal', () => {
+    const { w: start, npc } = wornNpc();
+    const before = topGoal(npc)?.kind;
+    let w = agree(start, npc.id, 'paid');
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 50, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, find(w, npc.id), raider);
+    w = runUntil(w, 5, (x) => !patchOpen(x, npc.id)).w;
+    expect(patchOpen(w, npc.id)).toBe(false);
+    expect(topGoal(find(w, npc.id))?.kind).not.toBe('patch');
+    expect(before).not.toBe('patch');
+  });
+
+  it('seals a holed tank that still holds fuel', () => {
+    const { w: start, npc } = wornNpc();
+    mountedParts(npc, 'engine')[0].hp = partDef('stockEngine').hp;
+    corePart(npc, 'tank')!.hp = 0;
+    npc.resources!.fuel = 10;
+    expect(isStranded(start, npc)).toBe(false);
+    let w = agree(start, npc.id, 'free');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    w = runUntil(w, 60, (x) => !patchOpen(x, npc.id)).w;
+    const tank = corePart(find(w, npc.id), 'tank')!;
+    expect(tank.hp).toBe(target(tank));
+  });
+
+  it('a holed-tank client that strands mid-deal still gets its agreed parts', () => {
+    const { w: start, npc } = wornNpc();
+    corePart(npc, 'tank')!.hp = 0;
+    npc.resources!.fuel = 4;
+    const money = npc.resources!.money;
+    let w = agree(start, npc.id, 'paid');
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    w = runUntil(w, 80, (x) => !patchOpen(x, npc.id)).w;
+    const after = find(w, npc.id);
+    expect(mountedParts(after, 'engine')[0].hp).toBe(target(mountedParts(after, 'engine')[0]));
+    expect(corePart(after, 'tank')!.hp).toBe(target(corePart(after, 'tank')!));
+    expect(after.resources!.money).toBe(money - deal.price);
+  });
+
+  it('a Machining rank bought mid-deal leaves a worn patch intact', () => {
+    const { w: start, npc } = wornNpc();
+    let w = agree(start, npc.id, 'paid');
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    const money = w.player.money;
+    w.player.ranks.machining = 3;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    const r = runUntil(w, 60, (x) => !patchOpen(x, npc.id));
+    expect(patchOutcomes(r.events)).toEqual(['started', 'done']);
+    expect(w.player.money).toBe(money);
+    expect(r.w.player.money).toBe(money + deal.price);
+    expect(mountedParts(find(r.w, npc.id), 'engine')[0].hp).toBe(target(mountedParts(npc, 'engine')[0]));
+  });
+
+  it('a part worn after agreement is not patched', () => {
+    const { w: start, npc } = wornNpc();
+    let w = agree(start, npc.id, 'paid');
+    const tr = corePart(find(w, npc.id), 'transmission');
+    if (tr) tr.hp = 1;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    w = runUntil(w, 60, (x) => !patchOpen(x, npc.id)).w;
+    const engine = mountedParts(find(w, npc.id), 'engine')[0];
+    expect(engine.hp).toBe(target(engine));
+    const after = corePart(find(w, npc.id), 'transmission');
+    if (after) expect(after.hp).toBe(1);
+  });
+
+  it('an agreed part already above target at settle is not lowered', () => {
+    const { w, npc } = wornNpc();
+    const engine = mountedParts(npc, 'engine')[0];
+    const above = target(engine) + 5;
+    engine.hp = above;
+    settlePatch(w, addState(w, 'patch', w.player.vehicleId, npc.id, { kind: 'patch', deal: 'free', parts: 0, partIds: [engine.id], price: 0, work: 1, workLeft: 0 }));
+    expect(engine.hp).toBe(above);
+  });
+
+  it('refuses to agree a patch with nothing to patch', () => {
+    const { w, npc } = wornNpc();
+    mountedParts(npc, 'engine')[0].hp = partDef('stockEngine').hp;
+    expect(() => agreePatch(w, npc, { kind: 'deal', deal: 'free', patcher: 'player', price: 0, parts: 1, turns: 2 })).toThrow(/nothing to patch/);
+  });
+
+  it('offers nothing for a healthy, sound, junk, self-fixing, towing or player-stranded case', () => {
+    const { w, npc } = wornNpc();
+    expect(offered(w, npc.id)).toBe(true);
+    const engine = mountedParts(npc, 'engine')[0];
+    const cases: [string, (x: World, n: Vehicle) => void][] = [
+      ['healthy', (_x, n) => { mountedParts(n, 'engine')[0].hp = partDef('stockEngine').hp; }],
+      ['at target', (_x, n) => { const e = mountedParts(n, 'engine')[0]; e.hp = target(e); }],
+      ['junk', (_x, n) => { mountedParts(n, 'engine')[0].wear = CONDITION.maxWear + 1; }],
+      ['self-fixing', (x, n) => addGoods(x, n, 'parts', 6)],
+      ['towing', (x, n) => { const o = addVehicle(x, 'traders', 'hauler', ['stockEngine'], { x: 20, y: 30 }, 0); addState(x, 'tow', n.id, o.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true }); }],
+      ['stranded player', (x) => breakEngine(playerVehicle(x))],
+    ];
+    for (const [name, change] of cases) {
+      const x = cloneWorld(w);
+      change(x, find(x, npc.id));
+      expect(offered(x, npc.id), name).toBe(false);
+    }
+    expect(engine.hp).toBeLessThan(target(engine));
+  });
+
+  it('lists no terms when the player has no parts, and shows the back-out', () => {
+    const { w: start, npc } = wornNpc();
+    setParts(start, playerVehicle(start), 0);
+    const w = answer(callVehicle(start, npc.id), OFFER);
+    expect(currentOptions(w).map((o) => o.text)).toContain('On second thought, I cannot.');
+  });
+
+  it('keeps stranded terms to the broken part only', () => {
+    const { w, npc } = wornNpc();
+    breakEngine(npc);
+    const tr = corePart(npc, 'transmission');
+    if (tr) tr.hp = 1;
+    expect(patchTerms(w, npc)).toMatchObject({ kind: 'deal' });
+    const engine = mountedParts(npc, 'engine')[0];
+    settlePatch(w, addState(w, 'patch', w.player.vehicleId, npc.id, { kind: 'patch', deal: 'free', parts: 0, partIds: [engine.id], price: 0, work: 1, workLeft: 0 }));
+    expect(engine.hp).toBe(target(engine));
+    if (tr) expect(tr.hp).toBe(1);
+  });
+
+  it('a stranded player asking a worn driver stays the client', () => {
+    const { w, npc } = wornNpc();
+    breakEngine(playerVehicle(w));
+    setParts(w, playerVehicle(w), 0);
+    setParts(w, npc, 4);
+    const asked = callVehicle(w, npc.id);
+    expect(currentOptions(asked).map((o) => o.text)).toContain('My truck is broken down. Can you patch it?');
+    expect(dealAvailable('free')(w, npc)).toBe(true);
+    expect(patchTerms(w, npc)).toMatchObject({ patcher: 'npc' });
   });
 });

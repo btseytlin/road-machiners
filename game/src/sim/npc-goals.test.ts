@@ -99,7 +99,7 @@ describe('damage taken', () => {
   it('sums part damage from shots, guard shots and collisions this turn', () => {
     const { w, npc } = scavengerWorld();
     const other = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    const round = (damage: number[]) => ({ hit: true, crit: false, offset: 0, struck: npc.id, hits: damage.map((d) => ({ part: 'x', damage: d })), blast: [] });
+    const round = (damage: number[]) => ({ hit: true, crit: false, offset: 0, struck: npc.id, hits: damage.map((d) => ({ part: 'x', damage: d })), blast: [], burst: null });
     npc.brain!.hurt = 7;
     w.events = [
       { t: 'shot', shooter: other.id, weapon: 'w', target: npc.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round([3, 2]), round([])] },

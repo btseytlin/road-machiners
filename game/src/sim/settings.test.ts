@@ -99,6 +99,6 @@ describe('scale queries', () => {
 
 describe('setupLabel', () => {
   it('names the mode and every setting as a percentage', () => {
-    expect(setupLabel(parseSetup(roaming({ damage: 1.5 })))).toBe('Roaming · Damage 150% · Fuel use 100% · Supply use 100%');
+    expect(setupLabel(parseSetup(roaming({ damage: 1.5 })))).toBe('Roaming, Damage 150%, Fuel use 100%, Supply use 100%');
   });
 });
