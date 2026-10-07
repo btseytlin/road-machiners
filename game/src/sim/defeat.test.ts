@@ -16,6 +16,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWher
 import { maxHp } from './wear';
 import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
+import { territoryOfStock } from './territory';
 import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
@@ -260,6 +261,8 @@ describe('waking', () => {
 
   it('wakes at the turn limit with the raider that fought it idling in sight', () => {
     let { w } = knockedOutByRaider();
+    // The turns spawn NPCs, and a spawned scavenger may head for a territory loot spot, which every map has.
+    w.salvage = emptyWorld().salvage.filter((stock) => territoryOfStock(stock) !== null);
     let turns = 0;
     while (w.player.state === 'knockedOut') {
       w = endTurn(w, testDrive);
@@ -307,6 +310,25 @@ describe('the loot rule', () => {
     corePart(me, 'cab').hp = 0;
     checkKnockout(w);
     expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+  });
+
+  it('a knockout ends combat with the player, so the robbers keep their loot goal into the next turn', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    addState(w, 'combat', raider.id, me.id, { kind: 'none' });
+    me.lastHitBy = raider.id;
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(w.states.filter((s) => s.kind === 'combat')).toEqual([]);
+    expect(w.events.some((e) => e.t === 'stateEnded' && e.state.kind === 'combat' && e.ending === 'broken')).toBe(true);
+    expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+    const next = endTurn(w, testDrive);
+    const actor = next.vehicles.find((v) => v.id === raider.id)!;
+    expect(actor.brain!.goals.some((g) => g.kind === 'loot' && g.targetId === me.id)).toBe(true);
   });
 
   it('a raider that knocked the player out loots goods straight off the truck', () => {

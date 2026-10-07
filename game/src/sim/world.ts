@@ -22,15 +22,16 @@ import { applyGodMode } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
-import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { fadeCraters } from './craters';
 import { timed } from '../perf';
-import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
+import { noteHurt, resolveNpcActivities } from './npc-activities';
+import { watchStalls } from './npc-watchdog';
 import { advanceStates } from './states';
 import { forgetOld } from './memory';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
@@ -69,6 +70,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     vehicles: [],
     obstacles: [],
     broken: [],
+    craters: [],
     salvage: [],
     shops: {},
     terrain: map.terrain,
@@ -228,11 +230,15 @@ export function autoRuns(world: World): boolean {
   return waitsOnBeacon(world);
 }
 
+// Slower than `RULES.parkedSpeed` with no move order.
+export function isAtRest(v: Vehicle): boolean {
+  return v.speed <= RULES.parkedSpeed && (v.order === null || v.order.kind === 'brake');
+}
+
 function waitsOnBeacon(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
-  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
-  return p.state === 'active' && p.beacon && parked && playerTow(world) === null;
+  return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
@@ -276,6 +282,7 @@ export function endTurn(
     advanceDust(w);
     clearPiles(w);
     renewSalvage(w);
+    fadeCraters(w);
     advanceJobs(w);
     startAutoRepair(w);
     refreshVision(w);
@@ -283,7 +290,6 @@ export function endTurn(
     assignAutoOrders(w);
     settleAims(w);
     fireWeapons(w);
-    fireGuards(w);
     consumeSupplies(w);
     applyHazards(w);
     scrapPatch(w);

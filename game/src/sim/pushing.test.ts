@@ -8,7 +8,7 @@ import { corePart, mountedParts } from './grid';
 import { isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 
 function removeEngines(v: Vehicle): void {
   v.items = v.items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
@@ -25,7 +25,7 @@ describe('pushing a truck without a working engine', () => {
   it('gives limp speed, limp accel and no fuel use without an engine', () => {
     const w = engineless();
     const s = vehicleStats(w, w.vehicles[0]);
-    expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherAt(w, w.vehicles[0].pos).speed);
+    expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherOn(w, w.vehicles[0]).speed);
     expect(s.accel).toBe(RULES.limpSpeed * chassisDef(w.vehicles[0].chassisId).accel);
     expect(s.fuelPerTile).toBe(0);
   });
@@ -34,7 +34,7 @@ describe('pushing a truck without a working engine', () => {
     const w = emptyWorld();
     mountedParts(w.vehicles[0], 'engine')[0].hp = 0;
     const s = vehicleStats(w, w.vehicles[0]);
-    expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherAt(w, w.vehicles[0].pos).speed);
+    expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherOn(w, w.vehicles[0]).speed);
     expect(s.accel).toBe(RULES.limpSpeed * chassisDef(w.vehicles[0].chassisId).accel);
     expect(s.fuelPerTile).toBe(0);
   });

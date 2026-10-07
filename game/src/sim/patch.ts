@@ -1,5 +1,6 @@
-// Roadside patches between two trucks. A patch lifts the broken engine, transmission and tank that strand a truck to
-// PATCH.share of their max HP, with the repair math of src/sim/repair.ts and the patcher's Machining. The terms are
+// Roadside patches between two trucks. A patch lifts the broken engine, transmission and tank that strand a truck, or
+// the badly worn ones of a truck that still drives, to PATCH.share of their max HP, with the repair math of
+// src/sim/repair.ts and the patcher's Machining. The agreement fixes which parts it covers. The terms are
 // the NPC's `patchDeal` decision, so traits and states shape them. A deal is a `patch` state held by the patcher
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
 
@@ -25,10 +26,35 @@ import { dist } from './vec';
 export type PatchPlan = { parts: number; turns: number };
 type Roles = { patcher: Vehicle; client: Vehicle };
 
-// The broken parts that strand a truck and a patch can fix: the first engine, the transmission and the tank, unless junk.
-function brokenParts(v: Vehicle): PartInstance[] {
+// The parts a patch can fix: the first engine, the transmission and the tank, unless junk.
+function patchable(v: Vehicle): PartInstance[] {
   const engine = mountedParts(v, 'engine')[0];
-  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && p.hp === 0 && !isJunk(p));
+  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && !isJunk(p));
+}
+
+// The broken parts that strand a truck.
+function brokenParts(v: Vehicle): PartInstance[] {
+  return patchable(v).filter((p) => p.hp === 0);
+}
+
+// The target a patch lifts a part to.
+function patchTarget(part: PartInstance): number {
+  return Math.max(1, Math.round(maxHp(part) * PATCH.share));
+}
+
+// The patchable parts of a truck that still drives and sit below the patch target. A holed tank at 0 HP counts.
+function wornParts(v: Vehicle): PartInstance[] {
+  return patchable(v).filter((p) => p.hp < patchTarget(p));
+}
+
+// A stranded truck gets its broken parts patched, a truck that drives its worn ones.
+function patchParts(world: World, v: Vehicle): PartInstance[] {
+  return isStranded(world, v) ? brokenParts(v) : wornParts(v);
+}
+
+// A truck that still drives can take a patch for its worn core parts.
+export function canTakeWornPatch(world: World, v: Vehicle): boolean {
+  return !isStranded(world, v) && wornParts(v).length > 0;
 }
 
 // A holed tank counts once the leak has emptied it, since a truck with fuel left still drives.
@@ -43,14 +69,16 @@ export function canFixItself(world: World, v: Vehicle): boolean {
 
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
   const mult = machiningMult(world, patcher);
-  const plans = brokenParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
+  const plans = patchParts(world, client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
   return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns: plans.reduce((sum, p) => sum + p.turns, 0) };
 }
 
-// Talk is between the player and one NPC. The one with the broken truck is the client.
+// Talk is between the player and one NPC. The one with the broken truck is the client. A worn NPC truck is the
+// client unless the player is the one stranded.
 function rolesWith(world: World, npc: Vehicle): Roles {
   const me = playerVehicle(world);
-  return needsPatch(world, npc) ? { patcher: me, client: npc } : { patcher: npc, client: me };
+  const npcIsClient = needsPatch(world, npc) || (canTakeWornPatch(world, npc) && !needsPatch(world, me));
+  return npcIsClient ? { patcher: me, client: npc } : { patcher: npc, client: me };
 }
 
 function partsHeld(v: Vehicle): number {
@@ -120,7 +148,9 @@ export function patchTerms(world: World, npc: Vehicle): CallVar | null {
 // Both sides agreed on the terms over the radio.
 export function agreePatch(world: World, npc: Vehicle, terms: Extract<CallVar, { kind: 'deal' }>): NpcState {
   const { patcher, client } = rolesWith(world, npc);
-  const data: StateData = { kind: 'patch', deal: terms.deal, parts: terms.parts, price: terms.price, work: terms.turns, workLeft: terms.turns };
+  const partIds = patchParts(world, client).map((p) => p.id);
+  if (partIds.length === 0) throw new Error(`Patch of ${client.id} agreed with nothing to patch`);
+  const data: StateData = { kind: 'patch', deal: terms.deal, parts: terms.parts, partIds, price: terms.price, work: terms.turns, workLeft: terms.turns };
   return addState(world, 'patch', patcher.id, client.id, data);
 }
 
@@ -176,6 +206,14 @@ function canStillPay(world: World, data: Extract<StateData, { kind: 'patch' }>, 
   return partsHeld(partsPayer(data.deal, roles)) >= data.parts && canPay(world, roles.client, data.price);
 }
 
+// The agreed parts that are still patchable and below the target go up to it. Nothing else changes.
+function liftAgreedParts(data: Extract<StateData, { kind: 'patch' }>, client: Vehicle): void {
+  for (const part of patchable(client)) {
+    const target = patchTarget(part);
+    if (data.partIds.includes(part.id) && part.hp < target) restorePart(part, target);
+  }
+}
+
 // The one place a patch pays: parts leave the payer, money moves from client to patcher, and the parts work again.
 export function settlePatch(world: World, s: NpcState): void {
   const data = patchData(s);
@@ -183,8 +221,8 @@ export function settlePatch(world: World, s: NpcState): void {
   removeGoods(partsPayer(data.deal, roles), 'parts', data.parts);
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
-  for (const part of brokenParts(roles.client)) restorePart(part, Math.max(1, Math.round(maxHp(part) * PATCH.share)));
-  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
+  liftAgreedParts(data, roles.client);
+  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done', price: data.price });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
   if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);

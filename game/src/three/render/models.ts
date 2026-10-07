@@ -31,6 +31,9 @@ const NAMES = [
   'rock',
   'pebbles',
   'scrub',
+  'desert_stones',
+  'desert_scrub',
+  'cactus',
   'building',
   'crates',
   'water_tower',
@@ -38,6 +41,7 @@ const NAMES = [
   'dead_tree',
   'bunker',
   'sandbags',
+  'tank_trap',
   'silo',
   'ship_hull',
   'ship_nose',
@@ -95,6 +99,10 @@ const NAMES = [
   'scanner',
   'store_jerrycans',
   'store_locker',
+
+  'cab_seat',
+  'cab_pickup',
+  'cab_hardtop',
 
   'eng_stock',
   'eng_tuned_v8',

@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { newId } from './factory';
 import { cabShield, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
-import { requireTown, townAt } from './sites';
+import { requireShop, shopAt } from './market';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
@@ -80,10 +80,24 @@ export function cargoRoom(v: Vehicle, good: string): number {
   return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / GOODS[good].mass));
 }
 
+// Whether the hold takes a unit of any good. A truck full by cells or by mass has no room for salvage.
+export function hasCargoRoom(v: Vehicle): boolean {
+  return Object.keys(GOODS).some((good) => cargoRoom(v, good) > 0);
+}
+
+// Where a loose part would go on the grid, or null when it does not fit the grid or the mass room.
+function stowPlace(v: Vehicle, item: GridItem): Spot | null {
+  return itemMass(item) > cargoMassRoom(v) ? null : stowSpot(v, item);
+}
+
+// Whether stowPart would place the part.
+export function canStowPart(v: Vehicle, part: PartInstance): boolean {
+  return stowPlace(v, { id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part }) !== null;
+}
+
 export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  if (itemMass(item) > cargoMassRoom(v)) return false;
-  const spot = stowSpot(v, item);
+  const spot = stowPlace(v, item);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
@@ -122,7 +136,7 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
     const result = planItemMove(me, itemId, to);
     if (result.error !== null) throw new Error(result.error);
     const { moves, items, turns } = result.plan;
-    if (turns > 0 && !townAt(w)) {
+    if (turns > 0 && !shopAt(w)) {
       const work = refitTurns(w, me, turns);
       startJob(w, me, { kind: 'refit', moves, pickup: null, turnsLeft: work, total: work });
     } else applyRefitLayout(w, me, items);
@@ -140,10 +154,10 @@ export function lootRefitTurns(world: World, v: Vehicle, planned: number): numbe
   return vehicleHasPerk(world, v, 'cannibal') ? PERK_NUMBERS.cannibal.turns : refitTurns(world, v, planned);
 }
 
-// Town garage storage holds spare parts between trips.
+// Garage storage holds spare parts between trips, at every shop.
 export function storePart(world: World, itemId: string): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const me = playerVehicle(w);
     requireIdleRefit(me);
     const item = findItem(me, itemId);
@@ -157,7 +171,7 @@ export function storePart(world: World, itemId: string): World {
 
 export function takeFromStorage(world: World, partId: string, to: Spot): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const me = playerVehicle(w);
     requireIdleRefit(me);
     const i = w.player.storage.findIndex((p) => p.id === partId);

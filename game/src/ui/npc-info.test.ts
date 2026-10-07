@@ -73,7 +73,7 @@ it('hides NPC traits without the read the driver perk', () => {
 function loadedHauler() {
   const w = emptyWorld();
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
-  npc.brain = npcBrain('hauler', npc.pos, ['trader']);
+  npc.brain = npcBrain('trader', npc.pos, ['trader']);
   expect(addGoods(w, npc, 'salt', 2) + addGoods(w, npc, 'scrap', 1)).toBe(3);
   if (!stowPart(w, npc, makePart(w, 'mg', 0))) throw new Error('No room for the spare gun');
   return { w, npc };

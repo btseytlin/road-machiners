@@ -6,6 +6,7 @@
 
 import { startKit } from '../../data/start';
 import { partDef } from '../../data/parts';
+import { MAX_RANK } from '../../data/skills';
 import { TIME } from '../../data/time';
 import type { Tier } from '../../data/market';
 import { isHostile } from '../combat';
@@ -25,7 +26,7 @@ import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
 import { endTurn, newWorld, update } from '../world';
-import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
+import { botOrders, parkedOnPurpose, type Archetype, type BotOptions, type Policy } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
 
@@ -65,38 +66,44 @@ export function recordTurns(seed: number, archetype: Archetype, turns: number, o
 
 // Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
 // it. A stall or any other error fails loud.
-export function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
+export function* stepsFrom(start: World, label: string, archetype: Policy, turns: number, options: BotOptions = {}): Generator<RecordStep> {
+  const tally = new DayTally();
+  let carried: DayRow[] = [tally.close(0, start)]; // the starting state rides on the first step
+  let i = 0;
+  for (const played of playTurns(start, label, archetype, turns, options)) {
+    const { before, next: world } = played;
+    tally.note(before, world, played.events, played.ledger);
+    const dead = world.player.state === 'dead';
+    const closed = dayEnds(before, world, ++i === turns || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
+    const rows = [...carried, ...closed];
+    carried = [];
+    yield { world, lines: played.lines, rows, death: dead ? { end: 'death', turn: world.turn } : null, events: played.events, ledger: played.ledger };
+  }
+}
+
+// Plays the turns one at a time on far travel and yields each one with the bot's commands. The player's death ends the
+// run after its turn. A stall of the player truck or any error fails loud, with the label, turn and position.
+export function* playTurns(start: World, label: string, policy: Policy, turns: number, options: BotOptions = {}): Generator<PlayedTurn> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   setHeadless(true);
   clearFarRoutes();
   try {
-    yield* playSteps(start, label, archetype, turns, options);
+    let world = start;
+    const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
+    for (let i = 0; i < turns; i++) {
+      const before = world;
+      const played = inContext(label, before, () => playTurn(before, policy, options));
+      world = played.next;
+      if (world.player.state === 'dead') {
+        yield played;
+        return;
+      }
+      watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
+      yield played;
+    }
   } finally {
     setHeadless(false);
     clearFarRoutes();
-  }
-}
-
-function* playSteps(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions): Generator<RecordStep> {
-  let world = start;
-  const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
-  const tally = new DayTally();
-  let carried: DayRow[] = [tally.close(0, world)]; // the starting state rides on the first step
-  for (let i = 0; i < turns; i++) {
-    const before = world;
-    const played = inContext(label, before, () => playTurn(before, archetype, options));
-    world = played.next;
-    tally.note(before, world, played.events, played.ledger);
-    const dead = world.player.state === 'dead';
-    const closed = dayEnds(before, world, i === turns - 1 || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
-    const rows = [...carried, ...closed];
-    carried = [];
-    if (dead) {
-      yield { world, lines: played.lines, rows, death: { end: 'death', turn: world.turn }, events: played.events, ledger: played.ledger };
-      return;
-    }
-    watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
-    yield { world, lines: played.lines, rows, death: null, events: played.events, ledger: played.ledger };
   }
 }
 
@@ -105,12 +112,14 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-function startWorld(seed: number, kit = 'standard'): World {
+// A new world on the start kit with no XP, every skill at `rank`, and no XP logged today. It picks no perks.
+export function startWorld(seed: number, kit = 'standard', rank = 0): World {
+  if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
   return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
-      p.ranks[skill] = 0;
+      p.ranks[skill] = rank;
       p.xpToday[skill] = 0;
     }
     for (const source of Object.keys(p.xpBySource) as XpSource[]) p.xpBySource[source] = 0;
@@ -119,17 +128,58 @@ function startWorld(seed: number, kit = 'standard'): World {
 }
 
 // events is everything the bot's commands and the turn raised on the way to next.
-type PlayedTurn = { next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
+export type PlayedTurn = { before: World; orders: BotTurn; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
 
-// The money the turn moved by itself, after the bot's commands: contract pay, else tow, patch and escort fees.
-function turnLedger(orders: BotTurn, next: World): Ledger {
+// Money sums differ by float rounding only below this.
+const MONEY_EPSILON = 1e-6;
+
+// The money the turn moved by itself, after the bot's commands, booked by the events that moved it: contract pay and
+// penalties as contracts, tow, patch and escort pay as fees. Money no event explains throws, so a new source in the
+// turn pipeline cannot hide under another key.
+export function turnLedger(orders: BotTurn, next: World): Ledger {
   const ledger = { ...orders.ledger };
+  let explained = 0;
+  for (const e of next.events) {
+    const move = playerMove(e, next.player.vehicleId);
+    if (!move) continue;
+    ledger[move.key] += move.amount;
+    explained += move.amount;
+  }
   const moved = next.player.money - orders.world.player.money;
-  ledger[next.events.some((e) => e.t === 'contract') ? 'contracts' : 'fees'] += moved;
+  if (Math.abs(moved - explained) > MONEY_EPSILON) throw new Error(`turn ${next.turn}: the turn moved ${moved} money but its events explain ${explained}, so some money source raises no event`);
   return ledger;
 }
 
-function playTurn(world: World, archetype: Archetype, options: BotOptions): PlayedTurn {
+type Move = { key: 'contracts' | 'fees'; amount: number };
+
+// The money one event moved for the player. The player's own tow fee has a money event, so towDone counts only when
+// the player pays it.
+function playerMove(e: GameEvent, me: string): Move | null {
+  if (e.t === 'money') return { key: moneyEventKey(e.reason), amount: e.amount };
+  return feeMove(e, me);
+}
+
+function feeMove(e: GameEvent, me: string): Move | null {
+  if (e.t === 'towDone') return e.client === me ? { key: 'fees', amount: -e.fee } : null;
+  if (e.t === 'escortPaid') return paidBetween(e.by, e.client, me, e.fee);
+  if (e.t === 'patch' && e.outcome === 'done') return paidBetween(e.patcher, e.client, me, e.price);
+  return null;
+}
+
+// A fee from payer to payee, as the player sees it, or null when the player is neither.
+function paidBetween(payee: string, payer: string, me: string, fee: number): Move | null {
+  if (payee === me) return { key: 'fees', amount: fee };
+  return payer === me ? { key: 'fees', amount: -fee } : null;
+}
+
+// A money event is a contract's pay or penalty, or the player's own tow fee.
+function moneyEventKey(reason: string): 'contracts' | 'fees' {
+  if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
+  if (reason.startsWith('towing ')) return 'fees';
+  throw new Error(`Money event with an unknown reason "${reason}"`);
+}
+
+function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {
   const orders = botOrders(buyCheapestRanks(world), archetype, options);
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
@@ -137,7 +187,7 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
   const lines = [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)];
-  return { next, lines, events, ledger: turnLedger(orders, next) };
+  return { before: world, orders, next, lines, events, ledger: turnLedger(orders, next) };
 }
 
 // Adds the seed, archetype, turn and truck position to any error of the turn.
@@ -243,8 +293,12 @@ function storageValue(world: World): number {
   return world.player.storage.reduce((sum, p) => sum + partValue(p), 0);
 }
 
-function cargoValue(v: Vehicle): number {
-  return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * n, 0);
+// The goods the truck holds that are its own. Units a haul contract carries belong to the client, so they are not
+// worth: accepting a haul would raise net worth by their value and delivering it would drop it again.
+function cargoValue(world: World, v: Vehicle): number {
+  const hauled = new Map<string, number>();
+  for (const c of world.player.contracts) if (c.kind === 'haul') hauled.set(c.good, (hauled.get(c.good) ?? 0) + c.units);
+  return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * Math.max(0, n - (hauled.get(good) ?? 0)), 0);
 }
 
 // What the player holds, split by kind. The chassis is its trade-in once repaired, less the whole repair bill, gear
@@ -254,7 +308,7 @@ export type Worth = { money: number; cargo: number; gear: number; storage: numbe
 
 export function worthOf(world: World): Worth {
   const v = playerVehicle(world);
-  return { money: world.player.money, cargo: cargoValue(v), gear: nonCoreTruckValue(v), storage: storageValue(world), chassis: repairedTradeIn(world) - repairCost(world) };
+  return { money: world.player.money, cargo: cargoValue(world, v), gear: nonCoreTruckValue(v), storage: storageValue(world), chassis: repairedTradeIn(world) - repairCost(world) };
 }
 
 function repairedTradeIn(world: World): number {
