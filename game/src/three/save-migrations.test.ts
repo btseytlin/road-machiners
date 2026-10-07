@@ -30,6 +30,7 @@ import FORMAT_2_20 from './save-fixtures/format-2-20.json';
 import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
+import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -485,5 +486,29 @@ describe('save migration 23 to 24', () => {
       ...FORMAT_2_23,
       vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
     });
+  });
+});
+
+describe('save migration 24 to 25', () => {
+  it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
+    const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_24.obstacles[5]);
+  });
+
+  it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
+    const world = { ...FORMAT_2_24, obstacles: [
+      { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
+    ] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
+  });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_24, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });
 });
