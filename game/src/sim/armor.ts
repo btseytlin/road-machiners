@@ -9,7 +9,7 @@ import { bodyOf } from './body';
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
 import { damagePart } from './damage';
-import { cellKey, gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
+import { cellKey, gridOf, itemCells, isMounted, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -45,13 +45,32 @@ export function ramMult(v: Vehicle, side: Side): number {
 // side's edge lies in a lane that crosses the cab. Front and rear lanes are columns, left and right lanes are rows.
 // Each side adds the square root of its shielded lanes, so cover spreads over the sides before it deepens on one.
 export function cabShield(v: Vehicle): number {
+  return cabShieldWith(v)(null);
+}
+
+// cabShield() of the truck plus one more armor item, for trying many spots of one piece. It reads the grid, the cab
+// lanes and the mounted armor once. The extra item counts only where it is mounted, and joins the armor in the (y, x)
+// order mountedItems() gives, so the sums run in the same order as for a truck that holds it.
+export function cabShieldWith(v: Vehicle): (extra: GridItem | null) => number {
   const g = gridOf(v);
   const cab = mountedItems(v, 'core').filter((it) => isCab(partDef(it.part.defId))).flatMap(itemCells);
   const cabLanes = new Set(cab.flatMap((c) => [`F${c.x}`, `B${c.x}`, `L${c.y}`, `R${c.y}`]));
-  const shielded = new Set(mountedItems(v, 'armor').flatMap(itemCells).map((c) => laneKey(g, c)).filter((key) => cabLanes.has(key)));
-  const perSide = new Map<string, number>();
-  for (const key of shielded) perSide.set(key[0], (perSide.get(key[0]) ?? 0) + 1);
-  return [...perSide.values()].reduce((sum, n) => sum + Math.sqrt(n), 0);
+  const armor = mountedItems(v, 'armor');
+  return (extra) => {
+    const items = extra ? withExtra(v, armor, extra) : armor;
+    const shielded = new Set(items.flatMap(itemCells).map((c) => laneKey(g, c)).filter((key) => cabLanes.has(key)));
+    const perSide = new Map<string, number>();
+    for (const key of shielded) perSide.set(key[0], (perSide.get(key[0]) ?? 0) + 1);
+    return [...perSide.values()].reduce((sum, n) => sum + Math.sqrt(n), 0);
+  };
+}
+
+// The mounted armor with one more item merged in at its (y, x) place, when that item is mounted.
+function withExtra(v: Vehicle, armor: GridItem[], extra: GridItem): GridItem[] {
+  if (extra.kind !== 'part' || partDef(extra.part.defId).kind !== 'armor') throw new Error('cabShieldWith takes an armor item as its extra');
+  if (!isMounted(v.chassisId, extra)) return armor;
+  const at = armor.findIndex((it) => it.y > extra.y || (it.y === extra.y && it.x > extra.x));
+  return at < 0 ? [...armor, extra] : [...armor.slice(0, at), extra, ...armor.slice(at)];
 }
 
 // The side and lane an edge cell covers, like "F2" for front column 2. Front and rear lanes are columns, left and

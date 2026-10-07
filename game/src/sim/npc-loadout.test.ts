@@ -482,7 +482,7 @@ describe('loadout fingerprint', () => {
 
   // Recorded on the code before the gear pick was sped up. A change here is a change of behavior, never re-record it.
   it('rolls the same loadouts and RNG streams for every template', () => {
-    const w = fixture;
+    const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
     expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('465aaaa1a18e2e34');
   }, budget(180_000));
