@@ -8,7 +8,7 @@ A community-driven wasteland truck RPG and software factory.
 
 ![Next release](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Frelease&style=flat-square)![Building](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Fbuilding&style=flat-square)![three.js and TypeScript](https://img.shields.io/badge/three.js-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 
-In ROAM you drive an armed truck across a post-apocalyptic wasteland. It's an immersive RPG sandbox: trade, scavenge ancient ruins, take jobs, rob other drivers or protect them. Inspired by Ex Machina, Space Rangers 2, Kenshi, Dustland 
+In ROAM you drive an armed truck across a post-apocalyptic wasteland. It's an immersive RPG sandbox: trade, scavenge ancient ruins, take jobs, rob other drivers or protect them. Inspired by Ex Machina, Space Rangers 2, Kenshi, Dustland Delivery and Caravaneer 2.
 
 ## The software factory
 
