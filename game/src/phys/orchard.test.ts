@@ -157,7 +157,7 @@ describe('driving through Old Orchard', () => {
     me.heading = UP_ROAD;
     const cache = stockNear(w, 'armyCache', at(32.5, 7.5));
     const up = [at(42, 1), at(39, 5.5), at(36, 7)];
-    const legs = [...up, at(33.5, 10), ...up.slice().reverse(), at(30, 0)].map(stopAt);
+    const legs = [...up, at(33.5, 10), ...up.slice().reverse().slice(1), at(30, 0)].map(stopAt);
     await driveLegs(w, legs, SHELF_LEG_TURNS, (x, leg) => {
       if (leg === up.length) expect(salvageInRange(player(x), cache)).toBe(true);
     });
