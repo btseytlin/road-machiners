@@ -66,14 +66,14 @@ describe('NPC equipment generation', () => {
       expect(world.nextId).toBe(beforeId);
       const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
-      expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(template.loadout.minGuns);
+      expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(1);
       for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
       const loose = v.items.filter((item) => item.kind === 'part' && !isMounted(v.chassisId, item));
       expect(loose).toHaveLength(loadout.spares.length);
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
-      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
+      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // a poor level still buys the base build
       expect(v.resources?.money).toBe(fixture.player.money);
     }
   });
@@ -93,14 +93,27 @@ describe('NPC equipment generation', () => {
   const guns = (v: Vehicle) => mountedItems(v, 'weapon').length;
 
   describe('loadout priorities', () => {
-    it('gives a template with no firepower priority only the guns it requires', () => {
+    // A gun still shields the parts behind it, so a driver with no firepower priority rarely adds one.
+    it('gives a template with no firepower priority few guns past its main one', () => {
       const template = withPriorities(NPCS.gunwagon, { firepower: 0 });
-      for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBe(template.loadout.minGuns);
+      for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBeLessThanOrEqual(1.25);
+    }, budget(120_000));
+
+    // A driver who can only shoot forward is beaten by anyone who drives behind it.
+    it.each(['gunwagon', 'trader', 'buggy', 'courier'])('gives most %s trucks a gun that fires at the rear', (id) => {
+      const rearGun = (v: Vehicle) => (mountedItems(v, 'weapon').some((g) => reachedSides(partDef(g.part.defId) as WeaponDef).includes('rear') && openSides(v, g).includes('rear')) ? 1 : 0);
+      expect(average(NPCS[id], 'standard', rearGun)).toBeGreaterThanOrEqual(0.75);
+    }, budget(120_000));
+
+    // The gear money is the level's share of what the template budget leaves past the base build.
+    it('lets a poor driver buy some armor', () => {
+      const armor = (v: Vehicle) => (mountedItems(v, 'armor').length > 0 ? 1 : 0);
+      expect(average(NPCS.courier, 'poor', armor)).toBeGreaterThanOrEqual(0.75);
     }, budget(120_000));
 
     it('gives more guns for more firepower', () => {
-      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'loaded', guns);
-      const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'loaded', guns);
+      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'standard', guns);
+      const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'standard', guns);
       expect(high).toBeGreaterThan(low);
     }, budget(120_000));
 
@@ -148,13 +161,16 @@ describe('NPC equipment generation', () => {
   }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
-    const world = { ...fixture, rngState: 3 };
-    const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
+    // The first roll whose speed floor holds fewer tools than its free cells, so the floor is what stops the load.
+    const rolls = Array.from({ length: 20 }, (_, i) => {
+      const world = { ...structuredClone(fixture), rngState: i + 1 };
+      const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
+      return { world, npc };
+    });
+    const { world, npc } = rolls.find(({ npc }) => Math.floor(npcMassRoom(npc) / GOODS.tools.mass) < freeCells(npc))!;
     const room = npcMassRoom(npc);
-    const free = freeCells(npc);
     const added = addGoods(world, npc, 'tools', 1000);
-    expect(added * GOODS.tools.mass).toBeLessThanOrEqual(room);
-    expect(added).toBeLessThan(free);
+    expect(added).toBe(Math.floor(room / GOODS.tools.mass));
     const player = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 60, y: 50 });
     player.brain = null;
     const playerFree = freeCells(player);
@@ -208,7 +224,7 @@ describe('NPC equipment generation', () => {
     ['unknown chassis', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'missing', weight: 1 }]; }],
     ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: 'plates', weight: 0 }]; }],
     ['an unknown gear level', (t: NpcTemplate) => { t.loadout.levels = [{ value: 'shiny' as GearLevel, weight: 1 }]; }],
-    ['no guns required', (t: NpcTemplate) => { t.loadout.minGuns = 0; }],
+    ['no firepower or armor priority', (t: NpcTemplate) => { t.loadout.priorities = { ...t.loadout.priorities, firepower: 0, armor: 0 }; }],
     ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'tiny', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
     ['a core part in the spare pool', (t: NpcTemplate) => { t.loadout.spares = { pool: [{ value: 'cab', weight: 1 }], count: [{ value: 1, weight: 1 }] }; }],
@@ -231,7 +247,7 @@ describe('NPC equipment generation', () => {
     }
     for (const template of Object.values(NPCS)) {
       const vehicles = world.vehicles.filter((v) => v.brain?.templateId === template.id);
-      expect(vehicles).toHaveLength(template.cap);
+      expect(vehicles.length, template.id).toBe(template.cap);
       expect(new Set(vehicles.map(describeLoadout)).size).toBeGreaterThan(1);
     }
   });
@@ -445,15 +461,11 @@ describe('armed choice cache', () => {
     expect(rolled('gunwagon', 3, 'loaded')).toEqual(first);
   });
 
-  it('reads the pools and minimum of a table edited in place', () => {
+  it('reads the pools of a table edited in place', () => {
     const template: NpcTemplate = structuredClone(NPCS.gunwagon);
-    const roll = () => generateNpcLoadout(emptyWorld(), template, null, 'poor');
-    const guns = () => roll().parts.filter((p) => partDef(p.defId).kind === 'weapon').map((p) => p.defId);
-    expect(guns().length).toBe(template.loadout.minGuns);
+    const mainGun = () => generateNpcLoadout(emptyWorld(), template, null, 'poor').parts.find((p) => partDef(p.defId).kind === 'weapon')!.defId;
+    expect(template.loadout.weapon.map((w) => w.value)).toContain(mainGun());
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    template.loadout.extraGun = [{ value: 'mg', weight: 1 }];
-    expect(guns()).toEqual(Array(template.loadout.minGuns).fill('mg'));
-    template.loadout.minGuns = 1;
-    expect(guns()).toEqual(['mg']);
+    expect(mainGun()).toBe('mg');
   });
 });

@@ -144,7 +144,7 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 
 ## Gear levels
 
-`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The template's priorities spend the mass above its speed share on armor, extra guns and free cargo room.
+`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The gear money is the level's share of what the template budget leaves past this base build. The driver then adds one gun, or covers one side with one armor type, at a time, by the fight model in `src/sim/npc-gear-score.ts`. It expects a fight with a truck like its own and counts each side's guns and the rounds that side takes before the truck stops. A faster attacker picks the weakest side, and a faster driver gets away if its rear holds. The template's priorities weigh firepower, armor, the speed it keeps and the room for its biggest load.
 
 <!-- wiki:gear-levels -->
 | level | budget mult | wear shift | cargo mult |
@@ -159,16 +159,16 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 <!-- wiki:loadout-priorities -->
 | template | speed | firepower | armor | cargo |
 | --- | --- | --- | --- | --- |
-| buggy | 3 | 3 | 1 | 1 |
+| buggy | 3 | 3 | 3 | 1 |
 | gunwagon | 0 | 3 | 3 | 0 |
-| trader | 1 | 1 | 1 | 3 |
-| scavenger | 1 | 1 | 1 | 3 |
+| trader | 1 | 1 | 3 | 3 |
+| scavenger | 1 | 1 | 3 | 3 |
 | bowlFarmer | 0 | 3 | 3 | 0 |
 | noseArmy | 0 | 3 | 3 | 0 |
-| courier | 3 | 1 | 1 | 2 |
-| roamer | 2 | 1 | 1 | 2 |
-| vulture | 1 | 1 | 1 | 3 |
-| convoy | 1 | 1 | 1 | 3 |
+| courier | 3 | 1 | 3 | 2 |
+| roamer | 2 | 1 | 3 | 2 |
+| vulture | 1 | 1 | 3 | 3 |
+| convoy | 1 | 1 | 3 | 3 |
 | convoyGuard | 1 | 3 | 2 | 0 |
 | merc | 1 | 3 | 2 | 0 |
 <!-- /wiki:loadout-priorities -->
