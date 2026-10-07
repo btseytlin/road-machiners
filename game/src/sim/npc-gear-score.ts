@@ -62,6 +62,7 @@ function freeMass(v: Vehicle): number {
   return Math.max(1, chassisDef(v.chassisId).ratedMass - vehicleMass(v));
 }
 
+// The kill rate of a gun into the rival's front, read once per gun def for the baseline.
 function rivalKill(base: Pick<GearBaseline, 'rivalTarget' | 'rivalKills'>, def: WeaponDef): number {
   let rate = base.rivalKills.get(def.id);
   if (rate === undefined) base.rivalKills.set(def.id, (rate = killRate(def, base.rivalTarget, 'front')));
