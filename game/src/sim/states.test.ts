@@ -171,7 +171,7 @@ describe('states', () => {
   });
 });
 
-const PATCH_DATA = { kind: 'patch', deal: 'free', parts: 1, price: 0, work: 4, workLeft: 3 } as const;
+const PATCH_DATA = { kind: 'patch', deal: 'free', parts: 1, partIds: [] as string[], price: 0, work: 4, workLeft: 3 } as const;
 
 function parkedPair(gap: number) {
   const world = emptyWorld({ x: 30, y: 30 });

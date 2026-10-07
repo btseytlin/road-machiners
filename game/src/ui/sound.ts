@@ -1,4 +1,4 @@
-// Sound settings: mute and one volume knob per group on the radio, kept in local storage apart from the game save.
+// Sound settings: mute, one volume knob per group and the next track key on the radio, kept in local storage apart from the game save.
 
 import { MIX, type Bus } from "../data/sounds";
 import type { Mixer } from "../audio/mixer";
@@ -41,6 +41,13 @@ export function knobAngle(value: number): number {
   return (value * 2 - 1) * SWEEP;
 }
 
+// A plastic transport key from an old CD player, with the skip-forward mark.
+function nextButton(onclick: () => void): HTMLElement {
+  const button = el("button", { class: "radio-next", title: "Next track", "aria-label": "Next track", onclick });
+  button.innerHTML = `<svg viewBox="0 0 14 8" focusable="false"><path d="M0 0L5 4L0 8ZM5 0L10 4L5 8Z"/><rect x="10.5" width="1.6" height="8"/></svg>`;
+  return button;
+}
+
 const KNOB_KEYS: Record<string, number> = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 };
 
 export class SoundSettings {
@@ -48,11 +55,12 @@ export class SoundSettings {
   private muteSwitch: HTMLElement;
   private knobs = new Map<Bus, HTMLElement>();
 
-  // The controls live on the radio's faceplate.
-  constructor(private mixer: Mixer, private storage: Storage, faceplate: HTMLElement) {
+  // The knobs and mute live on the radio's faceplate, the next track key in the strip above its screen.
+  constructor(private mixer: Mixer, private storage: Storage, faceplate: HTMLElement, keys: HTMLElement, nextTrack: () => void) {
     this.settings = parseSettings(storage.getItem(KEY));
     this.muteSwitch = el("div", { class: "radio-mute" });
     faceplate.append(...BUSES.map((b) => this.knob(b)), this.muteSwitch);
+    keys.append(nextButton(nextTrack));
     for (const b of BUSES) this.applyVolume(b);
     this.applyMute();
   }
@@ -113,7 +121,7 @@ export class SoundSettings {
     this.mixer.setMuted(this.settings.muted);
     const muted = this.settings.muted;
     this.muteSwitch.replaceChildren(
-      createSwitch({ on: "Mute", off: "Sound", checked: muted, key: "M", title: muted ? "Unmute [M]" : "Mute [M]", onclick: () => this.toggleMute() }),
+      createSwitch({ on: "Sound", off: "Mute", checked: !muted, key: "M", title: muted ? "Unmute [M]" : "Mute [M]", onclick: () => this.toggleMute() }),
     );
   }
 

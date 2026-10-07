@@ -15,7 +15,7 @@ import { getResources } from './resources';
 import { isTowing } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 
 // sides: the sides of the truck the weapon can fire toward, past the tall parts around it.
 export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
@@ -96,7 +96,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     // A broken transmission leaves only a crawl to limp home.
     if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
   }
-  maxSpeed *= weatherAt(world, v.pos).speed;
+  maxSpeed *= weatherOn(world, v).speed;
   // A tower drives with care while a truck hangs on its rope.
   if (isTowing(world, v.id)) maxSpeed *= TOW.speedShare;
 

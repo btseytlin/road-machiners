@@ -131,6 +131,21 @@ describe('NPC traffic', () => {
     expect(trafficStops(w, npc, DEST)).toBe(false);
   });
 
+  // Two scouts merging onto one road, at the poses of a touch found in physics traffic. The driver closes from behind
+  // and to the side, faster than the truck ahead. The truck ahead's centre passes the point where the driver's way
+  // meets its line just before the driver gets there, but its body still covers that point then.
+  it('routes around the stretch a truck ahead still covers when the driver gets there', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const driver = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 100, y: 100 }, (-53 * Math.PI) / 180);
+    driver.brain = npcBrain('scavenger', driver.pos, ['scavenger']);
+    driver.speed = 5.73;
+    const ahead = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 100.35, y: 96.19 }, (-9 * Math.PI) / 180);
+    ahead.brain = npcBrain('roamer', ahead.pos, ['roamer']);
+    ahead.speed = 4.19;
+    const merge = { x: ahead.pos.x + Math.cos(ahead.heading) * 2.3, y: ahead.pos.y + Math.sin(ahead.heading) * 2.3 };
+    expect(routeBlockers(w, driver).some((b) => dist(b.pos, merge) <= b.r)).toBe(true);
+  });
+
   it('a far driver does not stop for a moving truck, since far travel stops short of any truck in its way', () => {
     const oncoming = (playerAt: { x: number; y: number }) => {
       const { w, npc } = scene(playerAt.x, playerAt.y, 0, 0);

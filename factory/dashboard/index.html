@@ -2,37 +2,41 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RoaM factory</title>
 <link rel="stylesheet" href="/factory/dashboard.css">
+<script src="/factory/chart.js" defer></script>
 <script src="/factory/dashboard.js" defer></script>
 </head>
 <body>
-<div class="connection" id="connection" role="status">Connecting to the factory…</div>
-<div class="frame">
-<header class="top"><div class="wordmark">RoaM</div><span class="divider">/</span><h1>Factory</h1><div class="top-right"><a id="github-link" class="button">GitHub ↗</a><a id="play-link" class="button on">Play RoaM ↗</a></div></header>
-<section class="instrument" aria-label="Factory status">
-<div class="lcd"><span id="factory-status">Awaiting factory state</span><small id="state-age">No reading yet</small></div>
-<div class="readout"><small>Workers</small><strong id="worker-count">—</strong><em>Agent, test and branch queues</em></div>
-<div class="readout"><small>Next release</small><strong id="change-count">—</strong><em id="release-phase">Awaiting GitHub</em></div>
-<div class="readout"><small>Tokens today</small><strong id="tokens-today">—</strong><em id="usage-coverage">Awaiting measurements</em></div>
-<div class="readout"><small>Estimated cost today</small><strong id="cost-today">—</strong><em>Not billed spend</em></div>
-<div class="readout"><small>Worker time today</small><strong id="time-today">—</strong><em>Concurrent job time</em></div>
-</section>
-<main class="workbench">
-<div class="bench-head"><h2>Factory operations</h2><span class="source" id="source-age">Sources unavailable</span></div>
-<nav aria-label="Dashboard sections"><a class="button on" href="#jobs">Jobs</a><a class="button" href="#release">Release</a><a class="button" href="#host">Server</a><a class="button" href="#usage">Usage</a><a class="button" href="#channel">Telegram</a></nav>
-<div class="columns">
-<section id="jobs"><div class="section-head"><h3>Jobs</h3><span class="mono" id="job-count">Awaiting state</span></div><div class="pipeline" id="pipeline"></div><div class="table-scroll"><table><thead><tr><th>Issue</th><th>Stage</th><th>Elapsed</th></tr></thead><tbody id="job-rows"></tbody></table></div><p class="small dim" id="job-note">Factory state and GitHub are collected independently.</p></section>
-<section class="right" id="release"><div class="section-head"><h3>Next release</h3><span class="mono" id="release-count">Awaiting GitHub</span></div><div class="branch"><span id="release-name">—</span><span class="gold" id="release-status">Unavailable</span></div><ul class="release-list" id="release-changes"></ul><div class="release-status"><p class="gold small" id="release-blockers">Awaiting release data</p><p class="small dim">Then: candidate build → committee playtest → ship.</p></div><div class="release-actions" id="release-actions"></div><p class="small dim release-note">Jobs still in progress are not included. No ship date confirmed.</p></section>
+<div class="screen">
+<header><span class="brand">RoaM</span><h1>Factory</h1><nav role="tablist" aria-label="Dashboard"><button id="overview-tab" role="tab" aria-controls="overview" aria-selected="true">Overview</button><button id="analytics-tab" role="tab" aria-controls="analytics" aria-selected="false" tabindex="-1">Analytics</button></nav><div class="header-links"><a id="github-link">GitHub ↗</a><a id="play-link">Play ↗</a></div><span id="connection" role="status">Connecting</span></header>
+<div id="source-status" class="source-status" role="status">Waiting for data</div>
+<main id="overview" class="overview view" role="tabpanel" aria-labelledby="overview-tab">
+<section class="events"><h2>Event log</h2><div id="event-log" class="event-items"></div><div id="event-pages" class="pager"></div><button type="button" class="expand" data-dialog="event-dialog" aria-label="Expand event log">Expand ↗</button></section>
+<div class="workspace">
+<section class="panel workers"><div class="heading"><h2>Workers</h2><div id="worker-pages" class="pager"></div></div><div id="worker-zone" class="table-zone"><table><colgroup><col><col><col><col></colgroup><thead><tr><th>Task</th><th>Stage</th><th>Doing</th><th>Progress / elapsed</th></tr></thead><tbody id="worker-rows"></tbody></table></div><section class="capacity"><div class="heading"><h3>Free slots <span id="free-count" class="muted"></span></h3><span id="capacity-status" class="muted"></span></div><div id="free-slots" class="free-slots"></div><div class="heading"><h3>Waiting to start</h3><div id="capacity-pages" class="pager"></div></div><div id="capacity-rows" class="capacity-rows"></div></section></section>
+<div class="sidebar">
+<section class="panel"><div class="heading"><h2>Funnel</h2></div><div id="funnel" class="funnel"></div></section>
+<section class="panel release"><div class="heading"><h2>Next release <span id="release-count" class="muted"></span></h2><button type="button" class="expand" data-dialog="release-dialog" aria-label="Expand next release">Expand ↗</button><a id="release-link" hidden>Compare ↗</a></div><ul id="release-items" class="release-items"></ul><div class="release-gate"><p id="release-gate" class="clamp">Waiting for GitHub</p><div id="release-pages" class="pager"></div><a id="candidate-link" hidden>Play candidate ↗</a></div></section>
+<section class="panel"><div class="heading"><h2>Manager</h2></div><p id="manager-action" class="clamp">Activity unavailable</p></section>
+<section class="panel server"><div class="heading"><h2>Server</h2></div><div id="server-totals" class="server-totals"></div><div id="server-zone" class="table-zone"><table><colgroup><col><col><col></colgroup><thead><tr><th>Work</th><th>CPU</th><th>RAM</th></tr></thead><tbody id="server-rows"></tbody></table></div><div class="server-footer"><span id="server-note" class="muted clipped"></span><div id="server-pages" class="pager"></div></div></section>
 </div>
-<section class="lower" id="host"><div class="section-head"><h3>Factory server</h3><span class="mono" id="host-age">Awaiting host readings</span></div><div class="host-grid" id="host-readings"></div><p class="small dim">CPU is host-wide. RAM includes reclaimable cache as available on Linux. SSD is the factory data volume. GPU readings require NVIDIA drivers.</p></section>
-<div class="columns lower">
-<section id="usage"><div class="usage-top"><h3>Agent usage</h3><div class="range" role="group" aria-label="Usage date range"><button data-days="1" type="button" aria-pressed="false">Today</button><button data-days="7" type="button" class="on" aria-pressed="true">7 days</button><button data-days="30" type="button" aria-pressed="false">30 days</button></div></div><div class="usage-totals"><div><strong id="usage-tokens">—</strong><small>Reported tokens</small></div><div><strong id="usage-cost">—</strong><small>Estimated model cost</small></div><div><strong id="usage-time">—</strong><small>Worker time</small></div></div><div class="chart" id="usage-chart" role="img" aria-label="Daily measured token usage"></div><div class="chart-days" id="chart-days"></div><div class="legend"><span><i></i>Input + output</span><span><i class="cache"></i>Cache read + write</span></div><p class="small dim" id="token-split"></p><div class="usage-breakdown"><div><h4>Time by stage</h4><div id="stage-usage"></div></div><div><h4>Tokens by model</h4><div id="model-usage"></div><p class="small dim" id="usage-outcomes"></p></div></div><details><summary>Usage by public issue</summary><div class="table-scroll"><table><thead><tr><th>Issue</th><th>Worker time</th><th>Measured cost</th></tr></thead><tbody id="issue-usage"></tbody></table></div></details><p class="data-note" id="measurement-note">No measurements yet. Missing usage is never counted as zero.</p><p class="small dim">Factory jobs only. Excludes Hermes chat, external agent runs, audio and hosting charges. Cost is an estimate, not a bill. All date ranges use UTC days.</p></section>
-<div class="right"><section><div class="section-head"><h3>Event log</h3><span class="mono">Latest first</span></div><div class="log" id="event-log"></div></section><section class="radio" id="channel"><div class="section-head"><h3>Telegram channel</h3><a class="link" id="channel-link">Open channel ↗</a></div><div id="posts"></div><p class="small dim">Public factory announcements from the last 30 days. Older posts are in Telegram. Committee chat stays private.</p></section></div>
 </div>
 </main>
-<footer class="footer"><span>Read-only · No factory controls</span><span id="footer-status">Waiting for live data</span></footer>
+<main id="analytics" class="analytics view" role="tabpanel" aria-labelledby="analytics-tab" hidden>
+<div class="analytics-toolbar"><div role="group" aria-label="Period" id="period"><button data-days="1" aria-pressed="false">24 hours</button><button data-days="7" aria-pressed="true">7 days</button><button data-days="30" aria-pressed="false">30 days</button></div><span id="coverage" class="muted clipped">Measurements unavailable</span></div>
+<div class="counters"><section class="panel token-counter" aria-label="Tokens"><div class="counter"><span>Total tokens</span><strong id="usage-tokens">—</strong></div><div class="counter"><span>Input incl. cache</span><strong id="usage-input">—</strong></div><div class="counter"><span>Output</span><strong id="usage-output">—</strong></div></section><section class="panel counter"><span>Worker time</span><strong id="usage-time">—</strong></section><section class="panel counter"><span>Estimated cost</span><strong id="usage-cost">—</strong></section><section class="panel counter" title="Spend of jobs that failed, died or timed out"><span>Wasted: <span id="usage-wasted-tokens">—</span></span><strong id="usage-wasted-cost">—</strong></section><section class="panel counter"><span>Waiting time</span><strong id="usage-wait">—</strong></section></div>
+<div class="analytics-grid">
+<section class="panel chart-panel"><div class="heading"><h2 id="usage-title">Spend</h2><div class="chart-controls"><div role="group" aria-label="Chart grouping"><button data-grouping="stage" aria-pressed="true">Stage</button><button data-grouping="model" aria-pressed="false">Model</button></div><div role="group" aria-label="Chart metric"><button data-metric="tokens" aria-pressed="false">Tokens</button><button data-metric="cost" aria-pressed="true">Cost</button></div></div></div><div class="usage-chart"><canvas id="usage-chart" role="img" aria-label="Usage by stage or model"></canvas><p id="usage-empty" class="empty">No recorded usage</p></div></section>
+<section class="panel chart-panel"><div class="heading"><h2>Time by stage</h2><div id="stage-pages" class="pager"></div></div><div class="legend"><span class="running-color">Running</span><span class="waiting-color">Waiting</span></div><div id="stage-chart" class="stage-chart"></div></section>
+<section class="panel table-panel"><div class="heading"><h2>Repeat attempts</h2><div id="retry-pages" class="pager"></div></div><div id="retry-zone" class="table-zone"><table><thead><tr><th>Previous outcome</th><th>Runs</th><th>Time</th><th>Est. cost</th></tr></thead><tbody id="retry-rows"></tbody></table></div></section>
+<section class="panel table-panel"><div class="heading"><h2>Tokens by stage × model</h2><div id="model-column-pages" class="pager"></div></div><div id="stage-model-zone" class="table-zone"><table class="stage-model"><thead><tr id="stage-model-header"><th rowspan="2" scope="col">Stage</th></tr><tr id="stage-model-measures"></tr></thead><tbody id="stage-model-rows"></tbody></table></div><div id="stage-model-pages" class="pager"></div></section>
 </div>
+</main>
+</div>
+<dialog id="release-dialog" aria-labelledby="release-dialog-title"><div class="dialog-heading"><h2 id="release-dialog-title">Next release <span id="release-dialog-count" class="muted"></span></h2><button type="button" data-close aria-label="Close release details">Close ✕</button></div><p id="release-dialog-gate" class="muted"></p><ol id="release-dialog-rows" class="dialog-list"></ol><div id="release-dialog-pages" class="pager"></div></dialog>
+<dialog id="event-dialog" aria-labelledby="event-dialog-title"><div class="dialog-heading"><h2 id="event-dialog-title">Event log <span id="event-dialog-count" class="muted"></span></h2><button type="button" data-close aria-label="Close event log">Close ✕</button></div><p class="muted">Recorded outcomes, latest first</p><div id="event-dialog-rows" class="dialog-list"></div><div id="event-dialog-pages" class="pager"></div></dialog>
+<div id="full-text" role="tooltip" hidden></div>
 </body>
 </html>
