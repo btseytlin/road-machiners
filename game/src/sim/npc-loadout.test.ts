@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GEAR_LEVEL_IDS, GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED, NPC_WEAR, NPCS, PRIORITY_TOP, type GearLevel, type LoadoutPriorities, type NpcTemplate } from '../data/npcs';
@@ -474,4 +475,20 @@ describe('armed choice cache', () => {
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
     expect(mainGun()).toBe('mg');
   });
+});
+
+describe('loadout fingerprint', () => {
+  const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
+
+  // Recorded on the code before the gear pick was sped up. A change here is a change of behavior, never re-record it.
+  it('rolls the same loadouts and RNG streams for every template', () => {
+    const w = emptyWorld();
+    const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('465aaaa1a18e2e34');
+  }, budget(180_000));
+
+  it('populates a new world the same way', () => {
+    const w = newWorld(7, START_KITS.standard, TEST_MAP);
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('d18bd47cfff8480a');
+  }, budget(60_000));
 });

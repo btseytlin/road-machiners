@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { PARTS } from '../data/parts';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
-import { blastLanes, cabShield, lanePoint, openSides, walkLane } from './armor';
+import { blastLanes, cabShield, cabShieldWith, lanePoint, openSides, walkLane } from './armor';
 import { makePart } from './factory';
-import { mountedItems, sideOf } from './grid';
+import { gridOf, MOUNT_CELLS, mountedItems, mountSpots, sideOf } from './grid';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
@@ -104,6 +104,35 @@ describe('a stepped outline', () => {
     const nose = steppedWith(w, [{ defId: 'steelPlate', x: 2, y: 0 }]);
     const flank = steppedWith(w, [{ defId: 'steelPlate', x: 0, y: 3 }]);
     expect([cabShield(step), cabShield(nose), cabShield(flank)]).toEqual([0, 1, 1]);
+  });
+
+  describe('cabShieldWith', () => {
+    const armorItem = (w: World): GridItem => ({ id: 'i-extra', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(w, 'steelPlate', 0) });
+    const trucks = (w: World) => [
+      steppedWith(w, [{ defId: 'steelPlate', x: 2, y: 0 }, { defId: 'steelPlate', x: 0, y: 3 }]),
+      addVehicle(w, 'player', 'scout', [], { x: 40, y: 40 }),
+    ];
+
+    it('scores the truck with the extra item at every mount spot exactly as the truck that holds it', () => {
+      const w = emptyWorld();
+      for (const v of trucks(w)) {
+        const extra = armorItem(w);
+        const shield = cabShieldWith(v);
+        const spots = mountSpots(gridOf(v), v.items, extra, MOUNT_CELLS.armor);
+        expect(spots.length).toBeGreaterThan(0);
+        for (const spot of spots) {
+          const placed = { ...extra, ...spot };
+          expect(shield(placed)).toBe(cabShield({ ...v, items: [...v.items, placed] }));
+        }
+        expect(shield(null)).toBe(cabShield(v));
+      }
+    });
+
+    it('refuses an extra item that is not armor', () => {
+      const w = emptyWorld();
+      const gun: GridItem = { id: 'i-gun', x: 2, y: 1, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) };
+      expect(() => cabShieldWith(trucks(w)[0])(gun)).toThrow();
+    });
   });
 
   it('aims a blast at a missing corner at the lanes whose faces lie near it', () => {
