@@ -205,6 +205,7 @@ export function hitchNpc(world: World, npc: Vehicle, free: boolean): void {
   addState(world, 'tow', world.player.vehicleId, npc.id, { kind: 'tow', site: site.id, ...terms, hitched: true });
   npc.order = null;
   npc.speed = 0;
+  delete npc.brain!.farRoute;
 }
 
 // The player lets the NPC go. Runs inside the dialogue command.
@@ -356,7 +357,8 @@ function offer(world: World, tower: Vehicle, me: Vehicle): void {
   world.events.push({ t: 'towOffer', by: tower.id, town: site, fee });
 }
 
-// An NPC client takes the tow at once and pays what it can.
+// An NPC client takes the tow at once and pays what it can. The rope moves the truck, so its kept far route no longer
+// starts where it stands.
 function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   const { site, fee } = towerTerms(world, tower, client);
   endClaim(world, tower, client);
@@ -364,6 +366,7 @@ function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   addState(world, 'tow', tower.id, client.id, { kind: 'tow', site, fee: paid, waived: 0, hitched: true });
   client.order = null;
   client.speed = 0;
+  delete client.brain!.farRoute;
   world.events.push({ t: 'towHitched', by: tower.id, client: client.id, site });
 }
 
