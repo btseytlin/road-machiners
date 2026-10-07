@@ -356,7 +356,7 @@ def test_hook_hands_a_reply_to_the_release_post_draft_to_hermes_and_queues_nothi
 def draft_setup(tmp_path, state, session):
     committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
     committee.seed()
-    (tmp_path / "state").mkdir()
+    (tmp_path / "state").mkdir(parents=True)
     (tmp_path / "state" / "state.json").write_text(state)
     inbox = tmp_path / "inbox"
     inbox.mkdir()
@@ -369,9 +369,30 @@ def test_draft_tool_queues_hermes_draft_from_the_watch(tmp_path):
     assert json.loads(handle({"text": "  The road got longer.  "})) == {"success": True, "message": plugin.DRAFT_DONE}
     (file,) = inbox.iterdir()
     assert json.loads(file.read_text()) == {
-        "kind": "release-draft", "issue": None, "text": "The road got longer.",
+        "kind": "release-draft", "issue": None, "text": "The road got longer.", "image": None,
         "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": None,
     }
+
+
+def test_draft_tool_copies_a_picture_from_the_factory_home_into_the_inbox_media(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    picture = tmp_path / "work" / "shot.png"
+    picture.parent.mkdir()
+    picture.write_bytes(b"png")
+    assert json.loads(handle({"text": "Text", "image": str(picture)}))["success"] is True
+    command = json.loads(next(inbox.glob("*.json")).read_text())
+    assert command["image"].startswith("release-post/") and command["image"].endswith("-shot.png")
+    assert (inbox / "media" / command["image"]).read_bytes() == b"png"
+
+
+@pytest.mark.parametrize("where", ["missing", "outside"])
+def test_draft_tool_refuses_a_picture_that_is_missing_or_outside_the_factory_home(tmp_path, where):
+    inbox, handle = draft_setup(tmp_path / "home", RELEASE_POST_STATE, {}) if where == "outside" else draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    picture = tmp_path / "shot.png" if where == "outside" else tmp_path / "nope.png"
+    if where == "outside":
+        picture.write_bytes(b"png")
+    assert "error" in json.loads(handle({"text": "Text", "image": str(picture)}))
+    assert list(inbox.glob("*.json")) == []
 
 
 def test_draft_tool_queues_a_revision_for_the_member_who_asked(tmp_path):

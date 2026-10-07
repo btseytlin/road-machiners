@@ -48,7 +48,7 @@ describe('release post', () => {
     const ctx = fakeCtx(sent);
     put('1.json', draft('First draft'));
     await drainInbox(ctx);
-    expect(sent.calls).toEqual([expect.stringMatching(/^photo committee .*screenshot\.png Draft of the public post of release 2026-09-29/), 'buttons committee First draft']);
+    expect(sent.calls).toEqual([expect.stringMatching(/^photo committee .*screenshot\.png Picture of the public post of release 2026-09-29/), 'buttons committee First draft']);
     expect(sent.buttons).toEqual([[[{ text: 'Publish', data: 'factory:publish:11' }]]]);
     expect(readState(statePath).releasePost).toMatchObject({ postId: 101, draft: 'First draft' });
 
@@ -101,6 +101,32 @@ describe('release post', () => {
     expect(sent.calls.some((call) => call.includes('public'))).toBe(false);
     expect(sent.calls).toEqual(['message committee That did not work: This release post draft is out of date.', expect.stringMatching(/^message committee That did not work: Only committee members can do that/)]);
     expect(readState(statePath).releasePost).toMatchObject({ postId: 102 });
+  });
+
+  it('takes Hermes\'s picture from the inbox media folder and publishes the post with it', async () => {
+    const sent: Sent = { calls: [], buttons: [] };
+    const ctx = fakeCtx(sent);
+    mkdirSync(join(ROOT, 'inbox', 'media', 'release-post'), { recursive: true });
+    const png = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png);
+    writeFileSync(join(ROOT, 'inbox', 'media', 'release-post', '1-map.png'), png);
+    put('1.json', { ...draft('Text'), image: 'release-post/1-map.png' });
+    await drainInbox(ctx);
+    const picture = join(releasePostDir(ROOT, DAY), '1-map.png');
+    expect(sent.calls[0]).toMatch(new RegExp(`^photo committee ${picture} `));
+    expect(existsSync(join(ROOT, 'inbox', 'media', 'release-post', '1-map.png'))).toBe(false);
+    expect(readState(statePath).releasePost?.screenshot).toBe(picture);
+    sent.calls.length = 0;
+    put('2.json', { kind: 'publish', issue: 11, postId: 101 });
+    await drainInbox(ctx);
+    expect(sent.calls[0]).toBe(`photo public ${picture} Text`);
+  });
+
+  it('refuses a picture outside the inbox media folder', async () => {
+    const sent: Sent = { calls: [], buttons: [] };
+    put('1.json', { ...draft('Text'), image: '../../state.json' });
+    await drainInbox(fakeCtx(sent));
+    expect(sent.calls).toEqual([expect.stringMatching(/^message committee That did not work: Release post image .* is outside the inbox media folder/)]);
   });
 
   it('refuses a draft when no shipped release waits for its post', async () => {

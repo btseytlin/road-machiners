@@ -1,6 +1,7 @@
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, renameSync, rmSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { appendLedger } from './ledger';
+import { readPhoto } from './photo-file';
 import { CAPTION_LIMIT } from './stages/checks';
 import { readState, updateState } from './state';
 import type { Ctx, ReleasePost } from './types';
@@ -21,17 +22,31 @@ function requireReleasePost(ctx: Ctx): ReleasePost {
 }
 
 // Posts Hermes's draft to the committee chat with a Publish button. A new draft replaces the last one, whose button goes.
-// The first draft also shows the screenshot that goes out with it.
-export async function postDraft(ctx: Ctx, text: string): Promise<string> {
+// `image` is a file the plugin copied under the inbox media folder. It replaces the screenshot that goes out with the post.
+// The first draft and a draft with a new image show the picture above the text.
+export async function postDraft(ctx: Ctx, text: string, image: string | null | undefined): Promise<string> {
   const post = requireReleasePost(ctx);
   const draft = text.trim();
   if (!draft) throw new Error('The release post draft is empty.');
+  const screenshot = image == null ? post.screenshot : takeImage(ctx.cfg.home, post.day, image);
   const chat = ctx.cfg.committeeChat;
-  if (post.postId === null) await ctx.telegram.sendPhoto(chat, post.screenshot, `Draft of the public post of release ${post.day}. The text below goes to the channel with this screenshot. Reply to the text to change it.`);
+  if (post.postId === null || screenshot !== post.screenshot) await ctx.telegram.sendPhoto(chat, screenshot, `Picture of the public post of release ${post.day}. The text below goes to the channel with it. Reply to the text to change it.`);
   const id = await ctx.telegram.sendButtons(chat, draft, [[publishButton(post.issue)]]);
   await retireDraft(ctx, post);
-  recordDraft(ctx, post, id, draft);
+  recordDraft(ctx, post, id, draft, screenshot);
   return `Draft of the release ${post.day} post is in the committee chat.`;
+}
+
+// Moves the picture out of the inbox into the release post folder, after the same checks as any photo the factory sends.
+function takeImage(home: string, day: string, image: string): string {
+  const media = join(home, 'inbox', 'media');
+  const source = resolve(media, image);
+  if (!source.startsWith(`${media}/`)) throw new Error(`Release post image ${image} is outside the inbox media folder.`);
+  readPhoto(source);
+  const target = join(releasePostDir(home, day), basename(source));
+  mkdirSync(dirname(target), { recursive: true });
+  renameSync(source, target);
+  return target;
 }
 
 // Drops the buttons of the draft a new one replaced. The old draft cannot publish anyway, since only the current post id publishes.
@@ -45,13 +60,13 @@ async function retireDraft(ctx: Ctx, post: ReleasePost): Promise<void> {
 }
 
 // The draft's caption is recorded like an approval post's, so Publish can add its status line.
-function recordDraft(ctx: Ctx, post: ReleasePost, id: number, draft: string): void {
+function recordDraft(ctx: Ctx, post: ReleasePost, id: number, draft: string, screenshot: string): void {
   const old = post.postId === null ? null : String(post.postId);
   updateState(ctx.statePath, (state) => {
     const postCaptions = Object.fromEntries(Object.entries(state.postCaptions).filter(([key]) => key !== old));
     return {
       ...state,
-      releasePost: state.releasePost && { ...state.releasePost, postId: id, draft },
+      releasePost: state.releasePost && { ...state.releasePost, postId: id, draft, screenshot },
       postCaptions: { ...postCaptions, [String(id)]: draft },
       textPosts: [...state.textPosts.filter((key) => key !== old), String(id)],
     };

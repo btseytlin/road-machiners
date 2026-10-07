@@ -30,6 +30,7 @@ export type InboxCommand = {
   chat: string;
   messageId: number | null; // null for an order of Hermes that answers no message
   postId: number | null; // the approval, candidate or release post draft the command acts on. Null for change, adhoc and release-draft.
+  image?: string | null; // release-draft only: a picture under the inbox media folder that goes out with the post
 };
 
 export function inboxDir(home: string): string {
@@ -149,7 +150,7 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   if (command.kind === 'adhoc') return queueAdhoc(ctx, command, by);
   if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
   if (command.kind === 'release-task') return openReleaseTask(ctx, command, by);
-  if (command.kind === 'release-draft') return postDraft(ctx, requireText(command));
+  if (command.kind === 'release-draft') return postDraft(ctx, requireText(command), command.image);
   if (command.kind === 'publish') return publishPost(ctx, requirePost(command));
   return handleIssueCommand(ctx, command, requireIssue(command), by);
 }

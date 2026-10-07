@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import threading
 import time
@@ -387,6 +388,13 @@ DRAFT_SCHEMA = {
         "type": "object",
         "properties": {
             "text": {"type": "string", "description": f"The full post text, plain text with no markup, at most {DRAFT_LIMIT} characters."},
+            "image": {
+                "type": "string",
+                "description": (
+                    "Optional. Absolute path of a PNG, JPEG or WebP file under the factory home that goes out with the post instead of the release candidate screenshot. "
+                    "Leave it out to keep the current picture."
+                ),
+            },
         },
         "required": ["text"],
     },
@@ -493,6 +501,24 @@ def make_route_handler(cfg: Config, readiness: Readiness, session_env=_session_e
     return handle
 
 
+def _copy_draft_image(cfg: Config, image) -> Optional[str]:
+    """Copies the picture into the inbox media folder, where the tick checks it. Returns its path there, or None for no new picture.
+    The factory home has another path on the host, so the tick gets a path relative to the media folder."""
+    if image is None or not str(image).strip():
+        return None
+    home = Path(cfg.inbox).parent.resolve()
+    source = Path(str(image).strip()).resolve()
+    if home not in source.parents or not source.is_file():
+        raise ValueError(f"The image {image} is not a file under {home}.")
+    folder = Path(cfg.inbox) / "media" / "release-post"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{int(time.time() * 1000)}-{source.name}"
+    shutil.copyfile(source, target)
+    # The factory user moves the file out of the inbox, so it must be group-readable.
+    os.chmod(target, 0o640)
+    return f"release-post/{target.name}"
+
+
 def make_draft_handler(cfg: Config, session_env=_session_env):
     """Only a shipped release with its post still due takes a draft, so a draft never reaches the chat with nothing to publish."""
     def handle(args: dict, **kwargs) -> str:
@@ -507,8 +533,12 @@ def make_draft_handler(cfg: Config, session_env=_session_env):
             return _tool_error(f"{error} Nothing was sent.")
         if read_release_post(cfg.state_dir) is None:
             return _tool_error("No shipped release waits for its public post. Nothing was sent.")
+        try:
+            image = _copy_draft_image(cfg, args.get("image"))
+        except ValueError as error:
+            return _tool_error(f"{error} Nothing was sent.")
         command = {
-            "kind": "release-draft", "issue": None, "text": text,
+            "kind": "release-draft", "issue": None, "text": text, "image": image,
             "by": user, "byName": name or None, "chat": chat, "messageId": message, "postId": None,
         }
         write_inbox(cfg.inbox, command)
