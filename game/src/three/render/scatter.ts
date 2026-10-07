@@ -84,7 +84,7 @@ function chunkScatter(t: Terrain, look: readonly LookType[], blocked: Uint8Array
   for (let y = cy; y < Math.min(cy + TERRAIN_CHUNK, t.size); y++) for (let x = cx; x < Math.min(cx + TERRAIN_CHUNK, t.size); x++) {
     const i = y * t.size + x;
     const kind = blocked[i] ? null : tileScatter(look[i], x, y, rocky[i] === 1);
-    if (kind === null || underDeck(t, x, y)) continue;
+    if (kind === null || onLoweredGround(t, x, y)) continue;
     const model = modelOf(kind, desertWeight(look[i]) > 0);
     chunk[model].push(placed(t, x, y, model));
   }
@@ -101,7 +101,7 @@ function drawnLower(t: Terrain, x: number, y: number, ground: number): boolean {
 
 // Whether tile x, y's scatter would stand where terrain.ts draws the ground lower under a deck, so a tuft there
 // would float over the drawn ground or poke through the deck.
-export function underDeck(t: Terrain, x: number, y: number): boolean {
+export function onLoweredGround(t: Terrain, x: number, y: number): boolean {
   const p = tilePoint(x, y);
   if (drawnLower(t, p.x, p.y, groundAt(t, p.x, p.y))) return true;
   return TILE_CORNERS.some(([i, j]) => drawnLower(t, x + i, y + j, t.heights[(y + j) * (t.size + 1) + x + i]));

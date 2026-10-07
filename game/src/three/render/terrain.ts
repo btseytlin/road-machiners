@@ -73,21 +73,9 @@ export type TerrainChunk = {
 // centimeters of the deck line, and the drawn triangles, split along one diagonal, would poke through the plates.
 const DECK_FLOOR_GAP = 0.5;
 
-// Bounding box of each deck's outline, so most corners skip the deck test.
-const DECK_BOXES = DECKS.map((deck) => {
-  const points = deck.rails.flat();
-  return {
-    minX: Math.min(...points.map((p) => p.x)),
-    maxX: Math.max(...points.map((p) => p.x)),
-    minY: Math.min(...points.map((p) => p.y)),
-    maxY: Math.max(...points.map((p) => p.y)),
-  };
-});
-
 // The highest the ground is drawn at a map point inside a deck outline, in tiles, or null off every deck.
 // Render only: groundAt, physics, nav and sight keep the baked ground.
 export function deckFloorCap(t: Terrain, x: number, y: number): number | null {
-  if (!DECK_BOXES.some((b) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY)) return null;
   const on = deckAt(x, y);
   return on === null ? null : deckHeight(t, on.deck, on.along) - DECK_FLOOR_GAP / S;
 }
