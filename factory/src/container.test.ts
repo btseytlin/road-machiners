@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb } from './container';
+import { EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb, usageLimitMessage } from './container';
 import { recordJob, takeUsage } from './ledger';
+import { UsageLimitError } from './pause';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
@@ -305,5 +306,34 @@ describe('agent usage', () => {
     const [usage] = takeUsage(HOME, 'job-10');
     expect([usage.costUsd, usage.fromTranscript]).toEqual([2, true]);
     expect(existsSync(`${HOME}/usage/job-10.projects`)).toBe(false);
+  });
+});
+
+describe('usage limit', () => {
+  // The result line of a real run that hit the weekly limit, cut to the fields the factory reads. The real message separates its parts with a middle dot.
+  const LIMIT_RESULT = JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, total_cost_usd: 0, result: "You've hit your weekly limit, resets 11pm (UTC)" });
+  const limitRun = (stdout: string): Run => async (_cmd, args) => (args[0] === 'run' && args[1] === '--rm' ? { code: 1, stdout, stderr: '' } : { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : 'sha:1\n', stderr: '' });
+  const pause = `${HOME}/paused`;
+
+  it('pauses the factory and throws a usage-limit error', async () => {
+    mkdirSync(HOME, { recursive: true });
+    rmSync(pause, { force: true });
+    const agent = dockerContainer(limitRun(`{"type":"system"}\n${LIMIT_RESULT}\n`), cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    await expect(agent).rejects.toBeInstanceOf(UsageLimitError);
+    expect(readFileSync(pause, 'utf8')).toBe("Hermes: Claude weekly usage limit; You've hit your weekly limit, resets 11pm (UTC)\n");
+    rmSync(pause);
+  });
+
+  it('keeps a pause someone else wrote', async () => {
+    mkdirSync(HOME, { recursive: true });
+    writeFileSync(pause, 'Hermes repairs #4\n');
+    await expect(dockerContainer(limitRun(LIMIT_RESULT), cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toBeInstanceOf(UsageLimitError);
+    expect(readFileSync(pause, 'utf8')).toBe('Hermes repairs #4\n');
+    rmSync(pause);
+  });
+
+  it('finds no limit in a normal failure, and fails loud on a limit result with no message', () => {
+    expect(usageLimitMessage(`${AGENT_RESULT}\n`)).toBeNull();
+    expect(() => usageLimitMessage(JSON.stringify({ type: 'result', api_error_status: 429 }))).toThrow('no message');
   });
 });

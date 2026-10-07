@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { failureIssue, pruneFailures, reportFailure, summarizeError } from './fail';
+import { UsageLimitError } from './pause';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryState } from './types';
 
@@ -33,6 +34,14 @@ describe('reportFailure', () => {
     await reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l');
     expect(readState(statePath).failures).toEqual([{ stage: 'implement', issue: 4, error: 'agent failed', log: 'l', at: NOW.toISOString() }]);
     expect(labels).toEqual(['stuck']);
+  });
+
+  it('records a usage-limit failure but leaves the card unlabeled, so it runs again after the pause', async () => {
+    const labels: string[] = [];
+    const { ctx, statePath } = setup(async () => { labels.push('stuck'); });
+    await reportFailure(ctx, 'implement', 4, new UsageLimitError('agent hit the usage limit'), 'l');
+    expect(readState(statePath).failures).toHaveLength(1);
+    expect(labels).toEqual([]);
   });
 
   it('records the failure before a label that fails, so Hermes still sees it', async () => {

@@ -152,6 +152,7 @@ Every tick writes `/factory/home/health` with its time, the free disk space and 
   4. Check that the next tick runs. Record what held the factory in an issue comment or the chat.
   5. A missing health file after a deploy means no tick ran on the new code. Read the timer status and the update log.
 - `paused over an hour`. Finish your own pause and remove it. A pause someone else wrote stays. Ask the committee whether it can go, since it is their call.
+- `paused over an hour: Hermes: Claude weekly usage limit; ...`. The factory wrote it when an agent hit the limit, and it is yours. Its failure left no stuck label. Run `factory resume` once the reset time in the note has passed, and not before.
 
 Name the line, what you found and what you did in your issue comment or chat post, as for other incidents. When the same health line comes back within a day, fix its cause and post only if you could not.
 

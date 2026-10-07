@@ -43,7 +43,7 @@ The early ends:
 
 Screenshots never block a card. A card with no screenshot still runs verify and the checks, and its approval post is text that says it has no screenshot. [evidence.md](evidence.md) has the rules.
 
-A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label.
+A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label. A run that hits the Claude weekly usage limit pauses the factory instead, and its card takes no label.
 
 Every column change writes a card line to the ledger, named by its arrow in the diagram. The public dashboard reads these lines for its delivery numbers. [operations.md](operations.md#ledger-and-waste-review) lists the names.
 

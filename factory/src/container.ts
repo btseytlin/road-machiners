@@ -8,6 +8,7 @@ import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
 import { closeRun, closeRunFromTranscript, openRun, recordPeak, runProjectsDir, usageFromOutput } from './ledger';
 import { withLock } from './lock';
+import { pauseForUsageLimit, UsageLimitError } from './pause';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
 
 const FACTORY_LABEL = 'factory=1';
@@ -156,6 +157,18 @@ function recordUsage(cfg: FactoryConfig, jobId: string | null, result: RunResult
   closeRunFromTranscript(cfg.home, jobId, cfg.tokenPrices, new Date());
 }
 
+// The message of a result event that ended on the Claude usage limit, or null. Every 429 result seen on the server was the weekly limit.
+export function usageLimitMessage(stdout: string): string | null {
+  for (const line of stdout.split('\n')) {
+    if (!line.includes('"api_error_status":429')) continue;
+    const event = JSON.parse(line) as { type?: string; result?: unknown };
+    if (event.type !== 'result') continue;
+    if (typeof event.result !== 'string') throw new Error(`A usage-limit result has no message: ${line.slice(0, 200)}`);
+    return event.result;
+  }
+  return null;
+}
+
 // A run by hand has no job id and records no usage.
 function openRecordedRun(cfg: FactoryConfig, jobId: string | null, model: string, session: AgentSession | undefined): void {
   if (jobId === null || session === undefined) return;
@@ -193,6 +206,11 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       const result = await run('docker', args, { env, input, logPath: log });
       recordUsage(cfg, jobId, result, model, session);
       recordContainerPeak(cfg, jobId, result);
+      const limit = usageLimitMessage(result.stdout);
+      if (limit !== null) {
+        pauseForUsageLimit(cfg.home, limit);
+        throw new UsageLimitError(`agent in ${clone} hit the usage limit: ${limit}`);
+      }
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
