@@ -430,6 +430,8 @@ describe('move and merge preconditions and write order', () => {
     expect(calls).toContain('close 4 not planned');
     expect(calls).toContain('move 4 Done');
     expect(readState(statePath).approvalPosts).toEqual({ 43: 5 });
+    // Both moves to Done say dropped, so the dashboard reads one drop and no operator move.
+    expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'card').map((line) => line.kind === 'card' && line.step)).toEqual(['dropped', 'dropped']);
   });
 });
 

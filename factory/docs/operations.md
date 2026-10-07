@@ -80,8 +80,8 @@ Every card move adds a card line: the issue, the new column, the time and a step
 
 - Normal path: `entered`, `accepted`, `planned`, `built`, `patched`, `posted`, `approved`, `hardened` and `merged`.
 - Loops back: `questions`, `rebuild`, `plan-wrong`, `review-failed`, `patch`, `redesign`, `patch-replan`, `conflict`, `removed` and `unbundled`.
-- Early ends: `triage-wont-do`, `design-wont-do`, `bundled`, `denied` and `dropped`.
-- Other moves: `moved` by `factory move` or `merge`, `shipped` for the release card and `reported` for an ad hoc task.
+- Early ends: `triage-wont-do`, `design-wont-do`, `bundled`, `denied`, and `dropped` by `factory move N done`.
+- Other moves: `moved` by `factory move`, `merge-ordered` by `factory merge`, `shipped` for the release card and `reported` for an ad hoc task.
 - A line carries `flow` when the card is a hotfix, a release task, the release card or an ad hoc task.
 
 A triage `unclear` verdict moves nothing, so its wait for the author stays in Triage. A move by hand on GitHub writes no line.

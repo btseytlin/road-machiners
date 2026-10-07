@@ -28,7 +28,7 @@ Agents report their phase with `factory-status <activity>`, with no free text. `
 
 The Delivery tab reads only the card lines of the ledger. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
 
-- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing splits into preview and harden, and Approval into the committee's wait and the merge queue after hardening.
+- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing splits into preview and harden, and Approval into the committee's wait and the merge queue after hardening or `factory merge`. A `factory move` into Testing counts as preview.
 - A stage counts in a range when it ended in that range. Stages still open are counted with their mean age and are not in the means.
 - Triage to dev runs from the first triage acceptance to the first merge into dev after it, the merge that adds `release-candidate`. Weekly Ship is not its end. Cards merged in the range count. Accepted cards not yet merged or closed are in flight. A merge with no recorded acceptance is counted apart.
 - Loops count each move back by its transition, with the cards it touched. The loop rate is cards with a loop over cards with any move in the range.

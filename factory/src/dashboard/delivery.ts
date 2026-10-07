@@ -17,15 +17,22 @@ export type DeliverySummary = {
   since: string; issues: number; excluded: number; legacy: number;
   lead: Stat & { open: number; openMeanMs: number | null; missingStart: number };
   stages: (Stat & { stage: DeliveryStage; open: number; openMeanMs: number | null })[];
-  loops: { step: CardStep; events: number; issues: number }[]; looped: number; moved: number;
+  loops: { step: CardStep; events: number; issues: number }[]; looped: number;
   retries: { stage: JobStage; runs: number; issues: number }[];
   rejections: { gate: Gate; decided: number; rejected: number }[];
 };
 
 const DAY_MS = 86_400_000;
 const STAGES: DeliveryStage[] = ['triage', 'design', 'implementation', 'preview', 'approval', 'harden', 'merge'];
-// Steps that send a card back to an earlier column. A failed job is no loop: it moves nothing and shows under retries.
-export const LOOP_STEPS: CardStep[] = ['questions', 'rebuild', 'plan-wrong', 'review-failed', 'patch', 'redesign', 'patch-replan', 'conflict', 'removed', 'unbundled'];
+// Every step has a kind, so a new step does not compile until it is placed. A loop sends a card back to an earlier column.
+// A failed job is no loop: it moves nothing and shows under retries.
+const STEP_KINDS: Record<CardStep, 'path' | 'loop' | 'end' | 'other'> = {
+  entered: 'path', accepted: 'path', planned: 'path', built: 'path', patched: 'path', posted: 'path', approved: 'path', hardened: 'path', merged: 'path',
+  questions: 'loop', rebuild: 'loop', 'plan-wrong': 'loop', 'review-failed': 'loop', patch: 'loop', redesign: 'loop', 'patch-replan': 'loop', conflict: 'loop', removed: 'loop', unbundled: 'loop',
+  'triage-wont-do': 'end', 'design-wont-do': 'end', bundled: 'end', denied: 'end', dropped: 'end',
+  moved: 'other', 'merge-ordered': 'other', shipped: 'other', reported: 'other',
+};
+export const LOOP_STEPS = (Object.keys(STEP_KINDS) as CardStep[]).filter((step) => STEP_KINDS[step] === 'loop');
 const RETRY_STAGES: JobStage[] = ['triage', 'design', 'implement', 'patch', 'verify', 'checks'];
 // Each gate's passing and refusing steps. A pending card, a failed job, a patch, a redesign, a removal or an operator's drop decides nothing.
 const GATES: Record<Gate, { pass: CardStep[]; reject: CardStep[] }> = {
@@ -33,11 +40,11 @@ const GATES: Record<Gate, { pass: CardStep[]; reject: CardStep[] }> = {
   design: { pass: ['planned'], reject: ['design-wont-do'] },
   committee: { pass: ['approved', 'merged'], reject: ['denied'] },
 };
-// The column names the stage, and the step tells the two passes through Testing and Approval apart.
+// The column names the stage, and the step tells the two passes through Testing and Approval apart. An operator's move into Testing counts as a preview.
 const COLUMN_STAGE: Record<Column, (step: CardStep) => DeliveryStage | null> = {
   Triage: () => 'triage', Design: () => 'design', Implementation: () => 'implementation',
   Testing: (step) => (step === 'approved' || step === 'conflict' ? 'harden' : 'preview'),
-  Approval: (step) => (step === 'hardened' ? 'merge' : 'approval'),
+  Approval: (step) => (step === 'hardened' || step === 'merge-ordered' ? 'merge' : 'approval'),
   Done: () => null,
 };
 const stageOf = (line: CardLine): DeliveryStage | null => COLUMN_STAGE[line.to](line.step);
@@ -111,14 +118,14 @@ function summarizeLead(issues: CardLine[][], window: Window): DeliverySummary['l
   return { ...measure(done), open: open.length, openMeanMs: mean(open), missingStart };
 }
 
-function summarizeLoops(recent: CardLine[][]): Pick<DeliverySummary, 'loops' | 'looped' | 'moved'> {
+function summarizeLoops(recent: CardLine[][]): Pick<DeliverySummary, 'loops' | 'looped'> {
   const lines = recent.flat();
   const loops = LOOP_STEPS.map((step) => {
     const own = lines.filter((line) => line.step === step);
     return { step, events: own.length, issues: new Set(own.map((line) => line.issue)).size };
   });
   const looped = recent.filter((events) => events.some((line) => LOOP_STEPS.includes(line.step))).length;
-  return { loops, looped, moved: lines.filter((line) => line.step === 'moved').length };
+  return { loops, looped };
 }
 
 // Each issue counts once per gate, by its latest decision in the window.

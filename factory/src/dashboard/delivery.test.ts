@@ -77,14 +77,13 @@ describe('summarizeDelivery', () => {
       card(4, 46, 'posted', 'Approval'), card(4, 45, 'denied', 'Done'),
       card(5, 50, 'entered', 'Triage'), card(5, 49, 'accepted', 'Design'), card(5, 48, 'planned', 'Implementation'), card(5, 47, 'built', 'Testing'),
       card(5, 46, 'posted', 'Approval'), card(5, 45, 'redesign', 'Design'),
-      card(6, 50, 'entered', 'Triage'), card(6, 49, 'accepted', 'Design'), card(6, 48, 'moved', 'Done'), card(6, 48, 'dropped', 'Done'),
+      card(6, 50, 'entered', 'Triage'), card(6, 49, 'accepted', 'Design'), card(6, 48, 'dropped', 'Done'), card(6, 48, 'dropped', 'Done'),
       card(7, 50, 'entered', 'Triage'), card(7, 49, 'bundled', 'Done'),
     ];
     const summary = summarizeDelivery(lines, [job(8, 'triage', 'failed', 10)], NOW, 7);
     expect(gate(summary, 'triage')).toEqual({ gate: 'triage', decided: 6, rejected: 1 });
     expect(gate(summary, 'design')).toEqual({ gate: 'design', decided: 4, rejected: 1 });
     expect(gate(summary, 'committee')).toEqual({ gate: 'committee', decided: 2, rejected: 1 });
-    expect(summary!.moved).toBe(1);
     // Denied, refused and dropped cards are closed, so only the redesigned card stays open.
     expect(summary!.lead.open).toBe(1);
   });
@@ -141,6 +140,14 @@ describe('summarizeDelivery', () => {
     expect(stage(summary, 'preview')).toMatchObject({ count: 1, meanMs: 10 * HOUR });
     expect(loop(summary, 'rebuild').events).toBe(1);
     expect(stage(summary, 'implementation')).toMatchObject({ count: 1, open: 1, openMeanMs: 20 * HOUR });
+  });
+
+  it('counts an operator merge as merge queue time, not as the committee wait', () => {
+    const lines = [card(1, 30, 'entered', 'Triage'), card(1, 29, 'accepted', 'Design'), card(1, 20, 'merge-ordered', 'Approval'), card(1, 18, 'merged', 'Done')];
+    const summary = summarizeDelivery(lines, [], NOW, 7);
+    expect(stage(summary, 'merge')).toMatchObject({ count: 1, meanMs: 2 * HOUR });
+    expect(stage(summary, 'approval').count).toBe(0);
+    expect(gate(summary, 'committee')).toEqual({ gate: 'committee', decided: 1, rejected: 0 });
   });
 
   it('publishes aggregates only, with no issue numbers', () => {

@@ -6,7 +6,7 @@ import { ADHOC_LABEL, HOTFIX_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, type Colu
 export const CARD_STEPS = [
   'entered', 'accepted', 'triage-wont-do', 'bundled', 'unbundled', 'questions', 'planned', 'design-wont-do', 'built', 'patched', 'patch-replan',
   'rebuild', 'plan-wrong', 'review-failed', 'posted', 'hardened', 'approved', 'conflict', 'patch', 'redesign', 'merged', 'denied', 'dropped',
-  'moved', 'removed', 'shipped', 'reported',
+  'moved', 'merge-ordered', 'removed', 'shipped', 'reported',
 ] as const;
 export type CardStep = typeof CARD_STEPS[number];
 // Cards that do not run the feature path. The dashboard leaves them out of the delivery numbers.

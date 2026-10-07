@@ -488,7 +488,7 @@ function createDwellRow(row, maximum) {
   node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.openMeanMs)}. Open stages are not in the means.`;
   return node;
 }
-function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step]), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step] ?? row.step), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
 function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
 function readDeliveryCoverage(delivery) {
   if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
