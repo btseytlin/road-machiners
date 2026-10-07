@@ -484,6 +484,8 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
 const EXPOSED: readonly NpcActivity['kind'][] = ['repair', 'patch', 'meet', 'tow', 'loot'];
 // Deals a driver in combat calls off.
 const BROKEN_OFF: readonly NpcState['kind'][] = ['patch', 'trade', 'aid'];
+// Goals a deal with another truck pushes. A defeated driver keeps its word on them before it retreats.
+const DEAL_GOALS: readonly NpcActivity['kind'][] = ['meet', 'patch'];
 
 // A driver in combat drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
 function breakOffDeals(world: World, vehicle: Vehicle): void {
@@ -891,7 +893,8 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
 // A defeated driver makes no new decisions. It keeps its word on a meet or patch goal, which a deal pushes, then heads
 // home.
 function defeatedActivity(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): NpcActivity {
-  if (!['meet', 'patch'].includes(topGoal(vehicle)?.kind ?? '')) return retreatHome(world, vehicle);
+  const top = topGoal(vehicle);
+  if (!top || !DEAL_GOALS.includes(top.kind)) return retreatHome(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile);
 }
