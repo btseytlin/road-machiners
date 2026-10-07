@@ -258,7 +258,7 @@ describe("NPC names in the log", () => {
 describe("money text", () => {
   it("reads a money event in M with its sign", () => {
     const w = emptyWorld();
-    expect(eventText(w, { t: "money", amount: 4067, reason: "Sold salt" })).toEqual({ text: "+40.67 M: Sold salt", cls: "good" });
+    expect(eventText(w, { t: "money", amount: 4067, reason: "Sold salt" })).toEqual({ text: "+41 M: Sold salt", cls: "good" });
     expect(eventText(w, { t: "money", amount: -100, reason: "Fuel" })).toEqual({ text: "-1 M: Fuel", cls: "bad" });
   });
 });
@@ -271,7 +271,7 @@ describe("tow text", () => {
     expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 0 })?.text).toMatch(/ for free\.$/);
     expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 4000 })?.text).toMatch(/ for 40 M\.$/);
     expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 0 })).toMatchObject({ text: expect.stringMatching(/tows you into town for free\.$/), cls: "" });
-    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 4067 })).toMatchObject({ text: expect.stringMatching(/takes 40\.67 M\.$/), cls: "bad" });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 4067 })).toMatchObject({ text: expect.stringMatching(/takes 41 M\.$/), cls: "bad" });
     const other = addVehicle(w, "roamers", "buggy", ["stockEngine"], { x: 50, y: 30 });
     expect(eventText(w, { t: "towDone", by: npc.id, client: other.id, fee: 0 })?.text).toMatch(/ in for free\.$/);
   });
@@ -330,7 +330,7 @@ describe("saleEstimate", () => {
 
   it("only ever gives a signed number, ? or nothing", () => {
     for (const e of [saleEstimate(11, 3700, 4500), saleEstimate(3, 3700, 3000), saleEstimate(2, 3700, 3700), saleEstimate(2, 3700, undefined), saleEstimate(0, 3700, 100)]) {
-      expect(estimateText(e)).toMatch(/^([+\u2212]\d[\d,]*(\.\d\d)?|0|\?|)$/);
+      expect(estimateText(e)).toMatch(/^([+\u2212]\d[\d,]*|0|\?|)$/);
     }
   });
 
@@ -355,7 +355,7 @@ describe("goods table words", () => {
   });
 
   it("words lot totals", () => {
-    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 1.80 total");
+    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 2 total");
     expect(lotTitle("sell", 11, 31200)).toBe("Sell all 11 for 312 total");
   });
 });

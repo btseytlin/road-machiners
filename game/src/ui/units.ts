@@ -48,15 +48,15 @@ export function damage(value: number): number {
   return Math.ceil(value);
 }
 
-// Money is integer cents in the sim. It reads in M: no decimals for a whole M, two otherwise.
-const WHOLE_M = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const CENT_M = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Money is cents in the sim. It reads in whole M, with any part of an M rounded away from zero,
+// so a price, fee or debt never reads smaller than it is. Cents round first, to drop float noise.
+const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 export function moneyAmount(cents: number): string {
   const whole = Math.round(cents);
   if (whole === 0) return '0';
-  const format = whole % UNITS.centsPerM === 0 ? WHOLE_M : CENT_M;
-  return format.format(whole / UNITS.centsPerM);
+  const m = Math.ceil(Math.abs(whole) / UNITS.centsPerM);
+  return WHOLE_M.format(Math.sign(whole) * m);
 }
 
 // Money in running text, with its unit: log lines, talk and titles.
