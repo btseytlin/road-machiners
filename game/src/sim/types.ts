@@ -174,6 +174,7 @@ export type NpcActivity = {
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
+  watchUntil?: number; // the turn a raid's watch at its post ends
 };
 
 export type NpcBrain = {

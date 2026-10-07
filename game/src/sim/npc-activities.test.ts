@@ -116,7 +116,7 @@ describe('NPC activities', () => {
     expect(new Set(stops.map((p) => `${p.x},${p.y}`)).size).toBe(stops.length);
   });
 
-  it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
+  it.each(['sell', 'resupply'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];

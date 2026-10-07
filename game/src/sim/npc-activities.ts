@@ -17,7 +17,7 @@ import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
 } from './npc-decisions';
@@ -40,6 +40,7 @@ import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
+import { startWatch, watchOver } from './watch-posts';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
@@ -302,19 +303,19 @@ function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
 
-// A raid drives to a ground of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
-function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (vehicle: Vehicle) => Vec[]): IdleGoal {
+// A raid drives to a watch post of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
+function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (world: World, vehicle: Vehicle) => Vec[]): IdleGoal {
   return (world, vehicle) => {
-    const places = grounds(vehicle);
+    const places = grounds(world, vehicle);
     if (places.length === 0) throw new Error(`${vehicle.id} chose to ${kind} with no hunting ground away`);
     return createActivity(kind, null, { ...places[randInt(world, 0, places.length - 1)] }, reason);
   };
 }
 
-// A patrol drives to a road point near the town or camp it guards.
+// A patrol drives to a road point near the town it guards, or to a watch post near the camp, with no watch there.
 function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
   const site = patrolSite(vehicle);
-  const points = patrolPoints(site);
+  const points = patrolStopsOf(world, vehicle);
   if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${site.id} with no road near it`);
   return createActivity('patrol', site.id, { ...points[randInt(world, 0, points.length - 1)] }, `patrol the roads near ${'kind' in site && site.kind === 'camp' ? 'camp' : 'town'}`);
 }
@@ -348,8 +349,8 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
 const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
-  raid: huntingGoal('raid', 'look for prey at known hunting grounds', raiderGroundsAway),
-  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', huntingGroundsAway),
+  raid: huntingGoal('raid', 'watch the road for prey', raiderGroundsAway),
+  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', (_world, vehicle) => huntingGroundsAway(vehicle)),
   patrol: patrolGoal,
   travel: travelGoal,
   explore: exploreGoal,
@@ -511,8 +512,7 @@ export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): bo
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   if (EXPOSED.includes(goal.kind) && inCombat(world, vehicle)) return 'in combat';
-  const check = GOAL_CHECKS[goal.kind];
-  return check ? check(world, vehicle, goal, contacts) : null;
+  return watchOver(world, goal) ?? GOAL_CHECKS[goal.kind]?.(world, vehicle, goal, contacts) ?? null;
 }
 
 // ---- Decision points.
@@ -1188,8 +1188,9 @@ function reachedDestination(world: World, vehicle: Vehicle, activity: NpcActivit
   return withinReach(vehicle, activity) || world.events.some((e) => e.t === 'arrived' && e.vehicle === vehicle.id);
 }
 
+// A raid watches on arrival. Its goal check ends it once the watch runs out.
 function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
+  if (activity.phase === 'travel' && reachedDestination(world, vehicle, activity)) startWatch(world, activity);
 }
 
 // A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it

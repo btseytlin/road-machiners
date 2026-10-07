@@ -8,7 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { makePart } from './factory';
 import { freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
-import { huntingGrounds, optionChances, optionWeights, patrolPoints, raiderGrounds } from './npc-decisions';
+import { huntingGrounds, optionChances, optionWeights, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
@@ -86,12 +86,12 @@ describe('patrols', () => {
     expect(optionWeights(w, npc, 'idle', null, null)).not.toHaveProperty('patrol');
   });
 
-  it('offers raiders a patrol of their camp, within the patrol radius of its gates', () => {
+  it('offers raiders a patrol of their camp, to the watch posts around its gates', () => {
     forceOption('idle', 'patrol');
     for (const id of ['scrapjaw', 'kiln']) {
       const camp = siteById(id);
-      expect(patrolPoints(camp).length).toBeGreaterThanOrEqual(1);
       const w = emptyWorld({ x: 600, y: 600 });
+      expect(raiderPatrolPosts(w, camp).length).toBeGreaterThanOrEqual(1);
       const npc = createNpc(w, 'buggy', ['raider'], 'buggy', ['mg', 'stockEngine'], sitePads(camp)[0]);
       expect(optionWeights(w, npc, 'idle', null, null)).toHaveProperty('patrol');
       const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'patrol');
@@ -99,7 +99,7 @@ describe('patrols', () => {
       for (const goal of goals) {
         expect(goal.targetId).toBe(id);
         expect(goal.reason).toBe('patrol the roads near camp');
-        expect(Math.min(...siteGates(camp).map((gate) => dist(gate, goal.destination!)))).toBeLessThanOrEqual(NPC_BEHAVIOR.patrolRadius);
+        expect(raiderPatrolPosts(w, camp)).toContainEqual(goal.destination);
       }
     }
   });
@@ -113,7 +113,7 @@ describe('patrols', () => {
       const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'raid');
       expect(goals.length).toBeGreaterThan(25);
       for (const goal of goals) {
-        expect(raiderGrounds(camp)).toContainEqual(goal.destination);
+        expect(raiderGrounds(w, camp)).toContainEqual(goal.destination);
       }
     }
   });
