@@ -17,7 +17,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { backOffLoot, finishGoal, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
@@ -619,7 +619,7 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('sends a driver with no engine to a town for service, since a stall cannot refit it', () => {
+  it('sends a driver with no engine to a town for service, since only a town gives it a fresh loadout', () => {
     const { w, npc } = createTrader();
     const stall = Object.values(SHOPS).find((s) => s.kind === 'stall');
     const site = REGION.locations.find((l) => l.id === stall?.id);
@@ -964,6 +964,30 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.kind).not.toBe('investigate');
     expect(topGoal(raider)?.kind).not.toBe('fight');
     expect(topGoal(raider)?.kind).not.toBe('flee');
+  });
+});
+
+describe('a defeated driver with a deal goal', () => {
+  function defeatedClient() {
+    const { w, npc } = createScavenger();
+    const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 14, y: 10 });
+    npc.defeat = { phase: 'retreat', turns: 0, unseen: 0, foes: [], gaveUp: false };
+    addState(w, 'patch', other.id, npc.id, { kind: 'patch', deal: 'free', parts: 0, partIds: [], price: 0, work: 3, workLeft: 3 });
+    patchGoal(w, npc, other, false);
+    return { w, npc };
+  }
+
+  it('keeps a patch goal on top instead of retreating', () => {
+    const { w, npc } = defeatedClient();
+    expect(thinkNpc(w, npc).kind).toBe('patch');
+    expect(topGoal(npc)?.kind).toBe('patch');
+  });
+
+  it('retreats once the deal is gone', () => {
+    const { w, npc } = defeatedClient();
+    w.states = [];
+    expect(thinkNpc(w, npc).kind).toBe('retreat');
+    expect(npc.defeat).toBeTruthy();
   });
 });
 

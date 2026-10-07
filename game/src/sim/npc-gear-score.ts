@@ -3,6 +3,7 @@ import { GEAR_THREAT_SPEED, PRIORITY_TOP, type LoadoutPriorities } from '../data
 import { RULES } from '../data/rules';
 import { SIDES } from './armor';
 import { gunsBySide, killRate, targetOf, toughness, type Target } from './fight-odds';
+import { freeCells } from './grid';
 import { vehicleMass } from './mass';
 import { vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
@@ -12,19 +13,22 @@ import type { Vehicle, World } from './types';
 // it takes before the truck stops, each raised to the template's priority. Each side wins against the rival with odds
 // that top out at certain, so a strong side cannot make up for a bare one. A faster attacker fights from the weakest
 // side, any side otherwise, so a slow truck needs every side covered. A truck that loses gets away when it is the
-// faster one and its rear holds. For the cargo priority, the free rated mass must hold its biggest load. The damage
-// rules come from src/sim/fight-odds.ts.
+// faster one and its rear holds. For the cargo priority, the free rated mass and the free cells must hold its
+// biggest load. The damage rules come from src/sim/fight-odds.ts.
 
-export type GearBaseline = { rival: number; rear: number; loadKg: number; rivalTarget: Target };
+// The free mass and grid cells a load needs.
+export type Load = { kg: number; cells: number };
+
+export type GearBaseline = { rival: number; rear: number; load: Load; rivalTarget: Target };
 
 // The rival the driver expects is its own starting truck, main gun and utility part mounted, with its front armored,
 // facing it. A gun counts for the share of that truck it stops per turn through the armored front. `rival` is that
 // truck's strength from its best side. rear is the starting truck's rear toughness, which a getaway is judged
-// against. loadKg is the free mass the driver's biggest load needs.
-export function gearBaseline(v: Vehicle, rivalTruck: Vehicle, p: LoadoutPriorities, loadKg: number): GearBaseline {
+// against. load is what the driver's biggest load needs.
+export function gearBaseline(v: Vehicle, rivalTruck: Vehicle, p: LoadoutPriorities, load: Load): GearBaseline {
   const rivalTarget = targetOf(rivalTruck);
   const rival = Math.max(...sideStrength(rivalTruck, p, rivalTarget, toughness(rivalTruck)));
-  return { rival, rear: toughness(v)[SIDES.indexOf('rear')], loadKg, rivalTarget };
+  return { rival, rear: toughness(v)[SIDES.indexOf('rear')], load, rivalTarget };
 }
 
 // The driver survives by winning, or by getting away when it loses. A getaway needs the truck to be the faster one,
@@ -36,8 +40,14 @@ export function gearScore(world: World, v: Vehicle, p: LoadoutPriorities, base: 
   const win = edge * Math.min(...wins) + (1 - edge) * (wins.reduce((a, b) => a + b, 0) / wins.length);
   const rear = tough[SIDES.indexOf('rear')];
   const survive = win + (1 - win) * (1 - edge) * (rear / (rear + base.rear));
-  const loadFits = base.loadKg > 0 ? Math.min(1, freeMass(v) / base.loadKg) : 1;
-  return Math.log(survive) + (p.cargo / PRIORITY_TOP) * Math.log(loadFits);
+  return Math.log(survive) + (p.cargo / PRIORITY_TOP) * Math.log(loadFits(v, base.load));
+}
+
+// The share of the load the truck holds, by whichever of mass and cells runs out first.
+function loadFits(v: Vehicle, load: Load): number {
+  const byMass = load.kg > 0 ? freeMass(v) / load.kg : 1;
+  const byCells = load.cells > 0 ? Math.max(1, freeCells(v)) / load.cells : 1;
+  return Math.min(1, byMass, byCells);
 }
 
 // The odds an attacker is faster than the truck, so it picks the side to hit and the truck cannot get away.

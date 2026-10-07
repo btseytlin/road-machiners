@@ -141,6 +141,8 @@ export const NPC_BEHAVIOR = {
   // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
   threatAccept: 5,
   // Refuse weight times this when the driver is robbing the pleading foe and neither faces a threat nor is weak.
+  // A robber that holds up a foe with cargo names its price instead (holdsUp), so this covers the rest: prey with
+  // no cargo, or a stranded or on-duty robber.
   // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
   // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
   robberRefuse: 20,

@@ -24,7 +24,8 @@ import { cancelJob, startJob } from './jobs';
 import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { canUseSite, townAt } from './sites';
+import { canUseSite } from './sites';
+import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
@@ -495,7 +496,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 // Refit turns to move an item off the truck onto a spot: one part-worth to unmount it and one to mount it.
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
-  const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
+  const garage = looter.id === world.player.vehicleId && shopAt(world) !== null;
   return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 

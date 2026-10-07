@@ -250,6 +250,14 @@ export function strandedAt(world: World, vehicle: Vehicle, client: Vehicle): Vec
   return isPlayer(world, client) ? beaconCenter(world, vehicle, client) : null;
 }
 
+// A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
+// point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
+export function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
+  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded client perceived`);
+  goal.destination = { ...at };
+}
+
 export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   return strandedAt(world, vehicle, playerVehicle(world));
 }

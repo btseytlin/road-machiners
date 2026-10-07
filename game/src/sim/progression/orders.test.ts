@@ -73,7 +73,8 @@ describe('upgradeGear', () => {
 
   it('with keepRoom, takes no gun that would fill cargo cells, where a fighter would', () => {
     const roomOf = (world: World) => freeCells({ ...playerVehicle(world), items: playerVehicle(world).items.filter((it) => it.kind === 'part') });
-    const offer = (world: World) => shopState(world, 'bowl').stock.push(makePart(world, 'heavyMg', 0));
+    // The heavy machine gun is the only part on offer, so no cargo part adds room.
+    const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
     const trader = atBowl();
     offer(trader);
     const fighter = structuredClone(trader);
@@ -100,7 +101,8 @@ describe('upgradeGear', () => {
 });
 
 describe('upgradeGear for a fighter', () => {
-  const offer = (world: World) => shopState(world, 'bowl').stock.push(makePart(world, 'heavyMg', 0));
+  // The heavy machine gun is the only part on offer, so no cargo part adds room.
+  const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
   const roomOf = (world: World) => freeCells(playerVehicle(world));
   const speedOf = (world: World) => vehicleStats(world, playerVehicle(world)).maxSpeed;
 

@@ -210,19 +210,20 @@ describe('NPC field repairs', () => {
     expect(npc.job?.kind).toBe('repair');
   });
 
-  it('mostly flees instead of repairing under visible threat, and never starts the repair then', () => {
+  // The raider has no engine, so some drivers judge it beatable and fight it instead of fleeing.
+  it('mostly flees or fights instead of repairing under visible threat, and starts no repair then', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     corePart(npc, 'cab').hp = 1;
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    const fled = shareOfSeeds(world, npc.id, (x, me) => {
+    const answered = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       resolveNpcActivities(x);
-      const flees = topGoal(me)!.kind === 'flee';
-      if (flees) expect(me.job).toBeNull();
-      return flees;
+      const answers = topGoal(me)!.kind === 'flee' || topGoal(me)!.kind === 'fight';
+      if (answers) expect(me.job).toBeNull();
+      return answers;
     });
-    expect(fled).toBeGreaterThan(0.9);
+    expect(answered).toBeGreaterThan(0.9);
   });
 
   it.each([false, true])('orders escape during a repair and obeys parked-job rules, pinned: %s', (pinned) => {

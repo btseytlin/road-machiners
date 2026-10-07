@@ -6,7 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, fitToHunt, huntingGrounds, isWeak, judgeDanger, lawmanTowns, raiderGrounds, optionChances, optionWeights } from './npc-decisions';
+import { decide, fitToHunt, holdsUp, huntingGrounds, isWeak, judgeDanger, lawmanTowns, raiderGrounds, optionChances, optionWeights } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
@@ -708,5 +708,44 @@ describe('warn-off decisions', () => {
 
   it('never fights back without a working gun, and can always back off or refuse', () => {
     expect(Object.keys(warnChances(['raider'], ['stockEngine'])).sort()).toEqual(['comply', 'refuse']);
+  });
+});
+
+describe('holdsUp', () => {
+  const setup = (robbery: boolean) => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addState(w, 'feud', robber.id, me.id, { kind: 'feud', robbery });
+    addGoods(w, me, 'scrap', 2);
+    return { w, me, robber, up: () => holdsUp(w, robber, me, judgeDanger(w, robber, me)) };
+  };
+
+  it('a confident robber holds up prey with cargo', () => {
+    expect(setup(true).up()).toBe(true);
+  });
+
+  it('a raider holds up a non-raider with cargo', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    const raider = addNpc(w, 'raiders', 'raider', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addGoods(w, me, 'scrap', 2);
+    expect(holdsUp(w, raider, me, judgeDanger(w, raider, me))).toBe(true);
+  });
+
+  it('a weak robber, a defensive feud and prey without cargo are no hold-up', () => {
+    const weak = setup(true);
+    corePart(weak.robber, 'cab').hp = 1;
+    expect(weak.up()).toBe(false);
+    expect(setup(false).up()).toBe(false);
+    const bare = setup(true);
+    bare.me.items = bare.me.items.filter((i) => i.kind !== 'good');
+    expect(bare.up()).toBe(false);
+  });
+
+  it('a robber that follows a leader holds up nobody', () => {
+    const { robber, up } = setup(true);
+    robber.brain!.goals.push({ kind: 'follow', leader: 'x' } as never);
+    expect(up()).toBe(false);
   });
 });

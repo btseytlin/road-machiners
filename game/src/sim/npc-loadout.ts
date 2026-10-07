@@ -8,7 +8,7 @@ import { makePart, makeVehicle, newId, type PartSpec } from './factory';
 import { freeCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
-import { gearBaseline, gearScore } from './npc-gear-score';
+import { gearBaseline, gearScore, type Load } from './npc-gear-score';
 import { gunDrag, meetsSpeedFloor, npcMassRoom, speedShare } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { GridItem, Vehicle, World } from './types';
@@ -218,14 +218,17 @@ function mountedNonCore(v: Vehicle): PartSpec[] {
 
 type Room = { cells: number; mass: number };
 
-// The mass of the biggest load the template carries at this level, as chooseCargo() loads it: the repair parts, the
-// heaviest goods roll and the most spares of the heaviest spare part.
-function biggestLoadKg(table: NpcLoadoutTable, level: Level): number {
-  const repair = NPC_UPKEEP.repairParts * GOODS.parts.mass;
-  const goods = Math.max(0, ...table.goods.map(({ value }) => (value ? Math.max(1, Math.round(value.count * level.cargo)) * GOODS[value.good].mass : 0)));
-  if (!table.spares) return repair + goods;
-  const count = Math.round(Math.max(...table.spares.count.map((c) => c.value)) * level.cargo);
-  return repair + goods + count * Math.max(0, ...table.spares.pool.map((p) => (p.value ? partDef(p.value).mass : 0)));
+// The biggest load the template carries at this level, as chooseCargo() loads it: the repair parts, the biggest
+// goods roll and the most spares of the biggest spare part. A good takes one cell.
+function biggestLoad(table: NpcLoadoutTable, level: Level): Load {
+  const counts = table.goods.map(({ value }) => (value ? { n: Math.max(1, Math.round(value.count * level.cargo)), kg: GOODS[value.good].mass } : { n: 0, kg: 0 }));
+  const repair = NPC_UPKEEP.repairParts;
+  const goods = { kg: Math.max(0, ...counts.map((c) => c.n * c.kg)), cells: Math.max(0, ...counts.map((c) => c.n)) };
+  const spares = table.spares ? Math.round(Math.max(...table.spares.count.map((c) => c.value)) * level.cargo) : 0;
+  const pool = table.spares ? table.spares.pool.flatMap((p) => (p.value ? [partDef(p.value)] : [])) : [];
+  const spareKg = spares * Math.max(0, ...pool.map((def) => def.mass));
+  const spareCells = spares * Math.max(0, ...pool.map((def) => def.w * def.h));
+  return { kg: repair * GOODS.parts.mass + goods.kg + spareKg, cells: repair + goods.cells + spareCells };
 }
 
 // The level scales the rolled count, cut to what fits.
@@ -284,7 +287,7 @@ function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTempla
   // the gear level scales it, so a poor driver still buys a little gear.
   const base = computeEquipmentCost(v);
   const budget = base + level.budget * Math.max(0, table.budget - base);
-  return pickGear(probe, rng, table, v, { budget, share: speedShare(table.priorities) }, biggestLoadKg(table, level));
+  return pickGear(probe, rng, table, v, { budget, share: speedShare(table.priorities) }, biggestLoad(table, level));
 }
 
 // The required builds of one chassis, picked by chassis weight among those with a build that keeps MIN_NPC_SPEED on
@@ -351,9 +354,9 @@ function withinGunDraw(v: Vehicle): boolean {
 // weighted by pool weight and keeps the first GEAR_DRAWS that fit and beat the truck as it stands. It takes the one
 // that gains the most for what it uses, or with GEAR_WHIM odds a random one of them. The driver stops when no move
 // beats the truck.
-function pickGear(world: World, rng: Rng, table: NpcLoadoutTable, v: Vehicle, plan: Plan, loadKg: number): Vehicle {
+function pickGear(world: World, rng: Rng, table: NpcLoadoutTable, v: Vehicle, plan: Plan, load: Load): Vehicle {
   const rival = coverSides(v, ['F'], (u, side) => tryMountChoice(world, u, table.armor[0].value, Infinity, [side])) ?? v;
-  const base = gearBaseline(v, rival, table.priorities, loadKg);
+  const base = gearBaseline(v, rival, table.priorities, load);
   const moves = gearMoves(world, table, plan);
   const score = (u: Vehicle) => gearScore(world, u, table.priorities, base);
   for (;;) {

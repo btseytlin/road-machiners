@@ -32,6 +32,7 @@ type Key = {
   skyI: number;
   glassI: number; // strength of the glow cab windows add: none by day, most at sunset
   glassWhite: number; // share of white in that glow, so it goes from the sunset color to a whitish night glow
+  beamI: number; // share of the headlight beam strength that shows: all of it from sunset on, less under a high sun
 };
 const KEYS: Key[] = [
   {
@@ -43,6 +44,7 @@ const KEYS: Key[] = [
     skyI: 0.9,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.3,
   },
   {
     h: 20,
@@ -53,6 +55,7 @@ const KEYS: Key[] = [
     skyI: 0.88,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.45,
   },
   {
     h: 8,
@@ -63,6 +66,7 @@ const KEYS: Key[] = [
     skyI: 0.85,
     glassI: 0.1,
     glassWhite: 0,
+    beamI: 0.75,
   },
   {
     h: 1,
@@ -73,6 +77,7 @@ const KEYS: Key[] = [
     skyI: 0.7,
     glassI: 0.4,
     glassWhite: 0,
+    beamI: 1,
   },
   {
     h: -4,
@@ -83,6 +88,7 @@ const KEYS: Key[] = [
     skyI: 0.75,
     glassI: 0.35,
     glassWhite: 0.5,
+    beamI: 1,
   },
   {
     h: -TWILIGHT,
@@ -93,6 +99,7 @@ const KEYS: Key[] = [
     skyI: 0.78,
     glassI: 0.2,
     glassWhite: 0.8,
+    beamI: 1,
   },
 ];
 
@@ -105,6 +112,7 @@ export type Daylight = {
   ground: THREE.Color;
   skyIntensity: number;
   glass: THREE.Color; // glow cab windows add: the sun color at sunset, whitish at night
+  beam: number; // share of the headlight beam strength that shows, 1 from sunset on
 };
 
 // The sun's height in degrees. At night it keeps sinking at its horizon rate, so twilight has a length.
@@ -141,6 +149,7 @@ function colorsAt(h: number): Omit<Daylight, "dir" | "elevation"> {
     sky: mix(a.sky, b.sky),
     ground: mix(a.ground, b.ground),
     skyIntensity: a.skyI + (b.skyI - a.skyI) * s,
+    beam: a.beamI + (b.beamI - a.beamI) * s,
     glass: desaturate(mix(a.sun, b.sun).lerp(WHITE, a.glassWhite + (b.glassWhite - a.glassWhite) * s))
       .multiplyScalar(a.glassI + (b.glassI - a.glassI) * s),
   };
@@ -207,8 +216,9 @@ export function sunLight(): THREE.DirectionalLight {
   return sun;
 }
 
-// Lights that exist only at night: headlight beams for every vehicle within gray vision, also one the
-// player cannot see, and a faint glow over the player truck so its paint reads against the dark ground.
+// Vehicle lights. At night: headlight beams for every vehicle within gray vision, also one the player cannot see,
+// and a faint glow over the player truck so its paint reads against the dark ground. By day: only the beams of lamps
+// that are on, which is the player's switch, scaled by Daylight.beam.
 
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25;
@@ -246,7 +256,7 @@ export function lampsOn(id: string, lightTurn: number): boolean {
 export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean; player: boolean };
 
 // Whether the night lights should exist. At dawn NPC lamps switch off one by one, so the night lights stay until the
-// last one is off. The player's switch never keeps them, so lamps switched on by day light only the lamp faces.
+// last one is off. The player's switch alone does not keep them. By day the beams follow the lamps that are on instead.
 export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "player">[]): boolean {
   return !sunAt(turn) || lit.some((v) => !v.player && v.on);
 }
@@ -263,11 +273,12 @@ export function beamOrder(lit: LitVehicle[], truck: V3): LitVehicle[] {
     .map((e) => e.v);
 }
 
-// A change in light count recompiles every material, and a change in the count of shadowed lights does too. So the
-// lights exist only at night, and through the night both beam pools only grow. Unused beams stay at zero until dawn.
+// A change in light count recompiles every material, and a change in the count of shadowed lights does too. So
+// through the night both beam pools only grow, and unused beams stay at zero until dawn. By day the pools hold exactly
+// the lamps that are on, so the count changes only at a lamp switch or at the dusk and dawn handover.
 // The SHADOW_BEAMS nearest lamp-on vehicles take shadowed beams, so props block their light. The rest take plain
 // beams, which shine through props, because each shadowed beam costs a depth pass per frame.
-export class NightLights {
+export class VehicleLights {
   private readonly shadowed: THREE.SpotLight[] = [];
   private readonly plain: THREE.SpotLight[] = [];
   private glow: THREE.PointLight | null = null;
@@ -284,18 +295,20 @@ export class NightLights {
         on: vehicleLampsOn(world, v, lightTurn),
         player: v.id === world.player.vehicleId,
       }));
-    this.update(nightLightsWanted(world.turn, lit), truck, lit);
+    this.update(nightLightsWanted(world.turn, lit), daylightAt(lightTurn).beam, truck, lit);
   }
 
-  // truck: the drawn player truck position. lit: vehicles within gray vision.
-  update(night: boolean, truck: V3, lit: LitVehicle[]): void {
-    if (!night) {
-      this.clear();
-      return;
-    }
+  // night: nightLightsWanted. beam: Daylight.beam. truck: the drawn player truck position. lit: vehicles within gray vision.
+  update(night: boolean, beam: number, truck: V3, lit: LitVehicle[]): void {
     const order = beamOrder(lit, truck);
-    this.aim(this.shadowed, order.slice(0, SHADOW_BEAMS), true);
-    this.aim(this.plain, order.slice(SHADOW_BEAMS), false);
+    if (!night) {
+      this.removeGlow();
+      this.trim(this.shadowed, Math.min(order.length, SHADOW_BEAMS));
+      this.trim(this.plain, Math.max(0, order.length - SHADOW_BEAMS));
+    }
+    this.aim(this.shadowed, order.slice(0, SHADOW_BEAMS), true, beam);
+    this.aim(this.plain, order.slice(SHADOW_BEAMS), false, beam);
+    if (!night) return;
     if (!this.glow) {
       this.glow = new THREE.PointLight(PAL.truckGlow, GLOW_INTENSITY, GLOW_RANGE, GLOW_DECAY);
       this.scene.add(this.glow);
@@ -303,11 +316,14 @@ export class NightLights {
     this.glow.position.set(truck.x, truck.y + GLOW_HEIGHT, truck.z);
   }
 
-  private clear(): void {
-    for (const beam of [...this.shadowed.splice(0), ...this.plain.splice(0)]) {
+  private trim(pool: THREE.SpotLight[], n: number): void {
+    for (const beam of pool.splice(n)) {
       this.scene.remove(beam, beam.target);
       beam.dispose();
     }
+  }
+
+  private removeGlow(): void {
     if (!this.glow) return;
     this.scene.remove(this.glow);
     this.glow.dispose();
@@ -325,11 +341,11 @@ export class NightLights {
     return beam;
   }
 
-  private aim(pool: THREE.SpotLight[], vehicles: LitVehicle[], shadows: boolean): void {
+  private aim(pool: THREE.SpotLight[], vehicles: LitVehicle[], shadows: boolean, share: number): void {
     while (pool.length < vehicles.length) pool.push(this.newBeam(shadows));
     pool.forEach((beam, i) => {
       const v = vehicles[i];
-      beam.intensity = v ? BEAM_INTENSITY : 0;
+      beam.intensity = v ? BEAM_INTENSITY * share : 0;
       if (shadows) beam.shadow.autoUpdate = v !== undefined;
       if (v) this.aimAt(beam, v);
     });
