@@ -104,7 +104,7 @@ When your purpose changes, call `factory_report_activity` with an allowed activi
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, a `drift: <line>` from `factory audit`, a server health line from the section Server health, or a finished review from the section Daily factory review. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed `/dev/` build shows its commit and what broke: fix `dev`, or revert the merge that broke it, then run `run dev -`. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. You clear it after you fix the cause. The factory posts nothing about failures, so your message is the only one the committee sees.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, a `drift: <line>` from `factory audit`, a server health line from the section Server health, a finished review from the section Daily factory review, or a release post from the section Release post. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed `/dev/` build shows its commit and what broke: fix `dev`, or revert the merge that broke it, then run `run dev -`. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. You clear it after you fix the cause. The factory posts nothing about failures, so your message is the only one the committee sees.
 
 Fix every incident yourself, then report. Never ask the committee for permission to fix one. Post to the committee for a question on game design or taste, or to report what you did when it matters to them. Name the stage and the issue with its link, say in one line what broke, then what you did. No more than that.
 
@@ -172,6 +172,10 @@ Name the line, what you found and what you did in your issue comment or chat pos
 4. When it matters, post to the committee in a few lines: what changed with its numbers, the cause you found, and the change you propose with the issue link. Ask whether to queue it. When a member says yes, queue it with `factory_queue_change`.
 5. When nothing matters, respond with [SILENT].
 6. Delete `/factory/home/review-pending` either way, so the line closes.
+
+## Release post
+
+`release post due: release <day>` means a release shipped and its public post needs your draft. Read `factory/hermes/release-post.md` in the deployed code and follow it. A reply to the draft post in the committee chat follows it too. The line closes once your draft is in the chat.
 
 ## Changing factory state
 
@@ -256,6 +260,7 @@ The factory plugin reads certain committee messages before you see them. The fac
 - Approve, as a button or an "approve" reply, sends the card to the Hardening column, then it merges into `dev` by itself. Deny closes the issue for good.
 - A reply that starts with "patch:" or "redesign:" takes that route at once and never reaches you.
 - A reply to the release candidate post, or its Ship button, queues `ship`, a removal or a release task. A press on an old candidate post gets "This release post is out of date." and queues nothing.
+- Publish on the current release post draft posts it to the public channel. A press on an older draft queues nothing.
 - `/change <request>` queues a factory change.
 - `/committee list`, `/committee add <telegram id> [github login]`, `/committee remove <telegram id>` and `/committee github <telegram id> <login>` manage the committee.
 

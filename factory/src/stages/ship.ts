@@ -1,12 +1,12 @@
 import { moveCard } from '../card-events';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
-import { appendLedger } from '../ledger';
+import { releasePostDir } from '../release-post';
 import { reportEnv, takeMaps } from '../sourcemaps';
 import { updateState } from '../state';
-import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
+import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleasePost, type ReleaseState } from '../types';
 import { closeBundle } from './bundle';
 import { agentLog } from './common';
 import { queueIncidents } from './incident';
@@ -92,10 +92,11 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
     { branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` },
   ]);
   await publish(ctx, keys, 'ship');
-  const channel = ctx.cfg.publicChannel;
-  await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
-  const postId = await ctx.telegram.sendMessage(channel, changelog);
-  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, channel, text: changelog, at: ctx.now().toISOString() });
+  // The public post waits for Hermes's draft and a member's Publish. The candidate clone goes with the next release, so the screenshot moves to the factory home.
+  const kept = join(releasePostDir(ctx.cfg.home, release.day), 'screenshot.png');
+  mkdirSync(dirname(kept), { recursive: true });
+  copyFileSync(screenshot, kept);
+  const post: ReleasePost = { issue, day: release.day, changelog, screenshot: kept, postId: null, draft: null };
   // Only the factory pushes main, so main still holds the release merge here.
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
@@ -117,9 +118,9 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   updateState(ctx.statePath, (state) => {
     const builds = { ...state.builds };
     delete builds[String(issue)];
-    return { ...state, release: null, lastRelease: ctx.now().toISOString(), builds };
+    return { ...state, release: null, releasePost: post, lastRelease: ctx.now().toISOString(), builds };
   });
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes.`);
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes. Hermes drafts the public post next.`);
   ctx.log('ship', issue, `shipped ${features.length} changes`);
 }
 

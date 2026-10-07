@@ -154,11 +154,22 @@ export type ReleaseState = {
   playtest: PlaytestState;
 };
 
+// The public post of a shipped release. Hermes drafts it, and a member publishes the draft from the committee chat.
+export type ReleasePost = {
+  issue: number; // tracking issue of the shipped release
+  day: string; // YYYY-MM-DD of the release cut
+  changelog: string; // the shipped changelog lines, which the draft must cover
+  screenshot: string; // the candidate screenshot, kept under the factory home
+  postId: number | null; // Telegram id of the current draft post in the committee chat. Null until Hermes sends a draft.
+  draft: string | null; // text of the current draft, which Publish posts as it is
+};
+
 export type FactoryState = {
   jobs: Job[]; // running jobs, at most one per issue
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
   release: ReleaseState | null;
+  releasePost: ReleasePost | null; // the public post of the last shipped release, until a member publishes it
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick

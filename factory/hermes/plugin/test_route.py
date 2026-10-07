@@ -332,6 +332,67 @@ def test_route_tool_routes_as_hermes_when_no_member_wrote(tmp_path):
     }
 
 
+RELEASE_POST_STATE = '{"approvalPosts": {}, "releasePost": {"issue": 40, "day": "d", "changelog": "- [#3] x", "screenshot": "s.png", "postId": 66, "draft": "Old draft"}}'
+
+
+def test_hook_hands_a_reply_to_the_release_post_draft_to_hermes_and_queues_nothing(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text(RELEASE_POST_STATE)
+    (tmp_path / "inbox").mkdir()
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), "-100", committee)
+    gateway = types.SimpleNamespace(adapters={"telegram": Adapter()})
+    source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
+    event = types.SimpleNamespace(text="mention the new map", reply_to_message_id="66", source=source, message_id="5")
+    result = asyncio.run(plugin.make_hook(cfg, make_readiness(tmp_path))(event, gateway, None))
+    assert result["action"] == "rewrite"
+    assert result["text"].startswith("[Factory: a committee reply to the release post draft 66.")
+    assert plugin.DRAFT_TOOL in result["text"]
+    assert result["text"].endswith("\n\nmention the new map")
+    assert list((tmp_path / "inbox").iterdir()) == []
+
+
+def draft_setup(tmp_path, state, session):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text(state)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), str(tmp_path / "state"), "-100", committee)
+    return inbox, plugin.make_draft_handler(cfg, session_env=lambda key: session.get(key, ""))
+
+
+def test_draft_tool_queues_hermes_draft_from_the_watch(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, {})
+    assert json.loads(handle({"text": "  The road got longer.  "})) == {"success": True, "message": plugin.DRAFT_DONE}
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text()) == {
+        "kind": "release-draft", "issue": None, "text": "The road got longer.",
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": None,
+    }
+
+
+def test_draft_tool_queues_a_revision_for_the_member_who_asked(tmp_path):
+    inbox, handle = draft_setup(tmp_path, RELEASE_POST_STATE, SESSION)
+    assert json.loads(handle({"text": "New text"}))["success"] is True
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text())["by"] == "1"
+
+
+@pytest.mark.parametrize("state,text", [
+    ('{"approvalPosts": {}, "releasePost": null}', "Text"),
+    ('{"approvalPosts": {}}', "Text"),
+    (RELEASE_POST_STATE, "  "),
+    (RELEASE_POST_STATE, "x" * (plugin.DRAFT_LIMIT + 1)),
+])
+def test_draft_tool_refuses_with_no_post_due_an_empty_or_a_too_long_draft(tmp_path, state, text):
+    inbox, handle = draft_setup(tmp_path, state, {})
+    assert "error" in json.loads(handle({"text": text}))
+    assert list(inbox.iterdir()) == []
+
+
 def test_hook_queues_without_a_reply_of_its_own(tmp_path):
     result, adapter, inbox = dispatch(tmp_path, "1")
     assert result == {"action": "skip", "reason": "factory-change"}
@@ -514,5 +575,7 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"
     assert calls[2]["name"] == "factory_route_reply" and calls[2]["toolset"] == "factory"
     assert calls[3]["name"] == "factory_sender" and calls[3]["toolset"] == "factory"
-    assert calls[4]["name"] == "factory_status" and calls[4]["toolset"] == "factory"
+    assert calls[4]["name"] == "factory_release_draft" and calls[4]["toolset"] == "factory"
+    assert calls[4]["schema"]["parameters"]["required"] == ["text"]
+    assert calls[5]["name"] == "factory_status" and calls[5]["toolset"] == "factory"
     assert calls[2]["schema"]["parameters"]["required"] == ["post", "route", "text"]

@@ -65,6 +65,8 @@ else
   echo "tick stalled: no health file, so no tick ran on this code"
 fi
 from_source audit drift
+# A shipped release waits for Hermes's draft of its public post. The line goes once the draft is in the committee chat.
+jq -r '.releasePost // empty | select(.postId == null) | "release post due: release \(.day)"' /factory/home/state/state.json
 # A finished waste review waits for Hermes until Hermes deletes the file.
 if [ -f /factory/home/review-pending ]; then echo "factory review ready: $(cat /factory/home/review-pending)"; fi
 # The error service writes one line per cap it hits, with the day, and Hermes deletes the file once handled.

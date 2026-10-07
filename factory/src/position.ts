@@ -1,5 +1,5 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
-import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleaseState } from './types';
+import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleasePost, type ReleaseState } from './types';
 
 export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'harden' | 'harden-fix' | 'resolve' | 'harden-checks' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'harden', 'done'] as const;
@@ -107,7 +107,12 @@ export function releaseDrift(state: FactoryState, cards: Card[]): string[] {
   const release = state.release;
   const lines = release === null ? [] : openReleaseDrift(release, cards);
   if (state.pendingShip !== null && (release === null || release.postId === null)) lines.push('pending ship but no current candidate post');
-  return lines;
+  return [...lines, ...releasePostDrift(state.releasePost)];
+}
+
+function releasePostDrift(post: ReleasePost | null): string[] {
+  if (post === null || (post.postId === null) === (post.draft === null)) return [];
+  return [`release ${post.day} public post with a draft post id but no draft text, or text but no post`];
 }
 
 function openReleaseDrift(release: ReleaseState, cards: Card[]): string[] {

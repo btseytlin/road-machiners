@@ -5,30 +5,31 @@ import { readCommittee, telegramIds } from './committee';
 import { applyControl, openRelease, parseControl, queueRemoval, queueShip } from './control';
 import { reportFailure } from './fail';
 import { markPost } from './post-status';
+import { postDraft, publishPost } from './release-post';
 import { deny, routeFeedback } from './stages/approval';
 import { updateState } from './state';
 import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type Route } from './types';
 
 const TITLE_LIMIT = 80;
-const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task'];
+const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'release-draft', 'publish'];
 const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
-const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
-// Hermes writes its own orders with this `by`. It may queue a task and route a reply, which are mechanical. The rest is a member's decision.
+const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer', 'release-draft'];
+// Hermes writes its own orders with this `by`. It may queue a task, route a reply and draft the release post, which are mechanical. The rest is a member's decision.
 const HERMES = 'hermes';
-const HERMES_KINDS: InboxCommand['kind'][] = ['adhoc', 'answer', 'patch', 'redesign'];
+const HERMES_KINDS: InboxCommand['kind'][] = ['adhoc', 'answer', 'patch', 'redesign', 'release-draft'];
 
 // One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
 // `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
 // which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
-  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task';
+  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'release-draft' | 'publish';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id, or `hermes` for an order Hermes gives on its own reading
   byName: string | null;
   chat: string;
   messageId: number | null; // null for an order of Hermes that answers no message
-  postId: number | null; // the approval or candidate post the command acts on. Null for change and adhoc.
+  postId: number | null; // the approval, candidate or release post draft the command acts on. Null for change, adhoc and release-draft.
 };
 
 export function inboxDir(home: string): string {
@@ -131,7 +132,7 @@ async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise
 // Hermes acts as itself on the mechanical kinds. Every other command needs a member, by Telegram id.
 function resolveSender(ctx: Ctx, command: InboxCommand): string {
   if (command.by === HERMES) {
-    if (!HERMES_KINDS.includes(command.kind)) throw new Error(`Only committee members can do that. Hermes may only queue a task or route a reply, not ${command.kind}.`);
+    if (!HERMES_KINDS.includes(command.kind)) throw new Error(`Only committee members can do that. Hermes may only queue a task, route a reply or draft the release post, not ${command.kind}.`);
     return senderName(command);
   }
   const { home, committeeBootstrapTelegram: telegram, committeeBootstrapGithub: github } = ctx.cfg;
@@ -148,6 +149,8 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   if (command.kind === 'adhoc') return queueAdhoc(ctx, command, by);
   if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
   if (command.kind === 'release-task') return openReleaseTask(ctx, command, by);
+  if (command.kind === 'release-draft') return postDraft(ctx, requireText(command));
+  if (command.kind === 'publish') return publishPost(ctx, requirePost(command));
   return handleIssueCommand(ctx, command, requireIssue(command), by);
 }
 

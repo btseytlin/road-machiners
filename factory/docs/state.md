@@ -68,7 +68,13 @@ Flags hold on any position:
 `release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every run started, which names the audit folders; `streak`, the runs since the last pass or retry, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
 
-`factory audit` and `card N` flag three drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, and a candidate post of a commit the playtest did not pass. `factory release` flags nothing.
+The public post of a shipped release has its own position in `releasePost`, beside the next open release. `factory release` prints it as `public post`.
+
+- None due: `releasePost` is null.
+- Waiting for a draft: Ship set `releasePost` with the changelog and the screenshot under `$FACTORY_HOME/release-posts/<day>/`, and `postId` is null. The incident watch shows `release post due`, and Hermes sends a draft.
+- Draft posted: `releasePost.postId` holds the draft post in the committee chat, and `releasePost.draft` its text. A reply to it goes to Hermes, who sends a new draft. Publish on the current draft posts it to `FACTORY_PUBLIC_CHANNEL` and sets `releasePost` to null.
+
+`factory audit` and `card N` flag four drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
 
 The release tracking card has the label `release`. It waits in Approval for the whole release, and its post is `release.postId`. It never shows card drift.
 
