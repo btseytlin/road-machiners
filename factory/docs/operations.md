@@ -76,6 +76,16 @@ A run cut off before its `result` event still costs money. This covers a crash, 
 
 Every routed approval reply adds a line too.
 
+Every card move adds a card line: the issue, the new column, the time and a step that names the move. `src/card-events.ts` writes it after the board takes the move, and no other code moves a card. A line holds no actor, comment or reason.
+
+- Normal path: `entered`, `accepted`, `planned`, `built`, `patched`, `posted`, `approved`, `hardened` and `merged`.
+- Loops back: `questions`, `rebuild`, `plan-wrong`, `review-failed`, `patch`, `redesign`, `patch-replan`, `conflict`, `removed` and `unbundled`.
+- Early ends: `triage-wont-do`, `design-wont-do`, `bundled`, `denied` and `dropped`.
+- Other moves: `moved` by `factory move` or `merge`, `shipped` for the release card and `reported` for an ad hoc task.
+- A line carries `flow` when the card is a hotfix, a release task, the release card or an ad hoc task.
+
+A triage `unclear` verdict moves nothing, so its wait for the author stays in Triage. A move by hand on GitHub writes no line.
+
 Every `FACTORY_WASTE_REVIEW_DAYS`, the tick starts a waste review in the triage queue. `wasteNumbers()` in `src/waste.ts` computes the cost per stage and model, the wait per queue, the stages that ran more than once on one issue, the routes and the most expensive issues. A Sonnet agent reads those numbers and the records, and writes `.factory/brief.md` with one bottleneck and one change request. The job records them in a closed issue labeled `factory-review`. The committee chat gets the bottleneck and a "Queue as change" button. The first review waits one full period after the deploy.
 
 ## Deploying the factory

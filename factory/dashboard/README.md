@@ -1,6 +1,6 @@
 # Factory dashboard
 
-A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. The code is in `src/dashboard/`, and the page in this folder.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
@@ -23,6 +23,20 @@ From `factory/`:
 - While `DASHBOARD_HIDE_TELEGRAM=1`, the API returns no channel link or posts.
 
 Agents report their phase with `factory-status <activity>`, with no free text. `FACTORY_OBSERVATION_HEARTBEAT_MS` and `FACTORY_OBSERVATION_MAX_EVENT_BYTES` in `settings.env` set the liveness sampling and the event size limit.
+
+## Delivery numbers
+
+The Delivery tab reads only the card lines of the ledger. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
+
+- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing splits into preview and harden, and Approval into the committee's wait and the merge queue after hardening.
+- A stage counts in a range when it ended in that range. Stages still open are counted with their mean age and are not in the means.
+- Triage to dev runs from the first triage acceptance to the first merge into dev after it, the merge that adds `release-candidate`. Weekly Ship is not its end. Cards merged in the range count. Accepted cards not yet merged or closed are in flight. A merge with no recorded acceptance is counted apart.
+- Loops count each move back by its transition, with the cards it touched. The loop rate is cards with a loop over cards with any move in the range.
+- Failed job retries count card jobs that failed, died or timed out. The tick runs those again in the same column, so they are not loops. A job a control order stopped is no retry.
+- Each rejection rate has its own base: triage refusals over triage decisions, design refusals over design decisions, and Deny over committee approvals and denials. Each card counts once per gate, by its latest decision in the range. Pending cards, failed jobs, patches, redesigns, removals and operator drops are not rejections.
+- Hotfixes, release tasks, the release card and ad hoc tasks run other paths, so they are left out and counted.
+- A line equal to the card's previous line is a copy from a resumed job or a repeated tick, and is dropped. A move into the column the card is in starts no new stage.
+- Card lines stay 180 days in the dashboard's memory. A card that moved before the first card line is counted as joined before records.
 
 ## Production
 
