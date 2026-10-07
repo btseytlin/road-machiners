@@ -1,14 +1,42 @@
 // Any uncaught error stops the game behind a fullscreen message, so a crash is never silent.
 // Outside dev, once boot is done, the game keeps running: an error goes to the browser log and the debug console.
 // A failed command changes nothing, since commands mutate a clone of the world. Boot errors still crash.
+// A hidden error from a script outside the game, like a browser extension's, never crashes and never holds saves.
 
 let shown = false;
 let report: ((text: string) => void) | null = null;
 const reported = new Set<string>();
+const warned = new Set<string>();
 const listeners: (() => void)[] = [];
+const FOREIGN_NOTE = 'Ignored an error from a script outside the game';
+const MUTED_MESSAGE = /^script error\.?$/i;
+
+// The fields of a window error event the crash screen reads.
+export interface ErrorFacts {
+  error: unknown;
+  message: string;
+  filename: string;
+  lineno: number;
+  colno: number;
+}
+
+// A browser hides the message, file and stack of an error thrown by a classic script from another origin, and reports
+// only "Script error." with no error object. The game's code is same-origin module scripts and module workers, which
+// browsers fetch in CORS mode and never mute, so such an event is never the game's. Only that sign counts as foreign.
+export function isForeignError(event: ErrorFacts, pageOrigin: string): boolean {
+  if (event.error != null || !MUTED_MESSAGE.test(event.message)) return false;
+  if (event.filename === '') return true;
+  try {
+    return new URL(event.filename).origin !== pageOrigin;
+  } catch {
+    return false;
+  }
+}
 
 export function installCrashScreen(): void {
-  window.addEventListener('error', (e) => onError(e.error ?? e.message));
+  window.addEventListener('error', (e) =>
+    onWindowError({ error: e.error, message: e.message, filename: e.filename, lineno: e.lineno, colno: e.colno }),
+  );
   window.addEventListener('unhandledrejection', (e) => onError(e.reason));
 }
 
@@ -25,6 +53,21 @@ export function onEveryError(listener: () => void): void {
 // Routes a handled error like an uncaught one: the crash screen in dev, the debug console outside dev.
 export function reportError(err: unknown): void {
   onError(err);
+}
+
+function onWindowError(facts: ErrorFacts): void {
+  if (isForeignError(facts, location.origin)) return ignoreForeign(facts);
+  onError(facts.error ?? facts.message);
+}
+
+// The browser log and the debug console get each hidden foreign error once. No listener runs, so saves go on.
+function ignoreForeign(facts: ErrorFacts): void {
+  const text = `${FOREIGN_NOTE}: ${facts.message} ${facts.filename}`.trim();
+  if (!warned.has(text)) console.warn(FOREIGN_NOTE, facts.message, facts.filename);
+  warned.add(text);
+  if (!report || reported.has(FOREIGN_NOTE)) return;
+  reported.add(FOREIGN_NOTE);
+  report(FOREIGN_NOTE);
 }
 
 function onError(err: unknown): void {
