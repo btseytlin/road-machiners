@@ -48,15 +48,8 @@ function worstRise(deck: Deck, inset: number): number {
 }
 
 describe('terrain under decks', () => {
-  it('draws the ground at least 0.1 m under Canyon Bridge everywhere inside its outline', () => {
-    const rise = worstRise(deckById('canyon-bridge'), 0.32);
-    console.log(`Canyon Bridge: drawn ground peaks ${rise.toFixed(3)} m from the deck`);
-    expect(rise).toBeLessThanOrEqual(-0.1);
-  });
-
-  it('reports how close the ground comes under the Broken Wing deck', () => {
-    // The wing deck's ends meet ramp ground from outside its outline, so this is logged, not held.
-    console.log(`Broken Wing: drawn ground peaks ${worstRise(deckById('broken-wing'), 0.32).toFixed(3)} m from the deck`);
+  it.each(['canyon-bridge', 'broken-wing'])('draws the ground at least 0.1 m under %s everywhere inside its outline', (id) => {
+    expect(worstRise(deckById(id), 0.32)).toBeLessThanOrEqual(-0.1);
   });
 
   it('draws every corner outside all deck outlines at its baked height', () => {
@@ -94,6 +87,6 @@ describe('terrain under decks', () => {
         }
       }
     }
-    expect(inside).toBeGreaterThanOrEqual(0);
+    expect(inside).toBeGreaterThan(0);
   });
 });
