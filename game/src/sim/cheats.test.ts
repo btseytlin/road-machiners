@@ -16,7 +16,7 @@ import {
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
@@ -102,6 +102,14 @@ describe('part cheats', () => {
   it('damages the first mounted part with a def', () => {
     const w = damagePartTo(emptyWorld(), 'mg', 3);
     expect(mountedParts(playerVehicle(w)).find((p) => p.defId === 'mg')!.hp).toBe(3);
+  });
+
+  it('spills the cargo off a cargo part it breaks', () => {
+    const w = damagePartTo(emptyWorld(), 'panniers', 0);
+    const me = playerVehicle(w);
+    const g = gridOf(me);
+    expect(me.items.filter((it) => it.y >= g.deadFrom)).toEqual([]);
+    expect(w.events.filter((e) => e.t === 'cargoSpilled')).toHaveLength(1);
   });
 
   it('rejects an unmounted def and hit points out of range', () => {

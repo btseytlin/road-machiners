@@ -20,6 +20,9 @@ const KEYS = {
   repo: 'FACTORY_REPO',
   projectOwner: 'FACTORY_PROJECT_OWNER',
   projectNumber: 'FACTORY_PROJECT_NUMBER',
+  githubRetries: 'FACTORY_GITHUB_RETRIES',
+  githubRetryBaseSeconds: 'FACTORY_GITHUB_RETRY_BASE_SECONDS',
+  githubTimeoutSeconds: 'FACTORY_GITHUB_TIMEOUT_SECONDS',
   home: 'FACTORY_HOME',
   webRoot: 'FACTORY_WEB_ROOT',
   publicUrl: 'FACTORY_PUBLIC_URL',
@@ -46,8 +49,11 @@ const KEYS = {
   verifyTimeoutMinutes: 'FACTORY_VERIFY_TIMEOUT_MINUTES',
   testTimeoutMinutes: 'FACTORY_TEST_TIMEOUT_MINUTES',
   branchTimeoutMinutes: 'FACTORY_BRANCH_TIMEOUT_MINUTES',
+  agentJobMaxMinutes: 'FACTORY_JOB_MAX_MINUTES',
   replyRouteMinutes: 'FACTORY_REPLY_ROUTE_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
+  playtestTurns: 'FACTORY_PLAYTEST_TURNS',
+  playtestRuns: 'FACTORY_PLAYTEST_RUNS',
   wasteReviewDays: 'FACTORY_WASTE_REVIEW_DAYS',
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
@@ -65,11 +71,13 @@ const KEYS = {
   cpuLight: 'FACTORY_CPU_LIGHT',
   cpuImplement: 'FACTORY_CPU_IMPLEMENT',
   cpuTest: 'FACTORY_CPU_TEST',
+  vitestWorkersImplement: 'FACTORY_VITEST_WORKERS_IMPLEMENT',
+  vitestWorkersTest: 'FACTORY_VITEST_WORKERS_TEST',
 } as const satisfies Record<keyof FactoryConfig, string>;
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'maxJobsPerCard', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'transcriptDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'githubRetries', 'githubRetryBaseSeconds', 'githubTimeoutSeconds','sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes', 'agentJobMaxMinutes', 'replyRouteMinutes', 'releaseDays', 'playtestTurns', 'playtestRuns', 'wasteReviewDays', 'maxJobsPerDay', 'maxJobsPerCard', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'transcriptDays', 'cpuLight', 'cpuImplement', 'cpuTest', 'vitestWorkersImplement', 'vitestWorkersTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

@@ -3,7 +3,8 @@
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
 // The GPU is Metal on a Mac and Vulkan on Linux, like the factory's NVIDIA host. A run that falls back to software drawing fails.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
-// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
+// With --no-fps-gate, the GPU run prints the frame rate but does not check it, for hosts shared with other jobs.
+// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu] [--no-fps-gate]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -13,9 +14,9 @@ const arg = (name, fallback) => {
 };
 const url = arg('url', 'http://localhost:5173');
 const cpu = process.argv.includes('--cpu');
-const noFpsGate = process.argv.includes('--no-fps-gate');
 // --cpu checks that the game boots and plays, not its speed. Software drawing is slow, so it plays fewer turns.
 const turns = Number(arg('turns', cpu ? '4' : '12'));
+const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 // A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
 // Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
@@ -124,7 +125,7 @@ const problems = [...errors, ...hitProblems];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');
-if (!cpu && !noFpsGate && fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
+if (fpsGate && fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
 console.log(`turns ${state.turn - 1}, fps ${fps}`);
 if (problems.length > 0) {
   console.error(`FAIL\n${problems.join('\n')}`);

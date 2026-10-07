@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
@@ -26,7 +27,7 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.reopen(issue);
   await ctx.github.removeLabel(issue, RELEASE_CANDIDATE_LABEL);
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nRemoved from release ${release.day} by ${removal.by}:\n\n${removal.text}`);
-  await ctx.github.move(issue, 'Design');
+  await moveCard(ctx, issue, 'Design', 'removed');
   // Ship reads postId, so the old candidate post can no longer ship this release.
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null, removed: [...state.release.removed, issue] } }));
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Issue #${issue} is out of release ${release.day} and back in design. A new candidate follows when the release tasks are done.`);

@@ -4,7 +4,7 @@ import { readState, updateState } from './state';
 import type { Ctx, FactoryState } from './types';
 
 // Commands that leave the post as it is: they act on no post, or Hermes answers and the post stays open.
-const UNMARKED = ['change', 'adhoc', 'reply', 'answer', 'waste-change'] as const;
+const UNMARKED = ['change', 'adhoc', 'reply', 'answer'] as const;
 type PostKind = Exclude<InboxCommand['kind'], (typeof UNMARKED)[number]>;
 
 // The line a committee action adds under the post it acted on.

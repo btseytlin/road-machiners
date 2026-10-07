@@ -12,9 +12,11 @@ import {
   type FieldRules,
   type HighwayRules,
   type OldRoadRules,
+  type DebrisLook,
   type OverlookRules,
   type PowerLineRules,
   type SettlementRules,
+  type ShipDebrisRules,
   type TankRules,
 } from '../data/terrain';
 import { deckAt } from '../sim/bridge';
@@ -48,6 +50,7 @@ export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   billboards(seed, d, W.billboards);
   tankHulks(seed, d, roads, W.tanks);
   fields(seed, d, towns, W.fields);
+  shipDebris(seed, d, W.shipDebris);
   return d;
 }
 
@@ -784,6 +787,63 @@ function placeHulk(d: MapDraft, rng: Rng, rules: TankRules, road: OldRoad, s: nu
     const pos = offset(road.line.pointAt(at), out, road.width / 2 + rules.gap + rules.radius + randRange(rng, 0, rules.spread));
     if (place(d, prop('tank', pos, rules.radius, randRange(rng, 0, TURN)), rules.gap)) return;
   }
+}
+
+// Ship debris: a trail of impact clusters along an authored line, then single pieces over the whole map. It
+// runs after every other old-world rule, so their layouts do not move. A piece that does not fit is left out.
+
+export function shipDebris(seed: number, d: MapDraft, rules: ShipDebrisRules): void {
+  const rng = ruleRng(seed, rules.seedOffset);
+  const line = new RoadLine(rules.trail);
+  for (const s of stations(line.length, rules.clusterStep)) impactCluster(d, rng, rules, line, s);
+  for (let k = 0; k < rules.strays.count; k++) {
+    const look = pickLook(rng, rules.strays.looks);
+    const pick = (): Vec => ({ x: randRange(rng, 0, d.size), y: randRange(rng, 0, d.size) });
+    placeDebris(d, rng, look, pick, null, rules);
+  }
+}
+
+function impactCluster(d: MapDraft, rng: Rng, rules: ShipDebrisRules, line: RoadLine, s: number): void {
+  const along = clamp(s + randRange(rng, -rules.clusterStep / 3, rules.clusterStep / 3), 0, line.length);
+  const dir = line.dirAt(along);
+  const center = offset(line.pointAt(along), sideOf(dir, 1), randRange(rng, -rules.sideSpread, rules.sideSpread));
+  const heading = facing(dir);
+  const count = randInt(rng, rules.pieces[0], rules.pieces[1]);
+  let looks = rules.trailLooks;
+  for (let k = 0; k < count; k++) {
+    const look = pickLook(rng, looks);
+    // The habitat is the biggest piece: later draws of the cluster leave it out.
+    if (look.look === 'habitat') looks = looks.filter((l) => l.look !== 'habitat');
+    const pick = (): Vec => offset(center, { x: Math.cos(randRange(rng, 0, TURN)), y: Math.sin(randRange(rng, 0, TURN)) }, randRange(rng, 0, rules.clusterReach));
+    placeDebris(d, rng, look, pick, heading, rules);
+  }
+}
+
+// Tries a spot from pick until the piece fits. heading is the trail heading, or null for a stray.
+function placeDebris(d: MapDraft, rng: Rng, look: DebrisLook, pick: () => Vec, heading: number | null, rules: ShipDebrisRules): void {
+  for (let t = 0; t < rules.placeTries; t++) {
+    const pos = pick();
+    const r = range(rng, look.radius);
+    const yaw = look.aligned && heading !== null ? heading + randRange(rng, -rules.yawJitter, rules.yawJitter) : randRange(rng, 0, TURN);
+    if (offOldRoad(d, pos, r) && place(d, prop(look.look, pos, r, yaw), 0)) return;
+  }
+}
+
+// A weighted draw from the table.
+export function pickLook(rng: Rng, looks: readonly DebrisLook[]): DebrisLook {
+  const total = looks.reduce((sum, l) => sum + l.weight, 0);
+  if (looks.length === 0 || total <= 0) throw new Error('A debris look table needs at least one look with weight');
+  let at = randRange(rng, 0, total);
+  for (const l of looks) {
+    at -= l.weight;
+    if (at < 0) return l;
+  }
+  return looks[looks.length - 1];
+}
+
+// No tile the footprint touches is old asphalt. A tile is touched when its center lies within r plus half a tile diagonal.
+function offOldRoad(d: MapDraft, pos: Vec, r: number): boolean {
+  return tilesWithin(d.size, pos, r + Math.SQRT1_2).every((tile) => d.built[tile] !== BUILT_OLD_ROAD);
 }
 
 // Fields: rectangles of flat low ground beside each farm, all turned to one angle per farm. A field is

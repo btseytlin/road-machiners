@@ -28,6 +28,20 @@ it('streams new ledger lines once and keeps private routes out of public history
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
+it('reads past committee control lines without publishing them', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'control', action: 'move', issue: 12, by: 'PRIVATE', reason: 'PRIVATE reason', at: '2026-10-10T11:00:00Z' });
+    appendLedger(home, { kind: 'job', id: 'job-1', stage: 'design', issue: 12, startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T11:00:00Z', outcome: 'done', agents: [] });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const summary = history.summarize(now, 1);
+    expect(summary.completed).toBe(1);
+    expect(JSON.stringify(summary)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 it('reports token coverage as missing for older cost-only records', async () => {
   const home = mkdtempSync(resolve('tmp/history-'));
   try {
@@ -83,5 +97,34 @@ it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed
     expect(summary.wasted.cost).toBeCloseTo(2.3, 9);
     expect(summary.wasted.tokens).toEqual({ input: 150, output: 0, cacheRead: 0, cacheWrite: 0 });
     expect(summary.cost).toBeCloseTo(2.3, 9);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+it('keeps card lines past the 30 days of usage and publishes delivery numbers with no private text', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'card', issue: 31, step: 'entered', to: 'Triage', at: '2026-08-01T00:00:00Z' });
+    appendLedger(home, { kind: 'card', issue: 31, step: 'accepted', to: 'Design', at: '2026-08-02T00:00:00Z' });
+    appendLedger(home, { kind: 'route', issue: 31, route: 'patch', by: 'PRIVATE', at: '2026-10-09T00:00:00Z' });
+    appendLedger(home, { kind: 'control', action: 'move', issue: 31, by: 'PRIVATE', reason: 'PRIVATE reason', at: '2026-10-09T00:00:00Z' });
+    appendLedger(home, { kind: 'card', issue: 31, step: 'merged', to: 'Done', at: '2026-10-10T00:00:00Z' });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const delivery = history.summarize(now, 7).delivery!;
+    expect(delivery.since).toBe('2026-08-01T00:00:00Z');
+    expect(delivery.lead).toMatchObject({ count: 1, meanMs: 69 * 86_400_000 });
+    expect(JSON.stringify(delivery)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+it('shows delivery as unrecorded when the ledger has no card lines', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'job', id: 'job-1', stage: 'design', issue: 12, startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T11:00:00Z', outcome: 'failed', agents: [] });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    expect(history.summarize(now, 30).delivery).toBeNull();
   } finally { rmSync(home, { recursive: true, force: true }); }
 });

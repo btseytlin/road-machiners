@@ -54,6 +54,8 @@ Do not add suppressions.
 Do not raise its limits.
 
 Run up:uexecute on {{taskFile}}.
+Implement every phase inline in this session.
+Subagents are off.
 Then stop.
 Do not run up:uverify.
 The next stage does that.
@@ -61,9 +63,9 @@ The next stage does that.
 This machine is slow. Keep checks focused.
 While you work, run only the tests near your change with `npx vitest run <files>`.
 Prove the feature works with a targeted test. Playtest game behavior with the progression recorder, and use a short Playwright check only for what the screen shows.
-Do not run the playtest. The testing stage and the factory run it.
-Before you finish, run `npm test` and `npm run typecheck` once.
-Every test must pass, not only the tests for this issue.
+Do not run the full test suite or the playtest. The factory's checks run both after the testing stage.
+Before you finish, run `npm run typecheck` once.
+Every test you ran must pass, not only the tests for this issue.
 
 A failure blocks the task even when your change did not cause it.
 Fix every failure you find, also ones already broken on `dev`.
