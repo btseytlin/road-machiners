@@ -1,0 +1,10 @@
+{
+  "turn": 1200,
+  "mapHash": "d5a902b5",
+  "salvage": [
+    { "id": "landmark-0", "pos": { "x": 100, "y": 120 }, "radius": 3, "goods": { "scrap": 1, "parts": 1 }, "parts": [], "fuel": 2, "supplies": 1 },
+    { "id": "ruin-345", "pos": { "x": 210.5, "y": 88.25 }, "radius": 1.4, "goods": { "scrap": 0, "parts": 0 }, "parts": [], "fuel": 0, "supplies": 0 },
+    { "id": "wreck3", "pos": { "x": 40, "y": 60 }, "radius": 0.9, "goods": { "scrap": 1, "parts": 0 }, "parts": [], "fuel": 1, "supplies": 0 }
+  ],
+  "player": { "scavenged": ["landmark-0"] }
+}

@@ -483,6 +483,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withTracks_22_23,
   // 23 to 24: a track records the turn its truck came in sight, null after loading.
   withSeenSince_23_24,
+  // 24 to 25: old-world loot spots. Load rolls their stocks from the map, so a save from before holds none and gets
+  // them all, and an older game refuses a save that holds them.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

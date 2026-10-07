@@ -4,6 +4,7 @@ import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, World } from '../sim/types';
 import { clearTips } from '../ui/tips';
 import { settleAims } from '../sim/combat';
+import { stockOldSpots } from '../sim/salvage';
 import { clockOf } from '../sim/sun';
 import { allSlots, listSaves, manualSlots, requestBoot, slotKey, type BootRequest, type SlotId } from './save-slots';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
@@ -75,8 +76,18 @@ export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World 
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
   const player = { ...world.player, explored };
   const loaded = { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
+  stockedOldSpots(loaded, map);
   settleAims(loaded);
   return loaded;
+}
+
+// Gives a save from before old-world loot spots their stocks. A save holding only some of them is broken.
+function stockedOldSpots(world: World, map: BakedMap): void {
+  try {
+    stockOldSpots(world, map);
+  } catch (error) {
+    throw new SaveError(`Game save holds a broken set of old-world loot spots: ${(error as Error).message}`);
+  }
 }
 
 // The map's baked props but the broken ones. Every broken prop must be a breakable prop of this map.

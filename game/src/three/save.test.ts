@@ -5,7 +5,7 @@ import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
 import { makePart } from '../sim/factory';
-import type { GridItem } from '../sim/types';
+import type { GridItem, World } from '../sim/types';
 import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
@@ -19,6 +19,7 @@ import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
 import { newGameShape } from '../test/save-shape';
+import { oldSpotOf, oldSpotPicks, oldStockId } from '../sim/old-places';
 
 const SLOTS = allSlots(3);
 
@@ -187,6 +188,32 @@ describe('local game save', () => {
       expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(SaveError);
       expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(error);
     }
+  });
+
+  it('stocks every old-world loot spot of a save from before them, once', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const ids = oldSpotPicks(TEST_MAP).map(oldStockId);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => !oldSpotOf(stock));
+    storage.setItem('roam.save', JSON.stringify({ format: { major: SAVE_MAJOR, minor: 24 }, world: saved }));
+    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    const oldIds = (w: World): string[] => w.salvage.filter((stock) => oldSpotOf(stock)).map((stock) => stock.id);
+    expect(oldIds(loaded)).toEqual(ids);
+    expect(loaded.salvage).toHaveLength(world.salvage.length);
+    writeSave(storage, 'auto', loaded, 1000);
+    expect(loadWorld(storage, 'auto', TEST_MAP)).toEqual(loaded);
+  });
+
+  it('refuses a save holding only some old-world loot spots', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    const first = oldStockId(oldSpotPicks(TEST_MAP)[0]);
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => stock.id !== first);
+    storage.setItem('roam.save', JSON.stringify({ format: SAVE_FORMAT, world: saved }));
+    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow(/partial/);
   });
 
   it('records the saved shape of the current format', () => {
