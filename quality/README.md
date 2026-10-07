@@ -20,7 +20,7 @@ git add <files>
 git commit
 ```
 
-`npm run quality` checks tracked and untracked source files in the working tree against HEAD. The pre-commit hook checks the full staged source tree against HEAD. Both run the full TypeScript check for `game/tsconfig.json` and `factory/tsconfig.json`. A new repository with no HEAD treats every file as new.
+`npm run quality` checks tracked and untracked source files in the working tree against HEAD. The pre-commit hook checks the full staged source tree against HEAD. Both run the full TypeScript check for `game/tsconfig.json` and `factory/tsconfig.json`. A new repository with no HEAD treats every file as new. During a merge, each lint finding and each component only has to be no worse than in one of the parents, HEAD or a commit in `MERGE_HEAD`. Code the merge brings in passed the gate on its own branch, so it is not new debt.
 
 The hook exports the index to a temporary directory under `tmp/` and removes it when the check finishes. Dependencies come from this checkout. The snapshot links `game/node_modules` and `factory/node_modules` to the real ones. Stage changes to `.oxlintrc.json`, `.quality.json`, `package.json`, `package-lock.json`, `quality/quality.mjs` and `quality/quality-policy.mjs` together. The hook refuses unstaged changes to those files.
 
