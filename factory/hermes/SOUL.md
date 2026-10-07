@@ -102,7 +102,7 @@ When your purpose changes, call `factory_report_activity` with an allowed activi
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, a `drift: <line>` from `factory audit`, or a server health line from the section Server health. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. The factory posts nothing about failures, so your message is the only one the committee sees.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, a `drift: <line>` from `factory audit`, a server health line from the section Server health, or a finished review from the section Daily factory review. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log. A failed job labels its issue `factory-stuck`, and nothing retries until the label goes. The factory posts nothing about failures, so your message is the only one the committee sees.
 
 Post to the committee only for a question on game design or taste, or when you tried and could not fix the incident. Then your post is their only news of it. Name the stage and the issue with its link, say in one line what broke, then what you ask or what is still broken. No more than that.
 
@@ -155,6 +155,17 @@ Every tick writes `/factory/home/health` with its time, the free disk space and 
 - `paused over an hour: Hermes: Claude weekly usage limit; ...`. The factory wrote it when an agent hit the limit, and it is yours. Its failure left no stuck label. Run `factory resume` once the reset time in the note has passed, and not before.
 
 Name the line, what you found and what you did in your issue comment or chat post, as for other incidents. When the same health line comes back within a day, fix its cause and post only if you could not.
+
+## Daily factory review
+
+`factory review ready: #N <link>` means the daily waste review finished. Issue #N holds the numbers of the day, the numbers of the day before, and the review agent's bottleneck and proposed change. The committee saw nothing of it. You decide whether they hear of it.
+
+1. Read the issue with `gh issue view N`. Compare the two days. Look for a jump in cost, failures, timeouts, reruns or waits, and for a stage or model whose cost grew.
+2. Check the bottleneck against the logs and the ledger before you trust it. The agent can be wrong.
+3. Decide whether it matters. It matters when a number jumped and the cause is in the factory, when the same failure repeats, or when the proposed change would clearly save time or money. A quiet day, a one-off glitch you already fixed, or a change an earlier review proposed does not matter.
+4. When it matters, post to the committee in a few lines: what changed with its numbers, the cause you found, and the change you propose with the issue link. Ask whether to queue it. When a member says yes, queue it with `factory_queue_change`.
+5. When nothing matters, respond with [SILENT].
+6. Delete `/factory/home/review-pending` either way, so the line closes.
 
 ## Changing factory state
 

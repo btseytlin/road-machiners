@@ -6,12 +6,11 @@ import { applyControl, openRelease, parseControl, queueRemoval, queueShip } from
 import { reportFailure } from './fail';
 import { markPost } from './post-status';
 import { deny, routeFeedback } from './stages/approval';
-import { proposalOf } from './stages/waste';
 import { updateState } from './state';
-import { ADHOC_LABEL, RELEASE_TASK_LABEL, WASTE_LABEL, type Ctx, type Route } from './types';
+import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type Route } from './types';
 
 const TITLE_LIMIT = 80;
-const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'waste-change'];
+const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task'];
 const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
 const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 
@@ -19,7 +18,7 @@ const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 // `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
 // which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
-  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'waste-change';
+  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -106,10 +105,9 @@ async function handleChatCommand(ctx: Ctx, raw: string): Promise<void> {
 // A command on a post answers with a status line on that post. A reply comes only when that edit fails.
 // An ad hoc task, a reply Hermes is routing and an answer have Hermes's own reply already, so the factory adds nothing.
 // An answer also keeps the post open with its buttons. Other commands get the answer as a reply.
-// A review post is a text message, which has no caption for a status line, so its button press gets a reply too.
 async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
   if (SILENT_KINDS.includes(command.kind)) return;
-  if (answersByReply(command)) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
+  if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
   try {
     await markPost(ctx, command, command.byName ?? command.by);
   } catch (error) {
@@ -120,9 +118,6 @@ async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise
   }
 }
 
-function answersByReply(command: InboxCommand): boolean {
-  return command.postId === null || command.kind === 'waste-change';
-}
 
 async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   const { home, committeeBootstrapTelegram: telegram, committeeBootstrapGithub: github } = ctx.cfg;
@@ -142,7 +137,6 @@ const ISSUE_HANDLERS: Partial<Record<InboxCommand['kind'], IssueHandler>> = {
   remove: (ctx, command, issue, by) => queueRemoval(ctx, issue, by, requireText(command)),
   reply: (ctx, command, issue) => awaitRoute(ctx, command, issue),
   answer: routed, patch: routed, redesign: routed,
-  'waste-change': (ctx, _command, issue, by) => queueReviewChange(ctx, issue, by),
   deny: async (ctx, _command, issue, by) => {
     await deny(ctx, issue, by);
     return `Issue #${issue} is denied and closed.`;
@@ -208,13 +202,6 @@ async function openReleaseTask(ctx: Ctx, command: InboxCommand, by: string): Pro
   await addCard(ctx, n, 'Design', 'release-task');
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   return `Opened #${n} as a task of release ${release.day}. A new candidate follows when it is done.`;
-}
-
-// The button under a waste review post queues the change the review proposed, as if a member sent it with /change.
-async function queueReviewChange(ctx: Ctx, issue: number, by: string): Promise<string> {
-  const review = await ctx.github.issue(issue);
-  if (!review.labels.includes(WASTE_LABEL)) throw new Error(`Issue #${issue} is no factory review.`);
-  return queueChange(ctx, `${proposalOf(review.body)}\n\nProposed by the factory review #${issue}.`, by);
 }
 
 function queueChange(ctx: Ctx, text: string, by: string): string {

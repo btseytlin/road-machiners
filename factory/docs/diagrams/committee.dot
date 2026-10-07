@@ -5,7 +5,7 @@ digraph committee {
   edge [color="#374151", penwidth=1.6, arrowsize=0.8, fontname="Helvetica", fontsize=11];
   node [fillcolor="#fde68a", color="#b45309"];
   approve [label="Approve"]; deny [label="Deny"]; reply [label="Other reply to\nan approval post"]; forced [label="patch: or redesign:\nreply"];
-  ship [label="Ship"]; remove [label="remove #N"]; rtask [label="Other reply to\nthe candidate post"]; change [label="/change or\nQueue as change"]; ask [label="Message\nto Hermes"];
+  ship [label="Ship"]; remove [label="remove #N"]; rtask [label="Other reply to\nthe candidate post"]; change [label="/change or\nask Hermes"]; ask [label="Message\nto Hermes"];
   member [label="Member says what\nto change"];
   node [fillcolor="#f3f4f6", color="#6b7280"];
   hermes [label="Hermes routes"]; hermes2 [label="Hermes queues"];

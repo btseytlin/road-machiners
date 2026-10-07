@@ -31,12 +31,10 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
-BUTTON_PATTERN = r"^factory:(approve|deny|ship|waste):\d+$"
+BUTTON_PATTERN = r"^factory:(approve|deny|ship):\d+$"
 BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
-BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued", "waste": "Change queued"}
-# The inbox kind of each button. The waste review button queues the change its review issue proposes.
-BUTTON_KINDS = {"approve": "approve", "deny": "deny", "ship": "ship", "waste": "waste-change"}
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
 BUTTON_STALE = "This release post is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 # A reply to an approval post that starts with one of these picks its route itself, with no Hermes judgment.
@@ -200,7 +198,7 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
 
 
 def parse_button(data) -> Optional[tuple]:
-    """Splits callback data `factory:<approve|deny|ship|waste>:<issue>` into (kind, issue). None for anything else."""
+    """Splits callback data `factory:<approve|deny|ship>:<issue>` into (kind, issue). None for anything else."""
     if not isinstance(data, str) or not BUTTON_DATA.fullmatch(data):
         return None
     _, kind, issue = data.split(":")
@@ -210,7 +208,7 @@ def parse_button(data) -> Optional[tuple]:
 def button_command(kind: str, issue: int, user_id, user_name, chat_id, message_id) -> dict:
     """A button sits on the post it acts on, so the pressed message is also the post."""
     return {
-        "kind": BUTTON_KINDS[kind], "issue": issue, "text": None,
+        "kind": kind, "issue": issue, "text": None,
         "by": str(user_id), "byName": user_name or None,
         "chat": str(chat_id), "messageId": int(message_id), "postId": int(message_id),
     }

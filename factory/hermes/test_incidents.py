@@ -10,10 +10,12 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0") -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None) -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
     (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
+    if review is not None:
+        (home / "review-pending").write_text(review)
     if health is not None:
         (home / "health").write_text(json.dumps(health))
     if pause_age_minutes is not None:
@@ -87,3 +89,8 @@ def test_one_failed_audit_is_retried_and_opens_no_incident(tmp_path):
     flag = tmp_path / "first-run-done"
     audit = f"if [ -f {flag} ]; then echo '#5 testPhase checks but column Design'; else touch {flag}; exit 1; fi"
     assert run(tmp_path, health(), audit=audit) == ["drift: #5 testPhase checks but column Design"]
+
+
+def test_a_pending_review_wakes_hermes_until_the_file_goes(tmp_path):
+    assert run(tmp_path / "ready", health(), review="#301 https://github.com/o/r/issues/301\n") == ["factory review ready: #301 https://github.com/o/r/issues/301"]
+    assert run(tmp_path / "handled", health()) == []

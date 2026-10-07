@@ -25,5 +25,7 @@ if audit=$(factory audit 2>/dev/null || factory audit 2>/dev/null); then
 else
   echo "audit failed"
 fi
+# A finished waste review waits for Hermes until Hermes deletes the file.
+if [ -f /factory/home/review-pending ]; then echo "factory review ready: $(cat /factory/home/review-pending)"; fi
 # Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.
 if [ -n "$(find /factory/home/paused -mmin +60 2>/dev/null)" ]; then echo "paused over an hour: $(cat /factory/home/paused)"; fi

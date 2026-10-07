@@ -299,7 +299,7 @@ export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merg
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
-export const WASTE_LABEL = 'factory-review'; // the record of one weekly waste review
+export const WASTE_LABEL = 'factory-review'; // the record of one waste review
 export const BUG_LABEL = 'bug';
 // An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
 export const BUNDLED_LABEL = 'bundled';

@@ -74,6 +74,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 - `failures`: failed jobs of the last day. `factory failures` prints them. `retry N` clears a card's failure and its stuck label.
 - `lastTickError`: the last tick crash. `factory status` shows it.
 - `devFailed`: the short hash of a `dev` whose build failed. The tick skips it until `dev` moves or Hermes clears it.
+- Review pending: `$FACTORY_HOME/review-pending` names the issue of a finished waste review. Hermes's incident watch prints it, and Hermes deletes it once handled.
 - Pause: the pause file holds the reason and stops the tick. `pause <reason>` writes it and `resume` removes it when `pause` wrote it.
 
 ## Consistency rules

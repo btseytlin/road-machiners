@@ -11,18 +11,24 @@ const LEDGER_MOUNT = '/factory/ledger.jsonl';
 const DAY_MS = 24 * 3_600_000;
 const BOTTLENECK = 'BOTTLENECK: ';
 const CHANGE = 'CHANGE:';
-export const PROPOSAL_HEADING = '## Proposed change';
+const PROPOSAL_HEADING = '## Proposed change';
+const PREVIOUS_HEADING = '## Previous period';
+// Hermes's incident watch prints this file, so a finished review wakes Hermes. Hermes deletes it once handled.
+export const reviewPendingPath = (factoryHome: string): string => join(factoryHome, 'review-pending');
 
 export type Brief = { bottleneck: string; change: string | null };
 
-// Names the biggest waste of the period and proposes one factory change. The committee queues it with a button, so the review never changes the factory itself.
+// Names the biggest waste of the period and proposes one factory change. The review hands it to Hermes, who checks it and tells the committee only what matters, so the review never changes the factory itself.
 // The period starts at the last review. The start is recorded first, so a failed review waits a full period, and Hermes reruns it by hand.
+// The period before it, of the same length, sits beside it, so a jump from one day to the next shows.
 export async function runStage(ctx: Ctx): Promise<void> {
   const to = ctx.now();
   const from = periodStart(ctx, to);
+  const before = new Date(from.getTime() - (to.getTime() - from.getTime()));
   updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: to.toISOString() }));
-  const computed = wasteNumbers(readLedger(ctx.cfg.home, from), from, to);
-  const numbers = formatNumbers(computed);
+  const lines = readLedger(ctx.cfg.home, before);
+  const computed = wasteNumbers(lines, from, to);
+  const numbers = `${formatNumbers(computed)}\n\n${PREVIOUS_HEADING}\n\n${formatNumbers(wasteNumbers(lines, before, from))}`;
   const dir = `${ctx.cfg.home}/work/waste`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.fetch();
@@ -83,7 +89,7 @@ function parseChange(lines: string[]): string {
   return change;
 }
 
-// The issue keeps the numbers and the brief, so later reviews see what was tried. The post links it.
+// The issue keeps the numbers and the brief, so later reviews see what was tried. Hermes reads it from there.
 async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promise<void> {
   const day = to.toISOString().slice(0, 10);
   const proposal = brief.change === null ? 'No change proposed.' : brief.change;
@@ -91,17 +97,5 @@ async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promi
   const issue = await ctx.github.createIssue(`Factory review ${day}`, body, [WASTE_LABEL]);
   await ctx.github.close(issue, 'completed');
   appendFileSync(reviewsPath(ctx.cfg.home), `## ${day}, #${issue}\n\nBottleneck: ${brief.bottleneck}\n\nProposed change: ${proposal}\n\n`);
-  const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
-  if (brief.change === null) return void (await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `🔎 Weekly factory review: no waste stands out.\n${link}`));
-  const text = `🔎 Weekly factory review\n\nBottleneck: ${brief.bottleneck}\n\nThe proposed change and the numbers: ${link}`;
-  await ctx.telegram.sendButtons(ctx.cfg.committeeChat, text, [[{ text: 'Queue as change', data: `factory:waste:${issue}` }]]);
-}
-
-// The change text of a review issue, for the button that queues it.
-export function proposalOf(body: string): string {
-  const at = body.indexOf(`${PROPOSAL_HEADING}\n\n`);
-  if (at < 0) throw new Error('The review issue has no proposed change');
-  const proposal = body.slice(at + PROPOSAL_HEADING.length + 2).trim();
-  if (proposal === 'No change proposed.') throw new Error('The review proposed no change');
-  return proposal;
+  writeFileSync(reviewPendingPath(ctx.cfg.home), `#${issue} https://github.com/${ctx.cfg.repo}/issues/${issue}\n`);
 }

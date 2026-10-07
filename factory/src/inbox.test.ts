@@ -147,27 +147,6 @@ describe('drainInbox', () => {
     expect(readState(statePath).unroutedReplies).toEqual({});
   });
 
-  it('queues the change of a waste review from its button, and answers with a reply', async () => {
-    const sent: string[] = [];
-    const ctx = fakeCtx([], sent, []);
-    const body = 'Numbers.\n\n## Bottleneck\n\nSlow verify.\n\n## Proposed change\n\nSet FACTORY_VERIFY_WORKERS to 2.';
-    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 301, title: 'Factory review', body, labels: ['factory-review'] });
-    put('1.json', { kind: 'waste-change', issue: 301 });
-    await drainInbox(ctx);
-    expect(readState(statePath).pendingChanges).toEqual([{ id: 5000, text: 'Set FACTORY_VERIFY_WORKERS to 2.\n\nProposed by the factory review #301.', by: 'Ann' }]);
-    expect(sent).toEqual(['Change request 5000 is queued. The factory answers with a pull request.']);
-  });
-
-  it('refuses the review button on an issue that is no review', async () => {
-    const sent: string[] = [];
-    const ctx = fakeCtx([], sent, []);
-    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 4, title: 't', body: '## Proposed change\n\nx', labels: [] });
-    put('1.json', { kind: 'waste-change', issue: 4 });
-    await drainInbox(ctx);
-    expect(readState(statePath).pendingChanges).toEqual([]);
-    expect(sent[0]).toContain('no factory review');
-  });
-
   it('refuses a route it does not know', () => {
     expect(() => parseCommand(JSON.stringify({ kind: 'route', route: 'ship', by: '1', chat: 'c', messageId: 1, postId: 2 }))).toThrow('Unknown route ship');
   });
