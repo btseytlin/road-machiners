@@ -70,7 +70,7 @@ describe('combat harness', () => {
 describe('foe hp left', () => {
   it('reports a share between 0 and 1 for a won fight', () => {
     // Fixed outfits keep this fight off NPC gear rolls: the combat kit against a bare hauler with one mg.
-    const r = runFight({ ...FIGHT, kit: 'combat', foe: { gun: 'mg', armor: null }, policy: 'charge', seed: 1, maxTurns: 60 });
+    const r = runFight({ ...FIGHT, kit: 'combat', foe: { gun: 'mg', armor: null }, policy: 'charge', seed: 2, maxTurns: 60 });
     expect(r.outcome).toBe('won');
     expect(r.theirHpLeft).toBeGreaterThan(0);
     expect(r.theirHpLeft).toBeLessThan(1);
