@@ -13,7 +13,7 @@ import { freeCells, goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { playerSees } from '../vision';
-import { nearestPad, nearestTown } from '../sites';
+import { nearestPad, nearestTown, siteGates } from '../sites';
 import { TERRAIN } from '../../data/terrain';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway, type Vec } from '../vec';
@@ -186,6 +186,31 @@ describe('botOrders', () => {
     const turn = botOrders(w, 'scavenger');
 
     expect(playerVehicle(turn.world).job).toBeNull();
+  });
+
+  describe('a stock beside a raider camp gate', () => {
+    const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
+    const gate = siteGates(kiln)[0];
+
+    // The order dest of a scavenger 30 tiles east of a wreck that lies at `pile`.
+    function destFor(pile: Vec): Vec | undefined {
+      const w = emptyWorld({ x: pile.x + 30, y: pile.y });
+      w.player.explored.fill(1);
+      w.salvage.push({ id: 'wreck-test', pos: pile, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+      const order = playerVehicle(botOrders(w, 'scavenger').world).order;
+      return order?.kind === 'stopAt' ? order.dest : undefined;
+    }
+
+    it('is not driven to', () => {
+      const pile = { x: gate.x - 3, y: gate.y };
+      const dest = destFor(pile);
+      expect(dest === undefined || dist(dest, pile) > 10).toBe(true);
+    });
+
+    it('is driven to when it lies clear of every gate', () => {
+      const pile = { x: 60, y: 30 };
+      expect(dist(destFor(pile)!, pile)).toBeLessThan(5);
+    });
   });
 
   it('has a stranded truck crawl to the nearest town', () => {

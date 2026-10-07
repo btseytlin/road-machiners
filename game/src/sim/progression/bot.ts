@@ -9,6 +9,7 @@ import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, TRAITS } from '../../data/npcs';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
+import { TERRAIN } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
@@ -1001,11 +1002,17 @@ function postAfterNearest(pos: Vec): Post {
 
 // ---- Salvage.
 
+// Raiders spawn, lie up and refit at their camp gates. A stock in sight of one draws the bot in while the raider is out
+// of sight, then runs it off once seen, every other turn.
+const CAMP_WATCH = TERRAIN.vision.radius;
+const CAMP_GATES: readonly Vec[] = REGION.locations.filter((l) => l.kind === 'camp').flatMap((camp) => siteGates(camp));
+
 // Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// explored ground. A stock in sight of a raider camp gate is left alone.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
     if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (CAMP_GATES.some((gate) => dist(gate, stock.pos) <= CAMP_WATCH)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
