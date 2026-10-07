@@ -19,7 +19,10 @@ import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway, type Vec } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from '../testkit';
 import { NPC_BEHAVIOR, NPCS, TRAITS } from '../../data/npcs';
-import { towData } from '../states';
+import { addState, towData } from '../states';
+import { isHostile } from '../combat';
+import { raiseCalls } from '../dialogue';
+import { plead } from '../parley';
 import { playerTow, startEscort } from '../tow';
 import { cloneWorld, endTurn, hostileToPlayer } from '../world';
 import { basicsRepairCost, driveRepairCost, getTradePrice, partTradePrice, repairCost } from '../economy';
@@ -848,14 +851,16 @@ describe('the hunter', () => {
     expect(botOrders(w, 'hauler').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
   });
 
-  it('has a climber with fewer than three guns haul, and take no bounty', () => {
-    const w = parkedAt('bowl');
-    w.shops.bowl.contracts = [
-      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
-      { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
+  it('has a climber with fewer than three guns trade, and take no bounty', () => {
+    const w = saltGlut(parkedAt('nose'));
+    w.shops.nose.contracts = [
+      { id: 'ct-bounty', shop: 'nose', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
     ];
 
-    expect(botOrders(w, 'climber').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
+    const turn = botOrders(w, 'climber');
+
+    expect(turn.world.player.contracts).toEqual([]);
+    expect(loadOf(playerVehicle(turn.world))).toEqual(['salt']);
   });
 
   it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {
@@ -1027,6 +1032,69 @@ describe('the hunter', () => {
     const turn = botOrders(w, 'hunter');
 
     expect(turn.world.rngState).toBe(state);
+  });
+});
+
+// A climber with its third gun mounted, which it hunts with.
+function armedClimber(w: World): World {
+  const me = playerVehicle(w);
+  while (vehicleStats(w, me).weapons.length < 3) {
+    if (!mountPart(w, me, makePart(w, 'mg', 0))) throw new Error('No mount for a third gun');
+  }
+  return w;
+}
+
+describe('the climber', () => {
+  it('drives at a weak raider in sight once it mounts three guns', () => {
+    const w = armedClimber(emptyWorld({ x: 30, y: 30 }));
+    playerVehicle(w).speed = 0;
+    const weak = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 42, y: 30 });
+    weak.brain = npcBrain('buggy', weak.pos, ['raider']);
+
+    const turn = botOrders(w, 'climber');
+
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: weak.pos });
+  });
+
+  it('trades between fights where the hunter patrols', () => {
+    const w = armedClimber(saltGlut(parkedAt('nose')));
+    withPrey(w);
+
+    expect(loadOf(playerVehicle(botOrders(w, 'climber').world))).toEqual(['salt']);
+    expect(loadOf(playerVehicle(botOrders(w, 'hunter').world))).toEqual([]);
+  });
+
+  it('strips a knocked-out truck in reach before it leaves for service, where the hunter drives to the shop', () => {
+    const turnOf = (archetype: 'climber' | 'hunter') => {
+      const w = armedClimber(emptyWorld({ x: 30, y: 30 }));
+      playerVehicle(w).speed = 0;
+      w.player.supplies = 0;
+      w.player.money = 5000;
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
+      raider.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+      return playerVehicle(botOrders(w, archetype).world);
+    };
+
+    expect(turnOf('climber').job?.kind).toBe('refit');
+    expect(turnOf('hunter').job).toBeNull();
+  });
+
+  it('accepts a truce where the hunter refuses it', () => {
+    const peaceWith = (archetype: 'climber' | 'hunter') => {
+      const w = armedClimber(emptyWorld({ x: 30, y: 30 }));
+      for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+      const npc = addVehicle(w, 'traders', 'scout', ['stockEngine', 'mg'], { x: 36, y: 30 });
+      npc.brain = npcBrain('trader', npc.pos, ['trader']);
+      addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+      addState(w, 'feud', w.player.vehicleId, npc.id, { kind: 'feud', robbery: false });
+      plead(w, npc, playerVehicle(w), 'truce');
+      raiseCalls(w);
+      const after = botOrders(w, archetype).world;
+      return isHostile(after, after.vehicles.find((v) => v.id === npc.id)!, playerVehicle(after));
+    };
+
+    expect(peaceWith('climber')).toBe(false);
+    expect(peaceWith('hunter')).toBe(true);
   });
 });
 
