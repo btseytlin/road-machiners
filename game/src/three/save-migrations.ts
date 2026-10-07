@@ -233,6 +233,18 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
+// Town and camp gates lost their guns, so their shot events and their kill credit go. A gun's credit named
+// `guard-<site>`, no truck.
+function withoutGuards_13_14(world: SavedJson): SavedJson {
+  const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
+  return {
+    ...world,
+    events: (world.events as SavedJson[]).filter((e) => e.t !== 'guardShot'),
+    vehicles: (world.vehicles as SavedJson[]).map(uncredited),
+    removed: (world.removed as SavedJson[]).map(uncredited),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -298,6 +310,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withMemories_11_12,
   // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: gate guns are gone, with their shot events and kill credit.
+  withoutGuards_13_14,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
