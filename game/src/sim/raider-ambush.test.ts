@@ -8,14 +8,20 @@ import { TERRAIN } from '../data/terrain';
 import { TEST_MAP } from '../test/map';
 import { planNpcOrders } from './ai';
 import { inCombat } from './combat';
+import { knockOutNpc } from './defeat';
 import { contactsOf } from './detect';
-import { addGoods } from './inventory';
+import { campGoodPrice, campPartPrice } from './economy';
+import { corePart, goodsCount } from './grid';
+import { addGoods, spareParts } from './inventory';
 import { CLEARANCE, isTransientWreck, nearCliff, terrainNav } from './nav/layer';
 import { decide, huntingGrounds, lawmanTowns, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
 import { resolveNpcActivities, topGoal } from './npc-activities';
+import { yieldTo } from './parley';
 import { route } from './path';
+import { getResources } from './resources';
 import { siteGates, sitePads, siteUnder, type Site } from './sites';
 import { isFree } from './spawn';
+import { stateOf } from './states';
 import { isRoadTile } from './terrain';
 import { hazardZones } from './territory';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -254,5 +260,187 @@ describe('the watch', () => {
     expect(topGoal(raider)).toMatchObject({ kind: 'raid', phase: 'act' });
     expect(Object.keys(raider.brain!.noticed).some((key) => key.endsWith(trader.id))).toBe(false);
     expect(raider.order?.kind ?? 'brake').toBe('brake');
+  });
+});
+
+// ---- Going home with loot.
+
+// Plays whole turns until `done` holds, at most `limit` of them. `each` sees every turn's world.
+function playUntil(start: World, limit: number, done: (w: World) => boolean, each: (w: World) => void = () => {}): World {
+  let w = start;
+  for (let i = 0; i < limit; i++) {
+    w = endTurn(w, testDrive);
+    each(w);
+    if (done(w)) return w;
+  }
+  throw new Error(`Not done within ${limit} turns`);
+}
+
+function playTurns(start: World, turns: number, each: (w: World) => void): World {
+  let w = start;
+  for (let i = 0; i < turns; i++) {
+    w = endTurn(w, testDrive);
+    each(w);
+  }
+  return w;
+}
+
+function soldCargo(w: World, id: string): boolean {
+  return w.events.some((e) => e.t === 'activity' && e.vehicle === id && e.reason === 'sold cargo');
+}
+
+// What the given trucks hold: each good unit and each part by its id. A taken item gets a new grid id, so looting a
+// truck shows as the same holdings moved between the trucks, with nothing new.
+function holdings(w: World, ids: string[]): string[] {
+  return ids.flatMap((id) => vehicle(w, id).items.map((item) => (item.kind === 'good' ? `good:${item.good}` : `part:${item.part.id}`))).sort();
+}
+
+function goodsOn(w: World, id: string, good: string): number {
+  return goodsCount(vehicle(w, id))[good] ?? 0;
+}
+
+function pileGoods(w: World, good: string): number {
+  return w.salvage.filter((s) => s.pile).reduce((sum, s) => sum + (s.goods[good] ?? 0), 0);
+}
+
+// What a camp pays for every good and spare part the raider carries.
+function campValue(raider: Vehicle): number {
+  const goods = Object.entries(goodsCount(raider)).reduce((sum, [good, count]) => sum + count * campGoodPrice(good), 0);
+  return goods + spareParts(raider).reduce((sum, part) => sum + campPartPrice(part), 0);
+}
+
+// Whether the raider goes after the victim again: a fight or robbery goal on it, or a combat state toward it.
+function huntsAgain(w: World, raiderId: string, victimId: string): boolean {
+  const goals = vehicle(w, raiderId).brain!.goals;
+  return goals.some((g) => g.targetId === victimId && g.kind !== 'loot') || stateOf(w, 'combat', raiderId, victimId) !== null;
+}
+
+// A raider watching the post nearest its camp, and loaded prey `gap` tiles off, so the drive home stays short.
+function watchingNearCamp(gap: number) {
+  const start = watchingRaider(gap);
+  const post = nearestOf(raiderGrounds(start.w, scrapjaw), sitePads(scrapjaw)[0]);
+  start.raider.pos = { ...post };
+  start.trader.pos = { x: post.x + gap, y: post.y };
+  return start;
+}
+
+// The raider dropped its raid in the turn its loot goal ended, rather than going back to the watch.
+function droppedRaidAfterLoot(w: World, id: string): boolean {
+  const events = w.events.filter((e) => e.t === 'activity' && e.vehicle === id);
+  return events.some((e) => e.t === 'activity' && e.previous === 'loot') && events.some((e) => e.t === 'activity' && e.previous === 'raid' && e.reason === 'chose something new');
+}
+
+describe('going home with loot', () => {
+  function resumeShare(w: World, raider: Vehicle): number {
+    const draws = 400;
+    let resumes = 0;
+    for (let i = 0; i < draws; i++) if (decide(w, raider, 'resume', null, null) === 'resume') resumes++;
+    return resumes / draws;
+  }
+
+  it('makes a raider on a raid or patrol with sale cargo mostly drop its hunt', () => {
+    const { w, raider } = watchingRaider(200);
+    const empty = resumeShare(w, raider);
+    if (addGoods(w, raider, 'electronics', 2) < 2) throw new Error('No room for the raider cargo');
+    const raiding = resumeShare(w, raider);
+    raider.brain!.goals = [{ kind: 'patrol', targetId: scrapjaw.id, destination: { ...raider.pos }, phase: 'travel', reason: 'patrol' }];
+    const patrolling = resumeShare(w, raider);
+    expect(empty).toBeGreaterThan(0.8);
+    expect(raiding).toBeLessThan(0.15);
+    expect(patrolling).toBeLessThan(0.15);
+  });
+
+  it('leaves a raider on any other hunt, or any other driver, resuming as before', () => {
+    const { w, raider, trader } = watchingRaider(200);
+    if (addGoods(w, raider, 'electronics', 2) < 2) throw new Error('No room for the raider cargo');
+    raider.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { ...raider.pos }, phase: 'travel', reason: 'prowl' }];
+    trader.brain!.goals = [raidGoal(trader.pos)];
+    expect(resumeShare(w, raider)).toBeGreaterThan(0.8);
+    expect(resumeShare(w, trader)).toBeGreaterThan(0.8);
+  });
+
+  it('loots a surrendered pile, drops the raid and sells the cargo at its camp, leaving the victim alone', () => {
+    const { w, raider, trader } = watchingNearCamp(8);
+    const carried = goodsOn(w, trader.id, 'electronics');
+    const money = getResources(w, raider).money;
+    yieldTo(w, trader, raider);
+    expect(goodsOn(w, trader.id, 'electronics')).toBe(0);
+    expect(pileGoods(w, 'electronics')).toBe(carried);
+    expect(topGoal(raider)?.kind).toBe('loot');
+    let dropped = false;
+    let sale: { goals: NpcActivity[]; value: number; looted: number } | null = null;
+    const end = playUntil(w, 120, (x) => soldCargo(x, raider.id), (x) => {
+      const r = vehicle(x, raider.id);
+      dropped ||= droppedRaidAfterLoot(x, raider.id);
+      if (!soldCargo(x, raider.id)) expect(goodsOn(x, raider.id, 'electronics') + pileGoods(x, 'electronics') + goodsOn(x, trader.id, 'electronics')).toBe(carried);
+      if (stateOf(x, 'truce', raider.id, trader.id)) expect(huntsAgain(x, raider.id, trader.id)).toBe(false);
+      if (!sale && topGoal(r)?.kind === 'sell') sale = { goals: [...r.brain!.goals], value: campValue(r), looted: goodsOn(x, raider.id, 'electronics') };
+    });
+    expect(dropped).toBe(true);
+    expect(sale).not.toBeNull();
+    const { goals, value, looted } = sale!;
+    expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
+    expect(looted).toBe(carried);
+    expect(value).toBe(carried * campGoodPrice('electronics'));
+    expect(getResources(end, vehicle(end, raider.id)).money).toBe(money + value);
+    expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
+  });
+
+  it('strips a knocked-out victim, drops the raid and sells at its camp, and never attacks the victim again', () => {
+    const { w, raider, trader } = watchingNearCamp(3);
+    trader.lastHitBy = raider.id;
+    trader.brain!.attackers[raider.id] = true;
+    const before = holdings(w, [raider.id, trader.id]);
+    const money = getResources(w, raider).money;
+    knockOutNpc(w, trader);
+    expect(topGoal(raider)).toMatchObject({ kind: 'loot', targetId: trader.id });
+    let dropped = false;
+    let sale: { goals: NpcActivity[]; value: number; holdings: string[]; looted: number } | null = null;
+    const end = playUntil(w, 120, (x) => soldCargo(x, raider.id), (x) => {
+      const r = vehicle(x, raider.id);
+      dropped ||= droppedRaidAfterLoot(x, raider.id);
+      expect(huntsAgain(x, raider.id, trader.id)).toBe(false);
+      if (!sale && topGoal(r)?.kind === 'sell') {
+        sale = { goals: [...r.brain!.goals], value: campValue(r), holdings: holdings(x, [raider.id, trader.id]), looted: goodsOn(x, raider.id, 'electronics') };
+      }
+    });
+    expect(dropped).toBe(true);
+    expect(sale).not.toBeNull();
+    const { goals, value, looted } = sale!;
+    expect(sale!.holdings).toEqual(before);
+    expect(looted).toBeGreaterThan(0);
+    expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
+    expect(getResources(end, vehicle(end, raider.id)).money).toBe(money + value);
+    expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
+  });
+
+  it('sends an outmatched raider off without cargo', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius - 6);
+    corePart(raider, 'cab').hp = 1;
+    const carried = goodsOn(w, trader.id, 'electronics');
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).toBe('flee');
+    const end = playTurns(w, 10, (x) => {
+      expect(goodsOn(x, raider.id, 'electronics')).toBe(0);
+      expect(pileGoods(x, 'electronics')).toBe(0);
+    });
+    expect(goodsOn(end, trader.id, 'electronics')).toBe(carried);
+  });
+
+  it('sends a defeated raider home with nothing to sell', () => {
+    const { w, raider, trader } = watchingRaider(3);
+    raider.lastHitBy = trader.id;
+    raider.brain!.attackers[trader.id] = true;
+    const carried = goodsOn(w, trader.id, 'electronics');
+    const money = getResources(w, raider).money;
+    knockOutNpc(w, raider);
+    trader.pos = { x: raider.pos.x + 60, y: raider.pos.y };
+    const end = playUntil(w, 40, (x) => topGoal(vehicle(x, raider.id))?.kind === 'retreat', (x) => {
+      expect(vehicle(x, raider.id).brain!.goals.some((g) => g.kind === 'sell')).toBe(false);
+      expect(goodsOn(x, raider.id, 'electronics')).toBe(0);
+    });
+    expect(topGoal(vehicle(end, raider.id))).toMatchObject({ kind: 'retreat' });
+    expect(getResources(end, vehicle(end, raider.id)).money).toBe(money);
+    expect(goodsOn(end, trader.id, 'electronics')).toBe(carried);
   });
 });

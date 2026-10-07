@@ -25,7 +25,7 @@ import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
-import { corePart, freeCells, hasLoot, mountedParts } from './grid';
+import { corePart, freeCells, goodsCount, hasLoot, mountedParts } from './grid';
 import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
@@ -206,6 +206,13 @@ function isNearbyMate(world: World, vehicle: Vehicle, id: string): boolean {
 
 export function isHostileContact(world: World, vehicle: Vehicle, contact: Contact): boolean {
   return world.vehicles.some((other) => other.id === contact.vehicleId && isHostile(world, vehicle, other));
+}
+
+// Goods beyond the repair parts reserve, or a spare part.
+export function hasSaleCargo(vehicle: Vehicle): boolean {
+  const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
+  const goods = Object.entries(goodsCount(vehicle)).some(([good, count]) => count > (good === 'parts' ? NPC_UPKEEP.repairParts : 0));
+  return goods || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
 }
 
 export function getUpkeepReserve(vehicle: Vehicle): number {
@@ -811,6 +818,13 @@ function investigateFactor(world: World, vehicle: Vehicle): number {
   return getCombatCondition(world, vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
 }
 
+// A raider back on its raid or patrol after an interruption mostly takes the cargo it carries home to sell.
+function lootedResumeFactor(_world: World, vehicle: Vehicle): number {
+  const base = vehicle.brain!.goals[0].kind;
+  const hunting = base === 'raid' || base === 'patrol';
+  return hasTrait(vehicle, 'raider') && hunting && hasSaleCargo(vehicle) ? NPC_BEHAVIOR.lootedResume : 1;
+}
+
 function scavengeFactor(world: World, vehicle: Vehicle): number {
   return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
@@ -826,7 +840,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   tow: towFactor,
   demand: neutral,
   attack: neutral,
-  resume: neutral,
+  resume: lootedResumeFactor,
   new: neutral,
   trade: neutral,
   scavenge: scavengeFactor,

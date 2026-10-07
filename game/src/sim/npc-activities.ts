@@ -10,7 +10,7 @@ import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, hasSaleCargo,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -143,13 +143,6 @@ function chooseNearestSite(vehicle: Vehicle, ids: string[]) {
 
 function createSiteActivity(kind: NpcActivity['kind'], id: string, reason: string): NpcActivity {
   return createActivity(kind, id, { ...getKnownSite(id).pos }, reason);
-}
-
-// Goods beyond the repair parts reserve, or a spare part.
-function hasSaleCargo(vehicle: Vehicle): boolean {
-  const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
-  const goods = Object.entries(goodsCount(vehicle)).some(([good, count]) => count > (good === 'parts' ? NPC_UPKEEP.repairParts : 0));
-  return goods || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
 }
 
 // Where an NPC flees to, away from a threat at `threatPos`: its spot at the nearest known town or own camp whose

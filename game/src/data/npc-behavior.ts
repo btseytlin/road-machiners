@@ -78,6 +78,10 @@ export const NPC_BEHAVIOR = {
   // Keep weight times this when a raider watching from its post hears prey beyond sight. A raider's 1 : 10.8 : 3 for
   // keep, investigate and flee becomes 30 : 10.8 : 3, so it lies low about 2 times in 3 and lets the prey come on.
   watchKeep: 30,
+  // Resume weight times this when a raider with sale cargo comes back to its raid or patrol after an interruption,
+  // like looting a robbed truck. Resume 9 x 0.01 against new 1 resumes about 1 time in 12, so the raider mostly drops
+  // the hunt and takes the cargo to a camp, or scrap and parts to the Salvage Yard, as an empty stack does.
+  lootedResume: 0.01,
   // A ram is worth its expected net damage: what the crash model says it takes off the target minus what it takes off
   // the rammer, each part counted by partWeight, times the chance it connects. It competes with the rammer's guns over
   // the same turns, at gunWeight per point of gun damage that gets past the armor. The ram's share of the two is the
