@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import { STORY_WRECKS } from '../data/salvage';
 import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
@@ -30,6 +31,7 @@ import FORMAT_2_20 from './save-fixtures/format-2-20.json';
 import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
+import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -485,5 +487,28 @@ describe('save migration 23 to 24', () => {
       ...FORMAT_2_23,
       vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
     });
+  });
+});
+
+describe('save migration 24 to 25', () => {
+  const wagon = STORY_WRECKS[0];
+  const fresh = emptyWorld();
+
+  it('gives the player an empty journal and puts wagon Seven in place as a new game has it', () => {
+    const next = MIGRATIONS[24](FORMAT_2_24) as typeof FORMAT_2_24 & { player: { notes: unknown[] } };
+
+    expect(next.player).toEqual({ ...FORMAT_2_24.player, notes: [] });
+    expect(next.obstacles).toEqual([...FORMAT_2_24.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
+    expect(next.salvage).toEqual([...FORMAT_2_24.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
+    expect(next.turn).toBe(FORMAT_2_24.turn);
+  });
+
+  it('adds no second wagon to a save that holds one', () => {
+    const once = MIGRATIONS[24](FORMAT_2_24);
+
+    const twice = MIGRATIONS[24](once) as typeof FORMAT_2_24;
+
+    expect(twice.obstacles.filter((o) => o.id === wagon.id)).toHaveLength(1);
+    expect(twice.salvage.filter((s) => s.id === wagon.id)).toHaveLength(1);
   });
 });

@@ -395,6 +395,34 @@ function withSeenSince_23_24(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// Wagon Seven as STORY_WRECKS placed it at format 2.25: its wreck obstacle and its fixed stock.
+const WAGON_SEVEN_2_25 = {
+  obstacle: { id: 'story-wagon-seven', pos: { x: 171, y: 381 }, r: 0.8, kind: 'wreck', hulk: { chassisId: 'wagon', yaw: 2.2 } },
+  stock: {
+    id: 'story-wagon-seven',
+    pos: { x: 171, y: 381 },
+    radius: 0.8,
+    goods: { scrap: 3, meds: 1, parts: 1 },
+    parts: [{ id: 'story-wagon-seven-cannon', defId: 'cannon', hp: 48, wear: 2, gun: { cooldown: 0, ammo: 2, reloadWork: 0 } }],
+    fuel: 10,
+    supplies: 4,
+  },
+};
+
+// The player keeps a journal, empty in an old save, and wagon Seven lies where a new game puts it, unless the save
+// already holds it.
+function withNotesAndWagon_24_25(world: SavedJson): SavedJson {
+  const has = (list: SavedJson[]) => list.some((x) => x.id === WAGON_SEVEN_2_25.obstacle.id);
+  const obstacles = world.obstacles as SavedJson[];
+  const salvage = world.salvage as SavedJson[];
+  return {
+    ...world,
+    player: { ...(world.player as SavedJson), notes: [] },
+    obstacles: has(obstacles) ? obstacles : [...obstacles, structuredClone(WAGON_SEVEN_2_25.obstacle)],
+    salvage: has(salvage) ? salvage : [...salvage, structuredClone(WAGON_SEVEN_2_25.stock)],
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -483,6 +511,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withTracks_22_23,
   // 23 to 24: a track records the turn its truck came in sight, null after loading.
   withSeenSince_23_24,
+  // 24 to 25: the player keeps a journal of notes, and wagon Seven, a story wreck, lies off the Bowl north road.
+  withNotesAndWagon_24_25,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
