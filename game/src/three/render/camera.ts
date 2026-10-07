@@ -146,9 +146,11 @@ export class CameraRig {
     this.ray.setFromCamera(ndc, this.camera);
   }
 
-  hitsObject(clientX: number, clientY: number, object: THREE.Object3D): boolean {
+  // Distance along the pointer ray to the nearest hit on the object, or null.
+  hitDistance(clientX: number, clientY: number, object: THREE.Object3D | null): number | null {
+    if (!object) return null;
     this.aimRay(clientX, clientY);
-    return this.ray.intersectObject(object, true).length > 0;
+    return this.ray.intersectObject(object, true)[0]?.distance ?? null;
   }
 
   // Map point under the cursor, or null off the ground mesh.

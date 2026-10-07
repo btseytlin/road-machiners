@@ -24,6 +24,18 @@ beforeEach(() => {
 });
 
 describe('candidate', () => {
+  it('runs the release candidate agent on Opus', async () => {
+    const f = fake();
+    f.ctx.cfg = { ...f.ctx.cfg, designModel: 'opus', buildModel: 'sonnet' };
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    const original = f.ctx.container.agent;
+    const models: string[] = [];
+    f.ctx.container.agent = async (run) => { models.push(run.model); await original(run); };
+    await candidate(f.ctx, 11);
+    expect(models).toEqual(['opus']);
+  });
+
   it('posts one photo with a Ship button, stores the post id and puts the whole changelog in a reply to it', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn', 'Merge issue #6: gone'];
