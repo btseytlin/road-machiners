@@ -15,6 +15,7 @@ export type FactoryConfig = {
   projectNumber: number;
   githubRetries: number; // retries of a rate-limited GitHub call
   githubRetryBaseSeconds: number; // wait before the first retry, doubled for each next one
+  githubTimeoutSeconds: number; // a GitHub call that runs longer is killed and fails
   home: string; // $FACTORY_HOME: host clone, work clones, logs, state
   webRoot: string;
   publicUrl: string; // base of play links, no trailing slash
@@ -69,7 +70,7 @@ export type FactoryConfig = {
 // Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
 export type TokenPrice = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
 
-export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
+export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void; timeoutMs?: number };
 export type RunResult = { code: number; stdout: string; stderr: string };
 // Runs a program without a shell. Tests pass a fake that records calls.
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;

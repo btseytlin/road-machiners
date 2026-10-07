@@ -58,7 +58,7 @@ const RATE_LIMITED = /rate limit|HTTP 429|submitted too quickly/i;
 type Wait = (ms: number) => Promise<void>;
 const sleep: Wait = (ms) => new Promise((done) => setTimeout(done, ms));
 
-type ClientConfig = Pick<FactoryConfig, 'repo' | 'projectOwner' | 'projectNumber' | 'githubRetries' | 'githubRetryBaseSeconds'>;
+type ClientConfig = Pick<FactoryConfig, 'repo' | 'projectOwner' | 'projectNumber' | 'githubRetries' | 'githubRetryBaseSeconds' | 'githubTimeoutSeconds'>;
 
 export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHub {
   const repo = cfg.repo;
@@ -67,9 +67,10 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
   let queue: Promise<unknown> = Promise.resolve();
 
   // A rate-limited call waits and runs again, twice as long each time. Any other failure returns at once.
+  // A timed-out call is not run again, since a write may have landed before the connection died.
   async function attempt(args: string[]): Promise<RunResult> {
     for (let retry = 0; ; retry++) {
-      const result = await run('gh', args);
+      const result = await run('gh', args, { timeoutMs: cfg.githubTimeoutSeconds * 1000 });
       if (result.code === 0 || !RATE_LIMITED.test(result.stderr) || retry === cfg.githubRetries) return result;
       await wait(cfg.githubRetryBaseSeconds * 1000 * 2 ** retry);
     }

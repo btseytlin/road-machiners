@@ -52,7 +52,7 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 
 ## Failures and Hermes
 
-Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once.
+Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once. A call that runs past `FACTORY_GITHUB_TIMEOUT_SECONDS` is killed and fails, so a dead connection cannot hang a tick. It does not run again, since a write may have landed.
 
 A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 

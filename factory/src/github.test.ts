@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ghClient } from './github';
 import type { FactoryConfig, Run, RunResult } from './types';
 
-const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3, githubRetries: 3, githubRetryBaseSeconds: 15 } as FactoryConfig;
+const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3, githubRetries: 3, githubRetryBaseSeconds: 15, githubTimeoutSeconds: 60 } as FactoryConfig;
 const ok = (stdout: string): RunResult => ({ code: 0, stdout, stderr: '' });
 const RATE_LIMITED: RunResult = { code: 1, stdout: '', stderr: 'HTTP 403: API rate limit exceeded for user ID 1.' };
 
@@ -78,6 +78,13 @@ describe('ghClient', () => {
     const run: Run = async () => { calls++; return { code: 1, stdout: '', stderr: 'HTTP 404: Not Found' }; };
     await expect(ghClient(run, CFG, async () => {}).reopen(7)).rejects.toThrow('404');
     expect(calls).toBe(1);
+  });
+
+  it('gives every call the timeout and does not retry a call that timed out', async () => {
+    const timeouts: (number | undefined)[] = [];
+    const run: Run = async (_cmd, _args, opts) => { timeouts.push(opts?.timeoutMs); return { code: 1, stdout: '', stderr: 'gh timed out after 60000 ms and was killed' }; };
+    await expect(ghClient(run, CFG, async () => {}).reopen(7)).rejects.toThrow('timed out');
+    expect(timeouts).toEqual([60000]);
   });
 
   it('sends one call at a time, even after a failed call', async () => {
