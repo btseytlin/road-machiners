@@ -26,7 +26,8 @@ HANGING = ((10.0, 11, 0.3), (22.0, 10, 0.4), (33.0, 11, 0.3), (16.0, 0, 0.3))  #
 
 
 def build(kit: Kit) -> None:
-    rings = stations(0.0, LENGTH)
+    # Whole bays, so each bay keeps one main rib and one light rib between.
+    rings = stations(0.0, LENGTH, step=PLATE)
     last = len(rings) - 2
     gone: set[tuple[int, int]] = set()
     open_faces = {k % SIDES for k in OPEN_FACES}

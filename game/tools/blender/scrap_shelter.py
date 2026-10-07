@@ -1,4 +1,4 @@
-"""Nose's small scrap shelters (C5): a box of pale salvaged plates on a low plinth with a lit doorway and a lamp.
+"""Nose's small scrap shelters (C5): a box of pale salvaged plates on a low plinth with a dark plate door and a lamp over it.
 
 One script writes two roof variants, picked by the output name: scrap_shelter_flat.glb has a flat plated roof with
 a lip, and scrap_shelter_lean.glb a corrugated tin roof that leans down to the back.
@@ -25,10 +25,10 @@ COLORS = {
     "grey": 0x86867E,  # FACTION_COLORS.convoys.side
     "plinth": 0x9A8A78,  # PAL.rock.top
     "frame": 0x5A5A58,  # PAL.metal
-    "door": 0x3A2418,  # PAL.rust.dark
+    "door": 0x3A2418,  # PAL.rust.dark, the door and the shutter
     "roof": 0x7A6A4A,  # FACTION_COLORS.scavengers.top, the lean roof's weathered tin
     "rib": 0x5E3420,  # PAL.rust.side
-    "glow": 0xFFF2C8,  # PAL.lamp.on, the doorway and the lamp
+    "glow": 0xFFF2C8,  # PAL.lamp.on, the lamp
 }
 SEED = 28
 
@@ -59,10 +59,10 @@ def body(kit: Kit) -> None:
         for i in range(3):
             x = -DEPTH / 2 + 1 + i * 2
             kit.box(f"end{side}_{i}", (1.9, 0.08, WALL - 0.3), (x, side * (LENGTH / 2 + 0.03), WALL / 2 + 0.1), kit.rng.choice(("pale", "bone")), dent_by=0.03)
-    # The doorway: a steel frame round a lit opening, and a lamp over it.
+    # The doorway: a steel frame round a shut plate door, and a lamp over it.
     x = DEPTH / 2 + 0.06
     kit.box("door_frame", (0.12, DOOR[0] + 0.4, DOOR[1] + 0.25), (x, DOOR_Y, (DOOR[1] + 0.25) / 2), "frame")
-    kit.box("doorway", (0.16, DOOR[0], DOOR[1]), (x + 0.02, DOOR_Y, DOOR[1] / 2), "glow")
+    kit.box("doorway", (0.16, DOOR[0], DOOR[1]), (x + 0.02, DOOR_Y, DOOR[1] / 2), "door")
     kit.box("lamp", (0.3, 0.3, 0.25), (x + 0.15, DOOR_Y, DOOR[1] + 0.55), "glow")
     kit.box("shutter", (0.1, 1.2, 0.9), (x, 1.6, 1.8), "door")
 

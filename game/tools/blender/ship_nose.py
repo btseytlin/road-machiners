@@ -1,6 +1,6 @@
 """The Fallen Sun's nose (C5): the blunt, faceted, tapered bow of the colony ship that the town of Nose is built
-around. Large pale plates, a dark band of lit cockpit panes, a windshield, a long side window strip on the camera
-side, a raised ring frame at the joint and a radar pedestal on top.
+around. Patched pale, grey and rust plates, rows of small lit windows on dark bands for the cockpit, the windshield
+and a long side strip on the camera side, a raised ring frame at the joint and a radar pedestal on top.
 
 Built at its in-game size on the shared hull profile (ship_hull_kit.py): 36 m across at its rear joint, 56 m long.
 The origin is the hull axis at the joint with the next section, and the axis runs +X to the blunt tip 56 m away. The
@@ -37,8 +37,9 @@ TIP_RADIUS = 6.0
 COCKPIT = (36.0, 46.0)
 WINDSHIELD = (46.5, 52.0)
 SIDE_STRIP = (14.0, 32.0)  # C5's long window row, on the side that faces the camera
-PANE = 2.0  # pane length along the hull
-LIT_SHARE = 0.3
+PANE = 2.0  # one window every PANE meters along the hull
+WINDOW = (1.2, 1.6)  # a window's length along the hull and its height across the face
+LIT_SHARE = 0.75
 DISH_AT = 30.0
 PEDESTAL = 3.0  # the pedestal's side and its height over the top plates
 
@@ -55,13 +56,19 @@ def at(x: float) -> tuple[float, float, float]:
 
 
 def panes(kit: Kit, name: str, x0: float, x1: float, faces: list[int]) -> None:
-    """Dark panes proud of the plates on the given faces, a share of them lit."""
+    """A row of small windows down the middle of each given face, one every PANE meters, most of them lit. Each sits
+    on a dark band, so the row reads as one line of windows, as in C5."""
     count = max(1, round((x1 - x0) / PANE))
     for k in faces:
+        mid = (corner(k) + corner(k + 1)) / 2
+        band = WINDOW[1] / 2 + 0.3
+        slab(kit, f"{name}_band_{k}", at(x0), at(x1), mid - band / at(x0)[1], mid + band / at(x0)[1], "core", lift=0.15, thick=0.3, seam=0.0)
         for i in range(count):
-            a, b = x0 + (x1 - x0) * i / count, x0 + (x1 - x0) * (i + 1) / count
+            c = x0 + (x1 - x0) * (i + 0.5) / count
+            a, b = at(c - WINDOW[0] / 2), at(c + WINDOW[0] / 2)
+            half = WINDOW[1] / 2 / a[1]
             lit = kit.rng.random() < LIT_SHARE
-            slab(kit, f"{name}_{k}_{i}", at(a), at(b), corner(k) + 0.06, corner(k + 1) - 0.06, "glow" if lit else "core", lift=0.2, thick=0.4, seam=0.25)
+            slab(kit, f"{name}_{k}_{i}", a, b, mid - half, mid + half, "glow" if lit else "core", lift=0.3, thick=0.3, seam=0.0)
 
 
 def build(kit: Kit) -> None:

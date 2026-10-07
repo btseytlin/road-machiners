@@ -4,7 +4,8 @@ ship_hull_ribs and ship_hull_stern. They share one profile, so their joints meet
 The hull is a 12-sided prism of corner radius 18 m (36 m across), about 180 m long over its four sections. Its axis
 runs along X through the model origin, which is the hull axis at the section's joint, so the game poses the whole
 ship by one point and a pitch. Face 2 looks up and face 11 looks along +Y, the side the game turns toward its camera.
-The shell is large rectangular plates, about 9 m by 9 m (one per face, a quarter of them split in two), laid as slabs
+The shell is a patchwork of rectangular plates, 4.5 m along the hull and one 9 m face across, half of them split in
+two across, laid as slabs
 0.5 m thick with 0.16 m seams over a dark core, so the seams read as dark rivet lines. Each plate has a rust strip
 along its rear edge and a line of rivets. Raised dark ring frames stand between the sections, as in C5.
 
@@ -28,13 +29,14 @@ from shapes import loft, strut  # noqa: E402
 RADIUS = 18.0
 AXIS_Z = 0.0
 SIDES = 12
-PLATE = 9.0  # plate length along the hull; each face takes one plate across, and a quarter take two
+PLATE = 9.0  # the structure's bay along the hull: ribs, loose plates
+PLATE_ALONG = 4.5  # a shell plate's length along the hull, half a bay, so the shell reads as C5's patchwork
 THICK = 0.5  # plate slab thickness
 SEAM = 0.08  # half the gap between neighbouring plates
 FRAME = 2.0  # a raised ring frame's length along the hull
 FRAME_RISE = 0.8  # how far a frame stands proud of the plates
 BURIED = -1e9  # plates are never left out: the rise covers whatever lies under the hull
-SPLIT_SHARE = 0.25  # share of faces whose plate is split in two across
+SPLIT_SHARE = 0.5  # share of faces whose plate is split in two across
 
 # Colors from src/render/palette.ts. C5's hull is pale grey-beige plates with rust patches and rust-brown frames.
 COLORS = {
@@ -50,7 +52,7 @@ COLORS = {
     "glow": 0xFFF2C8,  # PAL.lamp.on, lit cockpit panes
 }
 # Plate colors and their weights.
-PLATES = (("bone", 0.45), ("pale", 0.25), ("sand", 0.2), ("grey", 0.06), ("rust", 0.04))
+PLATES = (("bone", 0.38), ("pale", 0.22), ("sand", 0.18), ("grey", 0.1), ("rust", 0.12))
 
 # A station is (x, radius, axis height) at one place along the hull.
 Station = tuple[float, float, float]
@@ -126,7 +128,7 @@ def liner(kit: Kit, name: str, s0: Station, s1: Station, a0: float, a1: float) -
     kit._add(obj, name, "core", 0.0)
 
 
-def stations(x0: float, x1: float, profile: Callable[[float], tuple[float, float]] | None = None, step: float = PLATE) -> list[Station]:
+def stations(x0: float, x1: float, profile: Callable[[float], tuple[float, float]] | None = None, step: float = PLATE_ALONG) -> list[Station]:
     """Stations every step meters from x0 to x1 (either way), on the profile (radius, axis height) at each x."""
     count = max(1, round(abs(x1 - x0) / step))
     out = []

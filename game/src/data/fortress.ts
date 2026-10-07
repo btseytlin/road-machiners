@@ -16,7 +16,10 @@ export type FortressPit = { margin: number; terraceWidth: number; stepHeight: nu
 // turn rotates the outline in degrees from map +x toward +y. It is tuned so every gate stays clear of the outline
 // corners: mid-side on a square and between towers on a circle. South Lock's one gate stands on a star point.
 // A circle has towers unless towers is false, and one every towerEvery sections, else FORTRESS.circleTowerEvery.
-export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle; bastions?: FortressBastions; towers?: boolean; towerEvery?: number; pit?: FortressPit };
+// rock: the stretches of outline a rock mass closes, each in degrees from the site's turn, counterclockwise from `from`
+// to `to`. No wall or tower stands on an outline segment whose middle lies in one. The walls either side end in the rock.
+export type FortressRock = { from: number; to: number };
+export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle; bastions?: FortressBastions; towers?: boolean; towerEvery?: number; pit?: FortressPit; rock?: readonly FortressRock[] };
 
 // A gatehouse footprint, width along the wall and depth out of the site, and its height to the parapet.
 export type FortressGate = { width: number; depth: number; height: number };
@@ -42,7 +45,11 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
     pit: { margin: 1, terraceWidth: 1.8, stepHeight: 0.5, terraces: 4 },
   },
   // C5's close towers: one every 3 sections, about 23 m apart. Turns 3.75 to 9.75 clear both 24 m flush gates.
-  nose: { shape: 'circle', turn: 8, style: 'shipMetal', towerEvery: 3 },
+  // The ring was built around the crashed ship, up to the flanks of the mountain it came down on. The mountain
+  // (nose_rise.py) covers the curtain line from 225 to 355 degrees past the turn: north of the WNW gate's open ground,
+  // round the back, to where its bent front meets the curtain in the east. The rock stretch lies a few degrees inside,
+  // so each wall end reaches into the rock. A test checks the walls' ends against the rock's boxes.
+  nose: { shape: 'circle', turn: 8, style: 'shipMetal', towerEvery: 3, rock: [{ from: 228, to: 352 }] },
   dustwell: { shape: 'square', turn: 45, style: 'compound' },
   'green-pit': { shape: 'circle', turn: 8, style: 'masonry' },
   'pump-station': { shape: 'square', turn: 0, style: 'masonry' },
@@ -54,6 +61,12 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
   scrapjaw: { shape: 'circle', turn: -10, style: 'scrap' },
   kiln: { shape: 'square', turn: 93, style: 'scrap' },
 };
+
+// The ground the bake raises around Nose's mountain, so its foot is a slope of the landscape. Tiles. The ground
+// under the rock stands `height` up, 5 m, under the rock's 8 m foot, and falls to the plain over `run` tiles from the
+// rock's boxes, a 0.125 grade any truck climbs. It stays at the plain within `clear` tiles of a road's edge or a pad and
+// rises over `ramp` tiles past that, and it stays at the plain inside the site circle.
+export const NOSE_APRON = { height: 1.25, run: 10, clear: 4, ramp: 4 };
 
 export const FORTRESS = {
   // Gap from the site circle in to the outline corners. A corner tower's half diagonal, 0.75 * sqrt(2), fits in it.

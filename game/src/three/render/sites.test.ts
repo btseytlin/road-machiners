@@ -7,8 +7,10 @@ import { PAL } from '../../render/palette';
 import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { fortressGates, insideCurtain, pitDepth } from '../../sim/fortress';
-import { GATE_CLEAR, RISE } from './interiors/nose';
+import { fortressGates, insideCurtain, onFortressRock, pitDepth } from '../../sim/fortress';
+import { GATE_CLEAR, riseFront } from './interiors/nose';
+import { boxDistance, propBoxes, propObstacle, propShape } from '../../sim/mapgen';
+import { noseRocks } from '../../sim/nose';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -106,7 +108,7 @@ describe('landmark scale', () => {
     }
   });
 
-  it('keeps every vertex of a fortress interior inside its curtain, inset by half a wall depth (IV8)', () => {
+  it('keeps every vertex of a fortress interior inside its curtain, inset by half a wall depth, or in its rock (IV8)', () => {
     const v = new Vector3();
     const m = new Matrix4();
     for (const site of ALL.filter(isFortress)) {
@@ -121,7 +123,9 @@ describe('landmark scale', () => {
           if (o instanceof InstancedMesh) at.multiply(o.getMatrixAt(k, m));
           for (let i = 0; i < pos.count; i++) {
             v.fromBufferAttribute(pos, i).applyMatrix4(at);
-            if (!insideCurtain(site, { x: v.x / PHYSICS.metersPerTile, y: v.z / PHYSICS.metersPerTile })) {
+            const p = { x: v.x / PHYSICS.metersPerTile, y: v.z / PHYSICS.metersPerTile };
+            // Where rock closes the curtain, a piece may run on into the rock.
+            if (!insideCurtain(site, p) && !onFortressRock(site, p)) {
               bad.push(`${o.name || o.geometry.type} at ${(v.x / PHYSICS.metersPerTile - site.pos.x).toFixed(1)},${(v.z / PHYSICS.metersPerTile - site.pos.y).toFixed(1)}`);
               return;
             }
@@ -295,7 +299,7 @@ describe('landmark scale', () => {
     node.updateMatrix();
   });
 
-  it('stands one pumpjack, three storage tanks and a shed with a lit doorway inside Dustwell (IV22)', () => {
+  it('stands one pumpjack, three storage tanks and a shed with a shut door and a lit lantern inside Dustwell (IV22)', () => {
     const group = sites.getObjectByName('landmark-dustwell')!;
     const named = (name: string) => {
       const found: Object3D[] = [];
@@ -310,7 +314,8 @@ describe('landmark scale', () => {
     expect(named('dustwell-tank')).toHaveLength(3);
     const door = named('dustwell-shed-door');
     expect(door).toHaveLength(1);
-    const lamp = (door[0] as Mesh).material as MeshLambertMaterial;
+    expect(((door[0] as Mesh).material as MeshLambertMaterial).emissive.getHex(), 'a shut door does not glow').toBe(0);
+    const lamp = (named('dustwell-shed-lamp')[0] as Mesh).material as MeshLambertMaterial;
     expect(lamp.color.getHex()).toBe(PAL.lamp.on);
     expect(lamp.emissive.getHex()).toBe(PAL.lamp.on);
   });
@@ -424,7 +429,7 @@ describe('landmark scale', () => {
     });
   });
 
-  it('stands a crane, stacked wrecks, a tall tank, a container, a jeep and a shed with a lit doorway inside the Salvage Yard (IV22)', () => {
+  it('stands a crane, stacked wrecks, a tall tank, a container, a jeep and a shed with a shut door and a lit lantern inside the Salvage Yard (IV22)', () => {
     const group = sites.getObjectByName('landmark-salvage-yard')!;
     const named = (name: string) => {
       const found: Object3D[] = [];
@@ -441,7 +446,8 @@ describe('landmark scale', () => {
     expect(named('salvage-shed')).toHaveLength(1);
     const door = named('salvage-shed-door');
     expect(door).toHaveLength(1);
-    const lamp = (door[0] as Mesh).material as MeshLambertMaterial;
+    expect(((door[0] as Mesh).material as MeshLambertMaterial).emissive.getHex(), 'a shut door does not glow').toBe(0);
+    const lamp = (named('salvage-shed-lamp')[0] as Mesh).material as MeshLambertMaterial;
     expect(lamp.emissive.getHex()).toBe(PAL.lamp.on);
     const cab: number[] = [];
     named('crane-upper')[0].traverse((o) => {
@@ -495,7 +501,9 @@ describe('landmark scale', () => {
     const uAxis = { x: -south.out.y, y: south.out.x };
     const toFrame = (p: { x: number; y: number }) => ({ u: (p.x - nose.pos.x) * uAxis.x + (p.y - nose.pos.y) * uAxis.y, v: -((p.x - nose.pos.x) * south.out.x + (p.y - nose.pos.y) * south.out.y) });
     const discs = gates.map((g) => ({ ...toFrame(g.face), r: g.width / 2 + GATE_CLEAR }));
-    const inRise = (p: { u: number; v: number }) => p.v >= RISE.front && Math.hypot(p.u, p.v) <= RISE.clip && Math.hypot(p.u - RISE.hole.u, p.v - RISE.hole.v) > RISE.hole.r;
+    // The rise and the crag are baked props: a point is under them where their collision boxes stand.
+    const rockBoxes = noseRocks(nose).flatMap((p, k) => propBoxes(propObstacle(p, k)));
+    const inRise = (p: { x: number; y: number }) => rockBoxes.some((b) => boxDistance(b, p) === 0);
     // Interior points on a 1 tile grid, a tile in from the curtain's wall.
     const interior: { x: number; y: number; u: number; v: number }[] = [];
     for (let x = Math.floor(nose.pos.x - nose.radius); x <= nose.pos.x + nose.radius; x++) {
@@ -504,7 +512,7 @@ describe('landmark scale', () => {
       }
     }
 
-    it('keeps every Nose mesh inside the curtain (IV8)', () => {
+    it('keeps every Nose mesh inside the curtain, or in the rock where the rock closes it (IV8)', () => {
       const v = new Vector3();
       const outside: string[] = [];
       group.updateWorldMatrix(true, true);
@@ -517,7 +525,8 @@ describe('landmark scale', () => {
         const pos = o.geometry.getAttribute('position');
         for (let i = 0; i < pos.count; i++) {
           v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-          if (!insideCurtain(nose, { x: v.x / S, y: v.z / S })) outside.push(`${o.name || o.parent?.name} ${(v.x / S - nose.pos.x).toFixed(1)},${(v.z / S - nose.pos.y).toFixed(1)}`);
+          const p = { x: v.x / S, y: v.z / S };
+          if (!insideCurtain(nose, p) && !onFortressRock(nose, p)) outside.push(`${o.name || o.parent?.name} ${(v.x / S - nose.pos.x).toFixed(1)},${(v.z / S - nose.pos.y).toFixed(1)}`);
         }
       });
       expect(outside.slice(0, 5)).toEqual([]);
@@ -564,13 +573,13 @@ describe('landmark scale', () => {
       }
     });
 
-    it('covers 35 to 50% of the interior with the rise and crag, all on the far half, and tops the crag over the towers (IV29)', () => {
+    it('covers 35 to 55% of the interior with the rise and crag, all behind the front edge, and tops the crag over the towers (IV29)', () => {
       const covered = interior.filter((p) => inRise(p));
       expect(covered.length / interior.length).toBeGreaterThanOrEqual(0.35);
-      expect(covered.length / interior.length).toBeLessThanOrEqual(0.5);
-      for (const p of covered) expect(p.v).toBeGreaterThan(0);
-      const crag = new Box3().setFromObject(group.getObjectByName('nose-crag')!);
-      expect(crag.max.y).toBeGreaterThanOrEqual(1.5 * 22);
+      expect(covered.length / interior.length).toBeLessThanOrEqual(0.55);
+      // A merged box may reach a little past the rock's front edge.
+      for (const p of covered) expect(p.v, `${p.u}, ${p.v}`).toBeGreaterThan(riseFront(p.u) - 0.5);
+      expect(Math.max(...propShape('nose_crag').map((b) => b.z1))).toBeGreaterThanOrEqual(1.5 * 22);
     });
 
     it('builds the yard up: no yard point is more than 4 tiles from a structure (IV27)', () => {
@@ -582,7 +591,7 @@ describe('landmark scale', () => {
     });
   });
 
-  it('lights the Nose shelter doorways and the cockpit windows (IV22)', () => {
+  it('lights the Nose shelter lamps and the cockpit windows (IV22)', () => {
     const group = sites.getObjectByName('landmark-nose')!;
     const glowsIn = (name: string) => {
       const found: number[] = [];

@@ -3,7 +3,10 @@ import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressSite } from '..
 import { REGION } from '../data/region';
 import { siteGates, type Site } from './sites';
 import { DEG, dist, segmentDist, type Vec } from './vec';
-import { fortressFootprint, fortressGates, fortressOutline, insideCurtain, fortressPieces, type FortressPiece } from './fortress';
+import { fortressFootprint, fortressGates, fortressOutline, insideCurtain, fortressPieces, onFortressRock, type FortressPiece } from './fortress';
+import { PHYSICS } from '../data/physics';
+import { boxDistance, propBoxes, propObstacle, type PosedBox } from './mapgen';
+import { noseRocks } from './nose';
 import BEFORE from './fortress-pieces-42b6c9fe.json';
 import BEFORE_8D from './fortress-pieces-8d024493.json';
 
@@ -24,6 +27,14 @@ function covers(site: Site, piece: FortressPiece, p: Vec): boolean {
     const b = c[(i + 1) % c.length];
     return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) >= -EPS;
   });
+}
+
+// The boxes of a site's rock masses that block a truck. Nose's mountain closes its curtain where no wall stands.
+const ROCK_BOXES = new Map<string, PosedBox[]>([['nose', noseRocks(siteOf('nose')).flatMap((p, k) => propBoxes(propObstacle(p, k)).filter((b) => b.z0 < PHYSICS.truckClearance))]]);
+
+// Whether a piece or a blocking rock box stands on p.
+function closed(site: Site, pieces: FortressPiece[], p: Vec): boolean {
+  return pieces.some((piece) => covers(site, piece, p)) || (ROCK_BOXES.get(site.id) ?? []).some((b) => boxDistance(b, p) === 0);
 }
 
 function outward(site: Site, p: Vec): Vec {
@@ -152,7 +163,7 @@ describe('fortress layout', () => {
     }
   });
 
-  it.each(FORTS.map((s) => [s.id, s] as const))('%s closes its outline with pieces', (_, site) => {
+  it.each(FORTS.map((s) => [s.id, s] as const))('%s closes its outline with pieces and rock', (_, site) => {
     const outline = fortressOutline(site);
     const pieces = fortressPieces(site);
     expect(outline.length).toBeGreaterThanOrEqual(4);
@@ -163,7 +174,7 @@ describe('fortress layout', () => {
       const steps = Math.ceil(dist(a, b) / 0.1);
       for (let k = 0; k < steps; k++) {
         const p = { x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps };
-        if (!pieces.some((piece) => covers(site, piece, p))) open.push(p);
+        if (!closed(site, pieces, p)) open.push(p);
       }
     });
     expect(open).toEqual([]);
@@ -190,7 +201,7 @@ describe('fortress layout', () => {
         if (ni < 0 || nj < 0 || ni >= n || nj >= n || seen[next]) continue;
         seen[next] = 1;
         const p = at(ni, nj);
-        if (pieces.some((piece) => covers(site, piece, p))) continue;
+        if (closed(site, pieces, p)) continue;
         if (dist(site.pos, p) >= site.radius - step) escaped = true;
         todo.push(next);
       }
@@ -198,7 +209,7 @@ describe('fortress layout', () => {
     expect(escaped).toBe(false);
   });
 
-  it.each(FORTS.map((s) => [s.id, s] as const))('%s buries both ends of every wall in a neighbor', (_, site) => {
+  it.each(FORTS.map((s) => [s.id, s] as const))('%s buries both ends of every wall in a neighbor or the rock', (_, site) => {
     const pieces = fortressPieces(site);
     const walls = pieces.filter((p) => p.kind === 'wall');
     expect(walls.length).toBeGreaterThan(0);
@@ -206,7 +217,7 @@ describe('fortress layout', () => {
     const loose = walls.flatMap((w) =>
       [1, -1]
         .map((side) => ({ x: w.pos.x + side * w.r * Math.cos(w.yaw), y: w.pos.y + side * w.r * Math.sin(w.yaw) }))
-        .filter((end) => !pieces.some((other) => other !== w && covers(site, other, end))),
+        .filter((end) => !closed(site, pieces.filter((other) => other !== w), end)),
     );
     expect(loose).toEqual([]);
   });
@@ -349,7 +360,7 @@ describe('flanking (IV25)', () => {
 });
 
 describe('Nose towers (IV30)', () => {
-  it('stand at most 26 m apart along the curtain, outside the gatehouses', () => {
+  it('stand at most 26 m apart along the curtain, outside the gatehouses and the rock', () => {
     const site = siteOf('nose');
     const angle = (p: Vec): number => Math.atan2(p.y - site.pos.y, p.x - site.pos.x);
     const pieces = fortressPieces(site);
@@ -360,9 +371,11 @@ describe('Nose towers (IV30)', () => {
     towers.forEach((t, i) => {
       const next = towers[(i + 1) % towers.length];
       if (gates.some((g) => between(angle(t), angle(next), g))) return;
+      if (onFortressRock(site, { x: (t.x + next.x) / 2, y: (t.y + next.y) / 2 })) return;
       expect(dist(t, next) * 4, `tower ${i}`).toBeLessThanOrEqual(26);
       checked++;
     });
-    expect(checked).toBeGreaterThan(25);
+    // The mountain closes about a third of the ring, and the walls hold the rest.
+    expect(checked).toBeGreaterThan(12);
   });
 });

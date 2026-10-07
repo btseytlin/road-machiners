@@ -28,6 +28,8 @@ function mapWith(props: BakedProp[]): BakedMap {
 }
 
 const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && FORT_MODELS.has(o.look);
+// Nose's mountain stands over its site and closes its curtain with the walls. src/sim/fortress.test.ts keeps its roads clear.
+const isNoseRock = (o: Obstacle) => o.kind === 'landmark' && (o.look === 'noseRise' || o.look === 'noseCrag');
 
 describe('baked map obstacles', () => {
   it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
@@ -113,7 +115,7 @@ describe('world from the baked map', () => {
     const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
     // Fortress pieces make up the site edge and its gates, which cross roads. src/sim/fortress.test.ts holds them to their circle.
     // The ship wing is the exception: it hangs over its road and reaches the Broken Wing hull by design.
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && !isFortPiece(o) && o.look !== 'shipWing');
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && !isFortPiece(o) && !isNoseRock(o) && o.look !== 'shipWing');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -143,11 +145,12 @@ describe('world from the baked map', () => {
       return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
     };
     const overlap = (a: Obstacle, b: Obstacle): boolean => {
-      // Fortress pieces meet end to end and share their joints, so only the ones of another kind count. A long wall
-      // leaves its circle mostly empty, so its boxes decide.
-      if (isFortPiece(a) && isFortPiece(b)) return false;
-      if (isFortPiece(a)) return touchesObstacle(a, world.terrain, b.pos, b.r);
-      if (isFortPiece(b)) return touchesObstacle(b, world.terrain, a.pos, a.r);
+      // Fortress pieces meet end to end and share their joints, and Nose's walls end in its rock, so only the ones of
+      // another kind count. A long wall or the mountain leaves its circle mostly empty, so its boxes decide.
+      const walled = (o: Obstacle) => isFortPiece(o) || isNoseRock(o);
+      if (walled(a) && walled(b)) return false;
+      if (walled(a)) return touchesObstacle(a, world.terrain, b.pos, b.r);
+      if (walled(b)) return touchesObstacle(b, world.terrain, a.pos, a.r);
       if (rimPair(a, b)) return false;
       if (boxed(a) && boxed(b)) return low(a).some((p) => low(b).some((q) => boxesOverlap(p, q)));
       if (boxed(a) || boxed(b)) {
