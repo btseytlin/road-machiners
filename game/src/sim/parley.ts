@@ -113,7 +113,8 @@ export function answersPlea(world: World, answerer: Vehicle, pleader: Vehicle, p
 
 // The prey's answer to a robber's demand: it pays the cargo, or defies the robber.
 export function answersHoldUp(world: World, prey: Vehicle, robber: Vehicle, answer: ThreatAnswer): void {
-  if (!holdsUp(world, robber, prey, perceiveDanger(world, robber, prey))) throw new Error(`${robber.id} does not hold up ${prey.id}`);
+  // The danger roll is jittered, so a second roll could disagree with the answer that made the demand. Check without it.
+  if (!holdsUp(world, robber, prey, null)) throw new Error(`${robber.id} does not hold up ${prey.id}`);
   if (answer === 'comply') yieldTo(world, prey, robber);
   else defyThreat(world, prey, robber, answer);
 }
