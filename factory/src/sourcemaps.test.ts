@@ -49,11 +49,14 @@ describe('takeMaps', () => {
     expect(readPublished(home).map((entry) => `${entry.sha.slice(-1)} ${entry.kind}`)).toEqual(['1 dev', '1 release', '5 dev']);
   });
 
-  it('fails a reporting build with no maps, since its reports could not be read', async () => {
+  it('publishes a build of game code from before error reports unrecorded, and says so in the log', async () => {
     const home = mkdtempSync(join('tmp', 'factory-maps-'));
     mkdirSync(join(home, 'clone', 'game', 'dist'), { recursive: true });
-    const ctx = { cfg: { home, errorMapDays: 14 }, now: () => new Date(), run: async () => ({ code: 0, stdout: sha(1), stderr: '' }) } as unknown as Ctx;
-    await expect(takeMaps(ctx, join(home, 'clone'), 'dev')).rejects.toThrow('has no source maps');
+    const logs: string[] = [];
+    const ctx = { cfg: { home, errorMapDays: 14 }, now: () => new Date(), log: (stage: string, _issue: null, msg: string) => logs.push(`${stage}: ${msg}`), run: async () => ({ code: 0, stdout: sha(1), stderr: '' }) } as unknown as Ctx;
+    await takeMaps(ctx, join(home, 'clone'), 'candidate');
+    expect(readPublished(home)).toEqual([]);
+    expect(logs).toEqual(['candidate: the candidate build has no source maps, so its game code predates error reports and it sends none']);
   });
 });
 
