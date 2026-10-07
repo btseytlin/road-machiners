@@ -850,24 +850,25 @@ body {
   overflow: auto;
   font-size: 12px;
 }
-#ui .info.pinned {
-  border-color: #f0d060;
+.info .aim-line {
+  margin: 4px 0;
+  white-space: nowrap;
 }
-.info .pin-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: #f0d060;
-  margin-bottom: 4px;
-}
-.info .pin-close {
+.info .aim-body {
   padding: 0 6px;
-  line-height: 1.2;
+  height: 18px;
+  line-height: 16px;
+  font-size: 11px;
+  cursor: crosshair;
 }
-.info .aim-row {
-  display: block;
-  width: 100%;
-  margin: 6px 0;
+.info .aim-body[aria-pressed="true"] {
+  border-color: #fa3934;
+}
+.info .aim-body .condition-aim {
+  position: static;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 /* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
 #ui .radio.away {

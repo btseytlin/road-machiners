@@ -21,7 +21,7 @@ import {
 } from "./format";
 import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimMarks, aimRow, pinHead, type AimState } from "./weapons";
+import { aimLine, aimMarks, type AimState } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph } from "./units";
@@ -75,7 +75,6 @@ type HudActions = {
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
   aimBody: (vehicleId: string) => void;
-  unpin: () => void;
   aimState: (vehicleId: string) => AimState;
 };
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
@@ -183,8 +182,8 @@ export class Hud {
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
       el("div", {}, "R: manual driving, straight at the point."),
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
+      el("div", {}, "T: radio the inspected truck. 1-9: reply. H: honk."),
+      el("div", {}, "Click a truck: inspect it. Aim from its card. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
@@ -535,17 +534,14 @@ export class Hud {
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
   }
 
-  // The Aim button and the part hint, for another truck only.
+  // The aim line above the diagram, for another truck only.
   private aimControls(w: World, v: Vehicle): HTMLElement[] {
-    const aim = this.actions.aimState(v.id);
-    if (v.id === playerVehicle(w).id || !aim.hasGuns) return [];
-    return [
-      aimRow(aim, () => this.actions.aimBody(v.id))!,
-      el("div", { class: "dim" }, `Click a part to aim ${aim.guns} at it`),
-    ];
+    if (v.id === playerVehicle(w).id) return [];
+    const line = aimLine(this.actions.aimState(v.id), () => this.actions.aimBody(v.id));
+    return line ? [line] : [];
   }
 
-  showInfo(w: World, v: Vehicle | null, hostile: boolean, pinned: boolean): void {
+  showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
     if (!v) {
       this.info.style.display = "none";
       return;
@@ -554,9 +550,7 @@ export class Hud {
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
-    this.info.classList.toggle("pinned", pinned);
     this.infoBody.replaceChildren(
-      ...(pinned ? [pinHead(() => this.actions.unpin())] : []),
       ...infoHeading(w, v),
       el(
         "div",

@@ -69,10 +69,10 @@ function seenNpcJob(w: World, v: Vehicle): JobMark | null {
   return work && { label: workLabel(w, v, work), progress: workProgress(work) };
 }
 
-// True when every chosen gun already has a body or part order on this target.
-export function aimsAt(w: World, weapons: MountedWeapon[], targetId: string): boolean {
+// True when every chosen gun has a body shot at this target.
+export function aimsBody(w: World, weapons: MountedWeapon[], targetId: string): boolean {
   const orders = playerVehicle(w).weaponOrders;
-  return weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === targetId);
+  return weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === targetId && orders[mw.part.id].aim === "body");
 }
 
 // Names the chosen guns as the panel numbers them.
@@ -82,41 +82,43 @@ export function gunsLabel(w: World, selected: string | null): string {
   return i < 0 ? "all guns" : `gun ${i + 1}`;
 }
 
-export type AimState = { guns: string; aimed: boolean; locked: boolean; hasGuns: boolean };
+export type AimState = { guns: string; body: number[]; bodyAimed: boolean; locked: boolean; hasGuns: boolean };
 
-// The card's first row for a pinned truck, with the way to unpin it.
-export function pinHead(unpin: () => void): HTMLElement {
-  return el(
-    "div",
-    { class: "pin-head" },
-    el("span", {}, "Pinned"),
-    el("button", { class: "pin-close", "aria-label": "Unpin", title: "Unpin [Esc]", onclick: unpin }, "×"),
-  );
-}
-
-// The card's button that aims the chosen guns at its truck. It is missing for a player without guns.
-export function aimRow(state: AimState, aim: () => void): HTMLElement | null {
+// The dim line above the card's diagram. It names the chosen guns and holds the Body chip. It is missing for a player without guns.
+export function aimLine(state: AimState, onBody: () => void): HTMLElement | null {
   if (!state.hasGuns) return null;
-  const label = state.aimed ? "Stop aiming" : `Aim ${state.guns}`;
-  return el("button", { class: "aim-row", disabled: state.locked, onclick: aim }, label);
+  const guns = state.guns[0].toUpperCase() + state.guns.slice(1);
+  const chip = el(
+    "button",
+    {
+      class: "aim-body",
+      "aria-pressed": String(state.bodyAimed),
+      disabled: state.locked,
+      title: `Body shot with ${state.guns}: rounds hit whatever part they reach. Click again to stop.`,
+      onclick: onBody,
+    },
+    "Body",
+    ...(state.body.length ? [el("span", { class: "condition-aim" }, state.body.join(" "))] : []),
+  );
+  return el("div", { class: "aim-line dim" }, `${guns}: click a part, or `, chip);
 }
 
-// The Aim button aims the weapons at a vehicle. When all of them already aim at it, the button clears them.
-export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
-  const aimed = aimsAt(w, weapons, target.id);
+// The Body chip aims the chosen guns at a vehicle's body. When all of them already do, it clears them. A gun on a part moves to the body.
+export function toggleBodyAim(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+  const aimed = aimsBody(w, weapons, target.id);
   if (w.player.autoFire) w = setAutoFire(w, false);
   for (const mw of weapons)
     w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: "body" });
   return w;
 }
 
-// Aims the chosen guns at one part of a target. When they all aim at that part already, they go back to a body shot.
+// Aims the chosen guns at one part of a target. When they all aim at that part already, their orders clear.
 export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, partId: string): World {
   const orders = playerVehicle(w).weaponOrders;
   const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id && orders[mw.part.id].aim === partId);
   if (w.player.autoFire) w = setAutoFire(w, false);
   for (const mw of weapons)
-    w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: aimed ? "body" : partId });
+    w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: partId });
   return w;
 }
 
@@ -128,6 +130,17 @@ export function aimMarks(w: World, targetId: string): Map<string, number[]> {
     const order = orders[mw.part.id];
     if (!order || order.targetId !== targetId || order.aim === "body") return;
     marks.set(order.aim, [...(marks.get(order.aim) ?? []), i + 1]);
+  });
+  return marks;
+}
+
+// Gun numbers, as the panel counts them, that have a body shot at a target.
+export function bodyMarks(w: World, targetId: string): number[] {
+  const orders = playerVehicle(w).weaponOrders;
+  const marks: number[] = [];
+  vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
+    const order = orders[mw.part.id];
+    if (order?.targetId === targetId && order.aim === "body") marks.push(i + 1);
   });
   return marks;
 }
@@ -445,10 +458,10 @@ export class InspectPin {
     return this.current;
   }
 
-  // Pins a truck. A click on the pinned truck unpins it.
+  // Pins a truck. A click on the pinned truck keeps it, and a click on another truck switches the pin.
   click(id: string): void {
     if (id === "") throw new Error("InspectPin.click needs a vehicle id");
-    this.set(id === this.current ? null : id);
+    this.set(id);
   }
 
   clear(): void {

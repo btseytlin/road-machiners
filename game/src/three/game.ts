@@ -46,7 +46,7 @@ import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { PickRings } from "./render/pickRings";
-import { aimAtPart, aimsAt, gunsLabel, HoverHold, InspectPin, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { aimAtPart, aimsBody, bodyMarks, gunsLabel, HoverHold, InspectPin, toggleBodyAim, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -155,8 +155,6 @@ export class Game {
   // The pointer needs a moment to travel from a truck to its panel.
   private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
   private readonly pin = new InspectPin(() => this.onInspectChange());
-  // The pinned truck and its frame, found by the vehicle pass.
-  private pinned: { v: Vehicle; f: VehicleFrame } | null = null;
   private readonly rings: PickRings;
   private selected: string | null = null;
   private readonly sightLimit: SightLimit;
@@ -290,11 +288,11 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
-      aimBody: (id) => this.canAim() && this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, id))),
-      unpin: () => this.pin.clear(),
+      aimBody: (id) => this.canAim() && this.apply(toggleBodyAim(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, id))),
       aimState: (id) => ({
         guns: gunsLabel(this.world, this.selected),
-        aimed: aimsAt(this.world, weaponsForClick(this.world, this.selected), id),
+        body: bodyMarks(this.world, id),
+        bodyAimed: aimsBody(this.world, weaponsForClick(this.world, this.selected), id),
         locked: !this.canAim(),
         hasGuns: weaponsForClick(this.world, this.selected).length > 0,
       }),
@@ -427,7 +425,7 @@ export class Game {
   private refreshInfo(): void {
     const w = this.displayWorld();
     const v = w.vehicles.find((x) => x.id === this.inspected() && playerSees(w, x.pos)) ?? null;
-    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false, v !== null && v.id === this.pin.id);
+    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
     this.hitCard.render(w, v ? v.id : null);
   }
 
@@ -1039,8 +1037,8 @@ export class Game {
     this.radioLights.note(this.world, now);
     const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
-    this.pinned = null;
-    for (const v of shown) {
+    let pinSeen = false;
+    for (const [i, v] of shown.entries()) {
       const kept = this.frames[v.id];
       // Between turns, a vehicle moved outside a turn, such as by a debug script, jumps to its new spot.
       const stale = !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
@@ -1067,9 +1065,9 @@ export class Game {
       view.pose(f, dt);
       view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt);
-      this.trackPin(v, f);
+      pinSeen = this.trackPin(v, i, pinSeen);
     }
-    this.settlePin();
+    this.settlePin(pinSeen);
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
       this.scene.remove(view.root);
@@ -1096,21 +1094,20 @@ export class Game {
 
   private placePickRing(hide: boolean): void {
     const v =
-      this.hovered && this.hovered !== playerVehicle(this.world).id && this.hovered !== this.pin.id
+      this.hovered && this.hovered !== playerVehicle(this.world).id
         ? this.world.vehicles.find((x) => x.id === this.hovered)
         : undefined;
     this.rings.placePick(this.world, v, v && this.frames[v.id], hide);
   }
 
-  // Notes the pinned truck when it is in the world and in sight now.
-  private trackPin(v: Vehicle, f: VehicleFrame): void {
-    if (v.id === this.pin.id && this.world.vehicles.includes(v) && this.isVehicleVisible(v)) this.pinned = { v, f };
+  // Whether the pinned truck has been seen so far this pass. Removed trucks come after the world's own, so the index tells them apart.
+  private trackPin(v: Vehicle, i: number, seen: boolean): boolean {
+    return seen || (v.id === this.pin.id && i < this.world.vehicles.length && this.isVehicleVisible(v));
   }
 
-  // The pin ends with its truck's sight. The ring shows even while the overlays hide.
-  private settlePin(): void {
-    this.pin.keepIf(this.pinned !== null || this.pin.id === null);
-    this.rings.placePin(this.world, this.pinned);
+  // The pin ends with its truck's sight.
+  private settlePin(seen: boolean): void {
+    this.pin.keepIf(seen || this.pin.id === null);
   }
 
   private drawOverlays(): void {

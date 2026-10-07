@@ -7,29 +7,20 @@ import { groundPoint, toMap, type VehicleFrame } from "../../phys/frames";
 
 type RingLook = { gap: number; width: number; alpha: number; lift: number };
 
-// The circle under the hovered vehicle, which a click pins. Sizes are in tiles.
+// The circle under the hovered vehicle, which a click inspects. Sizes are in tiles.
 const PICK_RING: RingLook = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
-// The wider circle under the pinned vehicle.
-const PIN_RING: RingLook = { gap: 0.7, width: 0.14, alpha: 0.95, lift: 0.02 };
 
-// Ground rings under the vehicle a click would pick and the vehicle the card is pinned to.
+// Ground rings under the vehicle a click would pick.
 export class PickRings {
   private readonly pick = ringMesh(PICK_RING);
-  private readonly pin = ringMesh(PIN_RING);
 
   constructor(scene: THREE.Scene) {
-    scene.add(this.pick, this.pin);
+    scene.add(this.pick);
   }
 
   placePick(world: World, v: Vehicle | undefined, f: VehicleFrame | undefined, hide: boolean): void {
     this.pick.visible = !hide && !!v && !!f;
     if (v && f && !hide) place(this.pick, world, v, f, PICK_RING);
-  }
-
-  // Shows even while the overlays hide, since it marks what the card is about.
-  placePin(world: World, pinned: { v: Vehicle; f: VehicleFrame } | null): void {
-    this.pin.visible = pinned !== null;
-    if (pinned) place(this.pin, world, pinned.v, pinned.f, PIN_RING);
   }
 }
 
