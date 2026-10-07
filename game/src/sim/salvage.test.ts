@@ -14,8 +14,13 @@ import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
 import {
   breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
-  isSiteStock, lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvagePlace, salvageUnits, siteLootTable,
+  isSiteStock, lootClaimedBy, looterOf, removeStocks, renewSalvage, rollStock, salvageInRange, salvagePlace, salvageUnits, siteLootTable, stockOldSpots,
 } from './salvage';
+import { FIELD_SPARE_WEAR, OLD_TABLES, type LootTable } from '../data/salvage';
+import { oldSpotOf, oldSpotPicks, oldStockId } from './old-places';
+import { chance, randInt } from './rng';
+import { sampleWeighted } from './npc-loadout';
+import { makePart } from './factory';
 import { knockOutNpc } from './defeat';
 import { SHOPS } from '../data/market';
 import type { NpcActivity, Obstacle, RefitPickup, SalvageStock, Vehicle, World } from './types';
@@ -885,3 +890,112 @@ describe('salvage place', () => {
     expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toBe(`${npc.name} is looting this wreck`);
   }, 30_000);
 });
+
+describe('old-world loot spots', () => {
+  const picks = oldSpotPicks(TEST_MAP);
+  const oldStocks = (w: World): SalvageStock[] => w.salvage.filter((stock) => oldSpotOf(stock));
+
+  it('gives every pick of the map one stock from its place type table', () => {
+    const w = emptyWorld();
+    expect(oldStocks(w).map((stock) => stock.id)).toEqual(picks.map(oldStockId));
+    for (const p of picks) {
+      const stock = stockOf(w, oldStockId(p));
+      expect(stock.pos).toEqual(p.pos);
+      expect(stock.radius).toBe(p.reach);
+      for (const [good, [, hi]] of Object.entries(OLD_TABLES[p.type].goods)) expect(stock.goods[good], `${stock.id} ${good}`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it('reads a building as a loot spot and a tank hulk as a wreck', () => {
+    const stock = (id: string): SalvageStock => ({ id, pos: { x: 0, y: 0 }, radius: 1, goods: {}, parts: [] });
+    expect(salvagePlace(stock('old-hamlet-ruin-12'))).toBe('spot');
+    expect(salvagePlace(stock('old-homestead-silo-3'))).toBe('spot');
+    expect(salvagePlace(stock('old-hulks-tank-40'))).toBe('wreck');
+  });
+
+  it('rolls a rare low-wear car part at the table odds', () => {
+    const table = OLD_TABLES.hulks;
+    const rare = table.rare!;
+    const w = emptyWorld();
+    let rares = 0;
+    const rolls = 2000;
+    for (let k = 0; k < rolls; k++) {
+      const parts = rollStock(w, table, `t${k}`, { x: 0, y: 0 }, 1).parts.filter((part) => rare.parts.includes(part.defId));
+      rares += parts.length;
+      for (const part of parts) expect(part.wear).toBeLessThanOrEqual(1);
+    }
+    expect(table.spareParts.some((id) => rare.parts.includes(id))).toBe(false);
+    expect(Math.abs(rares / rolls - table.sparePartChance * rare.share)).toBeLessThan(0.015);
+  });
+
+  it('makes the same draws as before for a table with no rare pool', () => {
+    const table: LootTable = { ...SALVAGE.landmark, sparePartChance: 0.5 };
+    for (let k = 0; k < 20; k++) {
+      const a = emptyWorld();
+      a.rngState = 1000 + k;
+      const b = cloneSeeds(a);
+      const rolled = rollStock(a, table, 's', { x: 0, y: 0 }, 1);
+      expect(rolled).toEqual(rollWithoutRare(b, table));
+      expect(a.rngState).toBe(b.rngState);
+      expect(a.marketRng.rngState).toBe(b.marketRng.rngState);
+    }
+  });
+
+  it('refills an emptied old spot daily, up to its table highs', () => {
+    const w = emptyWorld();
+    const p = picks.find((pick) => pick.type === 'hulks')!;
+    const stock = stockOf(w, oldStockId(p));
+    emptyStock(stock);
+    runDays(w, 1);
+    const firstDay = stock.goods.scrap;
+    runDays(w, 365);
+    expect(firstDay).toBeLessThan(OLD_TABLES.hulks.goods.scrap[1]);
+    expect(stock.goods.scrap).toBe(OLD_TABLES.hulks.goods.scrap[1]);
+    expect(stock.parts.length).toBeLessThanOrEqual(1);
+    for (const [good, [, hi]] of Object.entries(OLD_TABLES.hulks.goods)) expect(stock.goods[good]).toBeLessThanOrEqual(hi);
+    expect(stock.fuel).toBeLessThanOrEqual(OLD_TABLES.hulks.fuel[1]);
+  });
+
+  it('never removes an old spot stock', () => {
+    const w = emptyWorld();
+    expect(() => removeStocks(w, new Set([oldStockId(picks[0])]))).toThrow(/never leaves/);
+    expect(oldStocks(w)).toHaveLength(picks.length);
+  });
+
+  it('stocks a world with none once, and refuses a partial or stray set', () => {
+    const w = emptyWorld();
+    const held = oldStocks(w).map((stock) => structuredClone(stock));
+    stockOldSpots(w, TEST_MAP);
+    expect(oldStocks(w)).toEqual(held);
+    w.salvage = w.salvage.filter((stock) => !oldSpotOf(stock));
+    stockOldSpots(w, TEST_MAP);
+    expect(oldStocks(w).map((stock) => stock.id)).toEqual(picks.map(oldStockId));
+    w.salvage = w.salvage.filter((stock) => stock.id !== oldStockId(picks[0]));
+    expect(() => stockOldSpots(w, TEST_MAP)).toThrow(/partial/);
+    const stray = emptyWorld();
+    stray.salvage.push({ id: 'old-hamlet-ruin-999999', pos: { x: 0, y: 0 }, radius: 1, goods: {}, parts: [] });
+    expect(() => stockOldSpots(stray, TEST_MAP)).toThrow(/no old spot/);
+  });
+});
+
+// A world with the same rng streams, for replaying draws.
+function cloneSeeds(w: World): World {
+  const copy = emptyWorld();
+  copy.rngState = w.rngState;
+  copy.marketRng = { ...w.marketRng };
+  copy.nextId = w.nextId;
+  return copy;
+}
+
+// A stock roll as it was before rare pools: goods, the parts good, then one spare part with field wear.
+function rollWithoutRare(w: World, table: LootTable): SalvageStock {
+  const goods: Record<string, number> = {};
+  for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(w, lo, hi);
+  goods.parts = randInt(w, table.parts[0], table.parts[1]);
+  const parts = [];
+  if (chance(w, table.sparePartChance)) {
+    const defId = table.spareParts[randInt(w, 0, table.spareParts.length - 1)];
+    parts.push(makePart(w, defId, sampleWeighted(w.marketRng, FIELD_SPARE_WEAR)));
+  }
+  return { id: 's', pos: { x: 0, y: 0 }, radius: 1, goods, parts, fuel: randInt(w, ...table.fuel), supplies: randInt(w, ...table.supplies) };
+}

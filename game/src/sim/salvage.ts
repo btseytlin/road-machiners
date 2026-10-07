@@ -1,4 +1,4 @@
-import { FIELD_SPARE_WEAR, SALVAGE, type LootRange, type LootTable } from '../data/salvage';
+import { FIELD_SPARE_WEAR, OLD_TABLES, SALVAGE, type LootRange, type LootTable } from '../data/salvage';
 import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
@@ -27,6 +27,8 @@ import { walkLane } from './armor';
 import { canUseSite } from './sites';
 import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
+import { oldSpotOf, oldSpotPicks, oldStockId } from './old-places';
+import type { BakedMap } from './terrain';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
@@ -64,7 +66,7 @@ export function isRoadWreck(o: { id: string }): boolean {
 export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
 
 // What kind of place holds the stock: a dropped pile, a site's own stock, a wreck (a road wreck, a destroyed truck's
-// wreck or a loot spot with a wreck look), or any other loot spot of a territory.
+// wreck or a loot spot with a wreck look), or any other loot spot of a territory or an old-world place.
 export function salvagePlace(stock: SalvageStock): SalvagePlace {
   if (stock.pile) return 'pile';
   if (isSiteStock(stock)) return 'site';
@@ -72,16 +74,19 @@ export function salvagePlace(stock: SalvageStock): SalvagePlace {
 }
 
 function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {
-  const look = territoryOfStock(stock) ? spotLookOf(stock) : null;
+  const old = oldSpotOf(stock);
+  const look = old ? spotLookOf({ id: old.propId }) : territoryOfStock(stock) ? spotLookOf(stock) : null;
   if (!look) throw new Error(`Stock ${stock.id} is no pile, site, wreck or loot spot`);
   return WRECK_LOOKS.includes(look) ? 'wreck' : 'spot';
 }
 
-// A spare part found in the field. Its wear draws from the market stream, so it leaves world RNG
-// draws unchanged.
+// A spare part found in the field: now and then from the table's rare pool, in good repair. Its wear draws from the
+// market stream, so it leaves world RNG draws unchanged. A table with no rare pool makes no rare draw.
 function fieldSpare(world: World, table: LootTable): PartInstance {
-  const defId = table.spareParts[randInt(world, 0, table.spareParts.length - 1)];
-  return makePart(world, defId, sampleWeighted(world.marketRng, FIELD_SPARE_WEAR));
+  const rare = table.rare && chance(world, table.rare.share) ? table.rare : null;
+  const pool = rare ? rare.parts : table.spareParts;
+  const defId = pool[randInt(world, 0, pool.length - 1)];
+  return makePart(world, defId, sampleWeighted(world.marketRng, rare ? rare.wear : FIELD_SPARE_WEAR));
 }
 
 export function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius: number): SalvageStock {
@@ -91,6 +96,19 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
   const parts: PartInstance[] = [];
   if (chance(world, table.sparePartChance)) parts.push(fieldSpare(world, table));
   return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
+}
+
+// Gives every old-world loot spot of the map its stock, rolled from its place's table. A new game has none of them,
+// and neither has a save from before old spots, so both get them all. A world holding some but not all is broken.
+export function stockOldSpots(world: World, map: BakedMap): void {
+  const picks = oldSpotPicks(map);
+  const ids = new Set(picks.map(oldStockId));
+  const stray = world.salvage.find((stock) => oldSpotOf(stock) && !ids.has(stock.id));
+  if (stray) throw new Error(`Old spot stock ${stray.id} is no old spot of map ${map.hash}`);
+  const held = world.salvage.filter((stock) => ids.has(stock.id)).length;
+  if (held === picks.length) return;
+  if (held > 0) throw new Error(`Old spot stocks are partial: ${held} of ${picks.length}`);
+  for (const p of picks) world.salvage.push(rollStock(world, OLD_TABLES[p.type], oldStockId(p), p.pos, p.reach));
 }
 
 export function hasSalvage(stock: SalvageStock): boolean {
@@ -373,9 +391,16 @@ export function clearPiles(world: World): void {
 // Stocks that leave the world. Searches of them stop, and the player forgets them.
 export function removeStocks(world: World, gone: Set<string>): void {
   if (gone.size === 0) return;
+  requireNoOldSpots(gone);
   for (const v of world.vehicles) if (v.job?.kind === 'search' && gone.has(v.job.stockId)) cancelJob(world, v);
   world.salvage = world.salvage.filter((stock) => !gone.has(stock.id));
   world.player.scavenged = world.player.scavenged.filter((id) => !gone.has(id));
+}
+
+// Old spot stocks are fixed places like sites: they refill, and never go.
+function requireNoOldSpots(gone: Set<string>): void {
+  const old = [...gone].find((id) => oldSpotOf({ id }));
+  if (old) throw new Error(`Old spot stock ${old} never leaves the world`);
 }
 
 // ---- Daily renewal. Sites slowly regain loot, and looted road wrecks give way to new ones beyond the player's gray
@@ -390,6 +415,7 @@ export function renewSalvage(world: World): void {
   }
   // A spot never moves or goes: it refills like a site.
   for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, siteStock(world, o.id), spotTable(o));
+  for (const p of oldSpotPicks({ hash: world.mapHash })) restockSite(world, siteStock(world, oldStockId(p)), OLD_TABLES[p.type]);
   turnOverRoadWrecks(world);
   regrowBroken(world);
 }

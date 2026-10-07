@@ -62,7 +62,7 @@ export function spotTable(o: Obstacle): LootTable {
 
 // The prop kind in a stock's id, or null when the id names none. Ids of baked props are <kind>-<k>, so the id tells a
 // spot's kind.
-export function spotLookOf(stock: SalvageStock): PropKind | null {
+export function spotLookOf(stock: { id: string }): PropKind | null {
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
   return PROP_KINDS.find((k) => k === kind) ?? null;
 }

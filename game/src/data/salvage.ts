@@ -4,11 +4,25 @@ import type { Weighted } from './npcs';
 
 export type LootRange = [number, number];
 
+// A rare find: a share of the spare parts a table rolls come from a pool of better car parts, in good repair.
+export type RareSpare = {
+  share: number; // odds a rolled spare part is a rare one
+  parts: string[]; // part def ids of whole car parts, never stacks of the parts good
+  wear: Weighted<number>[]; // wear steps, 0 or 1 only, from the market stream
+};
+
+// Wear of a rare find: whole or one step worn, kept dry under a roof or a hull.
+const RARE_WEAR: Weighted<number>[] = [
+  { value: 0, weight: 1 },
+  { value: 1, weight: 2 },
+];
+
 export type LootTable = {
   goods: Record<string, LootRange>; // units rolled per good
   parts: LootRange; // units of the parts good
   sparePartChance: number; // odds the site also holds one mountable spare part
   spareParts: string[]; // part def ids the spare part is drawn from
+  rare: RareSpare | null; // a better pool the spare part comes from now and then, or null for none
   fuel: LootRange; // fuel units left in tanks and cans
   supplies: LootRange; // supply units left in crates
 };
@@ -59,6 +73,7 @@ export const SALVAGE = {
     parts: [1, 2],
     sparePartChance: 0.2,
     spareParts: ['stockEngine', 'plates', 'cage', 'mg'],
+    rare: null,
     fuel: [0, 8],
     supplies: [0, 3],
   } as LootTable,
@@ -68,6 +83,7 @@ export const SALVAGE = {
     parts: [0, 1],
     sparePartChance: 0.1,
     spareParts: ['mg', 'cage', 'rack', 'flatFour'],
+    rare: null,
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
@@ -77,6 +93,7 @@ export const SALVAGE = {
     parts: [0, 1],
     sparePartChance: 0.1,
     spareParts: ['mg', 'cage', 'plates', 'flatFour'],
+    rare: null,
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
@@ -86,6 +103,7 @@ export const SALVAGE = {
     parts: [0, 1],
     sparePartChance: 0.05,
     spareParts: ['flatFour', 'rack'],
+    rare: null,
     fuel: [0, 4],
     supplies: [0, 2],
   } as LootTable,
@@ -95,6 +113,7 @@ export const SALVAGE = {
     parts: [0, 1],
     sparePartChance: 0.15,
     spareParts: ['mg', 'plates', 'cage'],
+    rare: null,
     fuel: [0, 2],
     supplies: [0, 2],
   } as LootTable,
@@ -103,9 +122,54 @@ export const SALVAGE = {
     parts: [1, 2],
     sparePartChance: 0.3,
     spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox'],
+    rare: null,
     fuel: [4, 12],
     supplies: [2, 6],
   } as LootTable,
+};
+
+// Loot of old-world places, by place type. Mostly a little worn scrap and stores; now and then a good engine.
+export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
+  // Farmsteads: food and cloth, and the odd farm engine under a tarp.
+  homestead: {
+    goods: { grain: [0, 2], textiles: [0, 1], scrap: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.18,
+    spareParts: ['flatFour', 'rack'],
+    rare: { share: 0.2, parts: ['workhorseDiesel', 'heavyDiesel'], wear: RARE_WEAR },
+    fuel: [0, 4],
+    supplies: [0, 2],
+  },
+  // Hamlets: what the houses held, and a car left in a garage.
+  hamlet: {
+    goods: { scrap: [0, 2], textiles: [0, 1], meds: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.15,
+    spareParts: ['stockEngine', 'rack', 'plates'],
+    rare: { share: 0.2, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
+    fuel: [0, 3],
+    supplies: [0, 2],
+  },
+  // Lone lookout buildings: a hideout's leftovers, guns and batteries.
+  lookout: {
+    goods: { scrap: [0, 1], meds: [0, 1], batteries: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.18,
+    spareParts: ['mg', 'cage', 'stockEngine'],
+    rare: { share: 0.2, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
+    fuel: [0, 2],
+    supplies: [0, 1],
+  },
+  // Tank hulks: armor scrap and batteries, and now and then a diesel pulled whole from a hull.
+  hulks: {
+    goods: { scrap: [1, 2], batteries: [0, 1] },
+    parts: [0, 1],
+    sparePartChance: 0.2,
+    spareParts: ['plates', 'mg', 'cage'],
+    rare: { share: 0.2, parts: ['heavyDiesel', 'workhorseDiesel'], wear: RARE_WEAR },
+    fuel: [0, 4],
+    supplies: [0, 1],
+  },
 };
 
 // Stripping a spare part in the field for units of the parts good. See src/sim/jobs.ts.

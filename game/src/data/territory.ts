@@ -17,7 +17,7 @@ export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
 // Loot spots that are wrecks, so their prompts keep wreck wording. Every other loot spot is a plain place.
-export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache'];
+export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache', 'tank'];
 export type Hazard = {
   radius: number; // tiles around the reactor
   healthPerTurn: number;
