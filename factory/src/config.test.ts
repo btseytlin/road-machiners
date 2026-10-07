@@ -13,7 +13,7 @@ const FULL = {
   FACTORY_TEST_TIMEOUT_MINUTES: '90', FACTORY_BRANCH_TIMEOUT_MINUTES: '60',FACTORY_REPLY_ROUTE_MINUTES: '15', FACTORY_RELEASE_DAYS: '7', FACTORY_WASTE_REVIEW_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
   FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_VERIFY_WORKERS: '1', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low', FACTORY_DESIGN_EFFORT: 'medium',
-  FACTORY_MIN_FREE_GB: '5', FACTORY_MIN_AVAILABLE_GB: '1', FACTORY_LOG_DAYS: '14', FACTORY_CPU_LIGHT: '0.25', FACTORY_CPU_IMPLEMENT: '0.25', FACTORY_CPU_TEST: '0.5',
+  FACTORY_MIN_FREE_GB: '5', FACTORY_MIN_AVAILABLE_GB: '1', FACTORY_LOG_DAYS: '14', FACTORY_TRANSCRIPT_DAYS: '10', FACTORY_CPU_LIGHT: '0.25', FACTORY_CPU_IMPLEMENT: '0.25', FACTORY_CPU_TEST: '0.5',
 };
 
 describe('loadConfig', () => {
@@ -31,7 +31,7 @@ describe('loadConfig', () => {
     expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.verifyWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1, 1]);
     expect(cfg.triageEffort).toBe('low');
     expect(cfg.designEffort).toBe('medium');
-    expect([cfg.minFreeGb, cfg.minAvailableGb, cfg.logDays]).toEqual([5, 1, 14]);
+    expect([cfg.minFreeGb, cfg.minAvailableGb, cfg.logDays, cfg.transcriptDays]).toEqual([5, 1, 14, 10]);
   });
 
   it('reads token prices per model and requires one for each model the factory picks', () => {
