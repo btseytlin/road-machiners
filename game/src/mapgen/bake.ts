@@ -15,6 +15,7 @@ import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { BUILT_CANAL, BUILT_GLASS, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer, tilesWithin } from './oldworld';
+import { fortressLayer } from './fortress';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
@@ -22,7 +23,8 @@ export function bakeMap(seed: number): MapDraft {
   let d = groundForTerritories(seed);
   d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
-  return timed('rocks', () => rockLayer(seed, d));
+  d = timed('rocks', () => rockLayer(seed, d));
+  return timed('fortresses', () => fortressLayer(d));
 }
 
 // The layers before the territories: the ground and world a territory is laid out on.

@@ -91,6 +91,56 @@ const NAMES = [
   'watchtower',
   'glass_spire',
   'scrap_wall',
+  'fort_masonry_wall',
+  'fort_masonry_tower',
+  'fort_masonry_gate',
+  'fort_masonry_bastion',
+  'fort_masonry_inner',
+  'fort_ship_wall',
+  'fort_ship_tower',
+  'fort_ship_gate',
+  'fort_scrap_wall',
+  'fort_scrap_tower',
+  'fort_scrap_gate',
+  'fort_scrap_bastion',
+  'fort_scrap_inner',
+  'fort_patchwork_wall',
+  'fort_patchwork_tower',
+  'fort_patchwork_gate',
+  'fort_compound_wall',
+  'fort_compound_tower',
+  'fort_compound_gate',
+  'fort_ring_wall',
+  'fort_ring_gate',
+  'fort_yard_wall',
+  'fort_yard_tower',
+  'fort_yard_gate',
+  'bowl_house_rust',
+  'bowl_house_red',
+  'bowl_house_grey',
+  'windmill_tower',
+  'windmill_rotor',
+  'stilt_tank',
+  'fruit_tree',
+  'pumpjack_base',
+  'pumpjack_beam',
+  'storage_tank',
+  'grain_silo',
+  'grain_elevator',
+  'lean_to',
+  'crane_base',
+  'crane_upper',
+  'crane_grab',
+  'ship_hull_ring',
+  'ship_hull_ribs',
+  'ship_hull_stern',
+  'nose_rise',
+  'nose_crag',
+  'radar_dish',
+  'scrap_shelter_flat',
+  'scrap_shelter_lean',
+  'hull_scaffold',
+  'jib_crane',
 
   'bumper_front',
   'bumper_rear',
@@ -293,6 +343,9 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
   return group;
 }
 
+// A model material with this name is a lit lamp or window. It glows in its own color, so it shows at night.
+const GLOW_MATERIAL = 'glow';
+
 // glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
@@ -301,6 +354,7 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
+      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
       m.dispose();
       return l;
     });

@@ -9,7 +9,7 @@ import { ROOT, fake, reset } from './test-fakes';
 
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
-  buildAndDeploy: async (_ctx: unknown, _clone: string, scope: string) => { deployed.push(scope); return `https://play.test/${scope}/`; },
+  buildAndDeploy: async (_ctx: unknown, _clone: string, scope: string, _log: string, reports: string | null) => { deployed.push(`${scope} reports ${reports}`); return `https://play.test/${scope}/`; },
   recordBuild: (_statePath: string, issue: number, name: string) => { deployed.push(`record ${issue} ${name}`); },
 }));
 const { candidate, candidateCaption } = await import('./candidate');
@@ -55,7 +55,7 @@ describe('candidate', () => {
     f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
     await candidate(f.ctx, 11);
     expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['fetch', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'fetch', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
-    expect(deployed).toEqual(['rc', 'record 11 rc']);
+    expect(deployed).toEqual(['rc reports candidate', 'record 11 rc']);
     expect(f.calls.find((call) => call.startsWith('comment'))).toContain('- [#5] The horn is louder.');
     const photo = f.photos[0];
     expect(photo.buttons).toEqual([[{ text: 'Ship', data: 'factory:ship:11' }]]);

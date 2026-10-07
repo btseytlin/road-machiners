@@ -491,7 +491,7 @@ describe('save migration 23 to 24', () => {
 
 describe('save migration 24 to 25', () => {
   const before = structuredClone(FORMAT_2_24);
-  const next = MIGRATIONS[24](FORMAT_2_24) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+  const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[]; salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
 
   it('drops the Glass Flats stock and its searched mark, and keeps every other stock', () => {
     expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
@@ -502,5 +502,27 @@ describe('save migration 24 to 25', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_24.vehicles[1]);
     expect(FORMAT_2_24).toEqual(before);
+  });
+
+  it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
+    const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_24.obstacles[5]);
+  });
+
+  it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
+    const world = { ...FORMAT_2_24, obstacles: [
+      { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
+    ] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
+  });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_24, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });
 });

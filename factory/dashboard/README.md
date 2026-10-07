@@ -1,6 +1,6 @@
 # Factory dashboard
 
-A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. The code is in `src/dashboard/`, and the page in this folder.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
@@ -8,7 +8,7 @@ From `factory/`:
 
 1. Run `npm ci` and copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
 2. Set `DASHBOARD_PORT`, or `DASHBOARD_SOCKET` for an absolute socket path.
-3. Set `DASHBOARD_HIDE_TELEGRAM=1` and leave `DASHBOARD_CHANNEL_URL` empty, since the factory has no separate public channel yet.
+3. Leave `DASHBOARD_CHANNEL_URL` empty to get the link of `FACTORY_PUBLIC_CHANNEL` from the bot, or set `DASHBOARD_HIDE_TELEGRAM=1` to show no channel.
 4. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads need `gh` logged in.
 
 ## What the numbers mean

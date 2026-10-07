@@ -65,6 +65,27 @@ Each truck is one base model per chassis plus shared kit parts on its inventory 
 - `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
 - Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.
 
+## Fortress kit
+
+Each inhabited site is walled by fort pieces, one model per style and piece, named `fort_<style>_<piece>.glb`. A style is a material and a site's look, so the five sites remade from their concepts each have their own kit file, and work on one never touches another's.
+
+- `tools/blender/fort_kit.py` builds the masonry and scrap styles in five pieces each: wall, tower, gate, bastion and inner gate. It also holds the geometry helpers the other kits import: `extrude`, `plate`, `frame`, `rect` and `SKIRT`. Its gatehouse stands out on the site circle, and a barbican joins it back to the curtain.
+- `fort_patchwork_kit.py` (Bowl), `fort_compound_kit.py` (Dustwell), `fort_ring_kit.py` (Granary), `fort_yard_kit.py` (Salvage Yard) and `fort_ship_kit.py` (Nose) each build their style's wall, gate and, except for the towerless ring, tower. Each `fort_<style>_<piece>.py` script calls its kit's `run(piece)`.
+- These five styles have flush gates: the gatehouse stands in the curtain with its outer face on the curtain line, and nothing reaches past that face. Each style's gate size lives in `FORTRESS_STYLES` in `src/data/fortress.ts`, and a test checks it against the gate model's height.
+- Every wall is 8 m long and under 3 m deep, at least 12 m tall and over 3x the tallest truck. Nose's ship-metal wall is 16 m, its towers 22 m and its gate catwalk 18 m, so its ring reads as a band at the zoom that fits it. The game stretches it along its length only, so keep its detail repeatable along that axis. Towers keep a 6 m footprint. Each kit's docstring states each piece's size and origin.
+- Gate lamps, guns and banners are not part of any gate model. The gate furniture in `src/three/render/sites.ts` owns them.
+
+Nose's colony-ship wreck is four sections, `ship_nose`, `ship_hull_ring`, `ship_hull_ribs` and `ship_hull_stern`, about 180 m long and 36 m across. They share a 12-sided profile, a patchwork of pale, grey and rust plates 4.5 m along the hull, and ring frames from `tools/blender/ship_hull_kit.py`, so their joints meet. The origin of each is the hull axis at a joint. The nose is plated, with rows of small windows on dark bands for the cockpit and the side, and the radar pedestal. The ring is plated, the ribs show a lattice of ribs and X-braces with a few plates left, and the stern is torn open.
+
+The ship rests on `nose_rise` and runs into `nose_crag`, two rock masses from `tools/blender/nose_rise.py` and `nose_crag.py`, built by `nose_rock_kit.py` as faceted heightfields. Together they are the mountain the ship came down on. It fills the back right of the ring and runs well past it, to a low face about 230 m from the center over ground the bake raises, and the ring's walls end against its flanks. Under the ship it is a rubble mound, which falls to the sand past the nose's tip, so the yard runs open to the WNW gate. The ship lies far enough east that its nose stays off the line from that gate to the game camera. Both are baked props with collision boxes, so each mass is closed underneath. They share the site frame of Nose's interior: the origin is the site center, +x runs along the ship toward its nose and +y toward the south gate. `nose_rise` carries the ship's pose in two sockets, `socket_ship_front` and `socket_ship_rear`, on the hull axis, and its front edge is a timber-and-scrap retaining terrace 6 m high. The footprints, the mountain's arc and reach, the front edge's bend and the hole at the WNW gate are constants in `nose_rock_kit.py`. `RISE` in `interiors/nose.ts` mirrors the front edge, the rubble's west end and the hole, and the interior throws when the gate is not at the hole. Shelters keep off the rock by its collision boxes. The `rock` stretches of Nose in `src/data/fortress.ts` follow where the rock meets the curtain, and a test checks that walls and rock close the ring.
+
+Two material rules serve the site interiors:
+
+- A material named `glow` keeps its color as emissive, so lit windows and lamps show at night with no point lights. `toLambert()` in `src/three/render/models.ts` applies it.
+- A moving part, such as a windmill rotor, pumpjack beam, crane upper, crane grab or radar dish, is its own model with its origin at its pivot. It attaches at a `socket_<part>` on its base model (`Kit.socket()`), and `SiteMotion` moves it.
+
+Run `npm run models:shapes` after a change, as for any prop.
+
 ## Icons
 
 Shop, trade, inventory, garage and loot screens show each part and good as an icon rendered from its own models, and the truck shop shows a portrait of each chassis beside its grid. HUD, stat, tab and action glyphs stay hand-drawn SVG in `src/ui/cards.ts`. Cabs have no model on the truck, where the base draws them, so their icons come from icon-only models in `CAB_ICON_MODELS` in `src/render/partLooks.ts`: `cab_seat`, `cab_pickup` and `cab_hardtop`.

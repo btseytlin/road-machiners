@@ -671,6 +671,18 @@ describe('NPC activities', () => {
     });
   });
 
+  it('heads for a town, not the stall it is parked at, once stranded for good with no engine', () => {
+    const yard = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    expect(SHOPS['salvage-yard'].kind).toBe('stall');
+    const w = emptyWorld({ x: yard.pos.x + 100, y: yard.pos.y + 100 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg'], { ...sitePads(yard)[0] });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    getResources(w, npc).money = 500;
+    planNpcOrders(w);
+    expect(topGoal(npc)?.kind).toBe('resupply');
+    expect(REGION.towns.map((t) => t.id)).toContain(topGoal(npc)?.targetId);
+  });
+
   it('drives on near a town with a tank well below a fifth', () => {
     const { w, npc } = createTrader();
     const pad = sitePads(REGION.towns[0])[0];
