@@ -16,12 +16,14 @@ import {
   buyPrice,
   buySupply,
   chassisTradeIn,
+  driveRepairCost,
   getLotTradePrice,
   partRepairCost,
   partTradePrice,
   repairAll,
   repairBasics,
   repairCost,
+  repairDrive,
   repairPart,
   sellGood,
   sellPrice,
@@ -221,6 +223,21 @@ describe("garage", () => {
     const all = repairAll(w);
     expect(all.player.money).toBe(w.player.money - repairCost(w));
     expect(mountedParts(all.vehicles[0])[0].hp).toBe(maxHp(gun));
+  });
+
+  it("repairs only the broken drive parts for the drive bill", () => {
+    const w = startAtBowl();
+    const cab = corePart(w.vehicles[0], "cab");
+    const transmission = corePart(w.vehicles[0], "transmission");
+    cab.hp = 10;
+    transmission.hp = 0;
+
+    const fixed = repairDrive(w);
+
+    expect(corePart(fixed.vehicles[0], "transmission").hp).toBe(maxHp(transmission));
+    expect(corePart(fixed.vehicles[0], "cab").hp).toBe(10);
+    expect(fixed.player.money).toBe(w.player.money - partRepairCost(w, transmission));
+    expect(driveRepairCost(w)).toBe(partRepairCost(w, transmission));
   });
 
   it("leaves rebuildable junk to a town garage", () => {

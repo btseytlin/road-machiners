@@ -3,18 +3,18 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { appendLedger } from '../ledger';
 import { EMPTY_STATE, readState, writeState } from '../state';
-import type { AgentRun, Ctx, InlineButton } from '../types';
+import type { AgentRun, Ctx } from '../types';
 import { fillPrompt } from './common';
-import { parseBrief, proposalOf, runStage } from './waste';
+import { parseBrief, reviewPendingPath, runStage } from './waste';
 
 const HOME = resolve('tmp/factory-waste-test');
 const NOW = new Date('2026-10-10T09:00:00Z');
 const BRIEF = 'BOTTLENECK: Cards waited 204 min for the verify queue.\nCHANGE:\nSet FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.';
 
-type Seen = { runs: AgentRun[]; numbers: string; inputs: string[]; issues: { title: string; body: string; labels: string[] }[]; calls: string[]; buttons: InlineButton[][][] };
+type Seen = { runs: AgentRun[]; numbers: string; inputs: string[]; issues: { title: string; body: string; labels: string[] }[]; calls: string[] };
 
 function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
-  const seen: Seen = { runs: [], numbers: '', inputs: [], issues: [], calls: [], buttons: [] };
+  const seen: Seen = { runs: [], numbers: '', inputs: [], issues: [], calls: [] };
   const ctx = {
     cfg: { home: HOME, repo: 'o/r', committeeChat: '-5', buildModel: 'sonnet', wasteReviewDays: 7 },
     statePath: `${HOME}/state/state.json`, now: () => NOW, log: () => undefined,
@@ -40,7 +40,7 @@ function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
     },
     telegram: {
       sendMessage: async (_chat: string, text: string) => { seen.calls.push(`message ${text}`); return 1; },
-      sendButtons: async (_chat: string, text: string, buttons: InlineButton[][]) => { seen.calls.push(`buttons ${text}`); seen.buttons.push(buttons); return 2; },
+      sendButtons: async (_chat: string, text: string) => { seen.calls.push(`buttons ${text}`); return 2; },
     },
   } as unknown as Ctx;
   return { ctx, seen };
@@ -66,15 +66,25 @@ describe('waste review', () => {
     expect(readState(ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
   });
 
-  it('records the review as a closed issue and posts the bottleneck with a button that queues the change', async () => {
+  it('puts the period before beside the numbers, so a jump shows', async () => {
+    appendLedger(HOME, { kind: 'job', id: 'old', stage: 'design', issue: 3, startedAt: '2026-09-28T10:00:00Z', endedAt: '2026-09-28T11:00:00Z', outcome: 'failed', agents: [{ model: 'opus', costUsd: 2, minutes: 60 }] });
+    const { ctx, seen } = fakeCtx(BRIEF);
+    await runStage(ctx);
+    const [now, before] = seen.numbers.split('## Previous period');
+    expect(now).toContain('2 jobs, $0.50 of agent cost.');
+    expect(before).toContain('Factory numbers for 2026-09-26 to 2026-10-03.');
+    expect(before).toContain('- design: 1 runs, 1 failed');
+  });
+
+  it('records the review as a closed issue and hands it to Hermes, with no chat post', async () => {
     const { ctx, seen } = fakeCtx(BRIEF);
     await runStage(ctx);
     expect(seen.issues[0].title).toBe('Factory review 2026-10-10');
     expect(seen.issues[0].labels).toEqual(['factory-review']);
-    expect(proposalOf(seen.issues[0].body)).toBe('Set FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.');
+    expect(seen.issues[0].body).toContain('## Proposed change\n\nSet FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.');
     expect(seen.calls).toContain('close 301 completed');
-    expect(seen.calls.at(-1)).toContain('Bottleneck: Cards waited 204 min for the verify queue.');
-    expect(seen.buttons).toEqual([[[{ text: 'Queue as change', data: 'factory:waste:301' }]]]);
+    expect(seen.calls.filter((call) => call.startsWith('message') || call.startsWith('buttons'))).toEqual([]);
+    expect(readFileSync(reviewPendingPath(HOME), 'utf8')).toBe('#301 https://github.com/o/r/issues/301\n');
   });
 
   it('hands the agent the expensive issues and the earlier reviews, since agents have no GitHub login', async () => {
@@ -90,12 +100,11 @@ describe('waste review', () => {
     expect(fillPrompt('waste', { days: '7', ledger: 'l', logs: 'g', state: 's' })).not.toContain('gh issue');
   });
 
-  it('posts one line and no button when no waste stands out', async () => {
+  it('hands a review with no waste to Hermes too, since the numbers may still jump', async () => {
     const { ctx, seen } = fakeCtx('BOTTLENECK: none\n');
     await runStage(ctx);
-    expect(seen.buttons).toEqual([]);
-    expect(seen.calls.at(-1)).toBe('message 🔎 Weekly factory review: no waste stands out.\nhttps://github.com/o/r/issues/301');
-    expect(() => proposalOf(seen.issues[0].body)).toThrow('proposed no change');
+    expect(seen.issues[0].body).toContain('## Proposed change\n\nNo change proposed.');
+    expect(existsSync(reviewPendingPath(HOME))).toBe(true);
   });
 
   it('fails loud when the agent wrote no brief, and still waits a full period for the next review', async () => {

@@ -9,6 +9,7 @@ import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
+import type { UtilityEffectType } from "../data/parts";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -26,6 +27,7 @@ export type PartInstance = {
   defId: string;
   hp: number;
   gun?: GunState; // weapons only
+  charge?: ChargeState; // active utilities and claymore rams only
   wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
   rebuilt?: true; // a junk part rebuilt to the last wear step, which cannot be rebuilt again; see src/sim/wear.ts
 };
@@ -33,6 +35,10 @@ export type PartInstance = {
 // A weapon's fire state. cooldown counts turns to the next shot. reloadWork counts turns toward a full magazine,
 // and firing resets it. See src/sim/combat.ts.
 export type GunState = { cooldown: number; ammo: number; reloadWork: number };
+
+// An active utility's or a claymore ram's charge. reload counts turns until it can act again. armed: a claymore ram
+// waits for a crash. See src/sim/utility.ts.
+export type ChargeState = { reload: number; armed?: true };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
@@ -57,6 +63,11 @@ export type GridItem =
 // 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
 export type Aim = "body" | string;
 export type WeaponOrder = { targetId: string; aim: Aim };
+// An order to use a utility this turn: on the truck itself, or at a ground point in tiles. It acts once and is then
+// cleared. See src/sim/utility.ts.
+export type UtilityOrder =
+  | { kind: 'self' }
+  | { kind: 'point'; pos: Vec };
 
 export type Pose = { x: number; y: number; heading: number };
 
@@ -76,7 +87,10 @@ export type SalvageStock = {
   supplies?: number; // supply units that go to driver stores, not the grid
   pile?: Pile; // loot lying loose on the ground, drawn as a heap. Sites and wrecks draw their own stock.
   emptySince?: number; // turn a daily check first found a road wreck looted; see renewSalvage in src/sim/salvage.ts
+  hidden: HiddenLoot; // loot not found yet; a search reveals it into the fields above, which are the revealed loot
 };
+
+export type HiddenLoot = { goods: Record<string, number>; parts: PartInstance[]; fuel: number; supplies: number };
 
 // A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
 // as searched, and `basis` keeps the average paid per unit of each good on it, so taking them back restores their
@@ -127,7 +141,7 @@ export type Contact = {
   vehicleId: string;
   center: Vec;
   radius: number;
-  sources: ("sound" | "dust" | "radio" | "beacon" | "mark")[]; // mark: the spotter perk tracks the vehicle
+  sources: ("sound" | "dust" | "radio" | "beacon" | "mark" | "flare")[]; // mark: the spotter perk tracks the vehicle; flare: its flare at night
   loudness: number | null;
 };
 
@@ -142,6 +156,19 @@ export type DustCloud = {
   range: number; // tiles it can be seen from once risen, set by the speed and ground that raised it
   screen?: true; // raised under the dust screen perk, so it blocks sight lines; see src/sim/vision.ts
 };
+
+// World effects of utilities. Each lasts turnsLeft more turns and is gone at 0. Positions and radii are in tiles.
+// source is the vehicle id that made it.
+// A smoke cloud spoils aim through it. See src/sim/hazards.ts.
+export type SmokeCloud = { id: string; source: string; pos: Vec; r: number; turnsLeft: number };
+// A caltrop field hurts each truck that drives through it once; hit lists them. An oil patch cuts wheel grip.
+// See src/sim/hazards.ts.
+export type GroundField = { id: string; kind: 'caltrops' | 'oil'; source: string; pos: Vec; r: number; turnsLeft: number; hit: string[] };
+// A burning flare lights the ground within r at night. See src/sim/hazards.ts.
+export type Flare = { id: string; source: string; pos: Vec; r: number; turnsLeft: number };
+// A harpoon line from a part on one truck to a part on another. length in meters, the anchor distance at the hit.
+// See src/sim/harpoon.ts.
+export type HarpoonLine = { id: string; from: string; fromPart: string; to: string; toPart: string; length: number; turnsLeft: number };
 
 // Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
 export type WeatherEvent =
@@ -173,7 +200,8 @@ export type NpcActivity = {
   reason: string;
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
-  perceived?: number; // the turn a fight last saw or detected its target
+  perceived?: number; // a flee: the turn it last saw, heard or took a hit from anything hostile
+  worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
 };
@@ -184,7 +212,10 @@ export type NpcBrain = {
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
+    tracks: Record<string, Track>; // trucks the driver senses or remembers, by id; only src/sim/tracks.ts keeps them
     hurt: number; // part damage taken last turn
+    fullAt?: number; // free cells when a sale would have made room for a loot the hold could not take, until the hold frees more
+    unfit?: string[]; // loot the driver reached and found would not fit its truck even after a sale
     // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
     // is true once the driver decided on the latest shots. Attackers may always be fired back at.
     attackers: Record<string, boolean>;
@@ -210,6 +241,12 @@ export type NpcBrain = {
     memories: Memory[];
 };
 
+// A truck a driver senses: where and on which turn it last saw or heard it, whether it has seen it while tracked, and
+// the turn it came in sight, null while out of sight. choice is what the driver chose on it as a hostile, null before
+// a choice, and chosenInSight whether it chose with the truck in sight. See src/sim/tracks.ts.
+export type TrackChoice = 'keep' | 'fight' | 'flee' | 'investigate';
+export type Track = { at: Vec; turn: number; sighted: boolean; seenSince: number | null; choice: TrackChoice | null; chosenInSight: boolean };
+
 // A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
 // prices: a shop's standing pressure for each good it trades, when the driver did business there.
 export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
@@ -230,10 +267,12 @@ export type Vehicle = {
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
+  utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses
+  shutDown?: { from: number; until: number }; // the turns an emitter pulse shuts the truck down, both included; set at the end of the pulse turn and cleared after until; see settleShutdowns in src/sim/utility.ts
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
+  lastHitBy: string | null; // vehicle id of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
@@ -349,6 +388,7 @@ export type Player = {
   knockoutTurns: number; // turns spent in the current knockout
   god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   fullLog: boolean; // debug: the log shows events the player cannot see or hear; see src/ui/format.ts
+  frozen: boolean; // debug: NPC trucks have no driver: they roll free, hold fire, use no utilities and raise no radio calls; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
@@ -384,8 +424,8 @@ export type GameEvent =
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
-  | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
+  | { t: 'cargoSpilled'; vehicle: string; part: string; pile: string; units: number }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'npcKnockout'; vehicle: string; by: string }
   | { t: 'npcWake'; vehicle: string }
@@ -420,10 +460,23 @@ export type GameEvent =
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
   | { t: 'aidStarted'; giver: string; receiver: string }
-  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'lapsed' | 'broken' }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'done'; price: number } // money moved from client to patcher
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
-  | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
+  | { t: 'info'; text: string; debug?: true } // a debug line shows only with the full log flag
+  // A utility acted: at a truck, at a point, or on its own truck. effect 'claymore' arms a claymore ram.
+  | { t: 'utility'; vehicle: string; part: string; effect: UtilityEffectType | 'claymore'; point: Vec | null }
+  | { t: 'lineTorn'; line: string; vehicle: string; part: string; damage: number } // the harpoon line tore; part on vehicle took damage
+  | { t: 'pulse'; vehicle: string; pos: Vec; hit: string[] } // an emitter pulse and the trucks it shut down
+  // The claymore ram part on vehicle went off at pos, the ram's face, against other, a truck or an obstacle. hits are
+  // other's parts, selfHits vehicle's own struck side.
+  | { t: 'claymore'; vehicle: string; part: string; other: string; pos: Vec; hits: PartHit[]; selfHits: PartHit[] }
+  // An armed claymore ram broke on vehicle and its charge blasted vehicle around pos. hits are vehicle's parts.
+  | { t: 'claymoreCookOff'; vehicle: string; part: string; pos: Vec; hits: PartHit[] }
+  | { t: 'caltrops'; vehicle: string; field: string; source: string; hits: PartHit[] } // vehicle drove into source's caltrop field; hits are its wheels
+  // A search turn revealed loot in a stock.
+  | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };
 
 // A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
 // dug again. See src/sim/craters.ts.
@@ -452,4 +505,9 @@ export type World = {
   weather: WeatherEvent[];
   dustClouds: DustCloud[];
   states: NpcState[];
+  smoke: SmokeCloud[];
+  fields: GroundField[];
+  flares: Flare[];
+  lines: HarpoonLine[];
+  searchRng: Rng; // the stream for search reveals, so a search never shifts other randomness; see src/sim/search.ts
 };

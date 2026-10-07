@@ -46,3 +46,5 @@ After a check failure this is the last round. If the checks fail again, the card
 
 If the fix needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.

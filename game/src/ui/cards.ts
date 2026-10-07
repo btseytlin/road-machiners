@@ -3,8 +3,9 @@
 // Stat values are in display units, so a difference reads the same as the value.
 
 import { RULES } from "../data/rules";
+import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
+import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
@@ -45,6 +46,7 @@ const ART = {
   parts:
     '<circle cx="20" cy="20" r="8"/><circle cx="20" cy="20" r="3"/><path d="M20 4v6M20 30v6M4 20h6M30 20h6M9 9l4 4M27 27l4 4M31 9l-4 4M9 31l4-4"/>',
   scanner: '<path d="M8 30q-4-16 12-22l6 12zM17 19l9-9M26 10l4-4M20 30v6M12 36h16"/>',
+  utility: '<path d="M6 14h28v20H6zM10 14V8h20v6M20 18v12M14 24h12M30 8l5-4"/>',
   damage: '<path d="M20 3l4 10 11-3-7 9 8 8-11-1-1 11-5-9-7 8v-11l-10-3 10-5-4-10 10 5z"/>',
   pen: '<path d="M22 5v30M4 20h28M26 14l7 6-7 6"/>',
   range: '<path d="M4 20h32M4 13v14M36 13v14M12 17v6M20 16v8M28 17v6"/>',
@@ -94,6 +96,7 @@ const ICON_NAMES: Record<IconName, string> = {
   tools: "Machine tools",
   parts: "Parts",
   scanner: "Radio scanner",
+  utility: "Utility",
   damage: "Damage",
   pen: "Penetration",
   range: "Range",
@@ -135,9 +138,16 @@ export function createIcon(name: IconName): HTMLElement {
   return icon;
 }
 
+// The needle's share of the dial. A truck with no top speed, as one shut down by an emitter pulse, shows full while
+// it rolls and empty at rest.
+export function dialShare(speed: number, maxSpeed: number): number {
+  if (maxSpeed <= 0) return speed === 0 ? 0 : 1;
+  return Math.min(Math.abs(speed) / maxSpeed, 1);
+}
+
 export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   const dial = el("span", { class: "speed-dial", "aria-hidden": "true" });
-  const angle = -120 + Math.min(Math.abs(speed) / maxSpeed, 1) * 240;
+  const angle = -120 + dialShare(speed, maxSpeed) * 240;
   dial.innerHTML = `<svg viewBox="0 0 100 100"><circle class="dial-rim" cx="50" cy="50" r="47"/><circle class="dial-face" cx="50" cy="50" r="41"/><path class="dial-ticks" d="M17 68A38 38 0 1 1 83 68"/><path class="dial-needle" d="M50 50V17" transform="rotate(${angle} 50 50)"/><circle class="dial-pin" cx="50" cy="50" r="4"/></svg>`;
   return dial;
 }
@@ -396,7 +406,8 @@ export type StatIcon =
   | "blast"
   | "heat"
   | "patch"
-  | "tall";
+  | "tall"
+  | "clock";
 
 // better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
@@ -440,7 +451,24 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
   scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
   store: storeStats,
   core: () => [],
+  utility: utilityStats,
 };
+
+// A passive utility shows only its mass.
+function utilityStats(part: PartInstance): Stat[] {
+  const d = wornDef<UtilityDef>(part);
+  const reload = d.reload === null ? [] : [stat("reload", "Turns to recharge", d.reload, "t", "less")];
+  const lasts = "turns" in d.effect ? [stat("clock", "Turns it lasts", d.effect.turns, "t", "more")] : [];
+  return [...reload, ...utilityReach(d), ...lasts];
+}
+
+// How far a utility sends its effect, the length of its oil slick, or the radius it covers around the truck.
+function utilityReach(d: UtilityDef): Stat[] {
+  const e = d.effect;
+  if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
+  if (e.type === "oil") return [stat("range", "Slick length", meters(oilSlickLength()), "m", "more")];
+  return "radius" in e ? [stat("range", "Radius", meters(e.radius), "m", "more")] : [];
+}
 
 function storeStats(part: PartInstance): Stat[] {
   const d = partDefOf<StoreDef>(part);
@@ -482,6 +510,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
     stat("power", "Power draw", d.draw, "", "less", 1),
+    ...(d.line ? [stat("clock", "Turns the line holds", d.line.turns, "t", "more")] : []),
   ];
 }
 

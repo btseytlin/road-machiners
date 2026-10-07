@@ -5,6 +5,10 @@ import math
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+# Cloudflare's browser check answers urllib's default Python-urllib agent with 403, error 1010.
+# curl/8.0 is the non-browser agent confirmed to pass it on the public dashboard.
+USER_AGENT = 'curl/8.0'
+
 
 def create_status_handler(*, public_url: str, timeout_seconds: float):
     url = urlsplit(public_url)
@@ -19,7 +23,9 @@ def create_status_handler(*, public_url: str, timeout_seconds: float):
     def read_status(args: dict, **kwargs) -> str:
         if args:
             raise ValueError('factory_status takes no arguments')
-        request = Request(endpoint, headers={'Accept': 'application/json', 'Cache-Control': 'no-cache'})
+        request = Request(endpoint, headers={
+            'Accept': 'application/json', 'Cache-Control': 'no-cache', 'User-Agent': USER_AGENT,
+        })
         with urlopen(request, timeout=timeout_seconds) as response:
             body = response.read().decode('utf-8')
         if not isinstance(json.loads(body), dict):

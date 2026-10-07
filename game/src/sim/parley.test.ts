@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
 import { SALVAGE } from '../data/salvage';
-import { NPCS, type TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision, wreckVehicle } from './combat';
 import { advanceContracts } from './market';
 import { update } from './world';
@@ -12,7 +12,7 @@ import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, standDownTo, yieldTo } from './parley';
-import { hasCargo, lootBlocker, looterOf } from './salvage';
+import { hasCargo, lootBlocker, looterOf, emptyHidden } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -227,7 +227,7 @@ describe('NPC pleas to NPCs', () => {
     const gone = npcAt(w, 'raiders', ['raider'], 200, 200);
     feud(w, a, b);
     feud(w, a, gone);
-    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened' });
+    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened', perceived: w.turn - NPC_BEHAVIOR.fleeCalmTurns - 1 });
     a.brain!.hurt = 5;
     a.lastHitBy = b.id;
     thinkNpc(w, a);
@@ -422,7 +422,7 @@ describe('warning a looter off', () => {
   // The parked player at 30,30 beside a road wreck that a scavenger parked on its other side searches.
   function contested(): { w: World; npc: Vehicle; wreckId: string } {
     const w = quietWorld();
-    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);

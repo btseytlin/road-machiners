@@ -130,12 +130,53 @@ export function startWorld(seed: number, kit = 'standard', rank = 0): World {
 // events is everything the bot's commands and the turn raised on the way to next.
 export type PlayedTurn = { before: World; orders: BotTurn; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
 
-// The money the turn moved by itself, after the bot's commands: contract pay, else tow, patch and escort fees.
-function turnLedger(orders: BotTurn, next: World): Ledger {
+// Money sums differ by float rounding only below this.
+const MONEY_EPSILON = 1e-6;
+
+// The money the turn moved by itself, after the bot's commands, booked by the events that moved it: contract pay and
+// penalties as contracts, tow, patch and escort pay as fees. Money no event explains throws, so a new source in the
+// turn pipeline cannot hide under another key.
+export function turnLedger(orders: BotTurn, next: World): Ledger {
   const ledger = { ...orders.ledger };
+  let explained = 0;
+  for (const e of next.events) {
+    const move = playerMove(e, next.player.vehicleId);
+    if (!move) continue;
+    ledger[move.key] += move.amount;
+    explained += move.amount;
+  }
   const moved = next.player.money - orders.world.player.money;
-  ledger[next.events.some((e) => e.t === 'contract') ? 'contracts' : 'fees'] += moved;
+  if (Math.abs(moved - explained) > MONEY_EPSILON) throw new Error(`turn ${next.turn}: the turn moved ${moved} money but its events explain ${explained}, so some money source raises no event`);
   return ledger;
+}
+
+type Move = { key: 'contracts' | 'fees'; amount: number };
+
+// The money one event moved for the player. The player's own tow fee has a money event, so towDone counts only when
+// the player pays it.
+function playerMove(e: GameEvent, me: string): Move | null {
+  if (e.t === 'money') return { key: moneyEventKey(e.reason), amount: e.amount };
+  return feeMove(e, me);
+}
+
+function feeMove(e: GameEvent, me: string): Move | null {
+  if (e.t === 'towDone') return e.client === me ? { key: 'fees', amount: -e.fee } : null;
+  if (e.t === 'escortPaid') return paidBetween(e.by, e.client, me, e.fee);
+  if (e.t === 'patch' && e.outcome === 'done') return paidBetween(e.patcher, e.client, me, e.price);
+  return null;
+}
+
+// A fee from payer to payee, as the player sees it, or null when the player is neither.
+function paidBetween(payee: string, payer: string, me: string, fee: number): Move | null {
+  if (payee === me) return { key: 'fees', amount: fee };
+  return payer === me ? { key: 'fees', amount: -fee } : null;
+}
+
+// A money event is a contract's pay or penalty, or the player's own tow fee.
+function moneyEventKey(reason: string): 'contracts' | 'fees' {
+  if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
+  if (reason.startsWith('towing ')) return 'fees';
+  throw new Error(`Money event with an unknown reason "${reason}"`);
 }
 
 function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {
@@ -252,8 +293,12 @@ function storageValue(world: World): number {
   return world.player.storage.reduce((sum, p) => sum + partValue(p), 0);
 }
 
-function cargoValue(v: Vehicle): number {
-  return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * n, 0);
+// The goods the truck holds that are its own. Units a haul contract carries belong to the client, so they are not
+// worth: accepting a haul would raise net worth by their value and delivering it would drop it again.
+function cargoValue(world: World, v: Vehicle): number {
+  const hauled = new Map<string, number>();
+  for (const c of world.player.contracts) if (c.kind === 'haul') hauled.set(c.good, (hauled.get(c.good) ?? 0) + c.units);
+  return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * Math.max(0, n - (hauled.get(good) ?? 0)), 0);
 }
 
 // What the player holds, split by kind. The chassis is its trade-in once repaired, less the whole repair bill, gear
@@ -263,7 +308,7 @@ export type Worth = { money: number; cargo: number; gear: number; storage: numbe
 
 export function worthOf(world: World): Worth {
   const v = playerVehicle(world);
-  return { money: world.player.money, cargo: cargoValue(v), gear: nonCoreTruckValue(v), storage: storageValue(world), chassis: repairedTradeIn(world) - repairCost(world) };
+  return { money: world.player.money, cargo: cargoValue(world, v), gear: nonCoreTruckValue(v), storage: storageValue(world), chassis: repairedTradeIn(world) - repairCost(world) };
 }
 
 function repairedTradeIn(world: World): number {

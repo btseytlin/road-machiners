@@ -57,8 +57,6 @@ function interruptsTravel(event: GameEvent, id: string): boolean {
       return [event.a, event.b].includes(id);
     case "shot":
       return [event.shooter, event.target].includes(id);
-    case "guardShot":
-      return event.target === id;
     default:
       return stopsVehicle(event, id);
   }
@@ -287,6 +285,17 @@ export class Travel {
   }
 }
 
+// A turn the worker failed. It carries the worker's stack and the drive the turn started from, so an error report can rerun the turn.
+export class TurnFailure extends Error {
+  constructor(workerStack: string, readonly drive: DriveSnapshot) {
+    const head = workerStack.split("\n")[0];
+    const named = /^(\w*Error): (.*)$/.exec(head);
+    super(named ? named[2] : head);
+    if (named) this.name = named[1];
+    this.stack = workerStack;
+  }
+}
+
 export class TurnPreparation {
   private worker: Worker | null = null;
   private terrain: World["terrain"] | null = null;
@@ -295,6 +304,7 @@ export class TurnPreparation {
   private pending: {
     id: number;
     before: World;
+    drive: DriveSnapshot;
     ready: PreparedTurn | null;
     failure: string | null;
   } | null = null;
@@ -338,7 +348,7 @@ export class TurnPreparation {
   prepareFrom(world: World, saved: DriveSnapshot): void {
     if (this.pending?.before === world) return;
     const copy = { ...saved, snapshot: saved.snapshot.slice() };
-    this.pending = { id: this.post(world, copy), before: world, ready: null, failure: null };
+    this.pending = { id: this.post(world, copy), before: world, drive: saved, ready: null, failure: null };
   }
 
   private post(world: World, saved: DriveSnapshot): number {
@@ -366,7 +376,7 @@ export class TurnPreparation {
     if (pending?.before !== world) return null;
     if (pending.failure) {
       this.pending = null;
-      throw new Error(pending.failure);
+      throw new TurnFailure(pending.failure, pending.drive);
     }
     if (!pending.ready) return null;
     this.pending = null;

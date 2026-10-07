@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, iconSvg, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, iconSvg, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -64,6 +64,16 @@ describe("the part a shop card compares with", () => {
 
   it("is nothing for the selected part's own card", () => {
     expect(compareBase(part("turbine"), part("turbine"))).toBeNull();
+  });
+});
+
+describe("the speed dial's needle", () => {
+  it("shows the speed's share of the top speed, capped at full", () => {
+    expect([dialShare(3, 6), dialShare(-3, 6), dialShare(9, 6)]).toEqual([0.5, 0.5, 1]);
+  });
+
+  it("is a number for a truck with no top speed, as one shut down: full while rolling, empty at rest", () => {
+    expect([dialShare(4, 0), dialShare(0, 0)]).toEqual([1, 0]);
   });
 });
 
