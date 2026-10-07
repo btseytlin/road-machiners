@@ -61,7 +61,7 @@ import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { stormTintStyle, WeatherView } from "./render/weather";
 import { stormShare } from "../sim/weather";
 import { ZonesView } from "./render/zones";
-import { daylightAt, lightScene, VehicleLights, sunLight, vehicleLampsOn } from "./render/daylight";
+import { daylightAt, enableSunShadows, lightScene, VehicleLights, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
@@ -195,8 +195,7 @@ export class Game {
     setTimeout(() => this.travel.warm(this.world, this.drive));
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    enableSunShadows(this.renderer);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
