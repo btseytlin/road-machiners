@@ -92,9 +92,9 @@ describe('the territory layer', () => {
     const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
-    // The orchard grades its own ground, so heights are compared over the Fallen Sun's.
+    // The orchard grades its own ground and Glass Flats seats its pieces inside the Fallen Sun's bounding circle, so heights are compared over its outline.
     const w = full.size + 1;
-    const sunCorners = Array.from(full.heights.keys()).filter((k) => dist({ x: k % w, y: Math.floor(k / w) }, fallenSun.pos) < fallenSun.radius + 1);
+    const sunCorners = Array.from(full.heights.keys()).filter((k) => siteGap(fallenSun, { x: k % w, y: Math.floor(k / w) }) < 1);
     expect(sunCorners.map((k) => full.heights[k])).toEqual(sunCorners.map((k) => solo.heights[k]));
   });
 
