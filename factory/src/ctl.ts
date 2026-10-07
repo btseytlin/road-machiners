@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from 'node:path';
 import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, type DropQueue } from './control';
 import { pauseFile, pausedReason } from './pause';
+import { repairClone } from './repair-clone';
 import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
 import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
@@ -34,6 +35,7 @@ const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> =
   retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, gives the playtest its runs back and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
+  'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs a pause and no running job. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
 };
 
 const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
@@ -99,6 +101,16 @@ function writeCommand(ctx: Ctx, name: string, args: string[]): void {
   console.log(`Wrote ${path}. It applies on the next tick.`);
   const paused = pausedReason(ctx.cfg.home);
   if (paused !== null) console.log(`The factory is paused: ${paused}. The order applies when the pause is lifted.`);
+}
+
+async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
+  const by = takeFlag(args, '--by');
+  const reason = takeFlag(by.rest, '--reason');
+  const backupMerge = reason.rest.includes('--backup-merge');
+  const [n, ...extra] = reason.rest.filter((arg) => arg !== '--backup-merge');
+  if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
+  const actor = resolveActor(ctx, by.value, false);
+  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
 }
 
 async function status(ctx: Ctx): Promise<void> {

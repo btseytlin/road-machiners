@@ -80,11 +80,12 @@ Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <me
 - `factory merge-change <id>` merges a factory change PR into `main`.
 - `factory pause-card N` holds one card without a failure: its job stops, its work stays, and no job starts on it. `factory resume-card N` lifts the hold, and its stage continues.
 
-These three act at once, not on the next tick.
+These four act at once, not on the next tick.
 
 - `factory retry N` removes the stuck label and clears the card's failure.
 - `factory pause <reason>` pauses the factory.
 - `factory resume` lifts the pause.
+- `factory repair-clone N --by <who> --reason <why>` replaces a broken work clone of a card under a pause with no running job, and keeps the old one as a backup. `docs/operations.md` has the rules.
 
 Orders and authority:
 
@@ -129,7 +130,7 @@ Common fixes:
 - Move a card: `factory move N <position>`. By hand: `gh project item-edit` on Project 2 of owner `btseytlin`, with ids from `gh project item-list` and `gh project field-list`. A hand move leaves the other stores stale, so do it under a pause and fix them too.
 - Drop a queued action: `factory drop <queue> <id>`. By hand: edit `/factory/home/state/state.json` with `jq`, as Changing factory state says.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes. Prefer `factory merge N` for a merge.
-- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`, named `hermes-<name>`. The tick deletes folders named like its own clones, such as `issue-N`, and leaves other names alone. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
+- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`, named `hermes-<name>`. The tick deletes folders named like its own clones, such as `issue-N`, and leaves other names alone. Then run `factory repair-clone N`, so the next stage starts clean. Never delete the issue work clone by hand.
 - A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Drop the edit, or bring it to `main` with `factory_queue_change` when it looks worth keeping. You decide which, and record it in an issue comment or the chat. A failed build leaves the running release in place, and each update run tries again.
 
 ## Server health
