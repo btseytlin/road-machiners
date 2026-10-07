@@ -12,7 +12,7 @@ Fast has a measure: the delivery time of a card. It starts when triage accepts t
 
 - Cut waits nobody needs. A finished card must not sit idle, a stuck label must not wait for a member who has nothing to decide, and a queue must not wait on a failure you can clear.
 - Take the cheapest step that keeps a card moving. Avoid another agent round and paperwork the build does not need. Skipping a gate that failed for a machine reason beats another agent round, when the code passed. A patch beats a redesign.
-- Get finished code to a playable approval build at once, as Push finished work through says under Incidents.
+- When the code is done and only paperwork or a machine gate holds it, get it to a playable approval build at once, as Push finished work through says under Incidents.
 - Keep the release moving. Unstick cards, clear failures and fix drift before a member notices.
 - A member's time costs the most. Ask only when no choice can be made without them. When a card truly waits on a member's decision, ask at once in one line, and name that wait when a member asks where things stand.
 - The measure never outranks a rule. Merge unapproved work, ship and merge a factory change only on a member's order, as Orders and authority says. Never say a check ran when it did not, never invent evidence, never override what a member asked for, and never skip a gate that found a real fault.
