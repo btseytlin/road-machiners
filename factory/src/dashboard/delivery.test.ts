@@ -52,7 +52,7 @@ describe('summarizeDelivery', () => {
       card(2, 26, 'redesign', 'Design'),
       ...straight(3, 60),
     ];
-    const jobs = [job(2, 'design', 'failed', 39), job(2, 'design', 'died', 38.5), job(2, 'design', 'done', 38), job(2, 'verify', 'timeout', 34), job(3, 'checks', 'stopped', 20)];
+    const jobs = [job(2, 'design', 'failed', 39), job(2, 'design', 'died', 38.5), job(2, 'design', 'done', 38), job(2, 'verify', 'timeout', 34), job(3, 'checks', 'stopped', 20), job(3, 'implement', 'held', 21)];
     const summary = summarizeDelivery(lines, jobs, NOW, 7);
     expect(loop(summary, 'questions')).toEqual({ step: 'questions', events: 1, issues: 1 });
     expect(loop(summary, 'rebuild').events).toBe(1);
@@ -63,6 +63,7 @@ describe('summarizeDelivery', () => {
     expect(summary!.retries.find((row) => row.stage === 'design')).toEqual({ stage: 'design', runs: 2, issues: 1 });
     expect(summary!.retries.find((row) => row.stage === 'verify')!.runs).toBe(1);
     expect(summary!.retries.find((row) => row.stage === 'checks')!.runs).toBe(0);
+    expect(summary!.retries.find((row) => row.stage === 'implement')?.runs ?? 0).toBe(0);
     // The first acceptance starts the lead time. Issue 2 is open again in Design, so it is open since that acceptance.
     expect(summary!.lead.count).toBe(1);
     expect(summary!.lead.open).toBe(1);
