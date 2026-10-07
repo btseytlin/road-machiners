@@ -86,7 +86,7 @@ Every tick writes `/factory/home/health` with its time, the free disk space and 
 - `disk low`. Free space is under the minimum, so no job starts. Fix it yourself, then respond with [SILENT].
   1. Find what grew with `du -sh /opt/factory/home/* /opt/factory/home/work/* /var/lib/docker` through `factory-host`.
   2. Pause the factory and wait until `jobs` is empty.
-  3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
+  3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, archived transcripts in `transcripts/` older than `FACTORY_TRANSCRIPT_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
   4. Never delete these: the clone of an issue whose card is open, since its `.factory-tasks/` holds the design, plus `sessions/`, `state/`, `committee/`, `inbox/`, `media/`, `release-candidate` while a release is open, and the images in use.
   5. Remove the pause. Escalate to the committee when free space stays under the minimum after the cleanup. Name what holds the space.
 - `memory low`. Available memory is under the minimum, so jobs swap or the kernel may kill a container. No job is blocked, and the line closes by itself once memory frees.
@@ -134,7 +134,8 @@ The server runs the factory from GitHub's `main` and deploys each new commit wit
 
 A member may ask for one-off work that needs running code, like a simulation, a balance check or an investigation. Answer a current-status question with `factory_status`, and use the logs and the board to investigate a cause. Queue an ad hoc task only when the answer needs real work, with the `factory_queue_task` tool. Do not guess the answer.
 
-- The agent works in a clone of the game repo on `dev`, with the state file and the job logs read only. It may build any tool it needs.
+- The agent works in a clone of the game repo on `dev`, with the state file, the job logs, the ledger and the archived agent transcripts read only. It may build any tool it needs.
+- A question about what factory agents did, where they got stuck or what cost the most is an ad hoc task. The agent reads the transcripts of the last `FACTORY_TRANSCRIPT_DAYS` days. Name the issues, stages or period to look at.
 - Write the request so a coding agent can act on it alone, since it sees nothing of this chat. Say what to run, what to measure and what to report. Queue one request per task.
 - Tell the member in one sentence that it is queued and the report will reply to their message, with any files under it.
 - The factory delivers each file to the member's chat as a Telegram document. Never publish such a file yourself or put one behind a link, even when asked. Reports hold private data.

@@ -168,6 +168,7 @@ async function analyzeWorld(name, path) {
   const flaps = flapping(events);
   if (flaps.length > 0) console.log(`flapping: ${flaps.slice(0, 12).join('; ')}`);
   printPopulation(lines);
+  printOffRoad(lines);
   printNpcDeaths(lines);
 }
 
@@ -204,6 +205,22 @@ function printPopulation(lines) {
     const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} ($${Math.round(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
     console.log(`turn ${snap.t}: ${text}`);
   }
+}
+
+// Moving raiders in the snapshots: the share on a road of those that keep off roads, by top goal, against the share of
+// healthy raiders. A stranded raider shows as stranded whatever its goal.
+function printOffRoad(lines) {
+  const moving = lines.flatMap((l) => l.trucks ?? []).filter((v) => v.faction === 'raiders' && v.speed > 0);
+  if (moving.length === 0) return;
+  const share = (vs) => `${vs.filter((v) => v.onRoad).length}/${vs.length} on road`;
+  const by = Map.groupBy(moving.filter((v) => v.offRoad), offRoadReason);
+  const off = [...by.entries()].map(([why, vs]) => `${why} ${share(vs)}`).join(', ') || 'none';
+  console.log(`raiders keeping off roads: ${off}; healthy raiders ${share(moving.filter((v) => !v.offRoad))}`);
+}
+
+function offRoadReason(v) {
+  const top = v.goals.at(-1)?.split(':')[0];
+  return top === 'retreat' || top === 'flee' ? top : 'stranded';
 }
 
 // Every truck lost or knocked out, with the turn and who did it.

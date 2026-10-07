@@ -12,7 +12,7 @@ import { findRoadWreckSpot, isBreakable, propReach } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { findSpot, goodsCount, gridOf, isMounted, mountedParts, MOUNT_CELLS, type Spot } from './grid';
 import { addGoods, cargoMassRoom, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
@@ -24,7 +24,8 @@ import { cancelJob, startJob } from './jobs';
 import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { canUseSite, townAt } from './sites';
+import { canUseSite } from './sites';
+import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
@@ -218,6 +219,14 @@ export function wreckStockId(vehicleId: string): string {
 
 function isTruckWreck(stock: SalvageStock): boolean {
   return stock.id.startsWith(TRUCK_WRECK);
+}
+
+// A part a truck has mounted, or had mounted until its wreck put the part on the wreck's stock, so this turn's
+// events can still name the parts of a truck they wrecked.
+export function carriedPart(world: World, vehicleId: string, partId: string): PartInstance | undefined {
+  const v = world.vehicles.find((x) => x.id === vehicleId) ?? world.removed.find((x) => x.id === vehicleId);
+  const wreck = world.salvage.find((s) => s.id === wreckStockId(vehicleId));
+  return (v && mountedParts(v).find((x) => x.id === partId)) ?? wreck?.parts.find((x) => x.id === partId);
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -454,11 +463,11 @@ function canRegrow(world: World, o: Obstacle): boolean {
 // Whether a thing reaching `reach` tiles around pos may appear or vanish unseen: no part of it lies in the player's
 // gray vision and no truck stands on it. Broken props and craters both wait for this.
 export function canVanish(world: World, pos: Vec, reach: number): boolean {
-  return dist(playerVehicle(world).pos, pos) > grayRadius(world, pos) + reach && clearOfVehicles(world, pos, reach);
+  return dist(playerVehicle(world).pos, pos) > grayRadius(world) + reach && clearOfVehicles(world, pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
@@ -486,7 +495,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 // Refit turns to move an item off the truck onto a spot: one part-worth to unmount it and one to mount it.
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
-  const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
+  const garage = looter.id === world.player.vehicleId && shopAt(world) !== null;
   return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 

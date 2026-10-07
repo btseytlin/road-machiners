@@ -152,6 +152,7 @@ export type WeatherEvent =
       radius: number;
       vel: Vec;
       turnsLeft: number;
+      born: number; // world turn it spawned on; its strength builds from here, see stormStrength()
     }
   | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
@@ -203,7 +204,8 @@ export type NpcBrain = {
     targetSeen?: { id: string; turn: number; pos: Vec; heading: number; speed: number };
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
-    farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
+    // Route points still ahead while far from the player, for the order's dest, and whether they were planned off roads.
+    farRoute?: { dest: Vec; points: Vec[]; offRoad: boolean };
     // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
     memories: Memory[];
 };
@@ -222,6 +224,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  stormExposure: Record<string, number>; // storm id to how far that storm has got into this truck, in (0, 1]; see advanceExposure()
   strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
   stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading
@@ -230,7 +233,7 @@ export type Vehicle = {
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source, for kill credit
+  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
@@ -338,7 +341,7 @@ export type Player = {
   headlights: boolean; // the player's headlight switch; NPC lamps follow the clock, see src/three/render/daylight.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
-  storage: PartInstance[]; // spare parts kept in town garages, usable in any town
+  storage: PartInstance[]; // spare parts kept in garage storage, reachable at any shop
   contracts: Contract[]; // contracts taken and not yet ended; see src/sim/market.ts
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
