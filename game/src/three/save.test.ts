@@ -267,7 +267,7 @@ describe('local game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const npc = world.vehicles.find((v) => v.brain);
     if (!npc?.brain) throw new Error('The start world needs an NPC');
-    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }] };
+    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }], offRoad: false };
     saveWorld(storage, { ...world, turn: 21 }, 20, 1000);
     expect(JSON.parse(storage.getItem('roam.save')!).world).not.toHaveProperty('terrain');
     const loaded = loadWorld(storage, 'auto', TEST_MAP)!;

@@ -202,7 +202,8 @@ export type NpcBrain = {
     targetSeen?: { id: string; turn: number; pos: Vec; heading: number; speed: number };
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
-    farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
+    // Route points still ahead while far from the player, for the order's dest, and whether they were planned off roads.
+    farRoute?: { dest: Vec; points: Vec[]; offRoad: boolean };
     // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
     memories: Memory[];
 };

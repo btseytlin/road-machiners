@@ -18,6 +18,7 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -295,5 +296,18 @@ describe('save migration 12 to 13', () => {
     const next = MIGRATIONS[12](FORMAT_2_12);
 
     expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  const next = MIGRATIONS[13](FORMAT_2_13);
+
+  it('marks every far route of a truck in play or removed as planned with roads', () => {
+    const route = (v: (typeof FORMAT_2_13.vehicles)[number]) => ({ ...v, brain: { ...v.brain, farRoute: { ...v.brain!.farRoute, offRoad: false } } });
+    expect(next).toEqual({
+      ...FORMAT_2_13,
+      vehicles: [FORMAT_2_13.vehicles[0], route(FORMAT_2_13.vehicles[1]), FORMAT_2_13.vehicles[2]],
+      removed: [route(FORMAT_2_13.removed[0])],
+    });
   });
 });
