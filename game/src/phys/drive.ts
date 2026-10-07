@@ -46,7 +46,7 @@ export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 // route is the rest of the route driven last turn, so a driver keeps following it instead of planning
 // the whole way again every turn.
 // ahead holds the drive-through point that was ahead of the nose on the last leg at the last step.
-// stall holds the seconds the truck has pushed forward at a point behind it without moving.
+// stall holds the seconds the truck has pushed forward without moving.
 // backFrom is the point, in tiles, where the current back-out from a blockage began, or null.
 // airborne is true when no wheel touched the ground at the last step, so a jump that spans two turns still lands.
 type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number; backFrom: Vec | null; airborne: boolean };
@@ -650,18 +650,15 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
   return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
-// Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
-// Reason one: backsToDestination allows it. It starts below reverseBelow and holds while the rule holds.
-// Reason two: something in front stopped it. It backs RULES.reverse.distance tiles from where the back-out
-// began, then tries nose first again. Any other point behind turns the truck around nose first.
+// Whether the truck backs up this step, for one of two reasons.
+// Reason one: the aim is behind the nose and backsToDestination allows it. It starts below reverseBelow and holds
+// while the rule holds.
+// Reason two: something in front stopped it, wherever the aim lies. A truck that turns toward an aim ahead can grind
+// along a rock at a crawl, so pushing without moving counts as blocked too. It backs RULES.reverse.distance tiles from
+// where the back-out began, then tries nose first again. Any other point behind turns the truck around nose first.
 // at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
 function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
-  if (Math.abs(ang) <= Math.PI / 2) {
-    c.mem.stall = 0;
-    c.mem.backFrom = null;
-    return false;
-  }
-  if (backsToPoint(c, rearAng, far, target, speed)) {
+  if (Math.abs(ang) > Math.PI / 2 && backsToPoint(c, rearAng, far, target, speed)) {
     c.mem.backFrom = null;
     return true;
   }
