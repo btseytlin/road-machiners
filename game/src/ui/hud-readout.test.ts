@@ -23,6 +23,7 @@ import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
 import { dumpOnPile, isRoadWreck } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
+import { oldSpotPicks, oldStockId } from "../sim/old-places";
 import { isLootSpot, territoryAt } from "../sim/territory";
 import { propReach } from "../sim/mapgen";
 import type { Obstacle, World } from "../sim/types";
@@ -113,6 +114,18 @@ describe('loot spot wording', () => {
     expect(stockLabel(w, id)).toBe('Search the wreck');
     w.player.scavenged.push(id);
     expect(stockLabel(w, id)).toBe('Loot the wreck');
+  }, 30_000);
+
+  it.each([
+    ['a building', 'Search', 'Loot'],
+    ['tank hulks', 'Search the wreck', 'Loot the wreck'],
+  ])('reads %s at an old-world loot spot as %s, then %s', (name, search, loot) => {
+    const pick = oldSpotPicks(TEST_MAP).find((p) => (p.type === 'hulks') === (name === 'tank hulks'))!;
+    const { w } = parkedAt((o) => o.id === pick.propId);
+    const id = oldStockId(pick);
+    expect(stockLabel(w, id)).toBe(search);
+    w.player.scavenged.push(id);
+    expect(stockLabel(w, id)).toBe(loot);
   }, 30_000);
 
   it('names the driver blocking a shared spot with a plain Search', () => {
