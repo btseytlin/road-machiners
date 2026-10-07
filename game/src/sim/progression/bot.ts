@@ -18,7 +18,6 @@ import { aimGuns, isSoftTarget } from './aim';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
-import { isTownGuarded } from '../guards';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
@@ -152,10 +151,9 @@ function keepSwitches(o: Orders): void {
   setFire(o, underFire(o.world, o.me));
 }
 
-// In combat and outside the guns of a town gate. Inside them a foe may camp at the gate for hundreds of turns: the
-// guard shoots any truck that fires at a non-raider, so the bot holds its fire there and repairs as a player would.
+// In combat, wherever the bot stands. It fires back at a town gate as anywhere else.
 function underFire(world: World, me: Vehicle): boolean {
-  return inCombat(world, me) && !isTownGuarded(me.pos);
+  return inCombat(world, me);
 }
 
 // Holding fire also drops the aim: an order set while auto fire was on keeps the guns shooting after the switch is off.
@@ -673,7 +671,7 @@ function dangerOf(world: World, foe: Vehicle): number {
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
-// stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
+// stronger foe it runs for the nearest town, where lawmen patrol. Only the hunter fights a foe it can outrun: a won
 // fight still costs repairs, and broken wheels leave the truck for the next raider. A foe that drops out of sight
 // for a turn is still on its tail, so the bot keeps running until the combat ends. The hunter instead follows its
 // goal, which chases the foe it hears. True when the turn's command went to the fight.
@@ -739,9 +737,9 @@ function collectOrHunt(o: Orders): void {
 // A place on the hunter's patrol: a shop, reached at its nearest pad, or a point on the road out of a raider camp.
 type Post = { pos: Vec; shop: Site | null };
 
-// A camp's gate guns shoot every outsider in range, so the hunter waits for raiders leaving it half a gun range
-// beyond that, on the line to the nearest shop.
-const CAMP_STANDOFF = RULES.guards.range * 1.5;
+// Tiles off a camp gate where the hunter waits for raiders leaving it, on the line to the nearest shop, clear of
+// the gate traffic.
+const CAMP_STANDOFF = 18;
 
 // The camp posts, each with the shop nearest to its gate.
 function campPosts(): { post: Post; near: Site }[] {

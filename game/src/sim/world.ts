@@ -22,7 +22,6 @@ import { applyGodMode } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
-import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
@@ -283,7 +282,6 @@ export function endTurn(
     assignAutoOrders(w);
     settleAims(w);
     fireWeapons(w);
-    fireGuards(w);
     consumeSupplies(w);
     applyHazards(w);
     scrapPatch(w);

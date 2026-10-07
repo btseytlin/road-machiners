@@ -276,7 +276,6 @@ describe("automatic travel safety", () => {
   it.each([
     "collision",
     "shot",
-    "guardShot",
     "breakdown",
     "partDisabled",
     "knockout",
@@ -295,13 +294,6 @@ describe("automatic travel safety", () => {
         chance: 1,
         damageChance: 1,
         side: "front",
-        rounds: [],
-      },
-      guardShot: {
-        t: "guardShot",
-        site: "town",
-        from: { x: 0, y: 0 },
-        target: id,
         rounds: [],
       },
       breakdown: { t: "breakdown", vehicle: id, part: "engine" },

@@ -146,7 +146,6 @@ export class CombatScore {
 export function accentOf(e: GameEvent, playerId: string): AccentCue | null {
   if (e.t === "collision") return [e.a, e.b].includes(playerId) ? "accent-crash" : null;
   if (e.t === "shot") return volleyAccent(e.rounds, e.shooter === playerId, e.target === playerId);
-  if (e.t === "guardShot") return volleyAccent(e.rounds, false, e.target === playerId);
   return null;
 }
 

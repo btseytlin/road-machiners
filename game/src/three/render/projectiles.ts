@@ -11,11 +11,6 @@ import type { ShotRound } from '../../sim/types';
 // Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
 export type Muzzle = { pos: V3; dir: V3 };
 
-// A muzzle at a fixed gun point, like a guard tower, facing its target.
-export function towardFrom(from: V3, target: V3): Muzzle {
-  return { pos: from, dir: { x: target.x - from.x, y: target.y - from.y, z: target.z - from.z } };
-}
-
 // What a round tells the sound when it leaves the muzzle and when it lands.
 export type ShotCues = { fired: (m: Muzzle) => void; landed: () => void };
 
@@ -33,10 +28,9 @@ export type ProjectileSpec = {
 };
 
 // The shot band is CONFIG.combatShotMs, so slow rounds mostly fly the rest of the band and fast ones a part of it.
-// Keys are weapon part def ids, plus guard for town and camp guns.
+// Keys are weapon part def ids.
 export const PROJECTILES: Record<string, ProjectileSpec> = {
   mg: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
-  guard: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
   // Buckshot leaves almost at once, as a cloud of short streaks.
   shotgun: { look: 'tracer', speed: 160, gapMs: 8, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0 },
   autocannon: { look: 'tracer', speed: 140, gapMs: 140, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0 },
@@ -59,9 +53,8 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
 };
 
-// The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode. Guard guns fire bullets.
+// The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode.
 export function blastRadiusOf(key: string): number {
-  if (key === 'guard') return 0;
   const def = PARTS[key];
   if (def?.kind !== 'weapon') throw new Error(`${key} is not a weapon`);
   return def.round.splashRadius;

@@ -22,8 +22,8 @@ import { REGION } from '../data/region';
 import { siteGates } from './sites';
 import { startEscort } from './tow';
 
-// A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
-// past it.
+// A gate of Bowl, a lawman town. The robbery spots below lie outside Bowl's wall, north of the gate: one within the
+// lawmen's gate reach and one past it.
 const BOWL = REGION.towns[0];
 const GATE = siteGates(BOWL)[0];
 // A point d tiles out from the Bowl gate, away from the town.
@@ -31,8 +31,8 @@ function outFromGate(d: number): Vec {
   const k = d / BOWL.radius;
   return { x: GATE.x + (GATE.x - BOWL.pos.x) * k, y: GATE.y + (GATE.y - BOWL.pos.y) * k };
 }
-const GUARDED = RULES.guards.range / 2;
-const UNGUARDED = RULES.guards.range + 4;
+const GUARDED = NPC_BEHAVIOR.lawGateReach / 2;
+const UNGUARDED = NPC_BEHAVIOR.lawGateReach + 4;
 
 function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: TraitId[] = ['scavenger', 'scumbag']): Vehicle {
   const v = addVehicle(w, 'scavengers', 'wagon', parts, pos);

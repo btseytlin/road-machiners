@@ -5,7 +5,7 @@
 // the rest by weight. A roll with world RNG picks one. Traits also give the NPC's profile: the sites it knows and
 // how bold it is. Danger compares local groups: a truck with its visible faction mates nearby. A driver busy with
 // work mostly keeps on around hostiles not aimed at it or its group. Robbery is a fight against a truck the robber
-// can rob, mostly a weaker one away from guards.
+// can rob, mostly a weaker one away from a lawman town's gate.
 
 import { dealAvailable } from './patch';
 import { canSpareFor } from './aid';
@@ -26,7 +26,6 @@ import { getTradePrice } from './economy';
 import { cargoValue } from './market';
 import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
-import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
@@ -339,6 +338,19 @@ export function lawmanTowns(): readonly Site[] {
   return [...ids].map(getKnownSite);
 }
 
+let lawGates: readonly Vec[] | null = null;
+
+// Whether a point lies within NPC_BEHAVIOR.lawGateReach of a gate of a lawman town, where that town's lawmen live,
+// spawn and patrol. The gate list is built once from the region.
+export function nearLawGate(pos: Vec): boolean {
+  if (!lawGates) {
+    const towns = lawmanTowns();
+    if (towns.length === 0) throw new Error('No lawman town: lawman gates would mean nothing');
+    lawGates = towns.flatMap((town) => siteGates(town));
+  }
+  return lawGates.some((gate) => dist(gate, pos) <= NPC_BEHAVIOR.lawGateReach);
+}
+
 // The hunting grounds a camp's raiders raid: those nearer it than any other camp, and farther than HUNT.lawReach from
 // every gate of a lawman town. Built once per camp from the region.
 export function raiderGrounds(camp: Site): readonly Vec[] {
@@ -648,8 +660,8 @@ function appealOf(world: World, vehicle: Vehicle, target: Vehicle, curve: Appeal
   return stateOf(world, 'revenge', vehicle.id, target.id) ? 1 : lootAppeal(cargoValue(target), curve);
 }
 
-// A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
-// failed judgment scales rob down, and so does a cheap cargo. Before the sighting's danger roll, `danger` is null and only guards count. The
+// A robber mostly picks a target that looks weaker than itself times its boldness, away from a lawman town's gate. Each
+// failed judgment scales rob down, and so does a cheap cargo. Before the sighting's danger roll, `danger` is null and only the gate counts. The
 // player's social skill makes the player truck look more dangerous.
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
@@ -659,14 +671,14 @@ function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject
   return (stronger ? NPC_BEHAVIOR.robStronger : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
 
-// Guard caution: starting a fight or a robbery near a town gate is rare. It never lowers fighting back. Lawmen
-// keep the peace at the gates, so they skip it.
+// Lawman caution: starting a fight or a robbery near a lawman town's gate is rare, since its lawmen live and patrol
+// there. It never lowers fighting back. Lawmen keep the peace at the gates, so they skip it.
 function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): number {
   if (hasTrait(vehicle, 'lawman')) return 1;
-  return isTownGuarded(vehicle.pos) || isTownGuarded(subject.pos) ? nearGuards : 1;
+  return nearLawGate(vehicle.pos) || nearLawGate(subject.pos) ? nearGuards : 1;
 }
 
-// A driver free of work mostly takes on a manageable group it sees, away from guards. A raider there for the
+// A driver free of work mostly takes on a manageable group it sees, away from a lawman town's gate. A raider there for the
 // loot attacks a cheap cargo rarely.
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);

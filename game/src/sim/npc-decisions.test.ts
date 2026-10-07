@@ -6,7 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, isWeak, lawmanTowns, nearLawGate, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
@@ -293,18 +293,6 @@ describe('fight back', () => {
     expect(chances('parley').beg!).toBeLessThan(0.02);
   });
 
-  it('a guard shot fires no attacked decision', () => {
-    const w = emptyWorld({ x: 80, y: 80 });
-    const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
-    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(trader.id, 8)] }];
-    noteHurt(w);
-    w.events = [];
-    expect(trader.brain!.hurt).toBe(8);
-    const rng = w.rngState;
-    expect(thinkNpc(w, trader).kind).toBe('wait');
-    expect(w.rngState).toBe(rng);
-  });
 });
 
 describe('decision points', () => {
@@ -536,6 +524,15 @@ describe('raider grounds', () => {
         for (const gate of lawGates()) expect(dist(gate, p)).toBeGreaterThan(HUNT.lawReach);
       }
     }
+  });
+
+  it('lie past the lawmen gate reach of a lawman town, which no raider camp gate has', () => {
+    const gate = lawGates()[0];
+    const town = lawmanTowns().find((t) => siteGates(t).some((g) => g.x === gate.x && g.y === gate.y))!;
+    const out = (d: number) => ({ x: gate.x + ((gate.x - town.pos.x) / town.radius) * d, y: gate.y + ((gate.y - town.pos.y) / town.radius) * d });
+    expect(nearLawGate(out(NPC_BEHAVIOR.lawGateReach - 1))).toBe(true);
+    expect(nearLawGate(out(NPC_BEHAVIOR.lawGateReach + 1))).toBe(false);
+    for (const camp of [scrapjaw, kiln]) for (const g of siteGates(camp)) expect(nearLawGate(g)).toBe(false);
   });
 
   it('belong to the nearest camp alone', () => {

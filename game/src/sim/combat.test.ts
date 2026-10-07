@@ -11,7 +11,7 @@ import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, partHp, practiceOf, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn, update } from './world';
@@ -589,7 +589,7 @@ describe('NPC attack records and defensive fire', () => {
     expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
   });
 
-  it('an NPC opens fire only on its fight target away from guards, and always on an attacker', () => {
+  it('an NPC opens fire only on its fight target, also at a town gate, and always on an attacker', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
@@ -604,27 +604,42 @@ describe('NPC attack records and defensive fire', () => {
     npc.pos = { x: gate.x + 3, y: gate.y };
     prey.pos = { ...gate };
     autoOrders(w, npc);
-    expect(aimed()).toEqual([]);
+    expect(aimed()).toEqual([prey.id]);
     npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'test flee' }];
     npc.brain.attackers = { [prey.id]: true };
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
   });
 
-  // A robber chased its victim to a town gate. The victim's return fire must not open the gate to the robber's guns.
-  it('a robber holds its fire in guard range even after its victim shoots back', () => {
+  // A robber that gave up its robbery is no defender: the victim's return fire does not reopen its guns.
+  it('a robber off its robbery holds its fire even after its victim shoots back', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const gate = siteGates(REGION.towns[0])[0];
     const robber = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: gate.x + 3, y: gate.y });
     robber.brain = npcBrain('trader', robber.pos, ['scumbag']);
     const victim = addVehicle(w, 'traders', 'scout', ['mg'], { ...gate });
     addState(w, 'feud', robber.id, victim.id, { kind: 'feud', robbery: true });
-    robber.brain.goals = [{ kind: 'fight', targetId: victim.id, destination: { ...victim.pos }, phase: 'travel', reason: 'test robbery' }];
+    robber.brain.goals = [];
     robber.brain.attackers = { [victim.id]: true };
 
     autoOrders(w, robber);
 
     expect(Object.values(robber.weaponOrders)).toEqual([]);
+  });
+
+  it('a truck that fires at a trader at a town gate takes no damage from the gate', () => {
+    const gate = siteGates(REGION.towns[0])[0];
+    const w = emptyWorld({ x: gate.x - 3, y: gate.y }); // facing the trader at the gate
+    const me = w.vehicles[0];
+    const trader = addVehicle(w, 'traders', 'scout', ['stockEngine'], { ...gate });
+    const mg = vehicleStats(w, me).weapons[0];
+    order(me, mg.part.id, trader.id);
+    const before = partHp(me);
+
+    const after = endTurn(w, testDrive);
+
+    expect(after.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(true);
+    expect(partHp(after.vehicles.find((v) => v.id === me.id)!)).toBe(before);
   });
 });
 

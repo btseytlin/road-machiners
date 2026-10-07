@@ -55,8 +55,6 @@ function interruptsTravel(event: GameEvent, id: string): boolean {
       return [event.a, event.b].includes(id);
     case "shot":
       return [event.shooter, event.target].includes(id);
-    case "guardShot":
-      return event.target === id;
     default:
       return stopsVehicle(event, id);
   }

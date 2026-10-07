@@ -353,7 +353,7 @@ export const REGION = {
       pos: BROKEN_WING_SITE,
       radius: 6,
     },
-    // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
+    // Raider camps. Raiders spawn at their gates and service there.
     {
       id: "scrapjaw",
       edge: "camp",

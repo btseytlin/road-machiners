@@ -67,7 +67,6 @@ describe("accentOf", () => {
     expect(accentOf(shot("n", "p", [round(true)]), "p")).toBe("accent-struck");
     expect(accentOf(shot("n", "p", [round(true, true)]), "p")).toBe("accent-crit");
     expect(accentOf(shot("n", "p", [round(false)]), "p")).toBeNull();
-    expect(accentOf({ t: "guardShot", site: "s", from: { x: 0, y: 0 }, target: "p", rounds: [round(true)] }, "p")).toBe("accent-struck");
   });
   it("counts a round that strikes parts without a clean hit as struck", () => {
     const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [] };
