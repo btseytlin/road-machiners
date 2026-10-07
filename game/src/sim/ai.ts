@@ -6,18 +6,17 @@ import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
 import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { route, routeLength, type Blocker } from "./path";
-import { towData } from "./states";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
+import { escortsOf, followPace, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
 import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
-import { inArc } from "./combat";
+import { bodyHitChance, inArc } from "./combat";
 import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
@@ -39,13 +38,11 @@ export function planNpcOrders(world: World): void {
 }
 
 function thinkOrderPoint(world: World, v: Vehicle): Plan {
-  const tpl = NPCS[v.brain!.templateId];
-  if (!tpl) throw new Error(`Unknown NPC template ${v.brain!.templateId}`);
   const b = v.brain!;
   delete b.ramTarget;
   if (b.recovery) b.recovery--;
   const activity = thinkNpc(world, v);
-  return { v, activity, goal: orderPoint(world, v, activity, tpl.preferredRange) };
+  return { v, activity, goal: orderPoint(world, v, activity) };
 }
 
 function setOrder(world: World, { v, activity, goal }: Plan): void {
@@ -120,17 +117,16 @@ function nextOrder(world: World, v: Vehicle, activity: NpcActivity, goal: Vec | 
   return driveOrder(world, v, activity, goal);
 }
 
-// Where the driver heads. A fighter keeps its range from a target in sight. One that lost sight of its target
+// Where the driver heads. A fighter picks its spot around a target in sight. One that lost sight of its target
 // drives to where it last perceived it.
-function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRange: number): Vec | null {
+function orderPoint(world: World, v: Vehicle, activity: NpcActivity): Vec | null {
   if (activity.kind !== "fight") return getActivityDestination(world, v, activity);
   const target = world.vehicles.find((other) => other.id === activity.targetId);
   if (!target) throw new Error("Fight activity missing its target");
   if (!canVehicleSee(world, v, target.pos)) return getActivityDestination(world, v, activity);
-  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v) - RULES.arriveRadius;
   const seen = perceivedTarget(world, v, target);
   noteTarget(world, v, target);
-  return computeFightGoal(world, v, preferredRange, target, seen);
+  return computeFightGoal(world, v, target, seen);
 }
 
 // A leader out of danger waits while an escort that follows it lags more than NPC_BEHAVIOR.escortWaitGap behind,
@@ -162,7 +158,7 @@ function foeInSight(world: World, v: Vehicle, activity: NpcActivity): Vehicle | 
 // A chosen ram, then a rash whim, win over the scored spot. A rush drives through the target like a ram. A halt
 // brakes where the driver is. A veer drives to the whim's spot around the target. Rams aim at the target as it is.
 // Every other spot is placed against `seen`, the target as the driver last read it.
-function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle, seen: Vehicle): Vec | null {
+function computeFightGoal(world: World, v: Vehicle, target: Vehicle, seen: Vehicle): Vec | null {
   const b = v.brain!;
   if (rams(world, v, target)) {
     b.ramTarget = target.id;
@@ -171,9 +167,11 @@ function computeFightGoal(world: World, v: Vehicle, preferredRange: number, targ
   if (b.whim?.kind === "halt") return null;
   const lead = leadOf(seen);
   const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
-  const range = Math.max(preferredRange, clearance);
-  if (b.whim?.kind === "veer") return { x: lead.x + Math.cos(b.whim.angle) * range, y: lead.y + Math.sin(b.whim.angle) * range };
-  return fightPoint(world, v, seen, range);
+  if (b.whim?.kind === "veer") {
+    const range = Math.max(shortestRange(world, v) - RULES.arriveRadius, clearance);
+    return { x: lead.x + Math.cos(b.whim.angle) * range, y: lead.y + Math.sin(b.whim.angle) * range };
+  }
+  return fightPoint(world, v, seen, clearance);
 }
 
 // A fighter reacts a turn late: it places itself against where its target was and how it faced when it last read
@@ -195,17 +193,26 @@ function rams(world: World, v: Vehicle, target: Vehicle): boolean {
   return b.whim?.kind === "rush" || (b.ramChoice === target.id && ramImpact(world, v, target) !== null);
 }
 
-// A fighter keeps to its shortest gun range, less the distance a stop order may fall short of its point. A fight
-// without a gun is a decision bug, so it throws.
+// The range of the fighter's shortest and longest guns. A fight without a gun is a decision bug, so it throws.
 function shortestRange(world: World, v: Vehicle): number {
-  const weapons = vehicleStats(world, v).weapons;
-  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
-  return Math.min(...weapons.map((weapon) => weapon.def.range));
+  return Math.min(...gunRanges(world, v));
 }
 
-// ---- Fight driving. Each turn a fighter scores points around where its target will be next turn: points where its
-// own guns bear, the target's guns do not, at its range and within a turn's drive. A circling fighter also wants
-// points ahead around the target. Numbers live in NPC_BEHAVIOR.fight.
+function longestRange(world: World, v: Vehicle): number {
+  return Math.max(...gunRanges(world, v));
+}
+
+function gunRanges(world: World, v: Vehicle): number[] {
+  const weapons = vehicleStats(world, v).weapons;
+  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
+  return weapons.map((weapon) => weapon.def.range);
+}
+
+// ---- Fight driving. Each turn a fighter scores points around where its target will be next turn, on rings from
+// close in out to its longest gun's range: points where its own rounds would land and get past the armor, the
+// target's would not, within a turn's drive. Hit chance falls with distance, so a fighter closes in when its guns
+// gain more up close than the target's, and stands off when they gain less. A circling fighter also wants points
+// ahead around the target. Numbers live in NPC_BEHAVIOR.fight.
 
 const F = NPC_BEHAVIOR.fight;
 const QUARTER = Math.PI / 2;
@@ -215,20 +222,24 @@ export function leadOf(target: Vehicle): Vec {
   return { x: target.pos.x + Math.cos(target.heading) * target.speed, y: target.pos.y + Math.sin(target.heading) * target.speed };
 }
 
-// The best scored point around the target's lead at `range`. Arcs are judged where the fighter is after this turn's
-// drive toward the point, and range at the point itself. A point where some working gun bears always beats one where
-// none does, so a slow fighter never parks where it cannot fire while a firing spot exists. With no such point, or no
-// working gun, the best score wins.
-export function fightPoint(world: World, v: Vehicle, target: Vehicle, range: number): Vec {
+// The best scored point around the target's lead, no nearer than `clearance`. Arcs and hit chances are judged where
+// the fighter is after this turn's drive toward the point, since guns fire after the move. A point where some
+// working gun bears always beats one where none does, so a slow fighter never parks where it cannot fire while a
+// firing spot exists. With no such point, or no working gun, the best score wins.
+export function fightPoint(world: World, v: Vehicle, target: Vehicle, clearance: number): Vec {
   const lead = leadOf(target);
   const turn = circleTurn(world, v);
+  const reach = longestRange(world, v) - RULES.arriveRadius;
   let best: { p: Vec; score: number; fires: boolean } | null = null;
-  for (let i = 0; i < F.angles; i++) {
-    const a = (2 * Math.PI * i) / F.angles;
-    const p = { x: lead.x + Math.cos(a) * range, y: lead.y + Math.sin(a) * range };
-    const score = scorePoint(world, v, target, lead, range, p, turn);
-    const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
-    if (!best || beats({ score, fires }, best)) best = { p, score, fires };
+  for (const share of F.rings) {
+    const r = Math.max(clearance, share * reach);
+    for (let i = 0; i < F.angles; i++) {
+      const a = (2 * Math.PI * i) / F.angles;
+      const p = { x: lead.x + Math.cos(a) * r, y: lead.y + Math.sin(a) * r };
+      const score = scorePoint(world, v, target, lead, p, turn);
+      const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
+      if (!best || beats({ score, fires }, best)) best = { p, score, fires };
+    }
   }
   return best!.p;
 }
@@ -250,18 +261,17 @@ function circleTurn(world: World, v: Vehicle): number {
   return v.brain!.fightTurn;
 }
 
-export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec, range: number, p: Vec, turn: number): number {
+export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec, p: Vec, turn: number): number {
   const sv = vehicleStats(world, v);
   const me = afterTurn(world, v, p);
   const there = { ...target, pos: lead };
-  const mine = bearingShare(world, v, there, p);
+  const mine = exposure(world, v, me, there);
   const theirs = exposure(world, target, there, me);
-  const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);
   const ahead = turn === 0 ? 0 : Math.min(1, (turn * angleDiff(bearing(lead, v.pos), bearing(lead, p))) / QUARTER);
   const rammed = ramValue(world, there, me);
   const seek = ramsReadily(world, v, target.id) ? ramValue(world, me, there) : 0;
-  return F.arcWeight * mine - F.threatWeight * theirs - F.rangeWeight * off - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed + F.ramWeight * seek;
+  return F.arcWeight * mine - F.threatWeight * theirs - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed + F.ramWeight * seek;
 }
 
 // Where v is after one turn of driving toward p, facing the way it drives. Guns fire after the move, so arcs are
@@ -275,16 +285,16 @@ export function afterTurn(world: World, v: Vehicle, p: Vec): Vehicle {
   return { ...v, pos: { x: v.pos.x + Math.cos(heading) * step, y: v.pos.y + Math.sin(heading) * step }, heading };
 }
 
-// The share of the shooter's working gun damage per turn that could hit v and get past the armor on the side v shows
-// each gun. A bare side facing every gun gives 1, a well plated one far less. shooter holds the guns and at is
-// where it stands.
+// The share of the shooter's working gun damage per turn expected to land on v and get past the armor on the side v
+// shows each gun: each gun in reach counts by its hit chance from there. A bare side up close to every gun gives the
+// most, a far or well plated one far less. shooter holds the guns and at is where it stands.
 export function exposure(world: World, shooter: Vehicle, at: Vehicle, v: Vehicle): number {
   const working = vehicleStats(world, shooter).weapons.filter((mw) => mw.part.hp > 0);
   const total = working.reduce((sum, mw) => sum + sustainedDamage(mw.def), 0);
   if (total === 0) return 0;
   const side = sideToward(v, at.pos);
-  const exposed = working.filter((mw) => inReach(at, mw, v)).reduce((sum, mw) => sum + sustainedDamage(mw.def) * passShare(v, side, mw.def.round), 0);
-  return exposed / total;
+  const landed = (mw: MountedWeapon) => sustainedDamage(mw.def) * bodyHitChance(world, at, mw, v) * passShare(v, side, mw.def.round);
+  return working.filter((mw) => inReach(at, mw, v)).reduce((sum, mw) => sum + landed(mw), 0) / total;
 }
 
 function inReach(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
@@ -423,8 +433,7 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
 }
 
 function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
-  const tow = towHeldBy(world, tower.id);
-  return tow !== null && towData(tow).hitched && tow.other === x.id;
+  return ropeClientOf(world, tower.id) === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.

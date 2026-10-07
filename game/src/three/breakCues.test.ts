@@ -5,7 +5,7 @@ import type { GameEvent, GridItem, PartInstance, ShotRound } from "../sim/types"
 import { breakRounds, BreakCues, shownItems, type ShotLike } from "./breakCues";
 
 const round = (hits: { part: string; damage: number }[] = [], blast: ShotRound["blast"] = [], struck: string | null = "t"): ShotRound => ({
-  hit: hits.length > 0, crit: false, offset: 0, struck, hits, blast,
+  hit: hits.length > 0, crit: false, offset: 0, struck, hits, blast, burst: null,
 });
 const shot = (rounds: ShotRound[]): ShotLike => ({ t: "shot", shooter: "s", weapon: "mg", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds }) as ShotLike;
 const off = (part: string, vehicle = "t"): GameEvent => ({ t: "partDisabled", vehicle, part });
@@ -27,11 +27,6 @@ describe("breakRounds", () => {
   it("finds a blast-only break on the blasted truck", () => {
     const s = shot([round(), round([], [{ vehicle: "t", hits: [dmg("a")] }], null)]);
     expect(breakRounds([off("a"), s])[0].round).toBe(1);
-  });
-
-  it("pairs a guardShot break", () => {
-    const g = { t: "guardShot", site: "x", from: { x: 0, y: 0 }, target: "t", rounds: [round([dmg("a")])] } as ShotLike;
-    expect(breakRounds([off("a"), g])[0].owner).toBe(g);
   });
 
   it("gives a collision break and an unowned break no round", () => {

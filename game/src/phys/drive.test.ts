@@ -14,7 +14,7 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
-import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
+import { buildDrive, freeDrive, initPhysics, restWheels, routeAim, simulateTurn, syncDrive, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
@@ -36,6 +36,20 @@ function play(w: World, n: number): { w: World; d: Drive } {
     w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
     freeDrive(d);
     d = next!;
+  }
+  return { w, d };
+}
+
+// play() with a macrotask turn after each turn, for runs long enough under load to starve the worker's
+// status messages to the runner past vitest's 60 s RPC timeout.
+async function playYielding(w: World, n: number): Promise<{ w: World; d: Drive }> {
+  let d = buildDrive(w);
+  for (let i = 0; i < n; i++) {
+    let next: Drive | null = null;
+    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+    freeDrive(d);
+    d = next!;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
   return { w, d };
 }
@@ -91,7 +105,7 @@ describe('physics turns', () => {
     const d = buildDrive(w);
     try {
       d.obstacles.rock1 = [staleHandle(d)];
-      expect(() => syncDrive(d, w)).toThrow(/Obstacle rock1 has no collider/);
+      expect(() => syncDrive(d, w)).toThrow(/Obstacle or crater rock1 has no collider/);
     } finally {
       freeDrive(d);
     }
@@ -207,20 +221,20 @@ describe('physics turns', () => {
     let roadSkill0: World;
     let mudSkill5: World;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       const w = emptyWorld();
       editableTerrain(w).types.fill('mud');
-      const mud = play(setMoveOrder(w, order), 3);
+      const mud = await playYielding(setMoveOrder(w, order), 3);
       mudSkill0 = mud.w;
       freeDrive(mud.d);
-      const road = play(ordered(order), 3);
+      const road = await playYielding(ordered(order), 3);
       roadSkill0 = road.w;
       freeDrive(road.d);
       w.player.ranks.driving = 5;
-      const skilled = play(setMoveOrder(w, order), 3);
+      const skilled = await playYielding(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, budget(120_000)); // three physics runs share this hook; they took over 30s when the whole suite shares the cores
+    }, budget(120_000)); // three physics runs share this hook; they took over 30 s when the whole suite shared a loaded machine
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -588,7 +602,7 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
-  it('a fully loaded hauler still climbs a hill', () => {
+  it('a fully loaded hauler still climbs a hill', async () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
@@ -598,13 +612,13 @@ describe('physics turns', () => {
     addGoods(w0, me(w0), 'scrap', 999);
     expect(loadFactor(me(w0))).toBeLessThan(1);
     w0.player.fuel = 999;
-    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
+    const { w } = await playYielding(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
     // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, budget(90_000)); // physics turns up a hill take 10s alone and over 30s when the whole suite shares the cores
+  }, budget(240_000)); // six physics turns, like the limping courier below
 
-  it('a limping courier crawls up a bank as steep as any chassis limps up', () => {
+  it('a limping courier crawls up a bank as steep as any chassis limps up', async () => {
     const w0 = emptyWorld({ x: 26, y: 30 });
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
@@ -612,12 +626,12 @@ describe('physics turns', () => {
     const courier = makeVehicle(w0, { name: 'courier', faction: 'player', chassisId: 'courier', parts: [{ defId: 'stockEngine', wear: 0 }], spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w0.vehicles[0] = { ...courier, id: me(w0).id };
     mountedParts(me(w0), 'engine')[0].hp = 0;
-    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
+    const { w } = await playYielding(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, budget(90_000)); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
+  }, budget(240_000)); // twelve physics turns take 5s alone, over 40s alone on a loaded machine, and several times that when the whole suite shares it
 
-  it('a click in the hold zone keeps its speed up a hill', () => {
+  it('a click in the hold zone keeps its speed up a hill', async () => {
     let w = emptyWorld({ x: 29, y: 30 });
     const t = editableTerrain(w);
     const n = t.size;
@@ -632,10 +646,11 @@ describe('physics turns', () => {
       freeDrive(d);
       d = next!;
       speeds.push(me(w).speed);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  }, budget(90_000)); // eight physics turns take 10s alone and over 30s when the whole suite shares the cores
+  }, budget(240_000)); // eight physics turns, like the limping courier above
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
@@ -754,5 +769,55 @@ describe('stranded trucks', () => {
     const me = after.vehicles[0];
     const hauler = after.vehicles.find((v) => v.id === npc.id)!;
     expect(dist(me.pos, hauler.pos)).toBeGreaterThan(chassisDef(me.chassisId).radius + chassisDef('hauler').radius);
+  });
+});
+
+describe('rope frames roll the wheels', () => {
+  it('rolls a wheel in the same direction as a truck driving forward', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.order = { kind: 'stopAt', dest: { x: 40, y: 30 } };
+    const d = buildDrive(w);
+    const result = simulateTurn(d, w);
+    const frames = result.frames[me.id];
+    expect(frames[frames.length - 1].pos.x).toBeGreaterThan(frames[0].pos.x);
+    const drove = frames[frames.length - 1].wheels[2].spin - frames[0].wheels[2].spin;
+    const dx = (frames[frames.length - 1].pos.x - frames[0].pos.x) / bodyOf(me.chassisId).wheelRadius;
+    freeDrive(d);
+
+    const rope = emptyWorld({ x: 30, y: 30 });
+    const towed = rope.vehicles[0];
+    towed.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    const roped = trailFrames(rope, towed, restWheels(towed.chassisId));
+    expect(Math.sign(roped[roped.length - 1].wheels[2].spin)).toBe(Math.sign(drove));
+    expect(Math.sign(drove)).toBe(Math.sign(dx));
+  });
+
+  it('rolls every wheel by the distance driven over its radius, from the given spin', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    const start = restWheels(v.chassisId).map((wheel) => ({ ...wheel, spin: 2 }));
+    const frames = trailFrames(w, v, start);
+    expect(frames).toHaveLength(TURN_STEPS);
+    const roll = PHYSICS.metersPerTile / bodyOf(v.chassisId).wheelRadius;
+    for (const wheel of frames[frames.length - 1].wheels) expect(Math.abs(wheel.spin - 2)).toBeCloseTo(roll, 6);
+    expect(Math.abs(frames[0].wheels[0].spin - 2)).toBeLessThan(roll / TURN_STEPS + 1e-6);
+  });
+
+  it('turns the outer wheels more than the inner ones in a bend', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 31, heading: Math.PI / 2 }];
+    const frames = trailFrames(w, v, restWheels(v.chassisId));
+    const last = frames[frames.length - 1].wheels;
+    expect(Math.abs(last[2].spin - last[3].spin)).toBeGreaterThan(0.1);
+  });
+
+  it('throws when the start wheels do not match the chassis', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const v = w.vehicles[0];
+    v.trail = [{ x: 30, y: 30, heading: 0 }, { x: 31, y: 30, heading: 0 }];
+    expect(() => trailFrames(w, v, [])).toThrow(/wheels/);
   });
 });

@@ -14,7 +14,7 @@ Cargo parts add full-width rows to the grid while mounted and working. A roof ra
 
 Goods take one cell per unit and can be moved or dumped anywhere. Dragging an item onto another swaps them if both fit. Spare parts ride in the grid or wait in garage storage.
 
-Garage equipment changes are instant. Outside town, a change is a refit job:
+Equipment changes at a shop are instant. Away from a shop, a change is a refit job:
 
 - Installing or removing a part takes 3 turns.
 - Replacing an installed part with a spare takes 5 turns.
@@ -26,7 +26,7 @@ Machining shortens these times. The old layout stays active until the whole job 
 
 Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Every kilogram counts: a truck lighter than its handling mass beats the listed speed, and a heavier one falls short. The rated mass is the load limit. Every truck can put tier 1 armor on all its armor cells and guns on half its deck and stay at or under it. Cargo and heavier gear use the rest of the room. Past the rated mass the loss is severe: 500 kg over a 3000 kg rating leaves about half the speed. For the same job a higher tier part weighs less, so better gear leaves more room. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
-Every working gun draws power from the engine, and each gun slows the truck. A gun draws by its size and tier: its cells, plus a quarter more for each tier above the first. A machine gun draws 1, a long rifle 2 and a tank gun 4.5. The draw of all working guns, against the engine's capacity, cuts top speed and acceleration by up to 48%. The curve is convex, so the first guns cost little and a deck packed with guns hits the full 48%. On a stock engine, one or two light guns cost about 2 to 8%. A broken gun draws nothing. The gun and engine cards show the draw and the capacity.
+Every working gun draws power from the engine, and each gun slows the truck. A gun draws by its size and tier: its cells, plus a quarter more for each tier above the first. A machine gun draws 1, a long rifle 2 and a tank gun 4.5. The draw of all working guns, against the engine's capacity, cuts top speed and acceleration by up to 48%. The curve is convex, so the first guns cost little and a deck packed with guns hits the full 48%. On a stock engine, one or two light guns cost about 2 to 8%. A broken gun draws nothing. The gun and engine cards show the draw and the capacity. The truck headers in the inventory, shop and trade show the engine's power, the draw, what is spare or over, and what the draw costs in top speed. Hovering or focusing the HUD max speed lists every effect on it, from chassis to weather and towing, and its last line is the HUD number.
 
 The engine is the general capability upgrade. Its capacity sets how many guns the truck carries before they slow it. A light flat-four carries few guns. A stock engine carries more, and a heavy diesel carries a fortress. The turbine and the racing V6 give raw speed, and the diesels give gun room.
 

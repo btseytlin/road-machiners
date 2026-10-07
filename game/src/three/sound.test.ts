@@ -3,7 +3,9 @@ import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
 import { engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
 import type { SoundPlayer } from "../audio/player";
-import { accentOf, CombatScore, CombatWatch, engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { REGION } from "../data/region";
+import { OUTPOSTS, siteGates } from "../sim/sites";
+import { accentOf, CombatScore, CombatWatch, engineGlide, loopLevels, musicPlaceAt, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { CameraRig } from "./render/camera";
 
 describe("stingOf", () => {
@@ -29,16 +31,31 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, inCombat: false, paused: false };
-  it("raises wind near storms", () => {
+  const calm = { stormShare: 0, inCombat: false, place: null, paused: false } as const;
+  const gains = (l: ReturnType<typeof loopLevels>) => [l.calmGain, l.townGain, l.outpostGain, l.abandonedGain, l.combatGain];
+  it("raises the wind with the player's storm share", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
-    expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
+    expect(loopLevels({ ...calm, stormShare: 0.5 }, MIX).windGain).toBeCloseTo((MIX.wind.baseGain + MIX.wind.stormGain) / 2);
+    expect(loopLevels({ ...calm, stormShare: 1 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
   it("switches music to combat while in combat", () => {
-    const fight = loopLevels({ ...calm, inCombat: true }, MIX);
-    expect([fight.calmGain, fight.combatGain]).toEqual([0, 1]);
-    const peace = loopLevels({ ...calm, inCombat: false }, MIX);
-    expect([peace.calmGain, peace.combatGain]).toEqual([1, 0]);
+    expect(gains(loopLevels({ ...calm, inCombat: true }, MIX))).toEqual([0, 0, 0, 0, 1]);
+    expect(gains(loopLevels(calm, MIX))).toEqual([1, 0, 0, 0, 0]);
+  });
+  it("finds the music place of a town, an outpost, a territory and the open road", () => {
+    const territory = (id: string) => REGION.locations.find((l) => l.id === id)!.pos;
+    expect(musicPlaceAt(siteGates(REGION.towns[0])[0])).toBe("town");
+    expect(musicPlaceAt(siteGates(OUTPOSTS[0])[0])).toBe("outpost");
+    expect(musicPlaceAt(territory("fallen-sun"))).toBe("abandoned");
+    expect(musicPlaceAt(territory("orchard"))).toBe("abandoned");
+    expect(musicPlaceAt({ x: 0, y: 0 })).toBeNull();
+  });
+  it("plays each place's own music, and combat music over it", () => {
+    expect(gains(loopLevels({ ...calm, place: "town" }, MIX))).toEqual([0, 1, 0, 0, 0]);
+    expect(gains(loopLevels({ ...calm, place: "outpost" }, MIX))).toEqual([0, 0, 1, 0, 0]);
+    expect(gains(loopLevels({ ...calm, place: "abandoned" }, MIX))).toEqual([0, 0, 0, 1, 0]);
+    for (const place of ["town", "outpost", "abandoned"] as const)
+      expect(gains(loopLevels({ ...calm, place, inCombat: true }, MIX))).toEqual([0, 0, 0, 0, 1]);
   });
   it("muffles music during a pause between turns", () => {
     expect(loopLevels(calm, MIX).musicCutoffHz).toBe(MIX.music.openCutoffHz);
@@ -47,14 +64,14 @@ describe("loopLevels", () => {
   it("keeps the music choice when paused or near storms", () => {
     for (const inCombat of [true, false]) {
       const base = loopLevels({ ...calm, inCombat }, MIX);
-      const other = loopLevels({ ...calm, inCombat, paused: true, stormTiles: 0 }, MIX);
+      const other = loopLevels({ ...calm, inCombat, paused: true, stormShare: 1 }, MIX);
       expect([other.calmGain, other.combatGain]).toEqual([base.calmGain, base.combatGain]);
     }
   });
 });
 
 describe("accentOf", () => {
-  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [] });
+  const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [], burst: null });
   const shot = (shooter: string, target: string, rounds: ShotRound[]): GameEvent => ({
     t: "shot", shooter, weapon: "w", target, aim: "body", chance: 0.5, damageChance: 0.5, side: "front", rounds,
   });
@@ -67,10 +84,9 @@ describe("accentOf", () => {
     expect(accentOf(shot("n", "p", [round(true)]), "p")).toBe("accent-struck");
     expect(accentOf(shot("n", "p", [round(true, true)]), "p")).toBe("accent-crit");
     expect(accentOf(shot("n", "p", [round(false)]), "p")).toBeNull();
-    expect(accentOf({ t: "guardShot", site: "s", from: { x: 0, y: 0 }, target: "p", rounds: [round(true)] }, "p")).toBe("accent-struck");
   });
   it("counts a round that strikes parts without a clean hit as struck", () => {
-    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [] };
+    const grazing: ShotRound = { hit: false, crit: false, offset: 0, struck: "n", hits: [{ part: "armor", damage: 3 }], blast: [], burst: null };
     expect(accentOf(shot("p", "n", [grazing]), "p")).toBe("accent-hit");
   });
   it("ignores fights between other trucks and answers the player's crashes", () => {
@@ -107,6 +123,46 @@ describe("engine sound assignment", () => {
 
     expect(started).toEqual([engineFileFor("scout"), engineFileFor("hauler")]);
     expect(stopped).toEqual([0]);
+  });
+});
+
+describe("next track", () => {
+  const fake = () => {
+    const calm: { file?: string; gains: number[]; stops: number[] }[] = [];
+    const player = {
+      setBusTone: () => {},
+      loop: (id: string, _at: unknown, file?: string) => {
+        const handle = { file, gains: [] as number[], stops: [] as number[] };
+        if (id === "music-calm") calm.push(handle);
+        return { glide: () => {}, once: () => {}, setGain: (g: number) => handle.gains.push(g), stop: (ms: number) => handle.stops.push(ms) };
+      },
+    } as unknown as SoundPlayer;
+    return { calm, loops: new SoundLoops(player, { setCombat: () => {}, setPaused: () => {}, tick: () => {} }) };
+  };
+
+  it("crossfades the calm music to a new track at its current level", () => {
+    const { calm, loops } = fake();
+    loops.update({ stormShare: 1, inCombat: false, place: null, paused: false });
+    loops.nextTrack();
+    expect(calm).toHaveLength(2);
+    expect(calm[0].stops).toEqual([MIX.music.fadeSeconds * 1000]);
+    expect(calm[1].gains).toEqual([1]);
+  });
+
+  it("plays every calm track once before any repeats", () => {
+    const { calm, loops } = fake();
+    const files = SOUNDS["music-calm"].files;
+    for (let i = 0; i < files.length; i++) loops.nextTrack();
+    const cycle = calm.slice(0, files.length).map((c) => c.file);
+    expect([...cycle].sort()).toEqual([...files].sort());
+    expect(calm[files.length].file).toBe(cycle[0]);
+  });
+
+  it("keeps the new track silent in combat", () => {
+    const { calm, loops } = fake();
+    loops.update({ stormShare: 1, inCombat: true, place: null, paused: false });
+    loops.nextTrack();
+    expect(calm[1].gains).toEqual([0]);
   });
 });
 
@@ -187,7 +243,7 @@ describe("CombatWatch", () => {
 });
 
 describe("CombatScore", () => {
-  type BaseId = "score-drums" | "score-bass";
+  type BaseId = "score-drums" | "score-bass" | "score-horns" | "score-trombone";
   type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
   type Play = [string, { pan: number; gain: number }, number, { file: string; rate: number }?];
   const fakePlayer = () => {
@@ -227,7 +283,7 @@ describe("CombatScore", () => {
   it("starts every base silent at one time, each at its first beat", () => {
     const { player, loops } = fakePlayer();
     new CombatScore(player, () => 0);
-    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass"]);
+    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass", "score-horns", "score-trombone"]);
     expect(new Set(loops.map((l) => l.when)).size).toBe(1);
     expect(loops.map((l) => l.offset)).toEqual(loops.map((l) => scorePhaseOf(l.file)));
     expect(loops.every((l) => l.gains.length === 0)).toBe(true);
@@ -235,13 +291,13 @@ describe("CombatScore", () => {
 
   it("plays one random base per battle, quiet and muffled with no heat, and fades it out after", () => {
     const { player, loops } = fakePlayer();
-    const rolls = [0.9, 0, 0, 0.1];
+    const rolls = [0.3, 0, 0, 0.1];
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
     score.setCombat(true, 3);
     score.setCombat(true, 3);
     score.setCombat(false, 3);
     score.setCombat(true, 3);
-    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0]]);
+    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0], [], []]);
     expect(loops[1].tones).toEqual([s.quietCutoffHz]);
   });
 

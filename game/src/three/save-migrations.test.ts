@@ -4,7 +4,8 @@ import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
 import { emptyWorld } from '../sim/testkit';
-import type { Obstacle, Player, Vehicle } from '../sim/types';
+import type { Obstacle, Player, Vehicle, WeatherEvent, World } from '../sim/types';
+import { stormStrength, weatherAt, weatherOn } from '../sim/weather';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -18,6 +19,17 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
+import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
+import FORMAT_2_16 from './save-fixtures/format-2-16.json';
+import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
+import FORMAT_2_19 from './save-fixtures/format-2-19.json';
+import FORMAT_2_20 from './save-fixtures/format-2-20.json';
+import FORMAT_2_21 from './save-fixtures/format-2-21.json';
+import FORMAT_2_22 from './save-fixtures/format-2-22.json';
+import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -295,5 +307,183 @@ describe('save migration 12 to 13', () => {
     const next = MIGRATIONS[12](FORMAT_2_12);
 
     expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  const before = structuredClone(FORMAT_2_13);
+  const next = MIGRATIONS[13](FORMAT_2_13) as { states: { data: { partIds?: string[] } }[] };
+
+  it('gives a patch the ids of its client parts at 0 HP, in item order', () => {
+    expect(next.states[0].data.partIds).toEqual(['p1', 'p2']);
+  });
+
+  it('gives a patch whose client is gone an empty list', () => {
+    expect(next.states[1].data.partIds).toEqual([]);
+  });
+
+  it('leaves other states alone and does not mutate its input', () => {
+    expect(next.states[2]).toEqual(FORMAT_2_13.states[2]);
+    expect(FORMAT_2_13).toEqual(before);
+  });
+});
+
+describe('save migration 14 to 15', () => {
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[15](FORMAT_2_15);
+    const [shot, guard, arrived] = FORMAT_2_15.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_15,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
+  });
+});
+
+describe('save migration 16 to 17', () => {
+  const next = MIGRATIONS[16](FORMAT_2_16) as { turn: number; weather: WeatherEvent[] };
+
+  it('gives a storm a birth turn past its build-up and changes nothing else', () => {
+    expect(next).toEqual({ ...FORMAT_2_16, weather: [{ ...FORMAT_2_16.weather[0], born: 470 }, FORMAT_2_16.weather[1]] });
+  });
+
+  it('leaves a storm with a long way to go at full strength', () => {
+    const storm = next.weather[0];
+    if (storm.kind !== 'storm') throw new Error('expected the storm first');
+    expect(stormStrength(next as unknown as World, storm)).toBe(1);
+  });
+});
+
+describe('save migration 17 to 18', () => {
+  const next = MIGRATIONS[17](FORMAT_2_17) as unknown as World;
+  const shares = (id: string) => next.vehicles.find((v) => v.id === id)!.stormExposure;
+
+  it('gives each truck the share each storm has settled to where it stands, and nothing outside', () => {
+    expect(shares('v-centre')).toEqual({ wx1: 1 });
+    expect(shares('v-edge').wx1).toBeCloseTo(0.5);
+    expect(Object.keys(shares('v-edge'))).toEqual(['wx1']);
+    expect(shares('v-building').wx2).toBeCloseTo(11 / 30);
+    expect(shares('v-out')).toEqual({});
+  });
+
+  it('gives a removed truck no shares and changes nothing else', () => {
+    expect(next.removed[0].stormExposure).toEqual({});
+    const strip = (vs: Vehicle[]) => vs.map((v) => Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stormExposure')));
+    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_17);
+  });
+
+  it('loads every truck feeling exactly the settled weather where it stands', () => {
+    for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  const next = MIGRATIONS[18](FORMAT_2_18);
+
+  it('marks every far route of a truck in play or removed as planned with roads', () => {
+    const route = (v: (typeof FORMAT_2_18.vehicles)[number]) => ({ ...v, brain: { ...v.brain, farRoute: { ...v.brain!.farRoute, offRoad: false } } });
+    expect(next).toEqual({
+      ...FORMAT_2_18,
+      vehicles: [FORMAT_2_18.vehicles[0], route(FORMAT_2_18.vehicles[1]), FORMAT_2_18.vehicles[2]],
+      removed: [route(FORMAT_2_18.removed[0])],
+    });
+  });
+});
+
+describe('save migration 19 to 20', () => {
+  it('drops guard shots, guard kill credit and the gate a driver was shot by, and keeps every other field', () => {
+    const next = MIGRATIONS[19](FORMAT_2_19);
+
+    expect(next).toEqual({
+      ...FORMAT_2_19,
+      events: [FORMAT_2_19.events[0], FORMAT_2_19.events[2]],
+      vehicles: [{ id: 'player', lastHitBy: null }, FORMAT_2_19.vehicles[1], { id: 'npc-4', lastHitBy: null, brain: { goals: [] } }],
+      removed: [{ id: 'npc-8', lastHitBy: null }, FORMAT_2_19.removed[1]],
+    });
+  });
+});
+
+describe('save migration 20 to 21', () => {
+  it('stamps every flee goal with the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[20](FORMAT_2_20);
+    const [player, runner, fighter] = FORMAT_2_20.vehicles;
+    const fled = (g: { kind: string }) => (g.kind === 'flee' ? { ...g, perceived: 620 } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_20,
+      vehicles: [player, { ...runner, brain: { goals: runner.brain!.goals.map(fled) } }, fighter],
+      removed: [{ ...FORMAT_2_20.removed[0], brain: { goals: FORMAT_2_20.removed[0].brain.goals.map(fled) } }],
+    });
+  });
+});
+
+describe('save migration 21 to 22', () => {
+  it('gives every fight goal a fresh wear window from the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[21](FORMAT_2_21);
+    const [player, raider, runner] = FORMAT_2_21.vehicles;
+    const worn = (g: { kind: string }) => (g.kind === 'fight' ? { ...g, worn: { turn: 700, condition: 1 } } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_21,
+      vehicles: [player, { ...raider, brain: { goals: raider.brain!.goals.map(worn) } }, runner],
+      removed: [{ ...FORMAT_2_21.removed[0], brain: { goals: FORMAT_2_21.removed[0].brain.goals.map(worn) } }],
+    });
+  });
+});
+
+describe('save migration 22 to 23', () => {
+  it('turns noted hostiles and fight or flee targets into tracks, and keeps every other field', () => {
+    const next = MIGRATIONS[22](FORMAT_2_22) as typeof FORMAT_2_22;
+    const [player, raider, runner] = FORMAT_2_22.vehicles;
+    const [raid, fight] = raider.brain!.goals;
+    const { perceived: _, ...untimedFight } = fight;
+    const robbery = FORMAT_2_22.removed[0].brain.goals[0];
+    const { perceived: __, ...untimedRobbery } = robbery;
+
+    expect(next).toEqual({
+      ...FORMAT_2_22,
+      vehicles: [
+        player,
+        {
+          ...raider,
+          brain: {
+            noticed: { 'preySeen:npc-5': 799 },
+            goals: [raid, untimedFight],
+            tracks: {
+              player: { at: { x: 30, y: 30 }, turn: 797, sighted: true, choice: 'fight', chosenInSight: true },
+              'npc-5': { at: { x: 10, y: 12 }, turn: 797, sighted: false, choice: 'keep', chosenInSight: false },
+            },
+          },
+        },
+        { ...runner, brain: { ...runner.brain, tracks: { 'npc-2': { at: { x: 40, y: 40 }, turn: 799, sighted: true, choice: 'flee', chosenInSight: true } } } },
+      ],
+      removed: [
+        {
+          ...FORMAT_2_22.removed[0],
+          brain: { noticed: {}, goals: [untimedRobbery], tracks: { 'npc-5': { at: { x: 10, y: 12 }, turn: 790, sighted: true, choice: 'fight', chosenInSight: true } } },
+        },
+      ],
+    });
+  });
+});
+
+describe('save migration 23 to 24', () => {
+  it('marks every track out of sight and keeps every other field', () => {
+    const next = MIGRATIONS[23](FORMAT_2_23) as typeof FORMAT_2_23;
+    const [player, runner] = FORMAT_2_23.vehicles;
+    const tracks = runner.brain!.tracks;
+
+    expect(next).toEqual({
+      ...FORMAT_2_23,
+      vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
+    });
   });
 });

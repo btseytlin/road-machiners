@@ -26,6 +26,7 @@ export type TerrainNav = {
   cliffTile: Uint8Array; // 1 where the tile is too steep to drive
   tileCost: Float64Array; // route cost per tile driven: flatCost times the slope multiplier
   flatCost: Float64Array; // route cost per tile before the slope multiplier: 1 / terrain speed, times offRoadCost off the road
+  roadTile: Uint8Array; // 1 on a road tile that is not ground beside a site, for drivers who keep off roads
   slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
 };
 
@@ -78,20 +79,29 @@ function terrainEntry(t: Terrain) {
   let e = terrains.get(t);
   if (!e) {
     const n = Math.ceil(t.size / CELL);
-    const cliffTile = new Uint8Array(t.size * t.size);
-    const tileCost = new Float64Array(t.size * t.size);
-    const flatCost = new Float64Array(t.size * t.size);
-    for (let i = 0; i < t.size * t.size; i++) {
-      cliffTile[i] = isCliff(t, i) ? 1 : 0;
-      flatCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5));
-      tileCost[i] = flatCost[i] * slopeCost(t, i);
-    }
+    const tiles = tileLayers(t);
     const slow = new Float32Array(n * n);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, cliffTile, tileCost, flatCost, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tiles.tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
+    e = { nav: { size: t.size, n, ...tiles, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;
+}
+
+// The per-tile layers of a terrain, in one pass over its tiles.
+function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'flatCost' | 'roadTile'> {
+  const cliffTile = new Uint8Array(t.size * t.size);
+  const tileCost = new Float64Array(t.size * t.size);
+  const flatCost = new Float64Array(t.size * t.size);
+  const roadTile = new Uint8Array(t.size * t.size);
+  for (let i = 0; i < t.size * t.size; i++) {
+    cliffTile[i] = isCliff(t, i) ? 1 : 0;
+    const bySite = nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5);
+    flatCost[i] = routeCost(t.types[i], bySite);
+    tileCost[i] = flatCost[i] * slopeCost(t, i);
+    roadTile[i] = t.types[i] === 'road' && !bySite ? 1 : 0;
+  }
+  return { cliffTile, tileCost, flatCost, roadTile };
 }
 
 // Road tiles and the ground next to sites are on the road. Roads meet at site centers, but sites
@@ -118,6 +128,11 @@ function nearSite(x: number, y: number): boolean {
 
 export function terrainNav(t: Terrain): TerrainNav {
   return terrainEntry(t).nav;
+}
+
+// Whether map point (x, y) lies on a road tile that a driver keeping off roads pays extra for.
+export function onRouteRoad(nav: TerrainNav, x: number, y: number): boolean {
+  return nav.roadTile[tileIndex(nav.size, x, y)] === 1;
 }
 
 // Same clamping as tileAt.
@@ -445,8 +460,9 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
 // between the same points take different ways. Value noise on a lattice of points
 // REGION.navigation.taste.scale tiles apart, smoothly blended between them. It multiplies route cost
 // by 1 - taste.strength / 2 to 1 + taste.strength / 2. Centering it on 1 keeps the A* estimate as tight
-// as for a plain route, so a tasted search visits about as many cells.
-export type Taste = { seed: number; side: number; values: Float32Array };
+// as for a plain route, so a tasted search visits about as many cells. An off-road taste also marks the road tiles
+// of a map `size` tiles wide, and multiplies their cost by REGION.navigation.roadShyCost.
+export type Taste = { seed: number; side: number; values: Float32Array; roads: Uint8Array | null; size: number };
 
 // Tastes are pure functions of seed and map size, and every route of a driver asks for its taste. 256 is many
 // times the NPC drivers alive at once.
@@ -474,7 +490,13 @@ export function makeTaste(seed: number, size: number): Taste {
   const side = Math.ceil(size / scale) + 2;
   const values = new Float32Array(side * side);
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) values[y * side + x] = 1 + strength * (hashRandom(seed, x, y) - 0.5);
-  return { seed, side, values };
+  return { seed, side, values, roads: null, size };
+}
+
+// The same taste for a driver who keeps off roads: road tiles cost more, so the route runs beside a road and
+// only crosses it.
+export function offRoadTaste(taste: Taste, nav: TerrainNav): Taste {
+  return { ...taste, roads: nav.roadTile, size: nav.size };
 }
 
 // Cost multiplier at map point (x, y) in tiles.
@@ -493,14 +515,18 @@ export function tasteAt(t: Taste, x: number, y: number): number {
   return top + (bottom - top) * fy;
 }
 
-// A step cost scaled by the taste at map point (x, y), or unchanged without a taste.
+// A step cost scaled by the taste at map point (x, y), or unchanged without a taste. An off-road taste scales a
+// road tile again.
 export function tasted(t: Taste | null, cost: number, x: number, y: number): number {
-  return t ? cost * tasteAt(t, x, y) : cost;
+  if (!t) return cost;
+  const c = cost * tasteAt(t, x, y);
+  return t.roads && t.roads[tileIndex(t.size, x, y)] === 1 ? c * REGION.navigation.roadShyCost : c;
 }
 
 // The part of a route cache key that tells tastes apart.
 export function tasteKey(t: Taste | null): string {
-  return t ? String(t.seed) : 'plain';
+  if (!t) return 'plain';
+  return t.roads ? `${t.seed}:off` : String(t.seed);
 }
 
 function smooth(f: number): number {

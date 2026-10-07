@@ -63,6 +63,15 @@ export function isMounted(chassisId: string, item: GridItem): boolean {
   return mountLetter(chassisId, item) !== null;
 }
 
+// The side armor faces as the truck lays it: its mount side when mounted, else the front when it lies wide and the
+// left when it lies tall.
+export function plateSide(chassisId: string, item: GridItem): SideLetter {
+  const letter = mountLetter(chassisId, item);
+  if (letter !== null && SIDES.includes(letter)) return letter as SideLetter;
+  const size = itemSize(item);
+  return size.w >= size.h ? 'F' : 'L';
+}
+
 function mountLetter(chassisId: string, item: GridItem): Cell | null {
   if (item.kind !== 'part') return null;
   const base = baseGrid(chassisId);

@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, cellCount, freeCells, gridOf, isMounted, onDeadRow, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, cellCount, freeCells, gridOf, isMounted, onDeadRow, placementError, itemCells, mountedItems, mountedParts, plateSide, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
@@ -171,6 +171,17 @@ describe('side armor mounts', () => {
     expect(letters.has('L')).toBe(true);
     expect(letters.size).toBeGreaterThan(1);
     expect(isMounted('hauler', across)).toBe(false);
+  });
+
+  it('plateSide gives a mounted plate its mount side, even a square one', () => {
+    for (const letter of ['F', 'B', 'L', 'R'] as const) expect(plateSide('hauler', spotOn('hauler', 'steelPlate', letter, []))).toBe(letter);
+  });
+
+  it('plateSide lays a spare plate on the front when it lies wide and on the left when it lies tall', () => {
+    const spare = (rot: 0 | 1): GridItem => ({ id: 'i-plate', x: 0, y: 20, rot, kind: 'part', part: { id: 'p', defId: 'plates', hp: 1, wear: 0 } });
+    const wide = partDef('plates').w > partDef('plates').h;
+    expect(plateSide('hauler', spare(0))).toBe(wide ? 'F' : 'L');
+    expect(plateSide('hauler', spare(1))).toBe(wide ? 'L' : 'F');
   });
 
   it('sideOf is null for parts that are not mounted armor', () => {
