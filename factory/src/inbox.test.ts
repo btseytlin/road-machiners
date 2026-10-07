@@ -65,6 +65,32 @@ describe('drainInbox', () => {
     expect(sent).toEqual([]);
   });
 
+  it('queues an ad hoc task of Hermes with no message to answer', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'adhoc', text: 'check the disk', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: null } });
+    expect(sent).toEqual([]);
+  });
+
+  it('accepts a route of Hermes, as Hermes', async () => {
+    const calls: string[] = [];
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), builds: { 4: 'abc1234' } }));
+    put('1.json', { kind: 'route', route: 'patch', issue: 4, text: 'make the horn louder', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(readState(statePath).patching).toEqual({ 4: 'abc1234' });
+    expect(calls).toContain('edit -5 42 Post\n\n🔧 Patch from Hermes. Sonnet fixes the build, then the checks run again.');
+  });
+
+  it('refuses an approve, a deny, a ship and a remove from Hermes', async () => {
+    const sent: string[] = [];
+    for (const kind of ['approve', 'deny', 'ship', 'remove']) put(`${kind}.json`, { kind, issue: 4, text: 'x', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
+    expect(sent).toHaveLength(4);
+    for (const text of sent) expect(text).toContain('Only committee members can do that');
+    expect(readState(statePath).pendingApprovals).toEqual({});
+  });
+
   it('refuses an ad hoc task without text', async () => {
     const sent: string[] = [];
     put('1.json', { kind: 'adhoc' });

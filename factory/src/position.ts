@@ -1,5 +1,5 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
-import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Job, type JobStage, type ReleaseState } from './types';
+import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleaseState } from './types';
 
 export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'harden' | 'harden-fix' | 'resolve' | 'harden-checks' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'harden', 'done'] as const;
@@ -35,7 +35,7 @@ function hardeningPosition(phase: string | undefined): Position {
 // The release tracking card waits in Approval for the whole release, and its post is release.postId, so no store can disagree about it.
 export function cardDrift(card: Card, state: FactoryState): string[] {
   if (card.labels.includes(RELEASE_LABEL)) return [];
-  return [...phaseDrift(card, state), ...hardeningDrift(card, state), ...approvalDrift(card, state), ...jobDrift(card, state)];
+  return [...phaseDrift(card, state), ...hardeningDrift(card, state), ...approvalDrift(card, state), ...jobDrift(card, state), ...heldCardDrift(card, state)];
 }
 
 // The jobs that run on a card. A job owns its card mid-step, because a stage changes the column and the post before its job entry leaves the state.
@@ -81,6 +81,26 @@ function jobDrift(card: Card, state: FactoryState): string[] {
 // Ad hoc jobs run in Implementation in place of implement.
 function runsStage(position: Position, expected: JobStage | null, stage: JobStage): boolean {
   return stage === expected || (stage === 'adhoc' && position === 'implement');
+}
+
+const heldBy = (issue: string, hold: Hold): string => `#${issue} held by ${hold.by} (${hold.reason})`;
+
+// A held card waits in its column with no job. Done runs nothing, so a hold there is stale.
+function heldCardDrift(card: Card, state: FactoryState): string[] {
+  const hold = state.held[String(card.issue)];
+  if (hold === undefined) return [];
+  const lines = card.column === 'Done' ? [`${heldBy(String(card.issue), hold)} but column Done`] : [];
+  return [...lines, ...runningJobs(card, state).map((job) => `${heldBy(String(card.issue), hold)} but a ${job.stage} job is running`)];
+}
+
+// A hold whose card left the board holds nothing, and `resume-card` lifts it. A job on a held issue escaped the hold.
+// Audit skips the card drift of a card with a running job, so it reads the running job from here.
+export function holdDrift(state: FactoryState, cards: Card[]): string[] {
+  return Object.entries(state.held).flatMap(([issue, hold]) => {
+    const gone = cards.some((card) => String(card.issue) === issue) ? [] : [`${heldBy(issue, hold)} but not on the board`];
+    const running = state.jobs.filter((job) => String(job.issue) === issue).map((job) => `${heldBy(issue, hold)} but a ${job.stage} job is running`);
+    return [...gone, ...running];
+  });
 }
 
 export function releaseDrift(state: FactoryState, cards: Card[]): string[] {

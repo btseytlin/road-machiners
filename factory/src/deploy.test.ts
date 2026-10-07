@@ -81,7 +81,7 @@ describe('deployDev', () => {
     const { ctx, webRoot } = setup();
     const home = join(webRoot, '..');
     const statePath = join(home, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234' });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234', devError: 'old error' });
     const repo = {
       prepareWorkClone: async (_branch: string, _base: string, dir: string) => {
         mkdirSync(join(dir, 'game', 'dist'), { recursive: true });
@@ -100,7 +100,16 @@ describe('deployDev', () => {
   it('publishes /dev/ and records the dev commit it serves', async () => {
     const { ctx, statePath } = devSetup(false);
     expect(await deployDev(ctx, '/l')).toBe('http://x/play/dev/');
-    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null });
+    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null, devError: null });
+  });
+
+  it('builds /dev/ with error reports on and keeps its maps on the host, not in the web root', async () => {
+    const { ctx, home, envs } = devSetup(false);
+    await deployDev(ctx, '/l');
+    expect(envs).toEqual([{ SAVE_SCOPE: 'dev', ERROR_REPORT_URL: 'http://x/errors', ERROR_REPORT_BUILD: 'dev' }]);
+    expect(existsSync(join(home, 'sourcemaps', SHA, 'index.js.map'))).toBe(true);
+    expect(existsSync(join(home, 'web', 'dev', 'index.js.map'))).toBe(false);
+    expect(readPublished(home)).toEqual([{ sha: SHA, kind: 'dev', publishedAt: '2026-10-07T12:00:00.000Z' }]);
   });
 
   it('builds /dev/ with error reports on and keeps its maps on the host, not in the web root', async () => {
@@ -123,7 +132,7 @@ describe('deployDev', () => {
   it('records a failed dev commit and throws', async () => {
     const { ctx, statePath } = devSetup(true);
     await expect(deployDev(ctx, '/l')).rejects.toThrow('build broke');
-    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234' });
+    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234', devError: 'build broke' });
   });
 });
 

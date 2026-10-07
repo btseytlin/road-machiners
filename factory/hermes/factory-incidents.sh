@@ -51,7 +51,8 @@ from_source "stuck list" stuck
 # Each failed job of the last day, with its first error line and log. The log name holds the start time, so each failure prints once.
 jq -r '.failures // [] | .[] | "failed \(.stage)\(if .issue then " #\(.issue)" else "" end): \(.error | split("\n")[0]) (log \(.log // "none"))"' /factory/home/state/state.json
 jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/home/state/state.json
-jq -r '.devFailed // empty | "dev build failed at " + .' /factory/home/state/state.json
+# The line names the commit and the first line of what broke, so Hermes fixes dev or reverts the merge that broke it.
+jq -r 'select(.devFailed != null) | "dev build failed at \(.devFailed)" + (if .devError then ": " + (.devError | split("\n")[0]) else "" end)' /factory/home/state/state.json
 # factory-update could not deploy main. Its log is logs/update.log.
 if [ -f /factory/home/update-failed ]; then echo "update failed: $(cat /factory/home/update-failed)"; fi
 # Every tick, paused or not, writes the health file. A tick waits up to 15 minutes on the repo lock and the timer runs every minute, so 20 minutes without one means ticks stopped.

@@ -10,6 +10,7 @@ import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type M
 import { closeBundle } from './bundle';
 import { agentLog } from './common';
 import { queueIncidents } from './incident';
+import { mergeResolving } from './merge-resolve';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
@@ -39,13 +40,20 @@ async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
 }
 
 // The release merges into main with no conflict once it holds all of main. The cut and hotfixes keep it so, but factory
-// work lands on main directly. A game change on main was never in the played candidate, so Ship stops on it. Anything
-// else merges into the release first. Returns that merge, or nothing when the release holds main already.
-async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
+// work lands on main directly. A game change on main was never in the played candidate, so Ship merges main into the release
+// at once, with an agent for a conflict, and stops. The release moved, so the tick builds a new candidate for the committee to play.
+// Anything else merges into the release inside the ship. Returns that merge, or null when the ship stopped.
+async function takeMain(ctx: Ctx, issue: number, branch: string): Promise<MergeStep[] | null> {
   if (await ctx.repo.isMerged('main', branch)) return [];
   const unplayed = (await ctx.repo.changedFiles(branch, 'main')).filter((file) => file.startsWith(`${GAME_DIR}/`));
-  if (unplayed.length > 0) throw new Error(`main changed ${unplayed.length} game files that ${branch} lacks, like ${unplayed[0]}, so the candidate was not played with them. Merge main into ${branch} and build a new candidate.`);
-  return [{ branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` }];
+  const step = { branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` };
+  if (unplayed.length === 0) return [step];
+  await mergeResolving(ctx, 'ship', [step]);
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
+  const note = `main changed ${unplayed.length} game files that ${branch} lacked, like ${unplayed[0]}, so the committee had not played them. The factory merged main into ${branch}. A new candidate follows, and Ship works on that one.`;
+  await ctx.github.comment(issue, note);
+  ctx.log('ship', issue, note);
+  return null;
 }
 
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
@@ -75,9 +83,11 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const features = await releaseFeatures(ctx, release);
   // A changelog that does not match the release fails here, before anything public happens.
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
-  // One atomic push moves the release, main and dev, so a conflict or a rejected push fails here with nothing changed.
-  await ctx.repo.merge([
-    ...(await takeMain(ctx, release.branch)),
+  const taken = await takeMain(ctx, issue, release.branch);
+  if (taken === null) return;
+  // One atomic push moves the release, main and dev, so a failed push fails here with nothing changed. An agent resolves a conflict first.
+  await mergeResolving(ctx, 'ship', [
+    ...taken,
     { branch: release.branch, into: 'main', message: `Release ${release.day}` },
     { branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` },
   ]);

@@ -139,7 +139,7 @@ function summarizeGate(recent: CardLine[][], gate: Gate): DeliverySummary['rejec
 
 // Runs of a card stage that failed, died or timed out on any issue not known to run another path, which the next tick runs again in the same column. A job a control order stopped is no retry.
 function summarizeRetries(jobs: JobLine[], excluded: Set<number>, window: Window): DeliverySummary['retries'] {
-  const failed = jobs.filter((job) => job.issue !== null && !excluded.has(job.issue) && RETRY_STAGES.includes(job.stage) && !['done', 'stopped'].includes(job.outcome) && inside(window, Date.parse(job.endedAt)));
+  const failed = jobs.filter((job) => job.issue !== null && !excluded.has(job.issue) && RETRY_STAGES.includes(job.stage) && !['done', 'stopped', 'held'].includes(job.outcome) && inside(window, Date.parse(job.endedAt)));
   return RETRY_STAGES.map((stage) => {
     const own = failed.filter((job) => job.stage === stage);
     return { stage, runs: own.length, issues: new Set(own.map((job) => job.issue)).size };

@@ -32,6 +32,16 @@ describe('remove', () => {
     expect(state.release).toMatchObject({ postId: null, removed: [5] });
   });
 
+  it('has an agent resolve a conflicting revert and goes on with the removal', async () => {
+    const f = fake();
+    f.revertConflicts = ['dev'];
+    await remove(f.ctx, 5);
+    expect(f.calls.slice(0, 7)).toEqual(['fetch', 'revert 5 release/2026-09-29', 'revert 5 dev', 'open dev', 'agent', 'close dev', 'revert 5 dev']);
+    expect(f.agentRuns[0].prompt).toContain('takes issue 5 out of this branch');
+    expect(f.calls).toContain('reopen 5');
+    expect(readState(f.ctx.statePath).release).toMatchObject({ postId: null, removed: [5] });
+  });
+
   it('clears postId and pendingShip once the release branch is reverted, even when the dev revert fails', async () => {
     const f = fake();
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob', pendingRemovals: [{ issue: 5, by: 'Ann', text: 't' }] });
