@@ -6,12 +6,11 @@ import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
 import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { route, routeLength, type Blocker } from "./path";
-import { towData } from "./states";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
+import { escortsOf, followPace, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
 import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
@@ -386,7 +385,9 @@ function horizon(world: World, v: Vehicle): { vs: number; t: number } {
 
 // Circles along the line x covers on its heading within v's horizon. They are spaced one radius apart, so
 // together they close the strip. A circle is left out when v cannot get there before x does, so a truck driving
-// away at v's pace blocks only where it is now. x may speed up this turn, as in brakingReach.
+// away at v's pace blocks only where it is now. x may speed up this turn, as in brakingReach. A truck driving away
+// from v, as one v merges behind or overtakes, does not leave a point until its body has passed it, so its circles
+// stay until its centre is both radii beyond them.
 function sweptPath(world: World, v: Vehicle, x: Vehicle): Blocker[] {
   const sx = vehicleStats(world, x);
   const r = sx.radius;
@@ -395,11 +396,12 @@ function sweptPath(world: World, v: Vehicle, x: Vehicle): Blocker[] {
   const xs = Math.min(sx.maxSpeed, x.speed + sx.accel);
   const reach = xs * t;
   const steps = Math.ceil(reach / r);
+  const tail = Math.cos(angleDiff(x.heading, bearing(v.pos, x.pos))) > 0 ? radii : 0;
   const circles: Blocker[] = [];
   for (let i = 0; i <= steps; i++) {
     const d = (reach * i) / steps;
     const pos = { x: x.pos.x + Math.cos(x.heading) * d, y: x.pos.y + Math.sin(x.heading) * d };
-    if (i === 0 || dist(v.pos, pos) - radii <= (vs * d) / xs) circles.push({ pos, r });
+    if (i === 0 || dist(v.pos, pos) - radii <= (vs * (d + tail)) / xs) circles.push({ pos, r });
   }
   return circles;
 }
@@ -420,8 +422,7 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
 }
 
 function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
-  const tow = towHeldBy(world, tower.id);
-  return tow !== null && towData(tow).hitched && tow.other === x.id;
+  return ropeClientOf(world, tower.id) === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.

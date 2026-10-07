@@ -12,7 +12,7 @@ import { fuelCap, isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive , startCombat } from './testkit';
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
-import { startTow, thinkNpc, topGoal } from './npc-activities';
+import { resolveNpcActivities, startTow, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
@@ -21,7 +21,7 @@ import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
-import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
+import { autoRuns, cloneWorld, endTurn, setDirect, setMoveOrder } from './world';
 
 type Setup = { w: World; trader: Vehicle };
 
@@ -38,12 +38,23 @@ const MID_FAR: Vec = { x: 80, y: 330 };
 
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
+  // No region spawns, so NPCs elsewhere on the map never cross a long tow.
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   w.player.fuel = 0;
   const trader = withTower(w, 'trader', 'traders', 'hauler', traderPos);
   return { w, trader };
 }
 
 // Runs turns until the check passes, and returns the world with the turn's events.
+// A stranded driver lies up for fresh gear. This jumps to the end of its lie-up and lets it refit.
+function endLieUp(w: World, npc: Vehicle): void {
+  const goal = topGoal(npc);
+  expect(goal?.kind).toBe('rearm');
+  w.turn = goal!.until!;
+  thinkNpc(w, npc);
+  resolveNpcActivities(w);
+}
+
 function runUntil(w: World, max: number, done: (w: World) => boolean): { w: World; turns: number; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 1; i <= max; i++) {
@@ -956,7 +967,13 @@ describe('the player towing an NPC', () => {
     for (const part of mountedParts(npc, 'engine')) npc.items = npc.items.filter((i) => i.kind !== 'part' || i.part.id !== part.id);
     const w = pick(pick(callVehicle(start, npc.id), OFFER), HITCH);
     const r = runUntil(setMoveOrder(w, { kind: 'stopAt', dest: gate }), 60, (x) => playerTowing(x) === null);
-    const after = runUntil(r.w, 3, () => false).w;
+    const lying = runUntil(r.w, 3, () => false).w;
+    const goal = topGoal(find(lying, npc.id));
+    expect(goal).toMatchObject({ kind: 'rearm' });
+    expect(mountedParts(find(lying, npc.id), 'engine')).toHaveLength(0);
+    const ready = cloneWorld(lying);
+    ready.turn = goal!.until! - 1;
+    const after = runUntil(ready, 3, () => false).w;
     expect(mountedParts(find(after, npc.id), 'engine')).toHaveLength(1);
     expect(isStranded(after, find(after, npc.id))).toBe(false);
   });
@@ -1156,6 +1173,17 @@ describe('a truck stranded for good', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
+  it('with money, heads for a town, not a stall that cannot fit an engine', () => {
+    const yard = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const pad = sitePads(yard)[0];
+    const { w, npc } = engineless(pad);
+    npc.pos = { ...pad };
+    getResources(w, npc).money = 5000;
+    const goal = thinkNpc(w, npc);
+    expect(goal).toMatchObject({ kind: 'resupply' });
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
+  });
+
   it('a junk engine counts too', () => {
     const pad = nearestPad(bowl, far);
     const w = emptyWorld(pad);
@@ -1166,16 +1194,20 @@ describe('a truck stranded for good', () => {
     engine.wear = CONDITION.maxWear + 1;
     engine.hp = 0;
     thinkNpc(w, npc);
+    endLieUp(w, npc);
     const fresh = mountedParts(npc, 'engine')[0];
     expect(fresh.wear).toBeLessThanOrEqual(CONDITION.maxWear);
     expect(fresh.hp).toBeGreaterThan(0);
   });
 
-  it('gets a fresh engine from its loadout pool on reaching a town, however it got there', () => {
+  it('lies up on reaching a town, however it got there, then gets a fresh engine from its loadout pool', () => {
     const pad = nearestPad(bowl, far);
     const { w, npc } = engineless(pad);
     npc.pos = { ...pad };
     thinkNpc(w, npc);
+    expect(topGoal(npc)).toMatchObject({ kind: 'rearm', until: w.turn + NPCS.scavenger.cap * NPCS.scavenger.interval });
+    expect(mountedParts(npc, 'engine')).toHaveLength(0);
+    endLieUp(w, npc);
     expect(mountedParts(npc, 'engine')).toHaveLength(1);
     expect(isStranded(w, npc)).toBe(false);
   });
@@ -1243,12 +1275,14 @@ describe('a broke driver', () => {
     expect(getResources(w, npc).fuel).toBe(0);
   });
 
-  // Scrap fuel does not fix an engine for an NPC, so a broken engine still gets the refit.
-  it('stranded on a town pad by a broken engine gets a fresh loadout and can drive', () => {
+  // Scrap fuel does not fix an engine for an NPC, so a broken engine still gets the refit after a lie-up.
+  it('stranded on a town pad by a broken engine lies up, then gets a fresh loadout and can drive', () => {
     const { w, npc } = broke(nearestPad(bowl, far));
     mountedParts(npc, 'engine')[0].hp = 0;
     getResources(w, npc).fuel = 0;
     thinkNpc(w, npc);
+    expect(isStranded(w, npc)).toBe(true);
+    endLieUp(w, npc);
     expect(isStranded(w, npc)).toBe(false);
   });
 

@@ -5,6 +5,7 @@ import { isCheapMeeting } from "./fidelity";
 import { shadeCastersAround } from "./prop-index";
 import { weatherAt } from "./weather";
 import type { Obstacle, World } from "./types";
+import { propBase } from "./bridge";
 import { heightAt } from "./terrain";
 import { clamp, dist, type Vec } from "./vec";
 
@@ -53,7 +54,7 @@ export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = sha
 
 // Whether obstacle o covers ray point p and stands above the ray there.
 function obstacleBlocks(world: World, o: Obstacle, p: Vec, rayHeight: number): boolean {
-  return dist(p, o.pos) <= o.r && heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight;
+  return dist(p, o.pos) <= o.r && propBase(world.terrain, o) + TIME.obstacleShade[o.kind] > rayHeight;
 }
 
 // 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:
