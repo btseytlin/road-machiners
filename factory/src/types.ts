@@ -233,8 +233,8 @@ export type AgentSession = { dir: string; id: string; resume: boolean };
 export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; evidenceCheck?: boolean; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
 
 export interface Container {
-  // Runs Claude Code headless in the clone. Throws on a nonzero exit.
-  agent(run: AgentRun): Promise<void>;
+  // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.
+  agent(run: AgentRun): Promise<string>;
   // Runs a bash script in the game folder of the clone with no secret. It only runs game npm scripts. Throws on a nonzero exit.
   shell(clone: string, script: string, log: string, env?: Record<string, string>): Promise<void>;
 }

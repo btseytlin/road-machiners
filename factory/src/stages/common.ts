@@ -147,7 +147,8 @@ function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, 
 }
 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
+// Returns the run's stream-json output.
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<string> {
   const { labels } = await ctx.github.issue(issue);
   const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
@@ -156,7 +157,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.

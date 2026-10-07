@@ -45,7 +45,7 @@ function setup(heads: string[] = ['abc1234'], state: Partial<ReleaseState> = {})
   f.ctx.container.agent = async (agentRun: AgentRun) => {
     run.prompts.push(agentRun.prompt);
     run.models.push(agentRun.model);
-    await agent(agentRun);
+    return agent(agentRun);
   };
   return run;
 }

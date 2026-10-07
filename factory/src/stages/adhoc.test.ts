@@ -79,6 +79,7 @@ describe('adhoc', () => {
         await agent(run);
         mkdirSync(filesDir, { recursive: true });
         extra(filesDir);
+        return '';
       };
     }
 
@@ -152,6 +153,7 @@ describe('adhoc', () => {
       f.ctx.container.agent = async (run) => {
         await agent(run);
         symlinkSync('/etc', `${cfg.home}/work/adhoc-7/game/.factory/files`);
+        return '';
       };
       await expect(adhoc(f.ctx, 7)).rejects.toThrow('not a plain folder');
       expect(documents(f)).toEqual([]);

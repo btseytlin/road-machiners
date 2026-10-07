@@ -62,6 +62,7 @@ export function fake(): Fake {
           mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
           writeFileSync(join(home, '.factory', name), text, 'latin1');
         }
+        return '';
       },
     },
     repo: {

@@ -211,7 +211,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         pauseForUsageLimit(cfg.home, limit);
         throw new UsageLimitError(`agent in ${clone} hit the usage limit: ${limit}`);
       }
-      must(result, `agent in ${clone}`);
+      return must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);

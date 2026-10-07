@@ -45,17 +45,12 @@ Name who pays: the player, the next reader, a caller.
 State the problem only, never the fix.
 No hedge words.
 
-## Verdict
+## Report
 
-Write the complete review to `.factory/review.md`.
-End it with exactly one of these lines.
-
-REVIEW_VERDICT: PASS
-REVIEW_VERDICT: FAIL
-
-Use PASS only when the review found no issue that should block the change.
-A bug, a repeat of an incident, or a broken principle the task file does not name and explain blocks it.
-The factory stops the stage when the file is missing or has no verdict line at its end.
+Report every finding with ReportFindings, and report an empty list when you found nothing.
+The factory reads only that report.
+Give a finding the category `correctness` when it should block the change: a bug, a repeat of an incident, or a broken principle the task file does not name and explain.
+Any `correctness` finding blocks the change. Other categories are listed and do not block.
 
 ## Incident log
 

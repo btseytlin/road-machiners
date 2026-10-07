@@ -4,11 +4,13 @@ import { createHash } from 'node:crypto';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
+import type { Finding } from './review';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
 const { runStage: runPatch } = await import('./patch');
+const { judge, readFindings } = await import('./review');
 
 // Runs the Testing column the way the tick does: verify or checks by the card's phase, until the card leaves Testing.
 // Verify, checks, the fix round and the second checks make four jobs at most.
@@ -38,10 +40,12 @@ let bases: string[] = [];
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
 let merged = true;
-// The review agent's outputs in order. A null means it wrote no file. Rounds past the list get a clean review.
-let reviews: (string | null)[] = [];
-const PASSED = 'No blocking issue.\n\nREVIEW_VERDICT: PASS\n';
-const failed = (finding: string): string => `${finding}\n\nREVIEW_VERDICT: FAIL\n`;
+// The findings each review run reports, in order. A null means it called no ReportFindings. Rounds past the list report nothing.
+let reviews: (Finding[] | null)[] = [];
+// /code-review reports from its forked agent, as the server's logs show.
+const reportStream = (findings: Finding[]): string => `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'ReportFindings', input: { findings } }] }, parent_tool_use_id: 'forked-command-code-review' })}\n`;
+const bug = (summary: string): Finding => ({ file: 'game/src/sim/far.ts', line: 12, category: 'correctness', summary, failure_scenario: 'A probe shows it.', verdict: 'CONFIRMED' });
+const cleanup = (summary: string): Finding => ({ file: 'game/src/sim/far.ts', line: 30, category: 'simplification', summary, failure_scenario: 'A reader traces a dead branch.', verdict: 'CONFIRMED' });
 // How-to sentences the posts no longer carry. The buttons and the docs explain them.
 const BOILERPLATE = ['Approve runs the review', 'Deny closes the issue', 'Reply to this post'];
 // The prompt of every review round, in order.
@@ -96,12 +100,15 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       sendButtons: async (chat: string, text: string, buttons: unknown) => { calls.push(`buttons ${chat} ${text}`); photoButtons = buttons; return 120; },
     },
     container: {
-      agent: async (run: AgentRun) => {
-        if (!run.prompt.includes('review round')) return agent(run);
+      agent: async (run: AgentRun): Promise<string> => {
+        if (!run.prompt.includes('review round')) {
+          agent(run);
+          return '';
+        }
         calls.push(`review ${run.model} ${run.skill}`);
         reviewPrompts.push(run.prompt);
-        const output = reviews.length > 0 ? reviews.shift() : PASSED;
-        if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
+        const findings = reviews.length > 0 ? reviews.shift() : [];
+        return findings ? reportStream(findings) : '';
       },
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
@@ -463,8 +470,8 @@ describe('testing stage', () => {
       expect(reviewPrompts[0]).toContain('git diff origin/dev...HEAD');
     });
 
-    it('fails on a FAIL verdict, runs one fix round with the review, then passes a second review', async () => {
-      reviews = [failed('propsNear scans every prop per check. R3.')];
+    it('fails on a correctness finding, runs one fix round with the review, then passes a second review', async () => {
+      reviews = [[bug('propsNear scans every prop per check. R3.'), cleanup('A guard can never fire.')]];
       const prompts: string[] = [];
       let seen = '';
       const ctx = fakeCtx((run) => {
@@ -475,14 +482,17 @@ describe('testing stage', () => {
       await runStage(ctx, 7);
       expect(prompts).toHaveLength(2);
       expect(prompts[1]).toContain('second round');
-      expect(seen).toBe('propsNear scans every prop per check. R3.\n\nREVIEW_VERDICT: FAIL\n');
+      expect(seen).toBe([
+        '- [correctness, CONFIRMED] game/src/sim/far.ts:12: propsNear scans every prop per check. R3.\n  A probe shows it.',
+        '- [simplification, CONFIRMED] game/src/sim/far.ts:30: A guard can never fire.\n  A reader traces a dead branch.\n',
+      ].join('\n'));
       expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(2);
       expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
       expect(calls.at(-1)).toBe('move 7 Approval');
     });
 
     it('sends the card back to Design with the review when the second review fails again', async () => {
-      reviews = [failed('First review.'), failed('Hot scan in far.ts. Principle 3.')];
+      reviews = [[bug('First review.')], [bug('Hot scan in far.ts. Principle 3.')]];
       await runStage(fakeCtx(outputs), 7);
       expect(commentBodies).toHaveLength(1);
       expect(commentBodies[0]).toContain('## Review findings');
@@ -496,32 +506,37 @@ describe('testing stage', () => {
 
     it('throws instead of a second redesign when the card already came back from the review once', async () => {
       priorComments = [{ login: 'factory', body: '## Review findings\n\nThe review failed this change twice.' }];
-      reviews = [failed('First review.'), failed('Still scans every prop.')];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review failed the change twice again after a redesign.\nStill scans every prop.');
+      reviews = [[bug('First review.')], [bug('Still scans every prop.')]];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review failed the change twice again after a redesign.\n- [correctness, CONFIRMED] game/src/sim/far.ts:12: Still scans every prop.');
       expect(commentBodies).toHaveLength(0);
       expect(calls).not.toContain('move 7 Design');
       expect(calls).not.toContain('checks');
     });
 
-    it('throws when review.md is missing', async () => {
+    it('passes a review whose findings are all cleanups, with no fix round', async () => {
+      reviews = [[cleanup('A guard can never fire.')]];
+      const prompts: string[] = [];
+      await runStage(fakeCtx((run) => { prompts.push(run.prompt); outputs(run); }), 7);
+      expect(prompts).toHaveLength(1);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('fails a finding with no category, since nothing marks it as a cleanup', async () => {
+      const uncategorized = (summary: string): Finding => ({ file: 'game/src/a.ts', line: 1, summary, failure_scenario: 'A probe shows it.' });
+      reviews = [[uncategorized('Unclear.')], [uncategorized('Still unclear.')]];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.at(-1)).toBe('move 7 Design');
+    });
+
+    it('throws when the review reports no findings with ReportFindings', async () => {
       reviews = [null];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('reported no findings with ReportFindings');
       expect(calls).not.toContain('checks');
     });
 
-    it.each([
-      ['Looks fine.\n', 'must end with REVIEW_VERDICT: PASS or REVIEW_VERDICT: FAIL'],
-      ['REVIEW_VERDICT: PASS\nMore text after the verdict.\n', 'must end with'],
-      ['REVIEW_VERDICT: FAIL\nOn second thought.\nREVIEW_VERDICT: PASS\n', 'names both verdicts'],
-    ])('throws on a review with no clear verdict: %s', async (output, message) => {
-      reviews = [output];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow(message);
-      expect(calls).not.toContain('checks');
-    });
-
-    it('does not reuse the first review file for the second review', async () => {
-      reviews = [failed('First review.'), null];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+    it('reads the last report when a review reports twice', async () => {
+      const stream = `${reportStream([bug('First look.')])}${reportStream([])}`;
+      expect(judge(readFindings(stream))).toEqual({ passed: true, text: 'The review found nothing.' });
     });
   });
 

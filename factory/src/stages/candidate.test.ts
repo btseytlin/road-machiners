@@ -31,7 +31,7 @@ describe('candidate', () => {
     f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
     const original = f.ctx.container.agent;
     const models: string[] = [];
-    f.ctx.container.agent = async (run) => { models.push(run.model); await original(run); };
+    f.ctx.container.agent = async (run) => { models.push(run.model); return original(run); };
     await candidate(f.ctx, 11);
     expect(models).toEqual(['opus']);
   });
