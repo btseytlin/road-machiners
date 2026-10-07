@@ -157,7 +157,8 @@ describe('driving through Old Orchard', () => {
     me.heading = UP_ROAD;
     const cache = stockNear(w, 'armyCache', at(32.5, 7.5));
     const up = [at(42, 1), at(39, 5.5), at(36, 7)];
-    const legs = [...up, at(33.5, 10), ...up.slice().reverse(), at(30, 0)].map(stopAt);
+    // The way back skips the first up point: the truck stands facing away from it, and with the climb reserve (#160) its U-turn there wedges it against the slope.
+    const legs = [...up, at(33.5, 10), ...up.slice(0, -1).reverse(), at(30, 0)].map(stopAt);
     await driveLegs(w, legs, SHELF_LEG_TURNS, (x, leg) => {
       if (leg === up.length) expect(salvageInRange(player(x), cache)).toBe(true);
     });
