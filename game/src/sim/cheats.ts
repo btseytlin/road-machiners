@@ -28,6 +28,7 @@ import type { Faction, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { randInt } from './rng';
 import { refreshVision } from './vision';
+import { WEATHER } from '../data/weather';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
 import { fuelCap, suppliesCap } from './stats';
@@ -232,13 +233,25 @@ export function skipToHour(world: World, hour: number): World {
   throw new Error(`No turn within a day of ${world.turn} starts hour ${hour}`);
 }
 
-export function startWeather(world: World, kind: string): World {
+// Starts weather, replacing any of that kind. A turn count overrides the drawn duration.
+// A storm starts at the truck, or offsetTiles east of it as a still storm already at full strength, for driving into.
+export function startWeather(world: World, kind: string, turns: number | null, offsetTiles: number): World {
   const known = WEATHER_KINDS.find((k) => k === kind);
   if (!known) throw new CheatError(`Unknown weather ${kind}. Kinds: ${WEATHER_KINDS.join(', ')}`);
+  if (turns !== null) requireInteger('Turns', turns, 1, Number.MAX_SAFE_INTEGER);
+  requireInteger('Offset', offsetTiles, 0, Number.MAX_SAFE_INTEGER);
   return update(world, (w) => {
     w.weather = w.weather.filter((e) => e.kind !== known);
     const event = makeWeather(w, known);
-    if (event.kind === 'storm') event.pos = { ...playerVehicle(w).pos };
+    if (turns !== null) event.turnsLeft = turns;
+    if (event.kind === 'storm') {
+      const at = playerVehicle(w).pos;
+      event.pos = { x: Math.min(w.size, at.x + offsetTiles), y: at.y };
+      if (offsetTiles > 0) {
+        event.vel = { x: 0, y: 0 };
+        event.born = w.turn - WEATHER.sim.stormFadeTurns;
+      }
+    }
     w.weather.push(event);
     w.events.push({ t: 'weather', event, outcome: 'started' });
   });
