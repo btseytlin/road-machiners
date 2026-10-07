@@ -55,8 +55,11 @@ class NewGameScreen {
     this.root.setAttribute("role", "dialog");
     this.root.setAttribute("aria-modal", "true");
     this.root.setAttribute("aria-label", "New game");
-    // Keys typed in the screen stay out of the game.
-    this.root.addEventListener("keydown", (e) => e.stopPropagation());
+    // Keys typed in the screen stay out of the game, and Tab stays in the screen.
+    this.root.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if ((e as KeyboardEvent).code === "Tab") this.wrapFocus(e as KeyboardEvent);
+    });
     this.root.append(
       el("h3", {}, "New game"),
       this.modes,
@@ -109,6 +112,15 @@ class NewGameScreen {
       el("div", { class: "dim" }, def.description),
       el("div", { class: "setting-input" }, el("span", { class: "dim" }, percent(def.min)), input, el("span", { class: "dim" }, percent(def.max))),
     );
+  }
+
+  // Tab past the last control goes to the first, and Shift-Tab before the first goes to the last.
+  private wrapFocus(e: KeyboardEvent): void {
+    const controls = [...this.root.querySelectorAll<HTMLElement>("button, input")].filter((c) => c.offsetParent !== null);
+    const edge = e.shiftKey ? controls[0] : controls[controls.length - 1];
+    if (document.activeElement !== edge) return;
+    e.preventDefault();
+    (e.shiftKey ? controls[controls.length - 1] : controls[0]).focus();
   }
 
   private pickMode(id: GameModeId): void {
