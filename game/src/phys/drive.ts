@@ -568,7 +568,7 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
   const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
-  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
+  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers, v), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };

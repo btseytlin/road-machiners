@@ -40,7 +40,7 @@ import {
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { balanceEl, moneyEl, pricedEl } from "./money";
-import { spareParts } from "../sim/inventory";
+import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -152,7 +152,7 @@ export class TownScreen {
     const body: Record<Tab, () => HTMLElement> = {
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
-      sellParts: () => this.sellParts(w, def),
+      sellParts: () => this.sellParts(w),
       trucks: () => this.trucks(w),
       contracts: () => this.contracts(w, shopId),
     };
@@ -238,10 +238,12 @@ export class TownScreen {
     const cards = shown.map((p) => {
       const kind = partDef(p.defId).kind;
       const price = partTradePrice(w, me, p, "buy");
+      const buy = this.button(pricedEl("Buy", price), (x) => buyStockPart(x, p.id), w.player.money < price);
       return partCard({
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(pricedEl("Buy", price), (x) => buyStockPart(x, p.id), w.player.money < price),
+        // buyStockPart() sends a part that does not fit the grid to garage storage.
+        action: canStowPart(me, p) ? buy : el("div", { class: "buy-stored" }, buy, el("div", { class: "dim" }, "No room: goes to storage")),
         onHover: this.hintMounts(kind),
       });
     });
@@ -276,11 +278,10 @@ export class TownScreen {
     });
   }
 
-  // Spares sell at any shop, stored parts only at a garage, as sellPart() accepts.
-  private sellParts(w: World, def: ShopDef): HTMLElement {
+  // Spare and stored parts sell at any shop, as sellPart() accepts.
+  private sellParts(w: World): HTMLElement {
     const me = playerVehicle(w);
-    const garage = def.kind === "garage";
-    const sellable: PartInstance[] = [...(garage ? w.player.storage : []), ...spareParts(me)];
+    const sellable: PartInstance[] = [...w.player.storage, ...spareParts(me)];
     const cards = sellable.map((p) => {
       const kind = partDef(p.defId).kind;
       return partCard({
@@ -293,10 +294,10 @@ export class TownScreen {
     return el(
       "div",
       {},
-      el("h3", {}, garage ? "Sell spare and stored parts" : "Sell spare parts"),
+      el("h3", {}, "Sell spare and stored parts"),
       cards.length
         ? el("div", { class: "cards" }, ...cards)
-        : el("div", { class: "dim" }, garage ? "No spare or stored parts." : "No spare parts."),
+        : el("div", { class: "dim" }, "No spare or stored parts."),
     );
   }
 

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Sets up the incident watch job at each Hermes start. The watch wakes Hermes when the list of open incidents changes. SOUL.md holds what to do.
+# Hermes's message goes to the committee. A failed or killed watch run only logs in Hermes, since members cannot act on it and the next run tries again.
+# An existing job gets its prompt and both targets set again, so a job an older start created follows the current ones. An edit keeps its id, state and last output.
+set -eu
+deliver="telegram:$FACTORY_COMMITTEE_CHAT"
+prompt="The list of open factory incidents changed. The monitor diff shows how. Fix each new incident yourself, then report what you did. Never ask for permission to fix one. Follow the Incidents section of your instructions. If the change is only an incident going away, respond with [SILENT]."
+# A failed list says nothing about the job, so a create could make a second one. The job stays as it is until the next start.
+if ! jobs=$(hermes cron list --all); then
+  echo "factory-incident-watch: could not list cron jobs, so the factory-incidents job stays as it is" >&2
+  exit 0
+fi
+if printf '%s\n' "$jobs" | grep -q factory-incidents; then
+  # A failed edit must not stop Hermes. It leaves the old prompt and targets and says so in the container log.
+  hermes cron edit factory-incidents --prompt "$prompt" --deliver "$deliver" --failure-deliver local \
+    || echo "factory-incident-watch: could not edit the factory-incidents job, so its old prompt and delivery targets stay" >&2
+else
+  hermes cron create "every 1m" "$prompt" \
+    --name factory-incidents --monitor-script factory-incidents.sh --deliver "$deliver" --failure-deliver local
+fi

@@ -158,6 +158,19 @@ describe('finite salvage', () => {
     expect(canTakeAny(w, npc, stock)).toBe(true);
   });
 
+  it('pours stores in whole units, so no crumb under a unit stays in the stock', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
+    npc.resources!.supplies = RULES.baseSupplies - 1.6;
+    w.salvage.push({ id: 'test-stock', pos: { x: 10, y: 10 }, radius: 1, goods: {}, parts: [], supplies: 2 });
+
+    collectSalvage(w, npc, 'test-stock', 100);
+
+    expect(npc.resources!.supplies).toBeCloseTo(RULES.baseSupplies - 0.6);
+    expect(w.salvage.find((s) => s.id === 'test-stock')!.supplies).toBe(1);
+    expect(canTakeAny(w, npc, w.salvage.find((s) => s.id === 'test-stock')!)).toBe(false);
+  });
+
   it('lets an NPC collector take fuel and supplies', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
@@ -185,7 +198,7 @@ describe('finite salvage', () => {
     const victim = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 32 });
     addGoods(w, victim, 'scrap', 2);
     const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
-    claimant.brain = npcBrain('raider', claimant.pos, []);
+    claimant.brain = npcBrain('buggy', claimant.pos, []);
     const pile = createCargoSalvage(w, victim, 1);
     claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
     claimPile(w, pile, claimant);
@@ -618,7 +631,7 @@ describe('who loots a target', () => {
   // A scavenger parked beside the player, with a brain and no goals.
   function scavenger(w: World, pos: Vec = beside): Vehicle {
     const npc = addVehicle(w, 'scavengers', 'scout', [], pos);
-    npc.brain = npcBrain('scav', pos, []);
+    npc.brain = npcBrain('scavenger', pos, []);
     return npc;
   }
 
