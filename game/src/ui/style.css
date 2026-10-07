@@ -1092,7 +1092,6 @@ body {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
-#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
@@ -1100,6 +1099,10 @@ body {
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
+}
+/* The hidden weapons leave the dock, so the instruments drop to the bottom line instead of wrapping above them. */
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
+  display: none;
 }
 /* The wide modal reaches under the condition panel, which stands above the instruments. */
 #ui:has(.modal:not([style*="display: none"])) .truck-condition {
