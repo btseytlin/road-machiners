@@ -65,7 +65,7 @@ Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, st
 
 A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died or timed out as wasted.
 
-Before the factory deletes a sessions folder or a run's projects folder, it copies every transcript in it to `$FACTORY_HOME/transcripts/<session>/`, with its subagents. The transcripts are kept to analyze what agents did, where they got stuck and what to optimize. Each run in the ledger names its `sessionId`, so a ledger line leads to its transcripts. The folder is a Claude Code projects folder, so `transcriptUsage()` in `src/transcript.ts` reads it.
+Before the factory deletes a sessions folder or a run's projects folder, it copies every transcript in it to `$FACTORY_HOME/transcripts/<session>/`, with its subagents. The transcripts are kept to analyze what agents did, where they got stuck and what to optimize. Each run in the ledger names its `sessionId`, so a ledger line leads to its transcripts. An ad hoc task sees the ledger and the archive read only, so a member asks Hermes for such an analysis. The folder is a Claude Code projects folder, so `transcriptUsage()` in `src/transcript.ts` reads it.
 
 Every routed approval reply adds a line too.
 
