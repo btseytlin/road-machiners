@@ -13,6 +13,7 @@ import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { dist } from './vec';
 import { refreshVision, sightRadius } from './vision';
 import { vehicleStats } from './stats';
+import { corePart, mountedParts } from './grid';
 import { playerVehicle } from './damage';
 import type { World } from './types';
 
@@ -506,5 +507,122 @@ describe('the spotter perk', () => {
     const npc = addVehicle(marked, 'traders', 'scout', ['stockEngine'], { x: 30, y: 30 });
     driveOff(marked, target.id);
     expect(contactsOf(marked, npc, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
+  });
+});
+
+describe('a stranded truck', () => {
+  const day = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+
+  // A raider crawling at limp speed on sand in daylight, 15 tiles east of a parked player.
+  function crawling() {
+    const w = emptyWorld({ x: 5, y: 30 });
+    w.turn = day();
+    editableTerrain(w).types.fill('sand');
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    v.speed = RULES.limpSpeed;
+    v.heading = 0;
+    v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: 36 + i, y: 30, heading: 0 }));
+    return { w, me, v };
+  }
+
+  const strandings: [string, (w: World, v: ReturnType<typeof addVehicle>) => void][] = [
+    ['an empty tank', (_w, v) => { v.resources!.fuel = 0; }],
+    ['a broken transmission', (_w, v) => { corePart(v, 'transmission').hp = 0; }],
+    ['a broken engine', (_w, v) => { mountedParts(v, 'engine')[0].hp = 0; }],
+  ];
+
+  it('is heard at a crawl while healthy', () => {
+    const { w, v } = crawling();
+    expect(soundRange(w, v)).toBeGreaterThan(0);
+  });
+
+  for (const [name, strand] of strandings) {
+    it(`makes no sound or dust with ${name}`, () => {
+      const { w, v } = crawling();
+      strand(w, v);
+      v.speed = 4;
+      expect(soundRange(w, v)).toBe(0);
+      expect(dustRange(w, v)).toBe(0);
+    });
+  }
+
+  it('raises no dust for a skilled player crawling past limp speed', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    w.turn = day();
+    editableTerrain(w).types.fill('sand');
+    const me = w.vehicles[0];
+    corePart(me, 'transmission').hp = 0;
+    w.player.ranks.driving = 5;
+    me.speed = vehicleStats(w, me).maxSpeed;
+    me.trail = [{ x: 39, y: 30, heading: 0 }, { x: 40, y: 30, heading: 0 }];
+    expect(me.speed).toBeGreaterThan(RULES.limpSpeed);
+    advanceDust(w);
+    expect(w.dustClouds.filter((c) => c.source === me.id)).toHaveLength(0);
+  });
+
+  it('drops its sound contact and stops raising dust once it strands, and is heard again once refuelled', () => {
+    const { w, me, v } = crawling();
+    v.speed = 4;
+    const listener = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 75, y: 30 });
+    listener.speed = 0;
+    refreshVision(w);
+    expect(w.player.contacts.find((c) => c.vehicleId === v.id)?.sources).toContain('sound');
+    expect(contactsOf(w, listener, Infinity).find((c) => c.vehicleId === v.id)?.sources).toContain('sound');
+    advanceDust(w);
+    expect(w.dustClouds.filter((c) => c.source === v.id)).toHaveLength(1);
+    v.resources!.fuel = 0;
+    refreshVision(w);
+    expect(w.player.contacts.find((c) => c.vehicleId === v.id)?.sources ?? []).not.toContain('sound');
+    expect(contactsOf(w, listener, Infinity).find((c) => c.vehicleId === v.id)?.sources ?? []).not.toContain('sound');
+    advanceDust(w);
+    const clouds = w.dustClouds.filter((c) => c.source === v.id);
+    expect(clouds).toHaveLength(1);
+    expect(clouds[0].age).toBe(1);
+    expect(me.speed).toBe(0);
+    v.resources!.fuel = 10;
+    expect(contactsOf(w, listener, Infinity).find((c) => c.vehicleId === v.id)?.sources).toContain('sound');
+  });
+
+  it('hides the player from an NPC as it hides an NPC from the player', () => {
+    const w = emptyWorld({ x: 5, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+    const me = w.vehicles[0];
+    me.speed = 4;
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.speed = 4;
+    const heard = (from: typeof me, of: typeof me) => contactsOf(w, from, Infinity).find((c) => c.vehicleId === of.id)?.sources ?? [];
+    me.speed = 0;
+    expect(heard(me, npc)).toContain('sound');
+    me.speed = 4;
+    npc.speed = 0;
+    expect(heard(npc, me)).toContain('sound');
+    w.player.fuel = 0;
+    expect(heard(npc, me)).not.toContain('sound');
+    npc.speed = 4;
+    me.speed = 0;
+    npc.resources!.fuel = 0;
+    expect(heard(me, npc)).not.toContain('sound');
+  });
+
+  it('still gives a beacon contact and is still found by a scanner', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    raiseHill(w);
+    refreshVision(w);
+    const me = w.vehicles[0];
+    me.speed = RULES.limpSpeed;
+    w.player.fuel = 0;
+    w.player.beacon = true;
+    const observer = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    observer.speed = 0;
+    expect(contactsOf(w, observer, Infinity).find((c) => c.vehicleId === me.id)?.sources).toEqual(['beacon']);
+    observer.resources!.fuel = 0;
+    observer.speed = 4;
+    me.speed = 0;
+    w.player.fuel = 10;
+    me.items = me.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
+    if (!mountPart(w, me, makePart(w, 'scanner', 0))) throw new Error('No free mount for the test scanner');
+    expect(contactsOf(w, me, Infinity).find((c) => c.vehicleId === observer.id)?.sources).toEqual(['radio']);
   });
 });

@@ -3,6 +3,8 @@ set -euo pipefail
 root=${1:?factory root}
 marker=$root/home/dashboard-restart
 [ -f "$marker" ] || exit 0
-systemctl is-enabled --quiet roam-factory-dashboard.service || exit 0
-systemctl restart roam-factory-dashboard.service
+# Each long-running service runs the current release's code, so a deploy restarts every one that is installed.
+for unit in roam-factory-dashboard.service roam-factory-errors.service; do
+  if systemctl is-enabled --quiet "$unit"; then systemctl restart "$unit"; fi
+done
 rm -f "$marker"

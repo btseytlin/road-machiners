@@ -58,6 +58,7 @@ export const PAL = {
   hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
   scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
   dirtRoad: 0x8e7d69, // the Fallen Sun's grey-brown dirt roads: about 0.7 of PAL.sand[0]'s value, as reference 3's #6e5e50 roads over its #a08a70 islands, and greyer than the sand
+  shipGlow: 0x6fe4ff, // cold glow of dead ship tech on debris power cells and pod beacons, unlike the reactor's green
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck

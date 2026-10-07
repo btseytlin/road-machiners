@@ -1,5 +1,6 @@
+import { addCard } from './card-events';
 import { githubLogins, readCommittee } from './committee';
-import { CANDIDATE_LABELS, HOTFIX_LABEL } from './types';
+import { CANDIDATE_LABELS, ERROR_REPORT_LABEL, HOTFIX_LABEL } from './types';
 import type { Ctx, Issue } from './types';
 
 type MarkRules = { minVotes: number; minAgeHours: number; committee: string[] };
@@ -16,6 +17,7 @@ export function isMarked(issue: Issue, now: Date, rules: MarkRules): boolean {
 
 // Puts every marked issue that is not yet on the board into Triage.
 // A hotfix goes straight to Design with no votes, since a collaborator chose it by its label.
+// An error report goes to Triage with no votes, since a player's game hit the error. The error service caps how many it opens a day.
 export async function intake(ctx: Ctx): Promise<number[]> {
   const { cfg, github } = ctx;
   const bootstrap = { telegram: cfg.committeeBootstrapTelegram, github: cfg.committeeBootstrapGithub };
@@ -25,7 +27,8 @@ export async function intake(ctx: Ctx): Promise<number[]> {
   const added: number[] = [];
   for (const issue of candidates) {
     const hotfix = issue.labels.includes(HOTFIX_LABEL);
-    if (onBoard.has(issue.number) || !(hotfix || isMarked(issue, ctx.now(), rules))) continue;
+    const voteless = hotfix || issue.labels.includes(ERROR_REPORT_LABEL);
+    if (onBoard.has(issue.number) || !(voteless || isMarked(issue, ctx.now(), rules))) continue;
     await addToBoard(ctx, issue.number, hotfix);
     added.push(issue.number);
   }
@@ -34,7 +37,7 @@ export async function intake(ctx: Ctx): Promise<number[]> {
 
 async function addToBoard(ctx: Ctx, issue: number, hotfix: boolean): Promise<void> {
   const column = hotfix ? 'Design' : 'Triage';
-  await ctx.github.addCard(issue, column);
+  await addCard(ctx, issue, column, hotfix ? 'hotfix' : undefined);
   await ctx.github.comment(issue, hotfix ? 'The factory picked this up as a hotfix. It goes to design now.' : 'The factory picked this up for triage.');
   ctx.log('intake', issue, `added to ${column}`);
 }

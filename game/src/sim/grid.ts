@@ -6,8 +6,9 @@ import type { GridItem, PartInstance, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
 export type Cell = 'D' | 'E' | SideLetter | 'X' | '.';
-// cells[y][x], null is a hole. Rows from chassisH on come from mounted cargo parts.
-export type Grid = { w: number; h: number; chassisH: number; cells: (Cell | null)[][] };
+// cells[y][x], null is a hole. Rows from chassisH on come from mounted cargo parts. Rows from deadFrom on
+// come from broken cargo parts: they stay in the grid, so lanes and items do not move, but hold nothing.
+export type Grid = { w: number; h: number; chassisH: number; deadFrom: number; cells: (Cell | null)[][] };
 export type Spot = { x: number; y: number; rot: 0 | 1 };
 
 // Letters each kind mounts on. Armor lists the front first, so auto-mounting fills the nose before the sides.
@@ -33,7 +34,7 @@ export function baseGrid(chassisId: string): Grid {
   const rows = chassisDef(chassisId).layout;
   const w = Math.max(...rows.map((r) => r.length));
   const cells = rows.map((r) => Array.from({ length: w }, (_, x) => toCell(r[x] ?? ' ')));
-  const grid = { w, h: rows.length, chassisH: rows.length, cells };
+  const grid = { w, h: rows.length, chassisH: rows.length, deadFrom: rows.length, cells };
   baseGridCache.set(chassisId, grid);
   return grid;
 }
@@ -103,15 +104,32 @@ const gridCache = new Map<string, Grid>();
 
 export function gridOf(v: Vehicle): Grid {
   const base = baseGrid(v.chassisId);
-  let extra = 0;
-  for (const it of mountedItems(v, 'cargo')) extra += (partDef(it.part.defId) as { extraRows: number }).extraRows;
-  const key = `${v.chassisId}|${extra}`;
+  let working = 0;
+  let dead = 0;
+  for (const it of mountedItems(v, 'cargo')) {
+    const rows = (partDef(it.part.defId) as { extraRows: number }).extraRows;
+    if (it.part.hp > 0) working += rows;
+    else dead += rows;
+  }
+  const key = `${v.chassisId}|${working}|${dead}`;
   const cached = gridCache.get(key);
   if (cached) return cached;
-  const rows = Array.from({ length: extra }, () => Object.freeze(Array.from({ length: base.w }, () => '.' as Cell)));
-  const grid = Object.freeze({ w: base.w, h: base.h + extra, chassisH: base.h, cells: Object.freeze([...base.cells, ...rows]) as (Cell | null)[][] });
+  const row = (cell: Cell | null) => Object.freeze(Array.from({ length: base.w }, () => cell));
+  const rows = [...Array.from({ length: working }, () => row('.')), ...Array.from({ length: dead }, () => row(null))];
+  const grid = Object.freeze({
+    w: base.w,
+    h: base.h + working + dead,
+    chassisH: base.h,
+    deadFrom: base.h + working,
+    cells: Object.freeze([...base.cells, ...rows]) as (Cell | null)[][],
+  });
   gridCache.set(key, grid);
   return grid;
+}
+
+// True when any cell of the item lies on a broken cargo part's dead row.
+export function onDeadRow(g: Grid, item: GridItem): boolean {
+  return itemCells(item).some((c) => c.y >= g.deadFrom && c.y < g.h);
 }
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;

@@ -424,6 +424,12 @@ function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefus
 }
 
 // Pleas between two NPCs. The player's own pleas show as radio lines.
+function cargoSpilledText(world: World, e: Extract<GameEvent, { t: 'cargoSpilled' }>): LogLine {
+  if (e.vehicle !== world.player.vehicleId) return { text: `${vehicleName(world, e.vehicle)}: cargo spilled on the ground`, cls: 'good' };
+  const items = e.units === 1 ? 'item' : 'items';
+  return { text: `Your ${partName(world, e.vehicle, e.part).toLowerCase()} broke. ${e.units} ${items} fell out.`, cls: 'bad' };
+}
+
 function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
   const me = world.player.vehicleId;
   if (e.from === me || e.to === me) return null;
@@ -467,8 +473,8 @@ function playerNotices(world: World, ...ids: string[]): boolean {
 // The vehicles in events that log only when the player notices one of them.
 const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => string[] } = {
   collision: (e) => [e.a, e.b],
-  guardShot: (e) => [e.target],
   partDisabled: (e) => [e.vehicle],
+  cargoSpilled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
   npcKnockout: (e) => [e.vehicle],
   npcWake: (e) => [e.vehicle],
@@ -580,6 +586,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   // The dialogue panel shows the player's calls.
   call: () => null,
   plea: pleaText,
+  cargoSpilled: cargoSpilledText,
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
@@ -598,14 +605,6 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       return null;
     case 'shot':
       return shotText(world, e);
-    case 'guardShot': {
-      const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
-      const hits = e.rounds.filter((r) => r.hit).length;
-      return spanLine('dim', [
-        { text: `${site.name} guards → ${n(e.target)}, ${hits}/${e.rounds.length} hit`, cls: '' },
-        ...damageSpans(world, e.target, e.rounds.flatMap((r) => r.hits)),
-      ]);
-    }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };
     case 'destroyed':

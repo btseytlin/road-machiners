@@ -15,13 +15,15 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, siteGap, townAt, type Site } from './sites';
+import { isFortress, locationAt, siteGap, type Site } from './sites';
+import { shopAt } from './market';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
-// A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center.
+// A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center, and a
+// fortress curtain hides all of it, so a fortress is found from any tile as far out as its pads reach.
 export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
@@ -56,7 +58,8 @@ export function useOasis(world: World): World {
 }
 
 function seesArea(world: World, site: Site): boolean {
-  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= 0);
+  const reach = isFortress(site) ? REGION.sites.pad.length : 0;
+  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= reach);
 }
 
 // The stock with loot left that the parked player truck can reach, or null.
@@ -152,7 +155,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
-  if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
+  if (item.kind === 'part' && isMounted(me.chassisId, item) && !shopAt(world)) {
     const work = lootRefitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],

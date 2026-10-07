@@ -26,7 +26,7 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       const ids: number[] = [];
       for (const part of splitText(text)) {
         const payload: Record<string, unknown> = { chat_id: chat, text: part };
-        if (replyTo !== undefined && ids.length === 0) payload.reply_parameters = { message_id: replyTo };
+        if (typeof replyTo === 'number' && ids.length === 0) payload.reply_parameters = { message_id: replyTo };
         ids.push(await callForId('sendMessage', JSON.stringify(payload)));
       }
       return ids[0]!;

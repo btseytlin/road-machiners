@@ -15,6 +15,7 @@ Run every command from `factory/infra`, in the main checkout. Git ignores `prod.
 - `uv run pyinfra -y inventory.py deploy/provision.py` sets up the host. Run it once and after host changes.
 - `uv run pyinfra -y inventory.py deploy/deploy.py` sets up the factory. Run it to roll out a secret, an infra change or a new `FACTORY_TICK_MINUTES`.
 - `uv run pyinfra -y inventory.py deploy/dashboard.py` installs the public dashboard and its Caddy route. Run it after deploy.
+- `uv run pyinfra -y inventory.py deploy/errors.py` installs the error service and its `/errors` Caddy route. Run it after deploy. Its log is `logs/errors.log`.
 - `uv run pyinfra -y inventory.py deploy/status.py` reads the host state and changes nothing.
 - `uv run pytest` tests the pure helpers.
 
