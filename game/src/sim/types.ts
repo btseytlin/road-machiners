@@ -232,7 +232,7 @@ export type Vehicle = {
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source, for kill credit
+  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
