@@ -284,14 +284,20 @@ async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' 
     dropsApproval: DROPS_APPROVAL.includes(to),
     enter: (state) => {
       const phased = phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [key]: phase } };
-      // A hold outlives other moves, since it is a decision of its own. Done runs nothing, so a hold there means nothing.
-      const kept = to === 'done' ? { ...phased, held: omitKey(phased.held, key) } : phased;
+      const kept = { ...phased, held: keptHold(phased.held, key, to) };
       // A move to Hardening is an approval, like a merge order. A card approved already keeps its approver.
       return to === 'harden' && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
     },
   });
   if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
   return { issue, text: `Moved to ${to}.` };
+}
+
+// A hold outlives other moves, since it is a decision of its own. The move clears the sessions, so the stage starts fresh and no stopped job resumes.
+// Done runs nothing, so a hold there means nothing.
+function keptHold(held: FactoryState['held'], key: string, to: MoveTarget): FactoryState['held'] {
+  if (!(key in held)) return held;
+  return to === 'done' ? omitKey(held, key) : { ...held, [key]: { ...held[key], stage: null } };
 }
 
 // The approve job merges at once for a card in Approval that holds an approval, so the merge needs no post and no hardening.

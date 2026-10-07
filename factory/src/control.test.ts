@@ -461,8 +461,9 @@ describe('move and merge preconditions and write order', () => {
     busyCard();
     const hold = { by: 'Ann', reason: 'r', at: 'a', stage: null };
     seed({ ...readState(statePath), held: { 4: hold, 5: hold } });
+    seed({ ...readState(statePath), held: { 4: { ...hold, stage: 'verify' }, 5: hold } });
     await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }));
-    expect(Object.keys(readState(statePath).held)).toEqual(['4', '5']);
+    expect(readState(statePath).held).toEqual({ 4: hold, 5: hold });
     await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'done' }));
     expect(Object.keys(readState(statePath).held)).toEqual(['5']);
   });

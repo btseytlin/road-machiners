@@ -128,5 +128,6 @@ describe('hold drift', () => {
   });
   it('flags a held issue that left the board', () => {
     expect(holdDrift(withState({ held: { 158: hold } }), [card('Implementation')])).toEqual(['#158 held by Ann (release first) but not on the board']);
+    expect(holdDrift(withState({ held: { 157: hold }, jobs: [job('implement', 157)] }), [card('Implementation')])).toEqual(['#157 held by Ann (release first) but a implement job is running']);
   });
 });

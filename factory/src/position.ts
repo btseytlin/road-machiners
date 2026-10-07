@@ -93,9 +93,14 @@ function heldCardDrift(card: Card, state: FactoryState): string[] {
   return [...lines, ...runningJobs(card, state).map((job) => `${heldBy(String(card.issue), hold)} but a ${job.stage} job is running`)];
 }
 
-// A hold whose card left the board holds nothing. `resume-card` lifts it.
+// A hold whose card left the board holds nothing, and `resume-card` lifts it. A job on a held issue escaped the hold.
+// Audit skips the card drift of a card with a running job, so it reads the running job from here.
 export function holdDrift(state: FactoryState, cards: Card[]): string[] {
-  return Object.entries(state.held).filter(([issue]) => !cards.some((card) => String(card.issue) === issue)).map(([issue, hold]) => `${heldBy(issue, hold)} but not on the board`);
+  return Object.entries(state.held).flatMap(([issue, hold]) => {
+    const gone = cards.some((card) => String(card.issue) === issue) ? [] : [`${heldBy(issue, hold)} but not on the board`];
+    const running = state.jobs.filter((job) => String(job.issue) === issue).map((job) => `${heldBy(issue, hold)} but a ${job.stage} job is running`);
+    return [...gone, ...running];
+  });
 }
 
 export function releaseDrift(state: FactoryState, cards: Card[]): string[] {

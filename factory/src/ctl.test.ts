@@ -175,6 +175,15 @@ describe('read commands', () => {
     expect(out).toEqual(['#9 held by Ann (release tasks first) but not on the board']);
   });
 
+  it('audit flags a job that runs on a held card, though it skips the card drift of a card with a job', async () => {
+    const f = board();
+    const hold = { by: 'Ann', reason: 'r', at: 'a', stage: null };
+    const job = { id: 'j', stage: 'design' as const, issue: 5, pid: 1, startedAt: 'a', log: 'l' };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { '77': 6 }, held: { '5': hold }, jobs: [job] });
+    await run(f, 'audit');
+    expect(out).toEqual(['#5 held by Ann (r) but a design job is running']);
+  });
+
   it('help lists every command', async () => {
     await run(fake(), 'help');
     for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume']) {
