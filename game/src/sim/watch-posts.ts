@@ -31,7 +31,7 @@ function postReach(): number {
 }
 
 // What every post on one terrain is checked against, and each ground's post, keyed by the ground's coordinates.
-type PostMap = { reach: number; nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null> };
+type PostMap = { reach: number; nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null>; lists: Map<string, readonly Vec[]> };
 
 const maps = new WeakMap<Terrain, PostMap>();
 
@@ -45,6 +45,7 @@ function postMap(world: World): PostMap {
     gates: lawmanTowns().flatMap((town) => siteGates(town)),
     hazards: hazardZones(),
     posts: new Map(),
+    lists: new Map(),
   };
   maps.set(world.terrain, map);
   return map;
@@ -67,8 +68,18 @@ export function watchPost(world: World, ground: Vec): Vec | null {
   return post;
 }
 
-// The posts of a list of grounds, each once, in ground order. A ground with no post gives none.
-export function postsOf(world: World, grounds: readonly Vec[]): readonly Vec[] {
+// The posts of a list of grounds, each once, in ground order. A ground with no post gives none. The list is built
+// once per key and terrain, since decisions ask for it every turn.
+export function postsOf(world: World, key: string, grounds: readonly Vec[]): readonly Vec[] {
+  const map = postMap(world);
+  const cached = map.lists.get(key);
+  if (cached) return cached;
+  const out = postsOfGrounds(world, grounds);
+  map.lists.set(key, out);
+  return out;
+}
+
+function postsOfGrounds(world: World, grounds: readonly Vec[]): readonly Vec[] {
   const seen = new Set<string>();
   const out: Vec[] = [];
   for (const ground of grounds) {

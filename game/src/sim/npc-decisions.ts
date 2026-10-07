@@ -388,7 +388,7 @@ export function raiderGrounds(world: World, camp: Site): readonly Vec[] {
 
 // The posts of a camp's raid or patrol grounds. See src/sim/watch-posts.ts.
 function campPosts(world: World, camp: Site, grounds: readonly Vec[], kind: string): readonly Vec[] {
-  const posts = postsOf(world, grounds);
+  const posts = postsOf(world, `${kind}:${camp.id}`, grounds);
   if (posts.length === 0) throw new Error(`Camp ${camp.id} has no ${kind} post`);
   return posts;
 }
