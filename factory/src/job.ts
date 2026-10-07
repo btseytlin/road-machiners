@@ -24,13 +24,30 @@ type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
 const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste'>, Handler> = {
-  triage, design, implement, patch, verify, checks, change, adhoc, candidate, remove, incident,
+  triage,
+  design,
+  implement,
+  patch,
+  verify,
+  checks,
+  change,
+  adhoc,
+  candidate,
+  remove,
+  incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };
 
 // Card stages leave a progress comment on their issue, so the issue shows where its work stands.
-const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = { triage: 'Triage', design: 'Design', implement: 'Implementation', patch: 'Patch', verify: 'Verify', checks: 'Checks' };
+const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = {
+  triage: 'Triage',
+  design: 'Design',
+  implement: 'Implementation',
+  patch: 'Patch',
+  verify: 'Verify',
+  checks: 'Checks',
+};
 
 export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: 'finished' | 'failed'): string {
   const minutes = startedAt ? Math.round((ctx.now().getTime() - new Date(startedAt).getTime()) / 60_000) : null;
@@ -65,14 +82,24 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
     await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
     await noteProgress(ctx, stage, issue, job, 'failed');
   } finally {
-    recordJob(ctx.cfg.home, ctx.now(), entry, outcome);
+    recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), entry, outcome);
     clearJob(ctx, stage, issue);
     clearSessionsOf(ctx, stage, issue);
   }
 }
 
 // A job run by hand has no record, so it has no id, its agents record no usage, and it starts now.
-function ledgerEntry(ctx: Ctx, job: Job | null, stage: JobStage, issue: number | null): { id: string | null; stage: JobStage; issue: number | null; startedAt: string } {
+function ledgerEntry(
+  ctx: Ctx,
+  job: Job | null,
+  stage: JobStage,
+  issue: number | null,
+): {
+  id: string | null;
+  stage: JobStage;
+  issue: number | null;
+  startedAt: string;
+} {
   if (job === null) return { id: null, stage, issue, startedAt: ctx.now().toISOString() };
   return { id: job.id, stage, issue, startedAt: job.startedAt };
 }
@@ -81,7 +108,7 @@ function resuming(ctx: Ctx, stage: JobStage, issue: number | null): boolean {
   return issue !== null && readState(ctx.statePath).interrupted.includes(issue) && resumedStage(ctx.cfg.home, issue) === stage;
 }
 
-// Only agent and test jobs run agents with sessions. A branch job's id may be a change id, no issue number.
+// Only agent and test jobs run agents with sessions.
 function clearSessionsOf(ctx: Ctx, stage: JobStage, issue: number | null): void {
   if (issue !== null && QUEUE_OF[stage] !== 'branch') clearSessions(ctx.cfg.home, issue);
 }
@@ -105,7 +132,7 @@ async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Jo
 function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
   updateState(ctx.statePath, (state) => {
     const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
-    // Only agent and test jobs resume. A change job's id is no issue number, so it never clears a mark.
+    // Only agent and test jobs resume.
     const interrupted = QUEUE_OF[stage] === 'branch' ? state.interrupted : state.interrupted.filter((item) => item !== issue);
     return { ...clearQueued(state, stage, issue), jobs, interrupted };
   });
@@ -120,5 +147,12 @@ function clearQueued(state: FactoryState, stage: JobStage, issue: number | null)
   const pendingShip = stage === 'ship' ? null : state.pendingShip;
   const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
   const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
-  return { ...state, pendingApprovals, pendingChanges, pendingIncidents, pendingShip, pendingRemovals };
+  return {
+    ...state,
+    pendingApprovals,
+    pendingChanges,
+    pendingIncidents,
+    pendingShip,
+    pendingRemovals,
+  };
 }

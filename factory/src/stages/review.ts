@@ -29,7 +29,7 @@ async function reviewRound(ctx: Ctx, issue: number, base: string): Promise<Revie
     incidentLog: await ctx.repo.readFile(BASE_BRANCH, INCIDENT_LOG), principles: await ctx.repo.readFile(BASE_BRANCH, PRINCIPLES),
   });
   // A review only reads and its file is cleared above, so a resumed job reviews again from the start.
-  await runAgent(ctx, issue, 'verify', 'review', prompt, { model: ctx.cfg.designModel, skill: '/code-review', fresh: true });
+  await runAgent(ctx, issue, 'verify', 'review', prompt, { skill: '/code-review', fresh: true });
   return parseReview(readOutput(home, 'review.md'));
 }
 
