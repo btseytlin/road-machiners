@@ -39,7 +39,7 @@ import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { startWatch, watchOver } from './watch-posts';
+import { isWatching, startWatch, watchOver } from './watch-posts';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
@@ -356,7 +356,9 @@ export function finishGoal(world: World, vehicle: Vehicle, reason: string): void
   const done = popGoal(world, vehicle, reason);
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
-  if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
+  if (decide(world, vehicle, 'resume', null, null) === 'new') return void popGoal(world, vehicle, 'chose something new');
+  // The raider left its post for the interruption, and nothing drives it back, so the watch ends where it stands.
+  if (isWatching(vehicle)) popGoal(world, vehicle, 'left its post');
 }
 
 function heldTow(world: World, vehicle: Vehicle): NpcState | null {

@@ -17,7 +17,7 @@ import { corePart, goodsCount } from './grid';
 import { addGoods, spareParts } from './inventory';
 import { CLEARANCE, isTransientWreck, nearCliff, terrainNav } from './nav/layer';
 import { decide, huntingGrounds, lawmanTowns, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
-import { resolveNpcActivities, topGoal } from './npc-activities';
+import { finishGoal, resolveNpcActivities, topGoal } from './npc-activities';
 import { yieldTo } from './parley';
 import { route } from './path';
 import { getResources } from './resources';
@@ -231,6 +231,17 @@ describe('the watch', () => {
     expect(raider.brain!.goals[0].kind).toBe('raid');
     const next = endTurn(w, testDrive);
     expect(inCombat(next, vehicle(next, raider.id))).toBe(true);
+  });
+
+  it('ends the watch when a fight pops back onto it, instead of parking away from the post', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius - 6);
+    forceOption('hostileSeen', 'fight');
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).toBe('fight');
+    finishGoal(w, raider, 'lost the target');
+    expect(raider.brain!.goals.some((g) => g.kind === 'raid' && g.phase === 'act')).toBe(false);
+    expect(isWatching(raider)).toBe(false);
+    expect(trader.id).toBeDefined();
   });
 
   it('gives up prey that turns away and stays unheard, after the search turns', () => {
