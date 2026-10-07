@@ -19,6 +19,7 @@ import { maxHealthOf } from './health';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
+import { maxHp } from './wear';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
@@ -104,7 +105,7 @@ describe('part cheats', () => {
     const w = emptyWorld();
     for (const p of mountedParts(playerVehicle(w))) p.hp = 0;
     const fixed = repairAll(w);
-    for (const p of mountedParts(playerVehicle(fixed))) expect(p.hp).toBe(partDef(p.defId).hp);
+    for (const p of mountedParts(playerVehicle(fixed))) expect(p.hp).toBe(maxHp(p));
   });
 
   it('damages the first mounted part with a def', () => {
@@ -171,7 +172,7 @@ describe('god mode', () => {
     corePart(me, 'cab').hp = 0;
     Object.assign(w.player, { health: 1, fuel: 0, supplies: 0 });
     applyGodMode(w);
-    expect(corePart(me, 'cab').hp).toBe(partDef(corePart(me, 'cab').defId).hp);
+    expect(corePart(me, 'cab').hp).toBe(maxHp(corePart(me, 'cab')));
     expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.baseSupplies });
   });
 

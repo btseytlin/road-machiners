@@ -51,6 +51,16 @@ import { TEST_MAP } from "../test/map";
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
+
+// The start truck begins with every part rebuilt twice. This gives the same truck with every part new.
+const pristineAtBowl = () => {
+  const w = startAtBowl();
+  for (const part of mountedParts(w.vehicles[0])) {
+    part.wear = 0;
+    part.hp = maxHp(part);
+  }
+  return w;
+};
 // A longbed at Bowl, for trades bigger than the start scout's cargo room. Its money is back to the start amount.
 const longbedAtBowl = () => {
   const start = startAtBowl();
@@ -217,7 +227,7 @@ describe("garage", () => {
     expect(one.player.money).toBe(w.player.money - part);
 
     const basics = repairBasics(w);
-    expect(corePart(basics.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(basics.vehicles[0], "cab").hp).toBe(maxHp(cab));
     expect(basics.player.money).toBe(w.player.money - basicsRepairCost(w));
 
     const all = repairAll(w);
@@ -281,7 +291,7 @@ describe("garage", () => {
     corePart(w.vehicles[0], "cab").hp = 10;
     mountedParts(w.vehicles[0])[0].hp = 0;
     const r = repairAll(w);
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
     expect(r.player.money).toBeLessThan(1000);
   });
@@ -295,7 +305,7 @@ describe("garage", () => {
 
     const r = repairBasics(w);
 
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
     expect(mountedParts(r.vehicles[0])[0].hp).toBe(1);
     expect(mountedParts(r.vehicles[0])[0].wear).toBe(gun.wear);
     expect(r.player.money).toBe(w.player.money - price);
@@ -347,7 +357,7 @@ describe("garage", () => {
     const r = repairAll(w);
 
     expect(mountedParts(r.vehicles[0])[0].hp).toBe(0);
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
   });
 
   it("rebuilds a junk part with the Rebuild perk at the full repair price of its last wear step", () => {
@@ -403,9 +413,7 @@ describe("garage", () => {
 
     const repaired = repairPart(w, cab.id);
 
-    expect(corePart(repaired.vehicles[0], "cab").hp).toBe(
-      partDef(cab.defId).hp,
-    );
+    expect(corePart(repaired.vehicles[0], "cab").hp).toBe(maxHp(cab));
     expect(coreParts(repaired.vehicles[0], "wheel")[0].hp).toBe(1);
     expect(repaired.player.money).toBe(w.player.money - cost);
     expect(cab.hp).toBe(10);
@@ -432,7 +440,7 @@ describe("garage", () => {
   });
 
   it("chassis swap keeps fitting parts and stores the rest", () => {
-    let w = startAtBowl();
+    let w = pristineAtBowl();
     w.player.money = 2000;
     w = buyChassis(w, "hauler");
     const me = w.vehicles[0];
@@ -472,7 +480,7 @@ describe("garage", () => {
   });
 
   it("trade-in drops with worn built-in parts, even at full health", () => {
-    const w = startAtBowl();
+    const w = pristineAtBowl();
     const whole = chassisTradeIn(w);
     for (const wheel of coreParts(w.vehicles[0], "wheel")) wheel.wear = 2;
     expect(chassisTradeIn(w)).toBeLessThan(whole);
