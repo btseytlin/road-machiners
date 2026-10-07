@@ -512,11 +512,6 @@ export function findFightImpediment(world: World, vehicle: Vehicle, target: Vehi
   return vehicleStats(world, vehicle).weapons.length === 0 ? 'no gun left to fight with' : null;
 }
 
-// A fight needs a working gun and the subject in sight.
-function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
-}
-
 // A driver may start a fight when it has a working gun, sees the target, may fire there, and is not holding off a
 // robbery against a target that is not fighting it. A fight goal that passes this one is kept by fightInvalid.
 export function canStartFight(world: World, vehicle: Vehicle, target: Vehicle): boolean {
@@ -618,7 +613,7 @@ type OptionName = DecisionOptions[DecisionId];
 const AVAILABLE: Record<OptionName, Availability> = {
   keep: always,
   fight: canFightSubject,
-  fightBack: canFight,
+  fightBack: canFightSubject,
   flee: canDrive,
   investigate: canInvestigate,
   rob: canRobSubject,

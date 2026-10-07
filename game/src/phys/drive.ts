@@ -601,7 +601,9 @@ function applyTerrainGrip(c: Car, terrain: Terrain): void {
 function driveStep(c: Car, terrain: Terrain): void {
   applyTerrainGrip(c, terrain);
   const speed = forwardSpeed(c.body);
-  const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
+  const driving = c.plan.dest && !reached(c);
+  if (!driving) c.mem.stall = 0; // a stall count belongs to one push, not to the next order
+  const command = driving ? commandToward(c, c.plan.dest!, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
   if (!c.plan.dest) {
     c.mem.reverse = false;
