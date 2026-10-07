@@ -43,7 +43,8 @@ export const START_KITS: Record<string, StartKit> = {
     opening: {
       log: 'You find yourself stranded in an unfamiliar land. Not your finest moment.',
       // 9 of 50 engine HP: drawn nearly broken, and one patch with the 5 parts held after the loot reaches the field cap.
-      condition: { stockEngine: 0.18, cabPickup: 0.5 },
+      // The cab at 36 of 120 HP draws the body and bumpers at the last worn look before broken.
+      condition: { stockEngine: 0.18, cabPickup: 0.3 },
       stock: { goods: { scrap: 0, parts: 3 }, parts: ['cage'] },
     },
   },

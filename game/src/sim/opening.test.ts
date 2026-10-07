@@ -108,7 +108,7 @@ describe('new-game opening', () => {
     const engine = part(w, 'stockEngine');
     expect(engine.hp).toBe(9);
     expect(engine.wear).toBe(0);
-    expect(part(w, 'cabPickup').hp).toBe(maxHp(part(w, 'cabPickup')) / 2);
+    expect(part(w, 'cabPickup').hp).toBe(36);
     expect(mountedParts(playerVehicle(w)).some((p) => p.defId === 'cage')).toBe(false);
   });
 
