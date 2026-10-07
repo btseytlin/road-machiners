@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
-import { engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
+import { engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
 import type { Glide, SoundPlayer } from "../audio/player";
 import { REGION } from "../data/region";
 import { OUTPOSTS, siteGates } from "../sim/sites";
@@ -105,15 +105,6 @@ describe("engine sound assignment", () => {
     expect(() => engineFileFor("unknown")).toThrow("Unknown chassis");
   });
 
-  it("gives every chassis a strained copy of its own engine recording", () => {
-    for (const id of Object.keys(CHASSIS)) {
-      const strained = engineStrainFileFor(id);
-      expect(SOUNDS["engine-strain"].files).toContain(strained);
-      expect(strained).toBe(engineFileFor(id).replace("engine-", "engine-strain-"));
-    }
-    expect(() => engineStrainFileFor("unknown")).toThrow("Unknown chassis");
-  });
-
   it("changes the healthy and strained engine loops together, and only when the chassis changes", () => {
     const started: string[] = [];
     const stopped: string[] = [];
@@ -140,13 +131,13 @@ describe("engine sound assignment", () => {
 
     expect(started).toEqual([
       engineFileFor("scout"),
-      engineStrainFileFor("scout"),
+      "engine-strain",
       engineFileFor("hauler"),
-      engineStrainFileFor("hauler"),
+      "engine-strain",
     ]);
-    expect(stopped).toEqual([engineFileFor("scout"), engineStrainFileFor("scout")]);
+    expect(stopped).toEqual([engineFileFor("scout"), "engine-strain"]);
     expect(glides[engineFileFor("scout")].map((g) => g.gainFrom)).toEqual([glide.gainFrom, 0, 0]);
-    expect(glides[engineStrainFileFor("scout")].map((g) => g.gainFrom)).toEqual([0, glide.gainFrom, glide.gainFrom]);
+    expect(glides["engine-strain"].map((g) => g.gainFrom)).toEqual([0, glide.gainFrom, glide.gainFrom, 0]);
   });
 
   it("plays the strained engine on the same bus and level as the engine, so mute and volume match", () => {
