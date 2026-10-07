@@ -78,6 +78,7 @@ export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | '
     pos: { ...spec.pos },
     heading: spec.heading,
     speed: 0,
+    stormExposure: {},
     order: null,
     direct: false,
     weaponOrders: {},
