@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import threading
 import time
@@ -31,11 +32,12 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
-BUTTON_PATTERN = r"^factory:(approve|deny|ship):\d+$"
+BUTTON_PATTERN = r"^factory:(approve|deny|ship|publish):\d+$"
 BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
-BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued", "publish": "Publish queued"}
 BUTTON_STALE = "This release post is out of date."
+DRAFT_STALE = "This draft is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 # A reply to an approval post that starts with one of these picks its route itself, with no Hermes judgment.
 ROUTE_PREFIX = re.compile(r"(patch|redesign)\s*:", re.IGNORECASE)
@@ -100,13 +102,26 @@ def read_approval_posts(state_dir: str) -> dict:
     return read_state(state_dir)[0]
 
 
+def read_release_post(state_dir: str) -> Optional[dict]:
+    """The public post of the last shipped release from state.json, or None when no post is due."""
+    path = Path(state_dir) / "state.json"
+    if not path.is_file():
+        return None
+    post = json.loads(path.read_text()).get("releasePost")
+    if post is not None and not (isinstance(post, dict) and (post.get("postId") is None or _is_int(post.get("postId")))):
+        raise ValueError(f"state.json releasePost is not a post with a number or null postId: {post!r}")
+    return post
+
+
 CHANGE_PREFIX = "/change "
 
 
-def route(text, reply_to_message_id, chat_id, approval_posts, cfg, release=None) -> Optional[tuple]:
+def route(text, reply_to_message_id, chat_id, approval_posts, cfg, release=None, draft_post_id=None) -> Optional[tuple]:
     """Decides what a committee member's message means. Returns None for normal Hermes chat."""
     if str(chat_id) != cfg.chat:
         return None
+    if draft_post_id is not None and reply_to_message_id is not None and str(reply_to_message_id) == str(draft_post_id):
+        return ("draft-reply", text or "")
     return _request(text or "", reply_to_message_id, approval_posts, release)
 
 
@@ -162,6 +177,14 @@ def reply_header(issue: int, post_id) -> str:
     return (
         f"[Factory: a committee reply to the approval post {post_id} of issue #{issue}. "
         f"Route it with {ROUTE_TOOL}, as the section Approval replies of your instructions says.]\n\n"
+    )
+
+
+def draft_reply_header(post_id) -> str:
+    """Tells Hermes that the member's reply asks for a change to the release post draft."""
+    return (
+        f"[Factory: a committee reply to the release post draft {post_id}. "
+        f"Send a revised draft with {DRAFT_TOOL}, as the release post instructions say.]\n\n"
     )
 
 
@@ -233,6 +256,11 @@ def make_button_handler(cfg: Config):
             release = read_state(cfg.state_dir)[1]
             if release is None or release.post_id != message.message_id:
                 await _answer(query, BUTTON_STALE)
+                return
+        if kind == "publish":
+            post = read_release_post(cfg.state_dir)
+            if post is None or post.get("postId") != message.message_id:
+                await _answer(query, DRAFT_STALE)
                 return
         command = button_command(kind, issue, user.id, getattr(user, "full_name", None), message.chat.id, message.message_id)
         write_inbox(cfg.inbox, command)
@@ -347,6 +375,31 @@ ROUTE_DONE = {
     "patch": "Queued as a patch. Reply to the member with one short sentence. The factory adds a status line to the post.",
     "redesign": "Queued as a redesign. Reply to the member with one short sentence. The factory adds a status line to the post.",
 }
+DRAFT_TOOL = "factory_release_draft"
+DRAFT_LIMIT = 4096  # Telegram's limit for one message, and the draft must stay one message to carry its Publish button
+DRAFT_SCHEMA = {
+    "name": DRAFT_TOOL,
+    "description": (
+        "Send a draft of the public post of the last shipped release to the committee chat, with a Publish button. "
+        "Use it as the release post instructions say. A new draft replaces the last one. "
+        "The factory posts the draft text to the public channel exactly as written once a member presses Publish."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": f"The full post text, plain text with no markup, at most {DRAFT_LIMIT} characters."},
+            "image": {
+                "type": "string",
+                "description": (
+                    "Optional. Absolute path of a PNG, JPEG or WebP file under the factory home that goes out with the post instead of the release candidate screenshot. "
+                    "Leave it out to keep the current picture."
+                ),
+            },
+        },
+        "required": ["text"],
+    },
+}
+DRAFT_DONE = "The factory posts the draft to the committee chat on its next tick. Respond with [SILENT] in the release post job, or one short sentence to a member."
 SESSION_KEYS = (
     "HERMES_SESSION_CHAT_ID", "HERMES_SESSION_USER_ID", "HERMES_SESSION_USER_NAME", "HERMES_SESSION_MESSAGE_ID",
 )
@@ -448,6 +501,52 @@ def make_route_handler(cfg: Config, readiness: Readiness, session_env=_session_e
     return handle
 
 
+def _copy_draft_image(cfg: Config, image) -> Optional[str]:
+    """Copies the picture into the inbox media folder, where the tick checks it. Returns its path there, or None for no new picture.
+    The factory home has another path on the host, so the tick gets a path relative to the media folder."""
+    if image is None or not str(image).strip():
+        return None
+    home = Path(cfg.inbox).parent.resolve()
+    source = Path(str(image).strip()).resolve()
+    if home not in source.parents or not source.is_file():
+        raise ValueError(f"The image {image} is not a file under {home}.")
+    folder = Path(cfg.inbox) / "media" / "release-post"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{int(time.time() * 1000)}-{source.name}"
+    shutil.copyfile(source, target)
+    # The factory user moves the file out of the inbox, so it must be group-readable.
+    os.chmod(target, 0o640)
+    return f"release-post/{target.name}"
+
+
+def make_draft_handler(cfg: Config, session_env=_session_env):
+    """Only a shipped release with its post still due takes a draft, so a draft never reaches the chat with nothing to publish."""
+    def handle(args: dict, **kwargs) -> str:
+        text = str(args.get("text") or "").strip()
+        if not text:
+            return _tool_error("The draft is empty. Nothing was sent.")
+        if len(text) > DRAFT_LIMIT:
+            return _tool_error(f"The draft is {len(text)} characters, the limit is {DRAFT_LIMIT}. Nothing was sent.")
+        try:
+            _, user, name, chat, message = _sender(cfg, session_env)
+        except ValueError as error:
+            return _tool_error(f"{error} Nothing was sent.")
+        if read_release_post(cfg.state_dir) is None:
+            return _tool_error("No shipped release waits for its public post. Nothing was sent.")
+        try:
+            image = _copy_draft_image(cfg, args.get("image"))
+        except ValueError as error:
+            return _tool_error(f"{error} Nothing was sent.")
+        command = {
+            "kind": "release-draft", "issue": None, "text": text, "image": image,
+            "by": user, "byName": name or None, "chat": chat, "messageId": message, "postId": None,
+        }
+        write_inbox(cfg.inbox, command)
+        return json.dumps({"success": True, "message": DRAFT_DONE})
+
+    return handle
+
+
 def _tool_error(message: str) -> str:
     return json.dumps({"error": message})
 
@@ -476,9 +575,14 @@ def make_hook(cfg: Config, readiness: Readiness):
                 _schedule_restart()
             return {"action": "skip", "reason": "factory-committee"}
         posts, release = read_state(cfg.state_dir)
-        decision = route(event.text, event.reply_to_message_id, source.chat_id, posts, cfg, release)
+        release_post = read_release_post(cfg.state_dir)
+        draft_post_id = release_post.get("postId") if release_post else None
+        decision = route(event.text, event.reply_to_message_id, source.chat_id, posts, cfg, release, draft_post_id)
         if decision is None:
             return None
+        if decision[0] == "draft-reply":
+            # Hermes revises the draft with its tool. The factory waits for no route, so nothing goes to the inbox.
+            return {"action": "rewrite", "text": draft_reply_header(draft_post_id) + (event.text or "")}
         if decision[0] in ("reply", "patch", "redesign"):
             # Kept before any check, so a later route of the same post still finds them. A file that cannot be kept never stops the reply.
             attachments = list(getattr(event, "media_urls", None) or [])
@@ -514,5 +618,6 @@ def register(ctx) -> None:
     ctx.register_tool(name=CHANGE_TOOL, toolset="factory", schema=CHANGE_SCHEMA, handler=make_queue_handler(cfg, kind="change", done=CHANGE_DONE))
     ctx.register_tool(name=ROUTE_TOOL, toolset="factory", schema=ROUTE_SCHEMA, handler=make_route_handler(cfg, readiness))
     ctx.register_tool(name=SENDER_TOOL, toolset="factory", schema=SENDER_SCHEMA, handler=make_sender_handler(cfg))
+    ctx.register_tool(name=DRAFT_TOOL, toolset="factory", schema=DRAFT_SCHEMA, handler=make_draft_handler(cfg))
     register_status(ctx, public_url=os.environ['FACTORY_PUBLIC_URL'], timeout_seconds=float(os.environ['FACTORY_STATUS_TIMEOUT_MS']) / 1000)
     register_observation(ctx, home=Path(cfg.state_dir).parent, heartbeat_ms=float(os.environ['FACTORY_OBSERVATION_HEARTBEAT_MS']))

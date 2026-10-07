@@ -4,7 +4,7 @@ import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, t
 import { pauseFile, pausedReason } from './pause';
 import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
-import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleaseState } from './types';
+import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
 
 // The dashboard refuses a browser agent, so the CLI uses the same agent Hermes' status tool uses.
 const SNAPSHOT_AGENT = 'curl/8.0';
@@ -190,11 +190,18 @@ function queues(ctx: Ctx): void {
 function release(ctx: Ctx): void {
   const state = readState(ctx.statePath);
   console.log(`last release: ${state.lastRelease ?? 'none'}`);
+  console.log(`public post: ${publicPost(state.releasePost)}`);
   if (state.release === null) return console.log('open release: none');
   console.log(`open release: #${state.release.issue} branch ${state.release.branch} cut ${state.release.day}`);
   console.log(`candidate post: ${candidatePost(state.release)}`);
   console.log(`removed: ${state.release.removed.map((issue) => `#${issue}`).join(', ') || 'none'}`);
   for (const line of playtestLines(state.release.playtest, ctx.cfg.playtestRuns)) console.log(line);
+}
+
+function publicPost(post: ReleasePost | null): string {
+  if (post === null) return 'none due';
+  if (post.postId === null) return `release ${post.day} waits for Hermes's draft`;
+  return `release ${post.day} draft ${post.postId} waits for Publish`;
 }
 
 function candidatePost(release: ReleaseState): string {

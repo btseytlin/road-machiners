@@ -43,6 +43,8 @@ The early ends:
 - bundled: triage folds the issue into a lead, and it closes when the lead ships.
 - Deny: the committee rejects the build, and the issue closes.
 
+A branch that changes only Markdown docs cannot change the game, so it skips the heavy steps. It gets no test round and no harden round, and Checks only builds it. The review still reads it. A wiki page in `game/docs/wiki/` does not count as docs, since the game tests check its tables. [stages.md](stages.md#docs-changes) has the rules.
+
 Screenshots never block a card. A card with no screenshot still runs verify and the checks, and its approval post is text that says it has no screenshot. [evidence.md](evidence.md) has the rules.
 
 A failed job never moves a card. It labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label. A run that hits the Claude weekly usage limit pauses the factory instead, and its card takes no label.
@@ -68,7 +70,7 @@ Approve moves a card to Hardening. It runs the harden round and the review, and 
 
 ![Hardening column](diagrams/hardening.svg)
 
-- A release cleanup task goes from Implementation straight to Hardening, since it merges with no post. It has no played build, so Checks always runs.
+- A release cleanup task goes from Implementation straight to Hardening, since it merges with no post. It gets the review with no harden round, since its design and build were the cleanup. It has no played build, so Checks always runs. Then it merges with no second Hardening.
 - A conflict at approve sends the card back to Hardening. A merge agent resolves it, and Checks runs, with no harden round or review.
 - A card that the review already sent to Design once fails the stage on its next second FAIL.
 

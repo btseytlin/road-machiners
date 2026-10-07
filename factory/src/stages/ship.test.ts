@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readPublished } from '../sourcemaps';
@@ -30,7 +30,7 @@ function shippable(): Fake {
 }
 
 describe('ship', () => {
-  it('merges, builds main in a fresh clone, pushes with butler alone, and posts publicly only afterwards', async () => {
+  it('merges, builds main in a fresh clone, pushes with butler alone, and leaves the public post to Hermes and a member', async () => {
     const f = shippable();
     const runs: { cmd: string; args: string[]; env?: Record<string, string> }[] = [];
     f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd}`); return { code: 0, stdout: cmd === 'git' ? CLONE_SHA : '', stderr: '' }; };
@@ -41,8 +41,6 @@ describe('ship', () => {
     expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
     expect(at('push main dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(at('run butler')).toBeLessThan(at('photo public'));
-    expect(at('photo public')).toBeLessThan(at('message public'));
     expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
     expect(runs).toEqual([
       { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
@@ -52,9 +50,11 @@ describe('ship', () => {
     expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
     expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
     expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);
-    const publicNote = f.calls.find((call) => call.startsWith('message public')) ?? '';
-    expect(publicNote).toContain('- [#3] Trucks are faster.');
-    expect(publicNote).not.toContain('#6');
+    expect(f.calls.some((call) => / public/.test(call.split(' ').slice(0, 2).join(' ')))).toBe(false);
+    const post = readState(f.ctx.statePath).releasePost;
+    expect(post).toEqual({ issue: 11, day: '2026-09-29', changelog: '- [#3] Trucks are faster.', screenshot: join(ROOT, 'release-posts', '2026-09-29', 'screenshot.png'), postId: null, draft: null });
+    expect(readFileSync(post!.screenshot, 'utf8')).toBe('png');
+    expect(f.calls.some((call) => call.startsWith('message committee') && call.includes('Hermes drafts the public post'))).toBe(true);
   });
 
   it('fails on a dev merge conflict before the build, the butler push and any public post', async () => {
@@ -71,7 +71,7 @@ describe('ship', () => {
     await ship(f.ctx, 11, 'Ann');
     expect(f.calls).toContain('close completed');
     expect(f.calls).toContain('move Done');
-    expect(f.calls.at(-1)).toBe('message committee - Release 2026-09-29 shipped with 1 changes.');
+    expect(f.calls.at(-1)).toBe('message committee - Release 2026-09-29 shipped with 1 changes. Hermes drafts the public post next.');
     const state = readState(f.ctx.statePath);
     expect(state.release).toBeNull();
     expect(state.lastRelease).toBe('2026-09-29T10:00:00.000Z');
@@ -144,7 +144,7 @@ describe('ship', () => {
     f.mergeConflicts = ['release/2026-09-29 main'];
     await ship(f.ctx, 11, 'Ann');
     expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge release/2026-09-29 main', 'open main', 'agent', 'close main', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
-    expect(f.calls.some((call) => call.startsWith('message public'))).toBe(true);
+    expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
     expect(f.calls.some((call) => call.startsWith('addLabel'))).toBe(false);
   });
 

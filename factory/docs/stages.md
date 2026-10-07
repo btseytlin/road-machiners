@@ -44,12 +44,21 @@ Implementation runs Sonnet with up:uexecute on the task file. Subagents are off,
 - The post phase runs `npm ci` and the build only, once, with no tests, playtest or fix round. Hermes starts it with `factory move N approval`. A failed build fails the stage. The post and the issue comment say that no factory checks ran on this build. A card that the committee approved already queues its merge as usual.
 - The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
 
+## Docs changes
+
+A branch whose every changed file since its base is a Markdown file outside `game/docs/wiki/` is a docs change. `docsOnly()` in `src/stages/common.ts` decides it.
+
+- Verify runs no test round. The factory pushes the base merge and writes the approval text itself: the changed files, and to read the diff in the pull request. A conflict with the base still runs the test round, since its agent resolves the conflict.
+- A hotfix gets the review with no harden round and no test round.
+- Hardening runs the review with no harden round.
+- Checks runs `npm ci` and the build only. A failed build gets the check-fix round like a failed check.
+
 ## Hardening
 
 [process.md](process.md#hardening-column) shows the order of the rounds. These are the rules behind them.
 
 - Harden merges the new commits of the issue branch on GitHub, but not the base. Approve merges the base, and a conflict there comes back here.
-- The harden round uses `prompts/harden.md`.
+- The harden round uses `prompts/harden.md`. A cleanup task and a docs change skip it and get the review alone.
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. The factory reads the findings from the last `ReportFindings` call in the run's output. Any finding of category `correctness`, or with no category, fails the review. Other findings are listed and do not block. A run with no `ReportFindings` call fails the stage.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings", drops the approval and sends the card to Design.
 - After the review, the branch head is compared with the card's build, the commit Testing checked and the committee played. The same commit moves the card to Approval with its merge queued. Any other commit runs Checks, whose fix round runs in Hardening and leaves no evidence.
@@ -100,7 +109,7 @@ The post records the commit it was built from. The candidate does not post when 
 
 ## Ship
 
-Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks was never played. Ship merges `main` into the release, with an agent for a conflict, and stops. The release moved, so the tick drops the post and builds a new candidate. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
+Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks was never played. Ship merges `main` into the release, with an agent for a conflict, and stops. The release moved, so the tick drops the post and builds a new candidate. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. A GitHub release tagged `release-<day>` gets the changelog. The public post waits in `releasePost` with the changelog and the screenshot. Hermes drafts it with `factory_release_draft`, the draft goes to the committee chat with a Publish button, and a member's Publish posts it to the public channel. A reply to the draft goes to Hermes, who sends a new one. Each shipped issue loses `release-candidate` and closes.
 
 ## Hotfix
 
