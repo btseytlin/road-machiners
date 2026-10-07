@@ -99,6 +99,22 @@ server.shell(
     _sudo=True,
 )
 
+# ssh is reachable through the tunnel from anywhere, behind Cloudflare Access. Keys only, so a guessed password opens nothing.
+# sshd keeps the first value it reads, and the 10- prefix sorts this file before Ubuntu's own drop-ins.
+sshd_keys_only = files.put(
+    name="sshd: keys only",
+    src=StringIO("PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\n"),
+    dest="/etc/ssh/sshd_config.d/10-factory.conf",
+    mode="644",
+    _sudo=True,
+)
+server.shell(
+    name="Reload sshd after a config change",
+    commands=["sshd -t", "timeout 60 systemctl reload ssh"],
+    _if=sshd_keys_only.did_change,
+    _sudo=True,
+)
+
 # The host is a laptop. A closed lid or an idle timer must not suspend it. logind reads the lid setting at the next boot, which the driver step below forces.
 files.put(
     name="logind ignores the lid",

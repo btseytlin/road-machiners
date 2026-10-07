@@ -57,8 +57,9 @@ export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): num
   return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
 }
 
-// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
-export function groundAt(t: Terrain, x: number, y: number): number {
+// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge. It reads
+// only the size and corner heights, so the map bake can pass its draft heights.
+export function groundAt(t: { size: number; heights: ArrayLike<number> }, x: number, y: number): number {
   const cx = x < 0 ? 0 : x > t.size ? t.size : x;
   const cy = y < 0 ? 0 : y > t.size ? t.size : y;
   const i = Math.min(Math.floor(cx), t.size - 1);
@@ -154,7 +155,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 
 // Kinds of baked props, in their stored order: the map file keeps a kind as its index here. A change to this order
 // or a removed kind bumps VERSION, so a file with the old codes is refused rather than misread.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock'] as const;
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.

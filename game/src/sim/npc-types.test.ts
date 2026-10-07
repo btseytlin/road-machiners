@@ -221,6 +221,28 @@ describe('supply convoys', () => {
     for (const goal of goals) expect(GOOD_SOURCES[goal.load!.good]).toContain(goal.targetId);
   });
 
+  it('trade about one idle roll in three and haul the rest', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'convoy', ['supplier'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], sitePads(siteById('bowl'))[0]);
+    npc.resources!.money = NPCS.convoy.money;
+    const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
+    expect(chances.trade).toBeGreaterThan(0.28);
+    expect(chances.trade).toBeLessThan(0.38);
+    expect(chances.haul).toBeGreaterThan(0.6);
+    const kinds = new Set(idleGoals(w, npc.id, 30).map((g) => g.kind));
+    expect(kinds).toContain('trade');
+    expect(kinds).toContain('haul');
+  });
+
+  it('only haul when too poor for a trade', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'convoy', ['supplier'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], sitePads(siteById('bowl'))[0]);
+    npc.resources!.money = 0;
+    const weights = optionWeights(w, npc, 'idle', null, null);
+    expect(weights).not.toHaveProperty('trade');
+    expect(weights).toHaveProperty('haul');
+  });
+
   it('cannot haul with a full grid', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'convoy', ['supplier'], 'scout', ['mg', 'stockEngine'], sitePads(siteById('bowl'))[0]);

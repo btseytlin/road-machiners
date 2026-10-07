@@ -13,7 +13,7 @@ import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './map
 import { isCheapMeeting, isHeadless } from './fidelity';
 import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
@@ -29,18 +29,18 @@ function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
 // A dust screen: a circle that blocks sight lines through it.
 type Screen = { pos: Vec; r: number };
 
-// A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
+// A viewer's vision radius: the base radius, shrunk by the weather the viewer feels and at night, and widened by the
 // player's perception. Night eyes keeps it at night, and storm rider keeps it in weather.
-export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
+export function sightRadius(world: World, viewer: Vehicle): number {
   const night = sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
-  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherAt(world, at).sight;
+  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherOn(world, viewer).sight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
   return TERRAIN.vision.radius * weather * night * skill;
 }
 
-// Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.
-export function grayRadius(world: World, at: Vec): number {
-  return sightRadius(world, playerVehicle(world), at) * TERRAIN.vision.grayFactor;
+// Reach of the player's gray vision. It ignores rocks and hills, and it shows places but never vehicles.
+export function grayRadius(world: World): number {
+  return sightRadius(world, playerVehicle(world)) * TERRAIN.vision.grayFactor;
 }
 
 // Tile indices (y * world.size + x) the player would see from a point, within vision radius and line of sight.
@@ -59,7 +59,7 @@ export function exploreFrom(world: World, from: Vec): void {
 // Calls `seen` for each tile within vision radius of `from` that passes `test` and lies in plain view.
 function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
-  const r = sightRadius(world, playerVehicle(world), from);
+  const r = sightRadius(world, playerVehicle(world));
   const inView = plainViewFrom(world, from, r);
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };

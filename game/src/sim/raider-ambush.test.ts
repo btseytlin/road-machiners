@@ -384,7 +384,10 @@ describe('going home with loot', () => {
     expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
     expect(looted).toBe(carried);
     expect(value).toBe(carried * campGoodPrice('electronics'));
-    expect(getResources(end, vehicle(end, raider.id)).money).toBe(money + value);
+    // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
+    const after = getResources(end, vehicle(end, raider.id)).money;
+    expect(after).toBeLessThanOrEqual(money + value);
+    expect(after).toBeGreaterThan(money + value - 50);
     expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
   });
 
@@ -432,7 +435,10 @@ describe('going home with loot', () => {
     expect(sale!.holdings).toEqual(before);
     expect(looted).toBeGreaterThan(0);
     expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
-    expect(getResources(end, vehicle(end, raider.id)).money).toBe(money + value);
+    // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
+    const after = getResources(end, vehicle(end, raider.id)).money;
+    expect(after).toBeLessThanOrEqual(money + value);
+    expect(after).toBeGreaterThan(money + value - 50);
     expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
   });
 

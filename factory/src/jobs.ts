@@ -17,7 +17,12 @@ export function spawnJob(args: string[], cwd: string, log: string, id: string, c
   const fd = openSync(log, 'a');
   try {
     const env = { ...process.env, [JOB_ID_ENV]: id, [JOB_CPUS_ENV]: cpus };
-    const child = spawn('npm', ['run', '-s', 'factory', '--', 'run', ...args], { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
+    const child = spawn('npm', ['run', '-s', 'factory', '--', 'run', ...args], {
+      cwd,
+      env,
+      detached: true,
+      stdio: ['ignore', fd, fd],
+    });
     child.unref();
     if (child.pid === undefined) throw new Error('job process did not start');
     return child.pid;
@@ -38,7 +43,10 @@ export function isAlive(pid: number): boolean {
 
 async function jobContainers(run: Run, id: string): Promise<string[]> {
   const listed = must(await run('docker', ['ps', '-q', '--filter', `label=${jobLabel(id)}`]), 'docker ps');
-  return listed.split('\n').map((line) => line.trim()).filter(Boolean);
+  return listed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 // Other jobs run beside this one, so only the containers with its label go.
