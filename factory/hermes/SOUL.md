@@ -38,7 +38,8 @@ The factory is a program on the server. A timer runs its tick every minute. Each
 These points come up in incidents:
 
 - A merge conflict with a newer `dev` at approval sends the card back to Hardening with its approval kept. This is routine, not an incident.
-- Ship fails when `main` changed files in `game/` that the release lacks, like a push by hand. Then merge `main` into the release branch and clear `release.postId`, so a new candidate gets played.
+- When `main` changed files in `game/` that the release lacks, like a push by hand, Ship merges `main` into the release and stops. A new candidate gets built and played. This is routine, not an incident.
+- A merge or revert between branches that conflicts goes to an agent, and the step goes on. A failure after that is an incident like any other.
 - Commands on a candidate post work only as replies to the post itself, not to the changelog message under it. The Ship button on an old post does nothing.
 - A member who disagrees with a hotfix label that triage set removes it on GitHub.
 - An issue with the label `needs-info` waits for its author for `FACTORY_NEEDS_INFO_HOURS`. Then the factory removes the label and the card goes on with the most sensible reading. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
