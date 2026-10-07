@@ -651,6 +651,11 @@ function seenFleeReason(world: World, vehicle: Vehicle, enemy: Vehicle): string 
   return isWeak(world, vehicle) ? 'damaged and threatened' : 'avoid a costly fight';
 }
 
+// Turns a cornered driver on a foe it cannot get away from, over the goal it was driving to.
+export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): void {
+  interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
+}
+
 // Pushes a danger goal. A tower in danger drops its tow for free.
 function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
   const tow = heldTow(world, vehicle);
