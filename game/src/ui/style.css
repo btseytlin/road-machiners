@@ -1162,6 +1162,9 @@ body {
   overflow: auto;
   scrollbar-width: thin;
 }
+.town-shop {
+  container-type: inline-size;
+}
 .town-truck {
   padding-right: 24px;
   border-right: 1px solid #4b555b;
@@ -1957,14 +1960,22 @@ canvas.view {
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 0.9fr;
+  grid-template-columns: minmax(150px, 1fr) 132px 132px 44px 64px;
   gap: 10px;
   align-items: center;
   padding: 4px 6px;
   border-bottom: 1px solid #3b454b;
 }
+.goods.truck .goods-head,
+.goods.truck .good-row {
+  grid-template-columns: minmax(120px, 1fr) 48px 132px 132px 44px 64px;
+}
 .goods-head {
   font-size: 12px;
+}
+.goods-head span:nth-last-child(-n + 2),
+.goods.truck .goods-head span:nth-child(2) {
+  text-align: right;
 }
 .good-row:hover {
   background: #2c3438;
@@ -2005,11 +2016,59 @@ canvas.view {
 .tag.sell {
   color: #e8b86a;
 }
-.held {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
+.count,
+.profit {
+  text-align: right;
+  white-space: nowrap;
+}
+.num {
   font: 13px var(--font-mono);
+}
+.cap {
+  display: none;
+  margin-right: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+@container (max-width: 620px) {
+  .goods-head {
+    display: none;
+  }
+  .good-row {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas:
+      "name held profit"
+      "buy buy sell";
+    row-gap: 6px;
+  }
+  .goods.truck .good-row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas:
+      "name theirs held profit"
+      "buy buy sell sell";
+  }
+  .good-row .good-name {
+    grid-area: name;
+  }
+  .good-row .count.theirs {
+    grid-area: theirs;
+  }
+  .good-row .count.held {
+    grid-area: held;
+  }
+  .good-row .profit {
+    grid-area: profit;
+  }
+  .good-row .trade.buy {
+    grid-area: buy;
+  }
+  .good-row .trade.sell {
+    grid-area: sell;
+    justify-self: end;
+  }
+  .cap {
+    display: inline;
+  }
 }
 
 /* Garage services: fuel, supplies and repair, each a meter and its buttons. */

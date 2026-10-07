@@ -645,3 +645,57 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
   }
   throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
 }
+
+// Words for the goods table, shared by the town market and the truck goods trade.
+export type SaleEstimate =
+  | { kind: "none" }
+  | { kind: "unrecorded" }
+  | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
+  | { kind: "even"; avgCost: number };
+
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+
+// Describes the basis rules of noteCostBasis() (sim/economy.ts), addBasis()/takeBasis() (sim/salvage.ts) and loadHaul() (sim/market.ts).
+export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
+
+function checkEstimate(held: number, sell: number, basis: number | undefined): void {
+  if (!Number.isInteger(held) || held < 0) throw new Error(`saleEstimate: bad held count ${held}`);
+  if (!Number.isFinite(sell)) throw new Error(`saleEstimate: bad sell price ${sell}`);
+  if (basis !== undefined) checkBasis(basis);
+}
+
+function checkBasis(basis: number): void {
+  if (!Number.isFinite(basis) || basis < 0) throw new Error(`saleEstimate: bad cost basis ${basis}`);
+}
+
+export function saleEstimate(held: number, sell: number, basis: number | undefined): SaleEstimate {
+  checkEstimate(held, sell, basis);
+  if (held === 0) return { kind: "none" };
+  if (basis === undefined) return { kind: "unrecorded" };
+  const diff = Math.round(sell - basis);
+  const avgCost = Math.round(basis);
+  if (diff === 0) return { kind: "even", avgCost };
+  return { kind: diff > 0 ? "gain" : "loss", perUnit: Math.abs(diff), avgCost };
+}
+
+export function estimateText(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "?";
+    case "even": return "0";
+    case "gain": return `+${e.perUnit}`;
+    case "loss": return `\u2212${e.perUnit}`;
+  }
+}
+
+export function estimateTitle(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "No cost on record";
+    default: return `Avg cost ${e.avgCost}`;
+  }
+}
+
+export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
+  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
+}
