@@ -291,7 +291,7 @@ function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine |
   const damaged = shotDamage(e);
   if (e.shooter !== me && e.target !== me && !damaged.has(me)) return null;
   const strays = [...damaged].filter(([id]) => id !== e.target).flatMap(([id, h]) => [
-    { text: ` · stray fire hits ${vehicleName(world, id)}`, cls: '' },
+    { text: `, stray fire hits ${vehicleName(world, id)}`, cls: '' },
     ...damageSpans(world, id, h),
   ]);
   return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
@@ -307,20 +307,20 @@ function hitsAim(e: Extract<GameEvent, { t: 'shot' }>, r: ShotRound): boolean {
   return onTarget.some((h) => h.damage > 0 && (e.aim === 'body' || h.part === e.aim));
 }
 
-// "MG → Buggy at Cab · 3/6 hit (40%) · 1 crit", then the damage per part.
+// "MG → Buggy at Cab, 3/6 hit (40%), 1 crit", then the damage per part.
 function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget: PartHit[]): LogSpan[] {
   const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
   const hits = e.rounds.filter((r) => hitsAim(e, r)).length;
   const crits = e.rounds.filter((r) => r.crit).length;
   return [
-    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim} · ${hits}/${e.rounds.length} hit`, cls: '' },
+    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim}, ${hits}/${e.rounds.length} hit`, cls: '' },
     { text: ` (${Math.round(e.damageChance * 100)}%)`, cls: 'dim' },
-    ...(crits ? [{ text: ` · ${crits} crit`, cls: '' }] : []),
+    ...(crits ? [{ text: `, ${crits} crit`, cls: '' }] : []),
     ...damageSpans(world, e.target, onTarget),
   ];
 }
 
-// " · Cab −5 broken, Plate −3": inner parts first, then armor in the dim color. A part with no HP left reads broken.
+// ": Cab −5 broken, Plate −3": inner parts first, then armor in the dim color. A part with no HP left reads broken.
 function damageSpans(world: World, vehicleId: string, hits: PartHit[]): LogSpan[] {
   const v = findAny(world, vehicleId);
   const parts = [...partDamage(hits)].map(([id, d]) => {
@@ -332,7 +332,7 @@ function damageSpans(world: World, vehicleId: string, hits: PartHit[]): LogSpan[
     const broken = part.hp <= 0;
     return { text: `${partDef(part.defId).name} −${damage(d)}${broken ? ' broken' : ''}`, cls: broken ? 'bad' : armor ? 'dim' : '' };
   });
-  return spans.flatMap((s, i) => [{ text: i === 0 ? ' · ' : ', ', cls: '' }, s]);
+  return spans.flatMap((s, i) => [{ text: i === 0 ? ': ' : ', ', cls: '' }, s]);
 }
 
 // Only the player's own jobs are logged.
@@ -565,7 +565,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   townPatch: () => ({ text: 'You patch your truck with scrap.', cls: 'good' }),
   scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
-  npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
+  npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} regains consciousness`, cls: 'dim' }),
   stateEnded: stateEndedText,
   empty: () => null, // the HUD shows ammo; the log holds no gun state
   say: sayText,
@@ -604,7 +604,7 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
       const hits = e.rounds.filter((r) => r.hit).length;
       return spanLine('dim', [
-        { text: `${site.name} guards → ${n(e.target)} · ${hits}/${e.rounds.length} hit`, cls: '' },
+        { text: `${site.name} guards → ${n(e.target)}, ${hits}/${e.rounds.length} hit`, cls: '' },
         ...damageSpans(world, e.target, e.rounds.flatMap((r) => r.hits)),
       ]);
     }
@@ -644,4 +644,58 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       return null;
   }
   throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
+}
+
+// Words for the goods table, shared by the town market and the truck goods trade.
+export type SaleEstimate =
+  | { kind: "none" }
+  | { kind: "unrecorded" }
+  | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
+  | { kind: "even"; avgCost: number };
+
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+
+// Describes the basis rules of noteCostBasis() (sim/economy.ts), addBasis()/takeBasis() (sim/salvage.ts) and loadHaul() (sim/market.ts).
+export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
+
+function checkEstimate(held: number, sell: number, basis: number | undefined): void {
+  if (!Number.isInteger(held) || held < 0) throw new Error(`saleEstimate: bad held count ${held}`);
+  if (!Number.isFinite(sell)) throw new Error(`saleEstimate: bad sell price ${sell}`);
+  if (basis !== undefined) checkBasis(basis);
+}
+
+function checkBasis(basis: number): void {
+  if (!Number.isFinite(basis) || basis < 0) throw new Error(`saleEstimate: bad cost basis ${basis}`);
+}
+
+export function saleEstimate(held: number, sell: number, basis: number | undefined): SaleEstimate {
+  checkEstimate(held, sell, basis);
+  if (held === 0) return { kind: "none" };
+  if (basis === undefined) return { kind: "unrecorded" };
+  const diff = Math.round(sell - basis);
+  const avgCost = Math.round(basis);
+  if (diff === 0) return { kind: "even", avgCost };
+  return { kind: diff > 0 ? "gain" : "loss", perUnit: Math.abs(diff), avgCost };
+}
+
+export function estimateText(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "?";
+    case "even": return "0";
+    case "gain": return `+${e.perUnit}`;
+    case "loss": return `\u2212${e.perUnit}`;
+  }
+}
+
+export function estimateTitle(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "No cost on record";
+    default: return `Avg cost ${e.avgCost}`;
+  }
+}
+
+export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
+  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
 }

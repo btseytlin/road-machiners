@@ -1,7 +1,7 @@
 """One welded steel plate for the 'steelPlate' armor.
 
 A front-edge row of 1 cell: 0.484 m across, 0.65 m deep, outer face at +X. One riveted plate stands upright on the
-outer edge, 0.9 m tall, braced from behind. It is the one-cell cut of arm_plates.py and shares its build.
+outer edge, 0.9 m tall, on a foot with a short gusset behind it. It is the one-cell cut of arm_plates.py and shares its build.
 Run: blender --background --python tools/blender/arm_plate.py -- public/models/arm_plate.glb [tmp/arm_plate.png]
 """
 

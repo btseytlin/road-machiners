@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkFragmentation, checkGuidance, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
@@ -38,6 +38,14 @@ function readSources(directory, files) {
 function readGuidance(directory, files) {
   const docs = files.filter(file => isGuidance(file) && !ignoredPattern.test(file));
   return readSources(directory, docs.filter(file => !lstatSync(path.join(directory, file)).isSymbolicLink()));
+}
+
+// Text files holding the separator, found by git grep, which skips binary files. Staged mode searches the index.
+function readSeparatorFiles(directory, staged) {
+  const result = spawnSync('git', ['grep', staged ? '--cached' : '--untracked', '-lzIF', '-e', SEPARATOR], { cwd: root, encoding: 'utf8', maxBuffer });
+  if (result.status !== 0 && result.status !== 1) throw new Error(result.stderr || 'git grep failed.');
+  const files = splitPaths(result.stdout).filter(file => !ignoredPattern.test(file) && existsSync(path.join(directory, file)));
+  return readSources(directory, files);
 }
 
 function writeSources(directory, sources) {
@@ -102,7 +110,7 @@ function findRegressions(current, previous) {
   });
 }
 
-function checkQuality(directory, baseline, files, headFiles) {
+function checkQuality(directory, baseline, files, headFiles, staged) {
   const current = readSources(directory, selectSources(files));
   const previous = new Map(selectSources(headFiles).map(file => [file, runGit('show', `HEAD:${file}`)]));
   mkdirSync(baseline, { recursive: true });
@@ -114,6 +122,7 @@ function checkQuality(directory, baseline, files, headFiles) {
   const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
   const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
   failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
+  failures.push(...checkSeparators(readSeparatorFiles(directory, staged)));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);
   for (const failure of failures) console.error(failure);
   if (findings.length + failures.length) throw new Error('Quality regressed against HEAD. Fix the code. Do not weaken the checks.');
@@ -157,7 +166,7 @@ function checkSnapshot(staged, temporary) {
   const tracked = splitPaths(runGit('ls-files', '--cached', '-z'));
   const others = staged ? [] : splitPaths(runGit('ls-files', '--others', '--exclude-standard', '-z'));
   const files = [...tracked, ...others].filter(file => existsSync(path.join(directory, file)));
-  checkQuality(directory, path.join(temporary, 'head'), files, readHeadFiles());
+  checkQuality(directory, path.join(temporary, 'head'), files, readHeadFiles(), staged);
   checkTypes(directory);
 }
 

@@ -13,7 +13,7 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
-import { isOnRope } from './tow';
+import { isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -125,9 +125,11 @@ function keepFarRoute(v: Vehicle, route: FarRoute | undefined): void {
 const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
 
 // The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
-// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
+// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate. The truck on
+// the vehicle's own rope trails it and is never in its way.
 function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
-  const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+  const client = ropeClientOf(w, v.id);
+  const others = w.vehicles.filter((o) => o.id !== v.id && o.id !== client).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
   for (let seg = 1; seg < path.length; seg++) {
     const a = path[seg - 1];

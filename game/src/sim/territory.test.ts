@@ -2,32 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { onOrchardRoad, REGION } from '../data/region';
 import { ECONOMY, GOODS } from '../data/goods';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES } from '../data/territory';
+import { FALLEN_SUN_DECKS, inFurrow, TERRITORIES, type FarmRoad } from '../data/territory';
+import { PHYSICS } from '../data/physics';
+import { TERRAIN } from '../data/terrain';
+import { deckById, type Deck } from './bridge';
+import { boxDistance, propBoxes, segmentCrossesBox, type PosedBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
+import { boxesOverlap } from '../test/boxes';
 import { siteGap } from './sites';
-import { bayPoints, deckAlongAt, deckGap, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, spotTable, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
+import { hazardZones, isLootSpot, landingStrips, reactorPos, spotTable, territoryAt, territoryCaches, territoryEntries, territoryGrounds, territoryPieces, territoryRoads, type LandingStrip } from './territory';
 import type { PropKind } from './terrain';
 import type { LandmarkLook, Obstacle } from './types';
-import { dist, lerp, type Vec } from './vec';
+import { dist, lerp, polylineDist, type Vec } from './vec';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
-const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; roads keep clear of it
-
-// Points over a deck's footprint, from its corners: low left, high left, high right, low right.
-function footprint(deck: HullDeck, steps = 12): Vec[] {
-  const [lowLeft, highLeft, highRight, lowRight] = deck.corners;
-  const at = (a: Vec, b: Vec, t: number): Vec => ({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) });
-  const points: Vec[] = [];
-  for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps; j++) points.push(at(at(lowLeft, highLeft, i / steps), at(lowRight, highRight, i / steps), j / steps));
-  return points;
-}
-
-function hazardOf(deck: HullDeck) {
-  const zone = hazardZones().find((z) => z.id === deck.territory);
-  if (!zone) throw new Error(`Territory ${deck.territory} has no hazard`);
-  return zone;
-}
 
 describe('territory queries', () => {
   it('finds the territory under a point, and none outside', () => {
@@ -38,11 +27,31 @@ describe('territory queries', () => {
   it('puts every entry on the edge', () => {
     const entries = territoryEntries(fallenSun as never);
     expect(entries.length).toBeGreaterThan(0);
-    for (const e of entries) expect(dist(e, fallenSun.pos)).toBeCloseTo(fallenSun.radius, 6);
+    for (const e of entries) expect(Math.abs(siteGap(fallenSun, e))).toBeLessThan(1e-6);
   });
 
-  it('has three roads into the Fallen Sun', () => {
-    expect(territoryEntries(fallenSun as never)).toHaveLength(3);
+  it("has three roads into the Fallen Sun, where the level concept's tracks leave the crater", () => {
+    const entries = territoryEntries(fallenSun as never);
+    const bearings = entries.map((e) => (Math.atan2(e.y - fallenSun.pos.y, e.x - fallenSun.pos.x) * 180) / Math.PI).sort((a, b) => a - b);
+    expect(bearings).toHaveLength(3);
+    [-27, 37, 166].forEach((want, i) => expect(Math.abs(bearings[i] - want)).toBeLessThan(10));
+  });
+
+  it("follows the Fallen Sun's outline: the furrow is inside, and the cliff faces beside the north notch are not", () => {
+    if (fallenSun.kind !== 'territory' || !fallenSun.outline) throw new Error('The Fallen Sun has no outline');
+    const at = (x: number, y: number) => ({ x: fallenSun.pos.x + x, y: fallenSun.pos.y + y });
+    expect(fallenSun.radius).toBeCloseTo(Math.max(...fallenSun.outline.map((p) => Math.hypot(p.x, p.y))), 9);
+    // Down the crash furrow, past the old 44-tile circle.
+    expect(territoryAt(at(-20, 80))?.id).toBe('fallen-sun');
+    expect(territoryAt(at(-29, 108))?.id).toBe('fallen-sun');
+    // Out on the east floor, past the old circle.
+    expect(territoryAt(at(48, 0))?.id).toBe('fallen-sun');
+    // In the north notch, and on the crag faces on either side of it, inside the old circle.
+    expect(territoryAt(at(-2, -43.5))?.id).toBe('fallen-sun');
+    expect(territoryAt(at(-21.7, -34.8))).toBeNull();
+    expect(territoryAt(at(7.5, -42.3))).toBeNull();
+    // Beside the furrow, the land stays outside.
+    expect(territoryAt(at(0, 80))).toBeNull();
   });
 
   it('keeps every road out of the hazard', () => {
@@ -58,7 +67,7 @@ describe('territory queries', () => {
   });
 
   it('reports the hazard of each territory that has one', () => {
-    expect(hazardZones().map((z) => z.id)).toEqual(Object.keys(TERRITORIES).filter((id) => TERRITORIES[id].hazard));
+    expect(hazardZones().map((z) => z.id)).toEqual(Object.keys(TERRITORIES).filter((id) => TERRITORIES[id].reactor?.hazard));
   });
 
   it('knows a loot spot only inside its territory', () => {
@@ -68,11 +77,11 @@ describe('territory queries', () => {
     expect(isLootSpot({ ...spot, look: 'carWreck' })).toBe(false);
   });
 
-  it('rolls a deck bay from the bay table and a field spot from its rule', () => {
-    const bay = { id: 'deckBay-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'deckBay', yaw: 0 } as const;
-    expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].hull!.bayTable]);
-    expect(spotTable({ ...bay, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
-    expect(() => spotTable({ ...bay, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
+  it('rolls a cache from the cache table and a field spot from the spot table', () => {
+    const cache = { id: 'hullCache-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'hullCache', yaw: 0 } as const;
+    expect(spotTable(cache)).toBe(SALVAGE[TERRITORIES['fallen-sun'].wreck!.cacheTable]);
+    expect(spotTable({ ...cache, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
+    expect(() => spotTable({ ...cache, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
   });
 });
 
@@ -89,21 +98,21 @@ function midValue(table: LootTable): number {
 
 // The summed mid value of every loot spot a territory's rules place.
 function territoryValue(id: string): number {
-  const rules = TERRITORIES[id];
-  const bays = rules.hull ? rules.hull.sections.reduce((n, s) => n + s.bays.length, 0) * midValue(SALVAGE[rules.hull.bayTable]) : 0;
-  const buildings = (rules.farm ? rules.farm.buildings : []).reduce((sum, b) => sum + b.poses.length * midValue(SALVAGE[b.table]), 0);
-  const field = rules.spots.reduce((sum, s) => sum + s.count * midValue(SALVAGE[s.table]), 0);
-  return bays + buildings + field;
+  const { wreck, farm } = TERRITORIES[id];
+  const caches = wreck ? wreck.caches.length * midValue(SALVAGE[wreck.cacheTable]) : 0;
+  const field = wreck ? wreck.patches.reduce((n, p) => n + p.spots, 0) * midValue(SALVAGE[wreck.spotTable]) : 0;
+  const buildings = (farm ? farm.buildings : []).reduce((sum, b) => sum + b.poses.length * midValue(SALVAGE[b.table]), 0);
+  return caches + field + buildings;
 }
 
 describe('the Old Orchard', () => {
   const farm = TERRITORIES.orchard.farm!;
 
-  it('is a territory with an authored farm and no hull, reactor or hazard', () => {
+  it('is a territory with an authored farm and no wreck, reactor or hazard', () => {
     expect(orchard.kind).toBe('territory');
-    expect(TERRITORIES.orchard.hull).toBeNull();
+    expect(TERRITORIES.orchard.wreck).toBeNull();
     expect(TERRITORIES.orchard.reactor).toBeNull();
-    expect(TERRITORIES.orchard.hazard).toBeNull();
+    expect(hazardZones().filter((z) => z.id === 'orchard')).toEqual([]);
     expect(farm.buildings.length).toBeGreaterThan(0);
   });
 
@@ -117,7 +126,6 @@ describe('the Old Orchard', () => {
     expect(new Set(looks).size).toBe(looks.length);
     for (const b of farm.buildings) {
       expect(spotTable(landmarkAt(b.look, orchard.pos)), b.look).toBe(SALVAGE[b.table]);
-      for (const rule of TERRITORIES.orchard.spots) if (rule.look === b.look) expect(rule.table, b.look).toBe(b.table);
     }
   });
 
@@ -200,98 +208,255 @@ function crosses(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
   return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
 }
 
-describe('hull decks', () => {
-  const decks = hullDecks();
+describe('the Fallen Sun layout', () => {
+  const t = fallenSun as never;
+  const rules = TERRITORIES['fallen-sun'].wreck!;
+  const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
+  const pieces = territoryPieces(t);
+  const lowBoxes = (k: number): PosedBox[] => {
+    const p = pieces[k];
+    return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
+  };
+  // The bow holds the reactor in its breach, so it is the one piece the hazard reaches.
+  const housing = pieces.findIndex((p) => p.look === 'shipBow');
+  const { roads, spurs } = territoryRoads(t);
+  const roadSegments = [...roads, ...spurs].flatMap((road) => road.points.slice(1).map((b, i) => [road.points[i], b] as const));
 
-  it('builds one deck per hull section', () => {
-    expect(decks.map((d) => d.section.id)).toEqual(TERRITORIES['fallen-sun'].hull!.sections.map((s) => s.id));
-    for (const deck of decks) expect(deck.territory).toBe('fallen-sun');
+  it('keeps every piece centre, cache and patch inside the territory', () => {
+    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t)];
+    for (const p of points) expect(siteGap(fallenSun, p), `${p.x},${p.y}`).toBeLessThan(0);
+    for (const patch of rules.patches) expect(siteGap(fallenSun, { x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y })).toBeLessThan(0);
   });
 
-  it('measures the share along a deck: 0 at the low end, 1 at the high end, null outside', () => {
-    for (const deck of decks) {
-      expect(deckAlongAt(deck, deck.low), deck.section.id).toBeCloseTo(0, 9);
-      expect(deckAlongAt(deck, deck.high), deck.section.id).toBeCloseTo(1, 9);
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, 0.25), y: lerp(deck.low.y, deck.high.y, 0.25) })).toBeCloseTo(0.25, 9);
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, 1.1), y: lerp(deck.low.y, deck.high.y, 1.1) })).toBeNull();
-      expect(deckAlongAt(deck, { x: lerp(deck.low.x, deck.high.x, -0.1), y: lerp(deck.low.y, deck.high.y, -0.1) })).toBeNull();
-      const [lowLeft, highLeft] = deck.corners;
-      const beside = { x: lowLeft.x + (lowLeft.x - deck.low.x) * 0.1 + (highLeft.x - lowLeft.x) / 2, y: lowLeft.y + (lowLeft.y - deck.low.y) * 0.1 + (highLeft.y - lowLeft.y) / 2 };
-      expect(deckAlongAt(deck, beside), deck.section.id).toBeNull();
+  it("keeps caches, patches and every piece but the reactor's housing out of the hazard", () => {
+    for (const p of territoryCaches(t)) expect(dist(p, zone.pos), `${p.x},${p.y}`).toBeGreaterThan(zone.radius);
+    for (const patch of rules.patches) expect(dist({ x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y }, zone.pos) - patch.radius).toBeGreaterThan(zone.radius);
+    pieces.forEach((p, k) => {
+      if (k === housing) return;
+      for (const b of lowBoxes(k)) expect(boxDistance(b, zone.pos), p.look).toBeGreaterThan(zone.radius);
+    });
+  });
+
+  it("keeps every piece's low boxes off the roads, the dirt roads and the other pieces", () => {
+    pieces.forEach((p, k) => {
+      for (const b of lowBoxes(k)) {
+        expect(ROAD_INDEX.nearestWithin(b.center.x, b.center.y, Math.hypot(b.half.x, b.half.y) + REGION.roadWidth / 2), p.look).toBe(Infinity);
+        for (const [a, c] of roadSegments) expect(segmentCrossesBox(b, a, c), `${p.look} crosses a dirt road at ${a.x},${a.y}`).toBe(false);
+        pieces.forEach((_, other) => {
+          if (other <= k) return;
+          for (const ob of lowBoxes(other)) expect(boxesOverlap(b, ob), `${p.look} and ${pieces[other].look}`).toBe(false);
+        });
+      }
+    });
+  });
+
+  it('centres the hazard on the reactor', () => {
+    expect(zone.pos).toEqual(reactorPos(t));
+  });
+
+  it('has nine caches and fifteen field spots', () => {
+    expect(territoryCaches(t)).toHaveLength(9);
+    expect(rules.patches.reduce((n, p) => n + p.spots, 0)).toBe(15);
+  });
+
+  it('waits for scavengers at the entries and the patch centres', () => {
+    const grounds = territoryGrounds(t);
+    expect(grounds.slice(0, 3)).toEqual(territoryEntries(t));
+    expect(grounds).toHaveLength(3 + rules.patches.length);
+  });
+});
+
+// Points every quarter tile along a road's centreline.
+function along(points: readonly Vec[]): Vec[] {
+  const out: Vec[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const n = Math.max(1, Math.ceil(dist(points[i - 1], points[i]) * 4));
+    for (let k = 1; k <= n; k++) out.push({ x: lerp(points[i - 1].x, points[i].x, k / n), y: lerp(points[i - 1].y, points[i].y, k / n) });
+  }
+  return out;
+}
+
+// A deck's outline or a landing strip as a box on the ground.
+function deckBox(deck: Deck): PosedBox {
+  return { center: { x: (deck.from.x + deck.to.x) / 2, y: (deck.from.y + deck.to.y) / 2 }, axis: deck.axis, half: { x: deck.length / 2, y: deck.width / 2 }, z0: 0, z1: 1 };
+}
+
+function stripBox(s: LandingStrip): PosedBox {
+  const length = dist(s.a, s.b);
+  const axis = { x: (s.b.x - s.a.x) / length, y: (s.b.y - s.a.y) / length };
+  return { center: { x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }, axis, half: { x: length / 2, y: s.width / 2 }, z0: 0, z1: 1 };
+}
+
+function corners(b: PosedBox): Vec[] {
+  return [-1, 1].flatMap((i) => [-1, 1].map((j) => ({
+    x: b.center.x + b.axis.x * b.half.x * i - b.axis.y * b.half.y * j,
+    y: b.center.y + b.axis.y * b.half.x * i + b.axis.x * b.half.y * j,
+  })));
+}
+
+// Tiles from a point to a road's edge, negative on the road.
+function toRoad(p: Vec, road: FarmRoad): number {
+  return polylineDist(p, road.points) - road.width / 2;
+}
+
+describe("the Fallen Sun's dirt roads, wing and flaps", () => {
+  const t = fallenSun as never;
+  const rules = TERRITORIES['fallen-sun'].wreck!;
+  const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
+  const pieces = territoryPieces(t);
+  const lowBoxes = (k: number): PosedBox[] => {
+    const p = pieces[k];
+    return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
+  };
+  const { roads, spurs } = territoryRoads(t);
+  const decks = FALLEN_SUN_DECKS.map((d) => deckById(d.id));
+  const wing = decks.filter((d) => d.lips.length === 0);
+  const flaps = decks.filter((d) => d.lips.length > 0);
+  const strips = landingStrips(t);
+  const nearestRoad = (p: Vec) => Math.min(...[...roads, ...spurs].map((road) => toRoad(p, road)));
+  const onMap = (p: Vec) => ({ x: fallenSun.pos.x + p.x, y: fallenSun.pos.y + p.y });
+  // The piers stand under the wing; the large pieces each get an island of their own.
+  const underWing = (p: Vec) => wing.some((d) => segmentDistance(p, d) < d.width / 2);
+  const LARGE = new Set(['shipBow', 'shipHub', 'shipCage', 'hullShell', 'hullGantry', 'hullTower']);
+  const large = pieces.map((p, k) => k).filter((k) => LARGE.has(pieces[k].look) || (pieces[k].look === 'hullDrum' && pieces[k].r >= 5 && !underWing(pieces[k].pos)));
+
+  it('lays the furrow frame along the furrow in the terrain', () => {
+    const [head, tail] = [TERRAIN.features.furrow.path[0], TERRAIN.features.furrow.path.at(-1)!];
+    expect(dist(onMap(inFurrow(0, 0)), head)).toBeLessThan(1e-9);
+    expect(dist(onMap(inFurrow(dist(head, tail), 0)), tail)).toBeLessThan(1e-9);
+  });
+
+  it('lays the wing as one deck that rises from the ground, runs level at 1.5 over the piers and comes down to 0, with no lip (IV1)', () => {
+    expect(wing).toHaveLength(1);
+    const rises = wing[0].stations.map((st) => st.rise);
+    expect(rises[0]).toBe(0);
+    expect(rises[1]).toBe(1.5);
+    expect(rises[2]).toBe(1.5);
+    expect(rises.at(-1)).toBe(0);
+    for (let k = 3; k < rises.length; k++) expect(rises[k]).toBeLessThan(rises[k - 1]);
+    expect(wing[0].lips).toEqual([]);
+  });
+
+  it('lays the wing across two hull piers that stick out past both rails (AS2)', () => {
+    const span = wing[0];
+    const piers = pieces.map((p, k) => k).filter((k) => underWing(pieces[k].pos));
+    expect(piers).toHaveLength(2);
+    for (const k of piers) {
+      expect(pieces[k].look).toBe('hullDrum');
+      const across = lowBoxes(k).flatMap(corners).map((c) => (c.y - span.from.y) * span.axis.x - (c.x - span.from.x) * span.axis.y);
+      expect(Math.max(...across)).toBeGreaterThan(span.width / 2 + 1);
+      expect(Math.min(...across)).toBeLessThan(-span.width / 2 - 1);
     }
   });
 
-  it('spans its length and width', () => {
-    for (const deck of decks) {
-      const [lowLeft, highLeft, highRight, lowRight] = deck.corners;
-      expect(dist(deck.low, deck.high)).toBeCloseTo(deck.section.length, 9);
-      expect(dist(lowLeft, highLeft)).toBeCloseTo(deck.section.length, 9);
-      expect(dist(lowLeft, lowRight)).toBeCloseTo(deck.section.width, 9);
-      expect(dist(highLeft, highRight)).toBeCloseTo(deck.section.width, 9);
+  it('keeps every dirt road and deck inside the outline', () => {
+    for (const road of roads) for (const p of along(road.points)) expect(siteGap(fallenSun, p), `${p.x},${p.y}`).toBeLessThan(-road.width / 2);
+    for (const deck of decks) for (const c of corners(deckBox(deck))) expect(siteGap(fallenSun, c), deck.id).toBeLessThan(0);
+  });
+
+  it('starts every spur on a web road and ends it outside the outline, past its fade', () => {
+    expect(spurs.length).toBeGreaterThanOrEqual(5);
+    for (const spur of spurs) {
+      const start = spur.points[0];
+      expect(Math.min(...roads.map((road) => polylineDist(start, road.points))), `${start.x},${start.y}`).toBeLessThan(0.05);
+      expect(siteGap(fallenSun, spur.points.at(-1)!)).toBeGreaterThan(rules.spurFade);
     }
   });
 
-  it('climbs from the ground at its low end by its rise', () => {
-    const deck = decks[0];
-    expect(deckPlane(deck, 1.5, 0)).toBeCloseTo(1.5, 9);
-    expect(deckPlane(deck, 1.5, 0.5)).toBeCloseTo(1.5 + deck.section.rise / 2, 9);
-    expect(deckPlane(deck, 1.5, 1)).toBeCloseTo(1.5 + deck.section.rise, 9);
+  it('keeps every dirt road and landing strip out of the hazard', () => {
+    for (const road of [...roads, ...spurs]) for (const p of along(road.points)) expect(dist(p, zone.pos) - road.width / 2, `${p.x},${p.y}`).toBeGreaterThan(zone.radius);
+    for (const s of strips) expect(boxDistance(stripBox(s), zone.pos)).toBeGreaterThan(zone.radius);
   });
 
-  it('keeps decks apart from each other and clear of every road', () => {
-    const reach = REGION.roadWidth / 2 + DECK_EDGE;
-    for (const deck of decks) {
-      for (const p of footprint(deck)) {
-        expect(ROAD_INDEX.nearestWithin(p.x, p.y, reach), deck.section.id).toBe(Infinity);
-        for (const other of decks) if (other !== deck) expect(deckAlongAt(other, p), `${deck.section.id} on ${other.section.id}`).toBeNull();
+  it('joins the dirt roads into one web, and each of the three approaches to it (IV11)', () => {
+    const touches = (a: FarmRoad, b: FarmRoad) => [a.points[0], a.points.at(-1)!].some((p) => polylineDist(p, b.points) < 0.05);
+    const reached = new Set([0]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      roads.forEach((road, i) => {
+        if (reached.has(i) || ![...reached].some((j) => touches(road, roads[j]) || touches(roads[j], road))) return;
+        reached.add(i);
+        grew = true;
+      });
+    }
+    expect(reached.size).toBe(roads.length);
+    const ends = REGION.roads.map((road) => road.at(-1)!).filter((p) => siteGap(fallenSun, p) < 0);
+    expect(ends).toHaveLength(3);
+    for (const end of ends) expect(Math.min(...roads.map((road) => toRoad(end, road))), `${end.x},${end.y}`).toBeLessThan(REGION.roadWidth / 2);
+  });
+
+  it('gives every large piece dirt road within 3 tiles on two opposite sides (IV11)', () => {
+    expect(large).toHaveLength(9);
+    for (const k of large) {
+      const p = pieces[k];
+      const u = { x: Math.cos(p.yaw), y: Math.sin(p.yaw) };
+      const frame = (q: Vec) => ({ along: (q.x - p.pos.x) * u.x + (q.y - p.pos.y) * u.y, across: (q.y - p.pos.y) * u.x - (q.x - p.pos.x) * u.y });
+      const box = lowBoxes(k).flatMap(corners).map(frame);
+      const [a0, a1] = [Math.min(...box.map((c) => c.along)), Math.max(...box.map((c) => c.along))];
+      const [c0, c1] = [Math.min(...box.map((c) => c.across)), Math.max(...box.map((c) => c.across))];
+      const sides = new Set<string>();
+      for (const road of roads) {
+        for (const q of along(road.points)) {
+          if (Math.min(...lowBoxes(k).map((b) => boxDistance(b, q))) - road.width / 2 > 3) continue;
+          const f = frame(q);
+          if (f.along > a1) sides.add('+along');
+          if (f.along < a0) sides.add('-along');
+          if (f.across > c1) sides.add('+across');
+          if (f.across < c0) sides.add('-across');
+        }
+      }
+      expect((sides.has('+along') && sides.has('-along')) || (sides.has('+across') && sides.has('-across')), `${p.look} at ${p.pos.x},${p.pos.y}: ${[...sides]}`).toBe(true);
+    }
+  });
+
+  it("keeps every dirt road's surface off every piece's low boxes (IV11)", () => {
+    pieces.forEach((p, k) => {
+      const boxes = lowBoxes(k);
+      for (const road of [...roads, ...spurs]) {
+        for (const q of along(road.points)) expect(Math.min(...boxes.map((b) => boxDistance(b, q))), `${p.look} at ${q.x},${q.y}`).toBeGreaterThan(road.width / 2);
+      }
+    });
+  });
+
+  it('puts every cache and spot patch within 6 tiles of a dirt road (IV5)', () => {
+    for (const c of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
+    for (const patch of rules.patches.filter((p) => p.spots > 0)) expect(nearestRoad(onMap(patch.at)), `${patch.at.x},${patch.at.y}`).toBeLessThanOrEqual(6);
+  });
+
+  it('keeps every spur clear of the region roads, the other sites and the map margin (AS10)', () => {
+    const clearance = REGION.obstacles.roadClearance;
+    const others = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'fallen-sun');
+    for (const spur of spurs) {
+      for (const q of along(spur.points)) {
+        expect(ROAD_INDEX.nearestWithin(q.x, q.y, REGION.roadWidth / 2 + clearance + spur.width / 2), `${q.x},${q.y}`).toBe(Infinity);
+        for (const site of others) expect(siteGap(site, q), site.id).toBeGreaterThan(clearance + spur.width / 2);
+        for (const v of [q.x, q.y]) {
+          expect(v).toBeGreaterThan(REGION.obstacles.edgeMargin + clearance);
+          expect(v).toBeLessThan(REGION.size - REGION.obstacles.edgeMargin - clearance);
+        }
       }
     }
   });
 
-  it('keeps every deck, bay and rib leg out of the hazard', () => {
-    for (const deck of decks) {
-      const zone = hazardOf(deck);
-      const legs = ribPoses(deck).flatMap((rib) => [-1, 1].map((side) => ({ x: rib.pos.x + Math.cos(rib.yaw) * rib.r * side, y: rib.pos.y + Math.sin(rib.yaw) * rib.r * side })));
-      for (const p of [...footprint(deck), ...bayPoints(deck), ...legs]) expect(dist(p, zone.pos), deck.section.id).toBeGreaterThan(zone.radius);
-    }
-  });
-
-  it('runs every rib across its deck, both legs on the deck at one share along it', () => {
-    for (const deck of decks) {
-      const ribs = ribPoses(deck);
-      const step = deck.section.ribStep;
-      if (step === null) expect(ribs, deck.section.id).toEqual([]);
-      else {
-        expect(ribs.length, deck.section.id).toBeGreaterThan(1);
-        ribs.slice(1).forEach((rib, i) => expect(dist(rib.pos, ribs[i].pos)).toBeCloseTo(step, 9));
-      }
-      const along = Math.atan2(deck.high.y - deck.low.y, deck.high.x - deck.low.x);
-      for (const rib of ribs) {
-        expect(Math.cos(rib.yaw - along), deck.section.id).toBeCloseTo(0, 9);
-        const [a, b] = [-1, 1].map((side) => deckAlongAt(deck, { x: rib.pos.x + Math.cos(rib.yaw) * rib.r * side, y: rib.pos.y + Math.sin(rib.yaw) * rib.r * side }));
-        expect(a, deck.section.id).not.toBeNull();
-        expect(a).toBeCloseTo(b!, 9);
-      }
-    }
-  });
-
-  it('measures the gap from a point to a deck: 0 on it, the distance past a side or an end off it', () => {
-    for (const deck of decks) {
-      const across = { x: -Math.sin(deck.section.yaw), y: Math.cos(deck.section.yaw) };
-      const mid = { x: lerp(deck.low.x, deck.high.x, 0.5), y: lerp(deck.low.y, deck.high.y, 0.5) };
-      const out = deck.section.width / 2 + 2;
-      expect(deckGap(deck, mid), deck.section.id).toBe(0);
-      expect(deckGap(deck, { x: mid.x + across.x * out, y: mid.y + across.y * out }), deck.section.id).toBeCloseTo(2, 9);
-      expect(deckGap(deck, { x: lerp(deck.low.x, deck.high.x, 1 + 3 / deck.section.length), y: lerp(deck.low.y, deck.high.y, 1 + 3 / deck.section.length) })).toBeCloseTo(3, 9);
-      expect(deckGap(deck, { x: deck.corners[1].x + (deck.high.x - deck.low.x) / deck.section.length * 3 + across.x * -4, y: deck.corners[1].y + (deck.high.y - deck.low.y) / deck.section.length * 3 + across.y * -4 })).toBeCloseTo(5, 9);
-    }
-  });
-
-  it('stands each bay on its deck at its share of the length', () => {
-    for (const deck of decks) {
-      const bays = bayPoints(deck);
-      expect(bays).toHaveLength(deck.section.bays.length);
-      bays.forEach((p, i) => expect(deckAlongAt(deck, p), deck.section.id).toBeCloseTo(deck.section.bays[i], 9));
+  it('runs a landing strip from each flap lip, clear of the pieces and the other decks, inside the outline', () => {
+    expect(flaps.length).toBeGreaterThanOrEqual(4);
+    expect(flaps.length).toBeLessThanOrEqual(5);
+    expect(strips).toHaveLength(flaps.length);
+    expect(rules.landing).toBeGreaterThanOrEqual(12);
+    for (const s of strips) {
+      expect(dist(s.a, s.b)).toBeCloseTo(rules.landing, 9);
+      // Just past the lip, so the strip does not touch its own flap.
+      const box = stripBox({ ...s, a: { x: s.a.x + ((s.b.x - s.a.x) / rules.landing) * 0.01, y: s.a.y + ((s.b.y - s.a.y) / rules.landing) * 0.01 } });
+      for (const c of corners(box)) expect(siteGap(fallenSun, c)).toBeLessThan(0);
+      pieces.forEach((p, k) => {
+        for (const b of lowBoxes(k)) expect(boxesOverlap(box, b), `${p.look} on the strip at ${s.a.x},${s.a.y}`).toBe(false);
+      });
+      for (const deck of decks) expect(boxesOverlap(box, deckBox(deck)), `${deck.id} on the strip at ${s.a.x},${s.a.y}`).toBe(false);
     }
   });
 });
+
+// Tiles from a point to a deck's centre line.
+function segmentDistance(p: Vec, deck: Deck): number {
+  return polylineDist(p, [deck.from, deck.to]);
+}

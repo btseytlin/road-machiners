@@ -4,7 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   contractDue,
@@ -92,7 +92,7 @@ function weatherLabel(w: World): string {
 }
 
 export class Hud {
-  private top = panel("instruments");
+  private top = panel("instruments", bottomLeft());
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
   private contracts = panel("contracts", rightDock());
@@ -107,7 +107,7 @@ export class Hud {
   // Stands on top of the part condition panel.
   private stranded = panel("stranded", this.condition.root);
   // Shows only while a pan has left the truck.
-  private recenter = panel("recenter");
+  private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
@@ -124,6 +124,7 @@ export class Hud {
   };
 
   constructor(private actions: HudActions, private radio: RadioPanel) {
+    bottomLeft().append(this.condition.root);
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
@@ -247,7 +248,7 @@ export class Hud {
       el(
         "span",
         { class: "job-label" },
-        `${label} · ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
+        `${label}, ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
       ),
       el(
         "span",
@@ -406,7 +407,6 @@ export class Hud {
     this.renderContracts(w);
     this.tips.update(w, this.actions.autoTravel());
     this.top.replaceChildren(
-      this.condition.root,
       el(
         "div",
         {

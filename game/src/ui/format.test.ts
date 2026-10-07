@@ -8,7 +8,7 @@ import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
+import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -168,10 +168,10 @@ describe("shot log", () => {
     const cab = mountedParts(me).find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
     const e: GameEvent = {
       t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, damageChance: 0.5, side: "front",
-      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
+      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [], burst: null }],
     };
     const line = eventText(w, e);
-    expect(line?.text).toContain(" · stray fire hits ");
+    expect(line?.text).toContain(", stray fire hits ");
     expect(line?.cls).toBe("bad");
   });
 
@@ -184,7 +184,7 @@ describe("shot log", () => {
     const armor = parts.find((p) => partDef(p.defId).kind === "armor");
     const shot = (hits: { part: string; damage: number }[], rounds = 2): GameEvent => ({
       t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, damageChance: 0.4, side: "front",
-      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [] })),
+      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [], burst: null })),
     });
     return { w, raider, cab, armor, shot };
   }
@@ -193,7 +193,7 @@ describe("shot log", () => {
     const { w, raider, cab, shot } = duel();
     cab.hp = maxHp(cab);
     const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
-    expect(line.text).toMatch(/^.+ → .+ · 1\/2 hit \(40%\) · .+ −2$/);
+    expect(line.text).toMatch(/^.+ → .+, 1\/2 hit \(40%\): .+ −2$/);
     expect(line.text).toContain(raider.name);
   });
 
@@ -270,5 +270,83 @@ describe("aid handover text", () => {
     const theirs = next.vehicles.find((v) => v.id === npc.id)!;
     expect(workLabel(next, theirs, workOf(next, theirs)!)).toMatch(/^Taking .* from you$/);
     expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
+  });
+});
+
+describe("saleEstimate", () => {
+  it("words a loss per unit against the average cost", () => {
+    const e = saleEstimate(11, 12, 20);
+    expect(e).toEqual({ kind: "loss", perUnit: 8, avgCost: 20 });
+    expect(estimateText(e)).toBe("\u22128");
+    expect(estimateTitle(e)).toBe("Avg cost 20");
+  });
+
+  it("words a gain", () => {
+    expect(estimateText(saleEstimate(1, 38, 5))).toBe("+33");
+  });
+
+  it("calls a rounded zero even, never -0", () => {
+    for (const basis of [37, 37.4]) {
+      const e = saleEstimate(2, 37, basis);
+      expect(e.kind).toBe("even");
+      expect(estimateText(e)).toBe("0");
+    }
+  });
+
+  it("says when no cost is on record", () => {
+    const e = saleEstimate(1, 42, undefined);
+    expect(estimateText(e)).toBe("?");
+    expect(estimateTitle(e)).toBe("No cost on record");
+  });
+
+  it("has nothing to say when nothing is held", () => {
+    const e = saleEstimate(0, 37, 45);
+    expect(e.kind).toBe("none");
+    expect(estimateText(e)).toBe("");
+  });
+
+  it("keeps multi-digit values whole", () => {
+    expect(estimateText(saleEstimate(12, 987, 1234))).toBe("\u2212247");
+  });
+
+  it("only ever gives a signed number, ? or nothing", () => {
+    for (const e of [saleEstimate(11, 37, 45), saleEstimate(3, 37, 30), saleEstimate(2, 37, 37), saleEstimate(2, 37, undefined), saleEstimate(0, 37, 1)]) {
+      expect(estimateText(e)).toMatch(/^([+\u2212]\d*[1-9]\d*|0|\?|)$/);
+    }
+  });
+
+  it("fails loud on impossible input", () => {
+    expect(() => saleEstimate(-1, 37, 45)).toThrow();
+    expect(() => saleEstimate(1.5, 37, 45)).toThrow();
+    expect(() => saleEstimate(1, NaN, 45)).toThrow();
+    expect(() => saleEstimate(1, 37, -1)).toThrow();
+    expect(() => saleEstimate(1, 37, Infinity)).toThrow();
+  });
+});
+
+describe("goods table words", () => {
+  it("has terse column heads", () => {
+    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" });
+  });
+
+  it("explains the profit head in a hover title without turns", () => {
+    expect(PROFIT_HEAD_TITLE).toContain("average cost");
+    expect(PROFIT_HEAD_TITLE).toContain("usual value");
+    expect(PROFIT_HEAD_TITLE).not.toMatch(/turn/i);
+  });
+
+  it("words lot totals", () => {
+    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 180 total");
+    expect(lotTitle("sell", 11, 312)).toBe("Sell all 11 for 312 total");
+  });
+});
+
+describe("wake-up log", () => {
+  it("says an NPC regains consciousness, so the line does not read as cut off", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "npcWake", vehicle: npc.id });
+    expect(line?.text).toBe(`${vehicleName(w, npc.id)} regains consciousness`);
+    expect(line?.cls).toBe("dim");
   });
 });
