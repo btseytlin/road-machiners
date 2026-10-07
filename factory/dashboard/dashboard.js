@@ -471,6 +471,63 @@ function renderAnalytics() {
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderStageModels(summary);
 }
+const dwellNames = { triage: 'Triage', design: 'Design', implementation: 'Implementation', preview: 'Testing preview', approval: 'Committee approval', harden: 'Testing harden', merge: 'Merge queue' };
+const loopNames = { questions: 'Design asks the author', rebuild: 'Visual review: rebuild', 'plan-wrong': 'Visual review: plan wrong', 'review-failed': 'Code review fails twice', patch: 'Committee patch', redesign: 'Committee redesign', 'patch-replan': 'Patch needs a new plan', conflict: 'Merge conflict', removed: 'Removed from release', unbundled: 'Bundle lead dropped' };
+const gateNames = { triage: 'Triage wont-do', design: 'Design wont-do', committee: 'Committee Deny' };
+function readDelivery() { return readSummary()?.delivery ?? null; }
+function formatRate(part, whole) { return whole ? `${Math.round(100 * part / whole)}%` : '—'; }
+function createDwellRow(row, maximum) {
+  const node = createNode('tr');
+  const bar = createNode('td', '', 'dwell-bar');
+  const fill = createNode('span');
+  fill.style.width = `${row.meanMs === null ? 0 : 100 * row.meanMs / maximum}%`;
+  bar.append(fill);
+  bar.setAttribute('aria-hidden', 'true');
+  const open = row.open ? `${row.open}, ${formatDuration(row.openMeanMs)}` : '0';
+  node.append(createNode('td', dwellNames[row.stage]), bar, createNode('td', formatDuration(row.meanMs), 'numeric'), createNode('td', formatDuration(row.medianMs), 'numeric'), createNode('td', String(row.count), 'numeric'), createNode('td', open, 'numeric'));
+  node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.openMeanMs)}. Open stages are not in the means.`;
+  return node;
+}
+function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step]), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function readDeliveryCoverage(delivery) {
+  if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
+  if (!delivery) return 'No card moves recorded yet, so no delivery numbers';
+  const prefix = snapshot.analytics.status === 'ok' ? '' : 'Last known: ';
+  return `${prefix}Card records from ${delivery.since.slice(0, 10)} UTC. ${delivery.issues} cards moved in the period, ${delivery.legacy} joined before records, ${delivery.excluded} hotfix, release or private cards left out, ${delivery.lead.missingStart} merges lack a start`;
+}
+function renderDeliveryCounters(delivery) {
+  if (!delivery) return clearDeliveryCounters();
+  const { lead } = delivery;
+  setCounter('lead-mean', formatDuration(lead.meanMs), lead.count ? `${lead.meanMs} ms mean of ${lead.count} cards` : null);
+  setText('lead-count', `n=${lead.count}`);
+  setCounter('lead-median', formatDuration(lead.medianMs), lead.count ? `${lead.medianMs} ms median of ${lead.count} cards` : null);
+  setCounter('lead-open', String(lead.open), lead.open);
+  setText('lead-open-age', lead.open ? `age ${formatDuration(lead.openMeanMs)}` : '');
+  setCounter('loop-rate', formatRate(delivery.looped, delivery.issues), `${delivery.looped} of ${delivery.issues} cards`);
+  setText('loop-count', `${delivery.looped}/${delivery.issues}`);
+  for (const row of delivery.rejections) {
+    setCounter(`${row.gate}-rate`, formatRate(row.rejected, row.decided), `${gateNames[row.gate]}: ${row.rejected} of ${row.decided} decided cards`);
+    setText(`${row.gate}-count`, `${row.rejected}/${row.decided}`);
+  }
+}
+function clearDeliveryCounters() {
+  for (const id of ['lead-mean', 'lead-median', 'lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
+  for (const id of ['lead-count', 'lead-open-age', 'loop-count', 'triage-count', 'design-count', 'committee-count']) setText(id, '—');
+}
+function renderDelivery() {
+  const delivery = readDelivery();
+  setText('delivery-coverage', readDeliveryCoverage(delivery));
+  renderDeliveryCounters(delivery);
+  if (!delivery) return renderDeliveryEmpty(snapshot.analytics.value ? 'No card moves recorded yet' : 'Unavailable');
+  const maximum = Math.max(1, ...delivery.stages.map((row) => row.meanMs ?? 0));
+  renderTable('dwell', delivery.stages, (row) => createDwellRow(row, maximum), '', 6);
+  renderTable('loop', delivery.loops.filter((row) => row.events > 0), createLoopRow, 'No card sent back in the period', 3);
+  renderTable('stage-retry', delivery.retries.filter((row) => row.runs > 0), createStageRetryRow, 'No failed card job in the period', 3);
+}
+function renderDeliveryEmpty(text) {
+  for (const [key, columnCount] of [['dwell', 6], ['loop', 3], ['stage-retry', 3]]) renderTable(key, [], null, text, columnCount);
+}
 function readPauseNotice() {
   const operations = readOperations();
   if (operations?.status !== 'paused') return '';
@@ -497,6 +554,7 @@ function renderSnapshot() {
   renderFreshness();
   if (!getElement('overview').hidden) renderOverview();
   if (!getElement('analytics').hidden) renderAnalytics();
+  if (!getElement('delivery').hidden) renderDelivery();
   updateOverflow();
 }
 function updateOverflow() {
