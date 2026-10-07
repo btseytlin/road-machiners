@@ -12,6 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
+import { sweepTranscripts } from './transcript-archive';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
@@ -360,7 +361,7 @@ function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
-// Deletes finished work clones and old job logs. Running jobs and resumable clones stay, see sweepWork.
+// Deletes finished work clones, old job logs and old agent transcripts. Running jobs and resumable clones stay, see sweepWork.
 function cleanWork(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   const swept = sweepWork(join(ctx.cfg.home, 'work'), state, cards);
@@ -369,6 +370,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+  const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
+  if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
 }
 
 // Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.

@@ -53,6 +53,7 @@ export type FactoryConfig = {
   minFreeGb: number; // under this much free disk, a tick starts no job
   minAvailableGb: number; // under this much available memory, Hermes gets a memory incident
   logDays: number; // job logs older than this go
+  transcriptDays: number; // archived agent transcripts older than this go
   cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
