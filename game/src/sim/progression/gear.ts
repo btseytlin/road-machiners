@@ -2,7 +2,7 @@ import { ECONOMY, GOODS } from '../../data/goods';
 import { partDef, type PartKind } from '../../data/parts';
 import { freeCells, mountedItems, type Spot } from '../grid';
 import { getLayoutError, installSpot } from '../inventory';
-import { firepower, getUpkeepReserve } from '../npc-decisions';
+import { getUpkeepReserve, vehicleDanger } from '../npc-decisions';
 import { getResources } from '../resources';
 import { vehicleStats } from '../stats';
 import type { GearJob } from '../../data/npcs';
@@ -13,7 +13,7 @@ import { isJunk, maxHp, partValue } from '../wear';
 // it adds to the bot's job, and picks the one that adds most within the budget. Only the bots use it, since no NPC
 // buys parts. Executing the purchase is the caller's.
 //
-// A job is what the truck earns by: a fighter by its guns and armor, a trader and a carrier by cargo room, a courier by
+// A job is what the truck earns by: a fighter by its fight strength, guns times armor, a trader and a carrier by cargo room, a courier by
 // speed. A carrier hauls or salvages and needs no goods money. A driver takes only parts that raise its job's score.
 
 export type PartItem = Extract<GridItem, { kind: 'part' }>;
@@ -33,10 +33,10 @@ export function goodsRoom(v: Vehicle): number {
   return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
 }
 
-// The number a job grows by. A fighter hunts with its guns, and armor only keeps it alive. A trader or carrier moves
-// cargo, so its score is room times speed.
+// The number a job grows by. A fighter's score is its danger, firepower times toughness, so it buys a gun first and
+// then whichever of gun and armor adds more strength. A trader or carrier moves cargo, so its score is room times speed.
 export function jobScore(world: World, v: Vehicle, job: GearJob): number {
-  if (job === 'fighter') return firepower(world, v);
+  if (job === 'fighter') return vehicleDanger(world, v);
   if (job === 'courier') return vehicleStats(world, v).maxSpeed;
   return goodsRoom(v) * vehicleStats(world, v).maxSpeed;
 }

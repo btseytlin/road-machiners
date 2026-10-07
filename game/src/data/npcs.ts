@@ -131,7 +131,7 @@ export type NpcTemplate = {
   name: string;
   profession: string; // the noun texts put before the driver's name
   faction: Faction;
-  gearJob: GearJob; // what the driver earns by, which decides the gear it wants; see the gear choice in src/sim/npc-decisions.ts
+  gearJob: GearJob; // what the driver earns by, which decides the gear it wants; see the bots' gear choice in src/sim/progression/gear.ts and the spawn loadouts in src/sim/npc-loadout.ts
   traits: TraitId[]; // every NPC of the template has these
   extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
   loadout: NpcLoadoutTable;

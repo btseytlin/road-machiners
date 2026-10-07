@@ -75,14 +75,29 @@ describe('upgradeGear', () => {
     expect(mountedParts(playerVehicle(o.world), 'engine').map((p) => p.id)).toEqual([spare.id]);
   });
 
-  it('lets a fighter save for a gun instead of spending on armor', () => {
+  it('lets a gunless fighter save for a gun instead of spending on armor', () => {
     const w = atBowl();
+    const me = playerVehicle(w);
+    me.items = me.items.filter((it) => it.kind !== 'part' || it.part.defId === 'core' || !mountedParts(me, 'weapon').includes(it.part));
+    expect(mountedParts(me, 'weapon')).toHaveLength(0);
     shopState(w, 'bowl').stock = [makePart(w, 'steelPlate', 0), makePart(w, 'cage', 0)];
     const o = new Orders(w);
 
     upgradeGear(o, FIGHTER);
 
     expect(o.world.player.money).toBe(w.player.money);
+  });
+
+  it('lets an armed fighter spend on armor when it adds fight strength', () => {
+    const w = atBowl();
+    expect(mountedParts(playerVehicle(w), 'weapon').length).toBeGreaterThan(0);
+    shopState(w, 'bowl').stock = [makePart(w, 'steelPlate', 0)];
+    const o = new Orders(w);
+
+    upgradeGear(o, FIGHTER);
+
+    expect(o.world.player.money).toBeLessThan(w.player.money);
+    expect(mountedParts(playerVehicle(o.world), 'armor').length).toBeGreaterThan(mountedParts(playerVehicle(w), 'armor').length);
   });
 
   it('never buys a kind its style skips', () => {
