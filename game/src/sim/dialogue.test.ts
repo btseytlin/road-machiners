@@ -6,7 +6,7 @@ import { goodBasePrice, goodValue, vehicleValue } from './market';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, onAir, placeholders, radioSpeakers, raiseCalls } from './dialogue';
+import { callVehicle, callTrucks, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
 import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
@@ -1023,14 +1023,14 @@ describe('fuel and supply aid', () => {
 });
 
 describe('trucks on the radio', () => {
-  it('lists both trucks of an open call, and the player while the beacon is on', () => {
+  it('lists both trucks of an open call, and none with only the beacon on', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    expect(onAir(w)).toEqual([]);
+    expect(callTrucks(w)).toEqual([]);
     const open = callVehicle(w, npc.id);
-    expect(onAir(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
+    expect(callTrucks(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
     const beacon = structuredClone(w);
     beacon.player.beacon = true;
-    expect(onAir(beacon)).toEqual([w.player.vehicleId]);
+    expect(callTrucks(beacon)).toEqual([]);
   });
 
   it('reads the radio talk events and nothing else', () => {
