@@ -187,6 +187,12 @@ export const HUNT = {
   siteDistance: 40,
   // Tiles from any lawman town gate within which a raider never hunts: the farthest lawman patrol stop plus its sight.
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
+  // A hunting raider's route cost per road tile; open ground costs 1 / terrain speed, without the off-road cost. So
+  // hardpan 1.11, gravel 1.18, scrub and field 1.25 beat the road, sand 1.43 nearly ties it, and crossing a road
+  // costs only its width. It stays at 1 or more, so the A* estimate stays as tight as for a plain route.
+  roadShun: 1.5,
+  // A raider whose top goal is one of these routes off the road; see src/sim/hunt-style.ts.
+  offRoadGoals: ['raid', 'patrol', 'investigate'] as const,
 };
 
 // Driver memories; see src/sim/memory.ts. Each kind's lifetime in turns is explicit. One game day is the default:

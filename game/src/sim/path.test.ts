@@ -8,11 +8,13 @@ import { resetPerf, perfSnapshot } from '../perf';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isDriveObstacle, propBoxes, propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
+import { COARSE, componentOf, dynamicBlockers, navLayer, tasteAt, tasted, tasteKey, tasteOf, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
-import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
-import type { Obstacle, World } from './types';
+import { isCliff, isRoadTile, tileAt, tileSlope, type Terrain } from './terrain';
+import type { NpcActivity, Obstacle, Vehicle, World } from './types';
+import type { TraitId } from '../data/npcs';
+import { HUNT } from '../data/npc-behavior';
 import { siteGap, siteGates } from './sites';
 import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
@@ -390,6 +392,129 @@ describe('routes prefer roads', () => {
     const w = roadWorld([a, { x: 100, y: 160 }, { x: 160, y: 160 }, b]);
     const pts = route(w, a, b, 0.6, []);
     expect(routeLength(a, pts)).toBeLessThan(1.2 * dist(a, b));
+  });
+
+  describe('hunting raiders', () => {
+    // One driver id, so the raider and the trader share the same taste noise and differ only in style.
+    function driverOn(traits: TraitId[], kind: NpcActivity['kind']): Pick<Vehicle, 'id' | 'brain'> {
+      const brain = npcBrain('buggy', { x: 0, y: 0 }, traits);
+      brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'test' }];
+      return { id: 'v7', brain };
+    }
+    const raider = driverOn(['raider'], 'raid');
+    const trader = driverOn(['trader'], 'trade');
+    // A straight road along map x at y = 100.
+    const straightRoad = () => roadWorld([{ x: 40, y: 100 }, { x: 220, y: 100 }]);
+    const onRoadLength = (w: World, from: Vec, pts: Vec[]) => roadShare(w, from, pts) * routeLength(from, pts);
+
+    it('a raider on a raid routes off the road between two open points beside it, while a trader takes it', () => {
+      const w = straightRoad();
+      const a = { x: 100, y: 106 };
+      const b = { x: 160, y: 106 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(roadShare(w, a, hunting)).toBeLessThan(0.05);
+      expect(roadShare(w, a, trading)).toBeGreaterThan(0.7);
+    });
+
+    it('a raider on a raid leaves a straight road between two points on it', () => {
+      const w = straightRoad();
+      const a = { x: 100, y: 100 };
+      const b = { x: 160, y: 100 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+
+      expect(roadShare(w, a, hunting)).toBeLessThan(0.25);
+      expect(route(w, a, b, 0.6, [], trader)).toEqual([b]);
+    });
+
+    it('a raider crossing a road crosses it rather than following it', () => {
+      const w = straightRoad();
+      const a = { x: 110, y: 85 };
+      const b = { x: 170, y: 115 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(onRoadLength(w, a, hunting)).toBeLessThan(3 * REGION.roadWidth);
+      expect(onRoadLength(w, a, trading)).toBeGreaterThan(3 * REGION.roadWidth);
+    });
+
+    it("keeps the trader's taste, cache key and route, and keys the hunting style apart", () => {
+      const w = straightRoad();
+      const a = { x: 100, y: 106 };
+      const b = { x: 160, y: 106 };
+      const traderTaste = tasteOf(w, trader)!;
+      const huntingTaste = tasteOf(w, raider)!;
+
+      // The raider's route is planned first, so a shared cache key would hand it to the trader.
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(traderTaste.offRoad).toBeUndefined();
+      expect(tasteKey(traderTaste)).toBe(String(traderTaste.seed));
+      expect(tasteKey(huntingTaste)).toBe(`${traderTaste.seed}:off`);
+      expect(trading).not.toEqual(hunting);
+      // A raider that is not hunting plans exactly as the trader does.
+      expect(route(w, a, b, 0.6, [], driverOn(['raider'], 'sell'))).toEqual(trading);
+    });
+
+    it('plans off-road legs on the real map that a truck can drive straight', () => {
+      const w = w1337;
+      const gate = (id: string) => siteGates([...REGION.towns, ...REGION.locations].find((s) => s.id === id)!)[0];
+      const from = gate('nose');
+      const to = gate('dustwell');
+
+      const hunting = route(w, from, to, 0.8, [], raider);
+
+      // The first leg drives out of the gate's site clearance, as for every driver, so the legs after it are checked.
+      expect(hunting.length).toBeGreaterThan(2);
+      for (let i = 1; i < hunting.length; i++) expect(straightClear(w, hunting[i - 1], hunting[i], 0.8, [])).toBe(true);
+      expect(roadShare(w, from, hunting)).toBeLessThan(roadShare(w, from, route(w, from, to, 0.8, [], trader)));
+    });
+
+    it('never prices an off-road step below 1 per tile, nor below the plain cost over offRoadCost (IV2)', () => {
+      const w = w1337;
+      const nav = terrainNav(w.terrain);
+      const taste = tasteOf(w, raider)!;
+      const mul = taste.offRoad!.mul;
+      let lowest = Infinity;
+      let belowPlain = 0;
+
+      for (let i = 0; i < nav.tileCost.length; i++) {
+        lowest = Math.min(lowest, nav.tileCost[i] * mul[i]);
+        // The multipliers are 32-bit floats.
+        if (nav.tileCost[i] * mul[i] < (nav.tileCost[i] / REGION.navigation.offRoadCost) * (1 - 1e-6)) belowPlain++;
+      }
+
+      expect(lowest).toBeGreaterThanOrEqual(1 - 1e-6);
+      expect(belowPlain).toBe(0);
+      const at = { x: 123.4, y: 321.7 };
+      expect(tasted(taste, 2, at.x, at.y)).toBeCloseTo(2 * tasteAt(taste, at.x, at.y) * mul[tileIndex(nav.size, at.x, at.y)], 6);
+    });
+
+    it('raises road tiles to roadShun and cancels the off-road cost on open ground', () => {
+      const w = straightRoad();
+      const nav = terrainNav(w.terrain);
+      const mul = tasteOf(w, raider)!.offRoad!.mul;
+
+      expect(mul[tileIndex(nav.size, 130, 100)]).toBeCloseTo(HUNT.roadShun, 6);
+      expect(mul[tileIndex(nav.size, 130, 120)]).toBeCloseTo(1 / REGION.navigation.offRoadCost, 6);
+      expect(isRoadTile(w.terrain, { x: 130, y: 100 })).toBe(true);
+      expect(isRoadTile(w.terrain, { x: 130, y: 120 })).toBe(false);
+    });
+
+    it('keeps the road price on the ground beside a site', () => {
+      const w = emptyWorld();
+      editableTerrain(w).types.fill('hardpan');
+      const nav = terrainNav(w.terrain);
+      const mul = tasteOf(w, raider)!.offRoad!.mul;
+      const site = REGION.locations.find((l) => l.kind !== 'territory')!;
+
+      expect(mul[tileIndex(nav.size, site.pos.x + site.radius + REGION.roadWidth - 1, site.pos.y)]).toBe(1);
+    });
   });
 });
 
