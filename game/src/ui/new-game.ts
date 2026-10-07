@@ -17,12 +17,15 @@ export function chooseNewGame(): Promise<boolean> {
   if (open) throw new Error("New game setup is already open");
   open = true;
   return new Promise((resolve) => {
+    // The shade is a box-shadow, which does not take clicks. This layer keeps the Menu and death buttons from being clicked.
+    const block = panel("new-game-block");
     const root = panel("save-panel new-game");
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-label", "New game");
     const finish = (start: boolean) => {
       window.removeEventListener("keydown", onKey, true);
       root.remove();
+      block.remove();
       open = false;
       resolve(start);
     };
