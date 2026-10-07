@@ -1,10 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { solidPng } from '../media-fixtures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeState, readState, EMPTY_STATE } from '../state';
 import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
-const { approve, deny, routeFeedback } = await import('./approval');
+const { approve, closeCard, deny, routeFeedback } = await import('./approval');
 const { readLedger } = await import('../ledger');
 
 let home = '';
@@ -52,17 +54,24 @@ describe('approve', () => {
   // The queued merge of a hardened card. The committee approved its preview, and the hardening round and its checks passed.
   beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'bob' } }));
 
-  it('sends an approved preview back to Testing to harden, with no merge and no chat post', async () => {
+  it('moves an approved preview to Hardening with its played build kept, with no merge and no chat post', async () => {
     writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'comment 7 Approved by bob in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into dev by itself, with no new post.',
-      'move 7 Testing',
+      'comment 7 Approved by bob in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into dev by itself, with no new post.',
+      'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.builds).toEqual({ 7: 'aaa1111', 8: 'bbb2222' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('refuses to approve a preview with no recorded build, since Hardening compares against it', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {}, builds: {} });
+    await expect(approve(fakeCtx(), 7, 'bob')).rejects.toThrow('approved with no recorded build');
+    expect(calls).toEqual([]);
   });
 
   it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
@@ -84,7 +93,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -104,7 +113,7 @@ describe('approve', () => {
 
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
     labels = ['bug', 'hotfix'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [] }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     const changelog = 'ROAM hotfix 2026-09-30\n\nFixed: #7 Big horn';
     expect(calls.filter((call) => !call.startsWith('prepare') && !call.startsWith('shell'))).toEqual([
@@ -128,17 +137,18 @@ describe('approve', () => {
     expect(state.pendingIncidents).toEqual([7]);
   });
 
-  it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
+  it('sends the card back to Hardening on a conflict with dev, keeping the approver, with no chat post', async () => {
     const ctx = fakeCtx();
     ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step.branch, step.into, ['game/src/a.ts'], 'boom'); };
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
-      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again and resolves the conflict. Then the approval by bob merges it, with no new post.',
-      'move 7 Testing',
+      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Hardening merges dev again, resolves the conflict and runs the checks, with no new hardening round or review. Then the approval by bob merges it, with no new post.',
+      'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.testPhase).toEqual({ 7: 'resolve' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
   });
@@ -185,7 +195,7 @@ describe('approve', () => {
 
 describe('routeFeedback', () => {
   it('redesign comments with the route, moves to Design, drops the posts and the queued approval', async () => {
-    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign')).toBe(true);
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign', 100)).toBe(true);
     expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as redesign:\n\nMake it louder', 'move 7 Design']);
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 200: 8 });
@@ -195,7 +205,7 @@ describe('routeFeedback', () => {
   });
 
   it('patch keeps the played build for the patch, moves to Implementation and drops the posts', async () => {
-    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch', 100);
     expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Implementation']);
     const state = readState(`${home}/state.json`);
     expect(state.patching).toEqual({ 7: 'aaa1111' });
@@ -203,7 +213,7 @@ describe('routeFeedback', () => {
   });
 
   it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
-    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer')).toBe(false);
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer', 100)).toBe(false);
     expect(calls).toEqual(['comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 100: 7, 101: 7, 200: 8 });
@@ -211,17 +221,18 @@ describe('routeFeedback', () => {
   });
 
   it('records every route in the ledger', async () => {
-    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer');
-    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer', 100);
+    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100);
     expect(readLedger(home, new Date(0))).toEqual([
       { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
       { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+      { kind: 'card', issue: 7, step: 'patch', to: 'Implementation', at: '2026-09-30T10:00:00.000Z' },
     ]);
   });
 
   it('refuses a patch for a card with no recorded build before it comments or records anything', async () => {
     writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
-    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('no recorded build');
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100)).rejects.toThrow('no recorded build');
     expect(calls).toEqual([]);
     expect(readLedger(home, new Date(0))).toEqual([]);
   });
@@ -232,9 +243,31 @@ describe('routeFeedback', () => {
     expect(readState(`${home}/state.json`).unroutedReplies).toEqual({ 6: { issue: 8, postId: 200, text: 'y', at: 'a' } });
   });
 
+  it('a patch takes the Telegram images of its post into the issue media and lists only their type, size and hash', async () => {
+    const png = solidPng(4, 3, [1, 2, 3]);
+    mkdirSync(`${home}/inbox/media/post-100`, { recursive: true });
+    writeFileSync(`${home}/inbox/media/post-100/5-1.png`, png);
+    writeFileSync(`${home}/inbox/media/post-100/5-2.skipped`, 'the file is no longer in the cache');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Delete the middle dot', 'patch', 100);
+    const sha = createHash('sha256').update(png).digest('hex');
+    expect(calls[0]).toBe(`comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nDelete the middle dot\n\nThe reply came with 2 file(s) in Telegram. They stay private: the agent sees them in its media folder, and they are not posted here.\n- png, 4x3, ${png.length} bytes, sha256 ${sha}\n- not available: the chat bot could not keep it: the file is no longer in the cache`);
+    expect(readFileSync(`${home}/media/issue-7/committee/${sha.slice(0, 16)}.png`)).toEqual(png);
+    expect(existsSync(`${home}/inbox/media/post-100`)).toBe(false);
+  });
+
+  it('an answer leaves the Telegram images for a later route, and approve drops them', async () => {
+    mkdirSync(`${home}/inbox/media/post-101`, { recursive: true });
+    writeFileSync(`${home}/inbox/media/post-101/5-1.png`, solidPng(1, 1, [0, 0, 0]));
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer', 101);
+    expect(calls[0]).toBe('comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nq');
+    expect(existsSync(`${home}/inbox/media/post-101/5-1.png`)).toBe(true);
+    await approve(fakeCtx(), 7, 'bob');
+    expect(existsSync(`${home}/inbox/media/post-101`)).toBe(false);
+  });
+
   it('throws when the card is not in Approval', async () => {
     column = 'Design';
-    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('not in Approval');
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100)).rejects.toThrow('not in Approval');
     expect(calls).toEqual([]);
   });
 });
@@ -271,5 +304,19 @@ describe('deny', () => {
     column = 'Testing';
     await expect(deny(fakeCtx(), 7, 'bob')).rejects.toThrow('not in Approval');
     expect(calls).toEqual([]);
+  });
+});
+
+describe('closeCard', () => {
+  it('drops a card from any column with the given comment', async () => {
+    column = 'Testing';
+    await closeCard(fakeCtx(), 7, 'Dropped by Ann: dead end', 'dropped');
+    expect(calls).toEqual([
+      'comment 7 Dropped by Ann: dead end',
+      'addLabel 7 wont-do',
+      'close 7 not planned',
+      'move 7 Done',
+    ]);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
   });
 });

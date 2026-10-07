@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from './physics';
+import { TERRAIN } from './terrain';
 import SHAPES from './prop-shapes.json';
 
 type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
@@ -190,5 +191,31 @@ describe('prop shapes', () => {
     for (const b of low) expect(b.y1 <= -half || b.y0 >= half, JSON.stringify(b)).toBe(true);
     // The roof spans the lane.
     expect(boxes.some((b) => b.y0 < 0 && b.y1 > 0 && b.z0 >= PHYSICS.truckClearance)).toBe(true);
+  });
+});
+
+// Ship debris sizes in meters, from the issue 156 design: length is the longer horizontal extent.
+const DEBRIS_SIZES = [
+  { model: 'escape_pod', meters: 4.5 },
+  { model: 'habitat_cylinder', meters: 16 },
+  { model: 'wing_shard', meters: 14 },
+  { model: 'power_cell', meters: 3 },
+] as const;
+
+describe('ship debris models', () => {
+  it.each(DEBRIS_SIZES)('$model is $meters m long, within 20%', ({ model, meters }) => {
+    expect(Math.abs(lengthOf(shapeBoxes(model)) - meters)).toBeLessThanOrEqual(meters * 0.2);
+  });
+
+  it('makes the habitat cylinder tall enough to block sight', () => {
+    const top = Math.max(...shapeBoxes('habitat_cylinder').map((b) => b.z1));
+    expect(top).toBeGreaterThan(TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile);
+  });
+
+  it('blocks driving under the wing shard tip with a spar below truck clearance', () => {
+    const boxes = shapeBoxes('wing_shard');
+    const tip = Math.max(...boxes.map((b) => b.x1));
+    const under = boxes.filter((b) => b.x1 > tip - 6 && b.z0 < PHYSICS.truckClearance && b.z1 > PHYSICS.truckClearance);
+    expect(under.length).toBeGreaterThan(0);
   });
 });

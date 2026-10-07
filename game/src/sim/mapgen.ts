@@ -156,7 +156,7 @@ export type PropPose =
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'tank_trap' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'tank_trap' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -209,6 +209,10 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   deadTruck: 'wreck',
   glassSpire: 'glass_spire',
   scrapWall: 'scrap_wall',
+  escapePod: 'escape_pod',
+  habitat: 'habitat_cylinder',
+  wingShard: 'wing_shard',
+  powerCell: 'power_cell',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence or barrier segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The
@@ -252,6 +256,10 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   hull_tower: 6,
   hull_gantry: 22,
   rim_rock: 8,
+  escape_pod: 2.4,
+  habitat_cylinder: 8,
+  wing_shard: 7,
+  power_cell: 1.6,
   tank_trap: 1,
   engine_nozzle: 13,
   engine_frame: 15,

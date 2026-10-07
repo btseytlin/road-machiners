@@ -72,6 +72,11 @@ const DEFS = {
   // Loops.
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
+  // The strained engine plays while heat damages the engine. Variant 1 is a 4 s ElevenLabs loop with the engine's prompt
+  // style, close to the engine bay, and this subject: "Heavy old diesel engine at full throttle in a failing state:
+  // coarse labored growl, heavy knocking, clattering and ticking, a missing cylinder stumble." Variant 2 is a 2 s
+  // overheated truck engine take, supplied by hand.
+  "engine-strain": { bus: "sfx", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   // The desert blues take, music-calm-1791230467032.mp3, is run through ffmpeg
   // "highpass=f=40,equalizer=f=250:t=q:w=1:g=2,equalizer=f=1500:t=q:w=1:g=-4,volume=3dB,asoftclip=type=tanh,volume=-3dB,lowpass=f=6500,treble=g=-3:f=4000" before import, for tape grit.
@@ -189,6 +194,19 @@ export function engineFileFor(chassisId: string): string {
   return file;
 }
 
+// Trucks with the heavy engine recording get the generated strained loop; lighter trucks get the supplied one.
+const STRAIN_FILES: Record<string, string> = {
+  "engine-1.ogg": "engine-strain-2.ogg",
+  "engine-2.ogg": "engine-strain-2.ogg",
+  "engine-3.ogg": "engine-strain-1.ogg",
+};
+
+export function engineStrainFileFor(chassisId: string): string {
+  const file = STRAIN_FILES[engineFileFor(chassisId)];
+  if (!file) throw new Error(`Engine recording of ${chassisId} has no strained loop`);
+  return file;
+}
+
 export const MIX = {
   busVolume: { ui: 0.8, sfx: 0.75, ambient: 0.6, music: 0.65 } satisfies Record<Bus, number>,
   // Import loudness per bus: the loudest 400 ms moment, in LUFS. Cue volume then sets each cue's place in the mix.
@@ -202,8 +220,9 @@ export const MIX = {
   // Engine over a turn: playback rate and level follow speed in m/s, plus a load term from the speed change,
   // so speeding up revs and slowing drops audibly. Load is full at loadMs of change in one turn. Under movingMs
   // at both ends it stays silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
-  // Overdrive multiplies the engine level by overdriveGain.
-  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 31.2, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12, overdriveGain: 1.5 },
+  // Overdrive multiplies the engine level by overdriveGain. While heat damages the engine the level moves to the
+  // strained loop; strain falls by strainRelease per turn without heat damage.
+  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 31.2, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12, overdriveGain: 1.5, strainRelease: 0.5 },
   // Overdrive switching on revs the engine loop once: playback rate and level at each point, seconds from the start.
   // It jumps from idle to high revs, holds, and falls back as the throttle lets go.
   rev: [

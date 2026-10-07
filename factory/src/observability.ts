@@ -59,7 +59,7 @@ function validateScheduler(data: SchedulerData): void {
   validateReleaseReport(data.report);
 }
 function validateFunnelCount(column: string, count: number): void {
-  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'].includes(column)) throw new Error('Invalid funnel column');
+  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'].includes(column)) throw new Error('Invalid funnel column');
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid funnel count');
 }
 function validateDecision(decision: ScheduleReport['decisions'][number]): void {
@@ -74,7 +74,7 @@ function validateIssue(issue: number | null): void {
 }
 function validateReleaseReport(report: ScheduleReport): void {
   if (report.nextCapAt !== null && !Number.isFinite(Date.parse(report.nextCapAt))) throw new Error('Invalid cap time');
-  if (!['uncut', 'tracking-missing', 'failed', 'release-tasks', 'candidate', 'ship-approval'].includes(report.release.reason)) throw new Error('Invalid release gate');
+  if (!['uncut', 'tracking-missing', 'failed', 'release-tasks', 'playtest', 'playtest-blocked', 'candidate', 'ship-approval'].includes(report.release.reason)) throw new Error('Invalid release gate');
   for (const issue of report.release.issues) validateIssue(issue);
 }
 export function recordObservation(home: string, producer: string, data: ObservationData, now = new Date()): void {

@@ -61,6 +61,10 @@ const PROP_LOOKS = {
   glassSpire: { color: 0x2f8f88, shape: 'disc' },
   scrapWall: { color: 0xa8a090, shape: 'rail' },
   tankTrap: { color: 0x5e3420, shape: 'disc' },
+  escapePod: { color: 0xe0e0ff, shape: 'disc' },
+  habitat: { color: 0xffa0ff, shape: 'long' },
+  wingShard: { color: 0xa0ffa0, shape: 'long' },
+  powerCell: { color: 0x00ffff, shape: 'disc' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
