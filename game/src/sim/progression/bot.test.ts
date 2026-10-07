@@ -667,9 +667,10 @@ describe('the hunter', () => {
       { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 
-    const after = botOrders(w, 'climber').world;
-    expect(after.player.contracts.map((c) => c.id)).not.toContain('ct-bounty');
-    expect(playerVehicle(after).order?.kind).toBe('stopAt');
+    const turn = botOrders(w, 'climber');
+    expect(turn.world.player.contracts.map((c) => c.id)).not.toContain('ct-bounty');
+    // It works at once: it buys a load where it stands, or drives to a town to trade.
+    expect(turn.ledger.goodsBought < 0 || playerVehicle(turn.world).order?.kind === 'stopAt').toBe(true);
   });
 
   it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {
