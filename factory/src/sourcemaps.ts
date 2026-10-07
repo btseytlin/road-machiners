@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { dirname, join } from 'node:path';
 import { must } from './exec';
 import { withLockSync } from './lock';
-import { GAME_DIR, type Ctx, type FactoryConfig } from './types';
+import { GAME_DIR, type Ctx, type FactoryConfig, type Stage } from './types';
 
 // The source maps of the game builds that send error reports, kept on the host by commit, so the error service maps a
 // player's stack to source. No build publishes its maps: /dev/ and the candidate are served from our web root, and itch is public.
@@ -10,6 +10,7 @@ import { GAME_DIR, type Ctx, type FactoryConfig } from './types';
 export type ReportBuild = 'release' | 'dev' | 'candidate';
 export type Published = { sha: string; kind: ReportBuild; publishedAt: string };
 
+const STAGE_OF: Record<ReportBuild, Stage> = { release: 'ship', dev: 'dev', candidate: 'candidate' };
 const LOCK_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,10 +29,12 @@ export function reportEnv(cfg: Pick<FactoryConfig, 'publicUrl'>, kind: ReportBui
 
 // Moves every map out of the clone's build into the host's store under its commit, and records the publish, before the
 // build goes out. Dev and candidate maps older than FACTORY_ERROR_MAP_DAYS go at the same time.
+// Game code from before error reports writes no maps and sends no reports. Such a build publishes as before, unrecorded,
+// so a branch that lacks the reporting code yet, like an open release or main before its ship, still builds.
 export async function takeMaps(ctx: Ctx, clone: string, kind: ReportBuild): Promise<void> {
   const dist = join(clone, GAME_DIR, 'dist');
   const maps = readdirSync(dist, { recursive: true, encoding: 'utf8' }).filter((file) => file.endsWith('.map'));
-  if (maps.length === 0) throw new Error(`The ${kind} build in ${dist} has no source maps, so its error reports could not be read.`);
+  if (maps.length === 0) return ctx.log(STAGE_OF[kind], null, `the ${kind} build has no source maps, so its game code predates error reports and it sends none`);
   const sha = must(await ctx.run('git', ['rev-parse', 'HEAD'], { cwd: clone }), 'git rev-parse HEAD').trim();
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`git rev-parse HEAD in ${clone} gave "${sha}", not a commit hash`);
   const home = ctx.cfg.home;
