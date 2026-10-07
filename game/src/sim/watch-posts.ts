@@ -22,13 +22,16 @@ import { dist, segmentDist, type Vec } from './vec';
 import { clearOverTerrain, hasLineOfSight, sightLine } from './vision';
 
 // The largest chassis any raider template rolls plus the route clearance, so every raider's truck fits on every post.
-// One more grid cell covers the rounding of the route grid, so the cell under the post stays free too.
-const REACH = Math.max(
-  ...Object.values(NPCS).filter((t) => t.traits.includes('raider')).flatMap((t) => t.loadout.chassis.map((c) => chassisDef(c.value).radius)),
-) + CLEARANCE + CELL;
+// One more grid cell covers the rounding of the route grid, so the cell under the post stays free too. It is worked
+// out with the first post map, not at load: this module sits in an import cycle with the nav layer, which the turn
+// worker may load first.
+function postReach(): number {
+  const radii = Object.values(NPCS).filter((t) => t.traits.includes('raider')).flatMap((t) => t.loadout.chassis.map((c) => chassisDef(c.value).radius));
+  return Math.max(...radii) + CLEARANCE + CELL;
+}
 
 // What every post on one terrain is checked against, and each ground's post, keyed by the ground's coordinates.
-type PostMap = { nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null> };
+type PostMap = { reach: number; nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null> };
 
 const maps = new WeakMap<Terrain, PostMap>();
 
@@ -36,6 +39,7 @@ function postMap(world: World): PostMap {
   const hit = maps.get(world.terrain);
   if (hit) return hit;
   const map: PostMap = {
+    reach: postReach(),
     nav: terrainNav(world.terrain),
     statics: staticSet(fixedProps(world), world.terrain),
     gates: lawmanTowns().flatMap((town) => siteGates(town)),
@@ -88,11 +92,11 @@ function candidates(ground: Vec): Vec[] {
 }
 
 function qualifies(world: World, map: PostMap, p: Vec, ground: Vec): boolean {
-  return onMap(world, p) && clearOfRoads(p) && clearOfPlaces(map, p) && drivable(map, p) && seesGround(world, p, ground);
+  return onMap(world, map, p) && clearOfRoads(p) && clearOfPlaces(map, p) && drivable(map, p) && seesGround(world, p, ground);
 }
 
-function onMap(world: World, p: Vec): boolean {
-  return Math.min(p.x, p.y) >= REACH && Math.max(p.x, p.y) <= world.size - REACH;
+function onMap(world: World, map: PostMap, p: Vec): boolean {
+  return Math.min(p.x, p.y) >= map.reach && Math.max(p.x, p.y) <= world.size - map.reach;
 }
 
 // At least HUNT.postRoadGap from the edge of every road.
@@ -103,20 +107,20 @@ function clearOfRoads(p: Vec): boolean {
 // Outside every site, hazard zone and lawman reach.
 function clearOfPlaces(map: PostMap, p: Vec): boolean {
   if (siteUnder(p) !== null) return false;
-  return map.hazards.every((z) => dist(p, z.pos) > z.radius + REACH) && map.gates.every((gate) => dist(gate, p) > HUNT.lawReach);
+  return map.hazards.every((z) => dist(p, z.pos) > z.radius + map.reach) && map.gates.every((gate) => dist(gate, p) > HUNT.lawReach);
 }
 
 // No cliff and no fixed drive obstacle within reach of the largest raider truck.
 function drivable(map: PostMap, p: Vec): boolean {
-  if (nearCliff(map.nav, p.x, p.y, REACH) || cliffWithin(map.nav, p)) return false;
-  return !map.statics.buckets.alongSegment(p, p, REACH).some((b) => blocks(b, p));
+  if (nearCliff(map.nav, p.x, p.y, map.reach) || cliffWithin(map.nav, p, map.reach)) return false;
+  return !map.statics.buckets.alongSegment(p, p, map.reach).some((b) => blocks(b, p, map.reach));
 }
 
 // nearCliff() samples five points. A post checks every cliff tile whose square comes within reach.
-function cliffWithin(nav: TerrainNav, p: Vec): boolean {
-  for (let y = Math.floor(p.y - REACH); y <= Math.floor(p.y + REACH); y++) {
-    for (let x = Math.floor(p.x - REACH); x <= Math.floor(p.x + REACH); x++) {
-      if (nav.cliffTile[tileIndex(nav.size, x, y)] === 1 && tileGap(p, x, y) < REACH) return true;
+function cliffWithin(nav: TerrainNav, p: Vec, reach: number): boolean {
+  for (let y = Math.floor(p.y - reach); y <= Math.floor(p.y + reach); y++) {
+    for (let x = Math.floor(p.x - reach); x <= Math.floor(p.x + reach); x++) {
+      if (nav.cliffTile[tileIndex(nav.size, x, y)] === 1 && tileGap(p, x, y) < reach) return true;
     }
   }
   return false;
@@ -128,8 +132,8 @@ function tileGap(p: Vec, x: number, y: number): number {
 }
 
 // The bucket query keeps only props with a box within reach. A circle, a site edge or a hazard, needs its own test.
-function blocks(b: Blocker, p: Vec): boolean {
-  return b.prop !== undefined || dist(b.pos, p) < b.r + REACH;
+function blocks(b: Blocker, p: Vec, reach: number): boolean {
+  return b.prop !== undefined || dist(b.pos, p) < b.r + reach;
 }
 
 // Within the base sight radius, over the hills and past the fixed props between.
