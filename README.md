@@ -22,8 +22,6 @@ ROAM is built in public by a software factory of AI coding agents.
 4. Approved work goes to the [dev build](https://roam-game.online/dev/) at once and ships to [itch.io](https://btseytlin.itch.io/road-machiners) as a weekly release.
 5. A Hermes agent manages the factory and fixes its failures.
 
-The [factory dashboard](https://roam-game.online/factory/) shows live work, costs and how long each card takes. 
-
 ## Links
 
 - [Play the release on itch.io](https://btseytlin.itch.io/road-machiners)
