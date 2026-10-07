@@ -194,7 +194,8 @@ function issueTitle(report: ErrorReport): string {
 }
 
 function issueBody(report: ErrorReport, frames: readonly Frame[], fingerprint: string): string {
-  const stack = frames.map((frame) => `at ${frame.name ?? '?'} (${frame.source}:${frame.line}:${frame.column})`).join('\n');
+  // A map names what the frame's line calls, not the function the line is in.
+  const stack = frames.map((frame) => `${frame.source}:${frame.line}:${frame.column}${frame.name ? `, calls ${frame.name}` : ''}`).join('\n');
   return [
     `A ${report.build} build of the game hit this error. The error service opened this issue from the player's report.`,
     '```text', plain(`${report.error.name}: ${report.error.message}`, MESSAGE_CHARS), '```',

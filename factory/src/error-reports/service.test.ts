@@ -54,7 +54,7 @@ describe('error reports', () => {
     await new ErrorReports(deps).take(report());
     expect(calls[0]).toBe('search');
     expect(calls[1]).toMatch(/^create Error: No vehicle npc-37 \[bug,error-report\]/);
-    expect(calls[1]).toContain('at vehicleById (src/sim/damage.ts:1:10)');
+    expect(calls[1]).toContain('src/sim/damage.ts:1:10, calls vehicleById');
     expect(calls[1]).toContain("Firefox 'rm -rf'");
     expect(calls[1]).not.toContain('inject.js');
     const fingerprint = /Error fingerprint: ([0-9a-f]{16})$/.exec(calls[1])?.[1] ?? '';
