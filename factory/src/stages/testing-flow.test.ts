@@ -44,6 +44,8 @@ let bases: string[] = [];
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
 let merged = true;
+// The files the branch changed since it split from its base.
+let changed: string[] = [];
 // The findings each review run reports, in order. A null means it called no ReportFindings. Rounds past the list report nothing.
 let reviews: (Finding[] | null)[] = [];
 // /code-review reports from its forked agent, as the server's logs show.
@@ -62,6 +64,7 @@ beforeEach(() => {
   reviewPrompts = [];
   conflicts = [];
   merged = true;
+  changed = ['game/src/sim/far.ts'];
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
@@ -139,6 +142,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
       mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
       mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
+      changedFiles: async () => changed,
     },
   };
   return fake as unknown as Ctx;
@@ -640,10 +644,13 @@ describe('testing stage', () => {
     expect(calls).not.toContain('checks');
   });
 
-  it('merges a cleanup task into the release itself, with no committee post', async () => {
+  it('merges a cleanup task into the release itself after the review alone, with no harden round and no committee post', async () => {
     labels = ['release-task', 'maintenance'];
-    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    const prompts: string[] = [];
+    const ctx = fakeCtx((run) => { prompts.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); });
     await runStage(ctx, 7);
+    expect(prompts).toEqual([]);
+    expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('openPullRequest') || call === 'comment 7')).toBe(false);
     expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
@@ -672,6 +679,77 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
     expect(queued()).toEqual({});
+  });
+
+  describe('docs change', () => {
+    const rounds: string[] = [];
+    const agent = (run: AgentRun): void => {
+      rounds.push(run.prompt.split('\n')[0]);
+      writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    };
+    const builtOnly = (): void => {
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('typecheck');
+      expect(shellScript).not.toContain('playtest');
+    };
+    beforeEach(() => {
+      rounds.length = 0;
+      changed = ['game/docs/tools.md', 'game/CLAUDE.md'];
+    });
+
+    it('previews with no agent, builds with no tests and posts the changed docs', async () => {
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      builtOnly();
+      expect(calls).toContain('push w1 factory/issue-7');
+      expect(commentBodies[0]).toContain('Docs only, the game does not change: game/docs/tools.md, game/CLAUDE.md');
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('hardens an approved card with the review alone, then builds with no tests', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      builtOnly();
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('reviews a hotfix with no harden or test round', async () => {
+      labels = ['hotfix'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual([]);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      builtOnly();
+    });
+
+    it('gives a failed build the fix round, like a failed check', async () => {
+      await runStage(fakeCtx(agent, 1, 'vite build failed'), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory, second round.']);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('runs the test round when the base merge conflicts, since only the agent resolves it', async () => {
+      conflicts = ['game/docs/tools.md'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+    });
+
+    it('counts a wiki page as code, since the game tests check its tables', async () => {
+      changed = ['game/docs/wiki/items.md'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+      expect(shellScript).toContain('npm test');
+    });
+
+    it('counts a branch with any other file as code', async () => {
+      changed = ['game/docs/tools.md', 'game/scripts/playtest.mjs'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+      expect(shellScript).toContain('npm test');
+    });
   });
 });
 

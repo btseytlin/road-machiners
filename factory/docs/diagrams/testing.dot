@@ -21,6 +21,7 @@ digraph testing {
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
   PC -> PC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
   edge [color="#6b7280", fontcolor="#6b7280"];
+  PM -> PC [label="docs only: no test round,\nchecks only build"];
   XH -> QB;
   PV -> XI [label="rebuild"];
   PV -> XD [label="plan wrong"];

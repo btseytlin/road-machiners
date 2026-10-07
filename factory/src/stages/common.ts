@@ -23,6 +23,16 @@ export function baseBranchFor(ctx: Ctx, labels: string[]): string {
   return release.branch;
 }
 
+// The game's tests compare the wiki pages with the data, so a wiki edit is not a docs change here.
+const TESTED_DOCS = `${GAME_DIR}/docs/wiki/`;
+
+// Whether the branch changes only Markdown docs. Such a change cannot change the game, so it skips the harden round,
+// the test round and the factory checks. The review still reads it, and the build still runs for the play link.
+export async function docsOnly(ctx: Ctx, issue: number, base: string): Promise<boolean> {
+  const files = await ctx.repo.changedFiles(base, BRANCH(issue));
+  return files.length > 0 && files.every((file) => file.endsWith('.md') && !file.startsWith(TESTED_DOCS));
+}
+
 export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {
   return baseBranchFor(ctx, (await ctx.github.issue(issue)).labels);
 }
