@@ -91,16 +91,20 @@ function chunkScatter(t: Terrain, look: readonly LookType[], blocked: Uint8Array
   return chunk;
 }
 
+const TILE_CORNERS = [[0, 0], [1, 0], [0, 1], [1, 1]];
+
+// Whether ground at this height is drawn lower than the baked ground at a map point, under a deck.
+function drawnLower(t: Terrain, x: number, y: number, ground: number): boolean {
+  const cap = deckFloorCap(t, x, y);
+  return cap !== null && ground > cap;
+}
+
 // Whether tile x, y's scatter would stand where terrain.ts draws the ground lower under a deck, so a tuft there
 // would float over the drawn ground or poke through the deck.
 export function underDeck(t: Terrain, x: number, y: number): boolean {
   const p = tilePoint(x, y);
-  const lowered = (px: number, py: number, ground: number) => {
-    const cap = deckFloorCap(t, px, py);
-    return cap !== null && ground > cap;
-  };
-  if (lowered(p.x, p.y, groundAt(t, p.x, p.y))) return true;
-  return [[0, 0], [1, 0], [0, 1], [1, 1]].some(([i, j]) => lowered(x + i, y + j, t.heights[(y + j) * (t.size + 1) + x + i]));
+  if (drawnLower(t, p.x, p.y, groundAt(t, p.x, p.y))) return true;
+  return TILE_CORNERS.some(([i, j]) => drawnLower(t, x + i, y + j, t.heights[(y + j) * (t.size + 1) + x + i]));
 }
 
 type ScatterKind = 'pebbles' | 'scrub' | 'cactus';
