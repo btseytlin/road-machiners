@@ -207,6 +207,11 @@ export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWea
   return BLOCK_SHORT[block];
 }
 
+// Hold has something to do while the gun has an order or auto fire is on.
+function canHold(w: World, mw: MountedWeapon): boolean {
+  return w.player.autoFire || playerVehicle(w).weaponOrders[mw.part.id] !== undefined;
+}
+
 export class WeaponPanel {
   private root = panel("weapons", bottomLeft());
   private turn = panel('turn-control');
@@ -324,7 +329,7 @@ export class WeaponPanel {
         createItemIcon(mw.part.defId),
         this.renderAmmo(mw),
       ),
-      this.renderActions(mw, locked, order !== undefined),
+      this.renderActions(mw, locked, canHold(w, mw)),
     );
   }
 
@@ -341,8 +346,8 @@ export class WeaponPanel {
     );
   }
 
-  // The button that drops a gun's order and the one that forces a reload.
-  private renderActions(mw: MountedWeapon, locked: boolean, hasOrder: boolean): HTMLElement {
+  // The button that drops a gun's order (nothing to hold with no order and auto fire off) and the one that forces a reload.
+  private renderActions(mw: MountedWeapon, locked: boolean, canHold: boolean): HTMLElement {
     return el(
       "div",
       { class: "weapon-actions" },
@@ -350,7 +355,7 @@ export class WeaponPanel {
         "button",
         {
           class: "weapon-hold",
-          disabled: !hasOrder && !this.host.world().player.autoFire,
+          disabled: !canHold,
           title: "Hold fire: stop auto fire and clear this gun's target",
           onclick: () => this.holdWeapon(mw.part.id),
         },
