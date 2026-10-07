@@ -30,8 +30,8 @@ type Tip = {
   opening?: true; // an opening tip, which holds the others while it waits
   after?: TipId; // shows only once this tip is seen
   seenWhenOver?: true; // counts as seen once its moment ends while it shows
-  when: (w: World, auto: boolean) => boolean; // auto: turns follow each other without a key press
-  done: (w: World) => boolean;
+  when: (w: World, auto: boolean, o: OpeningState) => boolean; // auto: turns follow each other without a key press
+  done: (w: World, o: OpeningState) => boolean;
 };
 
 // Tiles from spawn for the farewell. Bots first see a trader 43 to 61 tiles from spawn, so this is the farthest of
@@ -53,12 +53,12 @@ const hasWaypoint = (w: World): boolean => {
   return kind === "through" || kind === "stopAt";
 };
 
-const searchedOpening = (w: World): boolean => openingStockOf(w) !== null && w.player.scavenged.includes(openingStockOf(w)!.id);
+// The opening wreck and the step it puts the player at, found once per frame for every tip.
+type OpeningState = { stock: SalvageStock | null; step: OpeningStep | null };
 
-const inOpeningReach = (w: World): boolean => {
-  const stock = openingStockOf(w);
-  return stock !== null && canReachSalvage(playerVehicle(w), stock);
-};
+const searchedOpening = (w: World, { stock }: OpeningState): boolean => stock !== null && w.player.scavenged.includes(stock.id);
+
+const inOpeningReach = (w: World, { stock }: OpeningState): boolean => stock !== null && canReachSalvage(playerVehicle(w), stock);
 
 // The engine's patch to the field cap still needs parts.
 const engineNeedsPatch = (w: World): boolean => {
@@ -77,9 +77,13 @@ const holdsLooseCage = (w: World): boolean => {
 // The step of the new-game opening, from saved facts, or null outside it. A game without the opening wreck, like an
 // old save, has none. Each step goes moot when its facts go: an NPC empties the wreck, the player drives off.
 export function openingStep(w: World): OpeningStep | null {
+  return openingState(w).step;
+}
+
+function openingState(w: World): OpeningState {
   const stock = openingStockOf(w);
-  if (!stock) return null;
-  return w.player.scavenged.includes(stock.id) ? stepAfterSearch(w, stock) : stepBeforeSearch(w, stock);
+  if (!stock) return { stock, step: null };
+  return { stock, step: w.player.scavenged.includes(stock.id) ? stepAfterSearch(w, stock) : stepBeforeSearch(w, stock) };
 }
 
 function stepBeforeSearch(w: World, stock: SalvageStock): OpeningStep | null {
@@ -97,11 +101,11 @@ const patchDue = (w: World): boolean => engineNeedsPatch(w) && (goodsCount(playe
 
 const installDue = (w: World): boolean => holdsLooseCage(w) && !cageMounted(w);
 
-const openingTip = (id: OpeningStep, text: string, done: (w: World) => boolean): Tip => ({
+const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningState) => boolean): Tip => ({
   id,
   text,
   opening: true,
-  when: (w) => !playerVehicle(w).direct && openingStep(w) === id,
+  when: (w, _auto, o) => !playerVehicle(w).direct && o.step === id,
   done,
 });
 
@@ -110,23 +114,23 @@ const TIPS: readonly Tip[] = [
   openingTip(
     "wreck",
     "Your engine is nearly dead. [Shift]-click the ground by the wreck to set a stop point, then [Space] to drive there.",
-    (w) => inOpeningReach(w) || searchedOpening(w),
+    (w, o) => inOpeningReach(w, o) || searchedOpening(w, o),
   ),
   openingTip("search", "Click Search the wreck, then [Space] to run the search.", searchedOpening),
   openingTip(
     "loot",
     "Drag the parts and the Rebar cage onto your truck, or click Take all that fits.",
-    (w) => openingStockOf(w) !== null && searchedOpening(w) && !hasSalvage(openingStockOf(w)!),
+    (w, o) => o.stock !== null && searchedOpening(w, o) && !hasSalvage(o.stock),
   ),
   openingTip(
     "patch",
     "[I] opens your truck. Click the engine, then Patch. Close your truck and [Space] runs the patch.",
-    (w) => openingStockOf(w) !== null && !engineNeedsPatch(w),
+    (w, o) => o.stock !== null && !engineNeedsPatch(w),
   ),
   openingTip(
     "install",
     "[I] opens your truck. Drag the Rebar cage onto a free cell at its edge, then close it and [Space] mounts the cage.",
-    (w) => openingStockOf(w) !== null && cageMounted(w),
+    (w, o) => o.stock !== null && cageMounted(w),
   ),
   {
     id: "waypoint",
@@ -198,22 +202,21 @@ const TIPS: readonly Tip[] = [
 ];
 
 // The opening holds the other tips while its step's tip waits to be seen.
-function openingLive(world: World, seen: ReadonlySet<TipId>): boolean {
-  const step = openingStep(world);
-  return step !== null && !seen.has(step);
-}
+const openingLive = (o: OpeningState, seen: ReadonlySet<TipId>): boolean => o.step !== null && !seen.has(o.step);
 
 // Tips the player has just done, whether or not they were on screen. Only opening tips while the opening runs.
 export function doneTips(world: World, seen: ReadonlySet<TipId>): TipId[] {
-  const live = openingLive(world, seen);
-  return TIPS.filter((t) => (t.opening || !live) && t.done(world)).map((t) => t.id);
+  const o = openingState(world);
+  const live = openingLive(o, seen);
+  return TIPS.filter((t) => (t.opening || !live) && t.done(world, o)).map((t) => t.id);
 }
 
 // The tip to show now. The shown tip keeps its place while its moment lasts, so a new tip never swaps it out.
 export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>, shown: TipId | null): TipId | null {
   if (!playerCanAct(world)) return null;
-  const live = openingLive(world, seen);
-  const open = TIPS.filter((t) => (t.opening || !live) && !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world, auto));
+  const o = openingState(world);
+  const live = openingLive(o, seen);
+  const open = TIPS.filter((t) => (t.opening || !live) && !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world, auto, o));
   return (open.find((t) => t.id === shown) ?? open[0])?.id ?? null;
 }
 
