@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { appendLedger } from '../ledger';
+import { reportEnv, takeMaps } from '../sourcemaps';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
 import { closeBundle } from './bundle';
@@ -48,13 +49,14 @@ async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
 }
 
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
-// The empty save scope keeps the itch save key. Only the butler call gets the key.
+// The empty save scope keeps the itch save key. Only the butler call gets the key. The maps stay on the host.
 export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release-main');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('main', 'main', dir);
   const log = releaseLog(ctx, logName);
-  await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '' });
+  await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '', ...reportEnv(ctx.cfg, 'release') });
+  await takeMaps(ctx, dir, 'release');
   const version = await ctx.repo.headHash('main');
   const args = ['push', join(dir, GAME_DIR, 'dist'), `${keys.itchTarget}:html5`, '--userversion', version];
   must(await ctx.run('butler', args, { env: { BUTLER_API_KEY: keys.butlerKey }, logPath: log }), 'butler push');
