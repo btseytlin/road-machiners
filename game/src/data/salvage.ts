@@ -128,46 +128,46 @@ export const SALVAGE = {
   } as LootTable,
 };
 
-// Loot of old-world places, by place type. Mostly a little worn scrap and stores; now and then a good engine.
+// Loot of old-world places, by place type: a territory loot spot's size, mostly worn, and now and then a good engine.
 export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
   // Farmsteads: food and cloth, and the odd farm engine under a tarp.
   homestead: {
-    goods: { grain: [0, 2], textiles: [0, 1], scrap: [0, 1] },
+    goods: { grain: [0, 1], textiles: [0, 1] },
     parts: [0, 1],
-    sparePartChance: 0.18,
+    sparePartChance: 0.12,
     spareParts: ['flatFour', 'rack'],
-    rare: { share: 0.2, parts: ['workhorseDiesel', 'heavyDiesel'], wear: RARE_WEAR },
-    fuel: [0, 4],
-    supplies: [0, 2],
+    rare: { share: 0.25, parts: ['workhorseDiesel', 'heavyDiesel'], wear: RARE_WEAR },
+    fuel: [0, 1],
+    supplies: [0, 1],
   },
   // Hamlets: what the houses held, and a car left in a garage.
   hamlet: {
-    goods: { scrap: [0, 2], textiles: [0, 1], meds: [0, 1] },
+    goods: { scrap: [0, 1], textiles: [0, 1] },
     parts: [0, 1],
-    sparePartChance: 0.15,
+    sparePartChance: 0.12,
     spareParts: ['stockEngine', 'rack', 'plates'],
-    rare: { share: 0.2, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
-    fuel: [0, 3],
-    supplies: [0, 2],
-  },
-  // Lone lookout buildings: a hideout's leftovers, guns and batteries.
-  lookout: {
-    goods: { scrap: [0, 1], meds: [0, 1], batteries: [0, 1] },
-    parts: [0, 1],
-    sparePartChance: 0.18,
-    spareParts: ['mg', 'cage', 'stockEngine'],
-    rare: { share: 0.2, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
-    fuel: [0, 2],
+    rare: { share: 0.25, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
+    fuel: [0, 1],
     supplies: [0, 1],
   },
-  // Tank hulks: armor scrap and batteries, and now and then a diesel pulled whole from a hull.
+  // Lone lookout buildings: a hideout's leftovers, meds and a gun.
+  lookout: {
+    goods: { scrap: [0, 1], meds: [0, 1] },
+    parts: [0, 0],
+    sparePartChance: 0.12,
+    spareParts: ['mg', 'cage', 'stockEngine'],
+    rare: { share: 0.25, parts: ['tunedEngine', 'racingV6'], wear: RARE_WEAR },
+    fuel: [0, 1],
+    supplies: [0, 1],
+  },
+  // Tank hulks: armor scrap, and now and then a diesel pulled whole from a hull.
   hulks: {
-    goods: { scrap: [1, 2], batteries: [0, 1] },
+    goods: { scrap: [1, 2] },
     parts: [0, 1],
-    sparePartChance: 0.2,
+    sparePartChance: 0.1,
     spareParts: ['plates', 'mg', 'cage'],
-    rare: { share: 0.2, parts: ['heavyDiesel', 'workhorseDiesel'], wear: RARE_WEAR },
-    fuel: [0, 4],
+    rare: { share: 0.25, parts: ['heavyDiesel', 'workhorseDiesel'], wear: RARE_WEAR },
+    fuel: [0, 1],
     supplies: [0, 1],
   },
 };

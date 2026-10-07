@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { OLD_PLACE_TYPES } from '../data/salvage';
+import { ECONOMY, GOODS } from '../data/goods';
+import { partDef } from '../data/parts';
+import { REGION } from '../data/region';
+import { OLD_PLACE_TYPES, OLD_TABLES, SALVAGE, type LootTable } from '../data/salvage';
+import { START_KITS } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { clearOfSites, mapObstacles, propReach } from './mapgen';
 import { navLayer } from './nav/layer';
 import { makeOldSpotPicks, MAX_RADIUS, oldPlaces, oldSpotOf, oldSpotPicks, oldStockId, offRoad, placeSpot, reachable } from './old-places';
-import { territoryAt } from './territory';
+import { siteLootTable } from './salvage';
+import { isLootSpot, spotTable, territoryAt } from './territory';
 import type { PropKind } from './terrain';
-import type { Obstacle } from './types';
+import type { Obstacle, SalvageStock } from './types';
+import { partValue } from './wear';
+import { newWorld } from './world';
 import type { Vec } from './vec';
 
 const baked = mapObstacles(TEST_MAP);
@@ -123,3 +130,53 @@ describe('old-world loot spot picks on the committed map', () => {
     expect(() => oldSpotOf({ id: 'old-castle-ruin-12' })).toThrow(/old place type/);
   });
 });
+
+// What old spots add to the economy over 30 new games, against the rest of the map's salvage.
+describe('old-world loot spot economy', () => {
+  const SEEDS = 30;
+  const stockValue = (stock: SalvageStock): number =>
+    Object.entries(stock.goods).reduce((sum, [id, n]) => sum + n * GOODS[id].value, 0) +
+    stock.parts.reduce((sum, p) => sum + partValue(p), 0) +
+    (stock.fuel ?? 0) * ECONOMY.supplyPrice.fuel +
+    (stock.supplies ?? 0) * ECONOMY.supplyPrice.supplies;
+  const worlds = Array.from({ length: SEEDS }, (_, k) => newWorld(k + 1, START_KITS.standard, TEST_MAP, false));
+  const isRare = (stock: SalvageStock) => stock.parts.some((p) => OLD_TABLES[oldSpotOf(stock)!.type].rare!.parts.includes(p.defId));
+  const olds = worlds.flatMap((w) => w.salvage.filter((s) => oldSpotOf(s)));
+  const others = worlds.flatMap((w) => w.salvage.filter((s) => !oldSpotOf(s)));
+
+  it('starts with at most 15% of the value of the other salvage', () => {
+    const oldValue = olds.reduce((sum, s) => sum + stockValue(s), 0) / SEEDS;
+    const otherValue = others.reduce((sum, s) => sum + stockValue(s), 0) / SEEDS;
+    expect(oldValue).toBeLessThanOrEqual(0.15 * otherValue);
+  });
+
+  it('refills by at most 15% of what sites and territory spots refill', () => {
+    const daily = (table: LootTable): number => SALVAGE.restockShare * (midValue(table) + table.sparePartChance * meanSpareValue(table));
+    const oldDaily = oldSpotPicks(TEST_MAP).reduce((sum, p) => sum + daily(OLD_TABLES[p.type]), 0);
+    const w = worlds[0];
+    const sites = REGION.locations.flatMap((site) => (siteLootTable(site) ? [siteLootTable(site)!] : []));
+    const otherDaily = [...sites, ...w.obstacles.filter(isLootSpot).map(spotTable)].reduce((sum, t) => sum + daily(t), 0);
+    expect(oldDaily).toBeLessThanOrEqual(0.15 * otherDaily);
+  });
+
+  it('holds a rare car part now and then, not often', () => {
+    const rare = olds.filter(isRare).length;
+    expect(rare / SEEDS).toBeGreaterThanOrEqual(0.1);
+    expect(rare / SEEDS).toBeLessThanOrEqual(1);
+    expect(rare / olds.length).toBeGreaterThanOrEqual(0.01);
+    expect(rare / olds.length).toBeLessThanOrEqual(0.05);
+  });
+});
+
+// What a fresh roll of the table sells for at the middle of every range, spare part aside.
+function midValue(table: LootTable): number {
+  const mid = ([lo, hi]: [number, number]) => (lo + hi) / 2;
+  const goods = Object.entries(table.goods).reduce((sum, [id, range]) => sum + mid(range) * GOODS[id].value, 0);
+  return goods + mid(table.parts) * GOODS.parts.value + mid(table.fuel) * ECONOMY.supplyPrice.fuel + mid(table.supplies) * ECONOMY.supplyPrice.supplies;
+}
+
+// The mean pristine value of the table's spare part, rare pool included.
+function meanSpareValue(table: LootTable): number {
+  const mean = (ids: string[]) => ids.reduce((sum, id) => sum + partDef(id).value, 0) / ids.length;
+  return table.rare ? (1 - table.rare.share) * mean(table.spareParts) + table.rare.share * mean(table.rare.parts) : mean(table.spareParts);
+}
