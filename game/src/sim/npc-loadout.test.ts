@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPC_WEAR, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVEL_IDS, GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED, NPC_WEAR, NPCS, PRIORITY_TOP, type GearLevel, type LoadoutPriorities, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -14,7 +14,8 @@ import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
-import { gunDrag, isStranded, npcMassRoom } from './stats';
+import { gunDrag, isStranded, npcMassRoom, speedShare } from './stats';
+import { wornDef } from './wear';
 import { addGoods } from './inventory';
 import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
@@ -77,51 +78,73 @@ describe('NPC equipment generation', () => {
     }
   });
 
-  describe('gun fill chance', () => {
-    const gunsAt = (level: GearLevel) => {
-      const template = NPCS.gunwagon;
-      let total = 0;
-      const rolls = 12;
-      for (let seed = 1; seed <= rolls; seed++) total += generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts.filter((p) => partDef(p.defId).kind === 'weapon').length;
-      return total / rolls;
-    };
+  // A copy of a template with some of its priorities changed.
+  const withPriorities = (template: NpcTemplate, change: Partial<LoadoutPriorities>): NpcTemplate => ({ ...template, loadout: { ...template.loadout, priorities: { ...template.loadout.priorities, ...change } } });
+  const rolled = (template: NpcTemplate, level: GearLevel | null, seed: number): Vehicle => {
+    const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
+    const loadout = generateNpcLoadout(world, template, null, level);
+    return makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+  };
+  const average = (template: NpcTemplate, level: GearLevel | null, of: (v: Vehicle) => number) => {
+    let total = 0;
+    for (let seed = 1; seed <= 12; seed++) total += of(rolled(template, level, seed));
+    return total / 12;
+  };
+  const guns = (v: Vehicle) => mountedItems(v, 'weapon').length;
 
-    it('a poor truck carries only the guns its template requires', () => {
-      expect(gunsAt('poor')).toBe(NPCS.gunwagon.loadout.minGuns);
-    });
+  describe('loadout priorities', () => {
+    it('gives a template with no firepower priority only the guns it requires', () => {
+      const template = withPriorities(NPCS.gunwagon, { firepower: 0 });
+      for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBe(template.loadout.minGuns);
+    }, budget(120_000));
 
-    it('more fill chance gives more guns, and a loaded truck reaches many', () => {
-      const [light, standard, heavy, loaded] = (['light', 'standard', 'heavy', 'loaded'] as const).map(gunsAt);
-      // The gunwagon decks are small, so the higher levels can fill every deck spot and tie.
-      expect(light).toBeLessThan(standard);
-      expect(standard).toBeLessThanOrEqual(heavy);
-      expect(heavy).toBeLessThanOrEqual(loaded);
-      expect(light).toBeLessThan(loaded);
-      expect(loaded).toBeGreaterThan(NPCS.gunwagon.loadout.minGuns);
+    it('gives more guns for more firepower', () => {
+      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'loaded', guns);
+      const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'loaded', guns);
+      expect(high).toBeGreaterThan(low);
     }, budget(120_000));
 
     it('stops extra guns before they slow a loaded truck past the limit', () => {
       for (let seed = 1; seed <= 12; seed++) {
-        const world = { ...fixture, rngState: seed };
-        const loadout = generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded');
-        const v = makeVehicle(world, { ...loadout, name: 'test', faction: 'raiders', brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const v = rolled(NPCS.gunwagon, 'loaded', seed);
         const engine = mountedItems(v, 'engine')[0];
         expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
       }
     }, budget(120_000));
+
+    it('leaves more cargo room for more cargo priority', () => {
+      const room = (template: NpcTemplate) => average(template, 'loaded', (v) => npcMassRoom(v, speedShare(template.loadout.priorities)));
+      expect(room(withPriorities(NPCS.trader, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.trader, { cargo: 0 })));
+    }, budget(120_000));
+
+    it('keeps a faster truck for more speed priority', () => {
+      const speed = (template: NpcTemplate) => average(template, 'loaded', topSpeed);
+      expect(speed(withPriorities(NPCS.gunwagon, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.gunwagon, { speed: 0 })));
+    }, budget(120_000));
   });
 
-  it.each(Object.values(NPCS))('keeps $id above the speed floor at every gear level', (template) => {
-    for (const level of Object.keys(GEAR_LEVELS) as GearLevel[]) {
+  // The top speed on the truck's worn engine with its gear, in calm weather.
+  function topSpeed(v: Vehicle): number {
+    const engine = wornDef<EngineDef>(mountedParts(v, 'engine')[0]);
+    return (CHASSIS[v.chassisId].maxSpeed + engine.speedBonus) * loadFactor(v) * gunDrag(v, engine.capacity);
+  }
+
+  // Wagons on worn heavy diesels spawned barely faster than a crawl and could not patrol or reach a stranded truck.
+  it.each(Object.values(NPCS))('keeps $id at MIN_NPC_SPEED on its worn engine at every gear level', (template) => {
+    for (const level of GEAR_LEVEL_IDS) {
       for (let seed = 1; seed <= 12; seed++) {
-        const world = { ...fixture, rngState: seed };
-        const loadout = generateNpcLoadout(world, template, null, level);
-        const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
-        const engine = mountedItems(v, 'engine')[0];
-        const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
-        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
+        const v = rolled(template, level, seed);
+        expect(topSpeed(v), `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED - 1e-9);
       }
     }
+  }, budget(120_000));
+
+  // A floor met by handing out fresh engines would make every NPC engine worth stripping.
+  it('rolls engine wear by the same odds as other parts', () => {
+    const wears = Object.values(NPCS).flatMap((template) => Array.from({ length: 12 }, (_, i) => mountedParts(rolled(template, 'standard', i + 1), 'engine')[0].wear));
+    const worn = wears.filter((wear) => wear >= 3).length / wears.length;
+    const odds = NPC_WEAR.filter((w) => w.value >= 3).reduce((sum, w) => sum + w.weight, 0) / NPC_WEAR.reduce((sum, w) => sum + w.weight, 0);
+    expect(worn).toBeGreaterThan(odds * 0.8);
   }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
@@ -366,6 +389,19 @@ describe('NPC loadout tables', () => {
       }
     }
   });
+
+  // A refit keeps the driver's chassis. A chassis with no build that holds MIN_NPC_SPEED on its most worn engine
+  // would throw in play. The poor level wears most and has the smallest budget, and eight rolls hit the last wear step.
+  it('every chassis in every table holds the speed floor on its most worn engine', () => {
+    for (const tpl of Object.values(NPCS)) {
+      for (const { value } of tpl.loadout.chassis) {
+        for (let seed = 1; seed <= 8; seed++) {
+          const world = { ...emptyWorld(), rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
+          expect(() => generateNpcLoadout(world, tpl, value, 'poor'), `${tpl.id} on ${value}`).not.toThrow();
+        }
+      }
+    }
+  }, budget(120_000));
 
   it('every rolled truck can drive: one working engine, one transmission, a cab, a tank and wheels', () => {
     for (const tpl of Object.values(NPCS)) {

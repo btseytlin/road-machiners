@@ -189,8 +189,13 @@ const TABLES: WikiTable[] = [
   { id: 'state-kinds', headers: ['kind', 'turns', 'binds a deal'], rows: stateKindRows },
   {
     id: 'gear-levels',
-    headers: ['level', 'gun fill chance', 'armor share', 'budget mult', 'wear shift', 'cargo mult'],
-    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.fill, g.armor, g.budget, g.wearShift, g.cargo]),
+    headers: ['level', 'budget mult', 'wear shift', 'cargo mult'],
+    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.budget, g.wearShift, g.cargo]),
+  },
+  {
+    id: 'loadout-priorities',
+    headers: ['template', 'speed', 'firepower', 'armor', 'cargo'],
+    rows: () => entries(NPCS).map(([id, t]) => [id, t.loadout.priorities.speed, t.loadout.priorities.firepower, t.loadout.priorities.armor, t.loadout.priorities.cargo]),
   },
   {
     id: 'skills',

@@ -144,17 +144,34 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 
 ## Gear levels
 
-`src/sim/npc-loadout.ts` rolls each NPC a level and fills its truck toward it within budget and rated mass. The gun fill chance is the base chance that each free deck spot gets a gun after the main gun and the template minimum. The template's `gunFill` scales it.
+`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The template's priorities spend the mass above its speed share on armor, extra guns and free cargo room.
 
 <!-- wiki:gear-levels -->
-| level | gun fill chance | armor share | budget mult | wear shift | cargo mult |
-| --- | --- | --- | --- | --- | --- |
-| poor | 0 | 0.5 | 0.6 | 1 | 0.5 |
-| light | 0.1 | 0.75 | 0.85 | 0 | 0.75 |
-| standard | 0.25 | 1 | 1.15 | 0 | 1 |
-| heavy | 0.45 | 1 | 1.6 | 0 | 1 |
-| loaded | 0.8 | 1 | 2.4 | 0 | 1.5 |
+| level | budget mult | wear shift | cargo mult |
+| --- | --- | --- | --- |
+| poor | 0.6 | 1 | 0.5 |
+| light | 0.85 | 0 | 0.75 |
+| standard | 1.15 | 0 | 1 |
+| heavy | 1.6 | 0 | 1 |
+| loaded | 2.4 | 0 | 1.5 |
 <!-- /wiki:gear-levels -->
+
+<!-- wiki:loadout-priorities -->
+| template | speed | firepower | armor | cargo |
+| --- | --- | --- | --- | --- |
+| buggy | 3 | 3 | 1 | 1 |
+| gunwagon | 0 | 3 | 3 | 0 |
+| trader | 1 | 1 | 1 | 3 |
+| scavenger | 1 | 1 | 1 | 3 |
+| bowlFarmer | 0 | 3 | 3 | 0 |
+| noseArmy | 0 | 3 | 3 | 0 |
+| courier | 3 | 1 | 1 | 2 |
+| roamer | 2 | 1 | 1 | 2 |
+| vulture | 1 | 1 | 1 | 3 |
+| convoy | 1 | 1 | 1 | 3 |
+| convoyGuard | 1 | 3 | 2 | 0 |
+| merc | 1 | 3 | 2 | 0 |
+<!-- /wiki:loadout-priorities -->
 
 ## Numbers
 

@@ -198,7 +198,7 @@ describe('finite salvage', () => {
     const victim = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 32 });
     addGoods(w, victim, 'scrap', 2);
     const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
-    claimant.brain = npcBrain('raider', claimant.pos, []);
+    claimant.brain = npcBrain('buggy', claimant.pos, []);
     const pile = createCargoSalvage(w, victim, 1);
     claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
     claimPile(w, pile, claimant);
@@ -631,7 +631,7 @@ describe('who loots a target', () => {
   // A scavenger parked beside the player, with a brain and no goals.
   function scavenger(w: World, pos: Vec = beside): Vehicle {
     const npc = addVehicle(w, 'scavengers', 'scout', [], pos);
-    npc.brain = npcBrain('scav', pos, []);
+    npc.brain = npcBrain('scavenger', pos, []);
     return npc;
   }
 

@@ -1,6 +1,7 @@
 // NPC vehicle templates and how often they appear.
 
 import type { Faction, StateKindId } from '../sim/types';
+import { RULES } from './rules';
 import { START_KITS } from './start';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis. A spawned driver's wallet is its
@@ -27,9 +28,9 @@ export type NpcLoadoutTable = {
   chassis: Weighted<string>[];
   engine: Weighted<string>[];
   weapon: Weighted<string>[]; // the main gun
-  extraGun: Weighted<string>[]; // guns past the main one, one per free deck spot the level's fill chance hits
+  extraGun: Weighted<string>[]; // guns past the main one, one per free deck spot while the mass and money allow
   minGuns: number; // guns the driver always gets, whatever its level rolls
-  gunFill: number; // times the gear level's fill chance is the chance that a free deck spot gets a gun; see GEAR_LEVELS
+  priorities: LoadoutPriorities;
   armor: Weighted<string>[]; // one type per armored side
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
@@ -38,28 +39,35 @@ export type NpcLoadoutTable = {
   targets: { guns: [number, number]; armor: [number, number] };
 };
 
-// What each gear level aims for. fill is the base chance that each free deck spot gets a gun after the main gun and
-// the template minimum. The template's `gunFill` scales it, capped at 1: 0.2 for haulers that must stay fast, 0.4 to
-// 0.5 for convoys, couriers and small buggies, 0.7 for scavengers and roamers, 1 for gunwagons, mercs and patrols; see addGuns() in src/sim/npc-loadout.ts. armor is the share of the chassis edge cells to armor.
-// budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
-// multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
-// a poor truck may end below its targets. Armor comes first in the fill order, so the budget cuts extra guns before
-// armor, and from the standard level up every edge cell is armored.
-// Extra guns stop before their power draw slows the truck by more than this share, see gunDrag() in src/sim/stats.ts.
-// A stronger engine carries more guns. The template's minimum guns ignore it.
+// What a template's spawn gear favours, each weight from 0 to PRIORITY_TOP. speed sets the share of its unloaded speed
+// the truck keeps after guns, armor and cargo: SPEED_SHARE.low at 0, SPEED_SHARE.high at the top weight. An NPC takes
+// no loot, purchase or spare part past that share either. firepower sets how far the extra guns' power draw may slow
+// the truck: MAX_GUN_SLOWDOWN at the top weight, no extra gun at 0. armor and cargo split the mass the truck can take
+// above its speed share by their weights: armor fills its part, and the cargo part stays free for goods and loot.
+// See src/sim/npc-loadout.ts.
+export type LoadoutPriorities = { speed: number; firepower: number; armor: number; cargo: number };
+export const PRIORITY_TOP = 3;
+export const SPEED_SHARE = { low: 0.6, high: 0.8 };
+
+// Every NPC truck spawns at least this fast on its worn engine with its gear: twice a crawl. A gunwagon is a slow
+// fortress, but a truck barely faster than a crawl could not patrol, chase or reach a stranded driver. The engine and
+// its wear are rolled first, and the build keeps to the engines and guns that hold this speed.
+export const MIN_NPC_SPEED = RULES.limpSpeed * 2;
+
+// Extra guns stop before their power draw slows the truck by more than this share times the template's firepower
+// priority over PRIORITY_TOP, see gunDrag() in src/sim/stats.ts. A stronger engine carries more guns. The template's
+// minimum guns ignore it.
 export const MAX_GUN_SLOWDOWN = 0.35;
 
-// The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo. Loadouts stop adding
-// weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's minimum
-// build ignores it. See npcMassRoom() in src/sim/stats.ts.
-export const MIN_NPC_SPEED_SHARE = 0.6;
-
-export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
-  poor: { fill: 0, armor: 0.5, budget: 0.6, wearShift: 1, cargo: 0.5 },
-  light: { fill: 0.1, armor: 0.75, budget: 0.85, wearShift: 0, cargo: 0.75 },
-  standard: { fill: 0.25, armor: 1, budget: 1.15, wearShift: 0, cargo: 1 },
-  heavy: { fill: 0.45, armor: 1, budget: 1.6, wearShift: 0, cargo: 1 },
-  loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: 0, cargo: 1.5 },
+// What each gear level gets. budget multiplies the template budget. wearShift moves every wear roll, clamped to
+// CONDITION.maxWear. cargo multiplies the goods and spares counts. Passes stop early when the budget, mass or grid
+// room runs out, so a poor truck carries less of everything.
+export const GEAR_LEVELS: Record<GearLevel, { budget: number; wearShift: number; cargo: number }> = {
+  poor: { budget: 0.6, wearShift: 1, cargo: 0.5 },
+  light: { budget: 0.85, wearShift: 0, cargo: 0.75 },
+  standard: { budget: 1.15, wearShift: 0, cargo: 1 },
+  heavy: { budget: 1.6, wearShift: 0, cargo: 1 },
+  loaded: { budget: 2.4, wearShift: 0, cargo: 1.5 },
 };
 
 // Light guns for the extra gun pass.
@@ -190,7 +198,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.25,
+    priorities: { speed: 3, firepower: 3, armor: 1, cargo: 1 },
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 3 },
@@ -207,7 +215,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.8, 1.8], armor: [0.6, 0.95] },
+    targets: { guns: [0.8, 1.25], armor: [0.1, 0.25] },
     spares: null,
   },
   // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
@@ -239,7 +247,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 2,
-    gunFill: 1,
+    priorities: { speed: 0, firepower: 3, armor: 3, cargo: 0 },
     armor: [
       { value: "plates", weight: 6 },
       { value: "spacedArmor", weight: 3 },
@@ -259,7 +267,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
-    targets: { guns: [2.6, 5.1], armor: [0.8, 1] },
+    targets: { guns: [2.05, 3.1], armor: [0.5, 0.8] },
     spares: null,
   },
   trader: {
@@ -289,7 +297,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.2,
+    priorities: { speed: 1, firepower: 1, armor: 1, cargo: 3 },
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -314,7 +322,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
-    targets: { guns: [1.1, 2.2], armor: [0.6, 0.95] },
+    targets: { guns: [1.45, 2.25], armor: [0.3, 0.5] },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -345,7 +353,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.25,
+    priorities: { speed: 1, firepower: 1, armor: 1, cargo: 3 },
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 4 },
@@ -365,7 +373,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.9, 1.6], armor: [0.4, 0.7] },
+    targets: { guns: [0.85, 1.3], armor: [0.15, 0.3] },
     spares: null,
   },
   // Bowl Farmers drive farm chassis.
@@ -381,11 +389,11 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 1,
+    priorities: { speed: 0, firepower: 3, armor: 3, cargo: 0 },
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    targets: { guns: [4.2, 6.5], armor: [0.85, 1] }, // MAX_GUN_SLOWDOWN caps the guns
+    targets: { guns: [1.95, 2.95], armor: [0.6, 1] },
     spares: null,
   },
   // The Nose Army drives wagons and carriers.
@@ -400,11 +408,11 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 1,
+    priorities: { speed: 0, firepower: 3, armor: 3, cargo: 0 },
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    targets: { guns: [3.0, 5.2], armor: [0.85, 1] },
+    targets: { guns: [2.05, 3.1], armor: [0.55, 0.9] },
     spares: null,
   },
   // Light and fast. A courier carries a few small valuables and little armor.
@@ -430,7 +438,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.5,
+    priorities: { speed: 3, firepower: 1, armor: 1, cargo: 2 },
     armor: [
       { value: "scrapPanels", weight: 3 },
       { value: "cage", weight: 2 },
@@ -445,7 +453,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    targets: { guns: [0.9, 1.7], armor: [0.25, 0.55] },
+    targets: { guns: [0.8, 1.25], armor: [0.05, 0.15] },
     spares: null,
   },
   // A roamer's rig is a scavenger's, a bit better kept.
@@ -475,7 +483,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.25,
+    priorities: { speed: 2, firepower: 1, armor: 1, cargo: 2 },
     armor: [
       { value: "scrapPanels", weight: 4 },
       { value: "cage", weight: 3 },
@@ -492,7 +500,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [0.9, 1.7], armor: [0.45, 0.8] },
+    targets: { guns: [0.8, 1.25], armor: [0.2, 0.35] },
     spares: null,
   },
   // A vulture picks its way along lonely roads with a long gun, plates and cargo packs, and never rolls without a
@@ -522,7 +530,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LONG_GUNS,
     minGuns: 1,
-    gunFill: 0.4,
+    priorities: { speed: 1, firepower: 1, armor: 1, cargo: 3 },
     armor: [
       { value: "plates", weight: 4 },
       { value: "scrapPanels", weight: 4 },
@@ -542,7 +550,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 2 },
       { value: { good: "batteries", count: 1 }, weight: 2 },
     ],
-    targets: { guns: [1.2, 2.0], armor: [0.7, 1] },
+    targets: { guns: [0.8, 1.25], armor: [0.2, 0.4] },
     spares: null,
   },
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
@@ -567,7 +575,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.25,
+    priorities: { speed: 1, firepower: 1, armor: 1, cargo: 3 },
     armor: [
       { value: "plates", weight: 3 },
       { value: "cage", weight: 2 },
@@ -584,7 +592,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "fuelDrums", count: 6 }, weight: 1 },
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
-    targets: { guns: [2.0, 3.9], armor: [0.7, 1] },
+    targets: { guns: [2.15, 3.3], armor: [0.35, 0.6] },
     spares: null,
   },
   // A guard is quick enough to keep up with its convoy and armed to fight for it.
@@ -614,7 +622,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 1,
+    priorities: { speed: 1, firepower: 3, armor: 2, cargo: 0 },
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -623,7 +631,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    targets: { guns: [1.55, 3.5], armor: [0.8, 1] },
+    targets: { guns: [1.65, 2.55], armor: [0.7, 1] },
     spares: null,
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
@@ -659,7 +667,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     // The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.8,
+    priorities: { speed: 1, firepower: 3, armor: 2, cargo: 0 },
     armor: [
       { value: "plates", weight: 5 },
       { value: "spacedArmor", weight: 3 },
@@ -669,7 +677,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
-    targets: { guns: [1.85, 4.4], armor: [0.85, 1] },
+    targets: { guns: [1.9, 2.9], armor: [0.7, 1] },
     spares: null,
   },
 };

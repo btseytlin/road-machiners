@@ -709,7 +709,7 @@ describe('NPC activities', () => {
       const raider = () => {
         const w = emptyWorld({ x: 50, y: 50 });
         const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
-        npc.brain = npcBrain('raider', npc.pos, ['raider']);
+        npc.brain = npcBrain('buggy', npc.pos, ['raider']);
         addGoods(w, npc, 'scrap', 2);
         tankAt(w, npc, 0.1, 500);
         return { w, npc };
