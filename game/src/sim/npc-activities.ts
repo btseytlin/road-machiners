@@ -704,7 +704,9 @@ function isFighting(vehicle: Vehicle, id: string): boolean {
 
 // One roll per attacker with new shots, hit or miss, nearest first. The attacker also counts as a noticed hostile
 // in sight, so it fires no second roll as one. A driver already fighting it keeps on. A reaction ends the turn's
-// rolls. Flee runs from the attacker, and fight back turns on it.
+// rolls. Flee runs from the attacker, and fight back turns on it. A driver already in a fight with another truck
+// keeps its target when it fights back, so its fire finishes one truck. Turning on whichever foe shot last left a
+// vulture between two raiders switching targets every turn.
 function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   const brain = vehicle.brain!;
   for (const shooter of newAttackers(world, vehicle)) {
@@ -712,11 +714,15 @@ function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
     brain.noticed[`hostileSeen:${shooter.id}`] = world.turn;
     if (isFighting(vehicle, shooter.id)) continue;
     const option = decide(world, vehicle, 'attacked', shooter.id, perceiveDanger(world, vehicle, shooter));
-    if (option === 'keep') continue;
+    if (keepsOn(vehicle, option)) continue;
     if (option === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, shooter, 'fight back'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, shooter.id, shooter.pos, 'escape an attacker'));
     return;
   }
+}
+
+function keepsOn(vehicle: Vehicle, option: DecisionOptions['attacked']): boolean {
+  return option === 'keep' || (option === 'fightBack' && topGoal(vehicle)?.kind === 'fight');
 }
 
 // One roll per crash grievance whose other truck the driver sees. Retaliating starts a feud with that truck and

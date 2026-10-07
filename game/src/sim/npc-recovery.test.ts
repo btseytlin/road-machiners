@@ -321,6 +321,21 @@ describe('NPC gameplay recovery', () => {
     expect(fled).toBeGreaterThan(0);
   });
 
+  it('keeps its target when a second attacker shoots, so its fire finishes one truck', () => {
+    const { world, npc } = createScenario('buggy');
+    const first = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    const second = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 36 });
+    const fight: NpcActivity = { kind: 'fight', targetId: first.id, destination: { ...first.pos }, phase: 'travel', reason: 'fight a hostile in sight', perceived: world.turn, worn: { turn: world.turn, condition: 1 } };
+    npc.brain!.goals = [workGoal('buggy'), fight];
+    npc.brain!.noticed[`hostileSeen:${first.id}`] = world.turn;
+    fireAt(world, second, npc);
+    const kept = shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      return !me.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === second.id);
+    });
+    expect(kept).toBe(1);
+  });
+
   // A roamer chased a trader for 78 turns at a hit chance under a fifth. Nothing ended a fight that went nowhere.
   describe('a stalled fight', () => {
     const stalled = (worn: number) => {
