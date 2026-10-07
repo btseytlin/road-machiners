@@ -1,4 +1,4 @@
-// Light from the clock, and the lights that switch on at night. The sun moves continuously: white at noon, gold in the late afternoon,
+// Light from the clock, and the lights that switch on at night. The sun moves continuously: warm white at noon, gold in the late afternoon,
 // red at the horizon with long shadows, then a short twilight hands over to blue moonlight.
 
 import * as THREE from "three";
@@ -18,9 +18,11 @@ const MOON_ELEVATION = 25; // degrees
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
+const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without losing the truck's contact shadow
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
-// By day the ground color is warm sand, so faces turned down catch light bounced off the desert.
+// By day the ground color is warm sand, so faces turned down catch light bounced off the desert. The day sky is a
+// light blue, so shadows on the orange sand go mauve-brown.
 type Key = {
   h: number;
   sun: number;
@@ -30,27 +32,30 @@ type Key = {
   skyI: number;
   glassI: number; // strength of the glow cab windows add: none by day, most at sunset
   glassWhite: number; // share of white in that glow, so it goes from the sunset color to a whitish night glow
+  beamI: number; // share of the headlight beam strength that shows: all of it from sunset on, less under a high sun
 };
 const KEYS: Key[] = [
   {
     h: 45,
-    sun: 0xffecd0,
-    sunI: 2.0,
-    sky: 0xaebbd7,
-    ground: 0xba8a56,
-    skyI: 1.0,
+    sun: 0xfff0d8,
+    sunI: 2.3,
+    sky: 0x9cbff0,
+    ground: 0xc08a52,
+    skyI: 0.9,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.3,
   },
   {
     h: 20,
-    sun: 0xffdcaa,
-    sunI: 2.15,
-    sky: 0xb5b7cf,
-    ground: 0xba8a56,
-    skyI: 0.95,
+    sun: 0xffe4c0,
+    sunI: 2.35,
+    sky: 0xa4b8e8,
+    ground: 0xc08a52,
+    skyI: 0.88,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.45,
   },
   {
     h: 8,
@@ -61,6 +66,7 @@ const KEYS: Key[] = [
     skyI: 0.85,
     glassI: 0.1,
     glassWhite: 0,
+    beamI: 0.75,
   },
   {
     h: 1,
@@ -71,6 +77,7 @@ const KEYS: Key[] = [
     skyI: 0.7,
     glassI: 0.4,
     glassWhite: 0,
+    beamI: 1,
   },
   {
     h: -4,
@@ -81,6 +88,7 @@ const KEYS: Key[] = [
     skyI: 0.75,
     glassI: 0.35,
     glassWhite: 0.5,
+    beamI: 1,
   },
   {
     h: -TWILIGHT,
@@ -91,6 +99,7 @@ const KEYS: Key[] = [
     skyI: 0.78,
     glassI: 0.2,
     glassWhite: 0.8,
+    beamI: 1,
   },
 ];
 
@@ -103,6 +112,7 @@ export type Daylight = {
   ground: THREE.Color;
   skyIntensity: number;
   glass: THREE.Color; // glow cab windows add: the sun color at sunset, whitish at night
+  beam: number; // share of the headlight beam strength that shows, 1 from sunset on
 };
 
 // The sun's height in degrees. At night it keeps sinking at its horizon rate, so twilight has a length.
@@ -139,6 +149,7 @@ function colorsAt(h: number): Omit<Daylight, "dir" | "elevation"> {
     sky: mix(a.sky, b.sky),
     ground: mix(a.ground, b.ground),
     skyIntensity: a.skyI + (b.skyI - a.skyI) * s,
+    beam: a.beamI + (b.beamI - a.beamI) * s,
     glass: desaturate(mix(a.sun, b.sun).lerp(WHITE, a.glassWhite + (b.glassWhite - a.glassWhite) * s))
       .multiplyScalar(a.glassI + (b.glassI - a.glassI) * s),
   };
@@ -193,6 +204,7 @@ export function sunLight(): THREE.DirectionalLight {
   sun.shadow.mapSize.set(2048, 2048);
   // The terrain shadows itself. Without a normal offset its lit slopes show striped shadow acne.
   sun.shadow.normalBias = 0.3;
+  sun.shadow.radius = SHADOW_SOFTNESS;
   Object.assign(sun.shadow.camera, {
     left: -80,
     right: 80,
@@ -204,8 +216,9 @@ export function sunLight(): THREE.DirectionalLight {
   return sun;
 }
 
-// Lights that exist only at night: headlight beams for every vehicle within gray vision, also one the
-// player cannot see, and a faint glow over the player truck so its paint reads against the dark ground.
+// Vehicle lights. At night: headlight beams for every vehicle within gray vision, also one the player cannot see,
+// and a faint glow over the player truck so its paint reads against the dark ground. By day: only the beams of lamps
+// that are on, which is the player's switch, scaled by Daylight.beam.
 
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25;
@@ -214,6 +227,9 @@ const BEAM_RANGE = 70; // meters where the light fades to nothing
 const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
 const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
 const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
+const SHADOW_BEAMS = 4; // beams that cast shadows: the lamp-on trucks nearest the player truck
+const BEAM_SHADOW_MAP = 1024; // texels per side of a beam's shadow map
+const BEAM_SHADOW_BIAS = 0.3; // meters along the surface normal, against acne on ground the beam grazes
 const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
 
 const GLOW_INTENSITY = 0.5;
@@ -240,26 +256,59 @@ export function lampsOn(id: string, lightTurn: number): boolean {
 export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean; player: boolean };
 
 // Whether the night lights should exist. At dawn NPC lamps switch off one by one, so the night lights stay until the
-// last one is off. The player's switch never keeps them, so lamps switched on by day light only the lamp faces.
+// last one is off. The player's switch alone does not keep them. By day the beams follow the lamps that are on instead.
 export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "player">[]): boolean {
   return !sunAt(turn) || lit.some((v) => !v.player && v.on);
 }
 
-// A change in light count recompiles every material. So the lights exist only at night, and through the night
-// the beam pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
-export class NightLights {
-  private readonly beams: THREE.SpotLight[] = [];
+const scratchRot = new THREE.Quaternion();
+const scratchAt = new THREE.Vector3();
+
+// The lamp-on vehicles nearest the truck first. Ties break by chassis id, then by input order.
+export function beamOrder(lit: LitVehicle[], truck: V3): LitVehicle[] {
+  const dist = (v: LitVehicle) => Math.hypot(v.frame.pos.x - truck.x, v.frame.pos.y - truck.y, v.frame.pos.z - truck.z);
+  return lit
+    .flatMap((v, i) => (v.on ? [{ v, i, d: dist(v) }] : []))
+    .sort((x, y) => x.d - y.d || (x.v.chassisId < y.v.chassisId ? -1 : x.v.chassisId > y.v.chassisId ? 1 : 0) || x.i - y.i)
+    .map((e) => e.v);
+}
+
+// A change in light count recompiles every material, and a change in the count of shadowed lights does too. So
+// through the night both beam pools only grow, and unused beams stay at zero until dawn. By day the pools hold exactly
+// the lamps that are on, so the count changes only at a lamp switch or at the dusk and dawn handover.
+// The SHADOW_BEAMS nearest lamp-on vehicles take shadowed beams, so props block their light. The rest take plain
+// beams, which shine through props, because each shadowed beam costs a depth pass per frame.
+export class VehicleLights {
+  private readonly shadowed: THREE.SpotLight[] = [];
+  private readonly plain: THREE.SpotLight[] = [];
   private glow: THREE.PointLight | null = null;
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  // truck: the drawn player truck position. lit: vehicles within gray vision.
-  update(night: boolean, truck: V3, lit: LitVehicle[]): void {
+  // Lights the vehicles within gray vision. truck: the drawn player truck position.
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
+    const lit = world.vehicles
+      .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
+      .map((v) => ({
+        chassisId: v.chassisId,
+        frame: frames[v.id],
+        on: vehicleLampsOn(world, v, lightTurn),
+        player: v.id === world.player.vehicleId,
+      }));
+    this.update(nightLightsWanted(world.turn, lit), daylightAt(lightTurn).beam, truck, lit);
+  }
+
+  // night: nightLightsWanted. beam: Daylight.beam. truck: the drawn player truck position. lit: vehicles within gray vision.
+  update(night: boolean, beam: number, truck: V3, lit: LitVehicle[]): void {
+    const order = beamOrder(lit, truck);
     if (!night) {
-      this.clear();
-      return;
+      this.removeGlow();
+      this.trim(this.shadowed, Math.min(order.length, SHADOW_BEAMS));
+      this.trim(this.plain, Math.max(0, order.length - SHADOW_BEAMS));
     }
-    this.aimBeams(lit);
+    this.aim(this.shadowed, order.slice(0, SHADOW_BEAMS), true, beam);
+    this.aim(this.plain, order.slice(SHADOW_BEAMS), false, beam);
+    if (!night) return;
     if (!this.glow) {
       this.glow = new THREE.PointLight(PAL.truckGlow, GLOW_INTENSITY, GLOW_RANGE, GLOW_DECAY);
       this.scene.add(this.glow);
@@ -267,33 +316,47 @@ export class NightLights {
     this.glow.position.set(truck.x, truck.y + GLOW_HEIGHT, truck.z);
   }
 
-  private clear(): void {
-    for (const beam of this.beams.splice(0)) {
+  private trim(pool: THREE.SpotLight[], n: number): void {
+    for (const beam of pool.splice(n)) {
       this.scene.remove(beam, beam.target);
       beam.dispose();
     }
+  }
+
+  private removeGlow(): void {
     if (!this.glow) return;
     this.scene.remove(this.glow);
     this.glow.dispose();
     this.glow = null;
   }
 
-  private aimBeams(lit: LitVehicle[]): void {
-    while (this.beams.length < lit.length) {
-      const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
-      this.beams.push(beam);
-      this.scene.add(beam, beam.target);
+  private newBeam(shadows: boolean): THREE.SpotLight {
+    const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
+    if (shadows) {
+      beam.castShadow = true;
+      beam.shadow.mapSize.set(BEAM_SHADOW_MAP, BEAM_SHADOW_MAP);
+      beam.shadow.normalBias = BEAM_SHADOW_BIAS;
     }
-    this.beams.forEach((beam, i) => {
-      const v = lit[i];
-      beam.intensity = v?.on ? BEAM_INTENSITY : 0;
-      if (!v?.on) return;
-      const f = v.frame;
-      const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-      const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
-      const nose = bodyOf(v.chassisId).half.x;
-      beam.position.copy(new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at));
-      beam.target.position.copy(new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at));
+    this.scene.add(beam, beam.target);
+    return beam;
+  }
+
+  private aim(pool: THREE.SpotLight[], vehicles: LitVehicle[], shadows: boolean, share: number): void {
+    while (pool.length < vehicles.length) pool.push(this.newBeam(shadows));
+    pool.forEach((beam, i) => {
+      const v = vehicles[i];
+      beam.intensity = v ? BEAM_INTENSITY * share : 0;
+      if (shadows) beam.shadow.autoUpdate = v !== undefined;
+      if (v) this.aimAt(beam, v);
     });
+  }
+
+  private aimAt(beam: THREE.SpotLight, v: LitVehicle): void {
+    const f = v.frame;
+    const rot = scratchRot.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
+    const at = scratchAt.set(f.pos.x, f.pos.y, f.pos.z);
+    const nose = bodyOf(v.chassisId).half.x;
+    beam.position.set(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at);
+    beam.target.position.set(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at);
   }
 }

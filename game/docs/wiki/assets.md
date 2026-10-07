@@ -129,10 +129,16 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | horn | sfx | false | 0.8 | 4 | 2 |
 | crash | sfx | false | 0.9 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
+| engine-strain | sfx | true | 0.6 | 1 | 2 |
 | wind | ambient | true | 1 | 1 | 3 |
-| music-calm | music | true | 1 | 1 | 3 |
+| music-calm | music | true | 1 | 1 | 5 |
+| music-town | music | true | 1 | 1 | 1 |
+| music-outpost | music | true | 1 | 1 | 1 |
+| music-abandoned | music | true | 0.7 | 1 | 1 |
 | score-drums | music | true | 0.9 | 1 | 1 |
 | score-bass | music | true | 0.8 | 1 | 1 |
+| score-horns | music | true | 0.8 | 1 | 1 |
+| score-trombone | music | true | 0.8 | 1 | 1 |
 | accent-sighted | music | false | 0.85 | 3 | 2 |
 | accent-struck | music | false | 0.85 | 3 | 2 |
 | accent-miss | music | false | 0.75 | 3 | 2 |

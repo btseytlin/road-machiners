@@ -3,15 +3,17 @@ import {
   restoreDrive,
   type DriveSnapshot,
   restFrames,
+  restWheels,
   trailFrames,
   type Drive,
   type TurnResult,
 } from "../phys/drive";
+import type { VehicleFrame, WheelFrame } from "../phys/frames";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { mergePerf } from "../perf";
 import { reportError } from "./crash";
 import { playerVehicle } from "../sim/damage";
-import type { GameEvent, World } from "../sim/types";
+import type { GameEvent, Vehicle, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
 import { isOnRope, isTowed } from "../sim/tow";
 import { playerSees } from "../sim/vision";
@@ -55,8 +57,6 @@ function interruptsTravel(event: GameEvent, id: string): boolean {
       return [event.a, event.b].includes(id);
     case "shot":
       return [event.shooter, event.target].includes(id);
-    case "guardShot":
-      return event.target === id;
     default:
       return stopsVehicle(event, id);
   }
@@ -76,11 +76,16 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
 // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
 // off the rope at the end of the turn, like on arrival in town, rode the rope during the step too. One that
 // jumped this turn, like a retreating truck sent home, has no trail and stands at its new pose.
-export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"]): void {
+export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"], shown: Record<string, VehicleFrame>): void {
   for (const v of after.vehicles) {
     if (!isOnRope(after, v.id) && (frames[v.id] || !isOnRope(before, v.id))) continue;
-    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v);
+    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v, startWheels(v, shown));
   }
+}
+
+// The wheels a rope truck starts the turn with: as last shown, or at rest when nothing of it was shown.
+function startWheels(v: Vehicle, shown: Record<string, VehicleFrame>): WheelFrame[] {
+  return shown[v.id]?.wheels ?? restWheels(v.chassisId);
 }
 
 export function canTravel(world: World): boolean {
@@ -239,10 +244,11 @@ export class Travel {
     prepared: PreparedTurn,
     now: number,
     elapsed: number,
+    shown: Record<string, VehicleFrame>,
   ): { world: World; playback: Playback; towed: boolean } {
     const world = { ...prepared.world, terrain: before.terrain };
     // Frames first: a throw here must not leave a restored Rapier world behind.
-    addRopeFrames(before, world, prepared.result.frames);
+    addRopeFrames(before, world, prepared.result.frames, shown);
     const nextSnapshot = prepared.result.next;
     const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
     if (!playerCanAct(world)) this.pause();
@@ -279,6 +285,17 @@ export class Travel {
   }
 }
 
+// A turn the worker failed. It carries the worker's stack and the drive the turn started from, so an error report can rerun the turn.
+export class TurnFailure extends Error {
+  constructor(workerStack: string, readonly drive: DriveSnapshot) {
+    const head = workerStack.split("\n")[0];
+    const named = /^(\w*Error): (.*)$/.exec(head);
+    super(named ? named[2] : head);
+    if (named) this.name = named[1];
+    this.stack = workerStack;
+  }
+}
+
 export class TurnPreparation {
   private worker: Worker | null = null;
   private terrain: World["terrain"] | null = null;
@@ -287,6 +304,7 @@ export class TurnPreparation {
   private pending: {
     id: number;
     before: World;
+    drive: DriveSnapshot;
     ready: PreparedTurn | null;
     failure: string | null;
   } | null = null;
@@ -330,7 +348,7 @@ export class TurnPreparation {
   prepareFrom(world: World, saved: DriveSnapshot): void {
     if (this.pending?.before === world) return;
     const copy = { ...saved, snapshot: saved.snapshot.slice() };
-    this.pending = { id: this.post(world, copy), before: world, ready: null, failure: null };
+    this.pending = { id: this.post(world, copy), before: world, drive: saved, ready: null, failure: null };
   }
 
   private post(world: World, saved: DriveSnapshot): number {
@@ -358,7 +376,7 @@ export class TurnPreparation {
     if (pending?.before !== world) return null;
     if (pending.failure) {
       this.pending = null;
-      throw new Error(pending.failure);
+      throw new TurnFailure(pending.failure, pending.drive);
     }
     if (!pending.ready) return null;
     this.pending = null;

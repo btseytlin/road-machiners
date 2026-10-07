@@ -24,17 +24,10 @@ This machine is shared and slow. Keep checks focused.
 Reference images from the issue are listed at the end of this prompt.
 Read every available image with the Read tool.
 When the issue or the task file wants the result to look like an image, a gameplay test is not enough.
-Then run the visual comparison.
-Take a screenshot of the finished game from the view of the image.
-Put it next to the reference image in one file, `.factory/comparison.png`, and read that file with the Read tool.
-List every mismatch you see in plain words, like "the cab is half as tall as in the image" or "the roof color is brown, the image has green".
-Fix what does not match, rebuild, take the screenshot again and compare again.
-Do this up to three rounds, and commit each fix.
-Write the last comparison under "Visual comparison" in the Conclusion of {{taskFile}}.
-It lists what matches, each mismatch that remains and why you left it.
-The testing stage is not done until that section exists.
+The visual review at the end of this prompt compares the final build with the image.
 An image marked NOT AVAILABLE was not seen.
-When the comparison depends on it, write that to `.factory/needs-committee.md` and stop.
+Compare from the text of the issue and the task file, and write down in your notes what you could not see.
+A missing image never stops your work.
 The skill `blender-image-to-3d` has a compare sheet script, `compose_review.py`, for model renders.
 Use it when the change is a Blender model.
 Its overlap number is a diagnostic only.
@@ -88,5 +81,12 @@ Only a major save bump goes to the committee.
 
 If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.
 
 Never push.
+
+Your very last step, after your last commit, is the factory's evidence check. Run `node /opt/factory-check/check.mjs test` from your folder.
+It runs the checks the factory runs after you, on your clone as it is now, and prints each failure with the factory's message.
+Fix every failure before you end. A fix needs a commit, new captures and a new manifest and visual review, and then you run the check again.
+Run it again after any later commit. Do not end while it fails.

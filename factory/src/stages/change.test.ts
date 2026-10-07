@@ -12,13 +12,14 @@ function pending(f: Fake): void {
 }
 
 describe('change', () => {
-  it('rejects a diff outside factory/', async () => {
+  it('opens a pull request for a diff outside factory/ and lists its files', async () => {
     const f = fake();
     pending(f);
-    f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\ndiff --git a/src/sim/world.ts b/src/sim/world.ts\n+y\n';
-    await expect(change(f.ctx, 4)).rejects.toThrow('src/sim/world.ts');
-    expect(f.calls.some((call) => call.startsWith('push'))).toBe(false);
-    expect(readState(f.ctx.statePath).pendingChanges).toHaveLength(1);
+    f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\ndiff --git a/quality/check.ts b/quality/check.ts\n+y\n';
+    await change(f.ctx, 4);
+    expect(f.calls).toContain('push work-head factory-change/4');
+    expect(f.prBodies.at(-1)).toContain('quality/check.ts');
+    expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
   });
 
   it('opens a pull request for a factory-only diff and clears the request', async () => {
@@ -26,14 +27,18 @@ describe('change', () => {
     pending(f);
     f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\n';
     f.agentWrites = { 'pr-title.txt': 'Post daily\n' };
+    f.ctx.cfg = { ...f.ctx.cfg, designModel: 'opus' };
     const dirs: string[] = [];
+    const runs: { model: string; prompt: string }[] = [];
     const agent = f.ctx.container.agent;
-    f.ctx.container.agent = async (run) => { dirs.push(run.dir); await agent(run); };
+    f.ctx.container.agent = async (run) => { dirs.push(run.dir); runs.push(run); return agent(run); };
     const bases: string[] = [];
     const prepare = f.ctx.repo.prepareWorkClone;
     f.ctx.repo.prepareWorkClone = async (branch, base, dir) => { bases.push(base); await prepare(branch, base, dir); };
     await change(f.ctx, 4);
     expect(dirs).toEqual(['factory']);
+    expect(runs[0].model).toBe('opus');
+    expect(runs[0].prompt).toContain('up:make in hands-off mode on the task file .factory-tasks/change-4.md');
     expect(bases).toEqual(['main']);
     expect(f.calls).toContain('push work-head factory-change/4');
     expect(f.calls).toContain('pr factory-change/4 main Post daily');

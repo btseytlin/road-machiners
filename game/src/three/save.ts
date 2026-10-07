@@ -158,7 +158,7 @@ function isCount(value: unknown): value is number {
 }
 
 // World fields a save must hold as arrays.
-const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'weather', 'dustClouds', 'states'] as const;
+const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'weather', 'dustClouds', 'states', 'craters'] as const;
 
 function isWorld(value: unknown): value is SavedWorld {
   if (!value || typeof value !== 'object') return false;

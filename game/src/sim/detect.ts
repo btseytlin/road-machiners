@@ -13,20 +13,21 @@ import { hasPerk, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
-import { hasWorkingEngine, isStalled, vehicleStats } from './stats';
+import { hasWorkingEngine, isStalled, isStranded, vehicleStats } from './stats';
 import { sunAt } from './sun';
 import type { Contact, DustCloud, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
-// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or without a working engine.
+// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or stranded, since a
+// stranded truck is pushed, not driven. A healthy truck at a crawl is still heard.
 export function soundRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v)) return 0;
+  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v) || isStranded(world, v)) return 0;
   const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
   return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
 }
@@ -49,12 +50,12 @@ function runsCold(world: World, v: Vehicle): boolean {
   return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed * PERK_NUMBERS.coldRunning.speedShare;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, while stranded, at night, or fully hidden by weather (the storms in the truck shrink it through weatherOn's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.limpSpeed) return 0;
+  if (v.speed <= RULES.limpSpeed || isStranded(world, v)) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-  const weather = weatherAt(world, v.pos);
+  const weather = weatherOn(world, v);
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
 
@@ -88,27 +89,49 @@ function idKey(id: string): number {
 
 // Contacts within `within` tiles of the observer. Cheap range checks run before any sight line is traced.
 export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
-  const out: Contact[] = [];
-  const scanned = scannerRange(observer); // the observer's own scanner, the same for every target below
+  return sensesOf(world, observer, within).contacts;
+}
+
+// The trucks within `within` tiles that the observer sees, and the contacts of the rest it detects, in one pass.
+export function sensesOf(world: World, observer: Vehicle, within: number): { seen: Vehicle[]; contacts: Contact[] } {
+  const seen: Vehicle[] = [];
+  const contacts: Contact[] = [];
   const sight = sightRadius(world, observer);
-  const clouds = cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within);
+  const listener = { scanned: scannerRange(observer), clouds: cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within) };
   for (const v of world.vehicles) {
-    if (v.id === observer.id) continue;
     const d = dist(observer.pos, v.pos);
-    if (d > within) continue;
-    if (d <= sight && canVehicleSee(world, observer, v.pos)) continue;
-    const moving = v.speed > RULES.parkedSpeed; // a parked truck makes no sound and no radio signal
-    const sources: Contact['sources'] = [];
-    const heard = Math.max(0, hearingRange(world, observer, v));
-    if (moving && heard > 0 && d <= heard) sources.push('sound');
-    const dust = newestCloud(clouds, v.id);
-    if (dust) sources.push('dust');
-    if (moving && scanned > 0 && d <= scanned) sources.push('radio');
-    sources.push(...trackingSources(world, observer, v));
-    if (sources.length === 0) continue;
-    out.push({ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
+    if (v.id === observer.id || d > within) continue;
+    if (d <= sight && canVehicleSee(world, observer, v.pos)) seen.push(v);
+    else contacts.push(...contactWith(world, observer, listener, v, d));
   }
-  return out;
+  return { seen, contacts };
+}
+
+// The contact of a truck out of the observer's sight, as a list of one, or none when the observer detects it in no
+// way. `scanned` is the observer's own scanner range, and `clouds` the dust clouds it sees in range.
+function contactWith(world: World, observer: Vehicle, listener: { scanned: number; clouds: DustCloud[] }, v: Vehicle, d: number): Contact[] {
+  const dust = newestCloud(listener.clouds, v.id);
+  const sources = sourcesOf(world, observer, listener.scanned, v, d, dust !== null);
+  if (sources.length === 0) return [];
+  const loudness = sources.includes('sound') ? soundRange(world, v) : null;
+  return [{ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness }];
+}
+
+// How the observer detects a truck `d` tiles off and out of sight. A parked truck makes no sound and no radio signal.
+function sourcesOf(world: World, observer: Vehicle, scanned: number, v: Vehicle, d: number, dusty: boolean): Contact['sources'] {
+  const moving = v.speed > RULES.parkedSpeed;
+  const sound = moving && hears(world, observer, v, d);
+  const radio = moving && inScanner(scanned, d);
+  return [...(sound ? ['sound' as const] : []), ...(dusty ? ['dust' as const] : []), ...(radio ? ['radio' as const] : []), ...trackingSources(world, observer, v)];
+}
+
+function inScanner(scanned: number, d: number): boolean {
+  return scanned > 0 && d <= scanned;
+}
+
+function hears(world: World, observer: Vehicle, v: Vehicle, d: number): boolean {
+  const heard = Math.max(0, hearingRange(world, observer, v));
+  return heard > 0 && d <= heard;
 }
 
 // Channels that work through hills whether the truck moves or not: the player's beacon and a spotter mark.

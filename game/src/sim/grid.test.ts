@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, cellCount, freeCells, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, cellCount, freeCells, gridOf, isMounted, onDeadRow, placementError, itemCells, mountedItems, mountedParts, plateSide, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
@@ -98,6 +98,56 @@ describe('cargo rows', () => {
   });
 });
 
+describe('broken cargo rows', () => {
+  function boxTruck(parts: string[]) {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', parts, { x: 40, y: 40 });
+    const box = mountedParts(v, 'cargo').find((p) => p.defId === 'trailerBox')!;
+    return { v, box };
+  }
+
+  it('a broken cargo box keeps its rows in the grid but makes them dead', () => {
+    const { v, box } = boxTruck(['trailerBox']);
+    const working = gridOf(v);
+    const free = freeCells(v);
+    box.hp = 0;
+    const g = gridOf(v);
+    expect(g.h).toBe(working.h);
+    expect(g.deadFrom).toBe(g.h - 3);
+    expect(g.cells.slice(g.deadFrom).every((row) => row.every((c) => c === null))).toBe(true);
+    expect(freeCells(v)).toBe(free - 3 * g.w);
+  });
+
+  it('working cargo rows come before the dead rows', () => {
+    const { v, box } = boxTruck(['rack', 'trailerBox']);
+    box.hp = 0;
+    const g = gridOf(v);
+    expect(g.deadFrom).toBe(g.chassisH + 1);
+    expect(g.cells[g.chassisH].every((c) => c === '.')).toBe(true);
+    expect(g.h - g.deadFrom).toBe(3);
+  });
+
+  it('rejects an item on a dead row', () => {
+    const { v, box } = boxTruck(['trailerBox']);
+    box.hp = 0;
+    const g = gridOf(v);
+    const salt: GridItem = { id: 'i-salt', x: 0, y: g.h - 1, rot: 0, kind: 'good', good: 'salt' };
+    expect(placementError(g, v.items, salt, null)).toBe('Does not fit there');
+    expect(onDeadRow(g, salt)).toBe(true);
+    expect(onDeadRow(g, { ...salt, y: g.deadFrom - 1 })).toBe(false);
+  });
+
+  it('repairing the box brings its rows back', () => {
+    const { v, box } = boxTruck(['trailerBox']);
+    box.hp = 0;
+    gridOf(v);
+    box.hp = 1;
+    const g = gridOf(v);
+    expect(g.deadFrom).toBe(g.h);
+    expect(g.cells.slice(g.chassisH).every((row) => row.every((c) => c === '.'))).toBe(true);
+  });
+});
+
 describe('side armor mounts', () => {
   for (const letter of ['F', 'B', 'L', 'R'] as const) {
     it(`armor mounts on ${letter}`, () => {
@@ -121,6 +171,17 @@ describe('side armor mounts', () => {
     expect(letters.has('L')).toBe(true);
     expect(letters.size).toBeGreaterThan(1);
     expect(isMounted('hauler', across)).toBe(false);
+  });
+
+  it('plateSide gives a mounted plate its mount side, even a square one', () => {
+    for (const letter of ['F', 'B', 'L', 'R'] as const) expect(plateSide('hauler', spotOn('hauler', 'steelPlate', letter, []))).toBe(letter);
+  });
+
+  it('plateSide lays a spare plate on the front when it lies wide and on the left when it lies tall', () => {
+    const spare = (rot: 0 | 1): GridItem => ({ id: 'i-plate', x: 0, y: 20, rot, kind: 'part', part: { id: 'p', defId: 'plates', hp: 1, wear: 0 } });
+    const wide = partDef('plates').w > partDef('plates').h;
+    expect(plateSide('hauler', spare(0))).toBe(wide ? 'F' : 'L');
+    expect(plateSide('hauler', spare(1))).toBe(wide ? 'L' : 'F');
   });
 
   it('sideOf is null for parts that are not mounted armor', () => {

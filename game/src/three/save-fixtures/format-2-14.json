@@ -1,13 +1,34 @@
 {
-  "turn": 2600,
-  "player": {
-    "vehicleId": "v1",
-    "money": 5120,
-    "contacts": [{ "vehicleId": "v2", "sources": ["sound"] }],
-    "clouds": ["dust-v1-3685"],
-    "explored": "AAAA"
-  },
-  "dustClouds": [
-    { "id": "dust-v1-3685", "source": "v1", "pos": { "x": 112.4, "y": 419.4 }, "vel": { "x": 1.7, "y": -0.5 }, "age": 7, "range": 29.4 }
-  ]
+  "turn": 1000,
+  "vehicles": [
+    {
+      "id": "retreating",
+      "chassisId": "buggy",
+      "defeat": {
+        "phase": "retreat",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ],
+        "gaveUp": true
+      },
+      "brain": {
+        "templateId": "buggy",
+        "goals": [
+          {
+            "kind": "retreat",
+            "targetId": "kiln",
+            "destination": {
+              "x": 100,
+              "y": 100
+            },
+            "phase": "travel",
+            "reason": "retreat home after a defeat"
+          }
+        ]
+      }
+    }
+  ],
+  "removed": []
 }

@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
-import { newWorld } from '../sim/world';
-import { addVehicle, emptyWorld } from '../sim/testkit';
-import { moveItem } from '../sim/inventory';
+import { newWorld, update } from '../sim/world';
+import { playerVehicle } from '../sim/damage';
+import { mountedParts } from '../sim/grid';
+import { inOverdrive } from '../sim/stats';
+import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
+import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
+import { buyStockPart } from '../sim/economy';
+import { makePart } from '../sim/factory';
+import type { GridItem } from '../sim/types';
+import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, savedRunId, saveWorld, SaveHold, writeSave } from './save';
@@ -88,6 +95,38 @@ describe('game save', () => {
     expect(loaded?.vehicles[0].weaponOrders.w1).toEqual({ targetId: foe.id, aim: 'body' });
   });
 
+  it('loads a save with overdrive on and a worn engine as not overdriving, and clears the flag on the next update', () => {
+    const slots = makeSlots();
+    const world = emptyWorld();
+    world.player.overdrive = true;
+    mountedParts(world.vehicles[0], 'engine')[0].hp = 5;
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    expect(inOverdrive(loaded, playerVehicle(loaded))).toBe(false);
+    expect(update(loaded, () => {}).player.overdrive).toBe(false);
+  });
+
+  it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
+    const slots = makeSlots();
+    const world = emptyWorld();
+    const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    world.player.contracts = [bounty];
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected saved bounty');
+    expect(loaded.player.contracts).toEqual([bounty]);
+    const after = update(loaded, (d) => {
+      d.events = [{ t: 'npcKnockout', vehicle: raider.id, by: d.player.vehicleId }];
+      advanceContracts(d);
+    });
+    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: bounty, outcome: 'done' }]);
+    expect(after.player.money).toBe(loaded.player.money + 100);
+    writeSave(slots, 'auto', after, RUN, 1000);
+    expect(loadWorld(slots, 'auto', TEST_MAP)?.player.contracts).toEqual([]);
+  });
+
   it('resumes a pending refit after loading without losing progress', () => {
     const slots = makeSlots();
     const world = emptyWorld();
@@ -103,6 +142,31 @@ describe('game save', () => {
     for (let turn = 0; turn < 4; turn++) advanceJobs(loaded);
     expect(loaded.vehicles[0].job).toBeNull();
     expect(loaded.vehicles[0].items.find((item) => item.id === weapon.id)).toMatchObject(to);
+  });
+
+  it('keeps a part bought into storage at a stall, and takes it out after loading', () => {
+    const slots = makeSlots();
+    let world = emptyWorld(sitePads(siteOf('pump-station'))[0]);
+    world.player.money = 100000;
+    const part = world.shops['pump-station'].stock[0];
+    while (canStowPart(world.vehicles[0], makePart(world, part.defId, 0))) stowPart(world, world.vehicles[0], makePart(world, part.defId, 0));
+    world = buyStockPart(world, part.id);
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected save');
+    expect(loaded.player.storage.find((p) => p.id === part.id)).toEqual({ ...part });
+    const stored = loaded.player.storage.find((p) => p.id === part.id)!;
+    const probe: GridItem = { id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part: stored };
+    let freed = loaded;
+    let spot = stowSpot(freed.vehicles[0], probe);
+    while (!spot) {
+      const filler = freed.vehicles[0].items.filter((it) => it.kind === 'part').at(-1);
+      if (!filler) throw new Error('Expected room for the stored part');
+      freed = storePart(freed, filler.id);
+      spot = stowSpot(freed.vehicles[0], probe);
+    }
+    const back = takeFromStorage(freed, part.id, spot);
+    expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
   it('stores explored as a string', () => {
@@ -314,7 +378,7 @@ describe('game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const npc = world.vehicles.find((v) => v.brain);
     if (!npc?.brain) throw new Error('The start world needs an NPC');
-    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }] };
+    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }], offRoad: false };
     saveWorld(slots, { ...world, turn: 21 }, RUN, 20, 1000);
     expect(savedWorldOf(slots, 'auto')).not.toHaveProperty('terrain');
     const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
@@ -452,5 +516,23 @@ describe('SaveHold', () => {
     hold.finishTurn();
     hold.noteError();
     expect(hold.held).toBe(true);
+  });
+});
+
+describe('full browser storage', () => {
+  it('keeps the slot in memory and reports the failure when the backend refuses a write', async () => {
+    const backend = memoryBackend();
+    const slots = new SaveSlots(backend, new Map());
+    const errors: unknown[] = [];
+    slots.onError = (err) => errors.push(err);
+    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 21 };
+    writeSave(slots, 'auto', world, RUN, 1000);
+    await slots.flush();
+    const quota = new DOMException('quota', 'QuotaExceededError');
+    backend.put = () => Promise.reject(quota);
+    writeSave(slots, 'auto', { ...world, turn: 22 }, RUN, 2000);
+    await slots.flush();
+    expect(errors).toEqual([quota]);
+    expect((await backend.readAll()).has('auto')).toBe(true);
   });
 });

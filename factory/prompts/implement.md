@@ -10,7 +10,8 @@ Read every available image with the Read tool before you build.
 Build what the plan says and what the images show.
 An image marked NOT AVAILABLE was not seen.
 Never build as if you had seen it.
-When the plan depends on it, write what is missing to `.factory/needs-committee.md` and stop.
+Build from the text of the plan, and write into the task file what you could not see.
+A missing image never stops your work.
 When the task file asks for a visual acceptance check, render or screenshot your work from the image's view, compare it with the image, fix the biggest mismatch and repeat.
 Stop after three rounds, or when nothing differs that a player would see.
 
@@ -19,7 +20,7 @@ The issue and its comments are in `.factory/issue.md`.
 Every task with a change a player can see needs this, with or without a reference image. That covers effects, UI, locations, models and animation.
 1. Build and run the affected gameplay, as a player meets it. Capture real in-game screenshots with a Playwright script in `tmp/`, without GPU flags. Take representative states and camera angles, like the start, the active state, the end and the view from the side.
 2. Read every screenshot with the Read tool. Look at the pixels.
-3. Compare them with the issue, the plan in {{taskFile}}, `game/docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
+3. Compare them with the issue, the plan in {{taskFile}}, `docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
 4. Write down every obvious mismatch in plain words. Look for placeholder shapes that should not ship, like a perfect circle or a plain box, wrong direction or placement, like ahead of the truck when the issue says behind it, wrong proportion or scale, poor readability against the ground, and missing states.
 5. Fix each mismatch, capture again, read the new images and compare again. Do this until nothing obvious differs. Do not claim you are done before that.
 A look that a still cannot show needs a short playback in a real browser, or frames at successive simulation points. Examples are a flare that launches and rises, and oil that drops behind a moving truck. Read those frames too.
@@ -54,6 +55,8 @@ Do not add suppressions.
 Do not raise its limits.
 
 Run up:uexecute on {{taskFile}}.
+Implement every phase inline in this session.
+Subagents are off.
 Then stop.
 Do not run up:uverify.
 The next stage does that.
@@ -61,9 +64,9 @@ The next stage does that.
 This machine is slow. Keep checks focused.
 While you work, run only the tests near your change with `npx vitest run <files>`.
 Prove the feature works with a targeted test. Playtest game behavior with the progression recorder, and use a short Playwright check only for what the screen shows.
-Do not run the playtest. The testing stage and the factory run it.
-Before you finish, run `npm test` and `npm run typecheck` once.
-Every test must pass, not only the tests for this issue.
+Do not run the full test suite or the playtest. The factory's checks run both after the testing stage.
+Before you finish, run `npm run typecheck` once.
+Every test you ran must pass, not only the tests for this issue.
 
 A failure blocks the task even when your change did not cause it.
 Fix every failure you find, also ones already broken on `dev`.
@@ -80,4 +83,6 @@ Never push.
 
 If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.
 Do not commit a change to `SAVE_MAJOR`.

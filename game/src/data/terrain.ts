@@ -4,6 +4,7 @@
 import { PHYSICS } from "./physics";
 import { BROKEN_WING, BROKEN_WING_POINT, FALLEN_SUN_POS, MAP_SCALE, REGION, scalePoint } from "./region";
 import { FALLEN_SUN_DECKS } from "./territory";
+import type { PropKind } from "../sim/terrain";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -31,36 +32,38 @@ export type TerrainType = {
   wear: number; // multiplies part wear per tile driven
   dust: number; // multiplies the range a moving truck's dust trail is seen from
   color: number;
+  craters: boolean; // whether an exploding round leaves a crater here; false on water
+  rut: number; // 0..1 darkness of the tire marks a truck leaves here; 0 leaves none
 };
 
 // The order is the map file's type codes (TYPE_IDS in src/sim/terrain.ts): a reorder or removal bumps its VERSION.
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
-  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
-  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c },
-  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66 },
-  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78 },
-  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044 },
-  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489 },
-  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba },
-  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
-  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
+  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a, craters: true, rut: 0 },
+  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676, craters: true, rut: 0.5 },
+  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c, craters: true, rut: 0.8 },
+  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66, craters: true, rut: 0.6 },
+  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78, craters: true, rut: 0.2 },
+  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044, craters: true, rut: 1 },
+  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489, craters: true, rut: 0.3 },
+  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba, craters: true, rut: 0.5 },
+  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b, craters: true, rut: 0 },
+  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a, craters: true, rut: 0.8 },
   // Dead fields: dry furrowed dirt. Furrows slow a truck like scrub and shake it a little more than
   // hardpan, and the tilled dirt throws more dust than hardpan.
-  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
+  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a, craters: true, rut: 0.8 },
   // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
   // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
-  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
-  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
+  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a, craters: false, rut: 0 },
+  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c, craters: false, rut: 0 },
   // Dirt tracks: hardpan packed pale by wheels, the farm tracks of the Old Orchard. It drives like hardpan and only
   // looks paler than both hardpan and sand, so the tracks read from the camera.
-  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458 },
+  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458, craters: true, rut: 0 },
   // Irrigation canals: shallow water in a concrete channel, the Old Orchard's canals. A truck in one drags and wears
   // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools.
-  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a },
+  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a, craters: false, rut: 0 },
   // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
   // their pale grey shows the slab apart from the dark road, as in the concept.
-  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
+  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94, craters: true, rut: 0 },
 };
 
 // A deck station: a map point on the deck's axis and the deck line's rise there, in height units over the ground.
@@ -202,6 +205,10 @@ export const TERRAIN = {
   roadGrade: 0.12,
   // Steepest height change per tile of a cutting or bank beside a road: below the scree slope.
   bankGrade: 0.3,
+  // Tiles beside a territory's farm road over which its grading blends back to the ground, so ridges stay ridges.
+  farmGradeMargin: 4,
+  // Tiles round a levelled building pad over which the pad blends back to the ground.
+  levelMargin: 4,
   // Noise elevation e (about -1..1) becomes height: e * hill, plus (e - mountainFrom) * mountain above
   // mountainFrom. The steep extra term makes mountain faces too steep to drive.
   height: { hill: 2.1, mountainFrom: 0.32, mountain: 11 },
@@ -548,6 +555,23 @@ export type TankRules = {
   placeTries: number;
 };
 
+// One kind of ship debris the rule can draw. radius is the footprint in tiles, drawn from the range. aligned pieces
+// face the heading of the trail, the others turn at random.
+export type DebrisLook = { look: PropKind; weight: number; radius: [number, number]; aligned: boolean };
+
+export type ShipDebrisRules = {
+  seedOffset: number;
+  trail: Vec[];
+  clusterStep: number;
+  sideSpread: number;
+  clusterReach: number;
+  pieces: [number, number];
+  yawJitter: number;
+  trailLooks: DebrisLook[];
+  strays: { count: number; looks: DebrisLook[] };
+  placeTries: number;
+};
+
 export type FieldRules = {
   seedOffset: number;
   perFarm: [number, number];
@@ -570,6 +594,7 @@ export const OLD_WORLD: {
   billboards: BillboardRules;
   tanks: TankRules;
   fields: FieldRules;
+  shipDebris: ShipDebrisRules;
 } = {
   settlements: {
     seedOffset: 7001,
@@ -670,6 +695,33 @@ export const OLD_WORLD: {
     gap: 1, // tiles between a hulk and the old road edge
     radius: 1.5, // tiles of footprint, as the old landmark hulks
     placeTries: 6, // tries to fit each hulk before it is left out
+  },
+  shipDebris: {
+    seedOffset: 7009,
+    // The crash trail in region points: north-east of Podfield, east of Podfield (region (79,26) moved to (82.5,22) and (79,30), since Podfield's site clearance took the whole cluster), south of the Broken Wing road, and
+    // the Fallen Sun's north-east rim. It stays west of the canyon, so no piece blocks the canyon floor.
+    trail: [scalePoint({ x: 81, y: 12 }), scalePoint({ x: 82.5, y: 22 }), scalePoint({ x: 79, y: 30 }), scalePoint({ x: 72, y: 37 }), scalePoint({ x: 66, y: 44.5 })],
+    clusterStep: 22, // tiles between impact clusters along the trail
+    sideSpread: 6, // tiles a cluster centre lies across the trail
+    clusterReach: 5, // tiles a piece lies from its cluster centre
+    pieces: [4, 7], // pieces per cluster
+    yawJitter: 0.5, // radians a trail piece turns off the trail heading
+    trailLooks: [
+      { look: 'hullChunk', weight: 4, radius: [0.8, 1.5], aligned: true }, // the metal, posed at 0.53 to 1 of the model's size
+      { look: 'wingShard', weight: 2, radius: [1.75, 1.75], aligned: true },
+      { look: 'escapePod', weight: 2, radius: [0.6, 0.6], aligned: false },
+      { look: 'habitat', weight: 1, radius: [2, 2], aligned: true }, // at most one per cluster
+      { look: 'powerCell', weight: 1, radius: [0.4, 0.4], aligned: false },
+    ],
+    strays: {
+      count: 30, // single pieces over the map, escape pods that came down anywhere
+      looks: [
+        { look: 'escapePod', weight: 5, radius: [0.6, 0.6], aligned: false },
+        { look: 'hullChunk', weight: 3, radius: [0.8, 1.5], aligned: false },
+        { look: 'powerCell', weight: 1, radius: [0.4, 0.4], aligned: false },
+      ],
+    },
+    placeTries: 24, // tries to fit each piece before it is left out
   },
   fields: {
     seedOffset: 7008,

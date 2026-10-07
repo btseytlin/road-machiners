@@ -12,15 +12,15 @@ import { patchGoal, startTow, topGoal } from './npc-activities';
 import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
-import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
+import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
-import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
+import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { spread, startTrade, tradeWith, transfer } from './economy';
-import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
+import { acceptOffer, canTowNpc, isTowing, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVar, CallVars, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
@@ -49,6 +49,11 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
   const towns = knownTowns(npc);
   if (towns.length === 0) throw new Error(`${npc.id} knows no town`);
   return towns.reduce((a, b) => (dist(me, a.pos) <= dist(me, b.pos) ? a : b));
+}
+
+// A robber's once-only demand topic is settled when its price came up in a truce call.
+function settleDemand(world: World, npc: Vehicle, outcome: TopicOutcome): void {
+  world.player.talked[npc.id] = { ...world.player.talked[npc.id], demand: outcome };
 }
 
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
@@ -204,6 +209,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
+  npcWorn: (world, npc) => canTakeWornPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id) && !isTowing(world, npc.id) && !isStranded(world, playerVehicle(world)),
   // A towed truck is already being helped. Its tower owns it.
   npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
@@ -221,12 +227,14 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcBeaten: (world, npc) => isWeak(world, npc),
   notOfferedYield: (world, npc) => !offeredSurrenderBy(world, npc, playerVehicle(world)),
   guardsClaim: (world, npc) => guardsClaim(world, npc),
+  claimsSpill: (world, npc) => spillClaimOn(world, npc) !== null,
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
   npcHasCargo: (_world, npc) => hasCargo(npc),
   offersTruce: (world, npc) => pendingPlea(world, npc) === 'truce',
   begsMercy: (world, npc) => pendingPlea(world, npc) === 'mercy',
+  demandsToll: (_world, _npc, vars) => answerOf(vars) === 'demand',
   accepts: (_world, _npc, vars) => answerOf(vars) === 'yes',
   refuses: (_world, _npc, vars) => answerOf(vars) === 'no',
   complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
@@ -275,6 +283,13 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
+  abandonSpill: (world, npc, call) => {
+    const stock = spillClaimOn(world, npc);
+    if (!stock) throw new Error(`${npc.id} claims no spilled cargo of the player`);
+    abandonSpill(world, playerVehicle(world), npc, stock);
+    settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
   surrender: (world, npc, call) => {
     surrenderTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
@@ -304,7 +319,23 @@ export const EFFECTS: Record<EffectId, Effect> = {
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
   settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
-  withdrawPlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), false),
+  withdrawPlea: (world, npc, call) => {
+    settlePlayerPlea(world, npc, playerPlea(call), false);
+    if (answerOf(call.vars) === 'demand') settleDemand(world, npc, 'refused');
+  },
+  // The player pays a robber's price for a truce: the same hand-over as the demand topic.
+  payToll: (world, npc, call) => {
+    if (answerOf(call.vars) !== 'demand') throw new Error('payToll needs a demand answer');
+    settlePlayerPlea(world, npc, 'truce', false);
+    yieldTo(world, playerVehicle(world), npc);
+    settleDemand(world, npc, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  refuseToll: (world, npc, call) => {
+    if (answerOf(call.vars) !== 'demand') throw new Error('refuseToll needs a demand answer');
+    settlePlayerPlea(world, npc, 'truce', false);
+    settleDemand(world, npc, 'refused');
+  },
   hitchNpc: (world, npc) => hitchNpc(world, npc, false),
   hitchNpcFree: (world, npc) => hitchNpc(world, npc, true),
   releaseNpc: (world, npc) => releaseNpc(world, npc),
@@ -347,8 +378,8 @@ export const EFFECTS: Record<EffectId, Effect> = {
 };
 
 export const PREPARES: Record<PrepareId, Prepare> = {
-  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
-  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
+  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') } }),
+  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') } }),
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),

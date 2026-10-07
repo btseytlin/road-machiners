@@ -133,9 +133,9 @@ export const CONTRACTS = {
     // Long enough that a raider's own patrol or camp turns do not expire the contract before the
     // player can reach and fight it. The window counts from acceptance and does not change the pay.
     durationTurns: [400, 1000] as [number, number],
-    // Share of the target's own total worth, chassis plus every part, paid for the kill. A fifth of
-    // its worth pays for the risk of the fight without outpricing the wreck's own salvage.
-    valueShare: 0.2,
+    // Turns of tier 1 wage paid per raider template, whatever the target carries. A bounty pays for the risk of
+    // the fight, so a gunwagon pays more than an outrider, and a better geared target pays the same.
+    rewardTurns: { buggy: 900, gunwagon: 1350 } as Record<string, number>,
     // Social XP per money of the reward, all of which pays for the fight.
     xpPerEffort: 0.25,
   },

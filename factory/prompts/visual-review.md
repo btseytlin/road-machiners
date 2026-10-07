@@ -8,8 +8,8 @@ Never set `visual` false while `.factory/evidence.json` lists features.
 
 For a change a player can see, work like this.
 1. Read each shown image with the Read tool, one by one. Look at the pixels, not at your file names or captions.
-2. Read the issue in `.factory/issue.md` when it exists, the plan in {{taskFile}}, `game/docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
-3. For an external reference image, compare side by side as above, in `.factory/comparison.png`.
+2. Read the issue in `.factory/issue.md` when it exists, the plan in {{taskFile}}, `docs/DESIGN.md` and the game docs the change touches, like the art and mechanics docs.
+3. For an external reference image, take a screenshot of the game from the view of the image. Put it next to the image in one file, `.factory/comparison.png`, and read that file with the Read tool. List each mismatch in plain words, like "the cab is half as tall as in the image".
 4. For an effect or an animation with no concept image, play it for real in the browser. Capture before and after frames, or a sequence at successive simulation points, like the flare as it launches and rises, or the oil as the truck drives on. A still cannot show direction or timing.
 5. For every visible change and every important state, decide if it looks right. Check placement and direction (behind the truck, not ahead of it), shape (no perfect circle, box or other placeholder where the game wants an organic form), proportion and scale, readability against the ground, and states a player will meet, like start, active, end, and the other camera angles.
 6. Write down every mismatch in plain words before you fix anything.
@@ -32,4 +32,8 @@ Write `.factory/visual-review.json` last, after the final capture and the final 
 - `decisions` has one entry per feature of `.factory/evidence.json`, or one for the change when there is no manifest.
 - `mismatches` lists only what still differs after your repairs, each with `description` and `scope`. A `wrong` verdict needs a mismatch. A clean review has an empty list and only `correct` verdicts.
 Never write a reading of an image you did not open. Never invent a render.
-When you cannot open or read an image, say so in `.factory/needs-committee.md` and stop. Do not approve a look you did not see.
+When you cannot open or read an image, never write a reading of it and never give it the verdict `correct`.
+Say in its `observations` and in the `notes` of the feature that you could not see it.
+Do not approve a look you did not see.
+Judge the feature only from what you did see and from the text.
+The review goes on. Never write `.factory/needs-committee.md` for it.

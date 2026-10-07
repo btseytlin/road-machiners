@@ -19,6 +19,7 @@
 - A save records the map file's hash and does not load on another map.
 - A build with `SAVE_SCOPE` set stores its saves in its own database, so builds served from one site keep separate saves.
 - A dead world is never saved.
+- A write the browser refuses (a full disk quota) leaves the slot's old save in the database and the new one in the memory mirror. The game notes "The game could not save" in the log and reports the error. Boot and rescue continue unsaved. Nothing is cleared to make room.
 
 ## Run log
 

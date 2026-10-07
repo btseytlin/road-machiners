@@ -1,0 +1,28 @@
+// Testing column. Preview before the committee plays. Post runs only when Hermes moves a card to Approval. Red: loops back. Grey: leaves Testing or enters from outside.
+digraph testing {
+  rankdir=LR; nodesep=0.35; ranksep=0.55; bgcolor=white; pad=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.1", penwidth=1.3, width=1.3];
+  edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
+  subgraph cluster_preview {
+    label="Preview: new card"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
+    PM [label="Merge new branch\ncommits and the base"]; PT [label="Test round\nplay, fix, capture"]; PV [label="Visual review"];
+    PC [label="Checks\ntests, playtest, build"]; PP [label="Post to\ncommittee", fillcolor="#fde68a", color="#b45309"];
+    PM -> PT -> PV -> PC -> PP [weight=100];
+  }
+  subgraph cluster_post {
+    label="Post: moved by Hermes"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
+    QB [label="Build only\nno tests, no playtest"]; QP [label="Post to committee\nno checks ran", fillcolor="#fde68a", color="#b45309"];
+    QB -> QP [weight=100];
+  }
+  XH [label="Hermes\nmove to Approval", fillcolor="#f3f4f6", color="#6b7280"];
+  XI [label="Implementation", fillcolor="#f3f4f6", color="#6b7280"];
+  XD [label="Design", fillcolor="#f3f4f6", color="#6b7280"];
+  XS [label="factory-stuck", fillcolor="#f3f4f6", color="#6b7280"];
+  edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
+  PC -> PC [label="timeouts: rerun, up to 3\nfailure: one check-fix round"];
+  edge [color="#6b7280", fontcolor="#6b7280"];
+  XH -> QB;
+  PV -> XI [label="rebuild"];
+  PV -> XD [label="plan wrong"];
+  PC -> XS [label="fails after the fix"];
+}

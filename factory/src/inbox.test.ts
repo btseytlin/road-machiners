@@ -28,6 +28,7 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
     telegram: {
       sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; },
       editCaption: async (chat: string, id: number, caption: string) => { calls.push(`edit ${chat} ${id} ${caption}`); },
+      editText: async (chat: string, id: number, text: string) => { calls.push(`editText ${chat} ${id} ${text}`); },
     },
   } as unknown as Ctx;
 }
@@ -64,6 +65,32 @@ describe('drainInbox', () => {
     expect(sent).toEqual([]);
   });
 
+  it('queues an ad hoc task of Hermes with no message to answer', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'adhoc', text: 'check the disk', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: null } });
+    expect(sent).toEqual([]);
+  });
+
+  it('accepts a route of Hermes, as Hermes', async () => {
+    const calls: string[] = [];
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), builds: { 4: 'abc1234' } }));
+    put('1.json', { kind: 'route', route: 'patch', issue: 4, text: 'make the horn louder', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(readState(statePath).patching).toEqual({ 4: 'abc1234' });
+    expect(calls).toContain('edit -5 42 Post\n\n🔧 Patch from Hermes. Sonnet fixes the build, then the checks run again.');
+  });
+
+  it('refuses an approve, a deny, a ship and a remove from Hermes', async () => {
+    const sent: string[] = [];
+    for (const kind of ['approve', 'deny', 'ship', 'remove']) put(`${kind}.json`, { kind, issue: 4, text: 'x', by: 'hermes', byName: null, messageId: null });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
+    expect(sent).toHaveLength(4);
+    for (const text of sent) expect(text).toContain('Only committee members can do that');
+    expect(readState(statePath).pendingApprovals).toEqual({});
+  });
+
   it('refuses an ad hoc task without text', async () => {
     const sent: string[] = [];
     put('1.json', { kind: 'adhoc' });
@@ -87,6 +114,15 @@ describe('drainInbox', () => {
     put('2.json', { kind: 'change', text: 'y', by: '11' });
     await drainInbox(fakeCtx([], [], []));
     expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
+  });
+
+  it('shows the status of a button press on a text post by editing its text', async () => {
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), postCaptions: { [POST]: 'Post' }, textPosts: [String(POST)] });
+    put('1.json', { kind: 'redesign', issue: 4, text: 'too loud' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(calls.at(-1)).toBe('editText -5 42 Post\n\n💬 Feedback from Ann. Back to design.');
+    expect(calls.some((call) => call.startsWith('edit -5'))).toBe(false);
   });
 
   it('sends a redesign back to design at once', async () => {
@@ -135,27 +171,6 @@ describe('drainInbox', () => {
     expect(calls).toEqual([expect.stringContaining('routed as answer')]);
     expect(sent).toEqual([]);
     expect(readState(statePath).unroutedReplies).toEqual({});
-  });
-
-  it('queues the change of a waste review from its button, and answers with a reply', async () => {
-    const sent: string[] = [];
-    const ctx = fakeCtx([], sent, []);
-    const body = 'Numbers.\n\n## Bottleneck\n\nSlow verify.\n\n## Proposed change\n\nSet FACTORY_VERIFY_WORKERS to 2.';
-    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 301, title: 'Factory review', body, labels: ['factory-review'] });
-    put('1.json', { kind: 'waste-change', issue: 301 });
-    await drainInbox(ctx);
-    expect(readState(statePath).pendingChanges).toEqual([{ id: 5000, text: 'Set FACTORY_VERIFY_WORKERS to 2.\n\nProposed by the factory review #301.', by: 'Ann' }]);
-    expect(sent).toEqual(['Change request 5000 is queued. The factory answers with a pull request.']);
-  });
-
-  it('refuses the review button on an issue that is no review', async () => {
-    const sent: string[] = [];
-    const ctx = fakeCtx([], sent, []);
-    (ctx.github as unknown as { issue: unknown }).issue = async () => ({ number: 4, title: 't', body: '## Proposed change\n\nx', labels: [] });
-    put('1.json', { kind: 'waste-change', issue: 4 });
-    await drainInbox(ctx);
-    expect(readState(statePath).pendingChanges).toEqual([]);
-    expect(sent[0]).toContain('no factory review');
   });
 
   it('refuses a route it does not know', () => {
@@ -215,7 +230,7 @@ describe('drainInbox', () => {
   });
 });
 
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [] };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
 const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } }));
 
 describe('release commands', () => {
@@ -317,5 +332,58 @@ describe('parseCommand', () => {
   });
   it('rejects an unknown kind', () => {
     expect(() => parseCommand('{"kind":"merge","by":"1","chat":"c","messageId":1}')).toThrow('Unknown inbox command kind');
+  });
+});
+
+describe('control files', () => {
+  const putControl = (name: string, body: object): void => writeFileSync(join(ROOT, 'inbox', name), JSON.stringify({ kind: 'control', by: 'boss', reason: 'the gate failed on load', ...body }));
+
+  beforeEach(() => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(join(ROOT, 'inbox'), { recursive: true });
+    writeState(statePath, withPost(structuredClone(EMPTY_STATE)));
+  });
+
+  it('applies a control order, empties the inbox and sends no chat message', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    putControl('1-control.json', { action: 'move', issue: 4, to: 'design' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Testing', labels: [] }], sent, calls));
+    expect(calls).toContain('move 4 Design');
+    expect(calls.find((call) => call.startsWith('comment 4'))).toContain('Reason: the gate failed on load');
+    expect(readdirSync(join(ROOT, 'inbox'))).toEqual([]);
+    expect(sent).toEqual([]);
+    expect(readState(statePath).failures).toEqual([]);
+  });
+
+  it('turns an order that cannot apply into a failure that names the reason, with no chat message and no change (IV4)', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    putControl('1-control.json', { action: 'move', issue: 4, to: 'design' });
+    await drainInbox(fakeCtx([], sent, calls));
+    const failure = readState(statePath).failures[0];
+    expect(failure).toMatchObject({ stage: 'control', issue: null, log: null });
+    expect(failure.error).toContain('#4: Issue #4 is not on the board');
+    expect(calls).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('fails a bad shape and an unknown actor as control failures', async () => {
+    const sent: string[] = [];
+    putControl('1-control.json', { action: 'explode' });
+    putControl('2-control.json', { action: 'cut', by: 'mallory' });
+    await drainInbox(fakeCtx([], sent, []));
+    const errors = readState(statePath).failures.map((failure) => failure.error);
+    expect(errors[0]).toContain('Unknown control action explode');
+    expect(errors[1]).toContain('mallory');
+    expect(sent).toEqual([]);
+  });
+
+  it('refuses Hermes on a gated order', async () => {
+    openRelease();
+    putControl('1-control.json', { action: 'ship', by: 'hermes' });
+    await drainInbox(fakeCtx([], [], []));
+    expect(readState(statePath).pendingShip).toBeNull();
+    expect(readState(statePath).failures[0].error).toContain('--by <member>');
   });
 });

@@ -1,23 +1,19 @@
 import { writeFileSync } from 'node:fs';
-import { readEvidence } from '../evidence';
+import { readApproval } from '../clone-checks';
+import { readShown } from '../evidence';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, type CardStage, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
 import { visualGate } from './visual';
-import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
-
-export type Approval = { description: string; howToTry: string };
+import { HOTFIX_BASE, agentHome, baseBranchFor, catchUpBranch, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
 // What a testing round does. `preview` gets a card ready to show: the agent plays the feature, fixes what blocks it and captures the evidence, with no review.
-// `harden` runs after the committee approved: verify, review, nitpicks and cost, with no post after it. `full` does both before the post.
-export type TestMode = 'preview' | 'harden' | 'full';
+// `full` also hardens and reviews before the post. Other approved cards harden in the Hardening column.
+export type TestMode = 'preview' | 'full';
 
-// A hotfix ships the moment it is approved, so it gets the full round before its post. A cleanup task merges with no post, so it only hardens.
-// Any other card hardens once a committee approval is recorded for it, and previews before that.
-export function testMode(ctx: Ctx, issue: number, labels: string[]): TestMode {
-  if (baseBranchFor(ctx, labels) === HOTFIX_BASE) return 'full';
-  if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'harden';
-  return String(issue) in readState(ctx.statePath).approvedResolving ? 'harden' : 'preview';
+// A hotfix ships the moment it is approved, so it gets the full round before its post.
+export function testMode(ctx: Ctx, labels: string[]): TestMode {
+  return baseBranchFor(ctx, labels) === HOTFIX_BASE ? 'full' : 'preview';
 }
 
 // The agent half of testing. It runs in the verify queue, so the test slot stays free for the factory's own checks.
@@ -27,33 +23,32 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  const mode = testMode(ctx, issue, item.labels);
-  if (readState(ctx.statePath).testPhase[String(issue)] === 'fix') return fixRound(ctx, issue, base, mode);
+  if (readState(ctx.statePath).testPhase[String(issue)] === 'fix') return fixRound(ctx, issue, base, 'verify');
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home);
-  if (await agentRounds(ctx, issue, base, mode, merged)) setPhase(ctx, issue, 'checks');
+  const merged = await mergeBase(ctx, issue, base, home, 'verify');
+  if (await agentRounds(ctx, issue, base, testMode(ctx, item.labels), merged)) setPhase(ctx, issue, 'checks');
 }
 
 // Plays the rounds of the mode. False means the card went elsewhere, so no checks follow.
 async function agentRounds(ctx: Ctx, issue: number, base: string, mode: TestMode, merged: string): Promise<boolean> {
   if (mode === 'preview') {
-    const shown = await agentRound(ctx, issue, 'test', 'test', base, true);
+    const shown = await agentRound(ctx, issue, 'verify', 'test', 'test', base, true);
     await requireBaseMerged(ctx, issue, base, merged);
     return shown;
   }
-  await agentRound(ctx, issue, 'harden', 'harden', base, false);
+  await agentRound(ctx, issue, 'verify', 'harden', 'harden', base, false);
   await requireBaseMerged(ctx, issue, base, merged);
-  if (!(await reviewGate(ctx, issue, base, async () => { await agentRound(ctx, issue, 'test-fix', 'review-fix', base, false); }))) return false;
-  return mode !== 'full' || (await agentRound(ctx, issue, 'test', 'test', base, true));
+  if (!(await reviewGate(ctx, issue, base, 'verify', async () => { await agentRound(ctx, issue, 'verify', 'test-fix', 'review-fix', base, false); }))) return false;
+  return agentRound(ctx, issue, 'verify', 'test', 'test', base, true);
 }
 
 // The checks stage left the end of its log in `.factory/check-failure.md`, next to the approval and evidence of the first round.
-// A hardening fix leaves no evidence, since no post follows it.
-async function fixRound(ctx: Ctx, issue: number, base: string, mode: TestMode): Promise<void> {
+// A fix in Testing captures the evidence its post needs. A fix in Hardening leaves no evidence, since no post follows it.
+export async function fixRound(ctx: Ctx, issue: number, base: string, stage: 'verify' | 'harden'): Promise<void> {
   if (readOutput(agentHome(workDir(ctx, issue), GAME_DIR), 'check-failure.md') === null) throw new Error(`Issue #${issue} waits for a check fix, but its work clone has no .factory/check-failure.md`);
-  if (!(await agentRound(ctx, issue, 'test-fix', 'checks-fix', base, mode !== 'harden'))) return;
+  if (!(await agentRound(ctx, issue, stage, 'test-fix', 'checks-fix', base, stage === 'verify'))) return;
   setPhase(ctx, issue, 'checks-after-fix');
 }
 
@@ -64,9 +59,10 @@ export function setPhase(ctx: Ctx, issue: number, phase: TestPhase): void {
 
 // The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
 // so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
+// The issue branch itself may have moved on GitHub too, so its new commits come in first and get tested with the rest.
 // Returns the base commit it merged.
-export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
-  await ctx.repo.fetch();
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
+  await catchUpBranch(ctx, issue, stage);
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
   return commit;
@@ -78,31 +74,31 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 }
 
 // `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
-// A round that `shows` leaves the approval and the evidence a post needs. The checks stage reads them, and the evidence must match the branch head.
-// It also leaves the agent's reading of those images. Returns false when that reading sent the card back, so no post follows.
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
-  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
-  const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
-  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
-  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars));
+// A round that `shows` leaves the approval a post needs, and the evidence and the agent's reading of it when it captured any.
+// Missing or broken evidence never fails the round. Returns false when the reading sent the card back, so no post follows.
+export async function agentRound(ctx: Ctx, issue: number, stage: 'verify' | 'harden', prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
+  await runAgent(ctx, issue, stage, round, roundPrompt(ctx, issue, prompt, shows), { evidenceCheck: shows });
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   if (shows) readApproval(home);
-  await guardAndPush(ctx, issue, base, 'verify');
-  if (!shows) return true;
+  await guardAndPush(ctx, issue, base, stage);
+  return shows ? showEvidence(ctx, issue, home) : true;
+}
+
+function roundPrompt(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', shows: boolean): string {
+  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg, false) };
+  if (prompt === 'harden') return fillPrompt(prompt, vars);
+  const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
+  if (prompt === 'test') return fillPrompt(prompt, { ...vars, visualRules });
+  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
+  return fillPrompt(prompt, { ...vars, evidenceRules });
+}
+
+// A shown round's evidence goes through the visual gate. A round with a broken or missing evidence report passes, since evidence never blocks.
+async function showEvidence(ctx: Ctx, issue: number, home: string): Promise<boolean> {
   const head = await ctx.repo.headHash(BRANCH(issue));
-  return visualGate(ctx, issue, home, head, readEvidence(home, head));
-}
-
-export function readApproval(home: string): Approval {
-  const raw = readOutput(home, 'approval.json');
-  if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
-  return parseApproval(JSON.parse(raw));
-}
-
-function parseApproval(data: unknown): Approval {
-  const { description, howToTry } = (data ?? {}) as Record<string, unknown>;
-  if (typeof description !== 'string' || typeof howToTry !== 'string') throw new Error('.factory/approval.json needs string fields description and howToTry');
-  return { description, howToTry };
+  const shown = readShown(home, head);
+  if (shown.problem !== null) ctx.log('verify', issue, shown.problem);
+  if (shown.evidence === null) return true;
+  return visualGate(ctx, issue, home, head, shown.evidence);
 }

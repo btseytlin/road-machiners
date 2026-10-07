@@ -34,7 +34,7 @@ describe('the vendored Blender image skill', () => {
 function runEntry(home: string, gameSkills: string): { code: number | null; out: string; err: string } {
   const bin = join(home, 'bin');
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, 'claude'), '#!/bin/bash\nls "$HOME/.claude/skills"\n');
+  writeFileSync(join(bin, 'claude'), '#!/bin/bash\nprintf "%s\\n" "$@" > "$HOME/arguments"\nls "$HOME/.claude/skills"\n');
   chmodSync(join(bin, 'claude'), 0o755);
   const result = spawnSync('bash', [join(DOCKER, 'factory-agent')], { env: { PATH: `${bin}:${process.env.PATH}`, HOME: home, FACTORY_GAME_SKILLS: gameSkills }, encoding: 'utf8' });
   return { code: result.status, out: result.stdout, err: result.stderr };
@@ -50,6 +50,7 @@ describe('factory-agent', () => {
     spawnSync('cp', ['-r', join(DOCKER, 'skills'), join(home, '.claude/skills')]);
     const run = runEntry(home, game);
     expect(run.code).toBe(0);
+    expect(readFileSync(join(home, 'arguments'), 'utf8')).toContain('factory-status milestone');
     expect(run.out.split('\n').filter(Boolean).sort()).toEqual(['blender-image-to-3d', 'typescript-practices']);
     expect(readdirSync(join(home, '.claude/skills/blender-image-to-3d/scripts'))).toContain('review_render.py');
     rmSync(home, { recursive: true, force: true });

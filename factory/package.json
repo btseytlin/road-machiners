@@ -6,14 +6,20 @@
   "scripts": {
     "factory": "vite-node src/cli.ts --",
     "dashboard": "vite-node src/dashboard/main.ts",
+    "diagrams": "node docs/diagrams/render.mjs",
     "test": "vitest run",
     "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^7.3.6",
     "vite-node": "^3.2.4",
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
+    "chart.js": "^4.5.1"
   }
 }

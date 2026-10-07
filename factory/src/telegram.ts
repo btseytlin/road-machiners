@@ -26,7 +26,7 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       const ids: number[] = [];
       for (const part of splitText(text)) {
         const payload: Record<string, unknown> = { chat_id: chat, text: part };
-        if (replyTo !== undefined && ids.length === 0) payload.reply_parameters = { message_id: replyTo };
+        if (typeof replyTo === 'number' && ids.length === 0) payload.reply_parameters = { message_id: replyTo };
         ids.push(await callForId('sendMessage', JSON.stringify(payload)));
       }
       return ids[0]!;
@@ -34,7 +34,14 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
     // A message with buttons cannot be split, since only one part could carry them.
     async sendButtons(chat, text, buttons) {
       if (text.length > MESSAGE_LIMIT) throw new Error(`Telegram message with buttons is ${text.length} chars, the limit is ${MESSAGE_LIMIT}.`);
-      return callForId('sendMessage', JSON.stringify({ chat_id: chat, text, reply_markup: JSON.parse(keyboard(buttons)) }));
+      return callForId(
+        'sendMessage',
+        JSON.stringify({
+          chat_id: chat,
+          text,
+          reply_markup: JSON.parse(keyboard(buttons)),
+        }),
+      );
     },
     async sendPhoto(chat, pngPath, caption, buttons) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
@@ -63,10 +70,22 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       form.set('document', new Blob([readFileSync(path)]), basename(path));
       return callForId('sendDocument', form);
     },
+    async editText(chat, messageId, text) {
+      if (text.length > MESSAGE_LIMIT) throw new Error(`Telegram message is ${text.length} chars, the limit is ${MESSAGE_LIMIT}.`);
+      await call('editMessageText', JSON.stringify({ chat_id: chat, message_id: messageId, text, reply_markup: { inline_keyboard: [] } }));
+    },
     async editCaption(chat, messageId, caption) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
       // An empty keyboard drops the buttons, so a decided post cannot be pressed again.
-      await call('editMessageCaption', JSON.stringify({ chat_id: chat, message_id: messageId, caption, reply_markup: { inline_keyboard: [] } }));
+      await call(
+        'editMessageCaption',
+        JSON.stringify({
+          chat_id: chat,
+          message_id: messageId,
+          caption,
+          reply_markup: { inline_keyboard: [] },
+        }),
+      );
     },
   };
 }
@@ -89,7 +108,16 @@ function albumRequest(chat: string, photos: AlbumPhoto[], replyTo: number | unde
     form.set('photo', new Blob([files[0]!.bytes], { type: files[0]!.mime }), files[0]!.name);
     return { method: 'sendPhoto', form };
   }
-  form.set('media', JSON.stringify(photos.map((photo, i) => ({ type: 'photo', media: `attach://photo${i}`, caption: photo.caption }))));
+  form.set(
+    'media',
+    JSON.stringify(
+      photos.map((photo, i) => ({
+        type: 'photo',
+        media: `attach://photo${i}`,
+        caption: photo.caption,
+      })),
+    ),
+  );
   files.forEach((file, i) => form.set(`photo${i}`, new Blob([file.bytes], { type: file.mime }), file.name));
   return { method: 'sendMediaGroup', form };
 }
@@ -110,7 +138,9 @@ function keyboard(buttons: InlineButton[][]): string {
     const size = Buffer.byteLength(data);
     if (size > CALLBACK_DATA_LIMIT) throw new Error(`Telegram callback data is ${size} bytes, the limit is ${CALLBACK_DATA_LIMIT}.`);
   }
-  return JSON.stringify({ inline_keyboard: buttons.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))) });
+  return JSON.stringify({
+    inline_keyboard: buttons.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))),
+  });
 }
 
 // Cuts at the last line break inside the limit, or at the limit when a line is longer.

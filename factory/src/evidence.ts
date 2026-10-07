@@ -23,7 +23,7 @@ export type Evidence = { images: EvidenceImage[]; features: string[] };
 // The agent's manifest `.factory/evidence.json`:
 // {"commit": "<git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}],
 //  "images": [{"file": "screenshot.png", "description": "Gate and approach", "covers": ["Salvage yard"], "sheet": false}]}
-// With no manifest the single screenshot stands, as before. A manifest that fails any rule throws, so no post goes out with doubtful evidence.
+// With no manifest the single screenshot stands, as before. A manifest that fails any rule throws.
 export function readEvidence(home: string, head: string | null): Evidence {
   const out = join(home, OUT_DIR);
   const manifest = join(out, MANIFEST_FILE);
@@ -34,6 +34,21 @@ export function readEvidence(home: string, head: string | null): Evidence {
   const images = parseImages(data.images, features, out);
   requireCoverage(features, images);
   return { images, features: features.map((feature) => feature.name) };
+}
+
+// What an approval post shows. `problem` says what was missing or dropped, and the post and the issue say it too.
+export type Shown = { evidence: Evidence | null; problem: string | null };
+
+// Evidence never blocks a card. With no screenshot the post is text. A manifest that breaks a rule is dropped, and the one screenshot stands.
+export function readShown(home: string, head: string | null): Shown {
+  const primary = join(home, OUT_DIR, PRIMARY_FILE);
+  if (!existsSync(primary)) return { evidence: null, problem: `The testing agent wrote no .factory/${PRIMARY_FILE}.` };
+  try {
+    return { evidence: readEvidence(home, head), problem: null };
+  } catch (error) {
+    const evidence = { images: [{ path: primary, description: '', covers: [], sheet: false }], features: [] };
+    return { evidence, problem: `The evidence manifest was dropped: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 // The evidence must come from the final branch. An agent that changed code after it captured has to capture again.

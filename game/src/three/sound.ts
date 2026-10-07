@@ -1,9 +1,9 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
+import { BEATS_PER_BAR, engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
-import { spatial } from "../audio/pick";
+import { shuffled, spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
   Glide,
@@ -14,6 +14,8 @@ import type {
 import type { V3, VehicleFrame } from "../phys/frames";
 import { PHYSICS } from "../data/physics";
 import type { GameEvent, ShotRound } from "../sim/types";
+import { isInTerritory, isNearOutpost, isNearTown } from "../sim/sites";
+import type { Vec } from "../sim/vec";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
@@ -38,7 +40,7 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
 
 // Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
-const BASE_CUES = ["score-drums", "score-bass"] as const;
+const BASE_CUES = ["score-drums", "score-bass", "score-horns", "score-trombone"] as const;
 type BaseCue = (typeof BASE_CUES)[number];
 type Base = { loop: BeatLoopHandle; grid: Grid };
 
@@ -146,7 +148,6 @@ export class CombatScore {
 export function accentOf(e: GameEvent, playerId: string): AccentCue | null {
   if (e.t === "collision") return [e.a, e.b].includes(playerId) ? "accent-crash" : null;
   if (e.t === "shot") return volleyAccent(e.rounds, e.shooter === playerId, e.target === playerId);
-  if (e.t === "guardShot") return volleyAccent(e.rounds, false, e.target === playerId);
   return null;
 }
 
@@ -218,6 +219,11 @@ export class SoundDirector {
     this.player.play(cue, CENTER, 0);
   }
 
+  // Logs the engine strain of a turn that has any.
+  engineStrain(s: Strain): void {
+    if (s.from > 0 || s.to > 0) this.record(`engine-strain ${s.from.toFixed(1)}->${s.to.toFixed(1)}`);
+  }
+
   private record(cue: string): void {
     this.log.push(cue);
     if (this.log.length > LOG_SIZE) this.log.shift();
@@ -236,24 +242,48 @@ export class SoundDirector {
   }
 }
 
+// A place with its own music, or null on the open road.
+export type MusicPlace = "town" | "outpost" | "abandoned" | null;
+
+// Town music plays near town gates, outpost music near outpost gates, and abandoned music inside territories.
+export function musicPlaceAt(pos: Vec): MusicPlace {
+  if (isNearTown(pos, MIX.music.musicReachTiles)) return "town";
+  if (isNearOutpost(pos, MIX.music.musicReachTiles)) return "outpost";
+  return isInTerritory(pos) ? "abandoned" : null;
+}
+
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
+// stormShare is the player's storm exposure in [0, 1], from stormShare() in src/sim/weather.ts; it sets the storm's share of the wind.
+export type LoopState = { stormShare: number; inCombat: boolean; place: MusicPlace; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
+  townGain: number;
+  outpostGain: number;
+  abandonedGain: number;
   combatGain: number;
   musicCutoffHz: number;
   paused: boolean;
 };
 
+// Which music plays: combat wins, then the place's music, then calm road music.
+function musicOf(s: LoopState): "calm" | "combat" | NonNullable<MusicPlace> {
+  if (s.inCombat) return "combat";
+  return s.place ?? "calm";
+}
+
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
-  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const near = s.stormShare;
+  const music = musicOf(s);
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
-    calmGain: s.inCombat ? 0 : 1,
-    combatGain: s.inCombat ? 1 : 0,
+    calmGain: Number(music === "calm"),
+    townGain: Number(music === "town"),
+    outpostGain: Number(music === "outpost"),
+    abandonedGain: Number(music === "abandoned"),
+    combatGain: Number(music === "combat"),
     musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
     paused: s.paused,
   };
@@ -310,33 +340,75 @@ export function engineGlide(
   };
 }
 
+// How strained the engine note is over one turn, from 0 healthy to 1 fully strained, at its start and end.
+export type Strain = { from: number; to: number };
+
+// Strain level between turns. A turn with heat damage is fully strained from its start; a turn without it falls by
+// MIX.engine.strainRelease, so the note comes back over two turns and never flips between full and none when damage
+// comes and goes. A turn that does not follow the last played one, like after a parked turn or a load, starts healthy.
+export class EngineStrain {
+  private turn: number | null = null;
+  private level = 0;
+
+  next(turn: number, damaging: boolean): Strain {
+    const before = this.turn === turn - 1 ? this.level : 0;
+    const s = damaging ? { from: 1, to: 1 } : { from: before, to: Math.max(0, before - MIX.engine.strainRelease) };
+    this.turn = turn;
+    this.level = s.to;
+    return s;
+  }
+}
+
+// Splits one engine glide between the healthy and strained loops: same rates, and levels that add up to the glide's.
+export function strainGlides(g: Glide, s: Strain): { healthy: Glide; strained: Glide } {
+  const level = (from: number, to: number): Glide => ({ ...g, gainFrom: g.gainFrom * from, gainTo: g.gainTo * to });
+  return { healthy: level(1 - s.from, 1 - s.to), strained: level(s.from, s.to) };
+}
+
 // Engine, wind, calm music and the combat score bases run for the whole session. Wind and music change gain;
 // the engine sounds only while a turn plays.
 export class SoundLoops {
-  private engine: LoopHandle | null = null;
+  private engine: { healthy: LoopHandle; strained: LoopHandle } | null = null;
   private engineChassis: string | null = null;
   private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
+  // Each place's music loop, by the LoopLevels gain that drives it.
+  private places: [LoopHandle, "townGain" | "outpostGain" | "abandonedGain"][];
+  // Calm tracks play in a playlist shuffled once per session, so every track plays before any repeats.
+  private playlist = shuffled(SOUNDS["music-calm"].files, Math.random);
+  private track = 0;
   private last: LoopLevels | null = null;
 
   constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "setPaused" | "tick">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
-    this.calm = player.loop("music-calm", silent);
+    this.calm = player.loop("music-calm", silent, this.playlist[0]);
+    this.places = [
+      [player.loop("music-town", silent), "townGain"],
+      [player.loop("music-outpost", silent), "outpostGain"],
+      [player.loop("music-abandoned", silent), "abandonedGain"],
+    ];
   }
 
-  drive(g: Glide, chassisId: string): void {
+  // The healthy and strained engine loops start together and take the same rates each turn.
+  drive(g: Glide, chassisId: string, strain: Strain): void {
     let engine = this.engine;
     if (this.engineChassis !== chassisId || !engine) {
-      const file = engineFileFor(chassisId);
-      engine?.stop(0);
-      engine = this.player.loop("engine", { pan: 0, gain: 0 }, file);
+      engine?.healthy.stop(0);
+      engine?.strained.stop(0);
+      const silent = { pan: 0, gain: 0 };
+      engine = {
+        healthy: this.player.loop("engine", silent, engineFileFor(chassisId)),
+        strained: this.player.loop("engine-strain", silent, engineStrainFileFor(chassisId)),
+      };
       this.engine = engine;
       this.engineChassis = chassisId;
     }
-    engine.glide(g);
+    const layers = strainGlides(g, strain);
+    engine.healthy.glide(layers.healthy);
+    engine.strained.glide(layers.strained);
   }
 
   // A throttle blip on the chassis's own engine note when overdrive comes on.
@@ -355,9 +427,10 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight as a new random track.
+  // Calm music comes back after a fight or a place with its own music as the next playlist track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
+    this.updatePlaces(l, was);
     if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);
     this.score.setPaused(l.paused);
     if (was?.combatGain !== l.combatGain) this.score.setCombat(l.combatGain > 0, MIX.music.fadeSeconds);
@@ -370,8 +443,20 @@ export class SoundLoops {
     this.calm.setGain(gain, fade);
 }
 
+  private updatePlaces(l: LoopLevels, was: LoopLevels | null): void {
+    for (const [loop, key] of this.places) if (was?.[key] !== l[key]) loop.setGain(l[key], MIX.music.fadeSeconds);
+  }
+
+  // The radio's next button crossfades to another calm track at the current calm level.
+  nextTrack(): void {
+    const fade = MIX.music.fadeSeconds;
+    this.nextCalm(fade);
+    this.calm.setGain(this.last?.calmGain ?? 0, fade);
+  }
+
   private nextCalm(fadeSeconds: number): void {
     this.calm.stop(fadeSeconds * 1000);
-    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 });
+    this.track = (this.track + 1) % this.playlist.length;
+    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 }, this.playlist[this.track]);
   }
 }

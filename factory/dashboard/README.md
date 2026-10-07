@@ -1,27 +1,62 @@
 # Factory dashboard
 
-The read-only dashboard exposes factory jobs, release contents, cost and token estimates, public Telegram announcements and host measurements at `/factory/`. It does not run factory jobs or grant visitors controls.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
-From `factory/`, run `npm ci`, copy `dashboard/.env.example` to `dashboard/.env`, and set a port or absolute socket path. Set `DASHBOARD_CHANNEL_URL` to the public channel URL or leave it out to resolve the username through Telegram's `getChat` API. The latter requires `FACTORY_PUBLIC_CHANNEL` and `TELEGRAM_BOT_TOKEN` in the factory's private `.env`. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads require `gh` authentication and a public repository.
+From `factory/`:
 
-## Measurements and privacy
+1. Run `npm ci` and copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
+2. Set `DASHBOARD_PORT`, or `DASHBOARD_SOCKET` for an absolute socket path.
+3. Leave `DASHBOARD_CHANNEL_URL` empty to get the link of `FACTORY_PUBLIC_CHANNEL` from the bot, or set `DASHBOARD_HIDE_TELEGRAM=1` to show no channel.
+4. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads need `gh` logged in.
 
-- The existing factory ledger owns job outcomes, durations and CLI cost estimates. New agent entries also record final whole-tree `modelUsage` token totals. Older ledger entries have cost but no token counts. Missing token counts display as unavailable, not zero.
-- Today, seven days and thirty days use rolling UTC windows. Worker time sums completed jobs. Concurrent time counts once per worker. Factory-managed jobs exclude Hermes chat, external agent runs, audio and hosting charges.
-- CPU uses host counter changes. Linux RAM uses `MemAvailable`. GPU requires `nvidia-smi`. SSD describes the filesystem containing `FACTORY_HOME`. Unsupported or failed readings are unavailable.
-- Only successful public release and hotfix messages are written to the ledger for the Telegram panel. Committee messages and ad hoc requests are not copied. Existing earlier posts remain on Telegram.
-- The collector reads the ledger incrementally. It retains up to thirty days of records in memory. A failed source keeps its last successful snapshot with a stale marker.
+## What the numbers mean
 
-## First production installation
+- Job outcomes, durations, costs and tokens come from the factory ledger. Older lines have cost but no tokens, and a missing count shows as unavailable, never as zero.
+- Review rounds count under Verify, since their ledger job is Verify.
+- The 24-hour, 7-day and 30-day ranges are rolling UTC windows. Hermes chat, agent runs outside the factory and hosting costs are not counted.
+- Waiting time sums the intervals a task spent not running. Gaps longer than three ticks are left out and counted.
+- Runner heartbeats show a job is alive. Agent activity reports are labelled apart and never prove a check passed. Scheduler explanations come from job selection.
+- CPU, container CPU, memory, GPU and disk readings are whole-host percentages. A reading that fails or is not supported shows as unavailable.
+- A pause shows as an amber banner from the pause file. Raw pause notes never leave the server.
+- While `DASHBOARD_HIDE_TELEGRAM=1`, the API returns no channel link or posts.
 
-The dashboard code must first reach `main` through the factory-change pull request. The standard updater installs the new release, but infrastructure is a separate operation. From `factory/infra/`, run `uv run pyinfra -y inventory.py deploy/dashboard.py` with the existing `prod.env` and host credentials. This dashboard-only operation creates `/opt/factory/dashboard/dashboard.env`, installs its systemd service and restart hook, and updates only Caddy. It does not rebuild agent images, restart Hermes, stop factory jobs or replace the tunnel.
+Agents report their phase with `factory-status <activity>`, with no free text. `FACTORY_OBSERVATION_HEARTBEAT_MS` and `FACTORY_OBSERVATION_MAX_EVENT_BYTES` in `settings.env` set the liveness sampling and the event size limit.
 
-The dashboard listens on `/opt/factory/dashboard/http.sock`. Caddy mounts this directory read-only and proxies `/factory/` to the socket. The existing root redirect and game build paths stay in Caddy. Later main updates create a release-local link to the persistent dashboard configuration and restart the dashboard after switching releases. A failed dashboard restart leaves the updater's restart marker for inspection. The factory release swap still follows its existing rules.
+## Delivery numbers
 
-Check `systemctl status roam-factory-dashboard.service`, `/opt/factory/home/logs/dashboard.log`, `https://<domain>/factory/health` and `https://<domain>/factory/` after installation. The public page should update through `/factory/api/events`. A `POST` must return 405 and a private path must return 404. Deployment requires a reachable host. Tests do not establish live service health.
+The Delivery tab reads only the card lines of the ledger. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
 
-## Fonts
+- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing is the preview and Hardening the harden stage. Approval splits into the committee's wait and the merge queue after hardening or `factory merge`. A `factory move` into Testing counts as preview.
+- A stage counts in a range when it ended in that range. Stages still open are counted with their mean age and are not in the means.
+- Triage to dev runs from the first triage acceptance to the first merge into dev after it, the merge that adds `release-candidate`. Weekly Ship is not its end. Cards merged in the range count. Accepted cards not yet merged or closed are in flight. A merge with no recorded acceptance is counted apart.
+- Loops count each move back by its transition, with the cards it touched. The loop rate is cards with a loop over cards with any move in the range.
+- Failed job retries count card jobs that failed, died or timed out. The tick runs those again in the same column, so they are not loops. A job a control order stopped is no retry.
+- Each rejection rate has its own base: triage refusals over triage decisions, design refusals over design decisions, and Deny over committee approvals and denials. Each card counts once per gate, by its latest decision in the range. Pending cards, failed jobs, patches, redesigns, removals and operator drops are not rejections.
+- Hotfixes, release tasks, the release card and ad hoc tasks run other paths, so they are left out and counted.
+- A line equal to the card's previous line is a copy from a resumed job or a repeated tick, and is dropped. A move into the column the card is in starts no new stage.
+- Card lines stay 180 days in the dashboard's memory. A card that moved before the first card line is counted as joined before records.
 
-The bundled Barlow Semi Condensed and IBM Plex Mono fonts use the SIL Open Font License. Their license files are under `fonts/`.
+## Production
+
+Code reaches the server with every merge into `main`. The service and its Caddy route need a one-time install from `factory/infra/` with `uv run pyinfra -y inventory.py deploy/dashboard.py`. It installs `roam-factory-dashboard.service` with Telegram hidden and updates Caddy. It does not restart Hermes or stop jobs. Rerunning it resets Telegram to hidden.
+
+The service listens on `/opt/factory/dashboard/http.sock`, and Caddy proxies `/factory/` to it. Each deploy of `main` restarts it.
+
+Check it after an install:
+
+- `systemctl status roam-factory-dashboard.service` and `/opt/factory/home/logs/dashboard.log`.
+- `https://<domain>/factory/health` answers, and `https://<domain>/factory/` updates through `/factory/api/events`.
+- A `POST` returns 405, and a private path returns 404.
+
+## Browser check
+
+From the repo root, with root, factory and game dependencies installed, this runs the page against fixtures with no network. It checks desktop fit, pagination, live updates, keyboard use, missing data and escaped markup. The image must match the installed Playwright version.
+
+```sh
+mkdir -p tmp/browser-evidence
+docker run --rm --init --network none --memory 2g --cpus 2 --shm-size 512m --mount type=bind,src="$PWD",dst=/work,readonly --mount type=bind,src="$PWD/tmp/browser-evidence",dst=/evidence --workdir /work mcr.microsoft.com/playwright:v1.63.0-noble node factory/dashboard/browser.test.mjs /work/game/node_modules/playwright/index.mjs /evidence
+```
+
+The bundled Barlow Semi Condensed and IBM Plex Mono fonts use the SIL Open Font License, with their licenses in `fonts/`.
