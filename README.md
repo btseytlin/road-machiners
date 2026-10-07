@@ -4,9 +4,9 @@
 
 A community-driven wasteland truck RPG and software factory.
 
-![Play on itch.io](https://img.shields.io/badge/play-itch.io-FA5C5C?style=for-the-badge&logo=itchdotio&logoColor=white)![Dev build](https://img.shields.io/badge/dev%20build-live-8B5A2B?style=for-the-badge&logo=googlechrome&logoColor=white)![Factory dashboard](https://img.shields.io/badge/factory-dashboard-6B7A3A?style=for-the-badge&logo=grafana&logoColor=white)![Telegram channel](https://img.shields.io/badge/telegram-channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)
+[![Play on itch.io](https://img.shields.io/badge/play-itch.io-FA5C5C?style=for-the-badge&logo=itchdotio&logoColor=white)](https://btseytlin.itch.io/road-machiners)[![Dev build](https://img.shields.io/badge/dev%20build-live-8B5A2B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://roam-game.online/dev/)[![Factory dashboard](https://img.shields.io/badge/factory-dashboard-6B7A3A?style=for-the-badge&logo=grafana&logoColor=white)](https://roam-game.online/factory/)[![Telegram channel](https://img.shields.io/badge/telegram-channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/roam_game_dispatch)
 
-![Next release](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Frelease&style=flat-square)![Building](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Fbuilding&style=flat-square)![three.js and TypeScript](https://img.shields.io/badge/three.js-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+[![Next release](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Frelease&style=flat-square)](https://roam-game.online/factory/)[![Building](https://img.shields.io/endpoint?url=https%3A%2F%2Froam-game.online%2Ffactory%2Fapi%2Fbadges%2Fbuilding&style=flat-square)](https://roam-game.online/factory/)[![three.js and TypeScript](https://img.shields.io/badge/three.js-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://threejs.org/)
 
 In ROAM you drive an armed truck across a post-apocalyptic wasteland. It's an immersive RPG sandbox: trade, scavenge ancient ruins, take jobs, rob other drivers or protect them. Inspired by Ex Machina, Space Rangers 2, Kenshi, Dustland Delivery and Caravaneer 2.
 
