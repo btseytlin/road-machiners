@@ -596,6 +596,14 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath).jobStarts).toEqual(starts(2));
   });
 
+  it('keeps the candidate post while a ship runs, since the ship moves the release itself', async () => {
+    const h = harness(job('2026-01-10T11:50:00Z', 'ship', 20), true, [card(20, 'Approval', ['release'])]);
+    writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:50:00Z', 'ship', 20)], release: { ...RELEASE, postId: 7, candidateSha: 'rel0000' }, pendingShip: 'Ann' }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).release?.postId).toBe(7);
+    expect(readState(h.ctx.statePath).pendingShip).toBe('Ann');
+  });
+
   it('drops the candidate post and a queued ship once the release moved past the posted commit, and plays the new head', async () => {
     const h = harness(null, false, [card(20, 'Approval', ['release'])]);
     writeState(h.ctx.statePath, state({ release: { ...RELEASE, postId: 7, candidateSha: 'rel0000', playtest: { ...RELEASE.playtest, passed: 'rel0000' } }, pendingShip: 'Ann' }));

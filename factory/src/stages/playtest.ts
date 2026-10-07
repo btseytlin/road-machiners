@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { addCard } from '../card-events';
+import { must } from '../exec';
 import { updateState } from '../state';
 import { GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type PlaytestState, type ReleaseState } from '../types';
 import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
@@ -26,12 +27,17 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const open = await openReleaseTasks(ctx);
   if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
   const sha = await ctx.repo.headHash(release.branch);
-  const started = startRun(ctx, release, sha);
-  const run = started.runs;
-  const startedAt = ctx.now().toISOString();
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
+  if (await cloneAt(ctx, dir, sha)) await play(ctx, release, sha, dir);
+}
+
+// Plays and reviews one run in the clone at sha, keeps its audit record and settles the outcome.
+async function play(ctx: Ctx, release: ReleaseState, sha: string, dir: string): Promise<void> {
+  const started = startRun(ctx, release, sha);
+  const run = started.runs;
+  const startedAt = ctx.now().toISOString();
   const home = agentHome(dir, GAME_DIR);
   resetOutputs(home);
   const log = releaseLog(ctx, 'playtest');
@@ -50,8 +56,17 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const task = outcome.outcome === 'fix' ? await openFixTask(ctx, release, run, sha, review) : null;
   const meta: RunMeta = { day: release.day, run, seed, turns, sha, startedAt, finishedAt: ctx.now().toISOString(), outcome: outcome.outcome, reason: outcome.reason, verdict: review.verdict, task, ending: facts.ending };
   keepAudit(ctx, release, home, meta);
-  await ctx.github.comment(issue, comment(meta, report));
+  await ctx.github.comment(release.issue, comment(meta, report));
   await settle(ctx, release, sha, outcome);
+}
+
+// The clone takes the branch tip, which may have moved since the factory read the head. The log, the review and the
+// audit must name the commit that ran, so a clone of another commit plays nothing and spends no run. The next tick plays the new head.
+async function cloneAt(ctx: Ctx, dir: string, sha: string): Promise<boolean> {
+  const head = must(await ctx.run('git', ['-C', dir, 'rev-parse', 'HEAD']), 'git rev-parse in the playtest clone').trim();
+  if (head.startsWith(sha)) return true;
+  ctx.log('playtest', null, `the clone is at ${head.slice(0, sha.length)}, not the release head ${sha}, since the release moved. Nothing played.`);
+  return false;
 }
 
 // The run is counted before it starts, so a run that times out or crashes still spends its budget. The limit holds the

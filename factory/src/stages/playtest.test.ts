@@ -32,6 +32,8 @@ function setup(heads: string[] = ['abc1234'], state: Partial<ReleaseState> = {})
   writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...state, playtest: { ...RELEASE.playtest, ...state.playtest } } });
   const run: Run = { f, shells: [], prompts: [], models: [] };
   const left = [...heads];
+  // The clone takes the head the factory read first, as a full hash.
+  f.ctx.run = async () => ({ code: 0, stdout: `${heads[0]}0123456789abcdef\n`, stderr: '' });
   f.ctx.repo.headHash = async () => (left.length > 1 ? left.shift() : left[0]) ?? 'abc1234';
   f.ctx.container.shell = async (_clone: string, script: string) => {
     run.shells.push(script);
@@ -179,6 +181,14 @@ describe('playtest', () => {
     const agent = setup();
     await expect(playtest(agent.f.ctx, 11)).rejects.toThrow('wrote no .factory/playtest.json');
     expect(release(agent.f).playtest).toMatchObject({ runs: 1, passed: null });
+  });
+
+  it('plays nothing and spends no run when the clone is not at the release head it read, so the audit never names the wrong commit', async () => {
+    const { f, shells } = setup();
+    f.ctx.run = async () => ({ code: 0, stdout: 'def5678aaaa\n', stderr: '' });
+    await playtest(f.ctx, 11);
+    expect(shells).toEqual([]);
+    expect(release(f).playtest).toMatchObject({ runs: 0, streak: 0, passed: null, blocked: null });
   });
 
   it('refuses an issue that is not the tracking issue', async () => {

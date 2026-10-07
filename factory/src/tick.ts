@@ -399,12 +399,18 @@ async function releaseHead(ctx: Ctx): Promise<string | null> {
 }
 
 // A candidate post plays one commit. Once the release branch moves, by any path, the post and a queued Ship go, and the
-// playtest and a new candidate follow on the new head.
+// playtest and a new candidate follow on the new head. A running ship moves the release itself when it merges main
+// into it, and its post must stay so a failed ship can run again.
 export function dropStaleCandidate(ctx: Ctx, head: string | null): void {
-  const release = readState(ctx.statePath).release;
-  if (release === null || head === null || release.postId === null || release.candidateSha === head) return;
+  const state = readState(ctx.statePath);
+  const release = state.release;
+  if (release === null || release.postId === null || !movedPast(state, release.candidateSha, head)) return;
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   ctx.log('tick', release.issue, `release moved from ${release.candidateSha ?? 'an unknown commit'} to ${head}, dropped candidate post ${release.postId}`);
+}
+
+function movedPast(state: FactoryState, posted: string | null, head: string | null): boolean {
+  return head !== null && posted !== head && !state.jobs.some((job) => job.stage === 'ship');
 }
 
 async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
