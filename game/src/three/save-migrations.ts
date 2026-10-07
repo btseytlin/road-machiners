@@ -316,9 +316,6 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
   // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
-  // 14 to 15: an NPC truck that chases may spawn carrying no goods, since it stops loading at its speed floor. Older
-  // saves already fit.
-  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

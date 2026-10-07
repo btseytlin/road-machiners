@@ -568,7 +568,8 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
 // Reason one: the aim is behind the nose and backsToDestination allows it. It starts below reverseBelow and holds
 // while the rule holds.
 // Reason two: something in front stopped it, wherever the aim lies. A truck that turns toward an aim ahead can grind
-// along a rock at a crawl, so pushing without moving counts as blocked too. It backs RULES.reverse.distance tiles from
+// along a rock at a crawl, so pushing without moving counts as blocked too. A block starts with a target of at least pushSpeed, so a truck that
+// arrives or creeps from rest never backs out; once it started, it counts on until the truck moves. It backs RULES.reverse.distance tiles from
 // where the back-out began, then tries nose first again. Any other point behind turns the truck around nose first.
 // at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
 function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
@@ -592,7 +593,8 @@ function backsToPoint(c: Car, rearAng: number, far: number, target: number, spee
 
 // Counts the seconds a truck pushes forward without moving, and says whether that lasted long enough to back up.
 function blockedInFront(c: Car, target: number, speed: number): boolean {
-  c.mem.stall = target > 0 && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
+  const pushing = target >= D.pushSpeed || (target > 0 && c.mem.stall > 0);
+  c.mem.stall = pushing && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
   return c.mem.stall >= D.stallSeconds;
 }
 

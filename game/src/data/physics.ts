@@ -55,7 +55,8 @@ export const PHYSICS = {
     cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up
     reverseSpeed: 5, // m/s while backing up
-    stallSpeed: 0.3, // m/s; a truck pushing at a point behind it slower than this is blocked in front
+    stallSpeed: 0.3, // m/s; a truck pushing forward slower than this is blocked in front
+    pushSpeed: 1, // m/s; a truck told to go at least this fast that stays under stallSpeed is pushing against something. Slower targets are arriving or creeping, not pushing, and cannot start a block; must stay above stallSpeed
     stallSeconds: 0.5, // seconds blocked in front before the truck backs up; a truck from rest passes stallSpeed sooner
   },
   rockHeight: 3, // meters of obstacle collider height
