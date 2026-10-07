@@ -64,7 +64,7 @@ import {
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
-import { moneyLabel, powerChip } from "./hud-readout";
+import { moneyChipLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -965,7 +965,7 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
     "span",
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyChipLabel(w.player.money)),
     opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",

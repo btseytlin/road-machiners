@@ -39,7 +39,7 @@ import {
   type Supply,
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
-import { moneyLabel } from "./hud-readout";
+import { moneyChipLabel } from "./hud-readout";
 import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
@@ -733,7 +733,7 @@ function partnerChips(npc: Vehicle): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyLabel(npc.resources!.money)),
+    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyChipLabel(npc.resources!.money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

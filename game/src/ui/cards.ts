@@ -19,7 +19,7 @@ import { fuelLiters, hp, kph, meters, mps2 } from "./units";
 
 const ART = {
   money:
-    '<ellipse cx="18" cy="9" rx="11" ry="5"/><path d="M7 9v15c0 7 22 7 22 0V9M7 16c0 7 22 7 22 0"/>',
+    '<circle cx="20" cy="20" r="15"/><circle cx="20" cy="20" r="10"/><path d="M20 14v12M16 17h8M16 23h8"/>',
   fuel: '<path d="M8 10h16v23H8zM11 4h10v6M15 15l6 6-9 8M24 12h7v18h5V15l-5-5"/>',
   supplies: '<path d="M5 13h30v22H5zM5 13l6-8h18l6 8M15 6v28M25 6v28"/>',
   driver:
@@ -121,13 +121,17 @@ const ICON_NAMES: Record<IconName, string> = {
   clock: "Time left",
 };
 
+export function iconSvg(name: IconName): string {
+  return `<svg viewBox="0 0 40 40" focusable="false">${ART[name]}</svg>`;
+}
+
 export function createIcon(name: IconName): HTMLElement {
   const icon = el("span", {
     class: `icon icon-${name}`,
     title: ICON_NAMES[name],
     "aria-hidden": "true",
   });
-  icon.innerHTML = `<svg viewBox="0 0 40 40" focusable="false">${ART[name]}</svg>`;
+  icon.innerHTML = iconSvg(name);
   return icon;
 }
 

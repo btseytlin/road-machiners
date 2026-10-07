@@ -10,7 +10,7 @@ import { maxHealthOf } from "../sim/health";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clockLabel } from "./format";
-import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, moneyChipLabel, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
@@ -448,5 +448,14 @@ describe('context picker', () => {
     picker.cycle([shop, pile, wreck], 1);
     expect(picker.pick([shop, wreck])).toBe(shop);
     expect(picker.pick([wreck, pile, shop])).toBe(shop);
+  });
+});
+
+describe("moneyChipLabel", () => {
+  it("names the amount as money and keeps debt as debt", () => {
+    expect(moneyChipLabel(830)).toBe("830 money");
+    expect(moneyChipLabel(1830)).toBe("1,830 money");
+    expect(moneyChipLabel(0)).toBe("0 money");
+    expect(moneyChipLabel(-50)).toBe("Debt 50");
   });
 });

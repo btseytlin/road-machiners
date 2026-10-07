@@ -226,6 +226,11 @@ export function moneyLabel(money: number): string {
     : money.toLocaleString("en-US");
 }
 
+// The header chip says the word, since an icon and a bare number do not read as money.
+export function moneyChipLabel(money: number): string {
+  return money < 0 ? moneyLabel(money) : `${moneyLabel(money)} money`;
+}
+
 // What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
 // when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =

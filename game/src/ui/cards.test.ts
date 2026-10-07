@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, iconSvg, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -133,5 +133,13 @@ describe("item tones", () => {
 describe("chassis portraits", () => {
   it.each(Object.keys(CHASSIS))("crop the %s portrait to its drawing", (id) => {
     expect(chassisPortraitCell(id).box).toEqual(boxOf(ICONS.chassis[id as keyof typeof ICONS.chassis].box));
+  });
+});
+
+describe("money icon", () => {
+  it("is a coin, not a stack of disks", () => {
+    const svg = iconSvg("money");
+    expect(svg).toContain("<circle");
+    expect(svg).not.toContain("<ellipse");
   });
 });
