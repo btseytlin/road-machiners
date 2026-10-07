@@ -5,7 +5,7 @@ import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, type CardStage, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
 import { visualGate } from './visual';
-import { HOTFIX_BASE, agentHome, baseBranchFor, catchUpBranch, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { HOTFIX_BASE, agentHome, baseBranchFor, catchUpBranch, docsOnly, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
 // What a testing round does. `preview` gets a card ready to show: the agent plays the feature, fixes what blocks it and captures the evidence, with no review.
 // `full` also hardens and reviews before the post. Other approved cards harden in the Hardening column.
@@ -28,20 +28,35 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home, 'verify');
-  if (await agentRounds(ctx, issue, base, testMode(ctx, item.labels), merged)) setPhase(ctx, issue, 'checks');
+  if (await agentRounds(ctx, issue, base, testMode(ctx, item.labels), merged, home)) setPhase(ctx, issue, 'checks');
 }
 
 // Plays the rounds of the mode. False means the card went elsewhere, so no checks follow.
-async function agentRounds(ctx: Ctx, issue: number, base: string, mode: TestMode, merged: string): Promise<boolean> {
-  if (mode === 'preview') {
-    const shown = await agentRound(ctx, issue, 'verify', 'test', 'test', base, true);
-    await requireBaseMerged(ctx, issue, base, merged);
-    return shown;
+// A docs change gets no harden or test round. A conflict with the base still needs the round agent to resolve it.
+async function agentRounds(ctx: Ctx, issue: number, base: string, mode: TestMode, merged: string, home: string): Promise<boolean> {
+  const docs = readOutput(home, 'merge-conflicts.md') === null && await docsOnly(ctx, issue, base);
+  if (mode === 'full') {
+    if (!docs) {
+      await agentRound(ctx, issue, 'verify', 'harden', 'harden', base, false);
+      await requireBaseMerged(ctx, issue, base, merged);
+    }
+    if (!(await reviewGate(ctx, issue, base, 'verify', async () => { await agentRound(ctx, issue, 'verify', 'test-fix', 'review-fix', base, false); }))) return false;
   }
-  await agentRound(ctx, issue, 'verify', 'harden', 'harden', base, false);
+  if (docs) return docsRound(ctx, issue, base, home, merged);
+  const shown = await agentRound(ctx, issue, 'verify', 'test', 'test', base, true);
   await requireBaseMerged(ctx, issue, base, merged);
-  if (!(await reviewGate(ctx, issue, base, 'verify', async () => { await agentRound(ctx, issue, 'verify', 'test-fix', 'review-fix', base, false); }))) return false;
-  return agentRound(ctx, issue, 'verify', 'test', 'test', base, true);
+  return shown;
+}
+
+// A docs change has nothing to play. The factory pushes the base merge and writes the post text a test round would write.
+async function docsRound(ctx: Ctx, issue: number, base: string, home: string, merged: string): Promise<boolean> {
+  await guardAndPush(ctx, issue, base, 'verify');
+  await requireBaseMerged(ctx, issue, base, merged);
+  const files = await ctx.repo.changedFiles(base, BRANCH(issue));
+  const approval = { description: `Docs only, the game does not change: ${files.join(', ')}`, howToTry: 'Read the diff in the pull request.' };
+  writeFileSync(`${home}/${OUT_DIR}/approval.json`, JSON.stringify(approval));
+  ctx.log('verify', issue, 'the branch changes docs only, so no test round');
+  return true;
 }
 
 // The checks stage left the end of its log in `.factory/check-failure.md`, next to the approval and evidence of the first round.

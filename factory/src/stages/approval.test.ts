@@ -117,6 +117,15 @@ describe('approve', () => {
     expect(state.pendingShip).toBeNull();
   });
 
+  it('merges a hardened cleanup task at once, since it reaches Approval only after Hardening and its checks', async () => {
+    labels = ['release-task', 'maintenance'];
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, builds: { 7: 'aaa1111' } });
+    await approve(fakeCtx(), 7, 'the factory');
+    expect(calls).toContain('merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn');
+    expect(calls).toContain('move 7 Done');
+    expect(calls).not.toContain('move 7 Hardening');
+  });
+
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
     labels = ['bug', 'hotfix'];
     writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
