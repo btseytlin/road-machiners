@@ -52,6 +52,7 @@ import type { UiHost } from "./host";
 import { fuelLiters } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
+import { vehicleHasPerk } from "../sim/progress";
 
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
@@ -391,12 +392,17 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays on defeat");
+    if (c.kind === "bounty") return el("span", { class: "dim" }, bountyPays(w));
     const destination = c.kind === "haul" ? c.to : c.shop;
     if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
     if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
     return this.button("Deliver", (x) => deliverContract(x, c.id));
   }
+}
+
+// What a held bounty pays for. A raider that gives up counts only with Bounty talk.
+function bountyPays(w: World): string {
+  return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
 const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
