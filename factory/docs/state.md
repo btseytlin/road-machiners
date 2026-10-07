@@ -13,6 +13,7 @@ One card position spans several stores. A position is consistent when every stor
 - GitHub branches: `factory/issue-N`, `dev`, `main` and the release branch. Written by implement, approve, ship and `merge`.
 - `state.json`: jobs, queues, card sub-positions, posts, builds, the release and the health records. Written by the tick, every job, and the write commands.
 - Work clone: the task file and stage outputs, like `.factory/approval.json`, the screenshot and `check-failure.md`. Written by the agent stages and checks.
+- Clone backups: `$FACTORY_HOME/clone-backups/issue-N-<time>/` holds a work clone that `repair-clone` replaced, with `repair.json` and `status.txt`. Written only by `repair-clone`. No code reads or deletes it. Hermes deletes it by hand once the card is past the trouble.
 - Web root: the published builds. Written by checks, approve, ship and the dev build.
 - Telegram: the posts with buttons. Written by checks, candidate, approve and ship.
 - Source maps: `$FACTORY_HOME/sourcemaps/<commit>/` holds the maps of each release, dev and candidate build, and `published.jsonl` lists those builds. Written by ship, hotfix, the dev build and candidate. Read by the error service.
@@ -149,4 +150,6 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `hermes` may send mechanical orders: `move` to any position except `harden`, `merge` and `move` to `harden` of a card the committee approved, `cut`, `drop`, `retry`, `pause-card` and `resume-card`. A member must send the product decisions: `ship`, `remove`, `merge-change`, and `merge` or `move` to `harden` of a card the committee has not approved. The CLI and the tick both refuse a gated order from `hermes`.
 
-Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.
+Immediate, with no tick wait: `retry N [decision]`, `pause <reason>`, `resume` and `repair-clone N --by <who> --reason <why> [--backup-merge]`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.
+
+`repair-clone N` needs a pause and no running job. It moves the card's work clone whole into a clone backup, checks out GitHub's `factory/issue-N` fresh and copies only the factory folders over. It changes no label, card or `state.json` field. [operations.md](operations.md#repairing-a-work-clone) has the rules.

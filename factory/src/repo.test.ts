@@ -302,6 +302,19 @@ describe('work clones', () => {
     expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('local work\n');
   });
 
+  it('clones the exact issue branch into a new folder, and refuses a missing branch or a used folder', async () => {
+    const { home, repo, commit, head } = await setup();
+    await commit('factory/issue-14', 'f.txt', 'fourteen\n');
+    await repo.fetch();
+    const work = join(home, 'fresh-14');
+    expect(await repo.cloneBranch('factory/issue-14', work)).toBe(await head('factory/issue-14'));
+    expect((await git(work, 'symbolic-ref', '--short', 'HEAD')).trim()).toBe('factory/issue-14');
+    expect(await git(work, 'check-ignore', '.factory-tasks/x.md')).toContain('.factory-tasks');
+    await expect(repo.cloneBranch('factory/issue-14', work)).rejects.toThrow('exists already');
+    await expect(repo.cloneBranch('factory/issue-15', join(home, 'fresh-15'))).rejects.toThrow('not in the host clone');
+    expect(existsSync(join(home, 'fresh-15'))).toBe(false);
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');
