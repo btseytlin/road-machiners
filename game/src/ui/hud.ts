@@ -7,6 +7,7 @@ import { isAutoPatch } from "../sim/jobs";
 import type { SpeedRow } from "./hud-readout";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
+import { ERROR_REPORT_URL } from "../config";
 import {
   contractDue,
   contractSummary,
@@ -213,6 +214,7 @@ export class Hud {
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
     );
+    if (ERROR_REPORT_URL) guide.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
   }
 
   private toggleCameraMode(): void {
@@ -545,6 +547,11 @@ export class Hud {
     }
     this.log.add(w.turn, lines);
     this.radio.hear(w);
+  }
+
+  // The session's log text, newest first, for error reports.
+  logTexts(): string[] {
+    return this.log.texts;
   }
 
   // A log line from the UI itself, not from a sim event.

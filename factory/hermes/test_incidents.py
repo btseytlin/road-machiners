@@ -11,12 +11,15 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0") -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0", error_alert: str | None = None) -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
     (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None}))
     if review is not None:
         (home / "review-pending").write_text(review)
+    if error_alert is not None:
+        (home / "error-reports").mkdir()
+        (home / "error-reports" / "alert").write_text(error_alert)
     if health is not None:
         (home / "health").write_text(json.dumps(health))
     if pause_age_minutes is not None:
@@ -151,4 +154,10 @@ def test_one_failed_audit_is_retried_and_opens_no_incident(tmp_path):
 
 def test_a_pending_review_wakes_hermes_until_the_file_goes(tmp_path):
     assert run(tmp_path / "ready", health(), review="#301 https://github.com/o/r/issues/301\n") == ["factory review ready: #301 https://github.com/o/r/issues/301"]
+    assert run(tmp_path / "handled", health()) == []
+
+
+def test_an_error_service_cap_wakes_hermes_until_the_file_goes(tmp_path):
+    alert = "error reports: the daily cap of 5 new issues was hit on 2026-10-07\n"
+    assert run(tmp_path / "hit", health(), error_alert=alert) == ["error reports: the daily cap of 5 new issues was hit on 2026-10-07"]
     assert run(tmp_path / "handled", health()) == []

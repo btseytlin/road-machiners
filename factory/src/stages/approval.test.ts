@@ -29,11 +29,11 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key' },
+    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key', errorMapDays: 14 },
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
     log: () => undefined,
-    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: '', stderr: '' }; },
+    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: cmd === 'git' ? 'abc1234'.padEnd(40, '0') : '', stderr: '' }; },
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
@@ -43,7 +43,13 @@ function fakeCtx(): Ctx {
     telegram: { sendMessage: record('message') },
     container: { shell: record('shell') },
     repo: {
-      fetch: record('fetch'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234',
+      fetch: record('fetch'), headHash: async () => 'abc1234',
+      // A clone's build output, as the game's build leaves it, maps included.
+      prepareWorkClone: async (...args: unknown[]) => {
+        calls.push(`prepare ${args.join(' ')}`);
+        mkdirSync(`${String(args[2])}/game/dist`, { recursive: true });
+        writeFileSync(`${String(args[2])}/game/dist/index.js.map`, '{}');
+      },
       merge: async (steps: MergeStep[]) => { for (const step of steps) calls.push(`merge ${step.branch} ${step.into} ${step.message}`); calls.push(`push ${steps.map((step) => step.into).join(' ')}`); },
     },
   };
@@ -122,6 +128,7 @@ describe('approve', () => {
       'merge main dev Merge main into dev after hotfix #7',
       'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
       'push main dev release/2026-09-29',
+      'run git rev-parse',
       'run butler push',
       `message public ${changelog}`,
       `release hotfix-2026-09-30-issue-7 main ROAM hotfix 2026-09-30 ${changelog}`,
