@@ -154,6 +154,14 @@ files.put(
     mode="755",
     _sudo=True,
 )
+# The update unit runs this hook after every deploy. It exits at once on a host with no dashboard.
+files.put(
+    name="Push the dashboard restart hook",
+    src=str(FILES / "factory-dashboard-restart.sh"),
+    dest=f"{FACTORY_ROOT}/factory-dashboard-restart.sh",
+    mode="755",
+    _sudo=True,
+)
 files.template(
     name="update service unit",
     src=str(FILES / "roam-factory-update.service.j2"),

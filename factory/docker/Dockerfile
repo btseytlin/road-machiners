@@ -3,8 +3,9 @@
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
 # ffmpeg serves the game's sound scripts. Pillow serves the compare sheets of the Blender image skill. The X and GL libraries let Blender load in background mode.
+# Graphviz renders the factory's process diagrams, which a factory change updates.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates xz-utils ffmpeg python3-pil \
+ && apt-get install -y --no-install-recommends git curl ca-certificates xz-utils ffmpeg python3-pil graphviz \
     libgl1 libegl1 libx11-6 libxext6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 \
  && apt-get clean
 
@@ -17,6 +18,8 @@ RUN curl -fsSL "https://download.blender.org/release/Blender${BLENDER_VERSION%.*
 RUN npm install -g @anthropic-ai/claude-code
 
 COPY --chmod=755 factory-agent /usr/local/bin/factory-agent
+COPY --chmod=755 factory-status /usr/local/bin/factory-status
+COPY --chmod=755 factory-job /usr/local/bin/factory-job
 
 # Everything below runs as the image's non-root user.
 # Claude Code reaches only the Anthropic API, so the egress allowlist needs no telemetry hosts.

@@ -4,12 +4,17 @@ import { PHYSICS } from '../data/physics';
 import { hulkBoxes } from './body';
 import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
-import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, practiceOf, settleStorms } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
 import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
 import { TEST_MAP } from '../test/map';
+import { START_KITS } from '../data/start';
+import { DECKS, deckAt } from './bridge';
+import type { World } from './types';
+import type { Vec } from './vec';
+import { newWorld } from './world';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -172,14 +177,14 @@ describe('terrain line of sight', () => {
   it('reaches gray vision a fixed number of sight radii out', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBe(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 
   it('shrinks gray vision at night with sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, w.vehicles[0], { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
-    expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBe(sightRadius(w, w.vehicles[0]) * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 });
 
@@ -272,8 +277,9 @@ describe('the storm rider perk', () => {
   function stormWorld() {
     const w = emptyWorld({ x: 60, y: 60 });
     w.turn = day();
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 62, y: 60 });
+    settleStorms(w);
     return { w, me: w.vehicles[0], npc };
   }
 
@@ -330,5 +336,53 @@ describe('a dust screen', () => {
   it('leaves the line of fire open', () => {
     const { w, npc, me } = screenWorld({ x: 26, y: 30 }, true);
     expect(hasLineOfFire(w, npc.pos, me.pos)).toBe(true);
+  });
+});
+
+// UK3: sight from the Fallen Sun's wing, on the real map. The span stands 1.5 height units (6 m) over the furrow.
+describe('sight from the wing', () => {
+  const span = DECKS.find((d) => d.id === 'fallen-sun-wing')!;
+  // The middle of the level span, between the wing's second and third stations.
+  const [top, end] = [span.stations[1].at, span.stations[2].at];
+  const mid = { x: (top.x + end.x) / 2, y: (top.y + end.y) / 2 };
+  const across = { x: -span.axis.y, y: span.axis.x };
+  const at = (p: Vec, along: number, side: number): Vec => ({ x: p.x + span.axis.x * along + across.x * side, y: p.y + span.axis.y * along + across.y * side });
+
+  function wingWorld(): World {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    // The player watches from near the wing, so the meetings play by the full rules.
+    w.vehicles[0].pos = at(mid, 0, -5);
+    return w;
+  }
+  const viewer = (w: World, pos: Vec) => addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], pos);
+
+  // The truck on the ground stands on the furrow's west bank, out of the trough, where only the plate hides the target.
+  it('sees a truck 15 tiles out on the furrow bank over a hull plate that hides it from the ground', () => {
+    const w = wingWorld();
+    const target = at(mid, 0, 15);
+    const onSpan = viewer(w, mid);
+    const onGround = viewer(w, at(mid, 0, 8));
+    expect(deckAt(onSpan.pos.x, onSpan.pos.y)?.deck.id).toBe(span.id);
+    expect(deckAt(onGround.pos.x, onGround.pos.y)).toBeNull();
+    expect(canVehicleSee(w, onGround, target)).toBe(true);
+
+    w.obstacles.push({ id: 'plate', pos: at(mid, 0, 11), r: 1.3, kind: 'landmark', look: 'hullChunk', yaw: 0 });
+
+    expect(canVehicleSee(w, onGround, target)).toBe(false);
+    expect(canVehicleSee(w, onSpan, target)).toBe(true);
+  });
+
+  // The two hull drums under the span hold it up. Their boxes inside the deck outline lie under the deck line.
+  it('sees and fires along the span over the piers under it', () => {
+    const w = wingWorld();
+    const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(o.pos.x, o.pos.y)?.deck.id === span.id);
+    expect(piers).toHaveLength(2);
+    const from = at(top, 1, 0);
+    const to = at(from, 15, 0);
+    expect(deckAt(to.x, to.y)?.deck.id).toBe(span.id);
+
+    expect(canVehicleSee(w, viewer(w, from), to)).toBe(true);
+    expect(hasLineOfFire(w, from, to)).toBe(true);
   });
 });

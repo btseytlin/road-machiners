@@ -8,7 +8,7 @@ import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
-import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
+import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
@@ -355,18 +355,6 @@ function buildLock(b: SiteBuilder): void {
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
-// Poses a deck model on a sim deck: its middle on the deck's middle, pitched along the deck line from
-// sim/terrain.ts, which the physics deck also follows, and turned along the deck axis. `top` is meters from the model
-// origin up to its deck top, after scaling.
-function poseOnDeck(obj: THREE.Object3D, terrain: Terrain, deck: Deck, top: number): void {
-  const { from, axis, length } = deck;
-  const [h0, h1] = deckEnds(terrain, deck);
-  const pitch = Math.atan2((h1 - h0) * S, length * S);
-  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
-  // YXZ applies the pitch about the model's own z first, then the yaw.
-  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
-}
-
 // Gives every vertex of a posed deck model the point on its deck's centre line at the same distance along,
 // as a sightAt attribute in world XZ meters, so the sight limit greys the model by the deck tile there and
 // not by whatever lies under its rails. The margin keeps that tile's centre on the deck. obj's parents
@@ -393,7 +381,7 @@ function buildBridge(b: SiteBuilder, terrain: Terrain): void {
   const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
   // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
-  poseOnDeck(bridge, terrain, deck, BRIDGE_DECK_TOP * BRIDGE_RISE);
+  poseOnDeck(bridge, deck, soleSegment(terrain, deck), BRIDGE_DECK_TOP * BRIDGE_RISE);
   sampleSightOnDeck(bridge, deck);
   b.addRuin(0, 0, 3, 2);
 }
@@ -406,7 +394,7 @@ function buildWingDeck(t: Terrain): THREE.Group {
   root.name = 'landmark-wing-deck';
   const obj = model('wing_deck');
   obj.scale.set((deck.length * S) / WING_DECK_LENGTH, 1, (deck.width * S) / WING_DECK_WIDTH);
-  poseOnDeck(obj, t, deck, 0);
+  poseOnDeck(obj, deck, soleSegment(t, deck), 0);
   root.add(obj);
   sampleSightOnDeck(obj, deck);
   root.traverse((o) => {
@@ -545,4 +533,25 @@ export function addSites(t: Terrain, scope: RenderScope): void {
   for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+}
+
+// Poses a deck model on one straight piece of its sim deck. Broken Wing, Canyon Bridge and the Fallen Sun's wing and
+// flaps share it, so every drawn deck follows the deck line from sim/terrain.ts, which the physics deck also follows.
+// It puts the model's middle on the piece's middle, pitched along the deck line and turned along the deck axis, so its
+// +x runs toward the deck's to end. `top` is meters from the model origin up to its deck top, after scaling.
+export function poseOnDeck(obj: THREE.Object3D, deck: Deck, seg: DeckSegment, top: number): void {
+  const { axis } = deck;
+  const { from, length, h0, h1 } = seg;
+  const pitch = Math.atan2((h1 - h0) * S, length * S);
+  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
+  // YXZ applies the pitch about the model's own z first, then the yaw.
+  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
+}
+
+// The one straight piece of a deck drawn as a single model, like Canyon Bridge and the Broken Wing deck. A deck with a
+// change of grade is a bug for such a view.
+export function soleSegment(t: Terrain, deck: Deck): DeckSegment {
+  const segments = deckSegments(t, deck);
+  if (segments.length !== 1) throw new Error(`Deck ${deck.id} has ${segments.length} pieces, not one`);
+  return segments[0];
 }

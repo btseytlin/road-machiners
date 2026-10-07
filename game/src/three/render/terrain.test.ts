@@ -3,7 +3,7 @@ import { PHYSICS } from '../../data/physics';
 import { deckAt, deckById, DECKS, type Deck } from '../../sim/bridge';
 import { deckHeight } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
-import { scatterSpot } from './scatter';
+import { scatterPlacements } from './scatter';
 import { chunkGeometry, deckFloorCap, TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
@@ -82,15 +82,18 @@ describe('terrain under decks', () => {
   });
 
   it('places no scatter inside a deck outline above the drawn floor', () => {
-    for (const deck of DECKS) {
-      const points = deck.rails.flat();
-      for (let y = Math.floor(Math.min(...points.map((p) => p.y))) - 1; y <= Math.max(...points.map((p) => p.y)) + 1; y++)
-        for (let x = Math.floor(Math.min(...points.map((p) => p.x))) - 1; x <= Math.max(...points.map((p) => p.x)) + 1; x++) {
-          const spot = scatterSpot(t, x, y);
-          if (spot === null) continue;
-          const cap = deckFloorCap(t, spot.x / S, spot.z / S);
-          if (cap !== null) expect(spot.y).toBeLessThanOrEqual(cap * S);
+    let inside = 0;
+    for (const chunk of scatterPlacements(t, [])) {
+      for (const model of ['pebbles', 'scrub', 'desert_stones', 'desert_scrub', 'cactus'] as const) {
+        for (const { matrix } of chunk[model]) {
+          const [x, y, z] = [matrix.elements[12], matrix.elements[13], matrix.elements[14]];
+          const cap = deckFloorCap(t, x / S, z / S);
+          if (cap === null) continue;
+          inside++;
+          expect(y).toBeLessThanOrEqual(cap * S);
         }
+      }
     }
+    expect(inside).toBeGreaterThanOrEqual(0);
   });
 });

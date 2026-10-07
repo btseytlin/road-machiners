@@ -30,19 +30,19 @@ A failing saved-shape test means the saved world changed without a migration ste
 Follow Save migrations in CLAUDE.md.
 Add the step, its fixture and its test, then run `npm run save:shape`.
 
-Run all the checks yourself until they pass.
-Run the playtest only as `{{playtest}}`.
+This machine is shared and slow. Keep checks focused.
+Run the tests near your fixes with `npx vitest run <files>`, and `npm run typecheck`.
+Run `{{playtest}}` only when a fix touched what the playtest covers.
 
 Reference images from the issue are listed at the end of this prompt.
-If your fixes change what a player sees and the issue wants the result to look like an image, redo the visual comparison.
-Read the image, take a screenshot, compare, and update "Visual comparison" in the Conclusion of {{taskFile}}.
+When a post follows this round, the rules below say how to capture the look again and review it.
 
 {{evidenceRules}}
 Commit on the current branch.
 Never push.
 
-This is the last round.
-If the checks fail again, the task stops for the committee.
+The factory runs its checks after you.
+After a check failure this is the last round. If the checks fail again, the card stops and Hermes takes it.
 
 If the fix needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
