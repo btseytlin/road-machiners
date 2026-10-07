@@ -1,0 +1,13 @@
+{
+  "turn": 410,
+  "vehicles": [
+    {
+      "id": "npc4",
+      "items": [
+        { "kind": "part", "id": "i1", "x": 1, "y": 2, "rot": 0, "part": { "id": "p11", "defId": "caltrops", "hp": 30, "wear": 0.1, "charge": { "reload": 3 } } },
+        { "kind": "part", "id": "i2", "x": 0, "y": 0, "rot": 0, "part": { "id": "p12", "defId": "mg", "hp": 40, "wear": 0, "gun": { "ammo": 20 } } }
+      ],
+      "utilityOrders": { "p11": { "kind": "self" } }
+    }
+  ]
+}

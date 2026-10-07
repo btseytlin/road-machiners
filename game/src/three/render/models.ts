@@ -41,6 +41,7 @@ const NAMES = [
   'dead_tree',
   'bunker',
   'sandbags',
+  'tank_trap',
   'silo',
   'ship_hull',
   'ship_nose',
@@ -104,6 +105,9 @@ const NAMES = [
   'util_flare',
   'util_scraper',
   'util_emitter',
+  'cab_seat',
+  'cab_pickup',
+  'cab_hardtop',
 
   'eng_stock',
   'eng_tuned_v8',

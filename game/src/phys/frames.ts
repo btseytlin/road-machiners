@@ -7,7 +7,8 @@ import type { Vec } from "../sim/vec";
 
 export type V3 = { x: number; y: number; z: number };
 export type Quat = { x: number; y: number; z: number; w: number };
-export type WheelFrame = { steer: number; spin: number; suspension: number }; // radians, radians, meters
+// steer and spin in radians, suspension in meters. ground: the tire touches the ground this step.
+export type WheelFrame = { steer: number; spin: number; suspension: number; ground: boolean };
 // acc: world-space acceleration over the last physics step, m/s^2. The view sways the body with it.
 export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] }; // wheels follow wheelMounts order
 export type TurnFrames = Record<string, VehicleFrame[]>; // by vehicle id

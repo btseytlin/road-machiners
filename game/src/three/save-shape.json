@@ -1,7 +1,8 @@
 {
- "format": "2.16",
+ "format": "2.18",
  "shape": {
   "broken": [],
+  "craters": [],
   "dustClouds": [],
   "events": [],
   "fields": [],
@@ -1258,6 +1259,22 @@
       "good": "string",
       "id": "string",
       "kind": "string",
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      },
       "rot": "number",
       "x": "number",
       "y": "number"

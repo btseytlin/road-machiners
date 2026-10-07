@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, SCRAP_ARMOR, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
@@ -70,13 +70,6 @@ function utilityRollsAt(pool: UtilityRoll[], gear: GearLevel): Weighted<string |
   return pool.filter((entry) => !entry.levels || entry.levels.includes(gear));
 }
 
-function validateWearTable(wear: Weighted<number>[]): void {
-  validateWeights(wear);
-  for (const { value } of wear) {
-    if (!Number.isInteger(value) || value < 0 || value > CONDITION.maxWear) throw new Error(`NPC wear roll ${value} is out of range`);
-  }
-}
-
 function validateSparePool(pool: Weighted<string | null>[]): void {
   validateWeights(pool);
   for (const { value } of pool) {
@@ -113,7 +106,6 @@ function validateTable(table: NpcLoadoutTable): void {
   validateGear(table);
   validatePartPool(table.cargoPart, 'cargo', false);
   validateGoodsTable(table.goods);
-  validateWearTable(table.wear);
   validateSpareTable(table.spares);
 }
 
@@ -151,17 +143,17 @@ function tryMountExtra(world: World, v: Vehicle, id: string, budget: number, mou
   return next && meetsSpeedFloor(next) ? next : null;
 }
 
-// One wear roll per mounted non-core part, shifted by the gear level and clamped so a spawned part is never junk.
-// Core parts stay wear 0.
-function rollWear(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): void {
+// One wear roll from NPC_WEAR per mounted non-core part, shifted by the gear level and clamped so a spawned part is
+// never junk. Core parts stay wear 0.
+function rollWear(world: World, rng: Rng, level: Level, v: Vehicle): void {
   for (const item of v.items) {
     if (item.kind !== 'part' || partDef(item.part.defId).kind === 'core') continue;
-    item.part = makePart(world, item.part.defId, wearOf(rng, table, level));
+    item.part = makePart(world, item.part.defId, wearOf(rng, level));
   }
 }
 
-function wearOf(rng: Rng, table: NpcLoadoutTable, level: Level): number {
-  return Math.min(CONDITION.maxWear, Math.max(0, sampleWeighted(rng, table.wear) + level.wearShift));
+function wearOf(rng: Rng, level: Level): number {
+  return Math.min(CONDITION.maxWear, Math.max(0, sampleWeighted(rng, NPC_WEAR) + level.wearShift));
 }
 
 // The choices depend only on data, so they are keyed by every input read, like gridCache in grid.ts. Cached vehicles
@@ -283,15 +275,16 @@ function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Le
   for (let i = 0; i < count; i++) {
     const defId = sampleWeighted(rng, table.spares.pool);
     if (defId === null || partDef(defId).mass > massLeft()) continue;
-    const part = makePart(world, defId, wearOf(rng, table, level));
+    const part = makePart(world, defId, wearOf(rng, level));
     if (stowPart(world, load, part)) added.push({ defId, wear: part.wear });
   }
   return added;
 }
 
-// Rolls the chassis with its engine and main gun, then one cargo part and one utility part, then extra guns and armor
+// Rolls the chassis with its engine and main gun, then one cargo part and one utility part, then armor and extra guns
 // toward the gear level's targets. The cargo and utility parts come first, so a full deck of guns never crowds out a
-// hauler's cargo part or a driver's utility. Each part fits the level's budget and the rated mass at pristine wear.
+// hauler's cargo part or a driver's utility. Armor comes before extra guns, so a driver covers its sides before it adds
+// firepower. Each part fits the level's budget and the rated mass at pristine wear.
 function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, gear: GearLevel): Vehicle {
   const table = template.loadout;
   const level = GEAR_LEVELS[gear];
@@ -305,8 +298,8 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   let v = withFreshIds(probe, chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices)));
   v = chooseOptionalPart(probe, rng, v, required, table.cargoPart);
   v = chooseOptionalPart(probe, rng, v, required, utilityRollsAt(utilityPoolOf(template), gear));
-  v = addGuns(probe, rng, table, level, v, budget);
-  return addArmor(probe, rng, table, level, v, budget);
+  v = addArmor(probe, rng, table, level, v, budget);
+  return addGuns(probe, rng, table, level, v, budget);
 }
 
 // Every free deck cell is a spot for one more gun, and each rolls the level's fill chance once. A roll that hits
@@ -348,7 +341,8 @@ const SIDE_ORDER: Cell[][] = [['F'], ['L', 'R'], ['B']];
 const EDGES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 
 // Armors sides in order, the front, both flanks, the rear, until the level's share of edge cells is armored. Each
-// side takes one armor type, picked among those that fit there. Flanks alternate pieces so both sides match.
+// side takes one armor type, picked among those that fit there. Flanks alternate pieces so both sides match. Cells the
+// typed armor leaves bare get scrap, so a driver short of money or mass room still bolts something on every side.
 function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   const target = Math.round(edgeCells(v.chassisId) * level.armor);
   for (const sides of SIDE_ORDER) {
@@ -359,6 +353,7 @@ function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, 
     const type = mountedItems(v, 'armor').at(-1)!.part.defId;
     v = fillSides(world, v, type, sides, budget, target);
   }
+  for (const sides of SIDE_ORDER) v = fillSides(world, v, SCRAP_ARMOR, sides, budget, target);
   return v;
 }
 
@@ -395,7 +390,7 @@ export function generateNpcLoadout(world: World, template: NpcTemplate, chassisI
   const wearRng = { rngState: world.marketRng.rngState };
   const gear = level ?? sampleWeighted(rng, table.levels);
   const v = chooseVehicle(probe, rng, template, chassisId, gear);
-  rollWear(probe, wearRng, table, GEAR_LEVELS[gear], v);
+  rollWear(probe, wearRng, GEAR_LEVELS[gear], v);
   const { spares, carried } = chooseCargo(probe, rng, wearRng, table, GEAR_LEVELS[gear], v);
   world.rngState = rng.rngState;
   world.marketRng = wearRng;

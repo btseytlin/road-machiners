@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { baseGrid, corePart, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
+import { corePart, mountedItems, itemSize } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -27,7 +27,7 @@ import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
-import { canLootTruck, canReachSalvage } from '../sim/salvage';
+import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
@@ -103,7 +103,7 @@ function getSiteActions(world: World): ContextAction[] {
   actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
-    if (empty) actions.push({ label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left', target: { kind: 'empty' } });
+    if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
   }
   return actions;
 }
@@ -113,7 +113,7 @@ function getSiteActions(world: World): ContextAction[] {
 function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
   const actions: ContextAction[] = [];
   if (needsSearch(world, stock)) actions.push(getSearchAction(world, stock));
-  if (hasLootFor(world, stock)) actions.push(withBlocker(world, stock, { label: `Loot ${getSalvageName(stock)}`, ready: canReachSalvage(playerVehicle(world), stock), target: { kind: 'loot', id: stock.id } }));
+  if (hasLootFor(world, stock)) actions.push(withBlocker(world, stock, { label: stockLabel('Loot', stock), ready: canReachSalvage(playerVehicle(world), stock), target: { kind: 'loot', id: stock.id } }));
   return actions;
 }
 
@@ -121,7 +121,7 @@ function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
 function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
   const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
-  return withBlocker(world, stock, { label: `Search ${getSalvageName(stock)}`, ready, combat, target: { kind: 'stock', id: stock.id } });
+  return withBlocker(world, stock, { label: stockLabel('Search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });
 }
 
 // Neither starts while another truck loots the stock.
@@ -130,9 +130,30 @@ function withBlocker(world: World, stock: SalvageStock, action: ContextAction): 
   return blocker ? { label: action.label, ready: false, hint: `${blocker.name} is looting it`, target: action.target } : action;
 }
 
-function getSalvageName(stock: SalvageStock): string {
-  if (stock.pile) return 'the pile';
-  return REGION.locations.find((site) => site.id === stock.id)?.name ?? 'the wreck';
+// The verb alone at a loot spot that has no name, else the verb and the stock's name.
+function stockLabel(verb: 'Search' | 'Loot', stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? verb : `${verb} ${name}`;
+}
+
+function emptyLabel(stock: SalvageStock): string {
+  const name = getSalvageName(stock);
+  return name === null ? 'Picked clean' : `${name} is picked clean`;
+}
+
+// What the prompt calls the stock, or null for a loot spot that is no wreck: a farmhouse or a hangar needs no name.
+function getSalvageName(stock: SalvageStock): string | null {
+  const place = salvagePlace(stock);
+  if (place === 'pile') return 'the pile';
+  if (place === 'wreck') return 'the wreck';
+  if (place === 'spot') return null;
+  return siteName(stock.id);
+}
+
+function siteName(id: string): string {
+  const site = REGION.locations.find((l) => l.id === id);
+  if (!site) throw new Error(`Unknown site ${id}`);
+  return site.name;
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
@@ -147,24 +168,10 @@ function getConditionState(ratio: number): string {
   return ratio < 1 ? "damaged" : "healthy";
 }
 
-// Armor edge cells with no armor mounted on them: the stripped spots of a truck.
-export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
-  const covered = new Set<string>();
-  for (const item of mountedItems(vehicle, "armor")) {
-    const { w, h } = itemSize(item);
-    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) covered.add(`${item.x + dx},${item.y + dy}`);
-  }
-  const open: { x: number; y: number }[] = [];
-  baseGrid(vehicle.chassisId).cells.forEach((row, y) =>
-    row.forEach((cell, x) => {
-      if (cell && MOUNT_CELLS.armor.includes(cell) && !covered.has(`${x},${y}`)) open.push({ x, y });
-    }));
-  return open;
-}
 
 // The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
-  return part.percent === 0 ? `${part.name} · broken` : `${part.name} · ${part.percent}%`;
+  return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
 }
 
 export class TruckConditionReadout {
@@ -190,6 +197,7 @@ export class TruckConditionReadout {
           id: item.part.id,
           name: def.name,
           icon: getConditionIcon(def),
+          defId: def.id,
           x: item.x,
           y: item.y,
           ...itemSize(item),

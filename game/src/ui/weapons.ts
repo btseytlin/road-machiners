@@ -58,6 +58,11 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   });
   markHarpoons(w, markOf);
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
+  markSeenNpcs(w, markOf);
+  return marks;
+}
+
+function markSeenNpcs(w: World, markOf: (id: string) => VehicleMark): void {
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
     if (job) markOf(v.id).job = job;
@@ -66,7 +71,6 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
       markOf(v.id).gaveUp = gaveUp(v);
     }
   }
-  return marks;
 }
 
 // A mark on the seen target of each standing truck order on the utility row, with the slot's key and why it waits.
@@ -434,7 +438,7 @@ export class WeaponPanel {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
     const chance =
-      readout.chance === null ? "" : ` · ${Math.round(readout.chance * 100)}%`;
+      readout.chance === null ? "" : `, ${Math.round(readout.chance * 100)}%`;
     const target =
       readout.target?.name ??
       (playerVehicle(w).weaponOrders[mw.part.id]

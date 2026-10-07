@@ -1,13 +1,27 @@
 {
-  "turn": 410,
-  "vehicles": [
+  "turn": 50,
+  "events": [
     {
-      "id": "npc4",
-      "items": [
-        { "kind": "part", "id": "i1", "x": 1, "y": 2, "rot": 0, "part": { "id": "p11", "defId": "caltrops", "hp": 30, "wear": 0.1, "charge": { "reload": 3 } } },
-        { "kind": "part", "id": "i2", "x": 0, "y": 0, "rot": 0, "part": { "id": "p12", "defId": "mg", "hp": 40, "wear": 0, "gun": { "ammo": 20 } } }
-      ],
-      "utilityOrders": { "p11": { "kind": "self" } }
-    }
+      "t": "shot",
+      "shooter": "npc1",
+      "weapon": "cannon",
+      "target": "player",
+      "aim": "body",
+      "chance": 0.5,
+      "damageChance": 0.8,
+      "side": "front",
+      "rounds": [
+        { "hit": false, "crit": false, "offset": 2.4, "struck": null, "hits": [], "blast": [] },
+        { "hit": true, "crit": false, "offset": 0.1, "struck": "player", "hits": [{ "part": "p1", "damage": 3 }], "blast": [] }
+      ]
+    },
+    {
+      "t": "guardShot",
+      "site": "nose",
+      "from": { "x": 120, "y": 80 },
+      "target": "npc1",
+      "rounds": [{ "hit": true, "crit": true, "offset": -0.2, "struck": "npc1", "hits": [], "blast": [] }]
+    },
+    { "t": "arrived", "vehicle": "npc2" }
   ]
 }

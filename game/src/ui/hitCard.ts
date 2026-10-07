@@ -22,14 +22,14 @@ function deg(r: number): string {
   return (Math.abs(r) / DEG).toFixed(1);
 }
 
-// "18 m · shows 4.1 m wide · scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
+// "18 m, shows 4.1 m wide, scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
 function detailLine(o: HitOdds): string {
   const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.smoke, 'smoke'], [o.causes.still, 'still target']] as const)
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
     .join('');
-  return `${Math.round(o.chance * 100)}% land on aim · ${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon${extra}`;
+  return `${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon${extra}`;
 }
 
 // A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.

@@ -85,6 +85,11 @@ export function isOnRope(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.other === id);
 }
 
+// The truck on this tower's rope, or null. It trails the tower, so the tower never routes around it or stops for it.
+export function ropeClientOf(world: World, towerId: string): string | null {
+  return hitchedTows(world).find((s) => s.holder === towerId)?.other ?? null;
+}
+
 // The vehicle pulls a truck on its tow rope.
 export function isTowing(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.holder === id);

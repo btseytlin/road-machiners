@@ -26,13 +26,16 @@ export type VehicleSpec = {
   brain: NpcBrain | null;
 };
 
-export function newId(world: World, prefix: string): string {
+// What makes ids: a world, or a counter of its own for a truck that never joins one.
+export type IdSource = Pick<World, 'nextId'>;
+
+export function newId(world: IdSource, prefix: string): string {
   world.nextId++;
   return `${prefix}${world.nextId}`;
 }
 
 // A part at the given wear step, at full HP for that step.
-export function makePart(world: World, defId: string, wear: number): PartInstance {
+export function makePart(world: IdSource, defId: string, wear: number): PartInstance {
   if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
   const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, wear, ...gunFor(defId), ...chargeFor(defId) };
   return { ...part, hp: maxHp(part) };
@@ -52,7 +55,7 @@ export function chargeFor(defId: string): Pick<PartInstance, 'charge'> {
 }
 
 // Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.
-export function addCoreParts(world: World, v: Vehicle): void {
+export function addCoreParts(world: IdSource, v: Vehicle): void {
   for (const c of chassisDef(v.chassisId).core) {
     const def = partDef(c.defId);
     if (def.kind !== 'core') throw new Error(`${c.defId} on ${v.chassisId} is not a core part`);
@@ -65,6 +68,13 @@ export function addCoreParts(world: World, v: Vehicle): void {
 }
 
 export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
+  const v = bareVehicle(world, spec);
+  loadVehicle(world, v, spec);
+  return v;
+}
+
+// A truck with only its chassis's built-in parts: cab, wheels and cores.
+export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | 'spares' | 'cargo'>): Vehicle {
   chassisDef(spec.chassisId);
   const v: Vehicle = {
     id: newId(world, 'v'),
@@ -86,7 +96,6 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     job: null,
   };
   addCoreParts(world, v);
-  loadVehicle(world, v, spec);
   return v;
 }
 

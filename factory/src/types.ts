@@ -24,6 +24,8 @@ export type FactoryConfig = {
   designModel: string;
   buildModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
+  designEffort: string; // reasoning effort of the design agent, passed to claude --effort
+  tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
@@ -55,6 +57,9 @@ export type FactoryConfig = {
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
 };
+
+// Dollars per million tokens. Claude Code writes the prompt cache for 5 minutes or for 1 hour, and the two cost differently.
+export type TokenPrice = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
@@ -143,6 +148,7 @@ export type FactoryState = {
   patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
   unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
+  textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
 };
 
@@ -186,17 +192,19 @@ export interface Telegram {
   sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
   sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
+  editText(chat: string, messageId: number, text: string): Promise<void>; // replaces a text message and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
+// `evidenceCheck` mounts the factory's evidence check read only, so the agent can run it before it ends. See `buildCheckBundle` in container.ts.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; evidenceCheck?: boolean; session?: AgentSession; skill?: string; effort?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -299,7 +307,7 @@ export const VISUAL_HEADING = '## Visual review findings';
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
-// Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
+// Model routing. Baseline without labels: design Opus, implementation and testing Sonnet. Triage labels trivial and intermediate cards design-sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
 export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.

@@ -170,6 +170,11 @@ describe("vehicle marks", () => {
     });
   });
 
+  it("leaves no player mark without a weapon aimed at it", () => {
+    const { world } = createDuel();
+    expect(vehicleMarks(world, null).has(world.player.vehicleId)).toBe(false);
+  });
+
   it("shows nothing for a vehicle without orders", () => {
     const { world, target } = createDuel();
     world.vehicles[0].weaponOrders = {};

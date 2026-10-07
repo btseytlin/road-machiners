@@ -16,6 +16,8 @@ export const PAL = {
   stoneGrey: 0x8a847d, // cool grey stones on road shoulders and in desert stone clusters
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
+  scorch: 0x2a2218, // blast-blackened ground in a crater
+  craterRim: 0x7a6242, // dirt a blast threw up around its crater
   desertStone: 0xb8ab9c, // the main stone of a desert stone cluster, a light warm grey
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   brush: [0x7c7a4c, 0x8c8a58, 0xa49c68], // desert scrub stems: dark core, olive body, dry lit tips
@@ -55,6 +57,7 @@ export const PAL = {
   radio: 0x8fe0c8, // crisp scanner blip
   beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls
   flash: 0xfff0a0,
+  brass: 0xc8a048, // spent casings on the ground
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   radioLight: { on: 0xff3020, off: 0x4a1a14 }, // antenna bulb, lit while the truck is on the radio
   truckGlow: 0xffffff, // faint white light over the player truck at night
@@ -84,12 +87,8 @@ export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: n
 
 // Item icon backgrounds by category tone, from itemTone() in partLooks.ts. The inventory grid boxes, loot chips, standalone
 // item icons and card borders set them as --tone, and the icon atlases fill their tiles with them. Each keeps at least
-// 4.5:1 contrast with LINE_STYLE.line.
-export const ITEM_TONES = { weapon: 0x8c3a30, armor: 0x686c6f, cargo: 0x6e5236, other: 0x35587a } satisfies Record<ItemTone, number>;
-
-// The item icons' line style, drawn by src/three/icons/render.ts: thick lines in line over a see-through fill, so the
-// tone shows darker inside the shape. fillAlpha is 0-255.
-export const LINE_STYLE = { line: 0xf4efe6, fill: 0x000000, fillAlpha: 77 };
+// 4.5:1 contrast with the blueprint line that blueprintColors() in src/three/icons/render.ts mixes from it.
+export const ITEM_TONES = { weapon: 0x8c3a30, armor: 0x4f5458, cargo: 0x6e5236, other: 0x35587a } satisfies Record<ItemTone, number>;
 
 // Multiply a color's channels by k.
 export function shade(color: number, k: number): number {

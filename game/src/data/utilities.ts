@@ -84,7 +84,7 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
       spread: 4,
       shake: 1,
       recoil: 0,
-      round: { damage: 6, pen: 3, blast: false, speed: 120, splashRadius: 0, splashDamage: 0, splashPen: 0, armorShare: 1 },
+      round: { damage: 6, pen: 3, blast: false, speed: 120, splashRadius: 0, splashDamage: 0, splashPen: 0, armorShare: 1, craterRadius: 0 },
     },
   },
   smokeMortar: {
@@ -186,7 +186,7 @@ export function oilSlickLength(): number {
 // Stiffness 5000 with damping 4000 held even that lunge; 20000 tore it faster. Both were kept at the design values.
 export const HARPOON = {
   stiffness: 10000, // N per meter of stretch
-  damping: 2000, // N·s per meter on the separating speed
+  damping: 2000, // newton seconds per meter on the separating speed
   tearForce: 20000, // N; a pull above it tears the line
   tearDamage: 12, // to the part the line held on the torn truck
 };

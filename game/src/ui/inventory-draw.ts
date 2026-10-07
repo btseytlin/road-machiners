@@ -8,6 +8,7 @@ import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
+import { truckOutline } from "./plans";
 import { wearLabel } from "./format";
 import { gridItemIcon, toneStyle } from "./cards";
 import { hp, kg } from "./units";
@@ -36,8 +37,8 @@ export function lootGoodItem(good: string): GridItem {
   return { id: `loot-${good}`, x: 0, y: 0, rot: 0, kind: "good", good };
 }
 
-// An empty inventory grid of mount cells. Items go on top.
-export function gridEl(g: Grid, cell: number): HTMLElement {
+// An empty inventory grid of mount cells with the truck's outline over them. Items go on top.
+export function gridEl(g: Grid, chassisId: string, cell: number): HTMLElement {
   const grid = el("div", { class: "inv-grid", style: `width:${g.w * cell}px;height:${g.h * cell}px` });
   grid.addEventListener("contextmenu", (e) => e.preventDefault());
   for (let y = 0; y < g.h; y++)
@@ -45,11 +46,12 @@ export function gridEl(g: Grid, cell: number): HTMLElement {
       const c = g.cells[y][x];
       if (c !== null) grid.append(cellEl(c, x, y, cell));
     }
+  grid.append(truckOutline(chassisId, cell));
   return grid;
 }
 
 export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {
-  return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
+  return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] });
 }
 
 // The box an item draws on the grid of a truck of chassisId: its tone, icon, name and condition bar.
@@ -62,7 +64,7 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
   const node = el(
     "div",
     { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    gridItemIcon(it, chassisId),
+    gridItemIcon(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));

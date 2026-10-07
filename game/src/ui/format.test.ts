@@ -164,22 +164,22 @@ describe("harpoon log", () => {
   it("names the part the player's line holds", () => {
     const s = harpooned([]);
     s.w.lines = [{ id: "l1", from: s.me.id, fromPart: s.harpoon.id, to: s.trader.id, toPart: s.engine.id, length: 10, turnsLeft: 3 }];
-    s.shot = { ...(s.shot as Extract<GameEvent, { t: "shot" }>), rounds: [{ hit: true, crit: false, offset: 0, struck: s.trader.id, hits: [{ part: s.engine.id, damage: 2 }], blast: [] }] };
+    s.shot = { ...(s.shot as Extract<GameEvent, { t: "shot" }>), rounds: [{ hit: true, crit: false, offset: 0, struck: s.trader.id, hits: [{ part: s.engine.id, damage: 2 }], blast: [], burst: null }] };
 
-    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)} · line on Stock engine (40%) · Stock engine −2`);
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: line on Stock engine (40%): Stock engine −2`);
   });
 
   it("reads a harpoon that holds nothing as a miss", () => {
-    const s = harpooned([{ hit: false, crit: false, offset: 3, struck: null, hits: [], blast: [] }]);
+    const s = harpooned([{ hit: false, crit: false, offset: 3, struck: null, hits: [], blast: [], burst: null }]);
 
-    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)} · missed (40%)`);
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: missed (40%)`);
   });
 
   it("tells the player its truck tore free of a line", () => {
     const s = harpooned([]);
     const mine = mountedParts(s.me, "engine")[0];
 
-    expect(eventText(s.w, { t: "lineTorn", line: "l1", vehicle: s.me.id, part: mine.id, damage: 12 })).toMatchObject({ text: `You tear free of a harpoon line · ${partDef(mine.defId).name} −12`, cls: "bad" });
+    expect(eventText(s.w, { t: "lineTorn", line: "l1", vehicle: s.me.id, part: mine.id, damage: 12 })).toMatchObject({ text: `You tear free of a harpoon line: ${partDef(mine.defId).name} −12`, cls: "bad" });
   });
 });
 
@@ -218,7 +218,7 @@ describe("claymore log", () => {
     const engine = mountedParts(trader, "engine")[0];
     const hits = [{ part: engine.id, damage: 20 }];
 
-    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)} · Stock engine −20`, cls: "good" });
+    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)}: Stock engine −20`, cls: "good" });
   });
 
   it("tells the player a claymore ram blasted its truck", () => {
@@ -227,7 +227,7 @@ describe("claymore log", () => {
     const engine = mountedParts(w.vehicles[0], "engine")[0];
     const hits = [{ part: engine.id, damage: 20 }];
 
-    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck · ${partDef(engine.defId).name} −20`, cls: "bad" });
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck: ${partDef(engine.defId).name} −20`, cls: "bad" });
   });
 
   it("logs a seen blast between other trucks and nothing for one out of sight", () => {
@@ -295,10 +295,10 @@ describe("shot log", () => {
     const cab = mountedParts(me).find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
     const e: GameEvent = {
       t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, damageChance: 0.5, side: "front",
-      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
+      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [], burst: null }],
     };
     const line = eventText(w, e);
-    expect(line?.text).toContain(" · stray fire hits ");
+    expect(line?.text).toContain(", stray fire hits ");
     expect(line?.cls).toBe("bad");
   });
 
@@ -311,7 +311,7 @@ describe("shot log", () => {
     const armor = parts.find((p) => partDef(p.defId).kind === "armor");
     const shot = (hits: { part: string; damage: number }[], rounds = 2): GameEvent => ({
       t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, damageChance: 0.4, side: "front",
-      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [] })),
+      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [], burst: null })),
     });
     return { w, raider, cab, armor, shot };
   }
@@ -320,7 +320,7 @@ describe("shot log", () => {
     const { w, raider, cab, shot } = duel();
     cab.hp = maxHp(cab);
     const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
-    expect(line.text).toMatch(/^.+ → .+ · 1\/2 hit \(40%\) · .+ −2$/);
+    expect(line.text).toMatch(/^.+ → .+, 1\/2 hit \(40%\): .+ −2$/);
     expect(line.text).toContain(raider.name);
   });
 
@@ -406,5 +406,15 @@ describe("found log", () => {
     const e: GameEvent = { t: "found", vehicle: w.player.vehicleId, stock: "rich", goods: { scrap: 3 }, parts: ["mg"], fuel: 2, supplies: 1 };
 
     expect(eventText(w, e)).toEqual({ text: `Found 3 Scrap metal, ${partDef("mg").name}, ${fuelLiters(2)} L of fuel and 1 supply.`, cls: "good" });
+  });
+});
+
+describe("wake-up log", () => {
+  it("says an NPC regains consciousness, so the line does not read as cut off", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "npcWake", vehicle: npc.id });
+    expect(line?.text).toBe(`${vehicleName(w, npc.id)} regains consciousness`);
+    expect(line?.cls).toBe("dim");
   });
 });

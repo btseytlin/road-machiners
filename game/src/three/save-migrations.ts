@@ -249,12 +249,21 @@ function withPatchParts_13_14(world: SavedJson): SavedJson {
   return { ...world, states: (world.states as SavedJson[]).map(recording) };
 }
 
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
+}
+
 // Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
 // and every stock gets hidden loot. The stream comes from the world seed like a new game's.
-const SEARCH_SALT_14_15 = 0x73656172;
-const NO_HIDDEN_14_15 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+const SEARCH_SALT_16_17 = 0x73656172;
+const NO_HIDDEN_16_17 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
 
-function withUtilities_14_15(world: SavedJson): SavedJson {
+function withUtilities_16_17(world: SavedJson): SavedJson {
   const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
   return {
     ...world,
@@ -264,27 +273,27 @@ function withUtilities_14_15(world: SavedJson): SavedJson {
     fields: [],
     flares: [],
     lines: [],
-    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_14_15 },
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_16_17 },
   };
 }
 
 // Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
 // ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
 // in the open.
-const LOOT_SITES_14_15 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
-const LOOT_SPOT_14_15 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
-const ROAD_WRECK_14_15 = /^wreck\d+$/;
+const LOOT_SITES_16_17 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_16_17 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_16_17 = /^wreck\d+$/;
 
-function isRolledStock_14_15(stock: SavedJson): boolean {
+function isRolledStock_16_17(stock: SavedJson): boolean {
   const id = stock.id as string;
-  return !stock.pile && (LOOT_SITES_14_15.has(id) || LOOT_SPOT_14_15.test(id) || ROAD_WRECK_14_15.test(id));
+  return !stock.pile && (LOOT_SITES_16_17.has(id) || LOOT_SPOT_16_17.test(id) || ROAD_WRECK_16_17.test(id));
 }
 
 // A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
-function withHiddenStock_14_15(world: SavedJson): SavedJson {
+function withHiddenStock_16_17(world: SavedJson): SavedJson {
   const searched = new Set((world.player as SavedJson).scavenged as string[]);
   const hide = (stock: SavedJson): SavedJson => {
-    if (searched.has(stock.id as string) || !isRolledStock_14_15(stock)) return { ...stock, hidden: NO_HIDDEN_14_15() };
+    if (searched.has(stock.id as string) || !isRolledStock_16_17(stock)) return { ...stock, hidden: NO_HIDDEN_16_17() };
     const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
     return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
   };
@@ -358,9 +367,14 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
   // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
-  // 14 to 15: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
-  (world) => withHiddenStock_14_15(withUtilities_14_15(world)),
-  // 15 to 16: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  // 16 to 17: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
+  (world) => withHiddenStock_16_17(withUtilities_16_17(world)),
+  // 17 to 18: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
   // types are the same, so a save keeps its world as it was.
   (world) => world,
 ];
