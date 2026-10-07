@@ -89,8 +89,8 @@ describe('planVolley', () => {
     expect(shell.flightMs).toBeGreaterThan(mg.flightMs);
   });
 
-  it('has a projectile look for every weapon and every utility that fires a shot', () => {
-    for (const def of Object.values(PARTS)) if (def.kind === 'weapon' || (def.kind === 'utility' && def.shot)) expect(() => projectileOf(def.id)).not.toThrow();
+  it('has a projectile look for every weapon', () => {
+    for (const def of Object.values(PARTS)) if (def.kind === 'weapon') expect(() => projectileOf(def.id)).not.toThrow();
   });
 
   it('fails loud for a weapon with no projectile look', () => {

@@ -1,5 +1,5 @@
 {
- "format": "2.18",
+ "format": "2.22",
  "shape": {
   "broken": [],
   "craters": [],
@@ -41,6 +41,7 @@
    "discovered": [],
    "engineHeat": "number",
    "explored": "string",
+   "frozen": "boolean",
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",

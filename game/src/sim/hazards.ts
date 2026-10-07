@@ -148,9 +148,9 @@ function crosses(v: Vehicle, f: GroundField): boolean {
 
 function hitWheels(world: World, f: GroundField, v: Vehicle): void {
   f.hit.push(v.id);
-  const dealt = coreParts(v, 'wheel').reduce((sum, wheel) => sum + damagePart(world, v, wheel, CALTROPS.damage), 0);
-  world.events.push({ t: 'caltrops', vehicle: v.id, field: f.id, source: f.source });
-  judgeField(world, f, v, dealt);
+  const hits = coreParts(v, 'wheel').map((wheel) => ({ part: wheel.id, damage: damagePart(world, v, wheel, CALTROPS.damage) }));
+  world.events.push({ t: 'caltrops', vehicle: v.id, field: f.id, source: f.source, hits });
+  judgeField(world, f, v, hits.reduce((sum, h) => sum + h.damage, 0));
 }
 
 // Judged like stray fire from the dropper. A dropper on its own field, or one no longer in the world, blames nobody.

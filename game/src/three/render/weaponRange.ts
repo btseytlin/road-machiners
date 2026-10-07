@@ -1,4 +1,4 @@
-// Gun reach on the ground: the selected gun's or harpoon's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
+// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -50,12 +50,6 @@ export class WeaponRangeView {
   // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
     this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: fireSpans(w.def.arc, w.sides) })));
-  }
-
-  // The reach of one shot that is not a gun's, as the harpoon's: its range and arc from a mount on a truck, drawn
-  // as a gun's.
-  showReach(terrain: Terrain, mount: MountPose, shot: { range: number; arc: number }): void {
-    this.draw(terrain, mount.pos, mount.heading, [{ range: shot.range, spans: fireSpans(shot.arc, mount.sides) }]);
   }
 
   hide(): void {

@@ -302,6 +302,47 @@ function withHiddenStock_16_17(world: SavedJson): SavedJson {
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
+// Step 17 to 18: the harpoon is a gun. A harpoon part trades its utility charge for a gun state with a one-round
+// magazine: ready with the round loaded, recharging as a reload with the turns it has worked. A standing harpoon order
+// becomes the gun's target, and utility events lose their target. Parts sit on trucks, in storage, stocks and shops,
+// so every object in the world is walked.
+const HARPOON_RELOAD_17_18 = 5;
+
+function asGun_17_18(part: SavedJson): SavedJson {
+  const { charge, ...rest } = part;
+  const left = (charge as { reload: number }).reload;
+  const gun = left > 0 ? { cooldown: 0, ammo: 0, reloadWork: Math.max(0, HARPOON_RELOAD_17_18 - left) } : { cooldown: 0, ammo: 1, reloadWork: 0 };
+  return { ...rest, gun };
+}
+
+// A vehicle's truck orders, the harpoon's, become weapon orders on the same part.
+function withHarpoonTargets_17_18(v: SavedJson): SavedJson {
+  const orders = Object.entries(v.utilityOrders as Record<string, SavedJson>);
+  const truck = orders.filter(([, o]) => o.kind === 'truck');
+  if (truck.length === 0) return v;
+  return {
+    ...v,
+    utilityOrders: Object.fromEntries(orders.filter(([, o]) => o.kind !== 'truck')),
+    weaponOrders: { ...(v.weaponOrders as SavedJson), ...Object.fromEntries(truck.map(([id, o]) => [id, { targetId: o.targetId, aim: o.aim }])) },
+  };
+}
+
+function withoutTarget_17_18(event: SavedJson): SavedJson {
+  return Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'target'));
+}
+
+function objectAsGun_17_18(obj: SavedJson): SavedJson {
+  const part = obj.defId === 'harpoon' && 'charge' in obj ? asGun_17_18(obj) : obj;
+  const vehicle = 'utilityOrders' in part && 'weaponOrders' in part ? withHarpoonTargets_17_18(part) : part;
+  return vehicle.t === 'utility' ? withoutTarget_17_18(vehicle) : vehicle;
+}
+
+function harpoonAsGun_17_18(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(harpoonAsGun_17_18);
+  if (node === null || typeof node !== 'object') return node;
+  return objectAsGun_17_18(Object.fromEntries(Object.entries(node).map(([k, v]) => [k, harpoonAsGun_17_18(v)])));
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 0 to 1: the player gets townPatched, as a new game does.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
@@ -377,6 +418,16 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 17 to 18: NPC trucks carry charged utilities far more often, so a new game holds them in more places. The saved
   // types are the same, so a save keeps its world as it was.
   (world) => world,
+  // 18 to 19: the player gets the debug freeze switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), frozen: false } }),
+  // 19 to 20: the harpoon is a gun.
+  (world) => harpoonAsGun_17_18(world) as SavedJson,
+  // 20 to 21: a caltrops event lists the wheel damage it dealt. A saved one gets none, so its log line shows no
+  // numbers.
+  (world) => ({ ...world, events: (world.events as SavedJson[]).map((e) => (e.t === 'caltrops' ? { ...e, hits: [] } : e)) }),
+  // 21 to 22: a claymore event names the ram that went off. A saved one cannot know it, so the last turn's blasts are
+  // dropped. Their damage is already on the trucks.
+  (world) => ({ ...world, events: (world.events as SavedJson[]).filter((e) => e.t !== 'claymore') }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

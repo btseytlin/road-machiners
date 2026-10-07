@@ -37,7 +37,7 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   weapon: [
     "shotgun", "longRifle", "flamer", "pneumobolter", "slugCannon",
     "heavyMg", "amRifle", "autocannon", "recoilless", "battleRifle",
-    "gatling", "rocketRack", "sniperCannon", "grenadeLauncher", "tankGun", "flechette",
+    "gatling", "rocketRack", "sniperCannon", "grenadeLauncher", "tankGun", "flechette", "harpoon",
   ],
   engine: ["flatFour", "workhorseDiesel", "racingV6", "heavyDiesel", "turbine"],
   armor: [
@@ -53,7 +53,7 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   ],
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
   utility: [
-    "sprout", "caltrops", "oilSpiller", "patcherCrane", "harpoon",
+    "sprout", "caltrops", "oilSpiller", "patcherCrane",
     "smokeMortar", "flareCannon", "scrapersKnife", "emitter",
   ],
 };
@@ -71,8 +71,9 @@ describe("equipment variety", () => {
     }
   });
 
-  it("gives each tier one gun per class set: three pure classes and three pairs", () => {
-    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon");
+  // The harpoon is no class's gun: it fires to tie a line, not to damage.
+  it("gives each tier one gun per class set: three pure classes and three pairs, beside the harpoon", () => {
+    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon" && p.line === undefined);
     for (const tier of [1, 2, 3]) {
       const sets = weapons.filter((w) => w.tier === tier).map((w) => [...w.classes].sort().join("+")).sort();
       expect(sets, `tier ${tier}`).toEqual(["chip", "chip+damager", "chip+precision", "damager", "damager+precision", "precision"]);
@@ -223,8 +224,8 @@ describe("equipment variety", () => {
 describe("utilities", () => {
   const utilities = Object.values(PARTS).filter((p) => p.kind === "utility");
 
-  it("prices each of the nine utilities inside its one tier's effort band", () => {
-    expect(utilities).toHaveLength(9);
+  it("prices each of the eight utilities inside its one tier's effort band", () => {
+    expect(utilities).toHaveLength(8);
     for (const def of utilities) {
       const [lo, hi] = EFFORT.bands[def.tier].utility;
       const effort = def.value / EFFORT.wage[def.tier];

@@ -68,7 +68,6 @@ Each chassis has one base model. Parts and goods have their own. A part with no 
 | part | caltrops | util_caltrops |
 | part | oilSpiller | util_oil |
 | part | patcherCrane | util_crane |
-| part | harpoon | util_harpoon |
 | part | smokeMortar | util_mortar |
 | part | flareCannon | util_flare |
 | part | scrapersKnife | util_scraper |
@@ -111,6 +110,7 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | gatling | wmount_ring_wide | wrec_autocannon | wbar_twin | wext_drum |
 | grenadeLauncher | wmount_ring_wide | wrec_shotgun | wbar_autocannon | wext_drum |
 | flechette | wmount_ring_small | wrec_mg_a | wbar_mg_long | wext_scope |
+| harpoon | wmount_pintle, wmount_ring_small | wrec_harpoon | wbar_harpoon |  |
 <!-- /wiki:weapon-pools -->
 
 ## Sound cues
@@ -138,6 +138,17 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | explosion | sfx | false | 1 | 2 | 3 |
 | horn | sfx | false | 0.8 | 4 | 2 |
 | crash | sfx | false | 0.9 | 2 | 2 |
+| harpoon-fire | sfx | false | 0.8 | 2 | 2 |
+| harpoon-hook | sfx | false | 0.7 | 2 | 2 |
+| line-tear | sfx | false | 0.8 | 2 | 2 |
+| mortar-fire | sfx | false | 0.8 | 2 | 2 |
+| smoke-burst | sfx | false | 0.6 | 2 | 2 |
+| flare-fire | sfx | false | 0.7 | 2 | 2 |
+| flare-burst | sfx | false | 0.6 | 2 | 2 |
+| caltrops-drop | sfx | false | 0.6 | 2 | 2 |
+| caltrops-hit | sfx | false | 0.7 | 3 | 1 |
+| oil-spill | sfx | false | 0.6 | 2 | 2 |
+| emitter-pulse | sfx | false | 0.8 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
 | wind | ambient | true | 1 | 1 | 3 |
 | music-calm | music | true | 1 | 1 | 5 |

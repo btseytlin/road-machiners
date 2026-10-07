@@ -19,7 +19,7 @@ import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
-import { applyGodMode } from './cheats';
+import { applyGodMode, freezeDriving, freezeFire } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
@@ -48,7 +48,7 @@ import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear
 import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
 import { searchStream } from './search';
-import { settleClaymores } from './claymore';
+import { cookOffClaymores, settleClaymores } from './claymore';
 import { activateUtilities, advanceUtilityEffects, settleShutdowns, tickCharges, utilityOrderError } from './utility';
 import { caltropHits } from './hazards';
 import { advanceJobs, startAutoRepair } from './jobs';
@@ -120,6 +120,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       talked: {},
       god: false,
       fullLog: false,
+      frozen: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -283,6 +284,7 @@ export function endTurn(
     w.turn++;
     advanceWeather(w);
     planNpcOrders(w);
+    freezeDriving(w);
     move(w);
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
@@ -300,11 +302,13 @@ export function endTurn(
     raiseCalls(w);
     assignAutoOrders(w);
     assignUtilityOrders(w);
+    freezeFire(w);
     settleAims(w);
     activateUtilities(w);
     tickCharges(w);
     fireWeapons(w);
     fireGuards(w);
+    cookOffClaymores(w);
     consumeSupplies(w);
     applyHazards(w);
     scrapPatch(w);

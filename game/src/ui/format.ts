@@ -25,7 +25,7 @@ import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -286,7 +286,7 @@ function spanLine(cls: string, spans: LogSpan[]): LogLine {
 }
 
 function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
-  return firedByUtility(world, e) ? harpoonText(world, e) : gunShotText(world, e);
+  return firedWithLine(world, e) ? harpoonText(world, e) : gunShotText(world, e);
 }
 
 // A shot by or at the player, or one whose stray rounds or blast hit the player. Trucks hit that the shot was not
@@ -302,10 +302,12 @@ function gunShotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLin
   return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
 }
 
-function firedByUtility(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
+// Whether the shot came from a gun that ties a line, the harpoon.
+function firedWithLine(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
   const shooter = findAny(world, e.shooter);
   const part = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
-  return part !== undefined && partDef(part.defId).kind === 'utility';
+  const def = part && partDef(part.defId);
+  return def?.kind === 'weapon' && def.line !== undefined;
 }
 
 // A harpoon shot by or at the player: "Harpoon → Buggy: line on Engine (40%)", or "missed", then the damage per
@@ -610,8 +612,8 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 // Caltrops on the player's wheels read as bad, the player's caltrops on another truck as good, the rest dim.
 function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
   const me = world.player.vehicleId;
-  if (e.vehicle === me) return { text: 'You drive into caltrops. Wheels damaged.', cls: 'bad' };
-  return { text: `${vehicleName(world, e.vehicle)} drives into caltrops`, cls: e.source === me ? 'good' : 'dim' };
+  const [text, cls] = e.vehicle === me ? ['You drive into caltrops', 'bad'] : [`${vehicleName(world, e.vehicle)} drives into caltrops`, e.source === me ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
 }
 
 // An emitter pulse the player fired, naming the trucks it shut down, or one that shut the player down. Others log
@@ -627,10 +629,25 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
 }
 
+// An armed claymore ram that broke and blew up on its own truck, with the damage it did there.
+function cookOffText(world: World, e: Extract<GameEvent, { t: 'claymoreCookOff' }>): LogLine {
+  const me = world.player.vehicleId;
+  const hitByMe = world.vehicles.find((v) => v.id === e.vehicle)?.lastHitBy === me;
+  const [text, cls] = e.vehicle === me ? ['Your claymore ram breaks and blows up', 'bad'] : [`${vehicleName(world, e.vehicle)}'s claymore ram breaks and blows up`, hitByMe ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
+}
+
+const OBSTACLE_NAMES: Record<Obstacle['kind'], string> = { rock: 'a rock', wreck: 'a wreck', building: 'a building', water: 'the water', site: 'a structure', landmark: 'a landmark' };
+
 // A claymore ram blast the player set off, one that hit the player, or a seen one between other trucks. The line
 // lists the blasted truck's damage. The ram's owner sees its own damage on its truck.
 function claymoreText(world: World, e: Extract<GameEvent, { t: 'claymore' }>): LogLine {
   const me = world.player.vehicleId;
+  const obstacle = world.obstacles.find((o) => o.id === e.other);
+  if (obstacle) {
+    const who = e.vehicle === me ? 'Your' : `${vehicleName(world, e.vehicle)}'s`;
+    return spanLine(e.vehicle === me ? 'bad' : 'dim', [{ text: `${who} claymore ram blows up against ${OBSTACLE_NAMES[obstacle.kind]}`, cls: '' }, ...damageSpans(world, e.vehicle, e.selfHits)]);
+  }
   const [who, whom, cls] =
     e.vehicle === me ? ['Your', vehicleName(world, e.other), 'good']
     : e.other === me ? [`${vehicleName(world, e.vehicle)}'s`, 'your truck', 'bad']
@@ -654,6 +671,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   lineTorn: lineTornText,
   pulse: pulseText,
   claymore: claymoreText,
+  claymoreCookOff: cookOffText,
   found: foundText,
   say: sayText,
   job: jobText,

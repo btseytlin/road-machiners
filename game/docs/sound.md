@@ -61,6 +61,13 @@ A cue with several prompts is a family of different sounds, one prompt per varia
 
 Every music loop also gets the palette finish at import, so tracks from different generations sound like one set. Its tone moves part of the way toward one target curve, taken from the town and outpost tracks. Its stereo width goes to one level. All loops share the same glue compression, one short room and one soft top end. The settings are at the end of `scripts/sfx-lib.mjs`. The finish changes timing by a few milliseconds, so measure the phase of a combat base again after it.
 
+World one-shots, the `sfx` cues with the `field` setup that do not loop, get two more steps at import, so they sound like one place:
+
+- A gentle cut above 8 kHz puts every take at the 10 m the prompt asks for. Generated takes come out close and bright.
+- Bass and treble move back to within `MIX.tone.spread` of the anchor's tone in `MIX.tone`. A cut may go up to 12 dB and a boost up to 6 dB, since a boost also raises noise.
+
+`npm run sfx:report` lists every world one-shot's loudness and tone beside the anchor. It flags the takes that import could not bring into range. Fix those by hand with ffmpeg, as the comments in `sounds.ts` show.
+
 ## Generating with ElevenLabs
 
 `npm run sfx:gen -- <cue> <count>` generates variants and imports them. It costs credits, so ask before running it. `SFX_MAX_GENERATIONS` in `.env` caps one run.
@@ -68,7 +75,7 @@ Every music loop also gets the palette finish at import, so tracks from differen
 - Every prompt starts with the `SOUND_STYLE` of the cue's setup, so a set of sounds shares one microphone and place. Combat accents use the `stinger` style, and base loops use `score`.
 - Prompt style plus subject must stay under 450 characters, or the API refuses it.
 - Generated heavy sounds come out thin. Check the spectrogram and process the take with ffmpeg rather than generating again. The horn and air brake comments in `sounds.ts` show the processing used.
-- Raw takes stay in `tmp/sfx-raw/`, and each file's tag names its source. After an import change, `npm run sfx:reimport` rebuilds every file from those sources.
+- Raw takes stay in `tmp/sfx-raw/`, and each file's tag names its source. After an import change, `npm run sfx:reimport` rebuilds every file from those sources. `npm run sfx:reimport -- field` rebuilds only the world one-shots, and cue names rebuild those cues.
 
 ## Beat loops
 

@@ -120,14 +120,14 @@ describe('utility reload', () => {
   it('a worn utility recharges slower: 10% of its reload per wear step, rounded up', () => {
     const w = emptyWorld();
     const sprout = partDef('sprout') as UtilityDef;
-    const harpoon = partDef('harpoon') as UtilityDef;
+    const oil = partDef('oilSpiller') as UtilityDef;
 
     expect(sprout.reload).toBe(10);
-    expect(harpoon.reload).toBe(5);
+    expect(oil.reload).toBe(6);
     expect(wornReload(makePart(w, 'sprout', 0))).toBe(10);
     expect(wornReload(makePart(w, 'sprout', 1))).toBe(11);
     expect(wornReload(makePart(w, 'sprout', 3))).toBe(13);
-    expect(wornReload(makePart(w, 'harpoon', 1))).toBe(6);
+    expect(wornReload(makePart(w, 'oilSpiller', 1))).toBe(7);
   });
 
   it('a worn claymore ram re-arms slower by the same rule', () => {

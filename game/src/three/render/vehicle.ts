@@ -328,6 +328,11 @@ export class VehicleView {
     }
   }
 
+  // Whether the view draws the part, so partPoint() knows it.
+  hasPart(partId: string): boolean {
+    return this.anchors.has(partId);
+  }
+
   // The world point of a part, in meters, valid after pose().
   partPoint(partId: string): V3 {
     const anchor = this.anchors.get(partId);

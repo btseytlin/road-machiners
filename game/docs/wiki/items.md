@@ -32,26 +32,27 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 `armor` is the penetration a part stops when a round passes through it. A tall part blocks a mounted gun from firing across it. How a shot resolves is in [combat.md](combat.md).
 
 <!-- wiki:weapons -->
-| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | range (tiles) | cooldown (turns) | magazine (shots) | reload (turns) | arc (deg) | spread (deg) | rounds per shot | recoil (deg) | shake |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| mg | MG turret | 1 | 145 | 1 x 1 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 360 | 5 | 6 | 0.5 | 0.5 |
-| shotgun | Shotgun | 1 | 179 | 1 x 2 | 100 | 36 | 2 | false | 10 | 1 | 2 | 2 | 90 | 12 | 10 | 1.5 | 0.6 |
-| longRifle | Long rifle | 1 | 159 | 1 x 2 | 120 | 30 | 2 | false | 18 | 1 | 3 | 2 | 60 | 1 | 1 | 0.8 | 1 |
-| flamer | Flamer | 1 | 205 | 1 x 2 | 100 | 34 | 2 | false | 8 | 1 | 3 | 2 | 90 | 7 | 8 | 0.3 | 0.6 |
-| pneumobolter | Pneumobolter | 1 | 204 | 2 x 2 | 150 | 44 | 3 | false | 14 | 1 | 2 | 1 | 60 | 1.6 | 1 | 1.5 | 1.5 |
-| slugCannon | Slug cannon | 1 | 199 | 1 x 2 | 160 | 46 | 3 | false | 16 | 1 | 3 | 2 | 180 | 2 | 2 | 3 | 1.5 |
-| heavyMg | Heavy MG | 2 | 264 | 1 x 2 | 95 | 50 | 4 | false | 13 | 1 | 5 | 2 | 360 | 4 | 6 | 1.5 | 0.6 |
-| cannon | Forward cannon | 2 | 340 | 2 x 2 | 270 | 60 | 3 | true | 13 | 1 | 2 | 2 | 60 | 3.5 | 1 | 6 | 1 |
-| amRifle | Anti-materiel rifle | 2 | 233 | 1 x 3 | 190 | 40 | 2 | false | 19 | 1 | 3 | 3 | 45 | 0.8 | 1 | 2 | 1.2 |
-| autocannon | Autocannon | 2 | 377 | 2 x 2 | 180 | 56 | 4 | false | 12 | 1 | 4 | 2 | 180 | 4 | 3 | 3 | 0.8 |
-| recoilless | Recoilless rifle | 2 | 327 | 1 x 3 | 150 | 40 | 2 | false | 15 | 1 | 2 | 2 | 45 | 1.4 | 1 | 1 | 2 |
-| battleRifle | Battle rifle | 2 | 350 | 1 x 3 | 150 | 44 | 3 | false | 17 | 1 | 5 | 1 | 180 | 1.6 | 3 | 2 | 1.4 |
-| gatling | Gatling MG | 3 | 508 | 2 x 2 | 150 | 70 | 5 | false | 14 | 1 | 6 | 3 | 360 | 5 | 12 | 2 | 0.7 |
-| rocketRack | Rocket rack | 3 | 493 | 2 x 2 | 110 | 32 | 1 | false | 14 | 1 | 1 | 3 | 90 | 6 | 4 | 1 | 1.2 |
-| sniperCannon | Sniper cannon | 3 | 615 | 2 x 3 | 180 | 40 | 2 | true | 20 | 1 | 3 | 3 | 30 | 0.6 | 1 | 2 | 1.4 |
-| grenadeLauncher | Grenade launcher | 3 | 587 | 2 x 2 | 130 | 50 | 4 | false | 12 | 1 | 4 | 3 | 180 | 5 | 3 | 2 | 1 |
-| tankGun | Tank gun | 3 | 604 | 2 x 3 | 210 | 90 | 8 | true | 16 | 1 | 2 | 2 | 45 | 2 | 1 | 8 | 2 |
-| flechette | Flechette gun | 3 | 655 | 2 x 2 | 120 | 44 | 3 | false | 18 | 1 | 4 | 2 | 180 | 1.2 | 4 | 1.5 | 1.5 |
+| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | range (tiles) | cooldown (turns) | magazine (shots) | reload (turns) | arc (deg) | spread (deg) | rounds per shot | recoil (deg) | shake | line (turns) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mg | MG turret | 1 | 145 | 1 x 1 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 360 | 5 | 6 | 0.5 | 0.5 |  |
+| shotgun | Shotgun | 1 | 179 | 1 x 2 | 100 | 36 | 2 | false | 10 | 1 | 2 | 2 | 90 | 12 | 10 | 1.5 | 0.6 |  |
+| longRifle | Long rifle | 1 | 159 | 1 x 2 | 120 | 30 | 2 | false | 18 | 1 | 3 | 2 | 60 | 1 | 1 | 0.8 | 1 |  |
+| flamer | Flamer | 1 | 205 | 1 x 2 | 100 | 34 | 2 | false | 8 | 1 | 3 | 2 | 90 | 7 | 8 | 0.3 | 0.6 |  |
+| pneumobolter | Pneumobolter | 1 | 204 | 2 x 2 | 150 | 44 | 3 | false | 14 | 1 | 2 | 1 | 60 | 1.6 | 1 | 1.5 | 1.5 |  |
+| slugCannon | Slug cannon | 1 | 199 | 1 x 2 | 160 | 46 | 3 | false | 16 | 1 | 3 | 2 | 180 | 2 | 2 | 3 | 1.5 |  |
+| heavyMg | Heavy MG | 2 | 264 | 1 x 2 | 95 | 50 | 4 | false | 13 | 1 | 5 | 2 | 360 | 4 | 6 | 1.5 | 0.6 |  |
+| cannon | Forward cannon | 2 | 340 | 2 x 2 | 270 | 60 | 3 | true | 13 | 1 | 2 | 2 | 60 | 3.5 | 1 | 6 | 1 |  |
+| amRifle | Anti-materiel rifle | 2 | 233 | 1 x 3 | 190 | 40 | 2 | false | 19 | 1 | 3 | 3 | 45 | 0.8 | 1 | 2 | 1.2 |  |
+| autocannon | Autocannon | 2 | 377 | 2 x 2 | 180 | 56 | 4 | false | 12 | 1 | 4 | 2 | 180 | 4 | 3 | 3 | 0.8 |  |
+| recoilless | Recoilless rifle | 2 | 327 | 1 x 3 | 150 | 40 | 2 | false | 15 | 1 | 2 | 2 | 45 | 1.4 | 1 | 1 | 2 |  |
+| battleRifle | Battle rifle | 2 | 350 | 1 x 3 | 150 | 44 | 3 | false | 17 | 1 | 5 | 1 | 180 | 1.6 | 3 | 2 | 1.4 |  |
+| gatling | Gatling MG | 3 | 508 | 2 x 2 | 150 | 70 | 5 | false | 14 | 1 | 6 | 3 | 360 | 5 | 12 | 2 | 0.7 |  |
+| rocketRack | Rocket rack | 3 | 493 | 2 x 2 | 110 | 32 | 1 | false | 14 | 1 | 1 | 3 | 90 | 6 | 4 | 1 | 1.2 |  |
+| sniperCannon | Sniper cannon | 3 | 615 | 2 x 3 | 180 | 40 | 2 | true | 20 | 1 | 3 | 3 | 30 | 0.6 | 1 | 2 | 1.4 |  |
+| grenadeLauncher | Grenade launcher | 3 | 587 | 2 x 2 | 130 | 50 | 4 | false | 12 | 1 | 4 | 3 | 180 | 5 | 3 | 2 | 1 |  |
+| tankGun | Tank gun | 3 | 604 | 2 x 3 | 210 | 90 | 8 | true | 16 | 1 | 2 | 2 | 45 | 2 | 1 | 8 | 2 |  |
+| flechette | Flechette gun | 3 | 655 | 2 x 2 | 120 | 44 | 3 | false | 18 | 1 | 4 | 2 | 180 | 1.2 | 4 | 1.5 | 1.5 |  |
+| harpoon | Harpoon | 2 | 287 | 1 x 2 | 120 | 40 | 4 | false | 8 | 1 | 1 | 5 | 270 | 1 | 1 | 0 | 0.3 | 10 |
 <!-- /wiki:weapons -->
 
 Each weapon's round:
@@ -77,6 +78,7 @@ Each weapon's round:
 | grenadeLauncher | 24 | 7 | true | 120 | 2 | 6 | 4 |
 | tankGun | 114 | 14 | false | 500 | 1.5 | 10 | 5 |
 | flechette | 15 | 14 | false | 1100 | 0 | 0 | 0 |
+| harpoon | 6 | 3 | false | 1000 | 0 | 0 | 0 |
 <!-- /wiki:weapon-rounds -->
 
 ## Engines
@@ -108,7 +110,7 @@ Each weapon's round:
 | spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
 | reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
 | plowRam | Plow ram | 3 | 602 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
-| claymoreRam | Claymore ram | 2 | 420 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"reload":20} |
+| claymoreRam | Claymore ram | 2 | 420 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
 | steelPlate | Steel plate | 2 | 198 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
 | scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
 | ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |
@@ -150,17 +152,16 @@ Each weapon's round:
 Yellow deck parts with one job each. An active utility acts once on an order and then recharges for its reload in turns. Each wear step adds 10% to the reload, rounded up. The patcher crane and the scraper's knife are passive and work while mounted.
 
 <!-- wiki:utilities -->
-| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | effect | reload (turns) | effect numbers | shot range (tiles) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sprout | Sprout | 1 | 170 | 1 x 1 | 60 | 25 | 2 | false | sprout | 10 | {"radius":5,"turns":6} |  |
-| caltrops | Caltrops | 1 | 140 | 1 x 1 | 70 | 30 | 3 | false | caltrops | 10 | {"radius":1.25,"turns":10,"behind":1} |  |
-| oilSpiller | Oil spiller | 1 | 170 | 1 x 1 | 90 | 30 | 3 | false | oil | 6 | {"slick":5.8,"turns":8,"behind":1,"fuel":2} |  |
-| patcherCrane | Patcher crane | 1 | 180 | 1 x 2 | 150 | 50 | 4 | false | crane |  | {} |  |
-| harpoon | Harpoon | 2 | 300 | 1 x 2 | 120 | 40 | 4 | false | harpoon | 5 | {"turns":3} | 8 |
-| smokeMortar | Smoke mortar | 2 | 320 | 1 x 2 | 110 | 36 | 3 | false | mortar | 8 | {"radius":4,"turns":5,"minRange":5,"maxRange":16} |  |
-| flareCannon | Flare cannon | 2 | 220 | 1 x 1 | 50 | 28 | 2 | false | flare | 10 | {"radius":10,"turns":6,"minRange":4,"maxRange":24} |  |
-| scrapersKnife | Scraper's knife | 2 | 280 | 1 x 2 | 170 | 50 | 4 | false | scraper |  | {} |  |
-| emitter | Emitter | 3 | 750 | 2 x 2 | 200 | 44 | 4 | false | emitter | 10 | {"radius":6,"turns":2} |  |
+| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | effect | reload (turns) | effect numbers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| sprout | Sprout | 1 | 170 | 1 x 1 | 60 | 25 | 2 | false | sprout | 10 | {"radius":5,"turns":6} |
+| caltrops | Caltrops | 1 | 140 | 1 x 1 | 70 | 30 | 3 | false | caltrops | 10 | {"radius":1.25,"turns":10,"behind":1} |
+| oilSpiller | Oil spiller | 1 | 170 | 1 x 1 | 90 | 30 | 3 | false | oil | 6 | {"slick":5.8,"turns":8,"behind":1,"fuel":2} |
+| patcherCrane | Patcher crane | 1 | 180 | 1 x 2 | 150 | 50 | 4 | false | crane |  | {} |
+| smokeMortar | Smoke mortar | 2 | 320 | 1 x 2 | 110 | 36 | 3 | false | mortar | 8 | {"radius":4,"turns":5,"minRange":5,"maxRange":16} |
+| flareCannon | Flare cannon | 2 | 220 | 1 x 1 | 50 | 28 | 2 | false | flare | 10 | {"radius":10,"turns":6,"minRange":4,"maxRange":24} |
+| scrapersKnife | Scraper's knife | 2 | 280 | 1 x 2 | 170 | 50 | 4 | false | scraper |  | {} |
+| emitter | Emitter | 3 | 750 | 2 x 2 | 200 | 44 | 4 | false | emitter | 10 | {"radius":6,"turns":2} |
 <!-- /wiki:utilities -->
 
 ## Core parts

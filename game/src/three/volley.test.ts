@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Break, Crash, Landing } from "../phys/drive";
 import { addVehicle, emptyWorld } from "../sim/testkit";
 import type { GameEvent, ShotRound } from "../sim/types";
-import type { V3 } from "../phys/frames";
+import { groundPoint, type V3 } from "../phys/frames";
+import { FLARE_LOOK, SHELL } from "./render/hazards";
 import { BreakCues, type PartBreak, type ShotLike } from "./breakCues";
-import { CollisionCues, collisionSteps, playShotFx, playUtilitySounds, playVolley, type CombatHost, type VolleyHost } from "./volley";
+import { CollisionCues, collisionSteps, playCrashes, playShotFx, playUtilitySounds, playVolley, type CombatHost, type VolleyHost } from "./volley";
 
 const hit = (a: string, b: string): GameEvent => ({ t: "collision", a, b, hitsA: [], hitsB: [] });
 const crash = (a: string, b: string, step: number) => ({ a, b, impact: 5, step }) as Crash;
@@ -39,7 +40,7 @@ describe("collisionSteps", () => {
 });
 
 describe("collisionSteps with claymore blasts", () => {
-  const blast = (vehicle: string, other: string): GameEvent => ({ t: "claymore", vehicle, other, pos: { x: 0, y: 0 }, hits: [], selfHits: [] });
+  const blast = (vehicle: string, other: string): GameEvent => ({ t: "claymore", vehicle, part: "ram", other, pos: { x: 0, y: 0 }, hits: [], selfHits: [] });
 
   it("times each blast at the step of the crash it follows", () => {
     const timed = collisionSteps([hit("a", "b"), blast("a", "b"), blast("b", "a")], { ...none, crashes: [crash("a", "b", 12)] });
@@ -48,6 +49,43 @@ describe("collisionSteps with claymore blasts", () => {
 
   it("throws on a blast that follows no crash of its trucks", () => {
     expect(() => collisionSteps([hit("a", "c"), blast("a", "b")], { ...none, crashes: [crash("a", "c", 3)] })).toThrow(/follows no crash/);
+  });
+});
+
+describe("playCrashes with claymore blasts", () => {
+  const blast = (other: string): GameEvent => ({ t: "claymore", vehicle: "a", part: "ram", other, pos: { x: 30, y: 30 }, hits: [], selfHits: [] });
+
+  const RAM_AT = { x: 7, y: 2, z: 9 };
+  // A view of truck a that draws the ram, or none.
+  const drawn = (ram: boolean) => new Map([["a", { hasPart: (id: string) => ram && id === "ram", partPoint: () => RAM_AT }]]);
+
+  // The fx and sounds one blast plays and where, with these trucks seen.
+  function played(e: GameEvent, seen: string[], views = drawn(true)): (string | V3)[] {
+    const out: (string | V3)[] = [];
+    const world = emptyWorld();
+    const host = {
+      world,
+      views,
+      fx: { claymoreBlast: (p: V3) => out.push(p), crash: () => out.push("crash") },
+      sound: { at: (cue: string) => out.push(cue) },
+      eventPoint: (id: string) => (seen.includes(id) ? { x: 0, y: 0, z: 0 } : null),
+    } as unknown as CombatHost;
+    playCrashes(host, new CollisionCues([{ event: e as never, step: null }]), null);
+    return out;
+  }
+
+  it("shows the blast at the ram on its drawn truck, also against an obstacle", () => {
+    expect(played(blast("rock1"), ["a"])).toEqual([RAM_AT, "explosion"]);
+    expect(played(blast("b"), ["b"])).toEqual([RAM_AT, "explosion"]);
+  });
+
+  it("shows the blast at the ram's saved face when the view does not draw the ram", () => {
+    const g = groundPoint(emptyWorld().terrain, { x: 30, y: 30 });
+    expect(played(blast("b"), ["a"], drawn(false))[0]).toEqual({ x: g.x, y: g.y + 1, z: g.z });
+  });
+
+  it("shows no blast when neither truck in it is seen", () => {
+    expect(played(blast("b"), [])).toEqual([]);
   });
 });
 
@@ -68,26 +106,75 @@ describe("CollisionCues", () => {
 });
 
 describe("playUtilitySounds", () => {
-  const use = (vehicle: string, effect: "mortar" | "flare" | "sprout" | "harpoon" | "claymore"): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, target: null, point: null });
+  type Effect = "mortar" | "flare" | "sprout" | "caltrops" | "oil" | "claymore";
+  const use = (vehicle: string, effect: Effect, point: { x: number; y: number } | null = null): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, point });
   const pulse = (vehicle: string): GameEvent => ({ t: "pulse", vehicle, pos: { x: 0, y: 0 }, hit: [] });
   const seen: Record<string, V3> = { a: { x: 1, y: 2, z: 3 }, b: { x: 4, y: 5, z: 6 } };
+  const terrain = emptyWorld().terrain;
 
-  function played(events: GameEvent[]): { cue: string; p: V3 }[] {
-    const out: { cue: string; p: V3 }[] = [];
-    playUtilitySounds({ world: { events }, eventPoint: (id) => seen[id] ?? null, sound: { at: (cue, p) => out.push({ cue, p }) } });
+  function played(events: GameEvent[]): { cue: string; p: V3; delayMs: number }[] {
+    const out: { cue: string; p: V3; delayMs: number }[] = [];
+    playUtilitySounds({ world: { events, terrain }, eventPoint: (id) => seen[id] ?? null, sound: { at: (cue, p, delayMs) => out.push({ cue, p, delayMs }) } });
     return out;
   }
 
-  it("plays the cannon cue for a mortar or flare launch and the spark cue for a pulse, at the user", () => {
-    expect(played([use("a", "mortar"), use("b", "flare"), pulse("b")])).toEqual([
-      { cue: "cannon-fire", p: seen.a },
-      { cue: "cannon-fire", p: seen.b },
-      { cue: "part-broken", p: seen.b },
+  it("plays each utility's own cue at its user as it is used, and the pulse's crack", () => {
+    expect(played([use("a", "mortar"), use("b", "flare"), use("a", "sprout"), use("a", "caltrops"), use("b", "oil"), pulse("b")]).map((s) => [s.cue, s.p, s.delayMs])).toEqual([
+      ["mortar-fire", seen.a, 0],
+      ["flare-fire", seen.b, 0],
+      ["smoke-burst", seen.a, 0],
+      ["caltrops-drop", seen.a, 0],
+      ["oil-spill", seen.b, 0],
+      ["emitter-pulse", seen.b, 0],
     ]);
   });
 
-  it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
-    expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "harpoon"), use("a", "claymore")])).toEqual([]);
+  it("booms the mortar's shell where it lands and bursts the flare at its point, when each flight ends", () => {
+    const point = { x: 40, y: 30 };
+    const ground = groundPoint(terrain, point);
+    expect(played([use("a", "mortar", point), use("a", "flare", point)]).filter((s) => s.delayMs > 0)).toEqual([
+      { cue: "cannon-fire", p: ground, delayMs: SHELL.flightMs },
+      { cue: "flare-burst", p: ground, delayMs: FLARE_LOOK.flightMs },
+    ]);
+  });
+
+  it("bursts a tire on a truck that drives into caltrops", () => {
+    expect(played([{ t: "caltrops", vehicle: "b", field: "g1", source: "a", hits: [] }])).toEqual([{ cue: "caltrops-hit", p: seen.b, delayMs: 0 }]);
+  });
+
+  it("stays silent for unseen users and for a claymore, whose blast plays with its crash", () => {
+    expect(played([use("hidden", "mortar", { x: 40, y: 30 }), pulse("hidden"), use("a", "claymore")])).toEqual([]);
+  });
+
+  it("snaps a torn harpoon line at the truck it held, and stays silent when that truck is unseen", () => {
+    const torn = (vehicle: string): GameEvent => ({ t: "lineTorn", line: "l1", vehicle, part: `${vehicle}-p`, damage: 12 });
+    expect(played([torn("a"), torn("hidden")])).toEqual([{ cue: "line-tear", p: seen.a, delayMs: 0 }]);
+  });
+});
+
+describe("playVolley sounds", () => {
+  // The cues one round of this gun plays as it fires and lands, striking the target or not.
+  function cuesOf(weapon: string, struck: boolean): string[] {
+    const cues: string[] = [];
+    const p = { x: 0, y: 0, z: 0 };
+    const round: ShotRound = { hit: struck, crit: false, offset: 0, struck: struck ? "t" : null, hits: [], blast: [], burst: null };
+    const event = { t: "shot", shooter: "s", weapon: "w", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds: [round] } as ShotLike;
+    const fly = (_s: unknown, _m: unknown, _p: unknown, _r: unknown, c: { fired: (m: never) => void; landed: () => void }) => {
+      c.fired({ pos: p } as never);
+      c.landed();
+    };
+    const host = { world: emptyWorld(), fx: { shot: fly, label: () => {} }, sound: { at: (cue: string) => cues.push(cue) }, eventPoint: () => p, breakPart: () => {} } as unknown as VolleyHost;
+    playVolley(host, p, () => ({ pos: p, dir: { x: 1, y: 0, z: 0 } }) as never, { x: 5, y: 0, z: 0 }, () => p, event, new BreakCues([event]), weapon, "t", new Map(), false);
+    return cues;
+  }
+
+  it("fires and hooks with the harpoon's own cues", () => {
+    expect(cuesOf("harpoon", true)).toEqual(["harpoon-fire", "harpoon-hook"]);
+  });
+
+  it("lets a harpoon miss like any round, and keeps every other gun on its look's cues", () => {
+    expect(cuesOf("harpoon", false)).toEqual(["harpoon-fire", "miss"]);
+    expect(cuesOf("mg", true)).toEqual(["mg-fire", "hit-metal"]);
   });
 });
 

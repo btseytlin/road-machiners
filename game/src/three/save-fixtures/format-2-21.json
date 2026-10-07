@@ -1,0 +1,9 @@
+{
+  "turn": 640,
+  "vehicles": [],
+  "removed": [],
+  "events": [
+    { "t": "collision", "a": "player", "b": "npc3", "hitsA": [], "hitsB": [] },
+    { "t": "claymore", "vehicle": "player", "other": "npc3", "pos": { "x": 41, "y": 30 }, "hits": [], "selfHits": [] }
+  ]
+}

@@ -35,7 +35,7 @@ Utilities and the claymore ram:
 
 - `src/sim/utility.ts` owns utility charge, order checks, the `activateUtilities()` step before `fireWeapons()`, reload ticks, `hasWorkingUtility()` and `workTimeMult()`. Its last section owns the emitter shutdown: `settleShutdowns()` writes the window at the end of the pulse turn, and `isShutDown()` is the one test that stats, fire, detection, engine heat and the HUD ask.
 - `src/sim/hazards.ts` owns smoke clouds, ground fields and flares. `smokeCrosses()` gives the `smoke` spread cause in `combat.ts`, `litAt()` gives flare light to `vision.ts`, and `flareSightings()` feeds `detect.ts`, which builds the contacts.
-- `src/sim/harpoon.ts` owns harpoon lines. The harpoon shot goes through `landSingleRound()` and `targetBlock()` in `combat.ts`, like a gun.
+- `src/sim/harpoon.ts` owns harpoon lines. The harpoon is a gun with `line` in its def: the fire phase in `combat.ts` fires it, and a round that strikes its target calls `attachLine()`. NPCs roll it with their utilities in `npc-loadout.ts`, which keeps it inside the gun slowdown limit.
 - `src/sim/claymore.ts` owns arming, the blast on a truck crash, which `crash-contact.ts` hands it, and `settleClaymores()`, the one place that disarms a broken or moved charge.
 - Smoke, fields, flares and lines are saved world objects with `turnsLeft`. `advanceUtilityEffects()` ages them each turn. Render only reads them.
 

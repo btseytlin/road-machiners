@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { partDef, type UtilityDef } from '../data/parts';
+import { partDef, type WeaponDef } from '../data/parts';
 import { HARPOON } from '../data/utilities';
-import { fightsAgainst, hitOdds } from './combat';
+import { fightsAgainst, fireBlock, fireWeapons, gunOf, hitOdds } from './combat';
+import { vehicleStats } from './stats';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { deploySmoke } from './hazards';
 import { endLines, lineAnchors, tearLine } from './harpoon';
 import { addVehicle, emptyWorld } from './testkit';
-import type { GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
-import { activateUtilities, advanceUtilityEffects, harpoonWait, tickCharges, utilityOrderError, wornReload } from './utility';
-import { setUtilityOrder } from './world';
+import type { GameEvent, PartInstance, Vehicle, World } from './types';
+import { advanceUtilityEffects } from './utility';
 
 // The player facing east with a harpoon on its deck, and a trader hauler `gap` tiles east of it, broadside.
 function duel(gap = 5): { w: World; me: Vehicle; part: PartInstance; trader: Vehicle } {
@@ -28,13 +28,13 @@ function shotOf(w: World): Extract<GameEvent, { t: 'shot' }> {
   return shots[0];
 }
 
-// Fires the harpoon from the given random state, as the activation step does.
+// Fires the harpoon from the given random state, as the fire phase does.
 function fire(rngState: number, gap?: number): ReturnType<typeof duel> {
   const s = duel(gap);
   s.w.rngState = rngState;
   s.w.events = [];
-  s.me.utilityOrders[s.part.id] = { kind: 'truck', targetId: s.trader.id, aim: 'body' };
-  activateUtilities(s.w);
+  s.me.weaponOrders[s.part.id] = { targetId: s.trader.id, aim: 'body' };
+  fireWeapons(s.w);
   return s;
 }
 
@@ -51,18 +51,19 @@ const hit = (gap?: number) => firstFire((s) => s.w.lines.length === 1, gap);
 const miss = (gap?: number) => firstFire((s) => shotOf(s.w).rounds[0].struck === null, gap);
 
 describe('firing the harpoon', () => {
-  it('starts the reload on a miss and makes no line', () => {
+  it('is a gun with a one-round magazine, a five-turn reload and a ten-turn line', () => {
+    const def = partDef('harpoon') as WeaponDef;
+
+    expect(def.kind).toBe('weapon');
+    expect({ magazine: def.magazine, reload: def.reload, line: def.line }).toEqual({ magazine: 1, reload: 5, line: { turns: 10 } });
+  });
+
+  it('empties its magazine on a miss and makes no line', () => {
     const { w, part } = miss(8);
 
     expect(w.lines).toEqual([]);
-    expect(part.charge).toEqual({ reload: wornReload(part) });
+    expect(gunOf(part).ammo).toBe(0);
     expect(shotOf(w).rounds).toHaveLength(1);
-  });
-
-  it('clears its order on a miss', () => {
-    const { me } = miss(8);
-
-    expect(me.utilityOrders).toEqual({});
   });
 
   it('attaches the line to the first part the round touches in its lane', () => {
@@ -71,10 +72,21 @@ describe('firing the harpoon', () => {
 
     expect(round.struck).toBe(trader.id);
     expect(w.lines).toEqual([
-      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 3 },
+      { id: w.lines[0].id, from: me.id, fromPart: part.id, to: trader.id, toPart: round.hits[0].part, length: w.lines[0].length, turnsLeft: 10 },
     ]);
-    expect(part.charge).toEqual({ reload: wornReload(part) });
+    expect(gunOf(part).ammo).toBe(0);
     expect(trader.lastHitBy).toBe(me.id);
+  });
+
+  it('ties a line on every round that strikes the target, through empty lanes too', () => {
+    let struck = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const s = fire(seed);
+      if (shotOf(s.w).rounds[0].struck !== s.trader.id) continue;
+      struck++;
+      expect(s.w.lines, `seed ${seed}`).toHaveLength(1);
+    }
+    expect(struck).toBeGreaterThan(200);
   });
 
   it('sets the line length to the anchor distance in meters at the hit', () => {
@@ -93,39 +105,33 @@ describe('firing the harpoon', () => {
     }
   });
 
-  it('takes a target past its range or behind it, and waits on it', () => {
-    const far = duel(9);
-    const behind = duel(-5);
+  it('keeps its target through the reload and fires again on the turn the round is back', () => {
+    const s = miss(8);
+    s.w.events = [];
+    const turns: number[] = [];
+    for (let turn = 1; turn <= 6; turn++) {
+      s.w.events = [];
+      fireWeapons(s.w);
+      if (s.w.events.some((e) => e.t === 'shot')) turns.push(turn);
+    }
 
-    expect(utilityOrderError(far.w, far.me, far.part.id, { kind: 'truck', targetId: far.trader.id, aim: 'body' })).toBeNull();
-    expect(utilityOrderError(behind.w, behind.me, behind.part.id, { kind: 'truck', targetId: behind.trader.id, aim: 'body' })).toBeNull();
-    expect(harpoonWait(far.w, far.me, far.part, far.trader)).toBe('range');
-    expect(harpoonWait(behind.w, behind.me, behind.part, behind.trader)).toBe('arc');
+    expect(s.me.weaponOrders[s.part.id]).toEqual({ targetId: s.trader.id, aim: 'body' });
+    expect(turns).toEqual([6]);
   });
 
-  it('takes a target while it recharges, and waits on the charge', () => {
-    const { w, me, part, trader } = duel();
-    part.charge = { reload: 2 };
-
-    expect(utilityOrderError(w, me, part.id, { kind: 'truck', targetId: trader.id, aim: 'body' })).toBeNull();
-    expect(harpoonWait(w, me, part, trader)).toBe('cooldown');
-  });
-
-  it('refuses a target it does not see, itself, a missing aim part, and a broken harpoon', () => {
-    const unseen = duel(80);
-    const s = duel();
-    const order = { kind: 'truck' as const, targetId: s.trader.id, aim: 'body' as const };
-
-    expect(utilityOrderError(unseen.w, unseen.me, unseen.part.id, { ...order, targetId: unseen.trader.id })).toMatch(/unseen/);
-    expect(utilityOrderError(s.w, s.me, s.part.id, { ...order, targetId: s.me.id })).toMatch(/Bad target/);
-    expect(utilityOrderError(s.w, s.me, s.part.id, { ...order, aim: 'p-none' })).toMatch(/no part p-none/);
-    s.part.hp = 0;
-    expect(utilityOrderError(s.w, s.me, s.part.id, order)).toMatch(/disabled/);
+  it('does not fire past its range or behind it', () => {
+    for (const gap of [9, -5]) {
+      const s = duel(gap);
+      s.me.weaponOrders[s.part.id] = { targetId: s.trader.id, aim: 'body' };
+      fireWeapons(s.w);
+      expect(s.w.events.filter((e) => e.t === 'shot')).toEqual([]);
+      expect(gunOf(s.part).ammo).toBe(1);
+    }
   });
 
   it('has lower odds through smoke', () => {
     const { w, me, trader } = duel();
-    const harpoon = { def: partDef('harpoon') as UtilityDef };
+    const harpoon = { def: partDef('harpoon') as WeaponDef };
     const clear = hitOdds(w, me, harpoon, trader, 'body');
 
     deploySmoke(w, me, trader.pos, 2, 3);
@@ -136,162 +142,26 @@ describe('firing the harpoon', () => {
   });
 });
 
-// A truck order on the trader, given straight to the truck, as the order commands leave it.
-function order(s: ReturnType<typeof duel>): UtilityOrder {
-  const given = { kind: 'truck' as const, targetId: s.trader.id, aim: 'body' as const };
-  s.me.utilityOrders[s.part.id] = given;
-  return given;
-}
-
-function shots(w: World): GameEvent[] {
-  return w.events.filter((e) => e.t === 'shot');
-}
-
-describe('the standing order', () => {
-  it('waits on a target 12 tiles away, then fires on the turn it comes within 8', () => {
-    const s = duel(12);
-    const given = order(s);
-    s.w.events = [];
-
-    activateUtilities(s.w);
-    expect(s.me.utilityOrders).toEqual({ [s.part.id]: given });
-    expect(shots(s.w)).toEqual([]);
-    expect(s.part.charge).toEqual({ reload: 0 });
-
-    s.trader.pos.x = s.me.pos.x + 7;
-    activateUtilities(s.w);
-    expect(shots(s.w)).toHaveLength(1);
-    expect(s.me.utilityOrders).toEqual({});
-    expect(s.part.charge).toEqual({ reload: wornReload(s.part) });
-  });
-
-  it('given while recharging, fires on the turn the charge is ready', () => {
-    const s = duel();
-    s.part.charge = { reload: 2 };
-    order(s);
-    s.w.events = [];
-
-    activateUtilities(s.w);
-    tickCharges(s.w);
-    expect(shots(s.w)).toEqual([]);
-    expect(s.part.charge).toEqual({ reload: 1 });
-
-    activateUtilities(s.w);
-    tickCharges(s.w);
-    expect(shots(s.w)).toEqual([]);
-    expect(s.part.charge).toEqual({ reload: 0 });
-
-    activateUtilities(s.w);
-    expect(shots(s.w)).toHaveLength(1);
-    expect(s.me.utilityOrders).toEqual({});
-  });
-
-  it('waits on a target out of its arc', () => {
-    const s = duel(-5);
-    const given = order(s);
-    s.w.events = [];
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({ [s.part.id]: given });
-    expect(shots(s.w)).toEqual([]);
-  });
-
-  it('waits on a target it no longer sees', () => {
-    const s = duel(80);
-    const given = order(s);
-    s.w.events = [];
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({ [s.part.id]: given });
-    expect(shots(s.w)).toEqual([]);
-  });
-
-  it('drops the order when the target is knocked out', () => {
-    const s = duel();
-    order(s);
-    s.trader.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
-    s.w.events = [];
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({});
-    expect(shots(s.w)).toEqual([]);
-    expect(s.part.charge).toEqual({ reload: 0 });
-  });
-
-  it('drops the order when the target leaves the world', () => {
-    const s = duel(12);
-    order(s);
-    s.w.vehicles = s.w.vehicles.filter((v) => v.id !== s.trader.id);
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({});
-    expect(s.part.charge).toEqual({ reload: 0 });
-  });
-
-  it('drops the order when the harpoon breaks', () => {
-    const s = duel(12);
-    order(s);
-    s.part.hp = 0;
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({});
-  });
-
-  it('drops the order when the harpoon leaves the truck', () => {
-    const s = duel(12);
-    order(s);
-    s.me.items = s.me.items.filter((it) => it.kind !== 'part' || it.part.id !== s.part.id);
-
-    activateUtilities(s.w);
-
-    expect(s.me.utilityOrders).toEqual({});
-  });
-
-  it('a second order replaces the first', () => {
-    const s = duel(12);
-    const other = addVehicle(s.w, 'traders', 'hauler', ['stockEngine'], { x: s.me.pos.x + 6, y: s.me.pos.y + 2 }, Math.PI / 2);
-
-    const first = setUtilityOrder(s.w, s.part.id, { kind: 'truck', targetId: s.trader.id, aim: 'body' });
-    const second = setUtilityOrder(first, s.part.id, { kind: 'truck', targetId: other.id, aim: 'body' });
-
-    expect(second.vehicles[0].utilityOrders).toEqual({ [s.part.id]: { kind: 'truck', targetId: other.id, aim: 'body' } });
-  });
-
-  it('starts its line in the turn it fires, and the line lasts 3 turns from then', () => {
-    const fired = (seed: number): ReturnType<typeof duel> => {
-      const s = duel(12);
-      order(s);
-      activateUtilities(s.w);
-      advanceUtilityEffects(s.w);
-      s.trader.pos.x = s.me.pos.x + 5;
-      s.w.rngState = seed;
-      activateUtilities(s.w);
-      return s;
-    };
-    const seed = Array.from({ length: 2000 }, (_, i) => i + 1).find((n) => fired(n).w.lines.length === 1);
-    if (seed === undefined) throw new Error('No seed gave a hit');
-    const { w } = fired(seed);
-
-    expect(w.lines[0].turnsLeft).toBe(3);
-    advanceUtilityEffects(w);
-    advanceUtilityEffects(w);
-    expect(w.lines).toHaveLength(1);
-    advanceUtilityEffects(w);
-    expect(w.lines).toEqual([]);
-  });
-});
-
 describe('the harpoon line', () => {
-  it('lasts 3 turns', () => {
+  it('holds fire while its line is out, reloaded or not, and fires again once the line ends', () => {
+    const s = hit();
+    s.me.weaponOrders[s.part.id] = { targetId: s.trader.id, aim: 'body' };
+    const fired: number[] = [];
+    for (let turn = 1; turn <= 11; turn++) {
+      s.w.events = [];
+      advanceUtilityEffects(s.w);
+      fireWeapons(s.w);
+      if (s.w.events.some((e) => e.t === 'shot')) fired.push(turn);
+    }
+
+    expect(fired).toEqual([10]);
+    expect(fireBlock(s.w, s.me, vehicleStats(s.w, s.me).weapons.find((m) => m.part.id === s.part.id)!, s.trader)).not.toBe('lineOut');
+  });
+
+  it('lasts 10 turns', () => {
     const { w } = hit();
 
-    advanceUtilityEffects(w);
-    advanceUtilityEffects(w);
+    for (let turn = 1; turn <= 9; turn++) advanceUtilityEffects(w);
     expect(w.lines).toHaveLength(1);
 
     advanceUtilityEffects(w);

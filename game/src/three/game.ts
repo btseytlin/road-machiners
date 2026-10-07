@@ -43,12 +43,13 @@ import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
-import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { FullShopScreen } from "../ui/full-shop";
+import { aimAtPart, HoverHold, SLOT_KEYS, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
+import { CollisionCues, collisionSteps, playCookOff, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { CraterViews } from "./render/craters";
@@ -180,6 +181,7 @@ export class Game {
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
+  private readonly fullShop: FullShopScreen;
   private readonly context: TruckContext;
   private readonly trade: TruckTradeScreen;
   private readonly character: CharacterScreen;
@@ -276,6 +278,7 @@ export class Game {
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
     this.town = new TownScreen(host);
+    this.fullShop = new FullShopScreen(host);
     this.trade = new TruckTradeScreen(host);
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
@@ -302,7 +305,7 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
-      aimPart: (vehicleId, partId) => this.anim === null && !this.utilityAim.aimPart(vehicleById(this.world, vehicleId), partId) && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
+      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
@@ -371,6 +374,13 @@ export class Game {
     if (!this.saves.held) saveInTown(window.localStorage, next, Date.now(), () => this.hud.note(next, SAVE_FULL_NOTE, "bad"));
   }
 
+  // The console's fullshop command: the full shop screen over any other screen, anywhere.
+  openFullShop(): void {
+    if (this.anim) return;
+    this.closeScreens(null);
+    this.fullShop.open();
+  }
+
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
@@ -384,7 +394,8 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
+    const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -416,6 +427,7 @@ export class Game {
     if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
     this.town.render();
+    this.fullShop.render();
     this.trade.render();
     this.character.render();
     this.inventory.render();
@@ -523,8 +535,7 @@ export class Game {
     KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
-    ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 1}`, { run: () => this.weapons.selectIndex(i), noModal: true as const, idle: true as const }])),
-    ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 5}`, { run: () => this.weapons.utilities.selectUtility(i), noModal: true as const, idle: true as const }])),
+    ...Object.fromEntries(Array.from({ length: SLOT_KEYS }, (_, i) => [`Digit${i + 1}`, { run: () => this.weapons.pressKey(i + 1), noModal: true as const, idle: true as const }])),
     KeyE: { run: () => this.context.use(), noModal: true },
     ArrowLeft: { run: () => this.cycleContext(-1), noModal: true, idle: true },
     ArrowRight: { run: () => this.cycleContext(1), noModal: true, idle: true },
@@ -546,7 +557,7 @@ export class Game {
   }
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
-    for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
+    for (const s of [this.town, this.fullShop, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
   }
 
   private toggleScreen(screen: CharacterScreen | InventoryScreen): void {
@@ -583,12 +594,10 @@ export class Game {
     }
   }
 
-  // A selected truck or point utility takes the click as its target instead of a move or a gun order.
+  // A selected point utility takes the click as its target instead of a move or a gun order.
   private clickUtility(e: MouseEvent): boolean {
     if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return false;
-    const picked = this.pickVehicle(e.clientX, e.clientY);
-    const other = picked && picked.id !== playerVehicle(this.world).id ? picked : null;
-    return this.utilityAim.click(other, this.rig.groundUnder(e.clientX, e.clientY, this.ground));
+    return this.utilityAim.click(this.rig.groundUnder(e.clientX, e.clientY, this.ground));
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -778,6 +787,7 @@ export class Game {
 
   private finishPlayback(): void {
     this.anim = null;
+    this.fx.releaseRopes();
     this.crashCues = null;
     this.breakCues = new BreakCues([]);
     this.phase = null;
@@ -892,6 +902,7 @@ export class Game {
     if (this.eventPoint(b.vehicle) === null) return;
     const p = playBreak(this.world, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
     if (p) this.sound.at("part-broken", p, 0);
+    playCookOff(this.combatHost(), b);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -1112,7 +1123,6 @@ export class Game {
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
-    this.utilityAim.cursor(this.renderer.domElement, this.pickRing.mesh.visible);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     this.hazards.update(this.world, this.world.terrain, this.views, performance.now(), this.turnClock(), this.rig.camera);

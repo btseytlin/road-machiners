@@ -49,10 +49,10 @@ export const PAL = {
   smoke: 0x100e0d, // dense black smoke clouds from smoke utilities
   caltrops: { spike: 0x9a9a94 }, // steel spikes
   oil: { slick: 0x0c0b0a }, // a glossy black oil slick; its rainbow sheen is drawn in its texture
-  rope: 0xc9b98a, // a harpoon line, pale hemp so it reads against trucks and dark ground
+  rope: 0x16130f, // a harpoon line, black tarred rope
   pulse: { flash: 0xc8ecff, arc: 0x9fd8ff, spark: 0xd8f0ff }, // an emitter pulse's flash and arcs and the sparks on a shut-down truck, electric blue-white
-  flare: { glow: 0xff4a3a, light: 0xff3a2a, marker: 0xff6a50, head: 0xfff0d0, trail: 0xb8b0a8 }, // a burning flare, its light, the contact blip it gives, and its hot head and pale smoke trail in flight
-  shell: { head: 0x2a2622, trail: 0x8a8580 }, // a smoke mortar's round in flight and its gray trail
+  flare: { core: 0xffffff, halo: 0xff3a2a, light: 0xff4a3a, marker: 0xff6a50, casing: 0x9a3426, trail: 0xb8b0a8 }, // a burning flare's white core, its red glow and red light, the contact blip it gives, and its red casing and pale smoke trail in flight
+  shell: { casing: 0x2a2622, trail: 0x8a8580 }, // a smoke mortar's round in flight and its gray trail
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls

@@ -69,6 +69,7 @@ export type WeaponDef = PartBase & {
   round: WeaponRound;
   classes: WeaponClass[];
   look: "mg" | "cannon";
+  line?: { turns: number }; // a round that hits ties a line to the part it struck, for this many turns; see src/sim/harpoon.ts
 };
 
 export type EngineDef = PartBase & {
@@ -88,6 +89,9 @@ export type ClaymoreDef = {
   minImpact: number;
   blast: { damage: number; pen: number; radius: number };
   selfBlast: { damage: number; pen: number };
+  // The blast throws the two trucks apart, or the user back off an obstacle: impulse in N s on each truck, and the
+  // share of it that points up.
+  throw: { impulse: number; lift: number };
   reload: number;
 };
 
@@ -130,7 +134,6 @@ export type StoreDef = PartBase & {
 };
 
 // The aim numbers a utility that fires a shot gives hitOdds, as a gun does. See WeaponDef.
-export type ShotDef = Pick<WeaponDef, 'range' | 'arc' | 'spread' | 'shake' | 'recoil' | 'round'>;
 
 // What a utility does. Distances are in tiles and durations in turns. An active effect acts on an order; crane
 // and scraper are passive and work while mounted. See src/sim/utility.ts.
@@ -142,20 +145,17 @@ export type UtilityEffect =
   | { type: 'mortar'; radius: number; turns: number; minRange: number; maxRange: number }
   | { type: 'caltrops'; radius: number; turns: number; behind: number }
   | { type: 'oil'; turns: number; behind: number; fuel: number }
-  | { type: 'harpoon'; turns: number }
   | { type: 'emitter'; radius: number; turns: number }
   | { type: 'flare'; radius: number; turns: number; minRange: number; maxRange: number }
   | { type: 'crane' }
   | { type: 'scraper' };
 export type UtilityEffectType = UtilityEffect['type'];
 
-// A yellow deck part with one job. reload: turns from one use to the next, null for a passive part. shot: the aim
-// of a utility that fires at a truck.
+// A yellow deck part with one job. reload: turns from one use to the next, null for a passive part.
 export type UtilityDef = PartBase & {
   kind: "utility";
   effect: UtilityEffect;
   reload: number | null;
-  shot?: ShotDef;
 };
 
 export type PartDef =
@@ -216,7 +216,6 @@ function utilityReach(d: Omit<UtilityDef, 'value'>): number {
   const e = d.effect;
   if ('maxRange' in e) return e.maxRange;
   if (e.type === 'oil') return oilSlickLength();
-  if (d.shot) return d.shot.range;
   return 'radius' in e ? e.radius : 0;
 }
 

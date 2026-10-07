@@ -119,7 +119,6 @@ export const PART_MODELS: Record<string, ModelName> = {
   caltrops: 'util_caltrops',
   oilSpiller: 'util_oil',
   patcherCrane: 'util_crane',
-  harpoon: 'util_harpoon',
   smokeMortar: 'util_mortar',
   flareCannon: 'util_flare',
   scrapersKnife: 'util_scraper',
@@ -249,6 +248,12 @@ export const WEAPON_POOLS: Record<string, WeaponPool> = {
     receiver: ['wrec_mg_a'],
     barrel: ['wbar_mg_long'],
     extra: ['wext_scope'],
+  },
+  harpoon: {
+    mount: ['wmount_pintle', 'wmount_ring_small'],
+    receiver: ['wrec_harpoon'],
+    barrel: ['wbar_harpoon'],
+    extra: [],
   },
 };
 
@@ -385,6 +390,7 @@ export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   grenadeLauncher: { mount: 'wmount_ring_wide', receiver: 'wrec_shotgun', barrel: 'wbar_autocannon', extra: 'wext_drum' },
   tankGun: { mount: 'wmount_cradle', receiver: 'wrec_tank', barrel: 'wbar_tank', extra: 'wext_shield' },
   flechette: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_long', extra: 'wext_scope' },
+  harpoon: { mount: 'wmount_pintle', receiver: 'wrec_harpoon', barrel: 'wbar_harpoon', extra: null },
 };
 
 const PART_SECTION: Record<PartDef['kind'], IconSection> = {

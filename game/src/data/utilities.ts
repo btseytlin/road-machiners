@@ -64,29 +64,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     reload: null,
     effect: { type: 'crane' }, // refits and roadside patches go faster, see WORK
   },
-  harpoon: {
-    id: 'harpoon',
-    kind: 'utility',
-    name: 'Harpoon',
-    hp: 40,
-    base: 269,
-    tier: 2,
-    w: 1,
-    h: 2,
-    mass: 120,
-    armor: 4,
-    tall: false,
-    reload: 5,
-    effect: { type: 'harpoon', turns: 3 }, // the line holds this many turns
-    shot: {
-      range: 8,
-      arc: 180,
-      spread: 4,
-      shake: 1,
-      recoil: 0,
-      round: { damage: 6, pen: 3, blast: false, speed: 120, splashRadius: 0, splashDamage: 0, splashPen: 0, armorShare: 1, craterRadius: 0 },
-    },
-  },
   smokeMortar: {
     id: 'smokeMortar',
     kind: 'utility',
@@ -164,14 +141,17 @@ export const CALTROPS = {
 // about 12° and 1.0 only 15-27° by where the streak lay. Kick 1.2 turns it 27-49° at 10 and 25-30° at 9; the cap of
 // 1.6 is reached from 9.3 tiles per turn. Grip 0.3 barely let the swing grow, and grip 0.06 moved a 3 tiles per turn
 // crossing 1 m off its line, against 0.38 m at 0.12. No kick rolled a truck: its up vector stayed level.
+// That spin read as too weak in play. Kick 2.4 with a cap of 3.2 turns the scout 26° at 5 tiles per turn, 46° at 6,
+// 82° at 8, 112° at 10 and 131° at 12, still with no truck rolled. Grip 0.06 on top let a crossing at 4 tiles per
+// turn slide 1 m and swing its tail, so grip stays 0.12.
 export const OIL = {
   blobs: 6, // oil fields per spill
   blobR: 0.9, // tiles, the radius of each field
   spacing: 0.8, // tiles along the path between field centers
   grip: 0.12, // share of friction slip and side friction stiffness left to a wheel on oil
   safeSpeed: 4, // tiles per turn; at or below it oil gives no tail kick
-  kick: 1.2, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
-  maxKick: 1.6, // rad/s, the cap on one tail kick
+  kick: 2.4, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
+  maxKick: 3.2, // rad/s, the cap on one tail kick
 };
 
 // Tiles from one end of a spill's streak to the other, on a straight path.
@@ -180,14 +160,16 @@ export function oilSlickLength(): number {
 }
 
 // The harpoon line: a one-sided spring between the two anchors once they are farther apart than the line's length.
-// Settled in src/phys/line.test.ts at 60 steps per second, with a parked hauler holding a 1.3 t scout: the spring is
-// stable without jitter, and the damping makes a held scout settle without bouncing, 0.77 m past the length at half
-// throttle. At full throttle the scout's lunge overshoots its 15.7 kN engine pull and tears the line in under a turn.
-// Stiffness 5000 with damping 4000 held even that lunge; 20000 tore it faster. Both were kept at the design values.
+// Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. A truck must be
+// able to drag the truck it hooked, so the line holds every drag measured over its 10 turns, each truck at full
+// throttle away from a braking or fleeing scout, buggy or hauler, from rest and at speed. The peak stretch pull: about
+// 15 kN for a scout, 30 to 60 kN for a hauler, van, tractor, carrier or loader, under 100 kN for any one-sided drag,
+// and 108 kN for a bus and a fleeing scout pulling against each other. The rope stretches under a meter in most
+// drags, so it reads as a rope and not a bungee. A softer 5000 N/m rope stretched 9 m behind a hauler.
 export const HARPOON = {
-  stiffness: 10000, // N per meter of stretch
-  damping: 2000, // newton seconds per meter on the separating speed
-  tearForce: 20000, // N; a pull above it tears the line
+  stiffness: 30000, // N per meter of stretch
+  damping: 12000, // newton seconds per meter on the separating speed
+  tearForce: 120000, // N; a stretch pull above it tears the line
   tearDamage: 12, // to the part the line held on the torn truck
 };
 
@@ -204,6 +186,7 @@ export const CLAYMORE: ClaymoreDef = {
   minImpact: 3, // tiles per turn
   blast: { damage: 60, pen: 12, radius: 2 }, // radius in meters
   selfBlast: { damage: 25, pen: 6 },
+  throw: { impulse: 40000, lift: 0.35 },
   reload: 20,
 };
 

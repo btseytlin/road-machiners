@@ -60,9 +60,18 @@ function utilityPoolOf(template: NpcTemplate): UtilityRoll[] {
   return pool;
 }
 
+// A utility pool holds utility parts and the harpoon, the gun that ties a line, which drivers carry as gear rather
+// than as one of their guns.
 function validateUtilityPool(pool: UtilityRoll[]): void {
-  validatePartPool(pool, 'utility', false);
+  validateWeights(pool);
+  const stray = pool.find(({ value }) => value !== null && !isGearPart(value));
+  if (stray) throw new Error(`NPC utility pool holds ${stray.value}, not a utility or a line gun`);
   for (const { levels } of pool) for (const level of levels ?? []) if (!GEAR_LEVEL_IDS.includes(level)) throw new Error(`Unknown gear level ${level}`);
+}
+
+function isGearPart(defId: string): boolean {
+  const def = partDef(defId);
+  return def.kind === 'utility' || (def.kind === 'weapon' && def.line !== undefined);
 }
 
 // The utility rolls open to the gear level: those with no level list, and those that name it.
@@ -225,11 +234,18 @@ function chooseRequiredParts(rng: Rng, table: NpcLoadoutTable, choices: ArmedCho
 function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, budget: number, pool: Weighted<string | null>[]): Vehicle {
   const choices: Weighted<Vehicle>[] = [];
   for (const entry of pool) {
-    const candidate = entry.value === null ? v : tryMountExtra(world, v, entry.value, budget);
+    const candidate = entry.value === null ? v : optionalMount(world, v, entry.value, budget);
     if (candidate) choices.push({ value: candidate, weight: entry.weight });
   }
   if (!choices.length) throw new Error(`No eligible optional equipment for ${v.chassisId}. Add an explicit empty outcome or a fitting part.`);
   return sampleWeighted(rng, choices);
+}
+
+// The truck with the optional part mounted, or null when it does not fit. A gun, as the harpoon, must also keep the
+// truck within its gun slowdown, as the extra guns do.
+function optionalMount(world: World, v: Vehicle, defId: string, budget: number): Vehicle | null {
+  const mounted = tryMountExtra(world, v, defId, budget);
+  return partDef(defId).kind === 'weapon' ? withinGunSlowdown(mounted) : mounted;
 }
 
 // Non-core mounted parts with the wear rolled onto each.

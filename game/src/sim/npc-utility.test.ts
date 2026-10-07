@@ -4,6 +4,7 @@ import { TIME } from '../data/time';
 import { makePart } from './factory';
 import { corePart, mountedParts } from './grid';
 import { mountPart } from './inventory';
+import { autoOrders } from './combat';
 import { assignUtilityOrders } from './npc-utility';
 import { siteGates } from './sites';
 import { addState } from './states';
@@ -49,82 +50,17 @@ function fleeing(w: World, npc: Vehicle, foe: Vehicle): void {
 }
 
 describe('NPC harpoon', () => {
-  it('fires at its fight target when the target is in range and driving away', () => {
+  it('is a gun: a driver in a fight aims it at the foe with its other guns, and gives it no utility order', () => {
     const { w, npc, part } = npcWith('harpoon');
-    const foe = foeAt(w, npc, 5, 0);
+    const foe = foeAt(w, npc, 5);
     npc.brain!.goals = [goal('fight', foe)];
+    startCombat(w, npc, foe);
 
+    autoOrders(w, npc);
     assignUtilityOrders(w);
 
-    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
-  });
-
-  it('holds fire at a target that drives toward it', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    const foe = foeAt(w, npc, 5, Math.PI);
-    npc.brain!.goals = [goal('fight', foe)];
-
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toBeUndefined();
-  });
-
-  it('holds fire inside a town guard', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    npc.pos = { ...GATE };
-    const foe = foeAt(w, npc, 5, 0);
-    npc.brain!.goals = [goal('fight', foe)];
-
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toBeUndefined();
-  });
-
-  it('sets a standing order on a target out of range, which waits for it', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    const foe = foeAt(w, npc, 12, 0);
-    npc.brain!.goals = [goal('fight', foe)];
-
-    assignUtilityOrders(w);
-    activateUtilities(w);
-
-    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
-  });
-
-  it('keeps its standing order while the fight with that target goes on', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    const foe = foeAt(w, npc, 12, Math.PI);
-    npc.brain!.goals = [goal('fight', foe)];
-    npc.utilityOrders[part.id] = { kind: 'truck', targetId: foe.id, aim: 'body' };
-
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
-  });
-
-  it('clears its standing order when its fight with that target ends', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    const foe = foeAt(w, npc, 12, 0);
-    npc.brain!.goals = [goal('fight', foe)];
-    assignUtilityOrders(w);
-    expect(npc.utilityOrders[part.id]).toBeDefined();
-
-    npc.brain!.goals = [];
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toBeUndefined();
-  });
-
-  it('moves its standing order to a new fight target', () => {
-    const { w, npc, part } = npcWith('harpoon');
-    const old = foeAt(w, npc, 12, 0);
-    const foe = foeAt(w, npc, 6, 0);
-    npc.utilityOrders[part.id] = { kind: 'truck', targetId: old.id, aim: 'body' };
-    npc.brain!.goals = [goal('fight', foe)];
-
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toEqual({ kind: 'truck', targetId: foe.id, aim: 'body' });
+    expect(npc.weaponOrders[part.id]).toEqual({ targetId: foe.id, aim: expect.any(String) });
+    expect(npc.utilityOrders).toEqual({});
   });
 });
 

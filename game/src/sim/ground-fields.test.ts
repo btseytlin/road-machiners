@@ -261,7 +261,7 @@ describe('caltropHits', () => {
 
     expect(wheelHp(me)).toEqual(before.map((hp) => hp - CALTROPS.damage));
     expect(f.hit).toEqual([me.id]);
-    expect(w.events).toContainEqual({ t: 'caltrops', vehicle: me.id, field: f.id, source: trader.id });
+    expect(w.events).toContainEqual({ t: 'caltrops', vehicle: me.id, field: f.id, source: trader.id, hits: coreParts(me, 'wheel').map((wheel) => ({ part: wheel.id, damage: CALTROPS.damage })) });
   });
 
   it('misses a truck whose trail passes farther than the field radius plus its own radius', () => {

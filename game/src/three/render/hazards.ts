@@ -11,12 +11,13 @@
 //
 // Ground fields from world.fields: a caltrop field is steel spikes strewn densest along the line its dropper drove and
 // thinning toward the radius. An oil field is a flat, opaque, glossy black blob with a noise-shaped rim and a faint
-// rainbow sheen. Blobs of one spill overlap, so they merge into one streak with no darker overlaps.
+// rainbow sheen. Blobs of one spill overlap, so they merge into one streak with no darker overlaps. New spikes fall
+// onto the ground one by one and new oil spreads out from its center. A field that ends sinks or soaks into the ground.
 //
 // Shown: clouds and fields the player sees any part of, and the player's own.
 //
-// Flares from world.flares: a red glow hanging over its point and a red point light, drawn while it burns within
-// FLARE.seenRange of the player. It sinks FLARE_LOOK.sink a turn. The truck its launch or its light shows is marked by
+// Flares from world.flares: a white-hot core in a red glow hanging over its point, and a red point light,
+// drawn while it burns within FLARE.seenRange of the player. It sinks FLARE_LOOK.sink a turn. The truck its launch or its light shows is marked by
 // contacts.ts from the player's contacts.
 //
 // Emitter pulses from the turn's pulse events: a blue-white flash at the emitter and jagged electric arcs to each truck
@@ -26,7 +27,8 @@
 // Timing (TurnClock, from the playback in game.ts): a hazard made in the turn now playing, absent from the world
 // before it, shows when it happens. Oil and caltrops appear as their dropper's animated spot passes them (fieldShown).
 // Smoke, flares, harpoon lines and pulses start when movement has played, at the volley (volleyShown). There a flare
-// flies from its cannon on a Flight arc and ignites at the top, and a mortar shell flies to where its cloud billows.
+// round flies from its cannon on a Flight arc and bursts alight at the top, and a mortar shell flies to where its
+// cloud billows. Both rounds are solid cylinders nose first along the arc.
 // A playback that ends in its volley frame, as a turn with no gunfire does, still gets its volley: the views keep its
 // world before the turn until the next turn. Hazards from earlier turns, and everything after a load, show at once.
 
@@ -71,10 +73,10 @@ export class HazardViews {
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, turnClock: TurnClock | null, camera: THREE.Camera): void {
     const clock = this.clockOf(world, turnClock);
     this.smoke.update(world, terrain, views, nowMs, clock, cutawayOf(world, views, camera));
-    this.fields.update(world, terrain, clock);
+    this.fields.update(world, terrain, clock, nowMs);
     this.flares.update(world, terrain, views, nowMs, clock);
     const fresh = clock === null ? NO_IDS : new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
-    this.lines.update(world, views, nowMs, { fresh, moved: clock === null || clock.moved });
+    this.lines.update(world, views, nowMs, { fresh, playing: turnClock !== null });
     this.pulses.update(world, terrain, views, nowMs, clock);
   }
 
@@ -188,26 +190,32 @@ export class Flight {
   }
 }
 
-type FlightLook = { head: number; headSize: number; additive: boolean; trail: number; trailPuffs: number; trailLag: number; trailSize: number; trailOpacity: number };
+// casing: the body's color. length and radius: the body's size in tiles.
+type FlightLook = { casing: number; length: number; radius: number; trail: number; trailPuffs: number; trailLag: number; trailSize: number; trailOpacity: number };
 
-type Flying = { flight: Flight; head: THREE.Sprite; trail: THREE.Sprite[] };
+type Flying = { flight: Flight; head: THREE.Mesh; trail: THREE.Sprite[] };
 
-// The heads and fading smoke trails of every body in flight. A body is dropped when it lands.
+const UP = new THREE.Vector3(0, 1, 0);
+const HEADING = new THREE.Vector3();
+const FLIGHT_LOOKAHEAD = 0.01; // share of the flight ahead that the round's nose points to
+
+// The bodies and fading smoke trails of every round in flight. A round is a solid cylinder that points along its arc.
+// It is dropped when it lands.
 class FlightsView {
   readonly root = new THREE.Group();
   private readonly flying: Flying[] = [];
-  private readonly headMaterial: THREE.SpriteMaterial;
+  private readonly headGeometry: THREE.CylinderGeometry;
+  private readonly headMaterial: THREE.MeshLambertMaterial;
   private readonly trailTexture = createSmokeTexture();
 
   constructor(private readonly look: FlightLook) {
-    const blending = look.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
-    this.headMaterial = new THREE.SpriteMaterial({ map: createGlowTexture(), color: look.head, transparent: true, depthWrite: false, blending });
+    this.headGeometry = new THREE.CylinderGeometry(look.radius * S, look.radius * S, look.length * S, 8);
+    this.headMaterial = new THREE.MeshLambertMaterial({ color: look.casing });
   }
 
   launch(flight: Flight): void {
-    const head = new THREE.Sprite(this.headMaterial);
+    const head = new THREE.Mesh(this.headGeometry, this.headMaterial);
     head.renderOrder = FLARE_ORDER;
-    head.scale.setScalar(this.look.headSize * S);
     const trail = Array.from({ length: this.look.trailPuffs }, () => {
       const puff = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.trailTexture, color: this.look.trail, transparent: true, depthWrite: false }));
       puff.renderOrder = FLARE_ORDER - 1;
@@ -227,7 +235,10 @@ class FlightsView {
 
   // The head at t, and each trail puff where the head was a little earlier, fading and spreading with its lag.
   private fly(body: Flying, t: number): void {
-    body.head.position.copy(body.flight.at(t));
+    const at = body.flight.at(t);
+    const ahead = body.flight.at(t + FLIGHT_LOOKAHEAD);
+    body.head.position.copy(at);
+    body.head.quaternion.setFromUnitVectors(UP, HEADING.set(ahead.x - at.x, ahead.y - at.y, ahead.z - at.z).normalize());
     body.trail.forEach((puff, i) => {
       const lag = (i + 1) * this.look.trailLag;
       puff.visible = t > lag;
@@ -283,8 +294,8 @@ const SMOKE_LOOK = {
   cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
 };
 // The mortar's shell: a dark round with a gray smoke trail on a low arc.
-const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
-const SHELL_LOOK: FlightLook = { head: PAL.shell.head, headSize: 0.5, additive: false, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
+export const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
+const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
 const RIM_SAMPLES = 8; // rim points checked for sight, besides the center
 
 type Puff = { sprite: THREE.Sprite; home: THREE.Vector3; size: number; opacity: number; seed: number };
@@ -417,6 +428,10 @@ function easeOut(t: number): number {
   return 1 - (1 - t) ** 3;
 }
 
+function easeIn(t: number): number {
+  return t * t;
+}
+
 function createSmokeTexture(): THREE.CanvasTexture {
   // A full core with a long soft falloff, so overlapping puffs make a solid screen with a soft edge.
   return radialTexture([[0, 1], [0.45, 0.85], [0.75, 0.4], [1, 0]]);
@@ -449,6 +464,11 @@ const FIELD_LOOK = {
   baseSpikes: 8,
   spike: { radius: 0.1, height: 0.2 }, // tiles
   across: 0.45, // share of the radius most spikes lie within across the drop line
+  // A fresh field's spikes drop from `height` tiles over `ms`, each starting up to `stagger` ms after the first, so
+  // they rain down one by one. A gone field's spikes sink `depth` spike heights into the ground over sinkMs, with the
+  // same stagger.
+  fall: { height: 0.8, ms: 300, stagger: 250 },
+  sink: { ms: 1200, depth: 1.5 },
 };
 const OIL_LOOK = {
   rim: { min: 0.6, max: 1.25 }, // the blob's rim, in shares of the field's radius
@@ -462,9 +482,26 @@ const OIL_LOOK = {
   // the radius.
   sheen: { share: 0.35, size: 0.45, shift: 0.3, opacity: 0.14 },
   wobble: 2.4, // noise cycles around the rim
+  spreadMs: 700, // a fresh blob spreads from its center to its rim over this
+  soakMs: 1400, // a gone blob shrinks into the ground over this
 };
 
-type FieldView = { objects: THREE.Object3D[]; materials: THREE.Material[] };
+// A spike's height at rest, and its delay from the field's start, so spikes land and sink one by one.
+type Spike = { mesh: THREE.Mesh; restY: number; delayMs: number };
+// The sheen's plane and the direction it sits off the blob's center.
+type Sheen = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; angle: number };
+// bornMs: when a field dropped this turn first showed, or -Infinity for one shown whole at once. goneMs: when it left
+// the world or the player's sight. spread: the blob's drawn share of its rim.
+type FieldView = {
+  f: GroundField;
+  root: THREE.Group;
+  bornMs: number;
+  goneMs: number | null;
+  spikes: Spike[];
+  slick: THREE.Mesh | null;
+  sheen: Sheen | null;
+  spread: number;
+};
 
 class GroundFieldsView {
   readonly root = new THREE.Group();
@@ -477,63 +514,119 @@ class GroundFieldsView {
   });
   private readonly sheenTexture = createSheenTexture();
 
-  update(world: World, terrain: Terrain, clock: TurnClock | null): void {
+  // A field that leaves the world or sight stays drawn while it fades into the ground. One that shows again before it
+  // is gone comes back whole.
+  update(world: World, terrain: Terrain, clock: TurnClock | null, nowMs: number): void {
     const shown = new Map(world.fields.filter((f) => fieldShown(world, f, clock) && isShown(world, f)).map((f) => [f.id, f]));
-    for (const [id, view] of this.views) if (!shown.has(id)) this.drop(id, view);
-    for (const f of shown.values()) if (!this.views.has(f.id)) this.views.set(f.id, this.makeView(world, terrain, f, clock));
+    for (const [id, view] of this.views) markGone(view, shown.has(id), nowMs);
+    for (const f of shown.values()) if (!this.views.has(f.id)) this.views.set(f.id, this.makeView(world, terrain, f, clock, nowMs));
+    for (const [id, view] of this.views) if (!this.pose(terrain, view, nowMs)) this.drop(id, view);
+  }
+
+  // Returns whether the field is still drawn.
+  private pose(terrain: Terrain, view: FieldView, nowMs: number): boolean {
+    return view.slick ? this.poseBlob(terrain, view, nowMs) : poseSpikes(view, nowMs);
   }
 
   private drop(id: string, view: FieldView): void {
-    this.root.remove(...view.objects);
-    for (const o of view.objects) if (o instanceof THREE.Mesh && o.geometry !== this.spikeGeometry) o.geometry.dispose();
-    for (const m of view.materials) m.dispose();
+    this.root.remove(view.root);
+    view.slick?.geometry.dispose();
+    view.sheen?.mesh.geometry.dispose();
+    view.sheen?.mesh.material.dispose();
     this.views.delete(id);
   }
 
-  // A field sits still, so its look is built once.
-  private makeView(world: World, terrain: Terrain, f: GroundField, clock: TurnClock | null): FieldView {
-    const view = f.kind === 'oil' ? this.blob(terrain, f) : { objects: [this.scatter(terrain, f, dropLine(world, f, clock))], materials: [] };
-    this.root.add(...view.objects);
+  // A field sits still, so its look is built once. One dropped this turn lands as it shows.
+  private makeView(world: World, terrain: Terrain, f: GroundField, clock: TurnClock | null, nowMs: number): FieldView {
+    const root = new THREE.Group();
+    const view: FieldView = { f, root, bornMs: madeThisTurn(clock, 'fields', f.id) ? nowMs : -Infinity, goneMs: null, spikes: [], slick: null, sheen: null, spread: -1 };
+    if (f.kind === 'oil') this.blob(view);
+    else view.spikes = this.scatter(terrain, f, dropLine(world, f, clock), root);
+    this.root.add(root);
     return view;
   }
 
-  // A flat glossy blob with a noise-shaped rim draped on the ground, and on some blobs a faint sheen spot.
-  private blob(terrain: Terrain, f: GroundField): FieldView {
-    const seed = hashId(f.id);
-    const slick = new THREE.Mesh(blobGeometry(terrain, f, seed), this.oilMaterial);
-    slick.renderOrder = FIELD_ORDER;
-    const { share, size, shift, opacity } = OIL_LOOK.sheen;
-    if (hash2(seed, 29) >= share) return { objects: [slick], materials: [] };
+  // A flat glossy blob with a noise-shaped rim draped on the ground, and on some blobs a faint sheen spot. poseBlob
+  // gives it its shape.
+  private blob(view: FieldView): void {
+    const seed = hashId(view.f.id);
+    view.slick = new THREE.Mesh(new THREE.BufferGeometry(), this.oilMaterial);
+    view.slick.renderOrder = FIELD_ORDER;
+    view.root.add(view.slick);
+    const { share, opacity } = OIL_LOOK.sheen;
+    if (hash2(seed, 29) >= share) return;
     // Pushed toward the camera past every blob's own offset, so a neighbor blob never clips it.
     const material = new THREE.MeshBasicMaterial({
       map: this.sheenTexture, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     });
-    const sheen = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
-    const a = hash2(seed, 31) * 2 * Math.PI;
-    const at = { x: f.pos.x + Math.cos(a) * f.r * shift, y: f.pos.y + Math.sin(a) * f.r * shift };
-    sheen.position.set(at.x * S, markHeightAt(terrain, f.pos, at.x, at.y) * S + OIL_LOOK.lift * 2, at.y * S);
-    sheen.scale.setScalar(f.r * size * 2 * S);
-    sheen.rotation.y = a;
-    sheen.renderOrder = FIELD_ORDER + 1;
-    return { objects: [slick, sheen], materials: [material] };
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material);
+    const angle = hash2(seed, 31) * 2 * Math.PI;
+    mesh.rotation.y = angle;
+    mesh.renderOrder = FIELD_ORDER + 1;
+    view.root.add(mesh);
+    view.sheen = { mesh, angle };
+  }
+
+  // A fresh blob spreads out from its center; a gone one shrinks back into it. The shape is redrawn only while it
+  // changes. Returns whether the blob is still drawn.
+  private poseBlob(terrain: Terrain, view: FieldView, nowMs: number): boolean {
+    const spread = view.goneMs === null
+      ? easeOut(Math.min(1, (nowMs - view.bornMs) / OIL_LOOK.spreadMs))
+      : 1 - easeIn(Math.min(1, (nowMs - view.goneMs) / OIL_LOOK.soakMs));
+    if (spread !== view.spread) {
+      const { f } = view;
+      view.spread = spread;
+      view.slick!.geometry.dispose();
+      view.slick!.geometry = blobGeometry(terrain, f, hashId(f.id), spread);
+      if (view.sheen) {
+        const { size, shift } = OIL_LOOK.sheen;
+        const off = f.r * shift * spread;
+        const at = { x: f.pos.x + Math.cos(view.sheen.angle) * off, y: f.pos.y + Math.sin(view.sheen.angle) * off };
+        view.sheen.mesh.position.set(at.x * S, markHeightAt(terrain, f.pos, at.x, at.y) * S + OIL_LOOK.lift * 2, at.y * S);
+        view.sheen.mesh.scale.setScalar(Math.max(1e-3, f.r * size * 2 * S * spread));
+      }
+    }
+    view.root.visible = spread > 0;
+    return view.goneMs === null || nowMs - view.goneMs < OIL_LOOK.soakMs;
   }
 
   // Spikes strewn densest along the drop line and thinning toward the radius, each at its own lean on the ground.
   // With no known drop line they spread evenly over the disk.
-  private scatter(terrain: Terrain, f: GroundField, line: Vec | null): THREE.Group {
-    const group = new THREE.Group();
+  private scatter(terrain: Terrain, f: GroundField, line: Vec | null, root: THREE.Group): Spike[] {
     const seed = hashId(f.id);
     const count = Math.round(FIELD_LOOK.baseSpikes + FIELD_LOOK.spikesPerArea * Math.PI * f.r * f.r);
-    for (let i = 0; i < count; i++) {
+    return Array.from({ length: count }, (_, i) => {
       const k = seed + i * 17;
       const p = line ? onLine(f, line, k) : onDisk(f, k);
-      const spike = new THREE.Mesh(this.spikeGeometry, this.spikeMaterial);
-      spike.position.set(p.x * S, heightAt(terrain, p.x, p.y) * S + (FIELD_LOOK.spike.height * S) / 2, p.y * S);
-      spike.rotation.set((hash2(k, 7) - 0.5) * 0.8, hash2(k, 11) * Math.PI, (hash2(k, 13) - 0.5) * 0.8);
-      group.add(spike);
-    }
-    return group;
+      const mesh = new THREE.Mesh(this.spikeGeometry, this.spikeMaterial);
+      const restY = heightAt(terrain, p.x, p.y) * S + (FIELD_LOOK.spike.height * S) / 2;
+      mesh.position.set(p.x * S, restY, p.y * S);
+      mesh.rotation.set((hash2(k, 7) - 0.5) * 0.8, hash2(k, 11) * Math.PI, (hash2(k, 13) - 0.5) * 0.8);
+      root.add(mesh);
+      return { mesh, restY, delayMs: hash2(k, 23) * FIELD_LOOK.fall.stagger };
+    });
   }
+}
+
+// A field keeps the moment it first went from view, and loses it when it shows again.
+function markGone(view: FieldView, shown: boolean, nowMs: number): void {
+  if (shown) view.goneMs = null;
+  else view.goneMs ??= nowMs;
+}
+
+// A fresh field's spikes fall onto the ground one by one; a gone field's spikes sink into it one by one. Returns
+// whether any spike is still drawn.
+function poseSpikes(view: FieldView, nowMs: number): boolean {
+  const { fall, sink, spike } = FIELD_LOOK;
+  let drawn = false;
+  for (const s of view.spikes) {
+    const landed = Math.min(1, Math.max(0, (nowMs - view.bornMs - s.delayMs) / fall.ms));
+    const sunk = view.goneMs === null ? 0 : Math.min(1, Math.max(0, (nowMs - view.goneMs - s.delayMs) / sink.ms));
+    s.mesh.visible = nowMs >= view.bornMs + s.delayMs && sunk < 1;
+    s.mesh.position.y = s.restY + fall.height * S * (1 - landed * landed) - easeIn(sunk) * spike.height * S * sink.depth;
+    drawn ||= sunk < 1;
+  }
+  return drawn;
 }
 
 // The direction of the dropper's path at a caltrop field dropped this turn, or null when not known.
@@ -559,9 +652,9 @@ function onLine(f: GroundField, dir: Vec, k: number): Vec {
 }
 
 // A fan of rim points around the center, through draped rings so the blob lies on the ground. Normals point up, so
-// every blob shades alike and overlaps do not show.
-function blobGeometry(terrain: Terrain, f: GroundField, seed: number): THREE.BufferGeometry {
-  const rim = Array.from({ length: OIL_LOOK.angles }, (_, i) => rimRadius(f.r, seed, (2 * Math.PI * i) / OIL_LOOK.angles));
+// every blob shades alike and overlaps do not show. spread: the share of the rim drawn, as the blob spreads or soaks in.
+function blobGeometry(terrain: Terrain, f: GroundField, seed: number, spread: number): THREE.BufferGeometry {
+  const rim = Array.from({ length: OIL_LOOK.angles }, (_, i) => rimRadius(f.r, seed, (2 * Math.PI * i) / OIL_LOOK.angles) * spread);
   const positions = [...drape(terrain, f, 0, 0)];
   for (const share of OIL_LOOK.rings) rim.forEach((r, i) => positions.push(...drape(terrain, f, (2 * Math.PI * i) / OIL_LOOK.angles, r * share)));
   const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -612,20 +705,22 @@ function createSheenTexture(): THREE.CanvasTexture {
 // ---- Flares
 
 const FLARE_ORDER = 906; // above smoke (905), below contact markers
-const FLARE_LOOK = {
+export const FLARE_LOOK = {
   height: 6, // tiles above the ground the flare hangs
   sink: 1, // tiles the hanging flare sinks a turn
   flightMs: 1600, // from the cannon to the top
   igniteMs: 300, // the light's ramp once lit
-  glow: 3, // tiles across the glow sprite
+  core: 0.5, // tiles across the white-hot core sprite
+  halo: { size: 3, opacity: 0.75 }, // the red glow around the core: tiles across, opacity at full brightness
+  burst: { size: 4, ms: 300 }, // the shell bursting at the top: the glow starts this many tiles across and shrinks to its size over ms
   light: { intensity: 60, reach: 1.6, decay: 1 }, // reach: the light's range as a share of the flare's radius
   flicker: { share: 0.25, speed: 6 }, // the glow and the light waver by this share, this many noise cycles a second
   lastTurn: 0.55, // brightness share in the flare's last turn, so a dying flare reads as ending
 };
-const FLARE_FLIGHT: FlightLook = { head: PAL.flare.head, headSize: 1.1, additive: true, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
+const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radius: 0.024, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
 
-// igniteMs: when it lights at the top. bornTurn: the world's turn when first drawn, for its sinking.
-type FlareView = { glow: THREE.Sprite; igniteMs: number; bornTurn: number };
+// igniteMs: when it bursts and lights at the top. bornTurn: the world's turn when first drawn, for its sinking.
+type FlareView = { core: THREE.Sprite; halo: THREE.Sprite; igniteMs: number; bornTurn: number };
 
 class FlaresView {
   readonly root = new THREE.Group();
@@ -659,12 +754,12 @@ class FlaresView {
     this.root.add(light);
   }
 
-  // A new flare flies from its cannon to its top and lights there. One from an earlier turn burns at once.
+  // A new flare flies from its cannon as a round, bursts at its top and lights there. One from an earlier turn burns
+  // at once.
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, f: Flare, fresh: boolean, nowMs: number): FlareView {
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: PAL.flare.glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    glow.renderOrder = FLARE_ORDER;
-    glow.scale.setScalar(FLARE_LOOK.glow * S);
-    this.root.add(glow);
+    const core = this.glowSprite(PAL.flare.core, FLARE_ORDER + 1);
+    core.scale.setScalar(FLARE_LOOK.core * S);
+    const halo = this.glowSprite(PAL.flare.halo, FLARE_ORDER);
     const shot = fresh ? launchOf(world, 'flare', f.source, f.pos) : null;
     if (shot) {
       const top = groundPoint(world.terrain, f.pos);
@@ -672,30 +767,44 @@ class FlaresView {
       const from = launchPoint(world, views, shot, f.pos);
       this.flights.launch(new Flight(from, top, (top.y - from.y) / 4, FLARE_LOOK.flightMs, nowMs));
     }
-    const view = { glow, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn };
+    const view = { core, halo, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn };
     this.views.set(f.id, view);
     return view;
   }
 
+  private glowSprite(color: number, order: number): THREE.Sprite {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    sprite.renderOrder = order;
+    this.root.add(sprite);
+    return sprite;
+  }
+
   private drop(id: string, view: FlareView): void {
-    this.root.remove(view.glow);
-    view.glow.material.dispose();
+    for (const sprite of [view.core, view.halo]) {
+      this.root.remove(sprite);
+      sprite.material.dispose();
+    }
     this.views.delete(id);
   }
 
-  // Lit, the glow and its light waver together, ramp up at ignition, dim in the flare's last turn and sink a little
-  // each turn from the turn after its launch.
+  // Lit, the core, its halo and its light waver together, ramp up at ignition, dim in the flare's last turn and sink a
+  // little each turn from the turn after its launch. At ignition the halo bursts wide and bright and shrinks back.
   private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, f: Flare, at: { nowMs: number; turn: number; progress: number }): void {
     const lit = Math.min(1, Math.max(0, (at.nowMs - view.igniteMs) / FLARE_LOOK.igniteMs));
+    const burst = lit > 0 ? 1 - Math.min(1, (at.nowMs - view.igniteMs) / FLARE_LOOK.burst.ms) : 0;
     const wave = 1 - FLARE_LOOK.flicker.share * valueNoise((at.nowMs / 1000) * FLARE_LOOK.flicker.speed, hashId(f.id) % 97);
     const bright = lit * wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1);
     const sunk = Math.max(0, at.turn - view.bornTurn - 1 + at.progress) * FLARE_LOOK.sink;
-    view.glow.position.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height - sunk) * S, f.pos.y * S);
-    view.glow.visible = lit > 0;
-    view.glow.material.opacity = bright;
-    light.intensity = FLARE_LOOK.light.intensity * bright;
+    const { halo, burst: wide } = FLARE_LOOK;
+    view.core.position.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height - sunk) * S, f.pos.y * S);
+    view.halo.position.copy(view.core.position);
+    view.core.visible = view.halo.visible = lit > 0;
+    view.core.material.opacity = bright;
+    view.halo.scale.setScalar((halo.size + (wide.size - halo.size) * burst) * S);
+    view.halo.material.opacity = halo.opacity * bright + (1 - halo.opacity) * burst;
+    light.intensity = FLARE_LOOK.light.intensity * bright * (1 + burst);
     light.distance = f.r * FLARE_LOOK.light.reach * S;
-    light.position.copy(view.glow.position);
+    light.position.copy(view.core.position);
   }
 }
 

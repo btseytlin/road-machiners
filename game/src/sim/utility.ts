@@ -6,15 +6,13 @@
 import { partDef, type PartDef, type UtilityDef, type UtilityEffect, type UtilityEffectType } from '../data/parts';
 import { EMITTER, WORK } from '../data/utilities';
 import { isHostile, noteAttack, type FireBlock } from './combat';
-import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
 import { armClaymore } from './claymore';
-import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
+import { endLines } from './harpoon';
 import { deploySmoke, dropField, launchFlare, oilShort, spillOil } from './hazards';
 import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
-import { canVehicleSee } from './vision';
 import { wornDef, wornTurns } from './wear';
 
 // What a part does when used: a utility effect, or arming a claymore ram.
@@ -27,7 +25,6 @@ const ORDER_KIND: Record<UseKind, UtilityOrder['kind'] | null> = {
   oil: 'self',
   emitter: 'self',
   claymore: 'self',
-  harpoon: 'truck',
   mortar: 'point',
   flare: 'point',
   crane: null,
@@ -35,18 +32,17 @@ const ORDER_KIND: Record<UseKind, UtilityOrder['kind'] | null> = {
 };
 
 // The order in which this turn's uses resolve: smoke and flares first, so they already cover this turn's shots, then
-// the harpoon, the ground drops and arming, and the emitter pulse last.
+// the ground drops and arming, and the emitter pulse last.
 const USE_ORDER: Record<UseKind, number> = {
   sprout: 0,
   mortar: 0,
   flare: 0,
-  harpoon: 1,
-  caltrops: 2,
-  oil: 2,
-  claymore: 2,
-  emitter: 3,
-  crane: 4,
-  scraper: 4,
+  caltrops: 1,
+  oil: 1,
+  claymore: 1,
+  emitter: 2,
+  crane: 3,
+  scraper: 3,
 };
 
 type Use = { vehicle: Vehicle; part: PartInstance; order: UtilityOrder; kind: UseKind };
@@ -65,7 +61,6 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
     deploySmoke(world, vehicle, pointOf(order), e.radius, e.turns);
   },
   flare: (world, { vehicle, part, order }) => launchFlare(world, vehicle, pointOf(order), effectOf(part, 'flare')),
-  harpoon: (world, { vehicle, part, order }) => fireHarpoon(world, vehicle, part, truckOf(order)),
   caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
   oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
   claymore: (_world, { vehicle, part }) => armClaymore(vehicle, part),
@@ -80,11 +75,6 @@ function effectOf<T extends UtilityEffectType>(part: PartInstance, type: T): Ext
   return def.effect as Extract<UtilityEffect, { type: T }>;
 }
 
-function truckOf(order: UtilityOrder): Extract<UtilityOrder, { kind: 'truck' }> {
-  if (order.kind !== 'truck') throw new Error(`A ${order.kind} order has no truck`);
-  return order;
-}
-
 function pointOf(order: UtilityOrder): Vec {
   if (order.kind !== 'point') throw new Error(`A ${order.kind} order has no point`);
   return order.pos;
@@ -97,7 +87,7 @@ export function useKindOf(def: PartDef): UseKind {
   throw new Error(`${def.name} is not a utility`);
 }
 
-// The kind of order the part takes: self, truck or point, or null for a passive utility. Throws for a part that is
+// The kind of order the part takes: self or point, or null for a passive utility. Throws for a part that is
 // not a utility or a claymore ram.
 export function orderKindOf(part: PartInstance): UtilityOrder['kind'] | null {
   return ORDER_KIND[useKindOf(partDef(part.defId))];
@@ -139,16 +129,13 @@ export function utilityBlock(world: World, v: Vehicle, part: PartInstance): Fire
 }
 
 // Why the vehicle cannot give this order to the part, or null when it can. Throws when the truck has no such part
-// or the part is not a utility. A truck order is refused only as a gun target is, plus a broken or unmounted part:
-// recharge, range, arc and cover are waits (harpoonWait), not refusals. Self and point orders are refused for every
-// reason the part cannot act this turn.
+// or the part is not a utility. An order is refused for every reason the part cannot act this turn.
 export function utilityOrderError(world: World, v: Vehicle, partId: string, order: UtilityOrder): string | null {
   const { part } = partOn(v, partId);
   const def = partDef(part.defId);
   const wanted = ORDER_KIND[useKindOf(def)];
   if (wanted === null) return `${def.name} is passive and takes no order`;
   if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
-  if (order.kind === 'truck') return truckOrderError(world, v, part, order);
   const charge = chargeError(world, v, part);
   if (charge) return `${def.name}: ${charge}`;
   return costError(world, v, def) ?? pointError(v, part, order);
@@ -185,53 +172,19 @@ export function pointBlock(v: Vehicle, part: PartInstance, pos: Vec): FireBlock 
   return d < minRange || d > maxRange ? 'range' : null;
 }
 
-type TruckOrder = Extract<UtilityOrder, { kind: 'truck' }>;
-
-// A truck order is refused like a gun target: a missing truck, the truck itself, a missing aimed part or a truck out
-// of sight. A broken or unmounted part takes no order either.
-function truckOrderError(world: World, v: Vehicle, part: PartInstance, order: TruckOrder): string | null {
-  const target = world.vehicles.find((x) => x.id === order.targetId);
-  const bad = targetError(v, target, order);
-  if (bad || !target) return bad ?? `Bad target ${order.targetId}`;
-  const name = partDef(part.defId).name;
-  const broken = partBroken(v, part);
-  if (broken) return `${name}: ${broken}`;
-  return canVehicleSee(world, v, target.pos) ? null : `${name}: unseen`;
-}
-
-function targetError(v: Vehicle, target: Vehicle | undefined, order: TruckOrder): string | null {
-  if (!target || target.id === v.id) return `Bad target ${order.targetId}`;
-  return order.aim !== 'body' && !findPart(target, order.aim) ? `Target has no part ${order.aim}` : null;
-}
-
-// 'unmounted' or 'disabled' for a part that is off the deck or at 0 HP, else null.
-function partBroken(v: Vehicle, part: PartInstance): FireBlock | null {
-  if (!partOn(v, part.id).mounted) return 'unmounted';
-  return part.hp <= 0 ? 'disabled' : null;
-}
-
-// Why a standing truck order waits this turn, or null when it fires: the part's own block, recharge included, then the
-// harpoon's sight, cover, range and arc.
-export function harpoonWait(world: World, v: Vehicle, part: PartInstance, target: Vehicle): FireBlock | null {
-  return utilityBlock(world, v, part) ?? harpoonBlock(world, v, part, target);
-}
-
-// The activation step, after movement and vision and before the guns fire. A self or point order acts once if the part
-// still takes it, and is cleared either way. A truck order stands like a gun's target: it fires when harpoonWait
-// allows and is then cleared, it waits through recharge, range, arc and sight, and it is dropped when its target is
-// gone or knocked out or the part left the truck, left the deck or broke.
+// The activation step, after movement and vision and before the guns fire. An order acts once if the part still
+// takes it, and is cleared either way.
 export function activateUtilities(world: World): void {
   const uses = world.vehicles.flatMap((vehicle) => takeUses(world, vehicle));
   uses.sort((a, b) => USE_ORDER[a.kind] - USE_ORDER[b.kind]);
   for (const use of uses) act(world, use);
 }
 
-// This turn's uses of the vehicle's orders. Each order that does not wait is cleared.
+// This turn's uses of the vehicle's orders. Every order is cleared.
 function takeUses(world: World, vehicle: Vehicle): Use[] {
   const uses: Use[] = [];
   for (const [partId, order] of Object.entries(vehicle.utilityOrders)) {
-    const use = order.kind === 'truck' ? standingUse(world, vehicle, partId, order) : oneShotUse(world, vehicle, partId, order);
-    if (use === 'wait') continue;
+    const use = oneShotUse(world, vehicle, partId, order);
     delete vehicle.utilityOrders[partId];
     if (use) uses.push(use);
   }
@@ -244,28 +197,6 @@ function held(vehicle: Vehicle, partId: string): boolean {
 
 function oneShotUse(world: World, vehicle: Vehicle, partId: string, order: UtilityOrder): Use | null {
   return held(vehicle, partId) && utilityOrderError(world, vehicle, partId, order) === null ? useOf(vehicle, partId, order) : null;
-}
-
-// The use of a standing truck order this turn, 'wait' to keep it, or null to drop it. An aimed part that left the
-// target makes it a body shot, as settleAims does for a gun, since the truck it chose is still there.
-function standingUse(world: World, vehicle: Vehicle, partId: string, order: TruckOrder): Use | 'wait' | null {
-  if (!held(vehicle, partId)) return null;
-  const { part } = partOn(vehicle, partId);
-  const target = liveTarget(world, order);
-  if (!target || partBroken(vehicle, part)) return null;
-  settleAim(target, order);
-  return harpoonWait(world, vehicle, part, target) === null ? useOf(vehicle, partId, order) : 'wait';
-}
-
-// An aimed part that left the target makes the order a body shot.
-function settleAim(target: Vehicle, order: TruckOrder): void {
-  if (order.aim !== 'body' && !findPart(target, order.aim)) order.aim = 'body';
-}
-
-// The order's target, or null when it left the world or is knocked out.
-function liveTarget(world: World, order: TruckOrder): Vehicle | null {
-  const target = world.vehicles.find((x) => x.id === order.targetId);
-  return target && !isKnockedOut(target) ? target : null;
 }
 
 function useOf(vehicle: Vehicle, partId: string, order: UtilityOrder): Use {
@@ -282,7 +213,6 @@ function act(world: World, use: Use): void {
     vehicle: use.vehicle.id,
     part: use.part.id,
     effect: use.kind,
-    target: use.order.kind === 'truck' ? use.order.targetId : null,
     point: use.order.kind === 'point' ? { ...use.order.pos } : null,
   });
 }

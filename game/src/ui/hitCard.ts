@@ -1,17 +1,14 @@
 // Hover card: my weapons' hit odds on the hovered truck and its weapons' odds on me, with the causes of scatter.
-// Utilities that fire at trucks, like the harpoon, follow the guns. Every number comes from hitOdds, the same function
-// the fire phase and the activation step roll against.
+// Every number comes from hitOdds, the same function the fire phase rolls against.
 
-import { partDef, type UtilityDef } from '../data/parts';
 import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
-import type { Aim, PartInstance, Vehicle, World } from '../sim/types';
-import { chargedParts, harpoonWait, orderKindOf, shutDownTurnsLeft } from '../sim/utility';
+import type { Aim, Vehicle, World } from '../sim/types';
+import { shutDownTurnsLeft } from '../sim/utility';
 import { DEG } from '../sim/vec';
-import { wornDef } from '../sim/wear';
 import { el } from './dom';
-import { ammoText, blockText, utilityBlockText, utilitySlots, UTILITY_SLOTS } from './weapons';
+import { ammoText, blockText } from './weapons';
 
 // `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
@@ -64,28 +61,6 @@ function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle,
   return { label, odds, text: `${Math.round(odds.damageChance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
 }
 
-// A harpoon's row: its chance to land on the target, or why it cannot fire now. The chance is the round's.
-function utilityRow(world: World, shooter: Vehicle, part: PartInstance, target: Vehicle, name: string): HitRow {
-  const block = harpoonWait(world, shooter, part, target);
-  if (block !== null) return { label: name, odds: null, text: utilityBlockText(part, block), cause: null, detail: null };
-  const order = shooter.utilityOrders[part.id];
-  const aim = order?.kind === 'truck' && order.targetId === target.id ? order.aim : 'body';
-  const odds = hitOdds(world, shooter, { def: wornDef<UtilityDef>(part) }, target, aim);
-  return { label: name, odds, text: `${Math.round(odds.chance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
-}
-
-// The mounted utilities that fire at trucks, in slot order.
-function truckUtilities(v: Vehicle): PartInstance[] {
-  return chargedParts(v).filter((p) => orderKindOf(p) === 'truck');
-}
-
-// "[5] Harpoon" for a utility on a key of the player's utility row.
-function slotName(world: World, part: PartInstance): string {
-  const slot = utilitySlots(world).indexOf(part);
-  const name = partDef(part.defId).name;
-  return slot < 0 ? name : `[${slot + 1 + UTILITY_SLOTS}] ${name}`;
-}
-
 // A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.
 function aimAt(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): Aim {
   const order = shooter.weaponOrders[mw.part.id];
@@ -102,14 +77,8 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   return {
     name: it.name,
     shutDown: left > 0 ? `Shut down: ${left} ${left === 1 ? 'turn' : 'turns'} left` : null,
-    mine: [
-      ...vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
-      ...truckUtilities(me).map((part) => utilityRow(world, me, part, it, slotName(world, part))),
-    ],
-    theirs: [
-      ...vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), mw.def.name)),
-      ...truckUtilities(it).map((part) => utilityRow(world, it, part, me, partDef(part.defId).name)),
-    ],
+    mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
+    theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), mw.def.name)),
   };
 }
 

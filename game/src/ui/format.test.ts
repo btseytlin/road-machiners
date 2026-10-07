@@ -144,7 +144,7 @@ describe("roundLabel", () => {
 describe("utility log", () => {
   it("logs no line for a utility use, so smoke never reads as mechanical state", () => {
     const w = emptyWorld();
-    expect(eventText(w, { t: "utility", vehicle: w.player.vehicleId, part: "p1", effect: "sprout", target: null, point: null })).toBeNull();
+    expect(eventText(w, { t: "utility", vehicle: w.player.vehicleId, part: "p1", effect: "sprout", point: null })).toBeNull();
   });
 });
 
@@ -218,7 +218,7 @@ describe("claymore log", () => {
     const engine = mountedParts(trader, "engine")[0];
     const hits = [{ part: engine.id, damage: 20 }];
 
-    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)}: Stock engine −20`, cls: "good" });
+    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, part: "ram", other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)}: Stock engine −20`, cls: "good" });
   });
 
   it("tells the player a claymore ram blasted its truck", () => {
@@ -227,7 +227,7 @@ describe("claymore log", () => {
     const engine = mountedParts(w.vehicles[0], "engine")[0];
     const hits = [{ part: engine.id, damage: 20 }];
 
-    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck: ${partDef(engine.defId).name} −20`, cls: "bad" });
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, part: "ram", other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck: ${partDef(engine.defId).name} −20`, cls: "bad" });
   });
 
   it("logs a seen blast between other trucks and nothing for one out of sight", () => {
@@ -237,31 +237,48 @@ describe("claymore log", () => {
     const far = addVehicle(w, "raiders", "hauler", [], { x: 200, y: 200 });
     const farTrader = addVehicle(w, "traders", "hauler", [], { x: 202, y: 200 });
 
-    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: trader.id, pos: { x: 34, y: 30 }, hits: [], selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts ${vehicleName(w, trader.id)}`, cls: "dim" });
-    expect(eventText(w, { t: "claymore", vehicle: far.id, other: farTrader.id, pos: { x: 201, y: 200 }, hits: [], selfHits: [] })).toBeNull();
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, part: "ram", other: trader.id, pos: { x: 34, y: 30 }, hits: [], selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts ${vehicleName(w, trader.id)}`, cls: "dim" });
+    expect(eventText(w, { t: "claymore", vehicle: far.id, part: "ram", other: farTrader.id, pos: { x: 201, y: 200 }, hits: [], selfHits: [] })).toBeNull();
   });
 });
 
 describe("caltrops log", () => {
-  it("tells the player its wheels took caltrops", () => {
-    const w = emptyWorld();
-    const me = w.player.vehicleId;
+  // A hit of 8 on each of the truck's wheels, as a caltrop field deals.
+  const wheelHits = (v: { items: { kind: string; part?: PartInstance }[] }) =>
+    v.items.flatMap((i) => (i.part && partDef(i.part.defId).kind === "core" && i.part.defId.includes("wheel") ? [{ part: i.part.id, damage: 8 }] : []));
 
-    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me })).toEqual({ text: "You drive into caltrops. Wheels damaged.", cls: "bad" });
+  it("lists the player's wheel damage like a hit", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const hits = wheelHits(me);
+
+    const line = eventText(w, { t: "caltrops", vehicle: me.id, field: "g1", source: me.id, hits });
+
+    expect(hits).toHaveLength(4);
+    expect(line).toMatchObject({ cls: "bad", text: expect.stringMatching(/^You drive into caltrops: (.+ −8, ){3}.+ −8$/) });
   });
 
-  it("names a seen truck that drives into the player's caltrops", () => {
+  it("names a seen truck that drives into the player's caltrops, with its wheel damage", () => {
     const w = emptyWorld();
     const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
 
-    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId })).toEqual({ text: `${vehicleName(w, trader.id)} drives into caltrops`, cls: "good" });
+    const line = eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId, hits: wheelHits(trader) });
+
+    expect(line).toMatchObject({ cls: "good", text: expect.stringMatching(new RegExp(`^${vehicleName(w, trader.id)} drives into caltrops: .*−8`)) });
+  });
+
+  it("logs a caltrops event from an old save with no wheel numbers", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+
+    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me, hits: [] })).toMatchObject({ text: "You drive into caltrops", cls: "bad" });
   });
 
   it("logs nothing for a truck out of sight", () => {
     const w = emptyWorld();
     const trader = addVehicle(w, "traders", "hauler", [], { x: 200, y: 200 });
 
-    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id })).toBeNull();
+    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id, hits: [] })).toBeNull();
   });
 });
 

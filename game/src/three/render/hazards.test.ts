@@ -155,19 +155,100 @@ describe('HazardViews', () => {
     const before = cloneWorld(world);
     const pos = { x: me.pos.x + 12, y: me.pos.y };
     world.flares.push({ id: 'f1', source: me.id, pos, r: 10, turnsLeft: 6 });
-    world.events = [{ t: 'utility', vehicle: me.id, part: 'p1', effect: 'flare', target: null, point: { ...pos } }];
+    world.events = [{ t: 'utility', vehicle: me.id, part: 'p1', effect: 'flare', point: { ...pos } }];
     const views = new HazardViews();
     const camera = new THREE.PerspectiveCamera();
 
     views.update(world, world.terrain, new Map(), 1000, clock(before, 0.5), camera);
     views.update(world, world.terrain, new Map(), 1016, null, camera);
 
-    const shown: THREE.Sprite[] = [];
+    const shown: (THREE.Sprite | THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>)[] = [];
     views.root.traverse((o) => {
-      if (o instanceof THREE.Sprite && o.visible && o.parent?.visible !== false) shown.push(o);
+      if ((o instanceof THREE.Sprite || o instanceof THREE.Mesh) && o.visible && o.parent?.visible !== false) shown.push(o);
     });
-    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.head)).toBe(true);
-    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.glow)).toBe(false);
+    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.casing)).toBe(true);
+    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.core)).toBe(false);
+  });
+
+  // Spikes are drawn in the view of a caltrop field: meshes under the fields' root at the spike's color.
+  const spikesOf = (views: InstanceType<typeof HazardViews>): THREE.Mesh[] => {
+    const out: THREE.Mesh[] = [];
+    views.root.traverse((o) => {
+      if (o instanceof THREE.Mesh && (o.material as THREE.MeshLambertMaterial).color?.getHex() === PAL.caltrops.spike) out.push(o);
+    });
+    return out;
+  };
+
+  it('drops a fresh caltrop field from above the ground and lets its spikes settle', () => {
+    const world = emptyWorld();
+    const me = droveEast(world);
+    const before = cloneWorld(world);
+    world.fields.push({ id: 'g1', kind: 'caltrops', source: me.id, pos: { x: 22, y: 30 }, r: 1.25, turnsLeft: 5, hit: [] });
+    const views = new HazardViews();
+    const camera = new THREE.PerspectiveCamera();
+
+    views.update(world, world.terrain, new Map(), 1000, clock(before, 1, true), camera);
+    const first = spikesOf(views).filter((s) => s.visible).map((s) => s.position.y);
+    views.update(world, world.terrain, new Map(), 3000, clock(before, 1, true), camera);
+    const rest = spikesOf(views).map((s) => s.position.y);
+
+    expect(spikesOf(views).every((s) => s.visible)).toBe(true);
+    expect(Math.min(...first)).toBeGreaterThan(Math.max(...rest));
+  });
+
+  it('sinks a gone caltrop field into the ground before dropping it', () => {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    world.fields.push({ id: 'g1', kind: 'caltrops', source: me.id, pos: { x: 25, y: 32 }, r: 1.25, turnsLeft: 1, hit: [] });
+    const views = new HazardViews();
+    const camera = new THREE.PerspectiveCamera();
+    views.update(world, world.terrain, new Map(), 1000, null, camera);
+    const rest = spikesOf(views).map((s) => s.position.y);
+
+    world.fields = [];
+    views.update(world, world.terrain, new Map(), 1100, null, camera);
+    views.update(world, world.terrain, new Map(), 1700, null, camera);
+    const sinking = spikesOf(views).map((s) => s.position.y);
+    expect(sinking.length).toBe(rest.length);
+    expect(sinking.some((y, i) => y < rest[i])).toBe(true);
+
+    views.update(world, world.terrain, new Map(), 4000, null, camera);
+    expect(spikesOf(views)).toEqual([]);
+  });
+
+  it('spreads a fresh oil blob from its center and soaks a gone one into the ground', () => {
+    const world = emptyWorld();
+    const me = droveEast(world);
+    const before = cloneWorld(world);
+    world.fields.push({ id: 'g1', kind: 'oil', source: me.id, pos: { x: 22, y: 30 }, r: 0.9, turnsLeft: 5, hit: [] });
+    const views = new HazardViews();
+    const camera = new THREE.PerspectiveCamera();
+    const slickWidth = () => {
+      let width = 0;
+      views.root.traverse((o) => {
+        if (o instanceof THREE.Mesh && (o.material as THREE.MeshStandardMaterial).color?.getHex() === PAL.oil.slick) {
+          o.geometry.computeBoundingBox();
+          width = o.geometry.boundingBox!.max.x - o.geometry.boundingBox!.min.x;
+        }
+      });
+      return width;
+    };
+
+    views.update(world, world.terrain, new Map(), 1000, clock(before, 1, true), camera);
+    views.update(world, world.terrain, new Map(), 1100, clock(before, 1, true), camera);
+    const spreading = slickWidth();
+    views.update(world, world.terrain, new Map(), 3000, clock(before, 1, true), camera);
+    const whole = slickWidth();
+    world.fields = [];
+    views.update(world, world.terrain, new Map(), 3100, null, camera);
+    views.update(world, world.terrain, new Map(), 3900, null, camera);
+    const soaking = slickWidth();
+    views.update(world, world.terrain, new Map(), 6000, null, camera);
+
+    expect(spreading).toBeGreaterThan(0);
+    expect(spreading).toBeLessThan(whole);
+    expect(soaking).toBeLessThan(whole);
+    expect(slickWidth()).toBe(0);
   });
 
   // IV23: hazard views draw no ground ring, disc or band at a hazard's radius.
