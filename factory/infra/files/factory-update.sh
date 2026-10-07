@@ -17,7 +17,7 @@ log() { echo "$(date +%FT%T%z) $*"; }
 # The reason has no time, so a retry that fails the same way does not wake Hermes again.
 fail() {
   log "failed: $*"
-  echo "$*" > "$failed"
+  echo "$*" >"$failed"
   if [ -n "$building" ]; then
     git -C "$repo" worktree remove --force "$building" || log "could not remove $building, the next deploy retries"
   fi
@@ -31,11 +31,11 @@ cwds() {
     cat "$FACTORY_CWD_LIST"
     return
   fi
-  readlink /proc/self/cwd > /dev/null
+  readlink /proc/self/cwd >/dev/null
   # One readlink per process, since the server's uutils readlink stops at the first unreadable link, like a root process.
   local link
   for link in /proc/[0-9]*/cwd; do
-    readlink "$link" 2> /dev/null || true
+    readlink "$link" 2>/dev/null || true
   done
 }
 
@@ -44,7 +44,7 @@ in_use() {
   local line
   while IFS= read -r line; do
     case $line in "$1" | "$1"/*) return 0 ;; esac
-  done <<< "$2"
+  done <<<"$2"
   return 1
 }
 
@@ -93,12 +93,12 @@ if [ "$(readlink "$releases/current")" != "$target" ]; then
   log "npm ci"
   (cd "$release/factory" && timeout 900 npm ci) || fail "npm ci failed at ${target:0:7}"
   image=$(grep '^FACTORY_IMAGE=' "$release/factory/settings.env" | cut -d= -f2-)
-  if grep -qE '^factory/docker/' <<< "$changed"; then
+  if grep -qE '^factory/docker/' <<<"$changed"; then
     log "build agent and proxy images"
     timeout 1800 docker build -q -t "$image" "$release/factory/docker" || fail "agent image build failed at ${target:0:7}"
     timeout 600 docker build -q -t "$image-proxy" "$release/factory/docker/proxy" || fail "proxy image build failed at ${target:0:7}"
   fi
-  if grep -qE '^factory/(hermes/|settings\.env$)' <<< "$changed"; then
+  if grep -qE '^factory/(hermes/|settings\.env$)' <<<"$changed"; then
     log "rebuild Hermes"
     (cd "$release" && FACTORY_HERMES_DIR=$root/hermes FACTORY_UID=$(id -u) FACTORY_CODE_SOURCE=$root FACTORY_CODE_TARGET=$root \
       timeout 900 docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env \
@@ -112,7 +112,7 @@ if [ "$(readlink "$releases/current")" != "$target" ]; then
   touch "$home/dashboard-restart"
 fi
 
-echo "$target" > "$home/deployed"
+echo "$target" >"$home/deployed"
 rm -f "$failed"
 log "deployed ${target:0:7}"
 prune

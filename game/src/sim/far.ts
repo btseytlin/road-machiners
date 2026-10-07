@@ -14,7 +14,7 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
-import { isOnRope } from './tow';
+import { isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -26,13 +26,21 @@ export function isNear(w: World, v: Vehicle): boolean {
   return inLiveRange(w, v.pos);
 }
 
+// Why the tank limits the truck now: 'low' halves top speed, 'empty' leaves a crawl. Null when it limits nothing.
+export function fuelLimit(w: World, v: Vehicle, burnsFuel: boolean): 'low' | 'empty' | null {
+  if (!burnsFuel) return null;
+  const fuel = getResources(w, v).fuel;
+  if (fuel <= 0) return 'empty';
+  return fuel < fuelCap(v) * RULES.lowFuelThreshold ? 'low' : null;
+}
+
 // Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
 // speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
 // A pushed truck burns no fuel, so its tank limits nothing.
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
+  const low = fuelLimit(w, v, s.fuelPerTile > 0) === 'low';
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
@@ -139,9 +147,11 @@ function keepFarRoute(v: Vehicle, route: FarRoute | undefined): void {
 const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
 
 // The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
-// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
+// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate. The truck on
+// the vehicle's own rope trails it and is never in its way.
 function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
-  const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+  const client = ropeClientOf(w, v.id);
+  const others = w.vehicles.filter((o) => o.id !== v.id && o.id !== client).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
   for (let seg = 1; seg < path.length; seg++) {
     const a = path[seg - 1];

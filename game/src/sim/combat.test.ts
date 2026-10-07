@@ -5,15 +5,18 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, noteAttack, resolveDestroyed } from './combat';
+import { autoOrders, beatenBy, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
+import { knockOutNpc } from './defeat';
+import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { thinkNpc, topGoal } from './npc-activities';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, settleStorms, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
+import { PHYSICS } from '../data/physics';
 import { endTurn, update } from './world';
 import { gunFor } from './factory';
 
@@ -686,7 +689,8 @@ describe('aim perks', () => {
 
   // A storm over both trucks.
   const storm = (w: World) => {
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
+    settleStorms(w);
   };
 
   it('storm rider takes the storm scatter away from the player', () => {
@@ -806,5 +810,131 @@ describe('betrayal', () => {
     thinkNpc(w, npc);
     expect(stateOf(w, 'trade', npc.id, me.id)).toBeNull();
     expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: me.id });
+  });
+});
+
+describe('who beat a truck', () => {
+  // A raider one hit from breaking its cab, with the player and a Bowl Farmers lawman both firing at it.
+  function sharedFight(seed: number) {
+    const { w, me, buggy, mg } = duel();
+    w.rngState = seed;
+    const ally = addVehicle(w, 'bowl', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 33 }, -Math.PI / 2);
+    ally.brain = npcBrain('bowlFarmer', { x: 33, y: 33 }, ['lawman']);
+    for (const it of mountedItems(buggy)) if (it.part.id !== corePart(buggy, 'cab').id && it.part.defId !== 'stockEngine') it.part.hp = 0;
+    corePart(buggy, 'cab').hp = 1;
+    order(me, mg.part.id, buggy.id, corePart(buggy, 'cab').id);
+    order(ally, vehicleStats(w, ally).weapons[0].part.id, buggy.id);
+    return { w, me, buggy, ally };
+  }
+
+  function damageBy(w: World, targetId: string): Map<string, number> {
+    const out = new Map<string, number>();
+    for (const e of w.events) {
+      if (e.t !== 'shot') continue;
+      const dealt = e.rounds.flatMap((r) => (r.struck === targetId ? r.hits : [])).reduce((sum, h) => sum + h.damage, 0);
+      out.set(e.shooter, (out.get(e.shooter) ?? 0) + dealt);
+    }
+    return out;
+  }
+
+  function shotAt(shooter: string, target: string, part: string, damage: number): GameEvent {
+    return { t: 'shot', shooter, weapon: 'gun', target, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [{ hit: true, crit: false, offset: 0, struck: target, hits: [{ part, damage }], blast: [], burst: null }] };
+  }
+
+  it('the player who dealt the most damage in the final turn gets the knockout, though a lawman hit last', () => {
+    const credited: { by: string; most: string }[] = [];
+    for (let seed = 1; seed <= 40 && credited.length < 3; seed++) {
+      const { w, me, buggy, ally } = sharedFight(seed * 7919);
+      fireWeapons(w);
+      const dealt = damageBy(w, buggy.id);
+      const mine = dealt.get(me.id) ?? 0;
+      const theirs = dealt.get(ally.id) ?? 0;
+      if (!(mine > theirs && theirs > 0)) continue;
+      expect(buggy.lastHitBy).toBe(ally.id);
+      resolveDestroyed(w);
+      const fate = w.events.find((e) => e.t === 'npcKnockout' || e.t === 'destroyed');
+      if (!fate || (fate.t !== 'npcKnockout' && fate.t !== 'destroyed')) continue;
+      credited.push({ by: fate.by, most: me.id });
+    }
+    expect(credited.length).toBeGreaterThan(0);
+    for (const c of credited) expect(c.by).toBe(c.most);
+  });
+
+  it('gives the same answer whatever order the trucks sit in', () => {
+    const { w, me, buggy } = duel();
+    const other = addVehicle(w, 'bowl', 'buggy', ['mg'], { x: 33, y: 33 });
+    w.events.push(shotAt(other.id, buggy.id, corePart(buggy, 'cab').id, 4), shotAt(me.id, buggy.id, corePart(buggy, 'cab').id, 9));
+    expect(beatenBy(w, buggy)).toBe(me.id);
+    w.vehicles = [...w.vehicles].reverse();
+    expect(beatenBy(w, buggy)).toBe(me.id);
+  });
+
+  it('on a tie, the source that damaged it first wins', () => {
+    const { w, me, buggy } = duel();
+    const cab = corePart(buggy, 'cab').id;
+    w.events.push(shotAt('other', buggy.id, cab, 5), shotAt(me.id, buggy.id, cab, 5));
+    expect(beatenBy(w, buggy)).toBe('other');
+  });
+
+  it('with no damage this turn, it is the last damage source, then unknown', () => {
+    const { w, me, buggy } = duel();
+    w.events.push(shotAt('other', buggy.id, corePart(buggy, 'cab').id, 0));
+    expect(beatenBy(w, buggy)).toBe('unknown');
+    buggy.lastHitBy = me.id;
+    expect(beatenBy(w, buggy)).toBe(me.id);
+  });
+
+  it('a guard shot counts for its gate, a ram for the other truck, and a crash into a rock for nobody', () => {
+    const { w, me, buggy } = duel();
+    const cab = corePart(buggy, 'cab').id;
+    w.events.push({ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: buggy.id, rounds: [{ hit: true, crit: false, offset: 0, struck: buggy.id, hits: [{ part: cab, damage: 6 }], blast: [], burst: null }] });
+    w.events.push({ t: 'collision', a: me.id, b: buggy.id, hitsA: [], hitsB: [{ part: cab, damage: 4 }] });
+    w.events.push({ t: 'collision', a: buggy.id, b: 'rock', hitsA: [{ part: cab, damage: 20 }], hitsB: [] });
+    expect(beatenBy(w, buggy)).toBe('guard-bowl');
+    w.events.push({ t: 'collision', a: buggy.id, b: me.id, hitsA: [{ part: cab, damage: 3 }], hitsB: [] });
+    expect(beatenBy(w, buggy)).toBe(me.id);
+  });
+
+  it('draws no RNG and throws for a truck no longer in the world', () => {
+    const { w, me, buggy } = duel();
+    w.events.push(shotAt(me.id, buggy.id, corePart(buggy, 'cab').id, 3));
+    const rng = w.rngState;
+    beatenBy(w, buggy);
+    expect(w.rngState).toBe(rng);
+    w.vehicles = w.vehicles.filter((v) => v.id !== buggy.id);
+    expect(() => beatenBy(w, buggy)).toThrow();
+  });
+
+  it('the knockout and its revenge roll follow the truck that beat it, not the last hitter', () => {
+    const { w, me, buggy } = duel();
+    const cab = corePart(buggy, 'cab').id;
+    w.events.push(shotAt(me.id, buggy.id, cab, 9), shotAt('other', buggy.id, cab, 2));
+    buggy.lastHitBy = 'other';
+    w.rngState = rngStateWhere((r) => r < NPC_BEHAVIOR.revengeChance);
+    knockOutNpc(w, buggy);
+    expect(w.events.find((e) => e.t === 'npcKnockout')).toMatchObject({ by: me.id });
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).not.toBeNull();
+  });
+
+  it('a wreck is credited to the truck that beat it', () => {
+    const { w, me, buggy } = duel();
+    w.events.push(shotAt(me.id, buggy.id, corePart(buggy, 'cab').id, 9));
+    buggy.lastHitBy = 'other';
+    wreckVehicle(w, buggy);
+    expect(w.events.find((e) => e.t === 'destroyed')).toMatchObject({ by: me.id });
+  });
+});
+
+describe('missPoint', () => {
+  it('puts a positive offset on the shooter\'s right, offset meters from the target', () => {
+    const from = { x: 10, y: 10 };
+    const target = { x: 30, y: 10 };
+    const p = missPoint(from, target, 6);
+    expect(p.x).toBeCloseTo(30);
+    expect(p.y).toBeCloseTo(10 + 6 / PHYSICS.metersPerTile);
+  });
+
+  it('throws when the shooter stands on the target', () => {
+    expect(() => missPoint({ x: 5, y: 5 }, { x: 5, y: 5 }, 1)).toThrow();
   });
 });
