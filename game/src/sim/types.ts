@@ -340,7 +340,7 @@ export type Player = {
   headlights: boolean; // the player's headlight switch; NPC lamps follow the clock, see src/three/render/daylight.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
-  storage: PartInstance[]; // spare parts kept in town garages, usable in any town
+  storage: PartInstance[]; // spare parts kept in garage storage, reachable at any shop
   contracts: Contract[]; // contracts taken and not yet ended; see src/sim/market.ts
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;

@@ -17,7 +17,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
-import { backOffLoot, getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { backOffLoot, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { beginSearch } from './search';
 import { salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
@@ -617,7 +617,7 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('sends a driver with no engine to a town for service, since a stall cannot refit it', () => {
+  it('sends a driver with no engine to a town for service, since only a town gives it a fresh loadout', () => {
     const { w, npc } = createTrader();
     const stall = Object.values(SHOPS).find((s) => s.kind === 'stall');
     const site = REGION.locations.find((l) => l.id === stall?.id);
@@ -829,6 +829,85 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.targetId).toBe(player.id);
   });
 
+  describe('an investigation that finds its truck', () => {
+    function investigating(noticed: Record<string, number> = {}) {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const player = w.vehicles[0];
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      raider.brain.goals = [
+        { kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'long-term goal' },
+        { kind: 'investigate', targetId: player.id, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' },
+      ];
+      raider.brain.noticed = noticed;
+      return { w, player, raider };
+    }
+    const closeIn = (w: World, player: Vehicle, raider: Vehicle) => { player.pos = { x: raider.pos.x - 4, y: raider.pos.y }; };
+
+    it('fights a truck it saw before, whatever it noticed earlier', () => {
+      const { w, player, raider } = investigating();
+      raider.brain!.noticed[`hostileSeen:${player.id}`] = w.turn;
+      w.turn += NPC_BEHAVIOR.noticeMemory + 2;
+      closeIn(w, player, raider);
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: player.id });
+      expect(raider.brain!.goals.some((g) => g.kind === 'investigate')).toBe(false);
+    });
+
+    it('goes back to its own work on keep', () => {
+      const { w, player, raider } = investigating();
+      closeIn(w, player, raider);
+      forceOption('hostileSeen', 'keep');
+      thinkNpc(w, raider);
+      expect(raider.brain!.goals.some((g) => g.kind === 'investigate')).toBe(false);
+      expect(topGoal(raider)?.kind).toBe('raid');
+      expect(raider.brain!.noticed).toHaveProperty([`hostileSeen:${player.id}`]);
+    });
+
+    it('flees on a flee roll', () => {
+      const { w, player, raider } = investigating();
+      closeIn(w, player, raider);
+      forceOption('hostileSeen', 'flee');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id });
+    });
+
+    it('keeps investigating behind cover', () => {
+      const { w, player, raider } = investigating();
+      closeIn(w, player, raider);
+      w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: raider.pos.x - 2, y: raider.pos.y }, r: 1.5 });
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
+      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+    });
+
+    it('ends the same way on an NPC target', () => {
+      const { w, raider } = investigating();
+      const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: raider.pos.x - 4, y: raider.pos.y });
+      trader.brain = npcBrain('trader', trader.pos, ['trader']);
+      w.states.push({ id: 'feud-test', kind: 'feud', holder: raider.id, other: trader.id, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
+      raider.brain!.goals[1].targetId = trader.id;
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: trader.id });
+    });
+
+    it('gains no knowledge of a truck it only hears', () => {
+      const { w, player, raider } = investigating();
+      player.speed = 4;
+      forceOption('contactHeard', 'keep');
+      for (let i = 0; i < 5; i++) {
+        player.pos = { x: raider.pos.x - TERRAIN.vision.radius - 4, y: raider.pos.y + i };
+        thinkNpc(w, raider);
+        expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
+        w.turn += 1;
+      }
+      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+    });
+  });
+
   it('a raider fighting a hostile in sight ignores a heard contact beyond sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
@@ -883,6 +962,30 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.kind).not.toBe('investigate');
     expect(topGoal(raider)?.kind).not.toBe('fight');
     expect(topGoal(raider)?.kind).not.toBe('flee');
+  });
+});
+
+describe('a defeated driver with a deal goal', () => {
+  function defeatedClient() {
+    const { w, npc } = createScavenger();
+    const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 14, y: 10 });
+    npc.defeat = { phase: 'retreat', turns: 0, unseen: 0, foes: [], gaveUp: false };
+    addState(w, 'patch', other.id, npc.id, { kind: 'patch', deal: 'free', parts: 0, partIds: [], price: 0, work: 3, workLeft: 3 });
+    patchGoal(w, npc, other, false);
+    return { w, npc };
+  }
+
+  it('keeps a patch goal on top instead of retreating', () => {
+    const { w, npc } = defeatedClient();
+    expect(thinkNpc(w, npc).kind).toBe('patch');
+    expect(topGoal(npc)?.kind).toBe('patch');
+  });
+
+  it('retreats once the deal is gone', () => {
+    const { w, npc } = defeatedClient();
+    w.states = [];
+    expect(thinkNpc(w, npc).kind).toBe('retreat');
+    expect(npc.defeat).toBeTruthy();
   });
 });
 

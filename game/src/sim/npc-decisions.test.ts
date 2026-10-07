@@ -6,7 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, fitToHunt, groupThreat, huntingGrounds, isWeak, lawmanTowns, perceiveThreat, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, fitToHunt, groupThreat, holdsUp, huntingGrounds, isWeak, lawmanTowns, perceiveThreat, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
@@ -755,5 +755,44 @@ describe('perceived threat', () => {
     strong.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
 
     expect(perceiveThreat(w, npc, weak)).toBeLessThanOrEqual(vehicleDanger(w, weak) * (1 + NPC_BEHAVIOR.dangerSpread));
+  });
+});
+
+describe('holdsUp', () => {
+  const setup = (robbery: boolean) => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addState(w, 'feud', robber.id, me.id, { kind: 'feud', robbery });
+    addGoods(w, me, 'scrap', 2);
+    return { w, me, robber, up: () => holdsUp(w, robber, me, vehicleDanger(w, me)) };
+  };
+
+  it('a confident robber holds up prey with cargo', () => {
+    expect(setup(true).up()).toBe(true);
+  });
+
+  it('a raider holds up a non-raider with cargo', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    const raider = addNpc(w, 'raiders', 'raider', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addGoods(w, me, 'scrap', 2);
+    expect(holdsUp(w, raider, me, vehicleDanger(w, me))).toBe(true);
+  });
+
+  it('a weak robber, a defensive feud and prey without cargo are no hold-up', () => {
+    const weak = setup(true);
+    corePart(weak.robber, 'cab').hp = 1;
+    expect(weak.up()).toBe(false);
+    expect(setup(false).up()).toBe(false);
+    const bare = setup(true);
+    bare.me.items = bare.me.items.filter((i) => i.kind !== 'good');
+    expect(bare.up()).toBe(false);
+  });
+
+  it('a robber that follows a leader holds up nobody', () => {
+    const { robber, up } = setup(true);
+    robber.brain!.goals.push({ kind: 'follow', leader: 'x' } as never);
+    expect(up()).toBe(false);
   });
 });

@@ -1,17 +1,17 @@
-// A bot's player commands: Orders runs them one after another and keeps their events, and upgradeGear is the town
-// upgrade routine every bot shares. In a garage it buys what src/sim/gear-choice.ts picks for the bot's job, the part
+// A bot's player commands: Orders runs them one after another and keeps their events, and upgradeGear is the shop
+// upgrade routine every bot shares. At any shop it buys what ./gear.ts picks for the bot's job, the part
 // that adds most to it within the budget, and mounts it. The parts on offer are the shop's stock and the spares the bot
 // holds, which cost nothing. A better chassis comes only when no part gains. A chassis counts by its value, or its top
 // speed for a bot that wants speed.
 
 import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
-import { shopDef } from '../../data/market';
 import { partDef, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
 import { type Spot, goodsCount, mountedItems } from '../grid';
 import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
+import { townAt } from '../sites';
 import { getUpkeepReserve } from '../npc-decisions';
 import { bestPlan, gearBudget, gearPlans, probe, type Offer } from './gear';
 import type { GearJob } from '../../data/npcs';
@@ -85,7 +85,7 @@ export function upgradeGear(o: Orders, style: UpgradeStyle): void {
 
 function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   const shop = shopAt(o.world);
-  if (!shop || shopDef(shop).kind !== 'garage') return null;
+  if (!shop) return null;
   const budget = gearBudget(o.world, o.me, chooseBudgetJob(style));
   const chassis = strongest(chassisOptions(o, style).filter((option) => option.cost <= budget));
   if (style.chassis === 'speed' && chassis) return chassis;
@@ -98,12 +98,12 @@ function chooseBudgetJob(style: UpgradeStyle): GearJob {
   return style.budgetJob ?? style.job;
 }
 
-// A bot with no gun mounts the cheapest one the garage sells or it holds as a spare, from money above the upkeep
+// A bot with no gun mounts the cheapest one the shop sells or it holds as a spare, from money above the upkeep
 // reserve. Working capital does not hold it back, since every bot shoots back and the hunter earns only with a gun.
 export function rearm(o: Orders): void {
   if (!o.buysGear) return;
   const shop = shopAt(o.world);
-  if (mountedItems(o.me, 'weapon').length > 0 || !shop || shopDef(shop).kind !== 'garage') return;
+  if (mountedItems(o.me, 'weapon').length > 0 || !shop) return;
   const spend = o.world.player.money - getUpkeepReserve(o.me);
   const guns = candidates(o, shop).filter((c) => partDef(c.part.defId).kind === 'weapon' && !isJunk(c.part) && c.price <= spend && installSpot(o.me, probe(c.part)));
   const cheapest = guns.reduce<Candidate | null>((best, c) => (!best || c.price < best.price ? c : best), null);
@@ -118,7 +118,8 @@ function strongest(options: Option[]): Option | null {
 
 // A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
-  if (style.chassis === 'keep' || Object.keys(goodsCount(o.me)).length > 0) return [];
+  // Chassis sell only in a town, as buyChassis() requires.
+  if (style.chassis === 'keep' || !townAt(o.world) || Object.keys(goodsCount(o.me)).length > 0) return [];
   const current = chassisDef(o.me.chassisId);
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);

@@ -26,7 +26,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -39,10 +39,9 @@ import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
-
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -487,6 +486,8 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
 const EXPOSED: readonly NpcActivity['kind'][] = ['repair', 'patch', 'meet', 'tow', 'loot'];
 // Deals a driver in combat calls off.
 const BROKEN_OFF: readonly NpcState['kind'][] = ['patch', 'trade', 'aid'];
+// Goals a deal with another truck pushes. A defeated driver keeps its word on them before it retreats.
+const DEAL_GOALS: readonly NpcActivity['kind'][] = ['meet', 'patch'];
 
 // A driver in combat drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
 function breakOffDeals(world: World, vehicle: Vehicle): void {
@@ -623,6 +624,15 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heard a hostile beyond sight'));
     return;
   }
+}
+
+// Finding the heard truck is a new sighting, so the driver decides on it with the usual hostileSeen roll.
+function onContactSpotted(world: World, vehicle: Vehicle): void {
+  const goal = topGoal(vehicle);
+  if (goal?.kind !== 'investigate') return;
+  if (!canVehicleSee(world, vehicle, vehicleById(world, goal.targetId!).pos)) return;
+  delete vehicle.brain!.noticed[`hostileSeen:${goal.targetId}`];
+  finishGoal(world, vehicle, 'spotted the truck it heard');
 }
 
 // A driver in a fight or on the run ignores contacts beyond sight. It decides on them once the danger goal pops.
@@ -804,7 +814,7 @@ export function startTow(world: World, vehicle: Vehicle, client: Vehicle, at: Ve
   pushGoal(world, vehicle, createActivity('tow', client.id, { ...at }, 'help a stranded truck'));
 }
 
-// A flee keeps running from where its threat is now. An investigation keeps the destination it started with.
+// A flee keeps running from where its threat is now. An investigation keeps the destination it started with until it sees its target.
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
   if (top) STEERS[top.kind]?.(world, vehicle, top, profile, contacts);
@@ -812,27 +822,15 @@ function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Co
 
 type Steer = (world: World, vehicle: Vehicle, goal: NpcActivity, profile: NpcProfile, contacts: Contact[]) => void;
 
+// A driver on its way to meet re-aims at the other truck every turn. The two keep in touch on the radio, so it
+// knows where the other truck is without sight. A waiting driver has no point and stays put.
 const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   fight: steerFight,
   flee: (world, vehicle, goal, profile, contacts) => steerFlee(world, vehicle, profile, contacts, goal),
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
-  meet: (world, _vehicle, goal) => steerToMeet(world, goal),
+  meet: (world, _vehicle, goal) => { if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos }; },
   follow: steerFollow,
 };
-
-// A driver on its way to meet re-aims at the other truck every turn. The two keep in touch on the radio, so it
-// knows where the other truck is without sight. A waiting driver has no point and stays put.
-function steerToMeet(world: World, goal: NpcActivity): void {
-  if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos };
-}
-
-// A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
-// point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
-function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
-  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
-  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded client perceived`);
-  goal.destination = { ...at };
-}
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);
@@ -861,12 +859,13 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   serveStranded(world, vehicle, profile);
-  if (isDefeated(vehicle)) return retreatHome(world, vehicle);
+  if (isDefeated(vehicle)) return defeatedActivity(world, vehicle, profile, contacts);
   applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
   considerPlea(world, vehicle);
   // A truce ends hostility, so goals that held only against the truce partner end here.
   dropInvalidGoals(world, vehicle, contacts);
+  onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
@@ -882,7 +881,16 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   return currentActivity(world, vehicle, profile);
 }
 
-// A defeated driver makes no decisions. It heads home, or waits for a tower on its way. At home it lies up.
+// A defeated driver makes no new decisions. It keeps its word on a meet or patch goal, which a deal pushes, then heads
+// home.
+function defeatedActivity(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): NpcActivity {
+  const top = topGoal(vehicle);
+  if (!top || !DEAL_GOALS.includes(top.kind)) return retreatHome(world, vehicle);
+  steer(world, vehicle, profile, contacts);
+  return currentActivity(world, vehicle, profile);
+}
+
+// A defeated driver with no deal heads home, or waits for a tower on its way. At home it lies up.
 function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
   const top = topGoal(vehicle)?.kind;
   if (top !== 'retreat' && top !== 'rearm') {
@@ -1285,21 +1293,4 @@ export function resolveNpcActivities(world: World): void {
     const top = topGoal(vehicle);
     if (top) resolveActivity(world, vehicle, top);
   }
-}
-
-// The victim's truck while it lies knocked out, else its wreck.
-function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
-  const victim = w.vehicles.find((v) => v.id === victimId);
-  if (victim && isKnockedOut(victim)) return victim;
-  return w.salvage.find((s) => s.id === wreckStockId(victimId));
-}
-
-// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
-// fight loots nothing.
-export function lootRobbed(w: World, robberId: string, victimId: string): void {
-  const robber = w.vehicles.find((v) => v.id === robberId);
-  if (!robber) return;
-  const stock = robbedLoot(w, victimId);
-  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
-  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }
