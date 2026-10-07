@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parseStage } from './jobs';
 import { readLedger } from './ledger';
 import { readObservation, type SchedulerData } from './observability';
 import { resumedStage } from './sessions';
@@ -259,7 +260,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, vitestWorkersImplement: 2, vitestWorkersTest: 4, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch === RELEASE.branch) return 'rel0001'; if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
-  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus, testWorkers) => { spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus} ${testWorkers}`); return 77; }, cores: () => 4 };
+  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus, testWorkers) => { parseStage(args[0]); spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus} ${testWorkers}`); return 77; }, cores: () => 4 };
   return { ctx, sent, labels, removed, deps, killed, spawned, pinned };
 }
 
@@ -334,6 +335,17 @@ describe('tick', () => {
     const started = readState(h.ctx.statePath).jobs;
     expect(started[1]).toMatchObject({ id: 'implement-8-2026-01-10T120000.000Z', stage: 'implement', issue: 8, pid: 77 });
     expect(started[1].log).toMatch(/logs\/implement-8-2026-01-10T120000\.000Z\.log$/);
+  });
+
+  it('starts a harden job for a Hardening card, with a stage the CLI accepts', async () => {
+    const h = harness(null, false, [card(5, 'Hardening')]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([['harden', '5']]);
+  });
+
+  it('accepts every job stage on the CLI and refuses an unknown one', () => {
+    for (const stage of ['harden', 'playtest', 'verify', 'ship']) expect(parseStage(stage)).toBe(stage);
+    expect(() => parseStage('hardening')).toThrow('Unknown stage "hardening"');
   });
 
   it('skips build cleanup while a checks or branch job runs, not while a verify agent runs', async () => {

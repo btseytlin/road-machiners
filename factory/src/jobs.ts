@@ -2,7 +2,15 @@ import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { must } from './exec';
-import type { Run } from './types';
+import { QUEUE_OF, type JobStage, type Run } from './types';
+
+// QUEUE_OF must name every job stage, so tsc fails when a new stage is left out of what `factory run` accepts.
+const JOB_STAGES = Object.keys(QUEUE_OF) as JobStage[];
+
+export function parseStage(value: string | undefined): JobStage {
+  if (!JOB_STAGES.includes(value as JobStage)) throw new Error(`Unknown stage "${value}". Use one of ${JOB_STAGES.join(', ')}.`);
+  return value as JobStage;
+}
 
 // The job process gets its id in this variable, and its containers carry it as a label.
 export const JOB_ID_ENV = 'FACTORY_JOB_ID';
