@@ -11,7 +11,7 @@ import { startRepair } from './jobs';
 import { takeAllLoot } from './locations';
 import { OPENING_WRECK_ID, openingStockOf } from './opening';
 import { repairPlan } from './repair';
-import { isRoadWreck } from './salvage';
+import { isRoadWreck, salvagePlace } from './salvage';
 import { startSearch } from './search';
 import { openingStopPoint, testDrive } from './testkit';
 import type { GridItem, PartInstance, World } from './types';
@@ -68,6 +68,7 @@ describe('new-game opening', () => {
       expect(stock.goods).toEqual({ scrap: 0, parts: 3 });
       expect(stock.parts.map((p) => [p.defId, p.wear, p.hp === maxHp(p)])).toEqual([['cage', 0, true]]);
       expect([stock.fuel, stock.supplies]).toEqual([0, 0]);
+      expect(salvagePlace(stock)).toBe('wreck');
       expect(isRoadWreck(stock)).toBe(false);
       // Nothing else sits on it: not a prop, not a road wreck.
       const o = w.obstacles.find((x) => x.id === OPENING_WRECK_ID)!;
