@@ -16,7 +16,7 @@ import { resolveNpcActivities, startTow, thinkNpc, topGoal } from './npc-activit
 import { optionChances, optionWeights, usefulContacts } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
-import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
+import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, steerToStranded, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
@@ -1076,6 +1076,22 @@ describe('NPCs towing each other', () => {
     c.resources!.money = 1000;
     return { w, client: c, tower: withTower(w, ...tower, outFrom(site, 38)) };
   }
+
+  // A truce ran out and a vulture fought the stranded raider in the same turn, after its tower checked its goal. The
+  // tower's steering threw instead of letting the goal check call the tow off.
+  it('a tower whose client is drawn into a fight this turn keeps its point, and calls the tow off next turn', () => {
+    const { w, client, tower } = roadside(bowl, TRADER, SCAVENGER);
+    const r = runUntil(w, 10, (x) => topGoal(find(x, tower.id))?.kind === 'tow');
+    const towing = find(r.w, tower.id);
+    const goal = topGoal(towing)!;
+    const before = { ...goal.destination! };
+    const foe = addVehicle(r.w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: client.pos.x + 6, y: client.pos.y });
+    startCombat(r.w, foe, find(r.w, client.id));
+    steerToStranded(r.w, towing, goal);
+    expect(goal.destination).toEqual(before);
+    thinkNpc(r.w, towing);
+    expect(towing.brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
 
   it('a scavenger hitches a stranded trader and tows it to its nearest town for a fee', () => {
     const s = roadside(bowl, TRADER, SCAVENGER);
