@@ -7,7 +7,7 @@ import { TERRAIN } from '../data/terrain';
 import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
 import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
-import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
+import { advanceFar, fuelLimit, fuelLimited, isNear, lowFuelSpeed } from './far';
 import { getResources } from './resources';
 import { fuelCap, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
@@ -144,6 +144,16 @@ describe('far NPC travel', () => {
     w.player.ranks.driving = 5;
     const crawl = RULES.limpSpeed * (1 + 5 * SKILL_EFFECTS.driving.crawl);
     expect(fuelLimited(w, me, vehicleStats(w, me), 0, order).maxSpeed).toBeCloseTo(crawl);
+  });
+
+  it('caps a low-fuel truck at lowFuelSpeed', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    w.player.fuel = fuelCap(me) * RULES.lowFuelThreshold * 0.5;
+    const s = vehicleStats(w, me);
+    const order = { kind: 'through', dest: { x: 200, y: 30 } } as const;
+    expect(fuelLimit(w, me, true)).toBe('low');
+    expect(fuelLimited(w, me, s, 0, order).maxSpeed).toBeCloseTo(lowFuelSpeed(s.maxSpeed));
   });
 
   it('names the fuel limit: low, empty or none', () => {
