@@ -1,7 +1,7 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
+import { BEATS_PER_BAR, engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
 import { shuffled, spatial } from "../audio/pick";
 import type {
@@ -401,7 +401,7 @@ export class SoundLoops {
       const silent = { pan: 0, gain: 0 };
       engine = {
         healthy: this.player.loop("engine", silent, engineFileFor(chassisId)),
-        strained: this.player.loop("engine-strain", silent),
+        strained: this.player.loop("engine-strain", silent, engineStrainFileFor(chassisId)),
       };
       this.engine = engine;
       this.engineChassis = chassisId;

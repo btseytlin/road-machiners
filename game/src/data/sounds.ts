@@ -72,9 +72,10 @@ const DEFS = {
   // Loops.
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
-  // The strained engine plays while heat damages the engine, for every chassis. It is a 4 s ElevenLabs loop with the
-  // engine's prompt style, close to the engine bay, and this subject: "Heavy old diesel engine at full throttle in a
-  // failing state: coarse labored growl, heavy knocking, clattering and ticking, a missing cylinder stumble."
+  // The strained engine plays while heat damages the engine. Variant 1 is a 4 s ElevenLabs loop with the engine's prompt
+  // style, close to the engine bay, and this subject: "Heavy old diesel engine at full throttle in a failing state:
+  // coarse labored growl, heavy knocking, clattering and ticking, a missing cylinder stumble." Variant 2 is a 2 s
+  // overheated truck engine take, supplied by hand.
   "engine-strain": { bus: "sfx", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   // The desert blues take, music-calm-1791230467032.mp3, is run through ffmpeg
@@ -190,6 +191,19 @@ export function scorePhaseOf(file: string): number {
 export function engineFileFor(chassisId: string): string {
   const file = ENGINE_FILES[chassisId];
   if (!file) throw new Error(`Unknown chassis ${chassisId}`);
+  return file;
+}
+
+// Trucks with the heavy engine recording get the generated strained loop; lighter trucks get the supplied one.
+const STRAIN_FILES: Record<string, string> = {
+  "engine-1.ogg": "engine-strain-2.ogg",
+  "engine-2.ogg": "engine-strain-2.ogg",
+  "engine-3.ogg": "engine-strain-1.ogg",
+};
+
+export function engineStrainFileFor(chassisId: string): string {
+  const file = STRAIN_FILES[engineFileFor(chassisId)];
+  if (!file) throw new Error(`Engine recording of ${chassisId} has no strained loop`);
   return file;
 }
 

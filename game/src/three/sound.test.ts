@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
-import { engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
+import { engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
 import type { Glide, SoundPlayer } from "../audio/player";
 import { REGION } from "../data/region";
 import { OUTPOSTS, siteGates } from "../sim/sites";
@@ -105,6 +105,12 @@ describe("engine sound assignment", () => {
     expect(() => engineFileFor("unknown")).toThrow("Unknown chassis");
   });
 
+  it("gives light trucks and heavy trucks different strained loops", () => {
+    for (const id of Object.keys(CHASSIS)) expect(SOUNDS["engine-strain"].files).toContain(engineStrainFileFor(id));
+    expect(engineStrainFileFor("scout")).not.toBe(engineStrainFileFor("hauler"));
+    expect(() => engineStrainFileFor("unknown")).toThrow("Unknown chassis");
+  });
+
   it("changes the healthy and strained engine loops together, and only when the chassis changes", () => {
     const started: string[] = [];
     const stopped: string[] = [];
@@ -131,13 +137,13 @@ describe("engine sound assignment", () => {
 
     expect(started).toEqual([
       engineFileFor("scout"),
-      "engine-strain",
+      engineStrainFileFor("scout"),
       engineFileFor("hauler"),
-      "engine-strain",
+      engineStrainFileFor("hauler"),
     ]);
-    expect(stopped).toEqual([engineFileFor("scout"), "engine-strain"]);
+    expect(stopped).toEqual([engineFileFor("scout"), engineStrainFileFor("scout")]);
     expect(glides[engineFileFor("scout")].map((g) => g.gainFrom)).toEqual([glide.gainFrom, 0, 0]);
-    expect(glides["engine-strain"].map((g) => g.gainFrom)).toEqual([0, glide.gainFrom, glide.gainFrom, 0]);
+    expect(glides[engineStrainFileFor("scout")].map((g) => g.gainFrom)).toEqual([0, glide.gainFrom, glide.gainFrom]);
   });
 
   it("plays the strained engine on the same bus and level as the engine, so mute and volume match", () => {
