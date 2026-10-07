@@ -10,7 +10,8 @@ Read every available image with the Read tool before you build.
 Build what the plan says and what the images show.
 An image marked NOT AVAILABLE was not seen.
 Never build as if you had seen it.
-When the plan depends on it, write what is missing to `.factory/needs-committee.md` and stop.
+Build from the text of the plan, and write into the task file what you could not see.
+A missing image never stops your work.
 When the task file asks for a visual acceptance check, render or screenshot your work from the image's view, compare it with the image, fix the biggest mismatch and repeat.
 Stop after three rounds, or when nothing differs that a player would see.
 
@@ -82,4 +83,6 @@ Never push.
 
 If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.
 Do not commit a change to `SAVE_MAJOR`.

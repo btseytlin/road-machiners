@@ -11,7 +11,11 @@ files_dir = INFRA_DIR / "files"
 config = (INFRA_DIR.parent / "dashboard" / ".env.example").read_text()
 config = config.replace("DASHBOARD_SOCKET=\n", f"DASHBOARD_SOCKET={FACTORY_ROOT}/dashboard/http.sock\n")
 config = config.replace("DASHBOARD_PORT=8787\n", "DASHBOARD_PORT=\n")
-config = "\n".join(line for line in config.splitlines() if not line.startswith("DASHBOARD_CHANNEL_URL=") and not line.startswith("DASHBOARD_HIDE_TELEGRAM=")) + "\nDASHBOARD_HIDE_TELEGRAM=1\n"
+# An empty channel URL makes the dashboard ask the bot for the link of FACTORY_PUBLIC_CHANNEL.
+channel_example = "DASHBOARD_CHANNEL_URL=https://t.me/your_public_channel\n"
+if channel_example not in config:
+    raise RuntimeError("dashboard/.env.example lost its DASHBOARD_CHANNEL_URL example line")
+config = config.replace(channel_example, "DASHBOARD_CHANNEL_URL=\n")
 
 server.shell(
     name="Create dashboard socket directory",

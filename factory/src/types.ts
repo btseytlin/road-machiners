@@ -32,6 +32,7 @@ export type FactoryConfig = {
   tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
+  needsInfoHours: number; // hours an author has to answer the factory's questions before the card goes on without an answer
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
   committeeBootstrapGithub: string;
   telegramToken: string;
@@ -85,7 +86,7 @@ export type RunResult = { code: number; stdout: string; stderr: string };
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;
 
 export type Reaction = { login: string; content: string };
-export type IssueComment = { login: string; body: string };
+export type IssueComment = { login: string; body: string; createdAt: string }; // createdAt is an ISO time
 
 export type Issue = {
   number: number;
@@ -168,21 +169,26 @@ export type FactoryState = {
   bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
-  adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
+  adhocReplies: Record<string, { chat: string; messageId: number | null }>; // ad hoc issue number -> the chat message its report answers. Null for a task of Hermes, whose report is a plain post
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
   cardStarts: Record<string, string[]>; // issue number -> ISO start times of its public-driven jobs in the last 24 hours
   postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
+  devError: string | null; // what broke in that build, for Hermes's incident watch. Cleared with devFailed.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
   testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
   patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
-  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
+  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes an incident for Hermes.
   visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
+  held: Record<string, Hold>; // issue number -> the hold `factory pause-card` put on its card. The tick starts no job on the issue until `resume-card` lifts it.
 };
+
+// A card a member or Hermes held. `stage` is the job the hold stopped, which resumes in its sessions, or null when none ran.
+export type Hold = { by: string; reason: string; at: string; stage: JobStage | null };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 
@@ -225,7 +231,7 @@ export type InlineButton = { text: string; data: string };
 export type AlbumPhoto = { path: string; caption: string };
 
 export interface Telegram {
-  sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
+  sendMessage(chat: string, text: string, replyTo?: number | null): Promise<number>;
   sendButtons(chat: string, text: string, buttons: InlineButton[][]): Promise<number>; // one text message with an inline keyboard
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
   // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
@@ -263,8 +269,14 @@ export interface HostRepo {
   path: string;
   fetch(): Promise<void>; // fetch GitHub, cloning first when the clone is missing
   createBranch(name: string, from: string): Promise<void>; // throws when the branch exists
-  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws.
-  revertIssueMerge(issue: number, branch: string): Promise<boolean>;
+  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws RevertConflictError.
+  // A resolution that fits the branch's tip and the merge to revert replaces the revert. A branch that moved on GitHub meanwhile gets the revert again.
+  revertIssueMerge(issue: number, branch: string, resolutions?: Resolution[]): Promise<boolean>;
+  // Clones the conflict's target into `dir` at the commit the conflict met, with the merge or revert left open for an agent.
+  openConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<void>;
+  // Takes the agent's finished merge or revert from `dir` into the host clone, without pushing it. Throws when the agent left it unfinished.
+  // `diff` holds only what the agent added beyond the two sides, so the stage can check it like any agent diff.
+  closeConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<{ resolution: Resolution; diff: string }>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   // Clones into `dir` unless a working clone is there. A broken clone, with no commit checked out, is replaced.
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
@@ -286,15 +298,36 @@ export interface HostRepo {
   readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
-  // A target that moved on GitHub meanwhile gets the steps again on its new tip.
-  merge(steps: MergeStep[]): Promise<void>;
+  // A resolution that fits a step's two tips replaces that step's merge. A target that moved on GitHub meanwhile gets the steps again on its new tip.
+  merge(steps: MergeStep[], resolutions?: Resolution[]): Promise<void>;
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
 }
 
+// A finished merge or revert that an agent made of a conflict. `head` merges `source` into `base`, or reverts the merge `source` on `base`.
+export type Resolution = { base: string; source: string; head: string };
+
 // A merge that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` and `source` are the commits the merge met, which no branch name may name any more.
+// `done` holds the merges of the steps before it, so a later try reuses them and meets the same commits.
 export class MergeConflictError extends Error {
-  constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
-    super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  constructor(readonly step: MergeStep, readonly files: string[], reason: string, readonly base: string, readonly source: string, readonly done: Resolution[] = []) {
+    super(`merge of ${step.branch} into ${step.into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  }
+
+  get branch(): string {
+    return this.step.branch;
+  }
+
+  get into(): string {
+    return this.step.into;
+  }
+}
+
+// A revert that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` is the branch tip the revert met, and `merge` the commit it reverts.
+export class RevertConflictError extends Error {
+  constructor(readonly issue: number, readonly into: string, readonly files: string[], reason: string, readonly base: string, readonly merge: string) {
+    super(`revert of issue #${issue} on ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
   }
 }
 

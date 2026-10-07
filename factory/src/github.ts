@@ -176,7 +176,7 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
     issue,
     async comments(number): Promise<IssueComment[]> {
       const rows = await lines(['api', `repos/${repo}/issues/${number}/comments`, '--paginate',
-        '--jq', '.[] | {login: .user.login, body: .body}']);
+        '--jq', '.[] | {login: .user.login, body: .body, createdAt: .created_at}']);
       return rows.map((row) => JSON.parse(row) as IssueComment);
     },
     async comment(number, body) {

@@ -13,7 +13,7 @@ import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
-import { isAnswered } from './questions';
+import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, PlaytestState, Queue, Run } from './types';
 
@@ -32,11 +32,12 @@ function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
 }
 
+const isHeld = (state: FactoryState, issue: number | null): boolean => issue !== null && String(issue) in state.held;
+
 // A removal runs before a ship, so a Ship pressed after a Remove finds the release without a current post and refuses.
+// The approval of a held card waits, and the next one runs.
 function queued(state: FactoryState): JobPick | null {
-  const approval = Object.keys(state.pendingApprovals)
-    .map(Number)
-    .sort((a, b) => a - b)[0];
+  const approval = Object.keys(state.pendingApprovals).map(Number).filter((issue) => !isHeld(state, issue)).sort((a, b) => a - b)[0];
   if (approval !== undefined) return { stage: 'approve', issue: approval };
   const removal = state.pendingRemovals[0];
   if (removal) return { stage: 'remove', issue: removal.issue };
@@ -51,8 +52,8 @@ function changeJobs(state: FactoryState): JobPick[] {
   return state.pendingChanges.map((change) => ({ stage: 'change' as const, issue: change.id }));
 }
 
-function openCards(cards: Card[]): Card[] {
-  return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL));
+function openCards(state: FactoryState, cards: Card[]): Card[] {
+  return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL) && !isHeld(state, card.issue));
 }
 
 // Furthest along first, lowest issue first.
@@ -95,7 +96,7 @@ const lacks =
 // Card jobs in order: hotfixes, ad hoc tasks, factory changes, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
 function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
-  const open = openCards(cards).filter(lacks(RELEASE_LABEL));
+  const open = openCards(state, cards).filter(lacks(RELEASE_LABEL));
   const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
   const adhoc = rest
@@ -190,12 +191,13 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval' | 'held';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
-function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
+// A held issue gets no job of any kind until the hold is lifted.
+function findCapacityReasons(state: FactoryState, pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
   const queue = QUEUE_OF[pick.stage];
-  const reasons: WaitReason[] = [];
+  const reasons: WaitReason[] = isHeld(state, pick.issue) ? ['held'] : [];
   if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
   if (pick.issue !== null && running.some((job) => job.issue === pick.issue)) reasons.push('issue-running');
   return reasons;
@@ -205,6 +207,7 @@ function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
   if (card.labels.includes(NEEDS_INFO_LABEL)) reasons.push('needs-info');
   if (card.column === 'Approval') reasons.push('approval');
+  if (isHeld(state, card.issue)) reasons.push('held');
   return reasons.length ? [{ stage: readWaitingStage(state, card), issue: card.issue, reasons }] : [];
 }
 function readWaitingStage(state: FactoryState, card: Card): JobStage {
@@ -245,7 +248,7 @@ export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, 
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
     const cardLeft = readCardLeft(state, now, cfg, pickedForCard, pick.issue);
-    const reasons = [...findCapacityReasons(pick, [...state.jobs, ...picks], cfg), ...readCapReasons(capped, capLeft, cardLeft)];
+    const reasons = [...findCapacityReasons(state, pick, [...state.jobs, ...picks], cfg), ...readCapReasons(capped, capLeft, cardLeft)];
     decisions.push({ ...pick, reasons });
     if (reasons.length) continue;
     capLeft -= capped;
@@ -344,22 +347,19 @@ async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps)
   await deps.removeContainers(ctx.run, job.id);
   recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, 'died');
   markResumed(ctx.cfg.home, job.issue, job.stage);
-  updateState(ctx.statePath, (state) => {
-    // Jobs started by one tick share a start time, so only one of them goes.
-    const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
-    const jobStarts = state.jobStarts.filter((_, index) => index !== start);
-    const cardStart = (state.cardStarts[job.issue] ?? []).indexOf(job.startedAt);
-    const cardStarts = { ...state.cardStarts, [job.issue]: (state.cardStarts[job.issue] ?? []).filter((_, index) => index !== cardStart || start === -1) };
-    const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
-    return {
-      ...state,
-      jobs: state.jobs.filter((other) => other.id !== job.id),
-      jobStarts,
-      cardStarts,
-      interrupted,
-    };
-  });
+  updateState(ctx.statePath, (state) => interruptJob(state, job));
   ctx.log('tick', job.issue, `${job.stage} process died, it resumes once on the next start`);
+}
+
+// Takes a job out of the list so its stage starts again in its sessions. Its cap slot frees, since the restart takes a new one.
+export function interruptJob(state: FactoryState, job: Job & { issue: number }): FactoryState {
+  // Jobs started by one tick share a start time, so only one of them goes.
+  const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
+  const jobStarts = state.jobStarts.filter((_, index) => index !== start);
+  const cardStart = (state.cardStarts[job.issue] ?? []).indexOf(job.startedAt);
+  const cardStarts = { ...state.cardStarts, [job.issue]: (state.cardStarts[job.issue] ?? []).filter((_, index) => index !== cardStart || start === -1) };
+  const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
+  return { ...state, jobs: state.jobs.filter((other) => other.id !== job.id), jobStarts, cardStarts, interrupted };
 }
 
 function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): void {
@@ -380,25 +380,27 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
 
-async function answeredWaiting(ctx: Ctx, card: Card): Promise<boolean> {
-  const waiting = card.column === 'Triage' && card.labels.includes(NEEDS_INFO_LABEL);
-  return waiting && isAnswered(await ctx.github.comments(card.issue));
+// Why a waiting card goes on: someone answered, or the questions are older than the limit. Null while it waits.
+async function releaseReason(ctx: Ctx, card: Card): Promise<'answered' | 'no answer in time' | null> {
+  if (card.column !== 'Triage' || !card.labels.includes(NEEDS_INFO_LABEL)) return null;
+  const comments = await ctx.github.comments(card.issue);
+  if (isAnswered(comments)) return 'answered';
+  const asked = askedAt(comments);
+  return asked !== null && minutesSince(ctx, asked) > ctx.cfg.needsInfoHours * 60 ? 'no answer in time' : null;
 }
 
-// A Triage card that waits for answers gets its label back off once someone replies. Returns the cards as they stand after that.
+// A Triage card that waits for answers gets its label back off once someone replies or the time limit passes. Returns the cards as they stand after that.
 export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
   const released: Card[] = [];
   for (const card of cards) {
-    if (!(await answeredWaiting(ctx, card))) {
+    const reason = await releaseReason(ctx, card);
+    if (reason === null) {
       released.push(card);
       continue;
     }
     await ctx.github.removeLabel(card.issue, NEEDS_INFO_LABEL);
-    ctx.log('tick', card.issue, `answered, removed ${NEEDS_INFO_LABEL}`);
-    released.push({
-      ...card,
-      labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL),
-    });
+    ctx.log('tick', card.issue, `${reason}, removed ${NEEDS_INFO_LABEL}`);
+    released.push({ ...card, labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL) });
   }
   return released;
 }
@@ -426,19 +428,18 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
 }
 
-// A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
+// A plain approval reply that Hermes did not route in time becomes an incident, so the incident watch wakes Hermes and the reply is never lost.
+// The card gets no stuck label, since nothing failed on it. Hermes routes the reply on its best reading.
 async function expireReplies(ctx: Ctx): Promise<void> {
   const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
   for (const [messageId, reply] of late) {
-    updateState(ctx.statePath, (state) => ({
-      ...state,
-      unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)),
-    }));
-    await reportFailure(ctx, 'feedback', reply.issue, `The reply ${messageId} to the approval post ${reply.postId} got no route within ${ctx.cfg.replyRouteMinutes} minutes: ${reply.text}`, null);
+    updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
+    const text = reply.text.replace(/\s+/g, ' ');
+    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null);
   }
 }
 
-// Late approval replies become failures, and the first tick that sees no waste review starts its period.
+// Late approval replies become incidents for Hermes, and the first tick that sees no waste review starts its period.
 async function settleRouting(ctx: Ctx): Promise<void> {
   await expireReplies(ctx);
   if (readState(ctx.statePath).lastWasteReview === null)

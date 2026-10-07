@@ -100,6 +100,22 @@ it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
+it('counts a held job as neither finished nor failed, and its spend as no waste', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    appendLedger(home, { kind: 'job', id: 'held', stage: 'implement', issue: 3, startedAt: '2026-10-10T08:00:00Z', endedAt: '2026-10-10T09:00:00Z', outcome: 'held', agents: [
+      { model: 'opus', costUsd: 1, minutes: 60, modelUsage: [{ model: 'opus', input: 10, output: 0, cacheRead: 0, cacheWrite: 0, cost: 1 }], fromTranscript: true },
+    ] });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const summary = history.summarize(now, 1);
+    expect(summary).toMatchObject({ completed: 0, failed: 0, wasted: { cost: null, tokens: null } });
+    expect(summary.cost).toBe(1);
+    expect(summary.activity).toEqual([{ stage: 'implement', issue: 3, outcome: 'held', at: '2026-10-10T09:00:00Z' }]);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 it('keeps card lines past the 30 days of usage and publishes delivery numbers with no private text', async () => {
   const home = mkdtempSync(resolve('tmp/history-'));
   try {

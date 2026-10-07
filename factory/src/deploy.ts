@@ -1,5 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { summarizeError } from './fail';
 import { reportEnv, takeMaps, type ReportBuild } from './sourcemaps';
 import { readState, updateState } from './state';
 import { GAME_DIR, type Ctx } from './types';
@@ -32,7 +33,7 @@ export function publishBuild(ctx: Ctx, clone: string, scope: string): string {
   return `${ctx.cfg.publicUrl}/${scope}/`;
 }
 
-// Records which dev commit /dev/ serves, or which one failed, so the tick rebuilds /dev/ only when dev moves.
+// Records which dev commit /dev/ serves, or which one failed and why, so the tick rebuilds /dev/ only when dev moves and Hermes sees what broke.
 export async function deployDev(ctx: Ctx, log: string): Promise<string> {
   const dir = `${ctx.cfg.home}/work/dev-build`;
   rmSync(dir, { recursive: true, force: true });
@@ -40,10 +41,10 @@ export async function deployDev(ctx: Ctx, log: string): Promise<string> {
   const head = await ctx.repo.headHash('dev');
   try {
     const url = await buildAndDeploy(ctx, dir, 'dev', log, 'dev');
-    updateState(ctx.statePath, (state) => ({ ...state, devBuild: head, devFailed: null }));
+    updateState(ctx.statePath, (state) => ({ ...state, devBuild: head, devFailed: null, devError: null }));
     return url;
   } catch (error) {
-    updateState(ctx.statePath, (state) => ({ ...state, devFailed: head }));
+    updateState(ctx.statePath, (state) => ({ ...state, devFailed: head, devError: summarizeError(error instanceof Error ? error.message : String(error)) }));
     throw error;
   }
 }
