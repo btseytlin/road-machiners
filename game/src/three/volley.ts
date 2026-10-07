@@ -1,17 +1,15 @@
 import { CONFIG } from "../config";
-import { PHYSICS } from "../data/physics";
-import { REGION } from "../data/region";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
 import { missPoint } from "../sim/combat";
+import { carriedPart } from "../sim/salvage";
 import type { Vec } from "../sim/vec";
-import { mountedParts } from "../sim/grid";
 import type { GameEvent, ShotRound, Vehicle, World } from "../sim/types";
 import type { BreakCues, PartBreak, ShotLike } from "./breakCues";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, roundSpec, towardFrom, type Muzzle, type RoundPlan } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, roundSpec, type Muzzle, type RoundPlan } from "./render/projectiles";
 import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
@@ -109,13 +107,13 @@ export function playDryGuns(host: CombatHost, played: Set<string>): void {
 
 const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
 
-// Plays every shown volley of the turn's shot and guardShot events. The score aims an accent at each volley's first
+// Plays every shown volley of the turn's shot events. The score aims an accent at each volley's first
 // landing. Returns the guns whose volley showed.
 export function playShotFx(host: CombatHost, breaks: BreakCues): Set<string> {
   const rows = new Map<string, number>();
   const played = new Set<string>();
   for (const e of host.world.events) {
-    const landMs = e.t === "shot" ? playTruckShot(host, e, rows, breaks) : e.t === "guardShot" ? playGuardShot(host, e, rows, breaks) : null;
+    const landMs = e.t === "shot" ? playTruckShot(host, e, rows, breaks) : null;
     if (landMs === null) continue;
     host.sound.accents([e], host.world.player.vehicleId, () => landMs);
     if (e.t === "shot") played.add(gunKey(e.shooter, e.weapon));
@@ -141,20 +139,11 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const w = host.world;
   const shooter = vehicleOf(w, e.shooter);
   const target = vehicleOf(w, e.target);
-  const gun = mountedParts(shooter).find((p) => p.id === e.weapon);
+  const gun = carriedPart(w, e.shooter, e.weapon);
   if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
   const view = viewOf(host.views, e.shooter);
   const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);
   return playVolley(host, a, () => view.muzzle(e.weapon), b, missAt(host.world, shooter.pos, target.pos), e, breaks, gun.defId, e.target, rows, dry);
-}
-
-function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" }>, rows: Map<string, number>, breaks: BreakCues): number | null {
-  const b = host.eventPoint(e.target);
-  if (!b) return null;
-  const target = vehicleOf(host.world, e.target);
-  const g = groundPoint(host.world.terrain, e.from);
-  const a: V3 = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
-  return playVolley(host, a, () => towardFrom(a, b), b, missAt(host.world, e.from, target.pos), e, breaks, "guard", e.target, rows, false);
 }
 
 export type CollisionEvent = Extract<GameEvent, { t: "collision" }>;

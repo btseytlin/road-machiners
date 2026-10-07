@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIX } from "../data/sounds";
-import { knobAngle, parseSettings, turned } from "./sound";
+import { dragged, knobAngle, parseSettings, turned } from "./sound";
 
 describe("parseSettings", () => {
   it("starts from the mix volumes", () => {
@@ -29,6 +29,28 @@ describe("turned", () => {
   it("stops at silence and full", () => {
     expect(turned(0.95, 3)).toBe(1);
     expect(turned(0.05, -3)).toBe(0);
+  });
+});
+
+describe("dragged", () => {
+  it("ignores travel under the dead zone", () => {
+    expect(dragged(0.5, 2, 0)).toBe(0.5);
+    expect(dragged(0.5, 1, -1)).toBe(0.5);
+  });
+  it("raises going up or right and lowers going down or left", () => {
+    expect(dragged(0, 0, -80)).toBe(0.5);
+    expect(dragged(0, 0, -160)).toBe(1);
+    expect(dragged(0, 80, 0)).toBe(0.5);
+    expect(dragged(1, 0, 160)).toBe(0);
+    expect(dragged(1, -80, 0)).toBe(0.5);
+  });
+  it("stops at silence and full", () => {
+    expect(dragged(0.5, 0, -500)).toBe(1);
+    expect(dragged(0.5, -500, 0)).toBe(0);
+  });
+  it("gives whole percents and keeps an off-grid start", () => {
+    expect(dragged(0.37, 0, -16)).toBe(0.47);
+    expect(dragged(0.37, 3, 0)).toBe(0.39);
   });
 });
 

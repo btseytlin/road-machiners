@@ -157,8 +157,9 @@ describe('driving through Old Orchard', () => {
     me.heading = UP_ROAD;
     const cache = stockNear(w, 'armyCache', at(32.5, 7.5));
     const up = [at(42, 1), at(39, 5.5), at(36, 7)];
-    // The way back stops once more on the shelf's bend, so the truck turns round on the track and does not wedge in the bend's rock.
-    const legs = [...up, at(33.5, 10), at(36, 7), at(37.5, 5.8), at(39, 5.5), at(42, 1), at(30, 0)].map(stopAt);
+    // The truck turns round past the stack, on the open shelf: a U-turn on the track itself swings its tail into the sandbags.
+    // The way back skips the first up point: the truck stands facing away from it, and with the climb reserve (#160) its U-turn there wedges it against the slope.
+    const legs = [...up, at(33.5, 10), at(32, 11), ...up.slice(0, -1).reverse(), at(30, 0)].map(stopAt);
     await driveLegs(w, legs, SHELF_LEG_TURNS, (x, leg) => {
       if (leg === up.length) expect(salvageInRange(player(x), cache)).toBe(true);
     });

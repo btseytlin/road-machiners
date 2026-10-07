@@ -290,6 +290,11 @@ export const REGION = {
     // A shortcut may cost this share more than the bends it replaces, so routes take fewer bends. It stays
     // well below the road margin, so roads stay followed.
     straighten: 0.05,
+    // Road cost multiplier for a driver who keeps off roads: a raider that retreats, flees or is stranded. Open
+    // ground costs at most 1.3 x 1.75 / 0.9 = 2.5 per tile on the worst taste, and a road at least 0.7 x 6 = 4.2,
+    // so ground beside a road beats the road even after the heuristic weight's 20% slack. It is a cost, not a
+    // block, so such a route still crosses a road where it must, and the ground beside sites stays priced as road.
+    roadShyCost: 6,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
@@ -403,7 +408,7 @@ export const REGION = {
       pos: BROKEN_WING_SITE,
       radius: 6,
     },
-    // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
+    // Raider camps. Raiders spawn at their gates and service there.
     {
       id: "scrapjaw",
       edge: "camp",
@@ -587,7 +592,6 @@ export const REGION = {
     wallHeight: 1.6, // 6.4 m, well over a truck roof
     wallThickness: 1.2,
     wallSegment: 3, // tiles per straight wall section around the curve
-    wallTowerEvery: 5, // wall sections between towers
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
     palisadeHeight: 1, // 4 m of scrap and posts
     palisadeThickness: 0.6,
@@ -601,9 +605,9 @@ export const REGION = {
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
+    gatePostRise: 0.4, // most tiles a gate post rises over its wall, so the posts of the tall town wall stay posts
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
-    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
+    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so

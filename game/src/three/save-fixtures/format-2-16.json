@@ -1,21 +1,7 @@
 {
-  "turn": 40,
-  "player": {
-    "vehicleId": "player",
-    "scavenged": ["glass-flats", "wreck3"]
-  },
-  "vehicles": [
-    {
-      "id": "player",
-      "job": { "kind": "search", "stockId": "glass-flats", "turnsLeft": 2 }
-    },
-    {
-      "id": "npc1",
-      "job": { "kind": "search", "stockId": "wreck3", "turnsLeft": 1 }
-    }
-  ],
-  "salvage": [
-    { "id": "glass-flats", "pos": { "x": 81, "y": 75 }, "radius": 16, "goods": { "scrap": 1 }, "parts": [] },
-    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
+  "turn": 500,
+  "weather": [
+    { "id": "wx1", "kind": "storm", "pos": { "x": 120, "y": 80 }, "radius": 90, "vel": { "x": 0.5, "y": -0.3 }, "turnsLeft": 120 },
+    { "id": "wx2", "kind": "heatwave", "turnsLeft": 30 }
   ]
 }

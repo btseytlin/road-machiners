@@ -15,6 +15,7 @@ import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
+import { stormDepth } from './weather';
 import { cloneWorld, newWorld } from './world';
 
 // Flat road-speed terrain, for tests that need predictable driving.
@@ -65,7 +66,7 @@ export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 
 
 // A fresh NPC brain with no goals.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
+  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
 // Makes `option` the only option of `decision` that can carry weight until the test ends. Other options lose their
@@ -111,6 +112,18 @@ export function rngStateForForcedRolls(count: number): number {
     if (ok) return state;
   }
   throw new Error(`No RNG state gives ${count} mid-range rolls`);
+}
+
+// Gives every truck the storm shares it would have after standing still long enough: each storm's depth where it is.
+export function settleStorms(w: World): void {
+  for (const v of w.vehicles) {
+    v.stormExposure = {};
+    for (const e of w.weather) {
+      if (e.kind !== 'storm') continue;
+      const depth = stormDepth(w, e, v.pos);
+      if (depth > 0) v.stormExposure[e.id] = depth;
+    }
+  }
 }
 
 // Total hit points of the mounted parts, for checking that damage landed.

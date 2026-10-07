@@ -27,6 +27,19 @@ function readHeadFiles() {
   return [];
 }
 
+// The commits a merge in progress brings in. Their code is not new debt, since the gate passed it on their own branch.
+function readMergeHeads() {
+  const file = path.resolve(root, runGit('rev-parse', '--git-path', 'MERGE_HEAD').trim());
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean);
+}
+
+function readParents() {
+  const head = { ref: 'HEAD', files: readHeadFiles() };
+  const merged = readMergeHeads().map(ref => ({ ref, files: splitPaths(runGit('ls-tree', '-rz', '--name-only', ref)) }));
+  return [head, ...merged];
+}
+
 function selectSources(files) {
   return [...new Set(files)].filter(file => sourcePattern.test(file) && !ignoredPattern.test(file));
 }
@@ -110,22 +123,35 @@ function findRegressions(current, previous) {
   });
 }
 
-function checkQuality(directory, baseline, files, headFiles, staged) {
-  const current = readSources(directory, selectSources(files));
-  const previous = new Map(selectSources(headFiles).map(file => [file, runGit('show', `HEAD:${file}`)]));
+function readParentSources(parent, baseline, config) {
+  const sources = new Map(selectSources(parent.files).map(file => [file, runGit('show', `${parent.ref}:${file}`)]));
   mkdirSync(baseline, { recursive: true });
-  writeSources(baseline, previous);
-  const config = path.join(directory, '.oxlintrc.json');
+  writeSources(baseline, sources);
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  const findings = findRegressions(collectFindings(directory, current, config), collectFindings(baseline, previous, baselineConfig));
+  return { sources, findings: collectFindings(baseline, sources, baselineConfig) };
+}
+
+// A merge passes when each finding and each component is no worse than in one of its parents. A normal commit has HEAD alone.
+function checkQuality(directory, baseline, files, parents, staged) {
+  const current = readSources(directory, selectSources(files));
+  const config = path.join(directory, '.oxlintrc.json');
+  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config));
+  const currentFindings = collectFindings(directory, current, config);
+  const regressions = previous.map(parent => new Set(findRegressions(currentFindings, parent.findings)));
+  const findings = currentFindings.filter(finding => regressions.every(set => set.has(finding)));
   const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
-  const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
+  const fragmented = previous.map(parent => checkFragmentation(current, collectComponents(parent.sources), maxFilesPerKloc));
+  const failures = fragmented[0].filter(failure => fragmented.every(list => list.some(other => componentOf(other) === componentOf(failure))));
   failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
   failures.push(...checkSeparators(readSeparatorFiles(directory, staged)));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);
   for (const failure of failures) console.error(failure);
   if (findings.length + failures.length) throw new Error('Quality regressed against HEAD. Fix the code. Do not weaken the checks.');
+}
+
+function componentOf(failure) {
+  return failure.slice(0, failure.indexOf(':'));
 }
 
 function checkTypes(directory) {
@@ -166,7 +192,7 @@ function checkSnapshot(staged, temporary) {
   const tracked = splitPaths(runGit('ls-files', '--cached', '-z'));
   const others = staged ? [] : splitPaths(runGit('ls-files', '--others', '--exclude-standard', '-z'));
   const files = [...tracked, ...others].filter(file => existsSync(path.join(directory, file)));
-  checkQuality(directory, path.join(temporary, 'head'), files, readHeadFiles(), staged);
+  checkQuality(directory, path.join(temporary, 'parents'), files, readParents(), staged);
   checkTypes(directory);
 }
 

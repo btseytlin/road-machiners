@@ -12,6 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
+import { sweepTranscripts } from './transcript-archive';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
@@ -19,12 +20,12 @@ import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'maxJobsPerCard' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
-// Committee-driven jobs and the factory's own review never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste'];
+// Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
 const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -148,6 +149,16 @@ export function recentStarts(state: FactoryState, now: Date): string[] {
   return state.jobStarts.filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
 }
 
+export function recentCardStarts(state: FactoryState, now: Date, issue: number): string[] {
+  return (state.cardStarts[issue] ?? []).filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
+}
+
+// Every card's starts in the last 24 hours. A card with none left drops out, so closed cards do not pile up in the state.
+function recentCardStartsAll(state: FactoryState, now: Date): Record<string, string[]> {
+  const entries = Object.keys(state.cardStarts).map((issue) => [issue, recentCardStarts(state, now, Number(issue))] as const);
+  return Object.fromEntries(entries.filter(([, starts]) => starts.length > 0));
+}
+
 export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, 'maxJobsPerDay'>): boolean {
   return recentStarts(state, now).length >= cfg.maxJobsPerDay;
 }
@@ -164,7 +175,7 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -173,6 +184,14 @@ function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitR
   if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
   if (pick.issue !== null && running.some((job) => job.issue === pick.issue)) reasons.push('issue-running');
   return reasons;
+}
+// An uncapped job never waits on a budget. A capped one waits at the daily cap, or when its card used its own budget, counting the picks made this tick.
+function findBudgetReasons(candidate: Candidate, state: FactoryState, now: Date, cfg: Due, capLeft: number, cappedPicks: JobPick[]): WaitReason[] {
+  if (candidate.uncapped) return [];
+  const reasons: WaitReason[] = cappedPicks.length >= capLeft ? ['daily-cap'] : [];
+  if (candidate.issue === null) return reasons;
+  const used = recentCardStarts(state, now, candidate.issue).length + cappedPicks.filter((pick) => pick.issue === candidate.issue).length;
+  return used >= cfg.maxJobsPerCard ? [...reasons, 'card-budget'] : reasons;
 }
 function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
@@ -192,17 +211,16 @@ function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null 
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
 // At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
 export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
-  let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
+  const capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const picks: JobPick[] = [];
+  const cappedPicks: JobPick[] = [];
   const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
   for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
-    const capped = candidate.uncapped ? 0 : 1;
-    const reasons = findCapacityReasons(pick, [...state.jobs, ...picks], cfg);
-    if (capped > capLeft) reasons.push('daily-cap');
+    const reasons = [...findCapacityReasons(pick, [...state.jobs, ...picks], cfg), ...findBudgetReasons(candidate, state, now, cfg, capLeft, cappedPicks)];
     decisions.push({ ...pick, reasons });
     if (reasons.length) continue;
-    capLeft -= capped;
+    if (!candidate.uncapped) cappedPicks.push(pick);
     picks.push(pick);
   }
   return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards) };
@@ -301,11 +319,14 @@ async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps)
     // Jobs started by one tick share a start time, so only one of them goes.
     const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
     const jobStarts = state.jobStarts.filter((_, index) => index !== start);
+    const cardStart = (state.cardStarts[job.issue] ?? []).indexOf(job.startedAt);
+    const cardStarts = { ...state.cardStarts, [job.issue]: (state.cardStarts[job.issue] ?? []).filter((_, index) => index !== cardStart || start === -1) };
     const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
     return {
       ...state,
       jobs: state.jobs.filter((other) => other.id !== job.id),
       jobStarts,
+      cardStarts,
       interrupted,
     };
   });
@@ -319,7 +340,12 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const cpus = cpuSets(ctx.cfg, deps.cores())[POOL_OF[QUEUE_OF[pick.stage]]];
   const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus);
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
-  updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  updateState(ctx.statePath, (state) => {
+    if (!countsAgainstCap(pick.stage)) return { ...state, jobs: [...state.jobs, job] };
+    const recent = recentCardStartsAll(state, ctx.now());
+    const cardStarts = pick.issue === null ? recent : { ...recent, [pick.issue]: [...(recent[pick.issue] ?? []), job.startedAt] };
+    return { ...state, jobs: [...state.jobs, job], jobStarts: [...recentStarts(state, ctx.now()), job.startedAt], cardStarts };
+  });
   reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
@@ -360,7 +386,7 @@ function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
-// Deletes finished work clones and old job logs. Running jobs and resumable clones stay, see sweepWork.
+// Deletes finished work clones, old job logs and old agent transcripts. Running jobs and resumable clones stay, see sweepWork.
 function cleanWork(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   const swept = sweepWork(join(ctx.cfg.home, 'work'), state, cards);
@@ -369,6 +395,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+  const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
+  if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
 }
 
 // Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.

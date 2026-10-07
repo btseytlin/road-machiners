@@ -81,20 +81,37 @@ function printEpisodes(label, turns, test) {
   console.log(`${label}: ${found.length} stretches, ${found.reduce((n, e) => n + e.to - e.from + 1, 0)} turns: ${list}`);
 }
 
-// Each combat stretch: who shot first, the foes and their danger and speed against the truck's, how many turns the
-// truck stood still under fire, and the net worth, cargo and parts it came out with.
+// Each combat stretch: who shot first, the foes with the player's odds to win against each and their speed against
+// the truck's, how many turns the truck stood still under fire, and the net worth, cargo and parts it came out with.
+// A combat stretch with no shot in it is a standoff, such as a refused demand, and prints as one line apart.
 function printFights(turns) {
-  for (const e of episodes(turns, (l) => l.flags.includes('combat'))) {
+  const stretches = episodes(turns, (l) => l.flags.includes('combat'));
+  const hasShot = (e) => turns.slice(e.from, e.to + 1).some((l) => l.ev.some((x) => x.startsWith('shot ')));
+  printStandoffs(turns, stretches.filter((e) => !hasShot(e)));
+  for (const e of stretches.filter(hasShot)) {
     const span = turns.slice(Math.max(0, e.from - CONTEXT_TURNS), e.to + 1);
     const fight = turns.slice(e.from, e.to + 1);
     const before = turns[Math.max(0, e.from - 1)];
     const after = turns[Math.min(turns.length - 1, e.to + 1)];
     const firstShot = span.flatMap((l) => l.ev.filter((x) => x.startsWith('shot ')).map((x) => `${l.t} ${x}`))[0] ?? 'none';
-    const foes = new Map(fight.flatMap((l) => l.foes).map((f) => [f.id, f]));
+    const foes = firstSeen(fight);
     const still = fight.filter((l, i) => i > 0 && l.pos[0] === fight[i - 1].pos[0] && l.pos[1] === fight[i - 1].pos[1]).length;
-    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me danger ${before.danger} speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} d${f.danger} s${f.speed}`).join(', ') || 'unseen'}`);
+    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} win ${f.odds}% s${f.speed}`).join(', ') || 'unseen'}`);
     console.log(`  first shot ${firstShot}; still ${still} turns; nw ${before.nw} -> ${after.nw}; ${outcome(fight, before, after)}`);
   }
+}
+
+function printStandoffs(turns, standoffs) {
+  if (standoffs.length === 0) return;
+  const list = standoffs.map((e) => `${turns[e.from].t}-${turns[e.to].t}`).join(' ');
+  console.log(`standoffs, combat with no shots: ${standoffs.length} stretches, ${standoffs.reduce((n, e) => n + e.to - e.from + 1, 0)} turns: ${list}`);
+}
+
+// Each foe with the values of the turn it first appears, the same moment as the truck's own.
+function firstSeen(fight) {
+  const foes = new Map();
+  for (const f of fight.flatMap((l) => l.foes)) if (!foes.has(f.id)) foes.set(f.id, f);
+  return foes;
 }
 
 function outcome(fight, before, after) {
@@ -168,6 +185,7 @@ async function analyzeWorld(name, path) {
   const flaps = flapping(events);
   if (flaps.length > 0) console.log(`flapping: ${flaps.slice(0, 12).join('; ')}`);
   printPopulation(lines);
+  printOffRoad(lines);
   printNpcDeaths(lines);
 }
 
@@ -204,6 +222,22 @@ function printPopulation(lines) {
     const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} ($${Math.round(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
     console.log(`turn ${snap.t}: ${text}`);
   }
+}
+
+// Moving raiders in the snapshots: the share on a road of those that keep off roads, by top goal, against the share of
+// healthy raiders. A stranded raider shows as stranded whatever its goal.
+function printOffRoad(lines) {
+  const moving = lines.flatMap((l) => l.trucks ?? []).filter((v) => v.faction === 'raiders' && v.speed > 0);
+  if (moving.length === 0) return;
+  const share = (vs) => `${vs.filter((v) => v.onRoad).length}/${vs.length} on road`;
+  const by = Map.groupBy(moving.filter((v) => v.offRoad), offRoadReason);
+  const off = [...by.entries()].map(([why, vs]) => `${why} ${share(vs)}`).join(', ') || 'none';
+  console.log(`raiders keeping off roads: ${off}; healthy raiders ${share(moving.filter((v) => !v.offRoad))}`);
+}
+
+function offRoadReason(v) {
+  const top = v.goals.at(-1)?.split(':')[0];
+  return top === 'retreat' || top === 'flee' ? top : 'stranded';
 }
 
 // Every truck lost or knocked out, with the turn and who did it.

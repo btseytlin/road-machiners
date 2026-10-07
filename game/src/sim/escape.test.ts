@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { XP_SOURCES } from '../data/skills';
 import { isHostile } from './combat';
 import { noteEscape } from './escape';
-import { vehicleDanger } from './npc-decisions';
+import { fightOdds } from './fight-odds';
 import { addVehicle, emptyWorld, npcBrain, practiceOf, testDrive } from './testkit';
 import type { Vehicle, World } from './types';
+import { addState } from './states';
 import { refreshVision } from './vision';
 import { endTurn } from './world';
 
-// A raider in sight of a player with loot, noted at the end of a turn.
-function raiderInSight(): { w: World; raider: Vehicle } {
+// A raider in sight of a player with loot, noted at the end of a turn. It fights the player unless told otherwise.
+function raiderInSight(fights = true): { w: World; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI);
   raider.brain = npcBrain('buggy', raider.pos, ['raider']);
   expect(isHostile(w, raider, w.vehicles[0])).toBe(true);
+  if (fights) addState(w, 'combat', raider.id, w.vehicles[0].id, { kind: 'none' });
   refreshVision(w);
   noteEscape(w);
   return { w, raider };
@@ -31,10 +33,9 @@ describe('escape practice', () => {
     raider.pos = { x: 80, y: 30 };
     refreshVision(w);
     noteEscape(w);
-    const theirs = vehicleDanger(w, raider);
-    const ours = vehicleDanger(w, w.vehicles[0]);
+    const theirOdds = 1 - fightOdds(w, [w.vehicles[0]], [raider]).win;
     expect(practiceOf(w, 'escape')).toMatchObject([{ amount: 1 }]);
-    expect(practiceOf(w, 'escape')[0].difficulty).toBeCloseTo(theirs / (theirs + ours));
+    expect(practiceOf(w, 'escape')[0].difficulty).toBeCloseTo(theirOdds);
     expect(w.player.hostilesSeen).toEqual([]);
   });
 
@@ -53,6 +54,37 @@ describe('escape practice', () => {
     const [first, second] = practiceOf(w, 'escape');
     expect(first.target).toBe(raider.id);
     expect(second.xp / first.xp).toBeCloseTo(XP_SOURCES.escape.repeat);
+  });
+
+  it('pays nothing for a hostile that never fought or hunted the player', () => {
+    const { w, raider } = raiderInSight(false);
+    raider.pos = { x: 80, y: 30 };
+    refreshVision(w);
+    noteEscape(w);
+    expect(practiceOf(w, 'escape')).toEqual([]);
+    expect(w.player.hostilesSeen).toEqual([]);
+  });
+
+  it('pays for a hostile that hunts the player on a fight goal without a combat state', () => {
+    const { w, raider } = raiderInSight(false);
+    raider.brain!.goals.push({ kind: 'fight', targetId: w.vehicles[0].id, destination: { ...w.vehicles[0].pos }, phase: 'travel', reason: 'test' });
+    raider.pos = { x: 80, y: 30 };
+    refreshVision(w);
+    noteEscape(w);
+    expect(practiceOf(w, 'escape')).toMatchObject([{ amount: 1, target: raider.id }]);
+  });
+
+  it('targets the engaged truck when an idle hostile left sight with it', () => {
+    const { w, raider } = raiderInSight();
+    const idle = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 34 }, Math.PI);
+    refreshVision(w);
+    noteEscape(w);
+    expect(w.player.hostilesSeen).toHaveLength(2);
+    raider.pos = { x: 80, y: 30 };
+    idle.pos = { x: 80, y: 34 };
+    refreshVision(w);
+    noteEscape(w);
+    expect(practiceOf(w, 'escape')).toMatchObject([{ target: raider.id }]);
   });
 
   it('pays nothing while a hostile is still in sight', () => {

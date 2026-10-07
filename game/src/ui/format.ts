@@ -12,8 +12,9 @@ import { gaveUp, isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
-import { goodsCount, mountedParts } from '../sim/grid';
+import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
+import { carriedPart } from '../sim/salvage';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -132,8 +133,7 @@ function findAny(world: World, id: string): Vehicle | undefined {
 }
 
 function partName(world: World, vehicleId: string, partId: string): string {
-  const v = findAny(world, vehicleId);
-  const p = v && mountedParts(v).find((x) => x.id === partId);
+  const p = carriedPart(world, vehicleId, partId);
   return p ? partDef(p.defId).name : 'part';
 }
 
@@ -261,8 +261,7 @@ const PART_SHORT = {
 } as const;
 
 function partShort(world: World, vehicleId: string, partId: string): string {
-  const v = findAny(world, vehicleId);
-  const p = v && mountedParts(v).find((x) => x.id === partId);
+  const p = carriedPart(world, vehicleId, partId);
   if (!p) throw new Error(`Round hit part ${partId}, which ${vehicleId} does not carry`);
   const def = partDef(p.defId);
   return PART_SHORT[def.kind === 'core' ? def.role : def.kind];
@@ -322,9 +321,8 @@ function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget
 
 // ": Cab −5 broken, Plate −3": inner parts first, then armor in the dim color. A part with no HP left reads broken.
 function damageSpans(world: World, vehicleId: string, hits: PartHit[]): LogSpan[] {
-  const v = findAny(world, vehicleId);
   const parts = [...partDamage(hits)].map(([id, d]) => {
-    const part = v && mountedParts(v).find((x) => x.id === id);
+    const part = carriedPart(world, vehicleId, id);
     if (!part) throw new Error(`Round hit part ${id}, which ${vehicleId} does not carry`);
     return { part, armor: partDef(part.defId).kind === 'armor', d };
   });
@@ -469,7 +467,6 @@ function playerNotices(world: World, ...ids: string[]): boolean {
 // The vehicles in events that log only when the player notices one of them.
 const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => string[] } = {
   collision: (e) => [e.a, e.b],
-  guardShot: (e) => [e.target],
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
   npcKnockout: (e) => [e.vehicle],
@@ -509,7 +506,7 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
-  return `Defeat any ${c.targetName}`;
+  return `Knock out or wreck any ${c.targetName}`;
 }
 
 // How long a contract allows from acceptance, in whole game hours.
@@ -600,14 +597,6 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       return null;
     case 'shot':
       return shotText(world, e);
-    case 'guardShot': {
-      const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
-      const hits = e.rounds.filter((r) => r.hit).length;
-      return spanLine('dim', [
-        { text: `${site.name} guards → ${n(e.target)}, ${hits}/${e.rounds.length} hit`, cls: '' },
-        ...damageSpans(world, e.target, e.rounds.flatMap((r) => r.hits)),
-      ]);
-    }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };
     case 'destroyed':
@@ -644,4 +633,58 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       return null;
   }
   throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
+}
+
+// Words for the goods table, shared by the town market and the truck goods trade.
+export type SaleEstimate =
+  | { kind: "none" }
+  | { kind: "unrecorded" }
+  | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
+  | { kind: "even"; avgCost: number };
+
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+
+// Describes the basis rules of noteCostBasis() (sim/economy.ts), addBasis()/takeBasis() (sim/salvage.ts) and loadHaul() (sim/market.ts).
+export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
+
+function checkEstimate(held: number, sell: number, basis: number | undefined): void {
+  if (!Number.isInteger(held) || held < 0) throw new Error(`saleEstimate: bad held count ${held}`);
+  if (!Number.isFinite(sell)) throw new Error(`saleEstimate: bad sell price ${sell}`);
+  if (basis !== undefined) checkBasis(basis);
+}
+
+function checkBasis(basis: number): void {
+  if (!Number.isFinite(basis) || basis < 0) throw new Error(`saleEstimate: bad cost basis ${basis}`);
+}
+
+export function saleEstimate(held: number, sell: number, basis: number | undefined): SaleEstimate {
+  checkEstimate(held, sell, basis);
+  if (held === 0) return { kind: "none" };
+  if (basis === undefined) return { kind: "unrecorded" };
+  const diff = Math.round(sell - basis);
+  const avgCost = Math.round(basis);
+  if (diff === 0) return { kind: "even", avgCost };
+  return { kind: diff > 0 ? "gain" : "loss", perUnit: Math.abs(diff), avgCost };
+}
+
+export function estimateText(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "?";
+    case "even": return "0";
+    case "gain": return `+${e.perUnit}`;
+    case "loss": return `\u2212${e.perUnit}`;
+  }
+}
+
+export function estimateTitle(e: SaleEstimate): string {
+  switch (e.kind) {
+    case "none": return "";
+    case "unrecorded": return "No cost on record";
+    default: return `Avg cost ${e.avgCost}`;
+  }
+}
+
+export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
+  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
 }
