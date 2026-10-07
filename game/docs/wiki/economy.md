@@ -63,8 +63,8 @@ The player's truck pays no upkeep. NPC drivers pay under `NPC_UPKEEP`.
 | `REPAIR.turnsPerPart` | 2 |
 | `PATCH.share` | 0.25 |
 | `CONTRACTS.maxActive` | 3 |
-| `CONTRACTS.haul.durationFactor` | 8 |
-| `CONTRACTS.haul.rewardFactor` | 5 |
+| `CONTRACTS.haul.durationFactor` | 2.5 |
+| `CONTRACTS.haul.rewardFactor` | 24 |
 | `CONTRACTS.haul.rush.chance` | 0.25 |
 | `CONTRACTS.haul.rush.durationFactor` | 1.5 |
 | `CONTRACTS.haul.rush.premium` | 1.75 |
