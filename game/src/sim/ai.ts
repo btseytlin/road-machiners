@@ -4,7 +4,7 @@ import { sustainedDamage } from "../data/parts";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
-import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
+import { fightCornered, getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { route, routeLength, type Blocker } from "./path";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
@@ -12,11 +12,11 @@ import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
-import { ramsReadily } from "./npc-decisions";
+import { firepower, ramsReadily, visibleHostiles } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
-import { bodyHitChance, inArc } from "./combat";
+import { bodyHitChance, inArc, inCombat } from "./combat";
 import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
@@ -48,7 +48,7 @@ function thinkOrderPoint(world: World, v: Vehicle): Plan {
 function setOrder(world: World, { v, activity, goal }: Plan): void {
   noteStuck(world, v, goal);
   const stops = goal !== null && trafficStops(world, v, goal);
-  noteStall(v, stops && activity.kind !== "fight" && activity.kind !== "flee");
+  noteStall(world, v, stops && activity.kind !== "fight" && activity.kind !== "flee");
   v.order = nextOrder(world, v, activity, goal, stops);
   v.direct = false;
 }
@@ -60,11 +60,25 @@ function noteStuck(world: World, v: Vehicle, goal: Vec | null): void {
   const b = v.brain!;
   b.stuck = heldAway(v, goal) ? (b.stuck ?? 0) + 1 : 0;
   if (b.stuck < RULES.unstick.turns) return;
+  if (turnCornered(world, v)) {
+    b.stuck = 0;
+    return;
+  }
   const spot = freeSpotNear(world, v);
   if (!spot) return;
   b.recovery = RULES.unstick.driveTurns;
   b.recoveryGoal = spot;
   b.stuck = 0;
+}
+
+// A trapped driver with a working gun turns back to fight a visible foe it is in combat with or has a fight goal on,
+// even if the combat state ran out while it fled. A driver already on that fight backs out like any other.
+export function turnCornered(world: World, v: Vehicle): boolean {
+  if (topGoal(v)?.kind === "fight" || firepower(world, v) === 0) return false;
+  const foe = visibleHostiles(world, v).find((other) => inCombat(world, v) || v.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id));
+  if (!foe) return false;
+  fightCornered(world, v, foe);
+  return true;
 }
 
 // Standing where it stood last turn, not recovering, with its goal point out of reach.
@@ -85,13 +99,15 @@ function freeSpotNear(world: World, v: Vehicle): Vec | null {
   return null;
 }
 
-// A driver that barely moved on a move order for RULES.npcStuckTurns turns in a row backs out. Waiting for traffic
-// is not being stuck.
-function noteStall(v: Vehicle, yielding: boolean): void {
+// A driver that barely moved on a move order for RULES.npcStuckTurns turns in a row backs out, unless a foe it cannot
+// get away from is in sight, where it turns on the foe. Waiting for traffic is not being stuck.
+function noteStall(world: World, v: Vehicle, yielding: boolean): void {
   const b = v.brain!;
   b.stalled = !yielding && barelyMoved(v) ? (b.stalled ?? 0) + 1 : 0;
   b.lastPos = { ...v.pos };
-  if (b.stalled >= RULES.npcStuckTurns) startRecovery(v);
+  if (b.stalled < RULES.npcStuckTurns) return;
+  if (turnCornered(world, v)) b.stalled = 0;
+  else startRecovery(v);
 }
 
 function barelyMoved(v: Vehicle): boolean {

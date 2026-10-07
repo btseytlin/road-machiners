@@ -1,13 +1,17 @@
 // Runs the combat harness (src/test/combat-harness.ts) and writes its report to tmp/combat/.
-// Usage: npm run combat -- --kit standard --enemies buggy,gunwagon,buggy+buggy --policy all --seeds 1-20
-//   [--guns mg,shotgun --armor plates] [--levels poor,loaded] [--foe-gun mg --foe-armor plates --foe-ram plowRam]
-//   [--gap 8] [--orbit 6] [--turns 40] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace]
-// --trace prints one line per turn. --out sets the report folder, tmp/combat by default.
-// --enemies lists lineups; + joins trucks in one lineup. --guns runs each listed weapon as the only gun of a hauler with
-// --armor on every armor cell, or bare without it. --levels runs each listed enemy gear level. --foe-gun gives every
-// enemy a hauler with that gun, --foe-armor and a --foe-ram bar on its nose. --set changes one balance number for this run.
+// Usage: npm run combat -- --a merc,merc:snowball --b buggy,buggy:buggy@heavy,buggy+buggy --seeds 1-5
+//   [--gap 8] [--orbit 6] [--turns 40] [--arena 9] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace] [--out tmp/combat]
+// --a and --b list lineups for the two sides, and every lineup of a fights every lineup of b on every seed. A comma
+// separates lineups, and + joins trucks in one lineup. A truck is driver:gear. The driver is an NPC template, whose
+// brain drives the truck, or a scripted style that steers the player truck: stand, orbit, charge or kite. The gear is a
+// start kit, an NPC template's rolled loadout as template or template@level, or gun/armor+ram on a hauler, with bare
+// for no armor. A driver without gear takes its own template's loadout. Hold the driver and vary the gear to tune
+// gear; hold the gear and vary the driver to tune behavior.
+// --arena <tiles> rings the fight with rocks and resumes hostility after peace. It must fit in sight, 10 at most.
+// Arena fights allow 400 turns by default, since evenly matched buggies needed 283; open fights allow 40.
+// --set changes one balance number for this run. --trace prints one line per turn.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { formatReport, POLICIES, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
+import { formatReport, parseLineup, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
 import { initPhysics } from '../src/phys/drive.ts';
 
 function argOf(name, fallback) {
@@ -35,23 +39,17 @@ function parseSeeds(text) {
 const trace = process.argv.includes('--trace');
 const sets = argsOf('set');
 for (const s of sets) setNumber(s);
-const policyArg = argOf('policy', 'all');
-const policies = policyArg === 'all' ? POLICIES : policyArg.split(',');
-for (const p of policies) if (!POLICIES.includes(p)) throw new Error(`Unknown policy "${p}". Known: ${POLICIES.join(', ')}`);
-const lineups = argOf('enemies', 'buggy,gunwagon').split(',').map((l) => l.split('+'));
-const seeds = parseSeeds(argOf('seeds', '1-10'));
-const armor = argOf('armor', null);
-const mes = argOf('guns', null)?.split(',').map((gun) => ({ gun, armor })) ?? [null];
-const foeGun = argOf('foe-gun', null);
-const foe = foeGun ? { gun: foeGun, armor: argOf('foe-armor', null), ram: argOf('foe-ram', undefined) } : null;
-const levels = argOf('levels', null)?.split(',') ?? [null];
-const base = { kit: argOf('kit', 'standard'), gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', '40') };
+const sideA = argOf('a', 'merc').split(',').map(parseLineup);
+const sideB = argOf('b', 'buggy,gunwagon').split(',').map(parseLineup);
+const seeds = parseSeeds(argOf('seeds', '1-5'));
+const arena = argOf('arena', null);
+const base = { gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', arena === null ? '40' : '400'), arena: arena === null ? null : positiveInt('arena') };
 
 await initPhysics();
-console.log(`Running ${mes.length} guns x ${lineups.length} lineups x ${levels.length} levels x ${policies.length} policies x ${seeds.length} seeds...`);
+console.log(`Running ${sideA.length} x ${sideB.length} lineups x ${seeds.length} seeds...`);
 const reports = [];
-const fights = mes.flatMap((me) => lineups.flatMap((enemies) => levels.flatMap((level) => policies.flatMap((policy) => seeds.map((seed) => ({ ...base, me, enemies, level, foe, policy, seed }))))));
-const label = (f) => `${f.me?.gun ?? 'kit'} ${f.enemies.join('+')} ${f.level ?? 'rolled'} ${f.policy} s${f.seed}`;
+const fights = sideA.flatMap((a) => sideB.flatMap((b) => seeds.map((seed) => ({ ...base, a, b, seed }))));
+const label = (f) => `${f.a.map((t) => t.label).join('+')} vs ${f.b.map((t) => t.label).join('+')} s${f.seed}`;
 for (const f of fights) reports.push(runFight(f, trace ? (w, t) => console.log(`${label(f)} ${turnLine(w, t)}`) : undefined));
 
 const out = argOf('out', 'tmp/combat');
