@@ -49,11 +49,14 @@ export function damage(value: number): number {
 }
 
 // Money is integer cents in the sim. It reads in M: no decimals for a whole M, two otherwise.
+const WHOLE_M = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const CENT_M = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function moneyAmount(cents: number): string {
   const whole = Math.round(cents);
   if (whole === 0) return '0';
-  const decimals = whole % UNITS.centsPerM === 0 ? 0 : 2;
-  return (whole / UNITS.centsPerM).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const format = whole % UNITS.centsPerM === 0 ? WHOLE_M : CENT_M;
+  return format.format(whole / UNITS.centsPerM);
 }
 
 // Money in running text, with its unit: log lines, talk and titles.
