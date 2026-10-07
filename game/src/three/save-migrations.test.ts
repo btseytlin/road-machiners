@@ -24,6 +24,7 @@ import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -376,5 +377,18 @@ describe('save migration 17 to 18', () => {
 
   it('loads every truck feeling exactly the settled weather where it stands', () => {
     for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  const next = MIGRATIONS[18](FORMAT_2_18);
+
+  it('marks every far route of a truck in play or removed as planned with roads', () => {
+    const route = (v: (typeof FORMAT_2_18.vehicles)[number]) => ({ ...v, brain: { ...v.brain, farRoute: { ...v.brain!.farRoute, offRoad: false } } });
+    expect(next).toEqual({
+      ...FORMAT_2_18,
+      vehicles: [FORMAT_2_18.vehicles[0], route(FORMAT_2_18.vehicles[1]), FORMAT_2_18.vehicles[2]],
+      removed: [route(FORMAT_2_18.removed[0])],
+    });
   });
 });

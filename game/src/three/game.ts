@@ -814,11 +814,12 @@ export class Game {
     if (sting) this.sound.ui(sting);
   }
 
+  // A stranded truck is pushed, so its engine stays quiet, as the sim's soundRange() rule says. Its brakes still hiss.
   private playDriveSound(result: TurnResult): void {
     const frames = result.frames[playerVehicle(this.world).id];
     const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, this.world.player.overdrive);
     if (!g) return;
-    this.loops.drive(g, playerVehicle(this.world).chassisId);
+    if (!isStranded(this.world, playerVehicle(this.world))) this.loops.drive(g, playerVehicle(this.world).chassisId);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
   }
 
