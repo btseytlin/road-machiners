@@ -4,6 +4,7 @@
 // Usage: npm run progression:analyze -- <dir> [--run trader-1]
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { HUNT } from '../src/data/npc-behavior.ts';
 
 // A loss of more than this share of net worth within LOSS_TURNS counts as a big loss: about one stolen gun.
 const LOSS_SHARE = 0.1;
@@ -18,6 +19,11 @@ const STALL_TURNS = 60;
 const FLAP_COUNT = 6;
 const FLAP_TURNS = 40;
 const FLAP_KINDS = new Set(['towDropped', 'towOffer', 'towHitched', 'stateEnded', 'hostile']);
+
+// Raiders on a hunting goal travel off the road, so road traffic does not see them coming. At most this share of
+// their moving snapshots may be on road.
+const HUNT_ROAD_TARGET = 0.25;
+const HUNT_GOALS = new Set(HUNT.offRoadGoals);
 
 const argv = process.argv.slice(2).filter((a) => a !== '--');
 const dir = argv[0];
@@ -168,6 +174,7 @@ async function analyzeWorld(name, path) {
   const flaps = flapping(events);
   if (flaps.length > 0) console.log(`flapping: ${flaps.slice(0, 12).join('; ')}`);
   printPopulation(lines);
+  printRaiderRoads(lines);
   printNpcDeaths(lines);
 }
 
@@ -204,6 +211,29 @@ function printPopulation(lines) {
     const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} ($${Math.round(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
     console.log(`turn ${snap.t}: ${text}`);
   }
+}
+
+// The share of moving raider snapshots on a road tile, for the hunting goals against the rest. The snapshot says whether
+// a truck moves and stands on road, so this counts and applies no rule of its own. Logs older than those fields skip it.
+function printRaiderRoads(lines) {
+  const snaps = lines.flatMap((l) => l.trucks ?? []);
+  if (snaps.length === 0 || !('onRoad' in snaps[0]) || !('moving' in snaps[0])) return;
+  const moving = snaps.filter((v) => v.faction === 'raiders' && v.moving);
+  if (moving.length === 0) return;
+  const hunts = (v) => HUNT_GOALS.has(v.goals.at(-1)?.split(':')[0]);
+  const hunting = moving.filter(hunts);
+  const rest = moving.filter((v) => !hunts(v));
+  const miss = roadShare(hunting) > HUNT_ROAD_TARGET ? ' MISS' : '';
+  console.log(`raider road share: hunting ${shareText(hunting)} moving snapshots (target <= ${100 * HUNT_ROAD_TARGET}%${miss}), other ${shareText(rest)}`);
+}
+
+// The share of snapshots on a road tile, 0 for none.
+function roadShare(snaps) {
+  return snaps.length === 0 ? 0 : snaps.filter((v) => v.onRoad).length / snaps.length;
+}
+
+function shareText(snaps) {
+  return snaps.length === 0 ? 'none' : `${Math.round(100 * roadShare(snaps))}% of ${snaps.length}`;
 }
 
 // Every truck lost or knocked out, with the turn and who did it.

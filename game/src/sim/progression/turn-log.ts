@@ -2,12 +2,14 @@
 // and every event that touches the player. A batch writes these beside its traces, so one run answers every later
 // question about it without a replay.
 
+import { RULES } from '../../data/rules';
 import { inCombat } from '../combat';
 import { playerVehicle } from '../damage';
 import { goodsCount, mountedParts } from '../grid';
 import { vehicleDanger } from '../npc-decisions';
 import { getResources } from '../resources';
 import { isStranded, vehicleStats } from '../stats';
+import { isRoadTile } from '../terrain';
 import { isTowed } from '../tow';
 import type { GameEvent, Vehicle, World } from '../types';
 import { dist } from '../vec';
@@ -78,9 +80,10 @@ export function turnLine(world: World, events: readonly GameEvent[], ledger: Led
 const SNAPSHOT_TURNS = 10;
 
 // The world log of one turn: every event of the turn raw, whoever it touches, and on a snapshot turn the position,
-// order, goal stack, money, fuel and part health of every truck.
+// order, goal stack, money, fuel and part health of every truck. `moving` and `onRoad` come from the sim's own rules,
+// above the parked speed and on a road tile, so the analyzer counts road time without a road rule of its own.
 export type WorldLine = { t: number; events?: GameEvent[]; trucks?: TruckSnap[] };
-export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; danger: number; states: string[] };
+export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; moving: boolean; onRoad: boolean; order: string | null; goals: string[]; money: number; fuel: number; hp: number; danger: number; states: string[] };
 
 export function worldLine(world: World, events: readonly GameEvent[]): WorldLine | null {
   const line: WorldLine = { t: world.turn };
@@ -104,6 +107,8 @@ function snap(world: World, v: Vehicle): TruckSnap {
     chassis: v.chassisId,
     pos: [Math.round(v.pos.x * 10) / 10, Math.round(v.pos.y * 10) / 10],
     speed: Math.round(v.speed * 10) / 10,
+    moving: v.speed > RULES.parkedSpeed,
+    onRoad: isRoadTile(world.terrain, v.pos),
     order: v.order ? v.order.kind : null,
     goals: v.brain?.goals.map((g) => `${g.kind}${g.targetId ? `:${g.targetId}` : ''}`) ?? [],
     money: Math.round(getResources(world, v).money),
