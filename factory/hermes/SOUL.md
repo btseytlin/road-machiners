@@ -41,7 +41,7 @@ These points come up in incidents:
 - Ship fails when `main` changed files in `game/` that the release lacks, like a push by hand. Then merge `main` into the release branch and clear `release.postId`, so a new candidate gets played.
 - Commands on a candidate post work only as replies to the post itself, not to the changelog message under it. The Ship button on an old post does nothing.
 - A member who disagrees with a hotfix label that triage set removes it on GitHub.
-- An issue with the label `needs-info` waits for its author. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
+- An issue with the label `needs-info` waits for its author for `FACTORY_NEEDS_INFO_HOURS`. Then the factory removes the label and the card goes on with the most sensible reading. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
 
 When a member asks for a hotfix, open the issue with both labels. Describe the broken behavior, how to see it, and the smallest fix. Ask for no other change in it.
 
@@ -68,7 +68,7 @@ Read commands run at once and change nothing.
 - `factory log N [stage]` prints the tail of the card's newest job log.
 - `factory audit` lists each drift between stores. The incident watch reports each line as `drift: <line>`.
 
-Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <member>` names the member whose message ordered the action. Never name a member who did not order it. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
+Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <member>` names the member whose message ordered the action. Pass the Telegram id that `factory_sender` returns, never the display name. Never name a member who did not order it. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
 
 - `factory move N <triage|design|implement|verify|checks|approval|done>` puts a card in any position and clears the state of the old one. `move N approval` builds and posts the branch with no tests or playtest. The post says no factory checks ran. `move N done` drops the card, like Deny: it closes the issue as not planned.
 - `factory merge N` merges a card into its base now.
@@ -89,7 +89,7 @@ Orders and authority:
 - An order from a member runs at once with the matching command. Do not ask back unless the order is unclear. Pass the member as `--by`.
 - "skip it" on a failed gate is `factory move N approval`.
 - A factory change PR is only for a change to the factory itself. Never use one to move a card past something.
-- On your own judgment you may run any command except four. These need `--by <member>` from that member's order: `merge` of a card the committee has not approved, `ship`, `merge-change`, and `retry` of the release tracking card while `factory release` shows the playtest blocked. They reach `dev`, players or the factory code, or overrule what the release playtest found. Pass the member's decision as the retry's text.
+- On your own judgment you may run any command except five. These need `--by <member>` from that member's order: `merge` of a card the committee has not approved, `ship`, `remove`, `merge-change`, and `retry` of the release tracking card while `factory release` shows the playtest blocked. They reach `dev`, players or the factory code, or overrule what the release playtest found. Pass the member's decision as the retry's text.
 - After a hand step the CLI lacks, queue a factory change with `factory_queue_change` that adds the command.
 
 ## Factory status

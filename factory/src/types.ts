@@ -161,7 +161,7 @@ export type FactoryState = {
   bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
-  adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
+  adhocReplies: Record<string, { chat: string; messageId: number | null }>; // ad hoc issue number -> the chat message its report answers. Null for a task of Hermes, whose report is a plain post
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
   cardStarts: Record<string, string[]>; // issue number -> ISO start times of its public-driven jobs in the last 24 hours
@@ -215,7 +215,7 @@ export type InlineButton = { text: string; data: string };
 export type AlbumPhoto = { path: string; caption: string };
 
 export interface Telegram {
-  sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
+  sendMessage(chat: string, text: string, replyTo?: number | null): Promise<number>;
   sendButtons(chat: string, text: string, buttons: InlineButton[][]): Promise<number>; // one text message with an inline keyboard
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
   // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.

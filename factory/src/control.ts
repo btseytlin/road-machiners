@@ -85,7 +85,8 @@ export function parseControl(raw: unknown): ControlCommand {
   return { ...(SHAPES[name as ControlAction['action']](data) as ControlAction), by, reason };
 }
 
-// `hermes` is Hermes's own name for actions it takes on its judgment. Any other actor must be a committee member, by telegram id, GitHub login or name.
+// `hermes` is Hermes's own name for mechanical actions it takes on its judgment. Any other actor must be a committee member.
+// Hermes passes the sender's telegram id, which the committee file matches exactly. A display name matches only when it equals the name in the file.
 export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   if (by === 'hermes') {
     if (gated) throw new Error('This action needs a committee member, not Hermes. Pass --by <member>.');
@@ -97,10 +98,10 @@ export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   return member.name ?? member.github ?? member.telegram;
 }
 
-// Actions that reach dev, players or the factory code need a member. A move to Hardening approves the card, so it is gated like a merge.
-// A merge or a move to Hardening of a card the committee already approved needs none.
+// Product decisions need a member: Ship, a Remove, a merge of factory code, and an approval. A move to Hardening approves the card, so it is gated like a merge.
+// A merge or a move to Hardening of a card the committee already approved needs none. Route, retry, cut and the other moves are mechanical.
 export function isGated(ctx: Ctx, command: ControlCommand): boolean {
-  if (command.action === 'ship' || command.action === 'merge-change') return true;
+  if (command.action === 'ship' || command.action === 'remove' || command.action === 'merge-change') return true;
   if (!approves(command)) return false;
   const { approvedResolving, pendingApprovals } = readState(ctx.statePath);
   const key = String(command.issue);

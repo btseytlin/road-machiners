@@ -1,6 +1,6 @@
 # Stages
 
-The rules of each step in [process.md](process.md). Each card stage comments on its issue when it finishes or fails, with the time it took. Every agent stage that ends with an `.factory/needs-committee.md` fails, so Hermes asks the committee. Agents write that file only for a game design fork or a major save bump.
+The rules of each step in [process.md](process.md). Each card stage comments on its issue when it finishes or fails, with the time it took. Agents write `.factory/needs-committee.md` only for a game design fork or a major save bump. A stage that ends with that file fails, so Hermes puts the question to the committee.
 
 ## Intake
 
