@@ -1,5 +1,5 @@
 {
-  "turn": 700,
+  "turn": 620,
   "vehicles": [
     { "id": "player", "brain": null },
     {
@@ -7,14 +7,16 @@
       "brain": {
         "goals": [
           { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 40 }, "phase": "travel", "reason": "look for prey at known hunting grounds" },
-          { "kind": "fight", "targetId": "player", "destination": { "x": 30, "y": 30 }, "phase": "travel", "reason": "fight a hostile in sight", "perceived": 698, "demands": false }
+          { "kind": "flee", "targetId": "npc-5", "destination": { "x": 10, "y": 12 }, "phase": "travel", "reason": "escape an attacker" }
         ]
       }
     },
     {
       "id": "npc-5",
       "brain": {
-        "goals": [{ "kind": "flee", "targetId": "npc-2", "destination": { "x": 10, "y": 12 }, "phase": "travel", "reason": "escape an attacker", "perceived": 699 }]
+        "goals": [
+          { "kind": "fight", "targetId": "npc-2", "destination": { "x": 30, "y": 30 }, "phase": "travel", "reason": "fight a hostile in sight", "perceived": 618 }
+        ]
       }
     }
   ],
@@ -22,7 +24,7 @@
     {
       "id": "npc-9",
       "brain": {
-        "goals": [{ "kind": "fight", "targetId": "npc-5", "destination": { "x": 5, "y": 5 }, "phase": "travel", "reason": "rob cargo", "perceived": 690 }]
+        "goals": [{ "kind": "flee", "targetId": "player", "destination": { "x": 5, "y": 5 }, "phase": "travel", "reason": "avoid a costly fight" }]
       }
     }
   ]

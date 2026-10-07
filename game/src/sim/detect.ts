@@ -13,7 +13,7 @@ import { hasPerk, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
-import { hasWorkingEngine, isStalled, vehicleStats } from './stats';
+import { hasWorkingEngine, isStalled, isStranded, vehicleStats } from './stats';
 import { sunAt } from './sun';
 import type { Contact, DustCloud, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
@@ -24,9 +24,10 @@ import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
-// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or without a working engine.
+// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or stranded, since a
+// stranded truck is pushed, not driven. A healthy truck at a crawl is still heard.
 export function soundRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v)) return 0;
+  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v) || isStranded(world, v)) return 0;
   const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
   return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
 }
@@ -49,9 +50,9 @@ function runsCold(world: World, v: Vehicle): boolean {
   return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed * PERK_NUMBERS.coldRunning.speedShare;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (the storms in the truck shrink it through weatherOn's sight multiplier).
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, while stranded, at night, or fully hidden by weather (the storms in the truck shrink it through weatherOn's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.limpSpeed) return 0;
+  if (v.speed <= RULES.limpSpeed || isStranded(world, v)) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
   const weather = weatherOn(world, v);

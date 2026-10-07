@@ -296,9 +296,20 @@ function withBurst_15_16(event: SavedJson): SavedJson {
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
+// Every saved far route was planned with roads, since only newer raiders that retreat, flee or are stranded plan
+// them off roads.
+function withRouteStyle_18_19(world: SavedJson): SavedJson {
+  const styled = (v: SavedJson): SavedJson => {
+    const brain = v.brain as SavedJson | null;
+    if (!brain?.farRoute) return v;
+    return { ...v, brain: { ...brain, farRoute: { ...(brain.farRoute as SavedJson), offRoad: false } } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
+}
+
 // Town and camp gates lost their guns, so their shot events, their kill credit and a driver's note of the gate that
 // shot it go. A gun's credit named `guard-<site>`, no truck.
-function withoutGuards_18_19(world: SavedJson): SavedJson {
+function withoutGuards_19_20(world: SavedJson): SavedJson {
   const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
   const unnoted = (v: SavedJson): SavedJson => {
     if (!v.brain) return v;
@@ -314,7 +325,7 @@ function withoutGuards_18_19(world: SavedJson): SavedJson {
 }
 
 // A runner keeps on until its threat has been out of sight, earshot and gunfire for some turns, counted from this turn.
-function withFleePerceived_19_20(world: SavedJson): SavedJson {
+function withFleePerceived_20_21(world: SavedJson): SavedJson {
   const turn = world.turn as number;
   const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
   const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
@@ -323,7 +334,7 @@ function withFleePerceived_19_20(world: SavedJson): SavedJson {
 
 // A fight records the last turn it wore its target down. Taken as the save's turn at full condition, so the first
 // check after loading starts a fresh window.
-function withFightWorn_20_21(world: SavedJson): SavedJson {
+function withFightWorn_21_22(world: SavedJson): SavedJson {
   const turn = world.turn as number;
   const goal = (g: SavedJson): SavedJson => (g.kind === 'fight' ? { ...g, worn: { turn, condition: 1 } } : g);
   const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
@@ -335,7 +346,7 @@ function withFightWorn_20_21(world: SavedJson): SavedJson {
 // perceived it. Seen wins over heard. A fight or flee goal's target becomes a track it fights or runs from, at its
 // place on the goal's perceived turn, and a fight drops that turn. A noted truck no longer in the world is left out.
 // Trucks sensed but not decided on get tracks on the first turn after loading.
-function withTracks_21_22(world: SavedJson): SavedJson {
+function withTracks_22_23(world: SavedJson): SavedJson {
   const turn = world.turn as number;
   const places = new Map((world.vehicles as SavedJson[]).map((v) => [v.id as string, v.pos as SavedJson]));
   const fromNoticed = (noticed: Record<string, number>): Record<string, SavedJson> => {
@@ -374,7 +385,7 @@ function withTracks_21_22(world: SavedJson): SavedJson {
 
 // A track records the turn its truck came in sight. A saved track gets null, as out of sight, so the first turn after
 // loading sets it for a truck in sight.
-function withSeenSince_22_23(world: SavedJson): SavedJson {
+function withSeenSince_23_24(world: SavedJson): SavedJson {
   const truck = (v: SavedJson): SavedJson => {
     if (!v.brain) return v;
     const brain = v.brain as SavedJson;
@@ -460,16 +471,18 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withStormBorn_16_17,
   // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
   withStormExposure_17_18,
-  // 18 to 19: gate guns are gone, with their shot events and kill credit.
-  withoutGuards_18_19,
-  // 19 to 20: a flee goal records the turn it last perceived its threat, taken as the save's turn.
-  withFleePerceived_19_20,
-  // 20 to 21: a fight records the last turn it wore its target down, taken as the save's turn.
-  withFightWorn_20_21,
-  // 21 to 22: a driver tracks the hostiles it decided on, and a fight reads its target's last place from the track.
-  withTracks_21_22,
-  // 22 to 23: a track records the turn its truck came in sight, null after loading.
-  withSeenSince_22_23,
+  // 18 to 19: a far route records whether it was planned off roads; every old one was not.
+  withRouteStyle_18_19,
+  // 19 to 20: gate guns are gone, with their shot events and kill credit.
+  withoutGuards_19_20,
+  // 20 to 21: a flee goal records the turn it last perceived its threat, taken as the save's turn.
+  withFleePerceived_20_21,
+  // 21 to 22: a fight records the last turn it wore its target down, taken as the save's turn.
+  withFightWorn_21_22,
+  // 22 to 23: a driver tracks the hostiles it decided on, and a fight reads its target's last place from the track.
+  withTracks_22_23,
+  // 23 to 24: a track records the turn its truck came in sight, null after loading.
+  withSeenSince_23_24,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

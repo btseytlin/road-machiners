@@ -5,7 +5,9 @@
 import { inCombat } from '../combat';
 import { playerVehicle } from '../damage';
 import { goodsCount, mountedParts } from '../grid';
+import { onRouteRoad, terrainNav } from '../nav/layer';
 import { fightOddsAgainst } from '../npc-decisions';
+import { keepsOffRoads } from '../off-road';
 import { getResources } from '../resources';
 import { isStranded, vehicleStats } from '../stats';
 import { isTowed } from '../tow';
@@ -77,9 +79,9 @@ export function turnLine(world: World, events: readonly GameEvent[], ledger: Led
 const SNAPSHOT_TURNS = 10;
 
 // The world log of one turn: every event of the turn raw, whoever it touches, and on a snapshot turn the position,
-// order, goal stack, money, fuel and part health of every truck.
+// order, goal stack, money, fuel and part health of every truck, whether it keeps off roads and whether it is on one.
 export type WorldLine = { t: number; events?: GameEvent[]; trucks?: TruckSnap[] };
-export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; states: string[] };
+export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; states: string[]; offRoad: boolean; onRoad: boolean };
 
 export function worldLine(world: World, events: readonly GameEvent[]): WorldLine | null {
   const line: WorldLine = { t: world.turn };
@@ -109,6 +111,8 @@ function snap(world: World, v: Vehicle): TruckSnap {
     fuel: Math.round(getResources(world, v).fuel),
     hp,
     states: world.states.filter((s) => s.holder === v.id).map((s) => `${s.kind}>${s.other}`),
+    offRoad: keepsOffRoads(world, v),
+    onRoad: onRouteRoad(terrainNav(world.terrain), v.pos.x, v.pos.y),
   };
 }
 

@@ -1,31 +1,17 @@
 {
-  "turn": 620,
+  "turn": 410,
+  "events": [
+    { "t": "shot", "shooter": "npc-3", "weapon": "p-7", "target": "player", "aim": "body", "chance": 0.6, "damageChance": 1, "side": "front", "rounds": [] },
+    { "t": "guardShot", "site": "bowl", "from": { "x": 120, "y": 88 }, "target": "player", "rounds": [] },
+    { "t": "npcKnockout", "vehicle": "npc-9", "by": "npc-3" }
+  ],
   "vehicles": [
-    { "id": "player", "brain": null },
-    {
-      "id": "npc-2",
-      "brain": {
-        "goals": [
-          { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 40 }, "phase": "travel", "reason": "look for prey at known hunting grounds" },
-          { "kind": "flee", "targetId": "npc-5", "destination": { "x": 10, "y": 12 }, "phase": "travel", "reason": "escape an attacker" }
-        ]
-      }
-    },
-    {
-      "id": "npc-5",
-      "brain": {
-        "goals": [
-          { "kind": "fight", "targetId": "npc-2", "destination": { "x": 30, "y": 30 }, "phase": "travel", "reason": "fight a hostile in sight", "perceived": 618 }
-        ]
-      }
-    }
+    { "id": "player", "lastHitBy": "guard-bowl" },
+    { "id": "npc-3", "lastHitBy": "player" },
+    { "id": "npc-4", "lastHitBy": null, "brain": { "goals": [], "gunnedBy": "kiln" } }
   ],
   "removed": [
-    {
-      "id": "npc-9",
-      "brain": {
-        "goals": [{ "kind": "flee", "targetId": "player", "destination": { "x": 5, "y": 5 }, "phase": "travel", "reason": "avoid a costly fight" }]
-      }
-    }
+    { "id": "npc-8", "lastHitBy": "guard-kiln" },
+    { "id": "npc-9", "lastHitBy": "npc-3" }
   ]
 }
