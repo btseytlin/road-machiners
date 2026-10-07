@@ -23,7 +23,7 @@ import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
+import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, tryWriteSave } from './save';
 import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
@@ -93,12 +93,18 @@ function newGame(): World {
 installCrashScreen();
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
+bootStep('loading physics, models and sounds');
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
+bootStep('loading the map');
 const map = await fetchMap();
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
+bootStep('loading the save');
 const world = await bootWorld();
+bootStep('building the ground');
 groundTexture(world);
+bootStep('waiting for physics, models and sounds');
 const [, , bank] = await loading;
+bootStep('starting the game');
 // UI code may use Math.random(), and the radio changes no rule.
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
@@ -109,6 +115,7 @@ const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
+bootStep('running');
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {
