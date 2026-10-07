@@ -47,19 +47,22 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
 }
 
-// The committee approved a preview, which had no review yet. The card goes back to Testing to harden under the same approver,
-// and the checks after it queue the merge with no new post. A hotfix hardened before its post, so it merges at once instead.
+// The committee approved a preview, which had no review yet. The card moves to Hardening under the same approver,
+// and Hardening queues the merge with no new post. A hotfix hardened before its post, so it merges at once instead.
+// The card keeps its build, the commit the checks passed, so Hardening runs the checks again only if the head moves past it.
 async function harden(ctx: Ctx, issue: number, by: string, base: string): Promise<void> {
+  const build = readState(ctx.statePath).builds[String(issue)];
+  if (build === undefined) throw new Error(`Issue #${issue} was approved with no recorded build`);
   forgetPosts(ctx, issue, true);
-  updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
-  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into ${base} by itself, with no new post.`);
-  await moveCard(ctx, issue, 'Testing', 'approved');
-  ctx.log('approve', issue, `approved by ${by}, back to Testing to harden`);
+  updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by }, builds: { ...state.builds, [String(issue)]: build } }));
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into ${base} by itself, with no new post.`);
+  await moveCard(ctx, issue, 'Hardening', 'approved');
+  ctx.log('approve', issue, `approved by ${by}, to Hardening`);
 }
 
 // Parallel work moves the base on after testing, so the branch may conflict with it. That is routine work, not an incident.
-// The change already passed hardening and review, so the card goes back to Testing only to resolve the conflict and run the checks.
-// Testing then queues the merge under the same approver, with no new post. Returns null in that case.
+// The change already passed hardening and review, so the card goes back to Hardening only to resolve the conflict and run the checks.
+// Hardening then queues the merge under the same approver, with no new post. Returns null in that case.
 async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string | null> {
   try {
     return await mergeApproved(ctx, issue, title, by, base);
@@ -67,9 +70,9 @@ async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string
     if (!(error instanceof MergeConflictError) || error.branch !== BRANCH(issue)) throw error;
     forgetPosts(ctx, issue, true);
     updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by }, testPhase: { ...state.testPhase, [String(issue)]: 'resolve' } }));
-    await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Testing merges ${base} again, resolves the conflict and runs the checks, with no new hardening or review. Then the approval by ${by} merges it, with no new post.`);
-    await moveCard(ctx, issue, 'Testing', 'conflict');
-    ctx.log('approve', issue, `conflict with ${base}, back to Testing to resolve`);
+    await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Hardening merges ${base} again, resolves the conflict and runs the checks, with no new hardening round or review. Then the approval by ${by} merges it, with no new post.`);
+    await moveCard(ctx, issue, 'Hardening', 'conflict');
+    ctx.log('approve', issue, `conflict with ${base}, to Hardening to resolve`);
     return null;
   }
 }

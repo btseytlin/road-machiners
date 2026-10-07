@@ -59,7 +59,7 @@ function validateScheduler(data: SchedulerData): void {
   validateReleaseReport(data.report);
 }
 function validateFunnelCount(column: string, count: number): void {
-  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'].includes(column)) throw new Error('Invalid funnel column');
+  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'].includes(column)) throw new Error('Invalid funnel column');
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid funnel count');
 }
 function validateDecision(decision: ScheduleReport['decisions'][number]): void {

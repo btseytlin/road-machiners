@@ -20,6 +20,11 @@ describe('cardPosition', () => {
     expect(cardPosition(card('Testing'), postState('checks-after-fix'))).toBe('checks');
     expect(cardPosition(card('Testing'), postState('post'))).toBe('post');
     expect(cardPosition(card('Approval'), EMPTY_STATE)).toBe('approval');
+    expect(cardPosition(card('Hardening'), EMPTY_STATE)).toBe('harden');
+    expect(cardPosition(card('Hardening'), postState('fix'))).toBe('harden-fix');
+    expect(cardPosition(card('Hardening'), postState('resolve'))).toBe('resolve');
+    expect(cardPosition(card('Hardening'), postState('checks'))).toBe('harden-checks');
+    expect(cardPosition(card('Hardening'), postState('checks-after-fix'))).toBe('harden-checks');
     expect(cardPosition(card('Done'), EMPTY_STATE)).toBe('done');
   });
 });
@@ -32,8 +37,16 @@ describe('cardDrift', () => {
     expect(cardDrift(card('Design'), withState({ jobs: [job('design', 157)] }))).toEqual([]);
     expect(cardDrift(card('Testing'), postState('post'))).toEqual([]);
   });
-  it('flags testPhase outside Testing', () => {
+  it('flags testPhase outside Testing and Hardening', () => {
     expect(cardDrift(card('Design'), postState('checks'))).toEqual(['#157 testPhase checks but column Design']);
+    expect(cardDrift(card('Hardening'), withState({ testPhase: { 157: 'checks' }, approvedResolving: { 157: 'bob' } }))).toEqual([]);
+  });
+  it('flags an approved card in Testing, which would merge with no hardening', () => {
+    expect(cardDrift(card('Testing'), withState({ approvedResolving: { 157: 'bob' } }))).toEqual(['#157 approved but column Testing']);
+  });
+  it('flags a Hardening card with no approval, unless it is a cleanup task', () => {
+    expect(cardDrift(card('Hardening'), EMPTY_STATE)).toEqual(['#157 column Hardening but no approval']);
+    expect(cardDrift(card('Hardening', 157, ['release-task', 'maintenance']), EMPTY_STATE)).toEqual([]);
   });
   it('flags patching outside Implementation', () => {
     expect(cardDrift(card('Testing'), withState({ patching: { 157: 'abc' } }))).toEqual(['#157 patching set but column Testing']);
@@ -54,6 +67,8 @@ describe('cardDrift', () => {
   it('lets post and fix run their mapped stages', () => {
     expect(cardDrift(card('Testing'), withState({ testPhase: { 157: 'post' }, jobs: [job('checks', 157)] }))).toEqual([]);
     expect(cardDrift(card('Testing'), withState({ testPhase: { 157: 'fix' }, jobs: [job('verify', 157)] }))).toEqual([]);
+    expect(cardDrift(card('Hardening'), withState({ testPhase: { 157: 'fix' }, approvedResolving: { 157: 'bob' }, jobs: [job('harden', 157)] }))).toEqual([]);
+    expect(cardDrift(card('Hardening'), withState({ testPhase: { 157: 'checks' }, approvedResolving: { 157: 'bob' }, jobs: [job('checks', 157)] }))).toEqual([]);
     expect(cardDrift(card('Approval'), withState({ approvalPosts: { 9: 157 }, jobs: [job('approve', 157)] }))).toEqual([]);
   });
   it('ignores jobs of other issues and release jobs', () => {
@@ -78,7 +93,7 @@ describe('runningJobs', () => {
 
 describe('CARD_JOBS', () => {
   it('lists the jobs that belong to a card position', () => {
-    expect(CARD_JOBS).toEqual(['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'checks']);
+    expect(CARD_JOBS).toEqual(['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'harden', 'checks']);
   });
 });
 

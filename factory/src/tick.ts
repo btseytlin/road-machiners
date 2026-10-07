@@ -25,7 +25,7 @@ const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
 const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
-const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
+const CARD_ORDER: Card['column'][] = ['Hardening', 'Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
@@ -57,17 +57,22 @@ function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
   return CARD_ORDER.flatMap((column) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: cardStage(state, card), issue: card.issue })));
 }
 
-// The card job of a column in CARD_ORDER.
+// The card job of each column in CARD_ORDER.
+const COLUMN_STAGE: Partial<Record<Card['column'], (state: FactoryState, issue: number) => JobStage>> = {
+  Hardening: (state, issue) => (checksDue(state, issue) ? 'checks' : 'harden'),
+  Testing: (state, issue) => (checksDue(state, issue) ? 'checks' : 'verify'),
+  Implementation: (state, issue) => (String(issue) in state.patching ? 'patch' : 'implement'),
+  Design: () => 'design',
+};
+
 function cardStage(state: FactoryState, card: Card): JobStage {
-  if (card.column === 'Testing') return testingStage(state, card.issue);
-  if (card.column === 'Implementation') return String(card.issue) in state.patching ? 'patch' : 'implement';
-  return card.column === 'Design' ? 'design' : 'triage';
+  return COLUMN_STAGE[card.column]?.(state, card.issue) ?? 'triage';
 }
 
-// A Testing card runs the factory checks once verify or a patch set its phase, and verify otherwise.
-function testingStage(state: FactoryState, issue: number): JobStage {
+// A Testing or Hardening card runs the factory checks once its agent stage or a patch set its phase, and the agent stage otherwise.
+function checksDue(state: FactoryState, issue: number): boolean {
   const phase = state.testPhase[String(issue)];
-  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post' ? 'checks' : 'verify';
+  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post';
 }
 
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
@@ -348,13 +353,13 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> 
   return released;
 }
 
-// Removes builds no card in Approval still needs.
+// Removes builds no card in Approval or Hardening still needs. A Hardening card keeps the build the committee played.
 // Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
-  const keep = cards.filter((card) => card.column === 'Approval').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
+  const keep = cards.filter((card) => card.column === 'Approval' || card.column === 'Hardening').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 

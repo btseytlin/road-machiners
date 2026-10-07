@@ -39,6 +39,11 @@ describe('summarizeDelivery', () => {
     expect(summary!.rejections).toEqual([{ gate: 'triage', decided: 1, rejected: 0 }, { gate: 'design', decided: 1, rejected: 0 }, { gate: 'committee', decided: 1, rejected: 0 }]);
   });
 
+  it('counts time in the Hardening column as harden, like older hardening in Testing', () => {
+    const lines = straight(1, 60).map((line) => (line.step === 'approved' ? { ...line, to: 'Hardening' as const } : line));
+    expect(stage(summarizeDelivery(lines, [], NOW, 7), 'harden')).toMatchObject({ count: 1, meanMs: 4 * HOUR });
+  });
+
   it('counts each loop by transition and issue, apart from failed-job retries of the same stage', () => {
     const lines = [
       card(2, 50, 'entered', 'Triage'), card(2, 49, 'accepted', 'Design'), card(2, 48, 'questions', 'Triage'), card(2, 40, 'accepted', 'Design'),

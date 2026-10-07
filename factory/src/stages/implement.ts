@@ -1,5 +1,5 @@
 import { moveCard } from '../card-events';
-import { BRANCH, GAME_DIR, TASK_FILE, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, TASK_FILE, isCleanupTask, type Ctx } from '../types';
 import { agentHome, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
 // Subagents read the code again from scratch, and the implementer subagent runs on Opus whatever model triage picked. The agent implements inline.
@@ -17,5 +17,5 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
   if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
   await guardAndPush(ctx, issue, base, 'implement');
-  await moveCard(ctx, issue, 'Testing', 'built');
+  await moveCard(ctx, issue, isCleanupTask((await ctx.github.issue(issue)).labels) ? 'Hardening' : 'Testing', 'built');
 }

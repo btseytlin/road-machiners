@@ -354,6 +354,13 @@ describe('tick', () => {
     expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
   });
 
+  it('picks harden for a Hardening card, and checks once harden set the phase, ahead of Testing', () => {
+    const cards = [card(1, 'Testing'), card(5, 'Hardening'), card(6, 'Hardening'), card(7, 'Hardening')];
+    const phases = state({ testPhase: { 6: 'checks', 7: 'fix' } });
+    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 3, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'checks', issue: 6 }, { stage: 'harden', issue: 7 }, { stage: 'verify', issue: 1 }]);
+  });
+
   it('runs a patch for an Implementation card with a queued patch, in the implement queue', () => {
     const picks = chooseJobs(state({ patching: { 4: 'abc1234' } }), [card(3, 'Implementation'), card(4, 'Implementation')], NOW, { ...CFG, maxJobsPerDay: 10 });
     expect(picks).toEqual([{ stage: 'implement', issue: 3 }, { stage: 'patch', issue: 4 }]);

@@ -54,17 +54,24 @@ describe('approve', () => {
   // The queued merge of a hardened card. The committee approved its preview, and the hardening round and its checks passed.
   beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'bob' } }));
 
-  it('sends an approved preview back to Testing to harden, with no merge and no chat post', async () => {
+  it('moves an approved preview to Hardening with its played build kept, with no merge and no chat post', async () => {
     writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'comment 7 Approved by bob in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into dev by itself, with no new post.',
-      'move 7 Testing',
+      'comment 7 Approved by bob in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into dev by itself, with no new post.',
+      'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.builds).toEqual({ 7: 'aaa1111', 8: 'bbb2222' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('refuses to approve a preview with no recorded build, since Hardening compares against it', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {}, builds: {} });
+    await expect(approve(fakeCtx(), 7, 'bob')).rejects.toThrow('approved with no recorded build');
+    expect(calls).toEqual([]);
   });
 
   it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
@@ -130,14 +137,14 @@ describe('approve', () => {
     expect(state.pendingIncidents).toEqual([7]);
   });
 
-  it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
+  it('sends the card back to Hardening on a conflict with dev, keeping the approver, with no chat post', async () => {
     const ctx = fakeCtx();
     ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step.branch, step.into, ['game/src/a.ts'], 'boom'); };
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
-      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again, resolves the conflict and runs the checks, with no new hardening or review. Then the approval by bob merges it, with no new post.',
-      'move 7 Testing',
+      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Hardening merges dev again, resolves the conflict and runs the checks, with no new hardening round or review. Then the approval by bob merges it, with no new post.',
+      'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });

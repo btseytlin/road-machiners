@@ -39,17 +39,25 @@ Implementation runs Sonnet with up:uexecute on the task file. Subagents are off,
 [process.md](process.md#testing-column) shows the order of the rounds and their limits. These are the rules behind them.
 
 - Verify first merges the new commits of the issue branch on GitHub, then the current base, so the committee plays what approve will merge. A conflict with the branch goes to a merge agent at once. The round agent resolves a conflict with the base. An unfinished merge fails the stage.
-- An approved card that conflicts with the base at approve already passed hardening and the review. Verify merges the base, a merge agent resolves the conflict with `prompts/branch-merge.md`, and the checks run next. No harden round or review runs.
-- The preview round uses `prompts/test.md`, and the harden round uses `prompts/harden.md`. A cleanup task only hardens, since it merges with no post.
-- The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. The factory reads the findings from the last `ReportFindings` call in the run's output. Any finding of category `correctness`, or with no category, fails the review. Other findings are listed and do not block. A run with no `ReportFindings` call fails the stage.
-- A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings".
+- The preview round uses `prompts/test.md`. A hotfix first runs the harden round and the review, as Hardening does.
 - Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent, then publishes the build at `/<hash>/`. The playtest prints the frame rate but does not check it, since the host runs other jobs at the same time. Only the release candidate fails under 50 fps. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
 - The post phase runs `npm ci` and the build only, once, with no tests, playtest or fix round. Hermes starts it with `factory move N approval`. A failed build fails the stage. The post and the issue comment say that no factory checks ran on this build. A card that the committee approved already queues its merge as usual.
 - The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
 
+## Hardening
+
+[process.md](process.md#hardening-column) shows the order of the rounds. These are the rules behind them.
+
+- Harden merges the new commits of the issue branch on GitHub, but not the base. Approve merges the base, and a conflict there comes back here.
+- The harden round uses `prompts/harden.md`.
+- The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. The factory reads the findings from the last `ReportFindings` call in the run's output. Any finding of category `correctness`, or with no category, fails the review. Other findings are listed and do not block. A run with no `ReportFindings` call fails the stage.
+- A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings", drops the approval and sends the card to Design.
+- After the review, the branch head is compared with the card's build, the commit Testing checked and the committee played. The same commit moves the card to Approval with its merge queued. Any other commit runs Checks, whose fix round runs in Hardening and leaves no evidence.
+- A conflict at approve merges the base, and a merge agent resolves the conflict with `prompts/branch-merge.md`. Checks runs next, with no harden round or review.
+
 ## Approval
 
-- Approve on a previewed card records the approver in `approvedResolving` and sends the card back to Testing to harden.
+- Approve on a previewed card records the approver in `approvedResolving` and moves the card to Hardening. The card keeps its build.
 - The merge takes the branch into `dev` and rebuilds `/dev/`.
 - Deny labels the issue `wont-do` and closes it and its pull request as not planned.
 

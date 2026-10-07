@@ -5,7 +5,7 @@ digraph lifecycle {
   edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
   T [label="Triage"]; D [label="Design"]; I [label="Implementation"];
   P [label="Testing\npreview"]; A [label="Approval\ncommittee plays", fillcolor="#fde68a", color="#b45309"];
-  H [label="Testing\nharden"]; G [label="Merge\ninto dev"]; M [label="Done"];
+  H [label="Hardening\nreview"]; G [label="Merge\ninto dev"]; M [label="Done"];
   W [label="Author answers\non GitHub", fillcolor="#fde68a", color="#b45309"];
   N [label="Hermes can move a card\nto any column", shape=note, style=filled, fillcolor="#f3f4f6", color="#6b7280", fontcolor="#374151"];
   X [label="Closed\nnot built", fillcolor="#f3f4f6", color="#6b7280", fontcolor="#374151"];

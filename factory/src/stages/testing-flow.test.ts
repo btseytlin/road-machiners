@@ -3,24 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
-import type { AgentRun, Ctx } from '../types';
+import { isCleanupTask, type AgentRun, type Ctx } from '../types';
 import type { Finding } from './review';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
+const { runStage: runHarden } = await import('./harden');
 const { runStage: runPatch } = await import('./patch');
 const { judge, readFindings } = await import('./review');
 
-// Runs the Testing column the way the tick does: verify or checks by the card's phase, until the card leaves Testing.
-// Verify, checks, the fix round and the second checks make four jobs at most.
+// Runs the card's column the way the tick does, until the card leaves it. An approved card or a cleanup task is in Hardening,
+// any other in Testing. Checks run by the card's phase. The agent stage, checks, the fix round and the second checks make four jobs at most.
 async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  const key = String(issue);
   for (let job = 0; job < 4; job += 1) {
-    const phase = readState(ctx.statePath).testPhase[String(issue)];
-    await (phase === 'checks' || phase === 'checks-after-fix' ? runChecks(ctx, issue) : runVerify(ctx, issue));
-    if (!(String(issue) in readState(ctx.statePath).testPhase)) return;
+    const state = readState(ctx.statePath);
+    const phase = state.testPhase[key];
+    const hardening = key in state.approvedResolving || isCleanupTask(labels);
+    await (phase === 'checks' || phase === 'checks-after-fix' ? runChecks(ctx, issue) : hardening ? runHarden(ctx, issue) : runVerify(ctx, issue));
+    if (!(key in readState(ctx.statePath).testPhase)) return;
   }
-  throw new Error(`Testing of #${issue} did not leave the column in four jobs`);
+  throw new Error(`#${issue} did not leave its column in four jobs`);
 }
 
 let home = '';
@@ -419,17 +423,45 @@ describe('testing stage', () => {
     it('hardens an approved card with the review and no evidence, then queues its merge with no post', async () => {
       writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
       await runStage(fakeCtx(agent), 7);
-      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.']);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.']);
       expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
       expect(existsSync(`${home}/work/issue-7/game/.factory/approval.json`)).toBe(false);
       expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
       expect(queued()).toEqual({ 7: 'Ann' });
     });
 
+    it('hardens an approved card without merging the base, since approve merges it', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(bases).not.toContain('merge dev');
+    });
+
+    it('runs no checks when hardening left the head on the build the committee played', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(calls).not.toContain('checks');
+      expect(calls.at(-1)).toBe('move 7 Approval');
+      expect(queued()).toEqual({ 7: 'Ann' });
+      expect(readState(`${home}/state.json`).testPhase).toEqual({});
+    });
+
+    it('runs the checks when hardening moved the head past the played build', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('refuses to harden a card with no recorded approval', async () => {
+      await expect(runHarden(fakeCtx(agent), 7)).rejects.toThrow('in Hardening with no recorded approval');
+      expect(rounds).toEqual([]);
+    });
+
     it('hardens a hotfix and reviews it before the test round that shows it, then posts it', async () => {
       labels = ['hotfix'];
       await runStage(fakeCtx(agent), 7);
-      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.', 'This is the testing stage of the ROAM factory.']);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.', 'This is the testing stage of the ROAM factory.']);
       expect(calls.findIndex((call) => call.startsWith('review'))).toBeLessThan(calls.indexOf('checks'));
       expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
     });

@@ -26,18 +26,21 @@ Each position lists the column, the state fields, the artifacts it needs and the
 - `patch`: column Implementation, with a `patching` entry that holds the commit of the last posted build. Next job: patch. `move` cannot target it.
 - `verify`: column Testing, with no `testPhase` entry. Needs the branch with the build. Next job: verify.
 - `fix`: column Testing, `testPhase` is `fix`. The checks failed once. Next job: verify, which runs the fix round. `move` cannot target it.
-- `resolve`: column Testing, `testPhase` is `resolve`, with an `approvedResolving` entry. Approve hit a conflict with the base. Next job: verify, which merges the base, lets a merge agent resolve the conflict and skips hardening and the review. `move` cannot target it.
 - `checks`: column Testing, `testPhase` is `checks` or `checks-after-fix`. Next job: checks.
 - `post`: column Testing, `testPhase` is `post`. Next job: checks, which builds, publishes and posts with no tests or playtest. Needs `.factory/approval.json` and the screenshot. `move N approval` goes through it.
 - `approval`: column Approval. Needs a published build in `builds` and an open post in `approvalPosts`, or an approval queued in `pendingApprovals`. Next job: approve, which runs when the committee presses Approve.
+- `harden`: column Hardening, with no `testPhase` entry and an `approvedResolving` entry, or a cleanup task. Its `builds` entry is the commit the committee played. Next job: harden, which runs the harden round and the review. It runs the checks only if the head moved past that build, and otherwise moves the card to Approval with its merge queued. `move N harden` records the mover as approver when none is recorded.
+- `harden-fix`: column Hardening, `testPhase` is `fix`. The checks failed once. Next job: harden, which runs the fix round. `move` cannot target it.
+- `resolve`: column Hardening, `testPhase` is `resolve`. Approve hit a conflict with the base. Next job: harden, which merges the base and lets a merge agent resolve the conflict, with no harden round or review. `move` cannot target it.
+- `harden-checks`: column Hardening, `testPhase` is `checks` or `checks-after-fix`. Next job: checks, which queue the merge with no post. `move N checks` on an approved card puts it here.
 - `done`: column Done. Runs nothing.
 
 Fields that belong to one position:
 
-- `testPhase` belongs to Testing only.
+- `testPhase` belongs to Testing and Hardening only.
 - `patching` belongs to Implementation only.
 - `approvalPosts`, `postCaptions` and `pendingApprovals` belong to Approval only.
-- `approvedResolving` marks an approved card that is back in Testing to resolve a conflict. It merges after the checks, with no new post.
+- `approvedResolving` marks an approved card in Hardening, or in Approval with its merge queued. It merges with no new post.
 
 Flags hold on any position:
 
@@ -87,8 +90,10 @@ The release tracking card has the label `release`. It waits in Approval for the 
 
 `factory audit` prints one line per drift and prints nothing when the factory is clean. A drift is one of these:
 
-- `testPhase` outside Testing.
+- `testPhase` outside Testing and Hardening.
 - `patching` outside Implementation.
+- An approved card in Testing, which would get a preview and merge with no hardening.
+- A Hardening card with no approval that is not a cleanup task.
 - An approval post or a queued approval outside Approval.
 - An Approval card with no open post that is not approved.
 - A running job whose stage differs from the stage the position runs. The stage of `post` is checks, of `approval` is approve, and `done` runs none.
@@ -104,7 +109,7 @@ Read: `factory status`, `cards`, `card N`, `jobs`, `queues`, `release`, `failure
 
 Write, each with `--by` and `--reason`:
 
-- `move N <triage|design|implement|verify|checks|approval|done>` changes the card's position. It stops the running job, closes the open post, clears the old position's state and sets the new one.
+- `move N <triage|design|implement|verify|checks|approval|harden|done>` changes the card's position. It stops the running job, closes the open post, clears the old position's state and sets the new one. `move N verify` drops the approval, so the card gets a new post.
 - `move N done` drops the card the way Deny does. It comments, closes the PR, adds the `wont-do` label, closes the issue as not planned, moves the card to Done and releases the bundled issues.
 - `move` and `merge` refuse the release tracking card.
 - `merge N` merges a card into its base now. It skips the post and hardening.

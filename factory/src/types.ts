@@ -1,9 +1,10 @@
 // Shared types of the game factory. Every module codes against these, so stages, wrappers and tests agree.
 
-export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
+export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Hardening' | 'Done';
 
-// Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
-export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
+// Stages that run agents on a card. Verify is the agent half of the Testing column, and harden the agent half of the Hardening column.
+// Patch applies a small committee reply to a built card.
+export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'harden';
 export type ReleaseStage = 'release' | 'playtest' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
@@ -108,7 +109,7 @@ export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 't
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
-  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify', harden: 'verify',
   // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
   change: 'implement',
   checks: 'test',
@@ -153,7 +154,7 @@ export type FactoryState = {
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
-  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
+  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card in Hardening. Hardening queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
   bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
@@ -177,9 +178,11 @@ export type FactoryState = {
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 
-// `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
+// The phases of a card in Testing or Hardening.
+// `checks`: verify, harden or a patch is done, the factory checks run next. `fix`: the checks failed once, the column's agent stage runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.
 // `post`: a control move to Approval. Only the build and the post run, with no tests and no playtest.
+// `resolve`: approve hit a conflict with the base. Harden merges the base, a merge agent resolves the conflict, and the checks run next.
 export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post' | 'resolve';
 
 export interface GitHub {
@@ -313,6 +316,8 @@ export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
 export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
+// A cleanup task merges into the release with no post, since the committee plays it in the candidate. So it skips Testing and only hardens.
+export const isCleanupTask = (labels: string[]): boolean => labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL);
 export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merged, waiting for a ship to main. The issue closes on ship.
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';

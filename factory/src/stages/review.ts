@@ -1,7 +1,7 @@
 import { moveCard } from '../card-events';
 import { rmSync, writeFileSync } from 'node:fs';
 import { updateState } from '../state';
-import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type CardStage, type Ctx } from '../types';
 import { BASE_BRANCH, agentHome, fillPrompt, fitComment, runAgent, workDir } from './common';
 
 const PRINCIPLES = `${GAME_DIR}/docs/architecture/principles.md`;
@@ -40,25 +40,25 @@ function findingLine(finding: Finding): string {
 
 // Runs Claude Code's /code-review once over the whole branch, with the incident log and the principles pasted in, so
 // the review cannot skip them. Both come from dev, where incidents land, so a hotfix branch from main gets them too.
-async function reviewRound(ctx: Ctx, issue: number, base: string): Promise<Review> {
+async function reviewRound(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<Review> {
   const prompt = fillPrompt('review', {
     issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base,
     incidentLog: await ctx.repo.readFile(BASE_BRANCH, INCIDENT_LOG), principles: await ctx.repo.readFile(BASE_BRANCH, PRINCIPLES),
   });
   // A review only reads, so a resumed job reviews again from the start.
-  return judge(readFindings(await runAgent(ctx, issue, 'verify', 'review', prompt, { skill: '/code-review', fresh: true })));
+  return judge(readFindings(await runAgent(ctx, issue, stage, 'review', prompt, { skill: '/code-review', fresh: true })));
 }
 
 // One adversarial review of the whole branch. A FAIL gets one fix round and one more review. Returns whether the
 // change passed. A second FAIL sends the card back to Design, since two blocks in a row point at the design, not
 // at the code. A card already redesigned once for the review throws instead, so the stage stops it for Hermes.
-export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound: () => Promise<void>): Promise<boolean> {
-  const first = await reviewRound(ctx, issue, base);
+export async function reviewGate(ctx: Ctx, issue: number, base: string, stage: CardStage, fixRound: () => Promise<void>): Promise<boolean> {
+  const first = await reviewRound(ctx, issue, base, stage);
   if (first.passed) return true;
   const findingsFile = `${agentHome(workDir(ctx, issue), GAME_DIR)}/${OUT_DIR}/review-findings.md`;
   writeFileSync(findingsFile, `${first.text}\n`);
   await fixRound();
-  const again = await reviewRound(ctx, issue, base);
+  const again = await reviewRound(ctx, issue, base, stage);
   rmSync(findingsFile);
   if (again.passed) return true;
   const redesigned = (await ctx.github.comments(issue)).some((comment) => comment.body.startsWith(REVIEW_HEADING));

@@ -20,7 +20,7 @@ function project(options: string[]): string {
   return JSON.stringify({ data: { user: { projectV2: { id: 'P1', field } } } });
 }
 
-const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 
 function fake(calls: string[][], projectJson: string): Run {
   return async (_cmd, args) => {

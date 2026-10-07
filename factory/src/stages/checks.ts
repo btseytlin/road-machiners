@@ -6,7 +6,7 @@ import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { BRANCH, GAME_DIR, OUT_DIR, isCleanupTask, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { setPhase } from './verify';
@@ -58,8 +58,8 @@ step "done"
 `;
 
 // The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
-// It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
-// A first failure hands the card to verify for one fix round. A failure after that fix stops the card.
+// It checks the branch head that verify, harden or a patch pushed, with the approval and evidence they left in the work clone.
+// A first failure hands the card to its column's agent stage for one fix round. A failure after that fix stops the card.
 // The phase `post` builds and posts the head with no checks and no fix round. A failed build throws.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const phase = checksPhase(ctx, issue);
@@ -111,14 +111,14 @@ function clearPhase(ctx: Ctx, issue: number): void {
 
 // Who approved the card before this round, or null when it needs a committee post.
 // Cleanup tasks on the release branch skip the post, since the committee plays them in the candidate.
-// A card approved after its preview, or before a conflict sent it back here, keeps its approval.
-function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
-  if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
+// A card in Hardening keeps the approval the committee gave its preview.
+export function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
+  if (isCleanupTask(labels)) return 'the factory';
   return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
 }
 
 // The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
-function queueMerge(ctx: Ctx, issue: number, by: string): void {
+export function queueMerge(ctx: Ctx, issue: number, by: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
   ctx.log('checks', issue, `approved by ${by} already, merge queued`);
 }

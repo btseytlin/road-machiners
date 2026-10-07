@@ -17,7 +17,7 @@ The public files and votes on GitHub issues. Agents design, build and test the t
 
 ## Card lifecycle
 
-A card is one GitHub issue on the Project board. Its column is the state. A card passes Testing twice: a quick preview before the committee plays it, and a full hardening after they approve it. Hardening is slow, so it runs only on work the committee wants.
+A card is one GitHub issue on the Project board. Its column is the state. Testing is a quick preview before the committee plays the card. Hardening runs after they approve it, with the deep verification and the review. Hardening is slow, so it runs only on work the committee wants.
 
 ![Card lifecycle](diagrams/lifecycle.svg)
 
@@ -33,7 +33,7 @@ The loops:
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
 - redesign: the committee reply changes the plan.
 - review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
-- conflict: `dev` moved on since testing. The approval is kept. A merge agent resolves the conflict, and the checks run again with no new hardening or review.
+- conflict: `dev` moved on since testing. The card goes back to Hardening with its approval kept. A merge agent resolves the conflict, and the checks run again with no new harden round or review.
 - removed from release: `remove #N` on the release candidate post.
 
 The early ends:
@@ -56,9 +56,17 @@ Testing is two jobs. Verify runs the testing agent. Checks runs the machine chec
 
 ![Testing column](diagrams/testing.svg)
 
-- A hotfix runs the harden line and then the preview test round before its post, since Approve ships it at once.
-- A release cleanup task runs only the harden line, since it merges with no post.
+- A hotfix runs the harden round and the review, then the preview test round, before its post, since Approve ships it at once. It never enters Hardening.
 - The visual review sends a card back at most twice. A third send-back fails the stage.
+
+## Hardening column
+
+Approve moves a card to Hardening. It runs the harden round and the review, and no test that Testing already ran. The card keeps the build the committee played. If hardening left the branch head on that build, the card goes straight to Approval with its merge queued. If hardening changed the code, Checks runs first.
+
+![Hardening column](diagrams/hardening.svg)
+
+- A release cleanup task goes from Implementation straight to Hardening, since it merges with no post. It has no played build, so Checks always runs.
+- A conflict at approve sends the card back to Hardening. A merge agent resolves it, and Checks runs, with no harden round or review.
 - A card that the review already sent to Design once fails the stage on its next second FAIL.
 
 ## Committee inputs

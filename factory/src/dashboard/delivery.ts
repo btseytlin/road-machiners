@@ -6,7 +6,7 @@ import type { Column, JobStage } from '../types';
 // and the board shows only where a card is now, so neither can say when a card entered a column.
 type CardLine = Extract<LedgerLine, { kind: 'card' }>;
 type JobLine = Extract<LedgerLine, { kind: 'job' }>;
-// Testing runs twice: a preview before the committee plays the card, and a hardening after it approves. Approval after hardening is
+// Testing runs the preview before the committee plays the card, and Hardening runs after it approves. Approval after hardening is
 // only the queue of the merge, so it is kept apart from the committee's wait.
 export type DeliveryStage = 'triage' | 'design' | 'implementation' | 'preview' | 'approval' | 'harden' | 'merge';
 type Visit = { stage: DeliveryStage; start: number; end: number | null };
@@ -33,18 +33,20 @@ const STEP_KINDS: Record<CardStep, 'path' | 'loop' | 'end' | 'other'> = {
   moved: 'other', 'merge-ordered': 'other', shipped: 'other', reported: 'other',
 };
 export const LOOP_STEPS = (Object.keys(STEP_KINDS) as CardStep[]).filter((step) => STEP_KINDS[step] === 'loop');
-const RETRY_STAGES: JobStage[] = ['triage', 'design', 'implement', 'patch', 'verify', 'checks'];
+const RETRY_STAGES: JobStage[] = ['triage', 'design', 'implement', 'patch', 'verify', 'harden', 'checks'];
 // Each gate's passing and refusing steps. A pending card, a failed job, a patch, a redesign, a removal or an operator's drop decides nothing.
 const GATES: Record<Gate, { pass: CardStep[]; reject: CardStep[] }> = {
   triage: { pass: ['accepted'], reject: ['triage-wont-do'] },
   design: { pass: ['planned'], reject: ['design-wont-do'] },
   committee: { pass: ['approved', 'merged'], reject: ['denied'] },
 };
-// The column names the stage, and the step tells the two passes through Testing and Approval apart. An operator's move into Testing counts as a preview.
+// The column names the stage, and the step tells the two passes through Approval apart. An operator's move into Testing counts as a preview.
+// Approved cards hardened in Testing before the Hardening column, so those older lines still count as harden.
 const COLUMN_STAGE: Record<Column, (step: CardStep) => DeliveryStage | null> = {
   Triage: () => 'triage', Design: () => 'design', Implementation: () => 'implementation',
   Testing: (step) => (step === 'approved' || step === 'conflict' ? 'harden' : 'preview'),
   Approval: (step) => (step === 'hardened' || step === 'merge-ordered' ? 'merge' : 'approval'),
+  Hardening: () => 'harden',
   Done: () => null,
 };
 const stageOf = (line: CardLine): DeliveryStage | null => COLUMN_STAGE[line.to](line.step);

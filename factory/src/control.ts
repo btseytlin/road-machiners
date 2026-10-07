@@ -11,7 +11,7 @@ import { readState, updateState } from './state';
 import { agentHome, workDir } from './stages/common';
 import { closeCard } from './stages/approval';
 import { moveCard, type CardStep } from './card-events';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, isCleanupTask, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
 
 export const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
 export type DropQueue = (typeof DROP_QUEUES)[number];
@@ -97,13 +97,18 @@ export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   return member.name ?? member.github ?? member.telegram;
 }
 
-// Actions that reach dev, players or the factory code need a member. A merge of a card the committee already approved needs none.
+// Actions that reach dev, players or the factory code need a member. A move to Hardening approves the card, so it is gated like a merge.
+// A merge or a move to Hardening of a card the committee already approved needs none.
 export function isGated(ctx: Ctx, command: ControlCommand): boolean {
   if (command.action === 'ship' || command.action === 'merge-change') return true;
-  if (command.action !== 'merge') return false;
+  if (!approves(command)) return false;
   const { approvedResolving, pendingApprovals } = readState(ctx.statePath);
   const key = String(command.issue);
   return !(key in approvedResolving) && !(key in pendingApprovals);
+}
+
+function approves(command: ControlCommand): command is Extract<ControlCommand, { action: 'merge' | 'move' }> {
+  return command.action === 'merge' || (command.action === 'move' && command.to === 'harden');
 }
 
 type Handlers = { [A in ControlAction['action']]: (ctx: Ctx, command: Extract<ControlCommand, { action: A }>, by: string) => Promise<Outcome> };
@@ -126,10 +131,19 @@ export async function applyControl(ctx: Ctx, command: ControlCommand): Promise<s
   return text;
 }
 
-const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', checks: 'Testing', approval: 'Testing', done: 'Done' };
+const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', checks: 'Testing', approval: 'Testing', harden: 'Hardening', done: 'Done' };
 const PHASE: Partial<Record<MoveTarget, TestPhase>> = { checks: 'checks', approval: 'post' };
-// A card put back before its build, or finished, no longer holds the approval it had.
-const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'done'];
+// A card put back before its build or its preview, or finished, no longer holds the approval it had.
+const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'verify', 'done'];
+
+// An approved card runs its checks or its build in Hardening, since an approved card in Testing would skip hardening.
+function isApproved(state: FactoryState, card: Card): boolean {
+  return String(card.issue) in state.approvedResolving || isCleanupTask(card.labels);
+}
+
+function targetColumn(ctx: Ctx, card: Card, to: MoveTarget): Column {
+  return (to === 'checks' || to === 'approval') && isApproved(readState(ctx.statePath), card) ? 'Hardening' : COLUMN[to];
+}
 
 async function requireCard(ctx: Ctx, issue: number): Promise<Card> {
   const found = (await ctx.github.cards()).find((card) => card.issue === issue);
@@ -205,7 +219,9 @@ async function requireBranch(ctx: Ctx, issue: number): Promise<void> {
   }
 }
 
+// An approved card merges with no post, so it needs no approval file.
 async function requireApprovalFile(ctx: Ctx, issue: number): Promise<void> {
+  if (isApproved(readState(ctx.statePath), await requireCard(ctx, issue))) return;
   const path = join(agentHome(workDir(ctx, issue), GAME_DIR), OUT_DIR, 'approval.json');
   if (!existsSync(path)) throw new Error(`Issue #${issue} has no ${path}; move it to verify, which writes the approval.`);
 }
@@ -221,6 +237,7 @@ const NEEDS: Partial<Record<MoveTarget, Need[]>> = {
   verify: [requireBranch],
   checks: [requireBranch, requireApprovalFile],
   approval: [requireBranch, requireApprovalFile],
+  harden: [requireBranch],
 };
 
 // The release flow owns the tracking card.
@@ -250,13 +267,18 @@ async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' 
   const { issue, to } = command;
   const card = await requireWorkCard(ctx, issue);
   const phase = PHASE[to];
+  const key = String(issue);
   await relocate(ctx, card, NEEDS[to] ?? [], {
-    column: COLUMN[to],
+    column: targetColumn(ctx, card, to),
     // A drop to Done ends the card the way Deny does, so its line says so.
     step: to === 'done' ? 'dropped' : 'moved',
     status: `↪️ Moved to ${to} by ${by}: ${command.reason}`,
     dropsApproval: DROPS_APPROVAL.includes(to),
-    enter: (state) => (phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [String(issue)]: phase } }),
+    enter: (state) => {
+      const phased = phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [key]: phase } };
+      // A move to Hardening is an approval, like a merge order. A card approved already keeps its approver.
+      return to === 'harden' && !isApproved(phased, card) ? { ...phased, approvedResolving: { ...phased.approvedResolving, [key]: by } } : phased;
+    },
   });
   if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
   return { issue, text: `Moved to ${to}.` };

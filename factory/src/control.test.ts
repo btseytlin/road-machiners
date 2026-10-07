@@ -225,12 +225,14 @@ describe('move', () => {
     expect(existsSync(replyMediaDir(ROOT, 43))).toBe(true);
   });
 
+  // The busy card is approved, so its checks and its build run in Hardening.
   it.each([
     ['triage', 'Triage', {}, false],
     ['implement', 'Implementation', {}, false],
-    ['verify', 'Testing', {}, true],
-    ['checks', 'Testing', { 4: 'checks' }, true],
-    ['approval', 'Testing', { 4: 'post' }, true],
+    ['verify', 'Testing', {}, false],
+    ['checks', 'Hardening', { 4: 'checks' }, true],
+    ['approval', 'Hardening', { 4: 'post' }, true],
+    ['harden', 'Hardening', {}, true],
     ['done', 'Done', {}, false],
   ] as const)('to %s sets column %s and phase %j, and keeps approval only for later positions (%s)', async (to, column, phase, keepsApproval) => {
     busyCard();
@@ -359,8 +361,32 @@ describe('move and merge preconditions and write order', () => {
     expectUntouched(before);
   });
 
+  it.each(['approval', 'checks'] as const)('to %s puts a card with no approval in Testing', async (to) => {
+    cards = [card(4, 'Approval')];
+    seed({});
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }));
+    expect(calls).toContain('move 4 Testing');
+  });
+
+  it('to harden records the mover as approver of a card with none', async () => {
+    cards = [card(4, 'Approval')];
+    seed({});
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'harden' }));
+    expect(calls).toContain('move 4 Hardening');
+    expect(readState(statePath).approvedResolving).toEqual({ 4: 'Ann' });
+  });
+
+  it('gates a move to harden of a card the committee has not approved, like a merge', () => {
+    seed({});
+    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'harden' }))).toBe(true);
+    seed({ approvedResolving: { 4: 'Bob' } });
+    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'harden' }))).toBe(false);
+    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'checks' }))).toBe(false);
+  });
+
   it.each(['approval', 'checks'] as const)('move to %s needs the approval file, and names the position that writes it', async (to) => {
     busyCard();
+    seed({ ...readState(statePath), approvedResolving: {} });
     rmSync(join(workDir(fakeCtx(), 4), 'game', '.factory', 'approval.json'));
     const before = readState(statePath);
     await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }))).rejects.toThrow(/approval\.json.*move it to verify/);

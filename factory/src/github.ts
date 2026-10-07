@@ -2,7 +2,7 @@ import { must } from './exec';
 import { FACTORY_MARK } from './types';
 import type { Card, Column, FactoryConfig, GitHub, Issue, IssueComment, Run, RunResult } from './types';
 
-const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state,author';
 
 type Board = { projectId: string; fieldId: string; options: Record<string, string> };
