@@ -49,6 +49,16 @@ describe("driving tips", () => {
     expect(tipToShow(w, false, seen, null)).toBe("zones");
   });
 
+  it("asks to drive a truck that parked after a drive, whose physics speed is not quite 0", () => {
+    const w = emptyWorld();
+    const me = playerVehicle(w);
+    me.speed = 0.0004;
+    me.order = { kind: "through", dest: { x: 40, y: 30 } };
+    const seen = new Set<TipId>(["waypoint"]);
+    expect(doneTips(w, seen)).not.toContain("drive");
+    expect(tipToShow(w, false, seen, null)).toBe("drive");
+  });
+
   it("holds a later driving tip until the one before it is seen", () => {
     const w = emptyWorld();
     playerVehicle(w).speed = 2;

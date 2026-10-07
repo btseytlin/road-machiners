@@ -9,6 +9,7 @@ import { playerVehicle } from "../sim/damage";
 import { goodsCount, isMounted, mountedParts } from "../sim/grid";
 import { openingStockOf } from "../sim/opening";
 import { partDef } from "../data/parts";
+import { RULES } from "../data/rules";
 import { repairPlan } from "../sim/repair";
 import { canReachSalvage, hasSalvage } from "../sim/salvage";
 import type { SalvageStock, World } from "../sim/types";
@@ -43,6 +44,9 @@ const npcInSight = (w: World): boolean =>
 
 const hostileInSight = (w: World): boolean =>
   w.vehicles.some((v) => v.brain && !isKnockedOut(v) && hostileToPlayer(w, v) && playerSees(w, v.pos));
+
+// Faster than parked. A truck that parked after a drive keeps a tiny speed from physics.
+const moving = (w: World): boolean => playerVehicle(w).speed > RULES.parkedSpeed;
 
 const hasWaypoint = (w: World): boolean => {
   const kind = playerVehicle(w).order?.kind;
@@ -108,7 +112,7 @@ const TIPS: readonly Tip[] = [
     "Your engine is nearly dead. [Shift]-click the ground by the wreck to set a stop point, then [Space] to drive there.",
     (w) => inOpeningReach(w) || searchedOpening(w),
   ),
-  openingTip("search", "Click Search the wreck to see what is left in it.", searchedOpening),
+  openingTip("search", "Click Search the wreck, then [Space] to run the search.", searchedOpening),
   openingTip(
     "loot",
     "Drag the parts and the Rebar cage onto your truck, or click Take all that fits.",
@@ -116,12 +120,12 @@ const TIPS: readonly Tip[] = [
   ),
   openingTip(
     "patch",
-    "[I] opens your truck. Click the engine, then Patch. Patching spends parts, and [Space] runs the turns it takes.",
+    "[I] opens your truck. Click the engine, then Patch. Close your truck and [Space] runs the patch.",
     (w) => openingStockOf(w) !== null && !engineNeedsPatch(w),
   ),
   openingTip(
     "install",
-    "Drag the Rebar cage onto a free cell at the edge of your truck to mount it.",
+    "[I] opens your truck. Drag the Rebar cage onto a free cell at its edge, then close it and [Space] mounts the cage.",
     (w) => openingStockOf(w) !== null && cageMounted(w),
   ),
   {
@@ -135,7 +139,7 @@ const TIPS: readonly Tip[] = [
     text: "[Space] to drive to the waypoint.",
     after: "waypoint",
     when: (w) => !playerVehicle(w).direct && hasWaypoint(w),
-    done: (w) => playerVehicle(w).speed > 0,
+    done: moving,
   },
   {
     id: "autoStop",
@@ -149,7 +153,7 @@ const TIPS: readonly Tip[] = [
     id: "stop",
     text: "Click your truck to stop.",
     after: "drive",
-    when: (w) => playerVehicle(w).speed > 0,
+    when: moving,
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
@@ -272,6 +276,8 @@ export class Tips {
     const tip = TIPS.find((t) => t.id === this.shown);
     this.box.style.display = tip ? "" : "none";
     if (!tip) return;
+    // An opening tip names steps in the inventory, so it stays on screen while a modal is open.
+    this.box.classList.toggle("opening-tip", tip.opening === true);
     this.box.replaceChildren(
       el("span", {}, tip.text),
       el("button", { class: "tip-close", title: "Close", onclick: () => this.close() }, "×"),
