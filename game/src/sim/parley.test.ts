@@ -615,7 +615,7 @@ describe('warning off a trespasser', () => {
 
   it('comply: the trespasser backs off and starts no search', () => {
     const { w, trespasser, pile } = trespass();
-    forceOption('threatened', 'comply');
+    forceOption('warnedOff', 'comply');
     resolveNpcActivities(w);
     expect(pile.pile!.claim!.warned).toContain(trespasser.id);
     expect(trespasser.job).toBeNull();
@@ -624,7 +624,7 @@ describe('warning off a trespasser', () => {
 
   it('fightBack: both feud and fight, and nobody searches', () => {
     const { w, claimant, trespasser } = trespass();
-    forceOption('threatened', 'fightBack');
+    forceOption('warnedOff', 'fightBack');
     resolveNpcActivities(w);
     expect(stateOf(w, 'feud', trespasser.id, claimant.id)).not.toBeNull();
     expect(stateOf(w, 'feud', claimant.id, trespasser.id)).not.toBeNull();
@@ -637,14 +637,22 @@ describe('warning off a trespasser', () => {
     const { w, claimant, trespasser } = trespass();
     claimant.pos = { x: 5, y: 5 };
     refreshVision(w);
-    forceOption('threatened', 'comply');
+    forceOption('warnedOff', 'comply');
     resolveNpcActivities(w);
     expect(trespasser.job?.kind).toBe('search');
   });
 
+  it('refuse: the claimant always fights for its pile', () => {
+    const { w, claimant, trespasser } = trespass();
+    forceOption('warnedOff', 'refuse');
+    resolveNpcActivities(w);
+    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', targetId: trespasser.id, reason: 'defend its claimed loot' });
+    expect(trespasser.job).toBeNull();
+  });
+
   it('an unarmed claimant flees a refusal', () => {
     const { w, claimant } = trespass(false);
-    forceOption('threatened', 'fightBack');
+    forceOption('warnedOff', 'refuse');
     resolveNpcActivities(w);
     expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defend its claimed loot' });
   });

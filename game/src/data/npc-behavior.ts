@@ -71,6 +71,12 @@ export const NPC_BEHAVIOR = {
   // Fight and fight back times this when the hostile's local group looks no stronger than the driver's own. A
   // driver busy with work gets it only when attacked, so it defends but does not start fights.
   manageableFight: 5,
+  // Leave times this when a driver that finds its loot taken, or whose warning is refused, judges the looter a threat.
+  // A traitless driver then leaves about nine times in ten.
+  threatLeave: 10,
+  // Turns a driver waits for the player to answer its loot warning. A call opens within a turn or two, so a warning
+  // still unanswered after 5 turns could not reach the player, and the driver leaves.
+  warnAnswerTurns: 5,
   // Keep times this when a driver busy with work and not weak sees or hears a hostile that is not aimed at it or
   // at a nearby faction mate. A scavenger at work then keeps on about 99 times in 100 beside an equal hostile, and
   // about 94 times in 100 beside one it judges a threat.

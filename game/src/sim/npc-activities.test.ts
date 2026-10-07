@@ -1,7 +1,7 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
-import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
+import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
@@ -17,7 +17,8 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { backOffLoot } from './loot-warning';
 import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
@@ -1327,8 +1328,15 @@ describe('one looter per target', () => {
   const stripping = (w: World, targetId: string) =>
     w.vehicles.filter((v) => v.job?.kind === 'refit' && v.job.pickup?.from === 'truck' && v.job.pickup.vehicleId === targetId);
 
-  it('a second driver at a searched wreck gives up its goal and starts no search, while the first search runs on', () => {
+  // The second driver argued with the first over the wreck, which it notes while the first stays in sight.
+  function argued(w: World, driver: Vehicle, looter: Vehicle): void {
+    driver.brain!.noticed[`lootContested:${looter.id}`] = w.turn;
+  }
+
+  it('a second driver that leaves a searched wreck gives up its goal and starts no search, while the first search runs on', () => {
+    forceOption('lootContested', 'leave');
     const { w, first, second, wreck } = contestedWreck();
+    w.rngState = rngStateForForcedRolls(4);
     second.brain!.goals = [lootGoal('loot', wreck.id, 'travel', wreck.pos)];
     const turnsLeft = first.job!.turnsLeft;
     w.events = [];
@@ -1340,8 +1348,9 @@ describe('one looter per target', () => {
     expect(topGoal(first)?.targetId).toBe(wreck.id);
   });
 
-  it('drops a scavenge goal on its way to a wreck another truck searches', () => {
-    const { w, second, wreck } = contestedWreck();
+  it('drops a scavenge goal on its way to a wreck another truck searches, once it argued with the looter', () => {
+    const { w, first, second, wreck } = contestedWreck();
+    argued(w, second, first);
     second.pos = { x: 16, y: 10 };
     second.speed = 3;
     second.brain!.goals = [lootGoal('scavenge', wreck.id, 'travel', wreck.pos)];
@@ -1351,23 +1360,26 @@ describe('one looter per target', () => {
     expect(w.events).toContainEqual(expect.objectContaining({ vehicle: second.id, previous: 'scavenge', reason: GONE }));
   });
 
-  it('does not see a wreck another truck searches as salvage', () => {
+  it('does not see a wreck another truck searches as salvage, once it argued with the looter', () => {
     const { w, first, second, wreck } = contestedWreck();
+    argued(w, second, first);
     expect(visibleSalvage(w, second).map((s) => s.id)).not.toContain(wreck.id);
     expect(visibleSalvage(w, first).map((s) => s.id)).toContain(wreck.id);
   });
 
-  it('never picks a claimed wreck as its idle scavenge goal', () => {
+  it('never picks a claimed wreck as its idle scavenge goal, once it argued with the looter', () => {
     forceOption('idle', 'scavenge');
-    const { w, second, wreck } = contestedWreck();
+    const { w, first, second, wreck } = contestedWreck();
+    argued(w, second, first);
     thinkNpc(w, second);
     expect(topGoal(second)?.kind).toBe('scavenge');
     expect(topGoal(second)?.targetId).not.toBe(wreck.id);
   });
 
-  it('never stops on the way for a wreck another truck searches', () => {
+  it('never stops on the way for a wreck another truck searches, once it argued with the looter', () => {
     forceOption('salvageSeen', 'loot');
-    const { w, second, wreck } = contestedWreck();
+    const { w, first, second, wreck } = contestedWreck();
+    argued(w, second, first);
     second.pos = { x: 16, y: 10 };
     second.speed = 3;
     second.brain!.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'search a known salvage site' }];
@@ -1377,7 +1389,9 @@ describe('one looter per target', () => {
   });
 
   it('lets a second driver strip a knocked-out truck only after the first is gone', () => {
+    forceOption('lootContested', 'leave');
     const { w, buggy, looters } = contestedTruck();
+    w.rngState = rngStateForForcedRolls(4);
     const [first, second] = looters;
     const held = goodsCount(second).scrap ?? 0;
     w.events = [];
@@ -1390,7 +1404,9 @@ describe('one looter per target', () => {
   });
 
   it('gives a knocked-out player truck only one NPC looter', () => {
+    forceOption('lootContested', 'leave');
     const w = emptyWorld({ x: 30, y: 30 });
+    w.rngState = rngStateForForcedRolls(4);
     const me = w.vehicles[0];
     me.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     const gap = chassisDef(me.chassisId).radius + chassisDef('scout').radius + 0.2;
@@ -1440,7 +1456,9 @@ describe('one looter per target', () => {
     });
 
     it('ends the strip of a knocked-out truck', () => {
+      forceOption('lootContested', 'leave');
       const { w, buggy, looters } = contestedTruck();
+      w.rngState = rngStateForForcedRolls(4);
       resolveNpcActivities(w);
       const [first] = looters;
       expect(stripping(w, buggy.id)).toEqual([first]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tipText } from './dialogue';
+import { fillLine, tipText } from './dialogue';
 
 describe('trading tip text', () => {
   it('names the site and the good of a dear tip', () => {
@@ -17,5 +17,11 @@ describe('trading tip text', () => {
 
   it('says there is nothing to tell without a tip', () => {
     expect(tipText({ kind: 'tip', tip: null })).toBe('Nothing worth telling.');
+  });
+});
+
+describe('fillLine', () => {
+  it("shows a driver's own line as it is", () => {
+    expect(fillLine('{warnLine}', { warnLine: { kind: 'line', text: "That's my pick. Roll on." } })).toBe("That's my pick. Roll on.");
   });
 });

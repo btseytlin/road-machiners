@@ -19,7 +19,7 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { aidData, lootWarningData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
 import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
@@ -191,6 +191,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   escort: () => 'Escorting you',
   aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
   combat: () => COMBAT_LABEL,
+  lootWarning: (s) => (lootWarningData(s).answer === 'comply' ? 'You agreed to leave its loot' : 'Warning you off its loot'),
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
@@ -486,6 +487,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
+  lootArgument: (e) => [e.warner, e.looter],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -561,6 +563,15 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
 
+const ARGUMENT_ENDS = { yielded: (_: string, looter: string) => `${looter} rolls on.`, backedOff: (warner: string, looter: string) => `${looter} stays put, and ${warner} rolls on.`, fight: () => 'They fight over it.' };
+
+// An argument over loot between two NPCs, like "Rust Hound warns Old Mae off the wreck. Old Mae rolls on."
+function lootArgumentText(world: World, e: Extract<GameEvent, { t: 'lootArgument' }>): LogLine {
+  const warner = vehicleName(world, e.warner);
+  const looter = vehicleName(world, e.looter);
+  return { text: `${warner} warns ${looter} off the ${e.place}. ${ARGUMENT_ENDS[e.end](warner, looter)}`, cls: e.end === 'fight' ? 'bad' : 'dim' };
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
@@ -590,6 +601,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  lootArgument: lootArgumentText,
 };
 
 // Returns null for events not worth a log line.

@@ -893,7 +893,10 @@ export type DecisionOptions = {
   strandedFoe: 'offer' | 'spare';
   surrenderOffered: 'accept' | 'refuse'; // a weak NPC is offered a way out by the foe that beat it, NPC or player
   threatened: 'comply' | 'fightBack' | 'flee'; // a driver demands the cargo, or a claimant warns the driver off its pile
-  warnedOff: 'comply' | 'refuse' | 'fightBack'; // the player tells a looting driver to back off its wreck
+  warnedOff: 'comply' | 'refuse' | 'fightBack'; // any truck tells a looting driver to back off its loot target
+  // The driver reaches a loot target another truck at peace is looting: warn it off, leave, or rarely fight over it.
+  lootContested: 'warn' | 'leave' | 'fight';
+  warnRefused: 'leave' | 'fight'; // the looter the driver warned off refused to go
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.
@@ -948,6 +951,11 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   // A threatened driver gives up its cargo, fights or runs about equally, and one warned off its wreck backs off,
   // keeps looting or fights about equally. The two sides' strength decides most.
   threatened: { comply: 1, fightBack: 1, flee: 1 }, warnedOff: { comply: 1, refuse: 1, fightBack: 1 },
+  // A driver that finds its loot taken warns the looter off about two times in five and leaves otherwise. A fight
+  // over it without a word is about 3%.
+  lootContested: { warn: 4, leave: 5.7, fight: 0.2 },
+  // A warner whose warning is refused leaves about three times in four and fights otherwise.
+  warnRefused: { leave: 3, fight: 1 },
   // A driver about to attack the player radios for the cargo first a bit more often than it opens fire unwarned.
   mugging: { demand: 3, attack: 2 },
   // After an interruption a driver goes back to its work 9 times in 10.
@@ -976,7 +984,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   feud: { hostileSeen: { fight: { add: 4 } } },
   // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
-  tow: {}, patch: {}, trade: {}, aid: {}, combat: {},
+  tow: {}, patch: {}, trade: {}, aid: {}, combat: {}, lootWarning: {},
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
@@ -1005,6 +1013,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
     truceOffered: { refuse: { mul: 3 } },
     mercyBegged: { finish: { mul: 3 } },
     threatened: { fightBack: { mul: 2 } }, warnedOff: { fightBack: { mul: 2 } },
+    lootContested: { fight: { mul: 2 } }, warnRefused: { fight: { mul: 2 } },
   },
 };
 
@@ -1052,6 +1061,10 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Hostile acts between two trucks reset it. 10 turns, like a feud, covers reloads and a chase out of sight behind a
   // ridge, and is short enough that a raider that drove off stops blocking work soon.
   combat: 10,
+  // A truck that agreed to leave a loot target keeps off it for 30 turns, like a failed robber. An answered warning
+  // that did not end in leaving ends at once, and one the player leaves unanswered ends after
+  // NPC_BEHAVIOR.warnAnswerTurns.
+  lootWarning: 30,
 };
 
 

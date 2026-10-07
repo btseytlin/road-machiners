@@ -85,6 +85,7 @@ const VAR_TEXT: VarText = {
   prices: pricesText,
   aid: aidText,
   tip: tipText,
+  line: (v) => v.text,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 

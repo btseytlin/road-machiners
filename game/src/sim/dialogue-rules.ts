@@ -12,7 +12,9 @@ import { patchGoal, startTow, topGoal } from './npc-activities';
 import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
-import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
+import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { answerLootWarning, answerWarning, lootsBesidePlayer, pendingWarningTo, playerWarns, warnRefusalOf, type WarnAnswer } from './loot-warning';
+import { talkOf } from './dialogue';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
@@ -85,6 +87,12 @@ function threatAnswer(call: Call): ThreatAnswer {
 function warnAnswer(call: Call): WarnAnswer {
   const option = answerOf(call.vars);
   if (option !== 'comply' && option !== 'refuse' && option !== 'fightBack') throw new Error(`Bad warning answer ${option}`);
+  return option;
+}
+
+function warnRefusal(call: Call): 'leave' | 'fight' {
+  const option = answerOf(call.vars);
+  if (option !== 'leave' && option !== 'fight') throw new Error(`Bad warning refusal ${option}`);
   return option;
 }
 
@@ -243,6 +251,10 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   // Loots a wreck or knocked-out truck the player truck is in reach of too.
   claimsPlayerLoot: (world, npc) => lootsBesidePlayer(world, npc),
   holdsOn: (_world, _npc, vars) => answerOf(vars) === 'refuse',
+  // Waits for the player's answer to its warning off a loot target.
+  warnsPlayerOff: (world, npc) => pendingWarningTo(world, npc) !== null,
+  yieldsLoot: (_world, _npc, vars) => answerOf(vars) === 'leave',
+  fightsForLoot: (_world, _npc, vars) => answerOf(vars) === 'fight',
   canTowNpc: (world, npc) => canTowNpc(world, npc),
   towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
   knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && lastTownMemory(npc) !== null,
@@ -348,8 +360,25 @@ export const EFFECTS: Record<EffectId, Effect> = {
   // A warning pays no XP: the wreck it wins is its own reward.
   settleWarning: (world, npc, call) => {
     const answer = warnAnswer(call);
-    settleWarning(world, npc, answer);
+    playerWarns(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
+  },
+  // The player answers a driver's warning off a loot target. The driver's choice on a refusal was rolled when the
+  // call opened. Hanging up before an answer refuses, and after one changes nothing.
+  leaveLootWarning: (world, npc, call) => {
+    answerLootWarning(world, npc, 'comply', warnRefusal(call));
+    settle(world, npc, call, 'agreed');
+  },
+  refuseLootWarning: (world, npc, call) => {
+    answerLootWarning(world, npc, 'refuse', warnRefusal(call));
+    settle(world, npc, call, 'refused');
+  },
+  fightLootWarning: (world, npc, call) => {
+    answerLootWarning(world, npc, 'fightBack', warnRefusal(call));
+    settle(world, npc, call, 'refused');
+  },
+  hangUpLootWarning: (world, npc, call) => {
+    if (pendingWarningTo(world, npc)) EFFECTS.refuseLootWarning(world, npc, call);
   },
   // The call holds no turn, so the rumor is the one the prepare step told.
   revealRumor: (world, npc, call) => {
@@ -382,7 +411,12 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') } }),
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
-  warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),
+  warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answerWarning(world, npc, playerVehicle(world)) } }),
+  // The driver warns in its own voice. What it does if the player refuses is rolled now, so the line can tell it.
+  lootWarningTerms: (world, npc) => ({
+    warnLine: { kind: 'line', text: talkOf(npc).warnOff },
+    answer: { kind: 'answer', option: warnRefusalOf(world, npc, playerVehicle(world)) },
+  }),
   npcTowTerms: (world, npc) => {
     const { site, fee } = npcTowTerms(world, npc);
     return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };

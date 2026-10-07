@@ -175,7 +175,7 @@ describe('a robber claims spilled cargo', () => {
   });
 
   it('warns a third driver off the claimed pile', () => {
-    forceOption('threatened', 'comply');
+    forceOption('warnedOff', 'comply');
     const { w } = robbedPlayer();
     const pile = spillPile(w);
     const other = npcAt(w, 'scavengers', pile.pos.x + 1, pile.pos.y);

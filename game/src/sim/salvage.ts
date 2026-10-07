@@ -28,6 +28,7 @@ import { canUseSite } from './sites';
 import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
+import { breakLootWarning, warnedOffTarget } from './loot-warning';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
@@ -538,6 +539,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     requireIdleRefit(me);
     if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
     requireLootFree(w, me, targetId);
+    breakLootWarning(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
     if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
     takeItem(w, me, target, item, to);
@@ -563,7 +565,8 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 
 // ---- Who loots a target. One truck at a time loots a wreck, a pile or a knocked-out truck. Site stock stays shared.
 // Active work claims first: a job on the target, then an NPC parked at it in its loot goal's act phase. Only when
-// nobody works it, the player parked in reach holds it. The rule blocks starts, never work already running.
+// nobody works it, the player parked in reach holds it, unless the player agreed to leave it after a warning. The
+// rule blocks starts, never work already running. Drivers argue over a taken target, see src/sim/loot-warning.ts.
 
 // A non-site stock or a knocked-out truck.
 export function isLootTarget(world: World, targetId: string): boolean {
@@ -580,8 +583,13 @@ export function looterOf(world: World, targetId: string): Vehicle | null {
   if (working) return working;
   // A parked player does not out-wait a claimant on its way. Taking from the pile is what answers the claim.
   if (world.salvage.some((s) => s.id === targetId && claimantOf(world, s))) return null;
+  return playerHolds(world, targetId);
+}
+
+// The player parked in reach of the target, unless it agreed to leave it.
+function playerHolds(world: World, targetId: string): Vehicle | null {
   const me = playerVehicle(world);
-  return inLootReach(world, me, targetId) ? me : null;
+  return inLootReach(world, me, targetId) && !warnedOffTarget(world, me, targetId) ? me : null;
 }
 
 // The other truck looting the target, which keeps `looter` from starting there, or null.
@@ -637,7 +645,7 @@ function isLootActOn(goal: NpcActivity, targetId: string): boolean {
   return (goal.kind === 'loot' || goal.kind === 'scavenge') && goal.targetId === targetId && goal.phase === 'act';
 }
 
-function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
+export function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
   return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
 }

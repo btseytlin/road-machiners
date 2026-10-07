@@ -25,11 +25,12 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootTruckTurn } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
 import { answersHoldUp, judgeStrandedFoe, plead, warnedOff } from './parley';
+import { heldByLooter } from './loot-warning';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Track, Vehicle, World } from './types';
@@ -569,7 +570,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
 }
 
 // Hostiles seen or heard are not noticed. The driver tracks them; see src/sim/tracks.ts.
-export type NoticedDecision = 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered' | 'needySeen';
+export type NoticedDecision = 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered' | 'needySeen' | 'lootContested';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -598,6 +599,7 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   strandedFoe: seesVehicle, // rolled in src/sim/parley.ts judgeStrandedFoe()
   surrenderOffered: seesVehicle, // rolled in src/sim/parley.ts answerOffer()
   needySeen: seesVehicle, // rolled in src/sim/aid.ts onNeedySeen()
+  lootContested: seesVehicle, // noted in src/sim/loot-warning.ts contestLoot()
 };
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
@@ -807,17 +809,6 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
   startFeuds(world, threatener, vehicle);
   if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, reason));
   else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, reason));
-}
-
-// A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
-// as salvage seen, so no roll on the way picks it again while it stays in sight.
-export function backOffLoot(world: World, vehicle: Vehicle): void {
-  const target = lootClaimedBy(world, vehicle);
-  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
-  if (worksOnLoot(vehicle, target)) cancelJob(world, vehicle);
-  vehicle.brain!.noticed[`salvageSeen:${target}`] = world.turn;
-  const goal = topGoal(vehicle);
-  if (goal && ['loot', 'scavenge'].includes(goal.kind) && goal.targetId === target) finishGoal(world, vehicle, 'warned off the loot');
 }
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
@@ -1163,10 +1154,9 @@ function resolveTow(world: World, vehicle: Vehicle, activity: NpcActivity): void
 }
 
 // Looting searches the robbed stock like any salvage, or strips a knocked-out truck. A driver that finds another truck
-// looting the target gives it up and starts nothing there.
+// looting the target argues over it once, see src/sim/loot-warning.ts, then gives it up and starts nothing there.
 function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const taken = lootTaken(world, vehicle, activity.targetId);
-  if (taken) { finishGoal(world, vehicle, taken); return; }
+  if (heldByLooter(world, vehicle, activity)) return;
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
   const stock = world.salvage.find((entry) => entry.id === activity.targetId);

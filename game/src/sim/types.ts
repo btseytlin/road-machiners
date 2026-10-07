@@ -272,7 +272,7 @@ export type Obstacle =
 export type BrokenProp = { obstacle: Obstacle; turn: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire' | 'aid' | 'combat';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire' | 'aid' | 'combat' | 'lootWarning';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
@@ -287,6 +287,8 @@ export type Plea = 'truce' | 'mercy';
 // the NPC and the other party the player. price is what the NPC pays, 0 when free or for an NPC gift. agreed is false
 // while an NPC's unprompted offer waits for the player's answer. started is set by the player's [E]; work and workLeft
 // are the handover turns. See src/sim/aid.ts.
+// A loot warning: the holder warned the other party off the loot target `targetId`. answer is the warned truck's
+// answer, null while the player has not answered yet. See src/sim/loot-warning.ts.
 export type StateData =
   | { kind: 'tow'; site: string; fee: number; waived: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
@@ -296,7 +298,9 @@ export type StateData =
   | { kind: 'patch'; deal: PatchDeal; parts: number; partIds: string[]; price: number; work: number; workLeft: number } // holder patches other; partIds are the client parts it lifts, fixed at agreement
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
+  | { kind: 'lootWarning'; targetId: string; answer: LootWarnAnswer | null }
   | { kind: 'none' };
+export type LootWarnAnswer = 'comply' | 'refuse' | 'fightBack';
 export type NpcState = {
   id: string;
   kind: StateKindId;
@@ -319,7 +323,8 @@ export type CallVar =
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
   | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null } // a trading tip, or none
-  | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
+  | { kind: "answer"; option: string } // a driver's rolled answer, which picks the next line; never shown
+  | { kind: "line"; text: string }; // a line in the driver's own words, shown as it is
 export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
@@ -434,6 +439,9 @@ export type GameEvent =
   | { t: 'patch'; patcher: string; client: string; outcome: 'done'; price: number } // money moved from client to patcher
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
+  // An NPC warned another off a loot target, a `place`, and the argument ended: the looter yielded, the warner backed
+  // off, or the two fight.
+  | { t: 'lootArgument'; warner: string; looter: string; place: 'wreck' | 'pile' | 'spot' | 'truck'; end: 'yielded' | 'backedOff' | 'fight' }
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
 // A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last

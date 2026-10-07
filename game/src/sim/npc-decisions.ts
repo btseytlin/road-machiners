@@ -35,6 +35,7 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { passesUpLoot } from './loot-warning';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
@@ -292,7 +293,8 @@ export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
 }
 
-// Loot another truck is looting is not the driver's to take. The claim is checked after sight, since it scans every truck.
+// Loot another truck is looting is not the driver's to take once it argued with the looter. The claim is checked after
+// sight, since it scans every truck.
 function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   if (target.id === vehicle.id || !isKnockedOut(target) || !seesLoot(world, vehicle, target.id, target.pos)) return false;
   return (!inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target)) && lootTaken(world, vehicle, target.id) === null;
@@ -308,11 +310,14 @@ function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boole
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
-// Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
-// job the driver already runs there keeps going. Null for no target, which nobody can claim.
+// Why the driver may not start on the loot target: another truck is looting it, and the driver passes it up, see
+// passesUpLoot() in src/sim/loot-warning.ts. Until the two argued over it, the target stays the driver's to drive to.
+// The rule blocks starts only, so a job the driver already runs there keeps going. Null for no target, which nobody
+// can claim.
 export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
   if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
-  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+  const looter = lootBlocker(world, vehicle, targetId);
+  return looter && passesUpLoot(world, vehicle, looter, targetId) ? 'someone else is looting it' : null;
 }
 
 // The driver's job works the target.
@@ -715,6 +720,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   decline: always,
   give: canSpareSubject,
   aid: canSpareSubject,
+  warn: always,
+  leave: always,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -883,6 +890,11 @@ export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle)
   return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
+// A driver leaves loot to a looter it judges a threat.
+function leaveFactor(_world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  return danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatLeave : 1;
+}
+
 // A driver hands its cargo to a threat, and seldom while its escort watches.
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
   const threat = danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
@@ -967,6 +979,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   decline: (world, vehicle) => declineFactor(world, vehicle),
   give: neutral,
   aid: neutral,
+  warn: neutral,
+  leave: leaveFactor,
 };
 
 // ---- Weights and the roll.
@@ -1054,6 +1068,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   mercyBegged: 'response',
   threatened: 'response',
   warnedOff: 'response',
+  lootContested: 'response',
+  warnRefused: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',

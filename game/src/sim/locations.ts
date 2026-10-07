@@ -6,6 +6,7 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
+import { breakLootWarning } from './loot-warning';
 import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
 import { takeClaimed } from './parley';
 import { newId } from './factory';
@@ -130,6 +131,7 @@ export function canLoot(world: World, stockId: string): boolean {
 export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
+    breakLootWarning(w, playerVehicle(w), stockId);
     if (!canScavenge(w, stockId)) throw new Error('Nothing unsearched in reach');
     beginSearch(w, playerVehicle(w), stockId);
   });
@@ -200,6 +202,7 @@ function requireLootable(world: World, stockId: string): SalvageStock {
   if (!world.player.scavenged.includes(stockId)) throw new Error('Search this site first');
   if (!canReachSalvage(playerVehicle(world), stock)) throw new Error('Stop within reach of the salvage');
   requireLootFree(world, playerVehicle(world), stockId);
+  breakLootWarning(world, playerVehicle(world), stockId);
   takeClaimed(world, stock);
   return stock;
 }

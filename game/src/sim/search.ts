@@ -6,6 +6,7 @@ import { playerVehicle } from './damage';
 import { startJob } from './jobs';
 import { practice, skillEffect } from './progress';
 import { canReachSalvage, collectSalvage, requireLootFree, salvageUnits } from './salvage';
+import { breakLootWarning } from './loot-warning';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
@@ -28,6 +29,7 @@ export function startSearch(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     requireLootFree(w, me, stockId);
+    breakLootWarning(w, me, stockId);
     beginSearch(w, me, stockId);
   });
 }
