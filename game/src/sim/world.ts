@@ -134,7 +134,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     name: kit.name,
     faction: "player",
     chassisId: kit.chassis,
-    parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
+    parts: kit.parts.map((defId) => ({ defId, wear: kit.wear })),
     spares: [],
     cargo: kit.cargo,
     pos: start.pos,
@@ -148,15 +148,21 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     throw new Error(
       `Player start overlaps ${blocked.map((o) => o.id).join(", ")}`,
     );
+  wearCoreParts(world, truck, kit.wear);
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
-  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId, kit.wear));
   if (populate) spawnInitial(world);
   initializeShops(world);
   refreshVision(world);
   world.events = [];
   return world;
+}
+
+// Rebuilds the truck's built-in parts at the kit's wear step.
+function wearCoreParts(world: World, truck: Vehicle, wear: number): void {
+  for (const item of truck.items) if (item.kind === "part" && partDef(item.part.defId).kind === "core") item.part = makePart(world, item.part.defId, wear);
 }
 
 // The player's start: REGION.playerStart.offset tiles to the right of the point REGION.playerStart.distance tiles

@@ -8,6 +8,7 @@ export type StartKit = {
   chassis: string;
   parts: string[]; // mounted in order on the first free fitting mount
   storage: string[]; // spare parts in the town garage
+  wear: number; // wear step of every part the kit starts with, built-in parts and storage included
   money: number;
   fuel: number;
   supplies: number;
@@ -16,12 +17,14 @@ export type StartKit = {
 };
 
 export const START_KITS: Record<string, StartKit> = {
-  // The normal start: a light scout with one gun and some scrap to trade.
+  // The normal start: a light scout with one gun and some scrap to trade, every part rebuilt twice like most trucks on
+  // the road.
   standard: {
     name: 'Your truck',
     chassis: 'scout',
     parts: ['panniers', 'mg', 'stockEngine', 'cage'],
     storage: [],
+    wear: 2,
     money: 1000,
     fuel: CHASSIS.scout.fuelCap,
     supplies: RULES.baseSupplies,
@@ -34,6 +37,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'hauler',
     parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
     storage: ['plates', 'cage', 'mg'],
+    wear: 0,
     money: 1500,
     fuel: 60,
     supplies: RULES.baseSupplies,
@@ -47,6 +51,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'hauler',
     parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
     storage: [],
+    wear: 0,
     money: 3000,
     fuel: CHASSIS.hauler.fuelCap,
     supplies: RULES.baseSupplies,
@@ -60,6 +65,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'convertible',
     parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
     storage: [],
+    wear: 0,
     money: 2500,
     fuel: CHASSIS.convertible.fuelCap,
     supplies: RULES.baseSupplies,
