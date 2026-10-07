@@ -68,7 +68,7 @@ Read commands run at once and change nothing.
 - `factory log N [stage]` prints the tail of the card's newest job log.
 - `factory audit` lists each drift between stores. The incident watch reports each line as `drift: <line>`.
 
-Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <member>` names the member whose message ordered the action. Never name a member who did not order it. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
+Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <member>` names the member whose message ordered the action. Pass the Telegram id that `factory_sender` returns, never the display name. Never name a member who did not order it. They apply on the next tick, before it picks jobs. A write that cannot apply becomes a failure that the incident watch reports.
 
 - `factory move N <triage|design|implement|verify|checks|approval|done>` puts a card in any position and clears the state of the old one. `move N approval` builds and posts the branch with no tests or playtest. The post says no factory checks ran. `move N done` drops the card, like Deny: it closes the issue as not planned.
 - `factory merge N` merges a card into its base now.

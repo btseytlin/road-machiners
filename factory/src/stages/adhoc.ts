@@ -66,7 +66,7 @@ async function runAdhocAgent(ctx: Ctx, issue: number, dir: string): Promise<void
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly, session });
 }
 
-type Reply = { chat: string; messageId: number };
+type Reply = { chat: string; messageId: number | null };
 
 async function deliverable(ctx: Ctx, issue: number, home: string, reply: Reply) {
   let files;

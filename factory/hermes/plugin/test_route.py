@@ -322,6 +322,16 @@ def test_route_tool_refuses_a_non_member(tmp_path):
     assert list(inbox.iterdir()) == []
 
 
+def test_route_tool_routes_as_hermes_when_no_member_wrote(tmp_path):
+    inbox, handle = route_setup(tmp_path, {})
+    assert json.loads(handle({"post": 55, "route": "answer", "text": "What is the horn volume?"}))["success"] is True
+    (file,) = inbox.iterdir()
+    assert json.loads(file.read_text()) == {
+        "kind": "route", "issue": 12, "text": "What is the horn volume?", "route": "answer",
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": 55,
+    }
+
+
 def test_hook_queues_without_a_reply_of_its_own(tmp_path):
     result, adapter, inbox = dispatch(tmp_path, "1")
     assert result == {"action": "skip", "reason": "factory-change"}
@@ -431,11 +441,49 @@ def test_queue_tool_refuses_non_member(tmp_path):
     assert list(inbox.iterdir()) == []
 
 
-@pytest.mark.parametrize("key", list(SESSION))
+@pytest.mark.parametrize("key", ["HERMES_SESSION_CHAT_ID", "HERMES_SESSION_MESSAGE_ID"])
 def test_queue_tool_refuses_missing_session_value(tmp_path, key):
     inbox, handle = queue_setup(tmp_path, {**SESSION, key: ""})
     assert key in json.loads(handle({"request": "x"}))["error"]
     assert list(inbox.iterdir()) == []
+
+
+def test_queue_tool_queues_a_task_for_hermes_when_no_member_wrote(tmp_path):
+    inbox, handle = queue_setup(tmp_path, {})
+    assert json.loads(handle({"request": "Check the disk."}))["success"] is True
+    [path] = list(inbox.iterdir())
+    assert json.loads(path.read_text()) == {
+        "kind": "adhoc", "issue": None, "text": "Check the disk.",
+        "by": "hermes", "byName": None, "chat": "-100", "messageId": None, "postId": None,
+    }
+
+
+def test_change_tool_refuses_hermes_own_change(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), "/st", "-100", committee)
+    handle = plugin.make_queue_handler(cfg, session_env=lambda key: "", kind="change", done=plugin.CHANGE_DONE)
+    assert "error" in json.loads(handle({"request": "x"}))
+    assert list(inbox.iterdir()) == []
+
+
+def test_sender_tool_returns_the_telegram_id_of_the_member(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config("/in", "/st", "-100", committee)
+    handle = plugin.make_sender_handler(cfg, session_env=lambda key: SESSION.get(key, ""))
+    assert json.loads(handle({})) == {"by": "1", "name": "Ann"}
+
+
+def test_sender_tool_errors_without_a_member_message(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config("/in", "/st", "-100", committee)
+    assert "hermes" in json.loads(plugin.make_sender_handler(cfg, session_env=lambda key: "")({}))["error"]
+    stranger = {**SESSION, "HERMES_SESSION_USER_ID": "2"}
+    assert "no committee member" in json.loads(plugin.make_sender_handler(cfg, session_env=lambda key: stranger.get(key, ""))({}))["error"]
 
 
 def test_queue_tool_refuses_empty_request(tmp_path):
@@ -465,5 +513,6 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     assert calls[0]["schema"]["parameters"]["required"] == ["request"]
     assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"
     assert calls[2]["name"] == "factory_route_reply" and calls[2]["toolset"] == "factory"
-    assert calls[3]["name"] == "factory_status" and calls[3]["toolset"] == "factory"
+    assert calls[3]["name"] == "factory_sender" and calls[3]["toolset"] == "factory"
+    assert calls[4]["name"] == "factory_status" and calls[4]["toolset"] == "factory"
     assert calls[2]["schema"]["parameters"]["required"] == ["post", "route", "text"]

@@ -39,6 +39,8 @@ BUTTON_STALE = "This release post is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 # A reply to an approval post that starts with one of these picks its route itself, with no Hermes judgment.
 ROUTE_PREFIX = re.compile(r"(patch|redesign)\s*:", re.IGNORECASE)
+# The `by` of an order Hermes gives on its own reading. The factory accepts it for a task and a route only.
+HERMES = "hermes"
 log = logging.getLogger(__name__)
 
 
@@ -185,10 +187,11 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
     """Writes one command file atomically. A taken name moves the stamp up, so no file replaces another."""
     stamp = int(time.time() * 1000) if now_ms is None else now_ms
     with _WRITE_LOCK:
-        final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
+        label = command["messageId"] if command["messageId"] is not None else HERMES
+        final = Path(inbox) / f"{stamp}-{label}.json"
         while final.exists():
             stamp += 1
-            final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
+            final = Path(inbox) / f"{stamp}-{label}.json"
         temp = final.with_suffix(".json.tmp")
         temp.write_text(json.dumps(command))
         # The factory user reads the inbox through the shared group, so the file must be group-readable.
@@ -354,23 +357,61 @@ def _session_env(name: str) -> str:
     return get_session_env(name)
 
 
+def _sender(cfg: Config, session_env):
+    """Who a tool call acts for: ("member", id, name, chat, message) for a committee member's message, ("hermes", ...) for a session with no user,
+    like the incident watch. A session user outside the committee is an error, so nothing acts for them."""
+    chat, user, name, message = (session_env(key).strip() for key in SESSION_KEYS)
+    if not user:
+        return HERMES, HERMES, "", cfg.chat, None
+    if not cfg.committee.is_member(user):
+        raise ValueError("The chat session user is no committee member.")
+    if not message.isdigit():
+        raise ValueError("HERMES_SESSION_MESSAGE_ID is missing or not a number.")
+    if not chat:
+        raise ValueError("HERMES_SESSION_CHAT_ID is missing.")
+    return "member", user, name, chat, int(message)
+
+
+SENDER_TOOL = "factory_sender"
+SENDER_SCHEMA = {
+    "name": SENDER_TOOL,
+    "description": (
+        "Returns the Telegram id of the committee member whose message you are answering. "
+        "Pass it as --by in every factory write command that member orders, like `factory move 4 design --by <id> --reason \"...\"`. "
+        "The display name in the chat does not work as --by. With no member message, like in the incident watch, it returns an error: use --by hermes."
+    ),
+    "parameters": {"type": "object", "properties": {}},
+}
+
+
+def make_sender_handler(cfg: Config, session_env=_session_env):
+    def handle(args: dict, **kwargs) -> str:
+        try:
+            actor, user, name, _, _ = _sender(cfg, session_env)
+        except ValueError as error:
+            return _tool_error(str(error))
+        if actor == HERMES:
+            return _tool_error("No member message is in this session. Use --by hermes for a mechanical order.")
+        return json.dumps({"by": user, "name": name or None})
+
+    return handle
+
+
 # `kind` is the inbox command, "adhoc" or "change". Both carry the member's message, so the factory answers it.
 def make_queue_handler(cfg: Config, session_env=_session_env, kind: str = "adhoc", done: str = QUEUE_DONE):
     def handle(args: dict, **kwargs) -> str:
         request = str(args.get("request") or "").strip()
         if not request:
             return _tool_error("The request is empty.")
-        chat, user, name, message = (session_env(key).strip() for key in SESSION_KEYS)
-        missing = [key for key, value in zip(SESSION_KEYS, (chat, user, name, message)) if not value]
-        if missing:
-            return _tool_error(f"The chat session has no {', '.join(missing)}. Nothing was queued.")
-        if not cfg.committee.is_member(user):
-            return _tool_error("Only committee members can queue tasks. Nothing was queued.")
-        if not message.isdigit():
-            return _tool_error("The session message id is not a number. Nothing was queued.")
+        try:
+            actor, user, name, chat, message = _sender(cfg, session_env)
+        except ValueError as error:
+            return _tool_error(f"{error} Nothing was queued.")
+        if actor == HERMES and kind != "adhoc":
+            return _tool_error("Only a committee member's message can queue a factory change. Nothing was queued.")
         command = {
             "kind": kind, "issue": None, "text": request,
-            "by": user, "byName": name, "chat": chat, "messageId": int(message), "postId": None,
+            "by": user, "byName": name or None, "chat": chat, "messageId": message, "postId": None,
         }
         write_inbox(cfg.inbox, command)
         return json.dumps({"success": True, "message": done})
@@ -387,9 +428,10 @@ def make_route_handler(cfg: Config, readiness: Readiness, session_env=_session_e
             return _tool_error(f"The route must be one of {', '.join(ROUTES)}. Nothing was queued.")
         if not text:
             return _tool_error("The text is empty. Nothing was queued.")
-        chat, user, name, message = (session_env(key).strip() for key in SESSION_KEYS)
-        if not cfg.committee.is_member(user) or not message.isdigit():
-            return _tool_error("Only a committee member's message can route a reply. Nothing was queued.")
+        try:
+            _, user, name, chat, message = _sender(cfg, session_env)
+        except ValueError as error:
+            return _tool_error(f"{error} Nothing was queued.")
         issue = read_approval_posts(cfg.state_dir).get(str(post))
         if issue is None:
             return _tool_error(f"Post {post} is no open approval post. Nothing was queued.")
@@ -398,7 +440,7 @@ def make_route_handler(cfg: Config, readiness: Readiness, session_env=_session_e
             return _tool_error(refusal(problems))
         command = {
             "kind": "route", "issue": issue, "text": text, "route": route,
-            "by": user, "byName": name or None, "chat": chat, "messageId": int(message), "postId": int(post),
+            "by": user, "byName": name or None, "chat": chat, "messageId": message, "postId": int(post),
         }
         write_inbox(cfg.inbox, command)
         return json.dumps({"success": True, "message": ROUTE_DONE[route]})
@@ -471,5 +513,6 @@ def register(ctx) -> None:
     ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))
     ctx.register_tool(name=CHANGE_TOOL, toolset="factory", schema=CHANGE_SCHEMA, handler=make_queue_handler(cfg, kind="change", done=CHANGE_DONE))
     ctx.register_tool(name=ROUTE_TOOL, toolset="factory", schema=ROUTE_SCHEMA, handler=make_route_handler(cfg, readiness))
+    ctx.register_tool(name=SENDER_TOOL, toolset="factory", schema=SENDER_SCHEMA, handler=make_sender_handler(cfg))
     register_status(ctx, public_url=os.environ['FACTORY_PUBLIC_URL'], timeout_seconds=float(os.environ['FACTORY_STATUS_TIMEOUT_MS']) / 1000)
     register_observation(ctx, home=Path(cfg.state_dir).parent, heartbeat_ms=float(os.environ['FACTORY_OBSERVATION_HEARTBEAT_MS']))

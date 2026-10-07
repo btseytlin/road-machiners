@@ -129,6 +129,8 @@ A failed order changes nothing, and the order can be repeated.
 
 Write orders wait while the factory is paused. The CLI still writes the order, says that the factory is paused and why, and the order applies when the pause is lifted.
 
-`merge` of a card the committee has not approved, `ship` and `merge-change` are gated by a rule Hermes keeps. Hermes names the member who ordered the action in `--by`. The CLI does not check who sent the message.
+`--by` is a committee member, by Telegram id, GitHub login or name, or `hermes`. Hermes passes the Telegram id of the member whose message ordered the action. Its `factory_sender` tool returns that id, since a Telegram display name matches no member.
+
+`hermes` may send mechanical orders: `move` to any position except `harden`, `merge` and `move` to `harden` of a card the committee approved, `cut`, `drop` and `retry`. A member must send the product decisions: `ship`, `remove`, `merge-change`, and `merge` or `move` to `harden` of a card the committee has not approved. The CLI and the tick both refuse a gated order from `hermes`.
 
 Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.

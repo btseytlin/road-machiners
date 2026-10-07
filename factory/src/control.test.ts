@@ -155,6 +155,11 @@ describe('resolveActor', () => {
     expect(resolveActor(fakeCtx(), '13', false)).toBe('13');
   });
 
+  it('resolves the telegram id Hermes passes in --by to its member, and refuses a display name', () => {
+    expect(resolveActor(fakeCtx(), '11', true)).toBe('Ann');
+    expect(() => resolveActor(fakeCtx(), 'Dr. Boris', true)).toThrow('no committee member');
+  });
+
   it('uses the bootstrap member when no committee file exists', () => {
     rmSync(join(ROOT, 'committee'), { recursive: true });
     expect(resolveActor(fakeCtx(), 'boss', true)).toBe('boss');
@@ -173,6 +178,10 @@ describe('isGated', () => {
     expect(isGated(ctx, command({ action: 'merge', issue: 4 }))).toBe(true);
     expect(isGated(ctx, command({ action: 'move', issue: 4, to: 'done' }))).toBe(false);
     expect(isGated(ctx, command({ action: 'cut' }))).toBe(false);
+  });
+
+  it('gates a removal', () => {
+    expect(isGated(fakeCtx(), command({ action: 'remove', issue: 5 }))).toBe(true);
   });
 
   it('does not gate the merge of a card the committee approved', () => {
@@ -493,7 +502,17 @@ describe('ship, cut and remove', () => {
     await applyControl(fakeCtx(), command({ action: 'remove', issue: 5 }));
     expect(readState(statePath).pendingRemovals).toEqual([{ issue: 5, by: 'Ann', text: 'the gate failed on load' }]);
     expect(calls.find((call) => call.startsWith('comment 5'))).toContain('Ann');
-    await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5, by: 'hermes' }))).resolves.toContain('#5');
+  });
+
+  it('refuses a removal from Hermes', async () => {
+    seed({ release: RELEASE });
+    await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5, by: 'hermes' }))).rejects.toThrow('--by <member>');
+    expect(readState(statePath).pendingRemovals).toEqual([]);
+  });
+
+  it('accepts a cut from Hermes', async () => {
+    await expect(applyControl(fakeCtx(), command({ action: 'cut', by: 'hermes' }))).resolves.toContain('release cut');
+    expect(ctrlLines()[0]).toMatchObject({ action: 'cut', by: 'Hermes' });
   });
 
   it('refuses a removal with no open release', async () => {
