@@ -12,7 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
-import { isAnswered } from './questions';
+import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, PlaytestState, Queue, Run } from './types';
 
@@ -333,21 +333,26 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
 
-async function answeredWaiting(ctx: Ctx, card: Card): Promise<boolean> {
-  const waiting = card.column === 'Triage' && card.labels.includes(NEEDS_INFO_LABEL);
-  return waiting && isAnswered(await ctx.github.comments(card.issue));
+// Why a waiting card goes on: someone answered, or the questions are older than the limit. Null while it waits.
+async function releaseReason(ctx: Ctx, card: Card): Promise<'answered' | 'no answer in time' | null> {
+  if (card.column !== 'Triage' || !card.labels.includes(NEEDS_INFO_LABEL)) return null;
+  const comments = await ctx.github.comments(card.issue);
+  if (isAnswered(comments)) return 'answered';
+  const asked = askedAt(comments);
+  return asked !== null && minutesSince(ctx, asked) > ctx.cfg.needsInfoHours * 60 ? 'no answer in time' : null;
 }
 
-// A Triage card that waits for answers gets its label back off once someone replies. Returns the cards as they stand after that.
+// A Triage card that waits for answers gets its label back off once someone replies or the time limit passes. Returns the cards as they stand after that.
 export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
   const released: Card[] = [];
   for (const card of cards) {
-    if (!(await answeredWaiting(ctx, card))) {
+    const reason = await releaseReason(ctx, card);
+    if (reason === null) {
       released.push(card);
       continue;
     }
     await ctx.github.removeLabel(card.issue, NEEDS_INFO_LABEL);
-    ctx.log('tick', card.issue, `answered, removed ${NEEDS_INFO_LABEL}`);
+    ctx.log('tick', card.issue, `${reason}, removed ${NEEDS_INFO_LABEL}`);
     released.push({ ...card, labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL) });
   }
   return released;

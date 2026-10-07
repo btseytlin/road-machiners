@@ -45,7 +45,7 @@ Fields that belong to one position:
 Flags hold on any position:
 
 - `factory-stuck`: a job failed. The card waits in its column until `retry N` removes the label.
-- `needs-info`: the author owes answers. The tick removes it when someone answers.
+- `needs-info`: the author owes answers. The tick removes it when someone answers, or when `FACTORY_NEEDS_INFO_HOURS` pass since the questions.
 - Approved: the card merges after hardening. It shows as `approvedResolving` or a queued approval.
 - Routing labels `design-sonnet` and `implementation-opus`, `open-network`, `hotfix`, `adhoc`, `release-task` and `bundled` change how the card runs, never where it stands.
 - `release-candidate` marks a merged card that waits for Ship.

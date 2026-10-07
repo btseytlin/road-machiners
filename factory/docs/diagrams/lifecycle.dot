@@ -1,4 +1,4 @@
-// Card lifecycle. Black: normal path. Red: loops back. Grey: ends early. Yellow: waits for people.
+// Card lifecycle. Black: normal path. Red: loops back. Grey: ends early. Yellow: waits for people, and the author wait has a time limit.
 digraph lifecycle {
   rankdir=LR; nodesep=0.3; ranksep=0.6; bgcolor=white; pad=0.3; forcelabels=true;
   node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.1", penwidth=1.3, width=1.3];
@@ -6,13 +6,13 @@ digraph lifecycle {
   T [label="Triage"]; D [label="Design"]; I [label="Implementation"];
   P [label="Testing\npreview"]; A [label="Approval\ncommittee plays", fillcolor="#fde68a", color="#b45309"];
   H [label="Hardening\nreview"]; G [label="Merge\ninto dev"]; M [label="Done"];
-  W [label="Author answers\non GitHub", fillcolor="#fde68a", color="#b45309"];
+  W [label="Author answers\non GitHub, or the\ntime limit passes", fillcolor="#fde68a", color="#b45309"];
   N [label="Hermes can move a card\nto any column", shape=note, style=filled, fillcolor="#f3f4f6", color="#6b7280", fontcolor="#374151"];
   X [label="Closed\nnot built", fillcolor="#f3f4f6", color="#6b7280", fontcolor="#374151"];
   T -> D -> I -> P -> A -> H -> G -> M [weight=100];
   // A loop is drawn as a forward edge with its arrow reversed, so it never bends the main line.
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=back, weight=0];
-  T -> W [xlabel="unclear,\nthen answered", dir=both, constraint=false];
+  T -> W [xlabel="unclear, then answered\nor time limit", dir=both, constraint=false];
   W -> D [label="questions"];
   I -> P [label="rebuild"];
   D -> P [label="plan wrong"];

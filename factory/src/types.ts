@@ -32,6 +32,7 @@ export type FactoryConfig = {
   tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
   minVotes: number;
   minAgeHours: number;
+  needsInfoHours: number; // hours an author has to answer the factory's questions before the card goes on without an answer
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
   committeeBootstrapGithub: string;
   telegramToken: string;
@@ -77,7 +78,7 @@ export type RunResult = { code: number; stdout: string; stderr: string };
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;
 
 export type Reaction = { login: string; content: string };
-export type IssueComment = { login: string; body: string };
+export type IssueComment = { login: string; body: string; createdAt: string }; // createdAt is an ISO time
 
 export type Issue = {
   number: number;

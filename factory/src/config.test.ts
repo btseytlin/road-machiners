@@ -7,7 +7,7 @@ const FULL = {
   FACTORY_OBSERVATION_HEARTBEAT_MS: '10000', FACTORY_OBSERVATION_MAX_EVENT_BYTES: '1048576',
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_GITHUB_RETRIES: '3', FACTORY_GITHUB_RETRY_BASE_SECONDS: '15', FACTORY_GITHUB_TIMEOUT_SECONDS: '60', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
   FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', FACTORY_GPU: 'on', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
-  FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5/8 sonnet=2/10/0.2/2.5/4', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
+  FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5/8 sonnet=2/10/0.2/2.5/4', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_NEEDS_INFO_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_TRIAGE_TIMEOUT_MINUTES: '30', FACTORY_DESIGN_TIMEOUT_MINUTES: '135', FACTORY_IMPLEMENT_TIMEOUT_MINUTES: '330', FACTORY_VERIFY_TIMEOUT_MINUTES: '240',
   FACTORY_TEST_TIMEOUT_MINUTES: '90', FACTORY_BRANCH_TIMEOUT_MINUTES: '60', FACTORY_JOB_MAX_MINUTES: '30', FACTORY_REPLY_ROUTE_MINUTES: '15', FACTORY_RELEASE_DAYS: '7', FACTORY_PLAYTEST_TURNS: '2250', FACTORY_PLAYTEST_RUNS: '4', FACTORY_WASTE_REVIEW_DAYS: '7',
@@ -22,6 +22,7 @@ describe('loadConfig', () => {
     expect(cfg.observationHeartbeatMs).toBe(10000);
     expect(cfg.observationMaxEventBytes).toBe(1048576);
     expect(cfg.minVotes).toBe(5);
+    expect(cfg.needsInfoHours).toBe(24);
     expect(cfg.committeeBootstrapGithub).toBe('boss');
     expect(cfg.committeeBootstrapTelegram).toBe('1');
     expect(cfg.committeeChat).toBe('-1');
@@ -39,6 +40,10 @@ describe('loadConfig', () => {
     expect(loadConfig(FULL).tokenPrices.opus).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 });
     expect(() => loadConfig({ ...FULL, FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5/8' })).toThrow('no price for sonnet');
     expect(() => loadConfig({ ...FULL, FACTORY_MODEL_PRICES: 'opus=4/20/0.2/5 sonnet=2/10/0.2/2.5/4' })).toThrow('entry "opus=4/20/0.2/5"');
+  });
+
+  it('requires the needs-info limit', () => {
+    expect(() => loadConfig({ ...FULL, FACTORY_NEEDS_INFO_HOURS: '' })).toThrow('FACTORY_NEEDS_INFO_HOURS');
   });
 
   it('names every missing key', () => {
