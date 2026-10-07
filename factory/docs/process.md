@@ -91,19 +91,20 @@ A reference that arrives while the card is in Design waits. The running design a
 
 ## Branches
 
-Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes at once. Steps that move several branches push them in one atomic push, so a conflict moves nothing.
+Every branch lives on GitHub. Each merge runs in a throwaway worktree and pushes at once. Steps that move several branches push them in one atomic push, so a failed push moves nothing.
 
 Members, other jobs and releases push all the time, so any branch may move while a job runs. A moved branch never fails a job.
 
 - An agent stage merges the new commits of its issue branch into the work before each push. When GitHub rejects the push because the branch moved again, it merges again and pushes again.
 - A conflict with those commits goes to an agent in the same job. The agent keeps both sides, and the stage goes on. An unfinished merge fails the stage.
 - Verify and patch also merge those commits before their agent starts, so the round tests them.
-- A merge into `dev`, `main` or the release that GitHub rejects because a target moved runs again on the new tips. Only a real conflict stops it.
+- A merge into `dev`, `main` or the release that GitHub rejects because a target moved runs again on the new tips.
+- A conflict between whole branches never stops the factory. It covers the release cut, Ship, the hotfix fan-out and the reverts of Remove. The step keeps the conflicted merge in a work clone of the target, and an agent resolves it with `prompts/merge-branches.md`, or `prompts/revert-merge.md` for a revert. The factory checks that the commit finished the merge and that the agent's own changes pass the diff checks. Then the step pushes as before. A target that moved meanwhile gets the merge again, and a new agent round only if that conflicts too. A conflict of an issue branch with its base still goes back to Hardening.
 
 ![Branches](diagrams/branches.svg)
 
-- The release cut merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup tasks.
-- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io.
+- The release cut merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup tasks. `lastRelease` changes only when the cut succeeds or finds nothing new, so a failed cut runs again on the next tick.
+- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io. A game change on `main` that the release lacks is merged into the release at once instead, and Ship stops. The release moved, so a new candidate follows for the committee to play.
 - A hotfix merges its branch into `main`, and `main` into `dev` and the open release, in one push. Then it ships like a release.
 - Remove reverts a feature's merge in both `dev` and the release, and sends its issue back to Design.
 

@@ -139,7 +139,7 @@ describe('approve', () => {
 
   it('sends the card back to Hardening on a conflict with dev, keeping the approver, with no chat post', async () => {
     const ctx = fakeCtx();
-    ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step.branch, step.into, ['game/src/a.ts'], 'boom'); };
+    ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step, ['game/src/a.ts'], 'boom', 'b1', 's1'); };
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -151,18 +151,6 @@ describe('approve', () => {
     expect(state.testPhase).toEqual({ 7: 'resolve' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
-  });
-
-  it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
-    labels = ['hotfix'];
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
-    const ctx = fakeCtx();
-    ctx.repo.merge = async (steps: MergeStep[]) => {
-      const step = steps.find((item) => item.branch === 'main');
-      if (step) throw new MergeConflictError(step.branch, step.into, ['x'], 'boom');
-    };
-    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('merge of main into dev failed');
-    expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });
 
   it('clears a kept approver and a leftover test phase once the merge lands', async () => {

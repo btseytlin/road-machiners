@@ -100,7 +100,7 @@ The post records the commit it was built from. The candidate does not post when 
 
 ## Ship
 
-Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks fails Ship, since the committee did not play it. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
+Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks was never played. Ship merges `main` into the release, with an agent for a conflict, and stops. The release moved, so the tick drops the post and builds a new candidate. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. The public channel and a GitHub release tagged `release-<day>` get the changelog. Each shipped issue loses `release-candidate` and closes.
 
 ## Hotfix
 

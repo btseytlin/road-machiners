@@ -253,8 +253,14 @@ export interface HostRepo {
   path: string;
   fetch(): Promise<void>; // fetch GitHub, cloning first when the clone is missing
   createBranch(name: string, from: string): Promise<void>; // throws when the branch exists
-  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws.
-  revertIssueMerge(issue: number, branch: string): Promise<boolean>;
+  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws RevertConflictError.
+  // A resolution that fits the branch's tip and the merge to revert replaces the revert. A branch that moved on GitHub meanwhile gets the revert again.
+  revertIssueMerge(issue: number, branch: string, resolutions?: Resolution[]): Promise<boolean>;
+  // Clones the conflict's target into `dir` at the commit the conflict met, with the merge or revert left open for an agent.
+  openConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<void>;
+  // Takes the agent's finished merge or revert from `dir` into the host clone, without pushing it. Throws when the agent left it unfinished.
+  // `diff` holds only what the agent added beyond the two sides, so the stage can check it like any agent diff.
+  closeConflict(dir: string, conflict: MergeConflictError | RevertConflictError): Promise<{ resolution: Resolution; diff: string }>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   // Clones into `dir` unless a working clone is there. A broken clone, with no commit checked out, is replaced.
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
@@ -276,15 +282,36 @@ export interface HostRepo {
   readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
-  // A target that moved on GitHub meanwhile gets the steps again on its new tip.
-  merge(steps: MergeStep[]): Promise<void>;
+  // A resolution that fits a step's two tips replaces that step's merge. A target that moved on GitHub meanwhile gets the steps again on its new tip.
+  merge(steps: MergeStep[], resolutions?: Resolution[]): Promise<void>;
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
 }
 
+// A finished merge or revert that an agent made of a conflict. `head` merges `source` into `base`, or reverts the merge `source` on `base`.
+export type Resolution = { base: string; source: string; head: string };
+
 // A merge that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` and `source` are the commits the merge met, which no branch name may name any more.
+// `done` holds the merges of the steps before it, so a later try reuses them and meets the same commits.
 export class MergeConflictError extends Error {
-  constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
-    super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  constructor(readonly step: MergeStep, readonly files: string[], reason: string, readonly base: string, readonly source: string, readonly done: Resolution[] = []) {
+    super(`merge of ${step.branch} into ${step.into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  }
+
+  get branch(): string {
+    return this.step.branch;
+  }
+
+  get into(): string {
+    return this.step.into;
+  }
+}
+
+// A revert that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
+// `base` is the branch tip the revert met, and `merge` the commit it reverts.
+export class RevertConflictError extends Error {
+  constructor(readonly issue: number, readonly into: string, readonly files: string[], reason: string, readonly base: string, readonly merge: string) {
+    super(`revert of issue #${issue} on ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
   }
 }
 
