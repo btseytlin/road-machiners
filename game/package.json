@@ -26,6 +26,7 @@
     "icons": "node scripts/icons.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs && node scripts/truck-shapes.mjs",
     "save:shape": "vite-node scripts/save-shape.mjs",
+    "old-spots": "vite-node scripts/old-spots.mjs",
     "wiki": "vite-node scripts/wiki.mjs",
     "itch": "node scripts/itch-publish.mjs"
   },

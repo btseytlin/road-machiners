@@ -23,6 +23,21 @@ export const FIELD_SPARE_WEAR: Weighted<number>[] = [
   { value: 4, weight: 2 },
 ];
 
+// Old-world places off today's roads that may hold one loot spot. See src/sim/old-places.ts.
+export type OldPlaceType = 'homestead' | 'hamlet' | 'lookout' | 'hulks';
+export const OLD_PLACE_TYPES: readonly OldPlaceType[] = ['homestead', 'hamlet', 'lookout', 'hulks'];
+
+export const OLD_PLACES = {
+  seedOffset: 7351, // hash key that keeps spot picks apart from other map draws
+  buildingGap: 12, // tiles between buildings of one place; a settlement's houses stand within 10 tiles, settlements 45 apart
+  tankGap: 10, // tiles between hulks of one group; a group's hulks lie within 8 tiles of each other
+  roadGap: 5, // tiles between a spot's reach and a road edge, so a spot is a trip off the road, not a roadside stop
+  // Chance a place holds a spot, by type. Most old places are picked clean, so a spot stays a find.
+  chance: { homestead: 0.5, hamlet: 0.35, lookout: 0.4, hulks: 0.25 } as Record<OldPlaceType, number>,
+  npcShare: 0.3, // share of scavenge trips that head for an old spot near the driver instead of a site
+  npcRange: 120, // tiles, the farthest old spot a scavenger heads for
+};
+
 export const SALVAGE = {
   unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
   pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
