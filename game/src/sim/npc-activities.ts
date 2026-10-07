@@ -626,17 +626,20 @@ function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle
 }
 
 // A hostile the driver ran from, it runs from again with no roll when the truck comes back in sight, unless it already
-// runs. A driver that ran as far as it could with the truck still in sight stays put. One it chose on in sight gets
-// no roll. Any other gets the sighting roll, also one the driver only heard so far.
-function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle): DecisionOptions['hostileSeen'] | null {
+// runs. A driver that ran as far as it could with the truck still in sight stays put, and so does one that stands where
+// a new run would end. One it chose on in sight gets no roll. Any other gets the sighting roll, also one the driver only
+// heard so far.
+function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle, profile: NpcProfile): DecisionOptions['hostileSeen'] | null {
   const track = trackOf(vehicle, enemy.id);
-  if (track?.choice === 'flee') return runsAgain(world, vehicle, track);
+  if (track?.choice === 'flee') return runsAgain(world, vehicle, track, enemy, profile);
   if (track?.chosenInSight) return null;
   return rollOnHostile(world, vehicle, 'hostileSeen', enemy.id, enemy.pos);
 }
 
-function runsAgain(world: World, vehicle: Vehicle, track: Track): 'flee' | null {
-  return comesInSight(world, track) && topGoal(vehicle)?.kind !== 'flee' ? 'flee' : null;
+function runsAgain(world: World, vehicle: Vehicle, track: Track, enemy: Vehicle, profile: NpcProfile): 'flee' | null {
+  if (!comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
+  const run = fleeGoal(world, vehicle, profile, enemy.id, enemy.pos, 'avoid a truck it ran from');
+  return reachedDestination(world, vehicle, run) ? null : 'flee';
 }
 
 // The driver's first choice on a hostile it hears, or null when it holds a choice on the truck already.
@@ -671,6 +674,11 @@ function dropChases(world: World, vehicle: Vehicle, threatId: string | null): vo
 // The driver tracks the threat as one it runs from.
 function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: string): NpcActivity {
   chooseOn(world, vehicle, threatId, threatPos, 'flee', true);
+  return fleeGoal(world, vehicle, profile, threatId, threatPos, reason);
+}
+
+// The flee goal for a threat, with no side effect.
+function fleeGoal(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: string): NpcActivity {
   return { ...createActivity('flee', threatId, fleeDestination(world, vehicle, profile, threatPos), reason), perceived: world.turn };
 }
 
@@ -678,7 +686,7 @@ function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId:
 function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   for (const enemy of visibleHostiles(world, vehicle)) {
     const reason = seenFleeReason(world, vehicle, enemy);
-    const option = reactSeen(world, vehicle, enemy);
+    const option = reactSeen(world, vehicle, enemy, profile);
     if (option === null || option === 'keep') continue;
     if (option === 'fight') interrupt(world, vehicle, fightGoal(world, vehicle, enemy, 'fight a hostile in sight'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, reason));
