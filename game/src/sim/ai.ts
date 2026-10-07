@@ -10,7 +10,7 @@ import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, isOnRope, ropeClientOf } from "./tow";
+import { escortsOf, followPace, getHitchedTowIds, isOnRope } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
 import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
@@ -352,9 +352,10 @@ export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   return routeLength(v.pos, around) - routeLength(v.pos, open) > vs * t;
 }
 
-// Vehicles v yields to: never the truck it rams, nor the truck on its own rope.
+// Vehicles v yields to: never the truck it rams, nor a truck on a tow rope, which has no body.
 function others(world: World, v: Vehicle): Vehicle[] {
-  return world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget && !onOwnRope(world, v, x));
+  const onRope = getHitchedTowIds(world);
+  return world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget && !onRope.has(x.id));
 }
 
 // Moving vehicles close ahead whose path meets v's. leadTurns adds turns of closing at both current speeds to the
@@ -430,10 +431,6 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
   const rr = rx * rx + ry * ry;
   const t = rr === 0 ? 0 : Math.min(h, Math.max(0, -(px * rx + py * ry) / rr));
   return Math.hypot(px + rx * t, py + ry * t) < sv.radius + sx.radius + RULES.yieldDistance;
-}
-
-function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
-  return ropeClientOf(world, tower.id) === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.
