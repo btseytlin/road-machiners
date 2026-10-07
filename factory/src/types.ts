@@ -216,6 +216,10 @@ export interface GitHub {
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;
+  // The issue, open or closed, whose body holds this error fingerprint line, or null.
+  findByFingerprint(fingerprint: string): Promise<FingerprintIssue | null>;
+  // The state of an error-report issue the store already names. Search lags new issues, so a known number is read directly.
+  errorIssue(number: number): Promise<FingerprintIssue>;
   mergePullRequest(branch: string): Promise<void>; // merges the open pull request of that head branch with a merge commit
 }
 
@@ -364,6 +368,11 @@ export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
 export const WASTE_LABEL = 'factory-review'; // the record of one waste review
 export const BUG_LABEL = 'bug';
+// A bug the error service opened from a game error report. It skips votes like a hotfix, but goes to Triage.
+export const ERROR_REPORT_LABEL = 'error-report';
+// The body line that ties an error-report issue to its fingerprint. GitHub search finds the issue by it.
+export const fingerprintLine = (fingerprint: string): string => `Error fingerprint: ${fingerprint}`;
+export type FingerprintIssue = { number: number; state: 'OPEN' | 'CLOSED'; stateReason: string | null; closedAt: string | null };
 // An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
 export const BUNDLED_LABEL = 'bundled';
 export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];
