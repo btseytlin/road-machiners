@@ -1,28 +1,29 @@
 import { PRESSURE_MAX } from '../../data/market';
-import type { World } from '../types';
+import type { GameEvent, Vehicle, World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
 import { partDef } from '../../data/parts';
 import { SHOPS } from '../../data/market';
 import { CONDITION } from '../../data/wear';
-import { playerVehicle } from '../damage';
+import { playerVehicle, vehicleById } from '../damage';
 import { makePart } from '../factory';
 import { goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
-import { dist } from '../vec';
-import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
-import { NPCS } from '../../data/npcs';
-import { playerTow } from '../tow';
+import { dist, type Vec } from '../vec';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from '../testkit';
+import { NPCS, TRAITS } from '../../data/npcs';
 import { towData } from '../states';
-import { endTurn } from '../world';
-import { partTradePrice, repairCost } from '../economy';
-import { getUpkeepReserve } from '../npc-decisions';
+import { playerTow, startEscort } from '../tow';
+import { playerSees } from '../vision';
+import { cloneWorld, endTurn } from '../world';
+import { getTradePrice, partTradePrice, repairCost } from '../economy';
+import { getKnownSite, getUpkeepReserve, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
-import { botOrders } from './bot';
+import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -57,6 +58,16 @@ describe('botOrders', () => {
 
     expect(turn.world).toBe(w);
     expect(turn.events).toEqual([]);
+  });
+
+  it('has a trader with money for one unit buy that one unit', () => {
+    const w = saltGlut(parkedAt('nose'));
+    const me = playerVehicle(w);
+    w.player.money = getUpkeepReserve(me) + getTradePrice(w, me, 'nose', 'salt', 'buy') + 1;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(goodsCount(playerVehicle(turn.world)).salt).toBe(1);
   });
 
   // Nose sells salt cheap, and Bowl pays well for it.
@@ -663,5 +674,174 @@ describe('the fast trader', () => {
     const after = playerVehicle(turn.world);
     expect(chassisDef(after.chassisId).maxSpeed).toBeGreaterThan(chassisDef(before.chassisId).maxSpeed);
     expect(mountedParts(after, 'armor').length).toBeLessThanOrEqual(armor);
+  });
+});
+
+// ---- Robbery.
+
+// A trader in the player's sight, at peace, with goods on its grid and a goal line that says it carries cargo.
+function addTrader(w: World, pos: Vec, parts: string[] = ['stockEngine']): Vehicle {
+  const v = addVehicle(w, 'traders', 'hauler', parts, pos);
+  v.brain = npcBrain('trader', pos, ['trader']);
+  v.brain.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'deliver purchased cargo' }];
+  if (addGoods(w, v, 'electronics', 4) < 4) throw new Error('No room for trader cargo');
+  return v;
+}
+
+// A supply convoy on its way to load cargo, and a convoy guard escorting it, both beside it.
+function addGuardedConvoy(w: World, pos: Vec): { convoy: Vehicle; guard: Vehicle } {
+  const convoy = addVehicle(w, 'convoys', 'hauler', ['stockEngine'], pos);
+  convoy.brain = npcBrain('convoy', pos, ['supplier']);
+  convoy.brain.goals = [{ kind: 'haul', targetId: 'nose', destination: { ...town('nose').pos }, phase: 'travel', reason: 'load cargo at its source' }];
+  if (addGoods(w, convoy, 'water', 4) < 4) throw new Error('No room for convoy cargo');
+  const guardPos = { x: pos.x, y: pos.y + 3 };
+  const guard = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], guardPos);
+  guard.brain = npcBrain('convoyGuard', guardPos, ['guard', 'brave']);
+  startEscort(w, guard, convoy, null, 0);
+  return { convoy, guard };
+}
+
+function radioed(turn: { events: GameEvent[] }, target: Vehicle): boolean {
+  return turn.events.some((e) => e.t === 'call' && e.with === target.id && e.outcome === 'opened');
+}
+
+// The player parked in open ground away from towns, with the scout kit's one machine gun.
+function robberWorld(): World {
+  const w = emptyWorld({ x: 60, y: 60 });
+  playerVehicle(w).speed = 0;
+  w.player.discovered = ['bowl', 'nose'];
+  return w;
+}
+
+describe('botOrders for robbers', () => {
+  it('does not radio a loaded trader out of sight', () => {
+    const w = robberWorld();
+    const trader = addTrader(w, { x: 160, y: 60 });
+    expect(playerSees(w, trader.pos)).toBe(false);
+
+    const turn = botOrders(w, 'robber');
+
+    expect(radioed(turn, trader)).toBe(false);
+  });
+
+  it('radios a loaded trader in sight', () => {
+    const w = robberWorld();
+    const trader = addTrader(w, { x: 64, y: 60 });
+    expect(playerSees(w, trader.pos)).toBe(true);
+
+    const turn = botOrders(w, 'robber');
+
+    expect(radioed(turn, trader)).toBe(true);
+    expect(turn.world.player.talked[trader.id]?.rob).toBeDefined();
+  });
+
+  it('radios a trader whose goal line says it sells carried cargo, and skips one going for repairs', () => {
+    const w = robberWorld();
+    const seller = addTrader(w, { x: 64, y: 60 });
+    seller.brain!.goals[0].reason = 'sell carried cargo';
+    expect(radioed(botOrders(w, 'robber'), seller)).toBe(true);
+    seller.brain!.goals[0].reason = 'needs repairs';
+    expect(radioed(botOrders(w, 'robber'), seller)).toBe(false);
+  });
+
+  it('skips a trader with more guns than the player', () => {
+    const w = robberWorld();
+    const trader = addTrader(w, { x: 64, y: 60 }, ['mg', 'mg', 'stockEngine']);
+
+    const turn = botOrders(w, 'robber');
+
+    expect(radioed(turn, trader)).toBe(false);
+  });
+
+  it('skips a convoy whose guard is in sight', () => {
+    const w = robberWorld();
+    const { convoy } = addGuardedConvoy(w, { x: 64, y: 60 });
+
+    const turn = botOrders(w, 'robber');
+
+    expect(radioed(turn, convoy)).toBe(false);
+  });
+
+  it('has the convoy robber radio a guarded convoy', () => {
+    const w = robberWorld();
+    const { convoy } = addGuardedConvoy(w, { x: 64, y: 60 });
+
+    const turn = botOrders(w, 'convoyRobber');
+
+    expect(radioed(turn, convoy)).toBe(true);
+  });
+
+  it('notes the answer of a demand', () => {
+    forceOption('threatened', 'comply');
+    const w = robberWorld();
+    w.rngState = rngStateForForcedRolls(4);
+    const trader = addTrader(w, { x: 62, y: 60 });
+
+    const turn = botOrders(w, 'robber');
+
+    expect(turn.notes).toContainEqual({ kind: 'demand', target: trader.id, answer: 'comply', guarded: false });
+  });
+
+  it('searches the pile a complying trader drops, then takes it', () => {
+    forceOption('threatened', 'comply');
+    const w = robberWorld();
+    w.rngState = rngStateForForcedRolls(4);
+    const trader = addTrader(w, { x: 61.5, y: 60 });
+
+    const demanded = botOrders(w, 'robber');
+    const pile = demanded.world.salvage.find((s) => s.pile && s.goods.electronics);
+    if (!pile) throw new Error('The trader dropped no pile');
+    expect(playerVehicle(demanded.world).job).toMatchObject({ kind: 'search', stockId: pile.id });
+
+    const searched = cloneWorld(demanded.world);
+    playerVehicle(searched).job = null;
+    searched.player.scavenged.push(pile.id);
+    const looted = botOrders(searched, 'robber');
+
+    expect(goodsCount(playerVehicle(looted.world)).electronics).toBe(4);
+    expect(goodsCount(vehicleById(looted.world, trader.id)).electronics).toBeUndefined();
+  });
+});
+
+describe('the convoy robber patrol', () => {
+  it('runs between the sites supply convoys haul between', () => {
+    expect(CONVOY_ROB_PATROL).toEqual([...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns]);
+  });
+
+  it('drives to the nearest of them with no target in sight', () => {
+    const w = robberWorld();
+    const order = playerVehicle(botOrders(w, 'convoyRobber').world).order;
+    if (order?.kind !== 'stopAt') throw new Error(`The convoy robber gave order ${order?.kind}`);
+    const near = CONVOY_ROB_PATROL.map(getKnownSite).sort((a, b) => dist(w.vehicles[0].pos, a.pos) - dist(w.vehicles[0].pos, b.pos))[0];
+    expect(dist(order.dest, nearestPad(near, playerVehicle(w).pos))).toBeLessThan(1e-6);
+  });
+});
+
+describe('wouldRob', () => {
+  it('takes a loaded trader out of sight that robTarget cannot see', () => {
+    const w = robberWorld();
+    const trader = addTrader(w, { x: 160, y: 60 });
+    expect(wouldRob(w, trader)).toBe(true);
+    expect(robTarget(w, true)).toBeNull();
+  });
+
+  it('skips a trader with more guns than the player', () => {
+    const w = robberWorld();
+    expect(wouldRob(w, addTrader(w, { x: 160, y: 60 }, ['mg', 'mg', 'stockEngine']))).toBe(false);
+  });
+});
+
+describe('haulMarginAt', () => {
+  it('with no money left is the cheapest haul fuel lost', () => {
+    const w = robberWorld();
+    const me = playerVehicle(w);
+    const fuels = REGION.towns.flatMap((a) => REGION.towns.filter((b) => b.id !== a.id).map((b) => tripFuelCost(w, me, dist(a.pos, b.pos))));
+    expect(haulMarginAt(w, 0, 20)).toBeCloseTo(-Math.min(...fuels), 9);
+  });
+
+  it('grows with the money and room of the load', () => {
+    const w = robberWorld();
+    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 200, 20));
+    expect(haulMarginAt(w, 2000, 20)).toBeGreaterThan(haulMarginAt(w, 2000, 2));
   });
 });

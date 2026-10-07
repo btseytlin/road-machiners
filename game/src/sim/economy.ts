@@ -247,7 +247,7 @@ export function serviceAtStall(
 
 // A driver in debt buys nothing.
 function refuelAndRepair(world: World, vehicle: Vehicle): void {
-  topUp(world, vehicle, ["fuel", "supplies"]);
+  topUp(world, vehicle, ['fuel', 'supplies']);
   const resources = getResources(world, vehicle);
   if (resources.money < 0) return;
   const multiplier =
@@ -264,13 +264,18 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
 }
 
+// Fills the tank as far as the money goes, for a driver doing business at a pump.
+export function buyFuel(world: World, vehicle: Vehicle): void {
+  topUp(world, vehicle, ['fuel']);
+}
+
 // Fills each kind up to its cap, as far as the money goes. A driver in debt buys nothing.
 function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
   const resources = getResources(world, vehicle);
   if (resources.money < 0) return;
   for (const kind of kinds) {
     const cap =
-      kind === "fuel"
+      kind === 'fuel'
         ? fuelCap(vehicle)
         : suppliesCap(vehicle);
     const count = Math.max(
@@ -415,7 +420,7 @@ export function sellGood(world: World, good: string, n: number): World {
 export function supplyRoom(world: World, kind: Supply): number {
   const p = world.player;
   const cap =
-    kind === "fuel"
+    kind === 'fuel'
       ? fuelCap(playerVehicle(world))
       : suppliesCap(playerVehicle(world));
   return Math.max(0, Math.floor(cap - p[kind]));
@@ -729,7 +734,7 @@ export function truckSupplyPrice(world: World, kind: Supply): number {
 
 // Whole units the driver will sell: what it holds above its reserve share of its cap.
 export function truckSupplyForSale(npc: Vehicle, kind: Supply): number {
-  const cap = kind === "fuel" ? fuelCap(npc) : suppliesCap(npc);
+  const cap = kind === 'fuel' ? fuelCap(npc) : suppliesCap(npc);
   const held = npc.resources![kind];
   return Math.max(0, Math.floor(held - cap * NPC_UPKEEP.tradeReserve));
 }

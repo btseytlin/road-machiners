@@ -44,7 +44,7 @@ import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary, contractWindow } from "./format";
 import { InventoryView, truckChips } from "./inventory";
@@ -118,7 +118,7 @@ export class TownScreen {
     );
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, siteName(shopId), truckChips(w)),
+      el("h3", {}, siteName(shopId), truckChips(w, { freeCells: def.kind !== "garage" })),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...shop)),
     );
     this.inventory.fitTo(truck);
@@ -203,7 +203,7 @@ export class TownScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         hint ? el("span", { class: `tag ${hint.cls}` }, hint.text) : null,
       ),
@@ -323,7 +323,7 @@ export class TownScreen {
       "div",
       { class: "town-repair" },
       createIcon("tools"),
-      el("span", { class: broken ? "bad" : "dim" }, broken ? `${broken} broken` : "Nothing broken"),
+      broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
       this.button(basics === 0 ? "Basics fine" : `Repair basics ${basics}`, repairBasics, basics === 0),
       this.button(all === 0 ? "No repairs" : `Repair all ${all}`, repairAll, all === 0),
     );
@@ -339,7 +339,7 @@ export class TownScreen {
       return el(
         "div",
         { class: `card truck-card${own ? " own" : ""}` },
-        chassisMap(id),
+        el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
           { class: "truck-body" },
@@ -624,7 +624,7 @@ export class TruckTradeScreen {
       el(
         "div",
         { class: "good-name" },
-        createIcon(goodIcon(g)),
+        createItemIcon(g),
         el("b", {}, GOODS[g].name),
         el("span", { class: "dim" }, theirs ? `×${theirs} on offer` : "none on offer"),
       ),

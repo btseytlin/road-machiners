@@ -3,6 +3,7 @@ import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
 import { BREAKABLE, RULES } from '../data/rules';
+import { WRECK_LOOKS } from '../data/territory';
 import { TIME } from '../data/time';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
@@ -25,7 +26,7 @@ import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite } from './sites';
 import { shopAt } from './market';
-import { isLootSpot, spotTable } from './territory';
+import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
@@ -58,6 +59,22 @@ export function isSiteStock(stock: SalvageStock): boolean {
 // A wreck placed on a road, not one a destroyed truck left.
 export function isRoadWreck(o: { id: string }): boolean {
   return /^wreck\d+$/.test(o.id);
+}
+
+export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
+
+// What kind of place holds the stock: a dropped pile, a site's own stock, a wreck (a road wreck, a destroyed truck's
+// wreck or a loot spot with a wreck look), or any other loot spot of a territory.
+export function salvagePlace(stock: SalvageStock): SalvagePlace {
+  if (stock.pile) return 'pile';
+  if (isSiteStock(stock)) return 'site';
+  return isRoadWreck(stock) || isTruckWreck(stock) ? 'wreck' : spotPlace(stock);
+}
+
+function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {
+  const look = territoryOfStock(stock) ? spotLookOf(stock) : null;
+  if (!look) throw new Error(`Stock ${stock.id} is no pile, site, wreck or loot spot`);
+  return WRECK_LOOKS.includes(look) ? 'wreck' : 'spot';
 }
 
 // A spare part found in the field. Its wear draws from the market stream, so it leaves world RNG
@@ -190,11 +207,18 @@ function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: n
   };
 }
 
+// The id of a destroyed truck's stock is this prefix and the truck's id.
+const TRUCK_WRECK = 'wreck-';
+
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked
 // beyond mounting, so they turn into the parts good instead, at a data rate off their remaining HP.
 // The stock a destroyed NPC leaves.
 export function wreckStockId(vehicleId: string): string {
-  return `wreck-${vehicleId}`;
+  return `${TRUCK_WRECK}${vehicleId}`;
+}
+
+function isTruckWreck(stock: SalvageStock): boolean {
+  return stock.id.startsWith(TRUCK_WRECK);
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -425,12 +449,17 @@ function regrowBroken(world: World): void {
 }
 
 function canRegrow(world: World, o: Obstacle): boolean {
-  const reach = propReach(o);
-  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world, o.pos) + reach && clearOfVehicles(world, o.pos, reach);
+  return canVanish(world, o.pos, propReach(o));
+}
+
+// Whether a thing reaching `reach` tiles around pos may appear or vanish unseen: no part of it lies in the player's
+// gray vision and no truck stands on it. Broken props and craters both wait for this.
+export function canVanish(world: World, pos: Vec, reach: number): boolean {
+  return dist(playerVehicle(world).pos, pos) > grayRadius(world) + reach && clearOfVehicles(world, pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
@@ -548,7 +577,8 @@ export function requireLootFree(world: World, looter: Vehicle, targetId: string)
 }
 
 export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
-  if (world.salvage.some((s) => s.id === targetId)) return `${blocker.name} is looting this wreck`;
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return `${blocker.name} is looting ${salvagePlace(stock) === 'spot' ? 'here' : 'this wreck'}`;
   if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
   throw new Error(`No loot target ${targetId}`);
 }
