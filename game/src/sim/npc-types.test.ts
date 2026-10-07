@@ -18,6 +18,7 @@ import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { cloneWorld } from './world';
+import { budget } from '../test/budget';
 
 function siteById(id: string) {
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
@@ -220,6 +221,28 @@ describe('supply convoys', () => {
     for (const goal of goals) expect(GOOD_SOURCES[goal.load!.good]).toContain(goal.targetId);
   });
 
+  it('trade about one idle roll in three and haul the rest', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'convoy', ['supplier'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], sitePads(siteById('bowl'))[0]);
+    npc.resources!.money = NPCS.convoy.money;
+    const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
+    expect(chances.trade).toBeGreaterThan(0.28);
+    expect(chances.trade).toBeLessThan(0.38);
+    expect(chances.haul).toBeGreaterThan(0.6);
+    const kinds = new Set(idleGoals(w, npc.id, 30).map((g) => g.kind));
+    expect(kinds).toContain('trade');
+    expect(kinds).toContain('haul');
+  });
+
+  it('only haul when too poor for a trade', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'convoy', ['supplier'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], sitePads(siteById('bowl'))[0]);
+    npc.resources!.money = 0;
+    const weights = optionWeights(w, npc, 'idle', null, null);
+    expect(weights).not.toHaveProperty('trade');
+    expect(weights).toHaveProperty('haul');
+  });
+
   it('cannot haul with a full grid', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'convoy', ['supplier'], 'scout', ['mg', 'stockEngine'], sitePads(siteById('bowl'))[0]);
@@ -278,7 +301,7 @@ describe('spawns of the new templates', () => {
 });
 
 describe('vultures', () => {
-  it('always carry a cargo part and only long-range guns', () => {
+  it('always carry a cargo part and a long-range main gun', () => {
     let seen = 0;
     for (let seed = 1; seed <= 15; seed++) {
       const x = emptyWorld({ x: 300, y: 300 });
@@ -288,11 +311,11 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        for (const d of defs) if (d.kind === 'weapon') expect(d.range).toBeGreaterThanOrEqual(15);
+        expect(defs.find((d) => d.kind === 'weapon')!.range).toBeGreaterThanOrEqual(15);
       }
     }
     expect(seen).toBeGreaterThan(10);
-  }, 60_000);
+  }, budget(60_000));
 
   it('stop for a wreck they pass nearly every time', () => {
     const w = emptyWorld({ x: 300, y: 300 });

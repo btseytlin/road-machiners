@@ -3,7 +3,7 @@
 // Business is an NPC's time at a site deal. A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
 // No driver works while in combat: no job starts then, and a running job is cancelled.
 // A repair is also cancelled once the grid holds no parts for it, and an auto repair once its parts are promised
-// to a roadside patch.
+// to a roadside patch or carried for a haul contract.
 
 import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
@@ -87,7 +87,7 @@ export function startRepair(world: World, partId: string): World {
 }
 
 // Auto patch: a parked, idle player truck patches with one unit of parts at a time, so driving off loses at
-// most one short job. It spends only parts not promised to a roadside patch. Parts that strand the truck come first, then broken wheels, then the most damaged part.
+// most one short job. It spends only parts not promised to a roadside patch or carried for a haul contract. Parts that strand the truck come first, then broken wheels, then the most damaged part.
 export function startAutoRepair(world: World): void {
   if (!world.player.autoRepair || world.player.state !== "active") return;
   const v = playerVehicle(world);
@@ -114,9 +114,14 @@ function patchRank(v: Vehicle, part: PartInstance): number {
   return coreParts(v, "wheel").includes(part) ? 1 : 2;
 }
 
-// Parts held above what open patch deals promised.
+// Parts held above what open patch deals promised and the player's haul contracts carry.
 function freeParts(world: World, v: Vehicle): number {
-  return (goodsCount(v).parts ?? 0) - promisedParts(world, v);
+  return (goodsCount(v).parts ?? 0) - promisedParts(world, v) - hauledParts(world, v);
+}
+
+function hauledParts(world: World, v: Vehicle): number {
+  if (v.id !== world.player.vehicleId) return 0;
+  return world.player.contracts.reduce((sum, c) => sum + (c.kind === "haul" && c.good === "parts" ? c.units : 0), 0);
 }
 
 // Idle, parked, out of combat, with parts to patch with.

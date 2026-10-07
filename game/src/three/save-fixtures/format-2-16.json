@@ -1,0 +1,7 @@
+{
+  "turn": 500,
+  "weather": [
+    { "id": "wx1", "kind": "storm", "pos": { "x": 120, "y": 80 }, "radius": 90, "vel": { "x": 0.5, "y": -0.3 }, "turnsLeft": 120 },
+    { "id": "wx2", "kind": "heatwave", "turnsLeft": 30 }
+  ]
+}

@@ -4,8 +4,6 @@
 import { NPC_UPKEEP } from '../data/npcs';
 import { inCombat } from './combat';
 import { startJob } from './jobs';
-import { getKnownSite } from './npc-decisions';
-import { canUseSite } from './sites';
 import type { BusinessDeal, Job, NpcActivity, Vehicle, World } from './types';
 
 type BusinessJob = Extract<Job, { kind: 'business' }>;
@@ -41,23 +39,11 @@ function startBusiness(world: World, vehicle: Vehicle, activity: NpcActivity, si
   startJob(world, vehicle, { kind: 'business', siteId, deal: activity.kind as BusinessDeal, turnsLeft: turns, total: turns });
 }
 
-// The site of a site goal once the NPC can use it, which starts the act phase. Null while it cannot.
-export function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof getKnownSite> | null {
-  const site = getKnownSite(activity.targetId!);
-  if (!canUseSite(vehicle.pos, site)) return null;
-  activity.phase = 'act';
-  return site;
-}
-
-// The site of a business goal on the turn its deal is due. Before that the driver starts or waits out its job.
-export function awaitBusiness(world: World, vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof getKnownSite> | null {
-  const site = reachSite(vehicle, activity);
-  return site && businessDue(world, vehicle, activity, site.id) ? site : null;
-}
-
-// True on the turn the deal is due. Before that the driver starts or waits out its business job.
-function businessDue(world: World, vehicle: Vehicle, activity: NpcActivity, siteId: string): boolean {
+// True on the turn a business goal's deal is due, at a site the driver can use. Before that the driver starts or waits
+// out its business job.
+export function dealDue(world: World, vehicle: Vehicle, activity: NpcActivity, site: { id: string } | null): site is { id: string } {
+  if (!site) return false;
   if (businessDone(world, vehicle, activity)) return true;
-  startBusiness(world, vehicle, activity, siteId);
+  startBusiness(world, vehicle, activity, site.id);
   return false;
 }

@@ -15,6 +15,7 @@ import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -86,7 +87,7 @@ describe('NPC driving', () => {
     }
     freeDrive(d);
     expect(arrived).toBe(true);
-  }, 120_000);
+  }, budget(120_000));
 
   it('passes the oncoming player without stopping or touching it', () => {
     let w = newWorld(1337, START_KITS.standard, TEST_MAP);
@@ -124,7 +125,7 @@ describe('NPC driving', () => {
     freeDrive(d);
     expect(slowest).toBeGreaterThan(RULES.parkedSpeed);
     expect(closest).toBeGreaterThan(gap);
-  }, 60_000);
+  }, budget(60_000));
 
   // Two scouts closing head-on on the real road, at the poses of a crash found in all-physics traffic.
   it.each([-3, -1.5].flatMap((dx) => [-3, -1.5, 0, 1.5, 3].map((dy) => [dx, dy])))(
@@ -136,6 +137,9 @@ describe('NPC driving', () => {
       w.vehicles[0].pos = { x: 300, y: 200 };
       const a = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 264.24, y: 165.07 }, (-48 * Math.PI) / 180);
       const b = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 283.01, y: 143.29 }, (129 * Math.PI) / 180);
+      // The lower id waits, so which truck swerves follows the ids. Pin them to those of the recorded crash, since the id counter shifts with how many trucks a new world starts with.
+      a.id = 'v1062';
+      b.id = 'v1081';
       a.speed = 6.46;
       b.speed = 4.08;
       a.brain = npcBrain('scavenger', a.pos, ['scavenger']);

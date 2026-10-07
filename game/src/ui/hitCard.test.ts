@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { XP_TO_REACH } from '../data/skills';
 import { hitOdds } from '../sim/combat';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
@@ -27,7 +26,7 @@ describe('hover card rows', () => {
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
     expect(o.causes.recoil).toBeGreaterThan(0);
-    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim · ${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
   });
 
   it('names the biggest reasons in plain words and keeps at most two', () => {
@@ -93,7 +92,7 @@ describe('hover card rows', () => {
 
   it('shows perception as a negative scatter cause', () => {
     const { world, me, them, mine } = createDuel();
-    world.player.skills.perception = XP_TO_REACH[3];
+    world.player.ranks.perception = 3;
     const o = hitOdds(world, me, mine, them, 'body');
     expect(o.causes.skill).toBeLessThan(0);
     expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);

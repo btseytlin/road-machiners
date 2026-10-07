@@ -45,6 +45,23 @@ describe('intake', () => {
     expect(calls).toEqual(['addCard 4 Triage', 'comment 4 The factory picked this up for triage.']);
   });
 
+  it('puts a fresh error report with no votes into Triage, not Design', async () => {
+    const calls: string[] = [];
+    const ctx = {
+      cfg: { home: 'tmp/factory-intake-none', minVotes: 3, minAgeHours: 24, committeeBootstrapTelegram: '1', committeeBootstrapGithub: 'boss' },
+      now: () => NOW,
+      log: () => undefined,
+      github: {
+        cards: async () => [],
+        candidates: async () => [issue({ number: 8, labels: ['bug', 'error-report'], createdAt: NOW.toISOString() }), issue({ number: 9, labels: ['bug'], createdAt: NOW.toISOString() })],
+        addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
+        comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
+      },
+    } as unknown as Ctx;
+    expect(await intake(ctx)).toEqual([8]);
+    expect(calls).toEqual(['addCard 8 Triage', 'comment 8 The factory picked this up for triage.']);
+  });
+
   it('puts a fresh hotfix with no votes straight into Design', async () => {
     const calls: string[] = [];
     let asked: string[] = [];

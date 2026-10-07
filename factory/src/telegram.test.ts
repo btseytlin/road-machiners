@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { pngBytes } from './photo-fixtures';
 import { botClient } from './telegram';
 
 type Call = { url: string; init: RequestInit };
@@ -16,6 +17,29 @@ function fakeFetch(replies: unknown[]): { fetchFn: typeof fetch; calls: Call[] }
 
 const ok = (id: number) => ({ ok: true, result: { message_id: id } });
 const body = (call: Call) => JSON.parse(call.init.body as string);
+
+describe('botClient sendButtons', () => {
+  it('sends one message with an inline keyboard', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(51)]);
+    expect(await botClient('T', fetchFn).sendButtons('-100', 'build', [[{ text: 'Approve', data: 'factory:approve:9' }]])).toBe(51);
+    expect(body(calls[0]!)).toEqual({ chat_id: '-100', text: 'build', reply_markup: { inline_keyboard: [[{ text: 'Approve', callback_data: 'factory:approve:9' }]] } });
+  });
+
+  it('refuses a text it would have to split', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(1)]);
+    await expect(botClient('T', fetchFn).sendButtons('c', 'a'.repeat(4097), [[{ text: 'x', data: 'y' }]])).rejects.toThrow('limit is 4096');
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('botClient editText', () => {
+  it('replaces the text and drops the buttons', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(51)]);
+    await botClient('T', fetchFn).editText('-100', 51, 'Approved');
+    expect(calls[0]!.url).toContain('/editMessageText');
+    expect(body(calls[0]!)).toEqual({ chat_id: '-100', message_id: 51, text: 'Approved', reply_markup: { inline_keyboard: [] } });
+  });
+});
 
 describe('botClient sendMessage', () => {
   it('posts JSON to the bot endpoint and returns the message id', async () => {
@@ -50,6 +74,43 @@ describe('botClient sendMessage', () => {
   it('throws with the Telegram description when ok is false', async () => {
     const { fetchFn } = fakeFetch([{ ok: false, description: 'chat not found' }]);
     await expect(botClient('T', fetchFn).sendMessage('c', 'hi')).rejects.toThrow('chat not found');
+  });
+});
+
+describe('botClient sendDocument', () => {
+  it('posts the file as a reply to the given message', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const path = join(mkdtempSync(join(process.cwd(), 'tmp', 'tg-')), 'report.html');
+    writeFileSync(path, '<html></html>');
+    const { fetchFn, calls } = fakeFetch([ok(9)]);
+    expect(await botClient('T', fetchFn).sendDocument('-100', path, 4)).toBe(9);
+    expect(calls[0]!.url).toBe('https://api.telegram.org/botT/sendDocument');
+    const form = calls[0]!.init.body as FormData;
+    expect(form.get('chat_id')).toBe('-100');
+    expect(JSON.parse(form.get('reply_parameters') as string)).toEqual({ message_id: 4 });
+    expect((form.get('document') as File).name).toBe('report.html');
+  });
+
+  it('refuses a missing file, a link, an empty file and a file over 50 MB before any request', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const dir = mkdtempSync(join(process.cwd(), 'tmp', 'tg-'));
+    writeFileSync(join(dir, 'empty.csv'), '');
+    writeFileSync(join(dir, 'big.zip'), 'x');
+    truncateSync(join(dir, 'big.zip'), 50 * 1024 * 1024 + 1);
+    symlinkSync('/etc/passwd', join(dir, 'link.txt'));
+    const { fetchFn, calls } = fakeFetch([ok(9)]);
+    const client = botClient('T', fetchFn);
+    for (const name of ['missing.csv', 'link.txt']) await expect(client.sendDocument('-100', join(dir, name), 4)).rejects.toThrow('not a regular file');
+    for (const name of ['empty.csv', 'big.zip']) await expect(client.sendDocument('-100', join(dir, name), 4)).rejects.toThrow('the limit is');
+    expect(calls).toEqual([]);
+  });
+
+  it('throws the Telegram description when the upload is refused', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const path = join(mkdtempSync(join(process.cwd(), 'tmp', 'tg-')), 'a.csv');
+    writeFileSync(path, 'a,b');
+    const { fetchFn } = fakeFetch([{ ok: false, description: 'Bad Request: chat not found' }]);
+    await expect(botClient('T', fetchFn).sendDocument('-100', path, 4)).rejects.toThrow('chat not found');
   });
 });
 
@@ -107,5 +168,84 @@ describe('botClient sendPhoto', () => {
     mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
     const { fetchFn } = fakeFetch([{ ok: false, description: 'wrong file' }]);
     await expect(botClient('T', fetchFn).sendPhoto('c', png(), 'cap')).rejects.toThrow('wrong file');
+  });
+});
+
+describe('botClient sendPhotos', () => {
+  const dir = (): string => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    return mkdtempSync(join(process.cwd(), 'tmp', 'tg-album-'));
+  };
+  const photos = (count: number): { path: string; caption: string }[] => {
+    const folder = dir();
+    return Array.from({ length: count }, (_, i) => {
+      const path = join(folder, `view${i}.png`);
+      writeFileSync(path, pngBytes(i));
+      return { path, caption: `view ${i}` };
+    });
+  };
+  const group = (count: number, first = 200) => ({ ok: true, result: Array.from({ length: count }, (_, i) => ({ message_id: first + i })) });
+
+  it('sends one photo as sendPhoto, as a reply, with no buttons', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(9)]);
+    expect(await botClient('T', fetchFn).sendPhotos('c', photos(1), 4)).toEqual([9]);
+    expect(calls[0]!.url).toBe('https://api.telegram.org/botT/sendPhoto');
+    const form = calls[0]!.init.body as FormData;
+    expect(JSON.parse(form.get('reply_parameters') as string)).toEqual({ message_id: 4 });
+    expect(form.get('caption')).toBe('view 0');
+    expect(form.has('reply_markup')).toBe(false);
+  });
+
+  it('sends two photos as a media group with attach references', async () => {
+    const { fetchFn, calls } = fakeFetch([group(2)]);
+    expect(await botClient('T', fetchFn).sendPhotos('c', photos(2), 4)).toEqual([200, 201]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api.telegram.org/botT/sendMediaGroup');
+    const form = calls[0]!.init.body as FormData;
+    expect(JSON.parse(form.get('media') as string)).toEqual([
+      { type: 'photo', media: 'attach://photo0', caption: 'view 0' },
+      { type: 'photo', media: 'attach://photo1', caption: 'view 1' },
+    ]);
+    expect((form.get('photo0') as File).name).toBe('view0.png');
+    expect((form.get('photo1') as File).type).toBe('image/png');
+    expect(JSON.parse(form.get('reply_parameters') as string)).toEqual({ message_id: 4 });
+    expect(form.has('reply_markup')).toBe(false);
+  });
+
+  it('sends ten photos in one group, in order', async () => {
+    const { fetchFn, calls } = fakeFetch([group(10)]);
+    expect(await botClient('T', fetchFn).sendPhotos('c', photos(10))).toHaveLength(10);
+    const media = JSON.parse((calls[0]!.init.body as FormData).get('media') as string) as { caption: string }[];
+    expect(media.map((item) => item.caption)).toEqual(Array.from({ length: 10 }, (_, i) => `view ${i}`));
+    expect((calls[0]!.init.body as FormData).has('reply_parameters')).toBe(false);
+  });
+
+  it('refuses none and more than ten photos before any request', async () => {
+    const { fetchFn, calls } = fakeFetch([group(11)]);
+    await expect(botClient('T', fetchFn).sendPhotos('c', photos(11))).rejects.toThrow('1 to 10');
+    await expect(botClient('T', fetchFn).sendPhotos('c', [])).rejects.toThrow('1 to 10');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a missing file, a non-image and an oversized one before any request', async () => {
+    const { fetchFn, calls } = fakeFetch([group(2)]);
+    const [first, second] = photos(2);
+    const client = botClient('T', fetchFn);
+    await expect(client.sendPhotos('c', [first!, { path: join(dir(), 'nope.png'), caption: 'x' }])).rejects.toThrow('missing');
+    writeFileSync(second!.path, 'not an image at all, just text bytes');
+    await expect(client.sendPhotos('c', [first!, second!])).rejects.toThrow('not a PNG, JPEG or WebP');
+    writeFileSync(second!.path, pngBytes(1, 9000, 2000));
+    await expect(client.sendPhotos('c', [first!, second!])).rejects.toThrow('too large');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('throws with the Telegram description when the album fails', async () => {
+    const { fetchFn } = fakeFetch([{ ok: false, description: 'Bad Request: wrong file identifier' }]);
+    await expect(botClient('T', fetchFn).sendPhotos('c', photos(3))).rejects.toThrow('wrong file identifier');
+  });
+
+  it('throws when the reply holds fewer messages than photos', async () => {
+    const { fetchFn } = fakeFetch([group(1)]);
+    await expect(botClient('T', fetchFn).sendPhotos('c', photos(3))).rejects.toThrow('1 messages for 3 photos');
   });
 });

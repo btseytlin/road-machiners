@@ -1,6 +1,7 @@
 // Trucks drawn as one base model per chassis, with every grid item's model from the shared kit on its own cells.
 // Items stand on the model's top surface under their projected footprint. A mounted engine stands at the model's engine anchor.
 // Body space: +x is the nose, +z the truck's right, +y up, origin at the collider center. Models share that frame.
+// A gun stands on a post that lifts its head over the cab ahead and over every drawn item and body surface its barrel can sweep.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -9,16 +10,19 @@ import { partDef, type PartDef, type PartKind, type WeaponDef } from '../../data
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor';
-import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
+import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, surfaceSamples, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
-import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
-import type { GridItem, Vehicle } from '../../sim/types';
+import { baseGrid, isMounted, itemCells, itemSize, plateSide, type SideLetter } from '../../sim/grid';
+import type { GridItem, Vehicle, World } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
+import { clearTop, headShape, sweepOf, type Obstacle } from './gunClearance';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
+import { onAir, radioSpeakers } from '../../sim/dialogue';
 import { TruckMotion, WHIPS } from './truckMotion';
+import { weaponHead } from './weaponHead';
 
 const T = PHYSICS.truck;
 const CELL = PHYSICS.cell;
@@ -28,6 +32,7 @@ type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 // Material name that takes the faction color.
 const PAINT = 'paint';
+const RADIO = 'radio_light'; // the antenna bulb material, lit while the truck is on the radio
 const LAMP = 'light'; // the headlight face material in the nose and base models
 const GLASS = 'glass'; // the cab window material in the base models, tinted by the daylight
 const TRIM = 'trim'; // base material that takes the faction cab color
@@ -44,6 +49,8 @@ const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2
 // Bumpers are authored 1 m tall with their top on the deck top. They stretch to the chassis box height plus the skirt.
 const EDGE_H = 1;
 const SIDE_SKIN = 0.1; // meters a mounted side plate stands out from the model face
+const GUN_GAP = 0.03; // meters a gun head stands above the highest thing it sweeps over
+const SAMPLE_REACH = 0.1; // meters past the head's reach where a body sample's center can still have its box under the head
 const SKIRT = 0.22; // meters a base hangs below the collider, SKIRT in tools/blender/parts_common_base.py
 
 // A truck behind terrain or props shows through as a flat faction-color silhouette.
@@ -62,6 +69,8 @@ type Axle = { obj: THREE.Object3D; a: number; b: number; inset: number };
 const SHOCK_R = 0.2; // coil radius of the coilover model at a 1 m wheel radius
 const UP = new THREE.Vector3(0, 1, 0);
 const ANTENNA_INSET = 0.12; // meters from the body side and the cab's back edge
+const RADIO_TIP = 1.6; // meters up the antenna to the bulb
+const RADIO_HALO = 0.6; // meters across the lit bulb's glow
 const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
 // A turning weapon head, its barrel tip in head space, and where its gun can fire in degrees off the truck heading.
@@ -112,6 +121,9 @@ export class VehicleView {
   private anchors = new Map<string, Anchor>(); // key: part id
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
+  private radioMat = new THREE.MeshBasicMaterial({ color: PAL.radioLight.off });
+  private halo: THREE.Sprite | null = null; // the red glow around a lit antenna bulb, set by buildLooseParts
+  private radioOn = false;
   private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
   private readonly glassGlow = new THREE.Color(0); // kept across rebuilds, which replace the glass material
   private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
@@ -163,12 +175,19 @@ export class VehicleView {
     this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
   }
 
+  // lit: the antenna bulb glows red with a halo while the truck talks on the radio.
+  radio(lit: boolean): void {
+    this.radioOn = lit;
+    this.radioMat.color.setHex(radioColor(lit));
+    if (this.halo) this.halo.visible = lit;
+  }
+
   // dark: the player sees only the headlights, so the truck draws as a black shape around its lit lamps.
   outline(dark: boolean): void {
     if (dark === this.dark) return;
     this.dark = dark;
     this.root.traverse((o) => {
-      if (!(o instanceof THREE.Mesh) || o.material === this.silhouetteMat || o.material === this.lampMat || o.userData.outline) return;
+      if (!(o instanceof THREE.Mesh) || this.keepsLook(o)) return;
       if (dark) {
         o.userData.litMat = o.material;
         o.material = this.darkMat;
@@ -177,6 +196,12 @@ export class VehicleView {
         delete o.userData.litMat;
       }
     });
+  }
+
+  // The silhouette twins, outline meshes and lit lamps keep their look in the dark.
+  private keepsLook(o: THREE.Mesh): boolean {
+    const m = o.material;
+    return m === this.silhouetteMat || m === this.lampMat || m === this.radioMat || o.userData.outline;
   }
 
   // glow: the color cab windows add over their lit color.
@@ -191,7 +216,7 @@ export class VehicleView {
     for (const [id, turret] of this.turrets) {
       const yaw = yawOf(id);
       const want = yaw === null ? 0 : angleDiff(this.heading, yaw) / DEG;
-      const turn = turret.spans.length ? aimWithin(turret.spans, want) : 0;
+      const turn = aimWithin(sweepOf(turret.spans, true), want);
       const q = headingQuat(turn * DEG);
       turret.head.quaternion.set(q.x, q.y, q.z, q.w);
     }
@@ -227,21 +252,28 @@ export class VehicleView {
     // disposeChildren disposed the lamp material, so a new one keeps the lamp state.
     const on = this.lampMat.color.getHex() === PAL.lamp.on;
     this.lampMat = new THREE.MeshBasicMaterial({ color: on ? PAL.lamp.on : PAL.lamp.off });
+    this.radioMat = new THREE.MeshBasicMaterial({ color: radioColor(this.radioOn) });
+    this.halo = null;
     this.glassMat = new THREE.MeshLambertMaterial({ flatShading: true, emissive: this.glassGlow });
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
     this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody), cabLook(v));
     const wheelItems: PartItem[] = [];
+    const guns: PartItem[] = [];
+    const obstacles: Obstacle[] = [];
     // The transmission and the tank of a truck that does not show its cores sit inside the body. A part with no surface
     // to rest on would float, so it is not drawn either.
     for (const item of onBody.filter((it) => !hidesInside(v, it) && !wouldFloat(v, it))) {
       if (item.kind === 'good') {
-        still.add(this.placeItem(v, item, paint, standingY(v, item)));
+        const good = this.placeItem(v, item, paint, standingY(v, item));
+        still.add(good);
+        obstacles.push(obstacleOf(good));
         continue;
       }
-      this.drawPart(v, body, item, still, paint, wheelItems);
+      this.drawPart(v, body, item, still, paint, wheelItems, guns, obstacles);
     }
+    for (const gun of guns) this.buildWeapon(v, gun, isMounted(v.chassisId, gun), still, paint, obstacles);
     this.buildWheels(v, body, wheelItems, paint);
     this.anchorUndrawn(v, body);
     this.buildSuspension(body, paint);
@@ -254,13 +286,20 @@ export class VehicleView {
   }
 
   // One part's model. The cab core has no model: the base draws the cab.
-  private drawPart(v: Vehicle, body: Body, item: PartItem, still: THREE.Group, paint: number, wheelItems: PartItem[]): void {
+  // Guns wait in guns, so they draw after everything their heads can turn over. Items a gun can hit add to obstacles.
+  private drawPart(v: Vehicle, body: Body, item: PartItem, still: THREE.Group, paint: number, wheelItems: PartItem[], guns: PartItem[], obstacles: Obstacle[]): void {
     const def = partDef(item.part.defId);
     const mounted = isMounted(v.chassisId, item);
     if (BODY_PARTS.has(def.id)) return;
-    if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
+    if (def.kind === 'weapon') guns.push(item);
     else if (isWheel(def) && mounted) wheelItems.push(item);
-    else this.addPart(still, item, this.placedPart(v, body, item, def, paint));
+    else this.drawModel(v, body, item, def, still, paint, obstacles);
+  }
+
+  private drawModel(v: Vehicle, body: Body, item: PartItem, def: PartDef, still: THREE.Group, paint: number, obstacles: Obstacle[]): void {
+    const obj = this.placedPart(v, body, item, def, paint);
+    this.addPart(still, item, obj);
+    if (blocksGuns(v, item, def)) obstacles.push(obstacleOf(obj));
   }
 
   private placedPart(v: Vehicle, body: Body, item: PartItem, def: PartDef, paint: number): THREE.Object3D {
@@ -324,20 +363,18 @@ export class VehicleView {
     }
   }
 
-  // Headlight faces share the lamp material, so lamps() switches them all. Cab windows share the glass material, so windows() tints them all.
+  // Headlight faces share the lamp material, so lamps() switches them all. The antenna bulb shares the radio material.
+  // Cab windows share the glass material, so windows() tints them all.
   private useLamp(obj: THREE.Object3D): void {
+    const shared: Record<string, THREE.Material> = { [LAMP]: this.lampMat, [RADIO]: this.radioMat, [GLASS]: this.glassMat };
     obj.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
-      if (o.material.name === LAMP) {
-        o.material.dispose();
-        o.material = this.lampMat;
-        o.userData.lamp = true;
-      } else if (o.material.name === GLASS) {
-        this.glassMat.color.copy(o.material.color);
-        o.material.dispose();
-        o.material = this.glassMat;
-        o.userData.lamp = true;
-      }
+      const mat = shared[o.material.name];
+      if (!mat) return;
+      if (mat === this.glassMat) this.glassMat.color.copy(o.material.color);
+      o.material.dispose();
+      o.material = mat;
+      o.userData.lamp = true;
     });
   }
 
@@ -407,10 +444,11 @@ export class VehicleView {
     return obj;
   }
 
-  // A weapon standing below the highest point ahead of it in its lane gets a riser post up to it, so its turret clears the cab.
-  // Returns where the weapon mount stands.
-  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group): Placement {
-    const { at, bottom, top } = weaponStand(v, item);
+  // A gun's post starts on the model's surface under it and rises to top, where the mount stands. A mount within
+  // CLIP_TOLERANCE of that surface, or over air, gets no post.
+  private riser(stand: ReturnType<typeof weaponStand>, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
+    const { at, foot } = stand;
+    const bottom = postBottom(foot, top);
     const mount = { ...at, pos: at.pos.clone().setY(top) };
     if (bottom >= top) return mount;
     const post = model('wmount_riser');
@@ -421,38 +459,44 @@ export class VehicleView {
   }
 
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
-  // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
-  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
+  // The head comes from weaponHead(): the receiver is its origin, the barrel joins at the muzzle socket and the extra at its extra socket.
+  // The post lifts the head over the cab ahead and over every obstacle and body surface the head can sweep, see clearTop().
+  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, obstacles: readonly Obstacle[]): void {
     const look = weaponLook(item.part.id, item.part.defId);
     const wear = lookOf(item);
+    const { head: parts, tip } = weaponHead(look);
+    for (const p of parts.children) tint(p, paint, wear);
+    const head = mergeStatic(parts);
+
+    const stand = weaponStand(v, item);
+    const headAt = socket(look.mount, 'head');
+    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
+    const shape = headShape(head, socket(look.receiver, 'muzzle').x);
+    // The head socket turns and stretches with the mount, so its x and z come from the mount's matrix.
     const mount = model(look.mount);
+    place(mount, stand.at);
+    mount.updateMatrix();
+    const pivot = headAt.clone().applyMatrix4(mount.matrix);
+    const own = rectOf(v, item);
+    const ground = surfaceSamples(v.chassisId, pivot, Math.max(shape.core, shape.reach) + SAMPLE_REACH)
+      .filter((s) => !(s.x >= own.x0 && s.x <= own.x1 && s.z >= own.z0 && s.z <= own.z1))
+      .map((s): Obstacle => ({ x0: s.x - s.half, x1: s.x + s.half, z0: s.z - s.half, z1: s.z + s.half, top: s.y }));
+    const clear = clearTop(pivot, shape, sweepOf(spans, active), [...obstacles, ...ground], GUN_GAP);
+    const top = Math.max(stand.top, clear - headAt.y - shape.bottom);
+    if (!Number.isFinite(top)) throw new Error(`Gun ${item.part.id} on ${v.chassisId} has a post height of ${top}`);
+
+    const at = this.riser(stand, item, paint, still, top);
     place(mount, at);
     tint(mount, paint, wear);
     still.add(mount);
-
-    const parts = new THREE.Group();
-    const receiver = model(look.receiver);
-    parts.add(receiver);
-    const barrel = model(look.barrel);
-    barrel.position.copy(socket(look.receiver, 'muzzle'));
-    const tip = socket(look.barrel, 'tip').add(barrel.position);
-    parts.add(barrel);
-    if (look.extra) {
-      const extra = model(look.extra);
-      extra.position.copy(socket(look.receiver, 'extra'));
-      parts.add(extra);
-    }
-    for (const p of parts.children) tint(p, paint, wear);
-    const head = mergeStatic(parts);
     mount.updateMatrix();
-    head.position.copy(socket(look.mount, 'head').applyMatrix4(mount.matrix));
+    head.position.copy(headAt.applyMatrix4(mount.matrix));
     this.anchors.set(item.part.id, { local: head.position.clone(), parent: this.body });
     if (!active) {
       still.add(head);
       return;
     }
     this.body.add(head);
-    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
     this.turrets.set(item.part.id, { head, tip, spans });
   }
 
@@ -514,7 +558,11 @@ export class VehicleView {
     if (!cab) throw new Error(`${v.id} has no cab`);
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const rear = cellRect(v.chassisId, itemCells(cab).filter((c) => c.y === row));
-    const antenna = mergeStatic(wrapped(model('antenna')));
+    const tip = wrapped(model('antenna'));
+    this.useLamp(tip);
+    const antenna = mergeStatic(tip);
+    this.halo = radioHalo(this.radioOn);
+    antenna.add(this.halo);
     antenna.position.set(rear.x0 + ANTENNA_INSET, surfaceAt(v.chassisId, rear), -body.half.z + ANTENNA_INSET);
     this.body.add(antenna);
     this.motion.addWhip(antenna, WHIPS.antenna);
@@ -622,12 +670,34 @@ function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
   return cells;
 }
 
-// Where a weapon stands. The post starts on the model's surface under the gun and rises to the highest point ahead of it
-// in its own lane, so the turret clears the cab in front but not a stack or a tire off to the side. The post and the
-// mount share x and z, at the center of the footprint.
-export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number } {
-  const bottom = standingY(v, item);
-  return { at: footprint(v, item, bottom), bottom, top: Math.max(bottom, highestAhead(v.chassisId, rectOf(v, item))) };
+// Where a weapon stands. The mount stands at the gun's rest, or higher up to the highest point ahead of it in its own lane,
+// so the turret clears the cab in front but not a stack or a tire off to the side. The riser post stands on the highest
+// surface under its column, so a mount perched on a cab edge never hangs over the lower bed. A mount within
+// CLIP_TOLERANCE of that surface stands on it with no post. A spare over air gets no post. The post and the mount share
+// x and z, at the center of the footprint.
+export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number; foot: number } {
+  const rest = standingY(v, item);
+  const at = footprint(v, item, rest);
+  const top = Math.max(rest, highestAhead(v.chassisId, rectOf(v, item)));
+  const foot = highestUnder(v.chassisId, postColumn(at.pos));
+  if (foot === -Infinity && isMounted(v.chassisId, item)) {
+    const cells = itemCells(item).map((c) => `${c.x},${c.y}`).join(' ');
+    throw new Error(`The ${v.chassisId} model has no surface under the post of gun ${item.kind === 'part' ? item.part.defId : item.id} mounted on ${cells}`);
+  }
+  return { at, bottom: postBottom(foot, top), top, foot };
+}
+
+// Where a post starts under a mount at top, given the surface under the post. No post when the mount touches it or nothing holds one.
+export function postBottom(foot: number, top: number): number {
+  return foot !== -Infinity && top - foot > CLIP_TOLERANCE ? foot : top;
+}
+
+// The riser post's column, in body meters, centered under a gun mount at. The post stands on the highest surface under
+// it. Its thin foot plate and gussets may overlap a taller edge next to it, so a post beside a cab wall still stands.
+export function postColumn(at: THREE.Vector3): CellRect {
+  const corner = socket('wmount_riser', 'column');
+  const half = { x: Math.abs(corner.x), z: Math.abs(corner.z) };
+  return { x0: at.x - half.x, x1: at.x + half.x, z0: at.z - half.z, z1: at.z + half.z };
 }
 
 // The highest model surface between the front of a rect and the nose, over the rect's width, in body meters.
@@ -671,11 +741,10 @@ export function standingY(v: Pick<Vehicle, 'chassisId'>, item: GridItem): number
   return restOf(v, item).y;
 }
 
-// The side an armor part covers: its mount letter, or for a spare the front if it lies wide and the left if it lies tall.
+// The side an armor part covers, by plateSide(), checked to be one cell deep.
 function armorSide(v: Vehicle, item: PartItem): SideLetter {
   const size = itemSize(item);
-  const side = isMounted(v.chassisId, item) ? sideOf(v, item.part) : size.w >= size.h ? 'F' : 'L';
-  if (!side) throw new Error(`Armor ${item.part.id} is mounted off a side letter`);
+  const side = plateSide(v.chassisId, item);
   const depthCells = ['F', 'B'].includes(side) ? size.h : size.w;
   if (depthCells !== 1) throw new Error(`Armor ${item.part.id} is ${depthCells} cells deep on side ${side}, expected 1`);
   return side;
@@ -742,6 +811,17 @@ export function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: numb
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(dz / (own.h * CELL.along), 1, dx / (own.w * CELL.across)) };
 }
 
+// A mounted plate is skin on the body, and a mounted engine sits in its bay under the hood cutout. Neither stands in a gun's way.
+function blocksGuns(v: Vehicle, item: PartItem, def: PartDef): boolean {
+  return !(isMounted(v.chassisId, item) && (def.kind === 'armor' || def.kind === 'engine'));
+}
+
+// The upright box a placed model fills, in body space.
+function obstacleOf(obj: THREE.Object3D): Obstacle {
+  const box = new THREE.Box3().setFromObject(obj);
+  return { x0: box.min.x, x1: box.max.x, z0: box.min.z, z1: box.max.z, top: box.max.y };
+}
+
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
@@ -774,8 +854,8 @@ function tint(obj: THREE.Object3D, paint: number, look: Look): void {
 }
 
 // Moves each vertex by an offset seeded by the part id and its position in the model's own space, so it ignores how the
-// model is placed. Corners that share a position move together, so faces stay closed.
-function jag(obj: THREE.Object3D, partId: string, step: number): void {
+// model is placed. Corners that share a position move together, so faces stay closed. The hulks in obstacles.ts share it.
+export function jag(obj: THREE.Object3D, partId: string, step: number): void {
   obj.updateMatrixWorld(true);
   const toModel = obj.matrixWorld.clone().invert();
   const box = new THREE.Box3();
@@ -793,10 +873,11 @@ function jag(obj: THREE.Object3D, partId: string, step: number): void {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const toMesh = toModel.clone().multiply(o.matrixWorld).invert();
     const p = new THREE.Vector3();
+    const offset = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(toModel);
       const d = jagOffset(partId, p.x, p.y, p.z, step, thinnest);
-      p.add(new THREE.Vector3(d.x, d.y, d.z)).applyMatrix4(toMesh);
+      p.add(offset.set(d.x, d.y, d.z)).applyMatrix4(toMesh);
       pos.setXYZ(i, p.x, p.y, p.z);
     }
     pos.needsUpdate = true;
@@ -875,10 +956,40 @@ function mergeStatic(group: THREE.Group): THREE.Group {
   return out;
 }
 
+function radioColor(lit: boolean): number {
+  return lit ? PAL.radioLight.on : PAL.radioLight.off;
+}
+
+// A soft red glow at the antenna tip, so a bulb a few centimeters wide still shows at game zoom.
+function radioHalo(lit: boolean): THREE.Sprite {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap(), color: PAL.radioLight.on, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+  sprite.scale.setScalar(RADIO_HALO);
+  sprite.raycast = () => {}; // a glow is not part of the truck, so clicks pass through it
+  sprite.position.set(0, RADIO_TIP, 0);
+  sprite.visible = lit;
+  return sprite;
+}
+
+// One soft round falloff shared by every halo, so a rebuild builds no texture.
+let haloTexture: THREE.DataTexture | null = null;
+function haloMap(): THREE.DataTexture {
+  if (haloTexture) return haloTexture;
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const d = Math.hypot((i % size) - size / 2 + 0.5, Math.floor(i / size) - size / 2 + 0.5) / (size / 2);
+    data.set([255, 255, 255, Math.round(255 * Math.max(0, 1 - d) ** 2)], i * 4);
+  }
+  haloTexture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  haloTexture.needsUpdate = true;
+  return haloTexture;
+}
+
 function disposeChildren(group: THREE.Group): void {
   for (const child of [...group.children]) {
     group.remove(child);
     child.traverse((o) => {
+      if (o instanceof THREE.Sprite) o.material.dispose(); // the shared halo map stays
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -893,4 +1004,36 @@ function disposeChildren(group: THREE.Group): void {
 // Every wheel part, whatever its size, hangs on a wheel mount.
 function isWheel(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'wheel';
+}
+
+// Wall-clock timing of the antenna radio light, so a call that freezes turns still blinks.
+export const RADIO_LIGHT = {
+  periodMs: 700, // one on and off cycle
+  spokeMs: 3000, // how long a truck keeps blinking after it talked in a turn
+};
+
+// Who blinks: the trucks on air now, and trucks that talked in a recently seen world.
+export class RadioLights {
+  private readonly until = new Map<string, number>();
+  private noted: World | null = null;
+  private air: { world: World; ids: Set<string> } | null = null; // onAir of the last world asked, once per world
+
+  note(world: World, now: number): void {
+    for (const [id, end] of this.until) if (end <= now) this.until.delete(id);
+    if (world === this.noted) return;
+    this.noted = world;
+    for (const id of radioSpeakers(world.events, world.player.vehicleId)) this.until.set(id, now + RADIO_LIGHT.spokeMs);
+  }
+
+  lit(world: World, id: string, now: number): boolean {
+    const end = this.until.get(id);
+    if (!this.onAir(world).has(id) && (end === undefined || end <= now)) return false;
+    const phase = (now / RADIO_LIGHT.periodMs + hashStr(id)) % 1;
+    return phase < 0.5;
+  }
+
+  private onAir(world: World): Set<string> {
+    if (this.air?.world !== world) this.air = { world, ids: new Set(onAir(world)) };
+    return this.air.ids;
+  }
 }

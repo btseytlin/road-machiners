@@ -4,7 +4,7 @@
 
 import {
   CheatError,
-  addSkillXp,
+  addXp,
   damagePartTo,
   give,
   grantPerk,
@@ -16,6 +16,7 @@ import {
   randomKit,
   repairAll,
   revealMap,
+  setEngineHeat,
   setFuel,
   setHealth,
   setMoney,
@@ -32,7 +33,7 @@ import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { partDef } from "../data/parts";
-import { levelOf, xpTodayOf } from "../sim/progress";
+import { xpTodayOf } from "../sim/progress";
 import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
@@ -98,16 +99,17 @@ export const COMMANDS: readonly Command[] = [
   setter("fuel", "Set fuel, capped by the tanks.", setFuel),
   setter("supplies", "Set supplies, capped by the storage.", setSupplies),
   setter("health", "Set driver health.", setHealth),
-  command("xp <skill> <n>", "Add XP to a skill.", { min: 2, max: 2 }, (world, [skill, text], usage) => {
+  setter("engineheat", "Set engine heat, 0 cold to 1 overheated.", setEngineHeat),
+  command("xp <n>", "Add XP to the pool to spend on ranks.", { min: 1, max: 1 }, (world, [text], usage) => {
     const n = parseNumber(text, usage);
-    return changed(addSkillXp(world, skill, n), `${skill} XP added: ${n}`);
+    return changed(addXp(world, n), `XP added: ${n}`);
   }),
-  command("perk <perk id>", "Grant a perk at any skill level.", { min: 1, max: 1 }, (world, [id]) => {
+  command("perk <perk id>", "Grant a perk at any skill rank.", { min: 1, max: 1 }, (world, [id]) => {
     const next = grantPerk(world, id);
     const granted = next.player.perks[next.player.perks.length - 1];
     return changed(next, `perk granted: ${PERKS[granted].name}`);
   }),
-  command("skills", "Show skill XP, levels, today's XP and XP per source.", { min: 0, max: 0 }, (world) => ({
+  command("skills", "Show the XP pool, skill ranks, today's XP per activity and XP per source.", { min: 0, max: 0 }, (world) => ({
     world: null,
     lines: skillLines(world),
   })),
@@ -143,8 +145,8 @@ export const COMMANDS: readonly Command[] = [
     const hour = parseNumber(text, usage);
     return changed(skipToHour(world, hour), `skipped to hour ${hour}`);
   }),
-  command("weather <storm|heatwave|overcast>", "Start that weather.", { min: 1, max: 1 }, (world, [kind]) =>
-    changed(startWeather(world, kind), `${kind} started`),
+  command("weather <storm|heatwave|overcast> [turns] [offset]", "Start that weather, for that many turns if given. A storm with an offset starts that many tiles east of the truck, still and at full strength.", { min: 1, max: 3 }, (world, [kind, turns, offset], usage) =>
+    changed(startWeather(world, kind, turns === undefined ? null : parseNumber(turns, usage), offset === undefined ? 0 : parseNumber(offset, usage)), `${kind} started`),
   ),
   command("reveal", "Mark the whole map explored.", { min: 0, max: 0 }, (world) =>
     changed(revealMap(world), "map revealed"),
@@ -196,10 +198,10 @@ export const COMMANDS: readonly Command[] = [
 function skillLines(world: World): string[] {
   const p = world.player;
   const skills = SKILL_IDS.map(
-    (id) => `${id}  level ${levelOf(p.skills[id])}  xp ${Math.round(p.skills[id])}  today ${Math.round(xpTodayOf(world, id))}/${XP_RULES.dailyCap}`,
+    (id) => `${id}  rank ${p.ranks[id]}  today ${Math.round(xpTodayOf(world, id))}/${XP_RULES.dailyCap}`,
   );
   const sources = (Object.keys(p.xpBySource) as XpSource[]).map((s) => `${s}  ${Math.round(p.xpBySource[s])} xp`);
-  return [...skills, ...sources];
+  return [`pool  ${Math.floor(p.xp)} xp`, ...skills, ...sources];
 }
 
 export function runCommand(world: World, line: string): CommandResult {

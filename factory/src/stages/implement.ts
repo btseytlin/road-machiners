@@ -1,16 +1,21 @@
-import { BRANCH, GAME_DIR, TASK_FILE, type Ctx } from '../types';
-import { agentHome, baseBranchOf, fillPrompt, guardAndPush, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { moveCard } from '../card-events';
+import { BRANCH, GAME_DIR, TASK_FILE, isCleanupTask, type Ctx } from '../types';
+import { agentHome, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+
+// Subagents read the code again from scratch, and the implementer subagent runs on Opus whatever model triage picked. The agent implements inline.
+export const IMPLEMENT_DISALLOWED = ['Agent'];
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
   const base = await baseBranchOf(ctx, issue);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
-  resetOutputs(home);
-  await runAgent(ctx, issue, 'implement', ctx.cfg.buildModel, fillPrompt('implement', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+  prepareOutputs(ctx, issue, home);
+  await writeIssueInput(ctx, issue, home);
+  await runAgent(ctx, issue, 'implement', 'implement', fillPrompt('implement', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }), { disallowedTools: IMPLEMENT_DISALLOWED });
   throwIfNeedsCommittee(home);
   const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
   if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
   await guardAndPush(ctx, issue, base, 'implement');
-  await ctx.github.move(issue, 'Testing');
+  await moveCard(ctx, issue, isCleanupTask((await ctx.github.issue(issue)).labels) ? 'Hardening' : 'Testing', 'built');
 }

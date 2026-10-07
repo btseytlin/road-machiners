@@ -9,7 +9,8 @@ export type SiteLocationDef = {
   kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
-  edge: SiteEdge;
+  // The edge of a site without a fortress curtain. A fortress site (FORTRESS_SITES) has none.
+  edge?: SiteEdge;
 };
 // Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
 // outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,
@@ -17,8 +18,8 @@ export type SiteLocationDef = {
 // decides inside and outside.
 export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
 export type LocationDef = SiteLocationDef | TerritoryDef;
-// What closes a location on its collision edge. Towns always have a town wall.
-export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
+// What closes a location on its collision edge, when no fortress curtain does.
+export type SiteEdge = "fence" | "wrecks";
 export const MAP_SCALE = 5;
 
 export function scalePoint(p: Vec): Vec {
@@ -60,8 +61,42 @@ function bend(a: Vec, b: Vec): Vec[] {
   return points;
 }
 
-const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
-const FALLEN_SUN_RADIUS = 44;
+export const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
+// The Fallen Sun's edge, in tiles from its centre (tmp/issue-81/r4/layout.md): the basin floor in TERRAIN.features.basins,
+// inset 1.5 tiles from the cliff arcs so their faces stay outside, with the crash furrow's floor spliced in to the
+// south-south-west. It is not a circle: the furrow reaches 112 tiles out and the crags come within 40.
+const FALLEN_SUN_OUTLINE: Vec[] = [
+  { x: -45.0, y: 0.0 }, // the west scree
+  { x: -41.3, y: -15.0 },
+  { x: -31.0, y: -26.0 }, // the left crag wall, inset
+  { x: -20.9, y: -33.5 },
+  { x: -11.4, y: -39.9 },
+  { x: -6.3, y: -44.6 }, // the north notch, at the floor edge, so a road can leave through it
+  { x: 1.6, y: -45.0 },
+  { x: 7.2, y: -40.9 }, // the right crag wall and the north-east wall, inset
+  { x: 15.3, y: -47.1 },
+  { x: 27.8, y: -44.5 },
+  { x: 37.8, y: -37.8 },
+  { x: 45.9, y: -26.5 }, // the east road
+  { x: 50.2, y: -8.9 }, // the east hill's foot
+  { x: 50.2, y: 8.9 },
+  { x: 45.3, y: 21.1 },
+  { x: 39.8, y: 33.4 }, // the south-east road
+  { x: 25.5, y: 44.2 },
+  { x: 8.2, y: 46.3 }, // the open south
+  { x: -2.4, y: 55.3 }, // down the furrow's east side
+  { x: -8.6, y: 78.4 },
+  { x: -13.6, y: 101.9 }, // a tile out from the furrow's east side, so the east lane past the wing's foot stays inside
+  { x: -22.6, y: 115.1 }, // round the furrow's far end, 3 tiles past its floor so the tail junction behind the wing fits
+  { x: -30.8, y: 114.9 },
+  { x: -38.8, y: 110.9 },
+  { x: -38.8, y: 95.4 }, // back up the furrow's west side, a tile out so the west lane past the wing's foot stays inside
+  { x: -31.8, y: 72.2 },
+  { x: -25.6, y: 49.1 },
+  { x: -23.5, y: 40.7 }, // the furrow's west lip
+  { x: -37.7, y: 26.4 },
+  { x: -43.5, y: 11.6 }, // the west road
+];
 const ORCHARD_POS = { x: 114, y: 284 }; // region (22.8, 56.8), the crossroads in the flat basin west of the north trunk road
 // Old Orchard's old road runs straight through its centre, in radians from map +x toward +y, pointing to its north
 // end. It is set so the gameplay camera shows the road at the concept image's 25 degrees above screen right.
@@ -137,9 +172,9 @@ function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Ve
   return { x: from.x + d.x * t, y: from.y + d.y * t };
 }
 
-// A point dx, dy tiles from the Fallen Sun's centre.
-function fromFallenSun(dx: number, dy: number): Vec {
-  return { x: FALLEN_SUN_POS.x + dx, y: FALLEN_SUN_POS.y + dy };
+// A point in tiles from the Fallen Sun's centre, on the map.
+function fromFallenSun(x: number, y: number): Vec {
+  return { x: FALLEN_SUN_POS.x + x, y: FALLEN_SUN_POS.y + y };
 }
 
 // Broken Wing: a crashed ship's wing lying along the road, which runs straight east-west (map yaw 0) so the wing
@@ -206,6 +241,11 @@ export const REGION = {
     // A shortcut may cost this share more than the bends it replaces, so routes take fewer bends. It stays
     // well below the road margin, so roads stay followed.
     straighten: 0.05,
+    // Road cost multiplier for a driver who keeps off roads: a raider that retreats, flees or is stranded. Open
+    // ground costs at most 1.3 x 1.75 / 0.9 = 2.5 per tile on the worst taste, and a road at least 0.7 x 6 = 4.2,
+    // so ground beside a road beats the road even after the heuristic weight's 20% slack. It is a cost, not a
+    // block, so such a route still crosses a road where it must, and the ground beside sites stays priced as road.
+    roadShyCost: 6,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
@@ -215,7 +255,6 @@ export const REGION = {
     { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
-      edge: "stone",
       name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 33.8, y: 32 }),
@@ -223,7 +262,6 @@ export const REGION = {
     },
     {
       id: "granary",
-      edge: "palisade",
       name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 32.8 }),
@@ -263,7 +301,6 @@ export const REGION = {
     },
     {
       id: "green-pit",
-      edge: "stone",
       name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
@@ -271,7 +308,6 @@ export const REGION = {
     },
     {
       id: "south-lock",
-      edge: "fence",
       name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 56.8, y: 94 }),
@@ -287,7 +323,6 @@ export const REGION = {
     },
     {
       id: "pump-station",
-      edge: "fence",
       name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 40.7, y: 51.7 }),
@@ -298,12 +333,11 @@ export const REGION = {
       name: "Fallen Sun",
       kind: "territory",
       pos: FALLEN_SUN_POS,
-      radius: FALLEN_SUN_RADIUS,
-      outline: null,
+      radius: boundingRadius(FALLEN_SUN_OUTLINE),
+      outline: FALLEN_SUN_OUTLINE,
     },
     {
       id: "salvage-yard",
-      edge: "palisade",
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
@@ -319,10 +353,9 @@ export const REGION = {
       pos: BROKEN_WING_SITE,
       radius: 6,
     },
-    // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
+    // Raider camps. Raiders spawn at their gates and service there.
     {
       id: "scrapjaw",
-      edge: "camp",
       name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
@@ -330,7 +363,6 @@ export const REGION = {
     },
     {
       id: "kiln",
-      edge: "camp",
       name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),
@@ -434,34 +466,33 @@ export const REGION = {
       { x: 61, y: 79 },
       { x: 66, y: 76 },
     ]),
-    // Three dead-end approaches come down the crater bank from the west, east and south, and end on the floor in
-    // the gaps between the hull sections. No road goes through the Fallen Sun. The south road leaves the Kiln Camp
-    // track, so raiders have a short way in.
+    // Three dead-end approaches come down the crater bank where the level concept's tracks leave the crater: from the
+    // west (bearing 166°), the east (-27°) and the south-east (37°). Each ends 4 tiles inside the outline, on the dirt
+    // road web, which takes over there (tmp/issue-81/r4/layout.md). Points are in tiles from the centre. No road goes
+    // through the Fallen Sun. The east road comes in south of the small drum, on the second reference's road out of its
+    // right edge, instead of round 3's -16°, where the bow, the hazard and the east shards walled it in. The south-east
+    // road leaves the end of the Kiln Camp track, so raiders have a short way in.
     [
       ...scaleRoad([
         { x: 43, y: 54 },
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      fromFallenSun(-FALLEN_SUN_RADIUS, 0),
-      fromFallenSun(-24, 13),
+      fromFallenSun(-39.71, 9.9),
+    ],
+    [
+      scalePoint({ x: 82, y: 49 }),
+      fromFallenSun(95, -36),
+      fromFallenSun(75, -37),
+      fromFallenSun(58, -34),
+      fromFallenSun(43.01, -21.92),
     ],
     [
       ...scaleRoad([
-        { x: 82, y: 49 },
-        { x: 75, y: 50 },
-        { x: 74, y: 56 },
+        { x: 66, y: 76 },
+        { x: 73, y: 64 },
       ]),
-      fromFallenSun(FALLEN_SUN_RADIUS, 0),
-      fromFallenSun(26, -8),
-    ],
-    [
-      ...scaleRoad([
-        { x: 61, y: 79 },
-        { x: 63.6, y: 70.4 },
-      ]),
-      fromFallenSun(4, 52),
-      fromFallenSun(2, 24),
+      fromFallenSun(37.75, 28.44),
     ],
   ] as Vec[][],
   roadWidth: 6,
@@ -475,10 +506,6 @@ export const REGION = {
     maxTries: 20000,
   },
   sites: {
-    buildingsPerTown: 10,
-    buildingRing: [0.62, 0.82] as [number, number], // buildings fit inside the non-drivable town radius
-    buildingRadius: [0.75, 1.2] as [number, number],
-    roadGapAngle: 0.38, // radians kept clear on each side of a road leaving a town
     convoyWrecks: [
       { x: -2.6, y: 0.6 },
       { x: 0.8, y: -2.6 },
@@ -492,30 +519,15 @@ export const REGION = {
     multiGateRadius: 12, // tiles; towns and locations at least this large get a gate per road, smaller sites get one
   },
   settlement: {
-    streetSpacing: 5, // 20 m blocks, with houses separated by alleys
-    houseWidth: 2.7, // 10.8 m, against the pickup's 5.2 m length
-    houseDepth: 2.1,
-    houseHeights: [1.1, 1.8],
-    wallHeight: 1.6, // 6.4 m, well over a truck roof
-    wallThickness: 1.2,
-    wallSegment: 3, // tiles per straight wall section around the curve
-    wallTowerEvery: 5, // wall sections between towers
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
-    palisadeHeight: 1, // 4 m of scrap and posts
-    palisadeThickness: 0.6,
-    palisadeSegment: 1.5,
-    stoneHeight: 0.6, // 2.4 m of piled stone around an oasis
-    stoneThickness: 0.9,
-    stoneSegment: 1.2,
     fenceHeight: 0.8, // 3.2 m of posts and rails
     fenceThickness: 0.15,
     fenceSegment: 1.5,
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
-    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
+    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so

@@ -2,20 +2,23 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
+import { FALLEN_SUN_DECKS } from '../data/territory';
+import { deckById } from './bridge';
 import { resetPerf, perfSnapshot } from '../perf';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isDriveObstacle, propBoxes, propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
+import { COARSE, componentOf, dynamicBlockers, navLayer, onRouteRoad, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
-import type { Obstacle, World } from './types';
+import type { Obstacle, Vehicle, World } from './types';
 import { siteGap, siteGates } from './sites';
-import { editableTerrain, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
@@ -122,15 +125,6 @@ describe("route", () => {
   });
 
 
-  it('town buildings fit inside the blocked site instead of the road', () => {
-    const w = w1337;
-    for (const town of REGION.towns) {
-      const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
-      expect(buildings.length).toBeGreaterThan(0);
-      for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
-    }
-  });
-
   it('player routes on the real map stay direct', () => {
     const w = w1337;
     const size = w.terrain.size;
@@ -162,6 +156,58 @@ describe("route", () => {
   });
 });
 
+describe('raised deck ends', () => {
+  const flap = deckById(FALLEN_SUN_DECKS[0].id);
+  const on = (along: number, across: number): Vec => ({
+    x: flap.from.x + flap.axis.x * along - flap.axis.y * across,
+    y: flap.from.y + flap.axis.y * along + flap.axis.x * across,
+  });
+  const alongOf = (p: Vec) => (p.x - flap.from.x) * flap.axis.x + (p.y - flap.from.y) * flap.axis.y;
+  const acrossOf = (p: Vec) => (p.y - flap.from.y) * flap.axis.x - (p.x - flap.from.x) * flap.axis.y;
+  const onFlap = (p: Vec) => alongOf(p) >= 0 && alongOf(p) <= flap.length && Math.abs(acrossOf(p)) <= flap.width / 2;
+
+  // Points along the route every twentieth of a tile.
+  function samples(points: Vec[]): Vec[] {
+    const out = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const n = Math.max(1, Math.ceil(dist(points[i - 1], points[i]) * 20));
+      for (let k = 1; k <= n; k++) out.push({ x: points[i - 1].x + ((points[i].x - points[i - 1].x) * k) / n, y: points[i - 1].y + ((points[i].y - points[i - 1].y) * k) / n });
+    }
+    return out;
+  }
+
+  // Each step that gets on or off the flap does so over its low end, never over the lip or a rail.
+  function expectOnAndOffOverLowEnd(points: Vec[]): void {
+    const path = samples(points);
+    for (let i = 1; i < path.length; i++) {
+      if (onFlap(path[i]) === onFlap(path[i - 1])) continue;
+      expect(alongOf(path[i]), `${path[i].x},${path[i].y}`).toBeLessThan(0.5);
+      expect(Math.abs(acrossOf(path[i]))).toBeLessThan(flap.width / 2);
+    }
+  }
+
+  it('climbs from the landing below the lip onto the flap only round by its low end', () => {
+    const radius = 0.5;
+    const below = on(flap.length + 4, 0);
+    const top = on(flap.length - 1.5, 0);
+    const points = [below, ...route(w1337, below, top, radius, [])];
+
+    expect(points.at(-1)).toEqual(top);
+    expectOnAndOffOverLowEnd(points);
+    expect(routeLength(below, points.slice(1))).toBeGreaterThan(flap.length);
+  });
+
+  it('never routes off the flap over its lip, though the landing lies straight ahead', () => {
+    const radius = 0.5;
+    const top = on(flap.length - 1.5, 0);
+    const landing = on(flap.length + 6, 0);
+    const points = [top, ...route(w1337, top, landing, radius, [])];
+
+    expect(points.at(-1)).toEqual(landing);
+    expectOnAndOffOverLowEnd(points);
+  });
+});
+
 describe('driver taste', () => {
   const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
   const site = (id: string) => {
@@ -172,11 +218,14 @@ describe('driver taste', () => {
   const from = siteGates(site('nose'))[0];
   const to = siteGates(site('dustwell'))[0];
   const w = w1337;
+  const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
+  // A trader driver: the player's truck under another id with a brain.
+  const trader = (id: string): Vehicle => ({ ...me, id, faction: 'traders', brain });
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
 
   it('sends drivers between the same towns along different ways', () => {
-    const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
+    const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], trader(`v${100 + i}`))]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
     // Nose and Dustwell have two roads of close length, the north trunk past Burnt Convoy and the middle road over
     // Broken Wing.
@@ -184,12 +233,12 @@ describe('driver taste', () => {
   });
 
   it('gives one driver the same route every time', () => {
-    const driver = { id: 'v100', brain };
+    const driver = trader('v100');
     expect(route(w, from, to, 0.8, [], driver)).toEqual(route(w, from, to, 0.8, [], { ...driver }));
   });
 
   it('plans the plain route for the player', () => {
-    expect(route(w, from, to, 0.8, [], { id: w.player.vehicleId, brain: null })).toEqual(route(w, from, to, 0.8, []));
+    expect(route(w, from, to, 0.8, [], me)).toEqual(route(w, from, to, 0.8, []));
   });
 });
 
@@ -335,6 +384,135 @@ describe('routes prefer roads', () => {
     const w = roadWorld([a, { x: 100, y: 160 }, { x: 160, y: 160 }, b]);
     const pts = route(w, a, b, 0.6, []);
     expect(routeLength(a, pts)).toBeLessThan(1.2 * dist(a, b));
+  });
+});
+
+describe('raiders that keep off roads', () => {
+  // Flat hardpan with roads of the given center lines and the map's road width.
+  function roadWorld(...roads: Vec[][]): World {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    for (let y = 0; y < t.size; y++)
+      for (let x = 0; x < t.size; x++) t.types[y * t.size + x] = roads.some((r) => polylineDist({ x: x + 0.5, y: y + 0.5 }, r) < REGION.roadWidth / 2) ? 'road' : 'hardpan';
+    return w;
+  }
+
+  // A raider on patrol, which keeps to roads, and `flee` to turn it into one that keeps off them.
+  function raider(w: World, pos: Vec): Vehicle {
+    const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], pos);
+    v.brain = npcBrain('test', pos, []);
+    v.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    return v;
+  }
+  function flee(v: Vehicle): void {
+    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'test flee' });
+  }
+
+  // Lengths of the stretches of a route on road tiles that keep-off-road drivers pay for, sampled every quarter tile.
+  function roadRuns(w: World, from: Vec, points: Vec[]): number[] {
+    const nav = terrainNav(w.terrain);
+    const runs: number[] = [];
+    let run = 0;
+    let prev = from;
+    for (const p of points) {
+      const n = Math.max(1, Math.ceil(dist(prev, p) * 4));
+      for (let k = 0; k < n; k++) {
+        if (onRouteRoad(nav, prev.x + ((p.x - prev.x) * k) / n, prev.y + ((p.y - prev.y) * k) / n)) run += dist(prev, p) / n;
+        else if (run > 0) {
+          runs.push(run);
+          run = 0;
+        }
+      }
+      prev = p;
+    }
+    if (run > 0) runs.push(run);
+    return runs;
+  }
+  const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+  it('drives beside a road that a raider on patrol drives along, to the same end', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 100 };
+    const w = roadWorld([{ x: 90, y: 100 }, { x: 170, y: 100 }]);
+    const v = raider(w, a);
+    const plain = route(w, a, b, 0.6, [], v);
+    flee(v);
+    const off = route(w, a, b, 0.6, [], v);
+    expect(total(roadRuns(w, a, plain))).toBeGreaterThan(50);
+    expect(Math.max(0, ...roadRuns(w, a, off).slice(1, -1))).toBe(0);
+    // It leaves the road where it starts and joins it where it ends, a road half width each.
+    expect(total(roadRuns(w, a, off))).toBeLessThan(REGION.roadWidth + 2);
+    expect(off.at(-1)).toEqual(plain.at(-1));
+  });
+
+  it('crosses a road lying across its way once, straight over', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 100 };
+    const w = roadWorld([{ x: 130, y: 20 }, { x: 130, y: 190 }]);
+    const v = raider(w, a);
+    flee(v);
+    const runs = roadRuns(w, a, route(w, a, b, 0.6, [], v));
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toBeLessThan(REGION.roadWidth + 1.5);
+  });
+
+  it('keeps away from a cliff beside the road as a plain route does', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 100 };
+    const w = roadWorld([{ x: 90, y: 100 }, { x: 170, y: 100 }]);
+    const t = w.terrain;
+    const n = t.size + 1;
+    // A sheer step down along the road's south side, so only the north side is open.
+    for (let j = 104; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = -8;
+    const v = raider(w, a);
+    flee(v);
+    const off = route(w, a, b, 0.6, [], v);
+    let prev = a;
+    for (const p of off) {
+      for (let k = 0; k <= 20; k++) expect(isCliff(t, tileAt(t, { x: prev.x + ((p.x - prev.x) * k) / 20, y: prev.y + ((p.y - prev.y) * k) / 20 }))).toBe(false);
+      prev = p;
+    }
+    expect(total(roadRuns(w, a, off))).toBeLessThan(REGION.roadWidth + 2);
+  });
+
+  it('turns off the road toward its camp on the real map', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
+    const pad = siteGates(kiln)[0];
+    // On the road north east of the camp, which a plain route follows for 60% of the 70 tiles to the gate.
+    const start = { x: 354.5, y: 331.5 };
+    expect(onRouteRoad(terrainNav(w.terrain), start.x, start.y)).toBe(true);
+    const v = raider(w, start);
+    const plain = route(w, start, pad, 0.8, [], v);
+    flee(v);
+    const off = route(w, start, pad, 0.8, [], v);
+    const plainRoad = total(roadRuns(w, start, plain)) / routeLength(start, plain);
+    const offRuns = roadRuns(w, start, off);
+    expect(total(offRuns) / routeLength(start, off)).toBeLessThan(plainRoad / 2);
+    // Past the stretch it starts on, no stretch on road is longer than a crossing.
+    expect(Math.max(0, ...offRuns.slice(1))).toBeLessThan(REGION.roadWidth * 2);
+    expect(dist(off.at(-1)!, plain.at(-1)!)).toBeLessThan(0.01);
+  });
+
+  it('caches routes on and off roads apart, and drops a kept route once the driver strands', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 100 };
+    const w = roadWorld([{ x: 90, y: 100 }, { x: 170, y: 100 }]);
+    const v = raider(w, a);
+    const plain = route(w, a, b, 0.6, [], v);
+    flee(v);
+    const off = route(w, a, b, 0.6, [], v);
+    v.brain!.goals.pop();
+    expect(route(w, a, b, 0.6, [], v)).toEqual(plain);
+    expect(off).not.toEqual(plain);
+    const kept = keepRoute(w, b, plain, [], v);
+    expect(kept.offRoad).toBe(false);
+    expect(continueRoute(w, a, kept, b, 0.6, [], v)).not.toBeNull();
+    v.resources!.fuel = 0;
+    expect(continueRoute(w, a, kept, b, 0.6, [], v)).toBeNull();
+    const keptOff = keepRoute(w, b, off, [], v);
+    expect(keptOff.offRoad).toBe(true);
+    expect(continueRoute(w, a, keptOff, b, 0.6, [], v)).not.toBeNull();
   });
 });
 
@@ -673,7 +851,7 @@ describe('nav layers match the old grid rules', () => {
       const goal = Ref.nearestFree(g, Ref.cellOf(g, to));
       const layer = navLayer(w.terrain, w.obstacles, radius);
       expect(layer.n).toBe(g.n);
-      const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, extra), radius);
+      const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, extra), radius);
       expect(nearestFreeCell(layer, overlay, Ref.cellOf(g, to))).toBe(goal);
       if (goal === null) continue;
       const ref = Ref.astar(g, start, goal);
@@ -691,7 +869,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, 60_000);
+  }, budget(180_000)); // ten reference searches take seconds alone and over a minute when the whole suite shares the cores
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;
@@ -727,7 +905,7 @@ describe('nav layers match the old grid rules', () => {
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a new kill wreck changes the route without rebuilding the static layer', () => {
     const a = { x: 30, y: 30 };
@@ -825,7 +1003,7 @@ describe('long routes search a coarse corridor', () => {
     const local = { ...w, obstacles };
     const radius = 0.6;
     const layer = navLayer(local.terrain, local.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, local.terrain, []), radius);
     const g = Ref.grid(Ref.terrainLayer(local.terrain, radius), Ref.blockers(local, []), radius);
     const goal = Ref.cellOf(g, center);
     const from = { x: 40, y: 40 };
@@ -837,7 +1015,7 @@ describe('long routes search a coarse corridor', () => {
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
@@ -845,7 +1023,7 @@ describe('long routes search a coarse corridor', () => {
     for (let y = 16; y < w.size; y += 1.5) w.obstacles.push({ id: `wreck-w${y}`, pos: { x: 80, y }, r: 1, kind: 'wreck' });
     const radius = 0.6;
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, []), radius);
     const n = layer.n;
     const start = 200 * n + 60;
     const goal = 200 * n + 260;
@@ -877,5 +1055,5 @@ describe('long routes search a coarse corridor', () => {
     expect(found).toBeGreaterThanOrEqual(5);
     // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
-  }, 60_000);
+  }, budget(60_000));
 });

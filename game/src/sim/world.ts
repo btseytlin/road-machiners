@@ -5,7 +5,7 @@ import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
-import { PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
+import { MAX_RANK, PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
 import { CONDITION } from '../data/wear';
 import { RULES } from '../data/rules';
 import type { StartKit } from '../data/start';
@@ -15,29 +15,32 @@ import { gridOf, placementError } from './grid';
 import { addGoods } from './inventory';
 import { isPerkId, pickedFromPair, skillLevel } from './progress';
 import { fitStores } from './resources';
-import { generateObstacles, obstacleReach } from './mapgen';
+import { generateObstacles, touchesObstacle } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
-import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { spillDeadRows } from './spill';
+import { fadeCraters } from './craters';
 import { timed } from '../perf';
-import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
+import { noteHurt, resolveNpcActivities } from './npc-activities';
+import { watchStalls } from './npc-watchdog';
 import { advanceStates } from './states';
+import { forgetOld } from './memory';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
-import { vehicleStats } from './stats';
+import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
@@ -68,6 +71,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     vehicles: [],
     obstacles: [],
     broken: [],
+    craters: [],
     salvage: [],
     shops: {},
     terrain: map.terrain,
@@ -75,7 +79,8 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     player: {
       vehicleId: "",
       money: kit.money,
-      skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
+      xp: 0,
+      ranks: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpDay: 1,
       repeats: {},
@@ -97,6 +102,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       townPatched: false,
       engineHeat: 0,
       overdrive: false,
+      headlights: false,
       discovered: [],
       scavenged: [],
       storage: [],
@@ -136,7 +142,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     brain: null,
   });
   const blocked = world.obstacles.filter(
-    (o) => dist(o.pos, truck.pos) < obstacleReach(o) + vehicleStats(world, truck).radius,
+    (o) => touchesObstacle(o, world.terrain, truck.pos, vehicleStats(world, truck).radius),
   );
   if (blocked.length > 0)
     throw new Error(
@@ -199,7 +205,15 @@ export function update(world: World, fn: (draft: World) => void): World {
   draft.removed = [];
   fn(draft);
   settleAims(draft);
+  settleOverdrive(draft);
   return draft;
+}
+
+// Overdrive cuts out once the engine is too worn for it, whatever wore it down. Only the player turns it back on.
+function settleOverdrive(w: World): void {
+  if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
+  w.player.overdrive = false;
+  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
 // Whether player commands are allowed now. The UI checks it before issuing one.
@@ -225,11 +239,15 @@ export function autoRuns(world: World): boolean {
   return waitsOnBeacon(world);
 }
 
+// Slower than `RULES.parkedSpeed` with no move order.
+export function isAtRest(v: Vehicle): boolean {
+  return v.speed <= RULES.parkedSpeed && (v.order === null || v.order.kind === 'brake');
+}
+
 function waitsOnBeacon(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
-  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
-  return p.state === 'active' && p.beacon && parked && playerTow(world) === null;
+  return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
@@ -269,10 +287,12 @@ export function endTurn(
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
     applyWear(w);
+    spillDeadRows(w);
     advanceEngineHeat(w);
     advanceDust(w);
     clearPiles(w);
     renewSalvage(w);
+    fadeCraters(w);
     advanceJobs(w);
     startAutoRepair(w);
     refreshVision(w);
@@ -280,9 +300,9 @@ export function endTurn(
     assignAutoOrders(w);
     settleAims(w);
     fireWeapons(w);
-    fireGuards(w);
     consumeSupplies(w);
     applyHazards(w);
+    spillDeadRows(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);
@@ -295,6 +315,7 @@ export function endTurn(
     advanceAid(w);
     advanceStates(w);
     checkBeacon(w);
+    forgetOld(w);
     resolveNpcActivities(w);
     noteEngagements(w);
     discoverSites(w);
@@ -361,8 +382,17 @@ export function setAutoRepair(world: World, on: boolean): World {
 
 export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
+    if (on && !canOverdrive(playerVehicle(w))) {
+      throw new Error(`Cannot overdrive: the engine is at or below ${RULES.overdriveMinEngineShare * 100}% of its max HP`);
+    }
     w.player.overdrive = on;
   });
+}
+
+// The one switch that flips while a turn plays, so it skips update(): that would empty the events and removed
+// vehicles the turn is still showing. No rule reads the lamps, so nothing else needs settling.
+export function setHeadlights(world: World, on: boolean): World {
+  return { ...world, player: { ...world.player, headlights: on } };
 }
 
 export function setAutoFire(world: World, on: boolean): World {
@@ -384,7 +414,8 @@ export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good';
 export type Carried = {
   seed: number | null;
   money: number | null;
-  skills: Partial<Record<string, number>>; // XP per skill id
+  xp: number | null; // unspent XP
+  ranks: Partial<Record<string, number>>; // bought ranks per skill id
   xpBySource: Partial<Record<string, number>>;
   perks: string[];
   discovered: string[];
@@ -448,12 +479,13 @@ function carryPlayer(world: World, c: Carried): void {
     supplies: pick(c.supplies, p.supplies),
     discovered: c.discovered.filter((id) => KNOWN_SITES.has(id)),
   });
-  for (const skill of SKILL_IDS) p.skills[skill] = pick(c.skills[skill], 0);
+  p.xp = Math.max(0, pick(c.xp, 0));
+  for (const skill of SKILL_IDS) p.ranks[skill] = Math.min(MAX_RANK, Math.max(0, Math.floor(pick(c.ranks[skill], 0))));
   for (const source of Object.keys(XP_SOURCES) as XpSource[]) p.xpBySource[source] = pick(c.xpBySource[source], 0);
   carryPerks(world, c.perks);
 }
 
-// A perk stays when its skill reached its level and no perk of its pair is picked yet.
+// A perk stays when its skill reached its rank and no perk of its pair is picked yet.
 function carryPerks(world: World, perks: string[]): void {
   for (const perk of perks.filter(isPerkId)) {
     const { skill, level } = PERKS[perk];

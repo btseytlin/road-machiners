@@ -73,7 +73,7 @@ it('hides NPC traits without the read the driver perk', () => {
 function loadedHauler() {
   const w = emptyWorld();
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
-  npc.brain = npcBrain('hauler', npc.pos, ['trader']);
+  npc.brain = npcBrain('trader', npc.pos, ['trader']);
   expect(addGoods(w, npc, 'salt', 2) + addGoods(w, npc, 'scrap', 1)).toBe(3);
   if (!stowPart(w, npc, makePart(w, 'mg', 0))) throw new Error('No room for the spare gun');
   return { w, npc };
@@ -254,8 +254,8 @@ describe('events far from the player', () => {
 
 it('says a perk can be picked when a skill reaches a perk level', () => {
   const w = emptyWorld();
-  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Perk ready [C].');
-  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving reached level 3.');
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving rank 2 bought. Perk ready [C].');
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving rank 3 bought.');
 });
 
 it('names both trucks, the destination and the fee in a tow between NPCs', () => {

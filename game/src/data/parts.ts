@@ -1,5 +1,6 @@
 import type { Tier } from './market';
 import { UNPRICED_WEAPONS } from './weapons';
+import { MASS_SCALE } from './mass-scale';
 
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
@@ -37,6 +38,8 @@ export type WeaponClass = "damager" | "chip" | "precision";
 // One round. pen is the armor it gets through. speed in m/s. A round with a splashRadius above 0 explodes where it
 // lands, and every lane of any truck within splashRadius meters takes splashDamage and splashPen. A blast round
 // meets blastArmor on armor parts. Splash always counts as blast. Armor parts take damage and splash times armorShare.
+// craterRadius is the radius in meters of the crater an exploding round digs where it bursts on open ground, 0 for
+// none. See digCrater() in src/sim/craters.ts.
 export type WeaponRound = {
   damage: number;
   pen: number;
@@ -46,6 +49,7 @@ export type WeaponRound = {
   splashDamage: number;
   splashPen: number;
   armorShare: number;
+  craterRadius: number;
 };
 
 export type WeaponDef = PartBase & {
@@ -672,6 +676,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   tank: {
     id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
+  // The convertible's and the Lincoln's tank.
   tankLong: {
     id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
@@ -699,8 +704,15 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
 };
 
 export const PARTS: Record<string, PartDef> = Object.fromEntries(
-  Object.entries(UNPRICED_PARTS).map(([id, def]) => [id, pricePart(def)]),
+  Object.entries(UNPRICED_PARTS).map(([id, def]) => [id, pricePart(scaleMass(def))]),
 );
+
+// Armor and weapons take their kind's MASS_SCALE.
+function scaleMass(def: Unpriced<PartDef>): Unpriced<PartDef> {
+  if (def.kind === "armor") return { ...def, mass: def.mass * MASS_SCALE.armor };
+  if (def.kind === "weapon") return { ...def, mass: def.mass * MASS_SCALE.weapon };
+  return def;
+}
 
 export function partDef(id: string): PartDef {
   const def = PARTS[id];

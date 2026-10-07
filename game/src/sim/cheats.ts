@@ -7,7 +7,7 @@ import { GEAR_LEVEL_IDS, NPCS, type GearLevel, type NpcTemplate } from '../data/
 import { PARTS, partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS } from '../data/rules';
-import { PERK_IDS, PERKS, SKILL_IDS } from '../data/skills';
+import { PERK_IDS, PERKS } from '../data/skills';
 import { TIME } from '../data/time';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { damagePart, isJunk, maxHp, restorePart } from './wear';
@@ -24,13 +24,15 @@ import { isFree, spawnAt } from './spawn';
 import { addState, settleStates, stateOf } from './states';
 import { isTowed } from './tow';
 import { clockOf } from './sun';
-import type { Faction, SkillId, Vehicle, World } from './types';
+import type { Faction, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { randInt } from './rng';
 import { refreshVision } from './vision';
+import { WEATHER } from '../data/weather';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
 import { fuelCap, suppliesCap } from './stats';
+import { spillDeadRows } from './spill';
 
 // Bad user input to a cheat. Any other error from a cheat is a bug.
 export class CheatError extends Error {}
@@ -72,27 +74,27 @@ export function setSupplies(world: World, n: number): World {
   return update(world, (w) => { w.player.supplies = n; });
 }
 
+export function setEngineHeat(world: World, n: number): World {
+  requireRange('Engine heat', n, 0, 1);
+  return update(world, (w) => { w.player.engineHeat = n; });
+}
+
 export function setHealth(world: World, n: number): World {
   requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
 }
 
-export function addSkillXp(world: World, skill: string, n: number): World {
-  if (!isSkillId(skill)) throw new CheatError(`No skill ${skill}. Skills: ${SKILL_IDS.join(', ')}`);
+export function addXp(world: World, n: number): World {
   requireInteger('XP', n, 1, Number.MAX_SAFE_INTEGER);
-  return update(world, (w) => grantXp(w, skill, n));
+  return update(world, (w) => grantXp(w, n));
 }
 
-// Grants a perk whatever the skill level. A pair still holds one pick.
+// Grants a perk whatever the skill rank. A pair still holds one pick.
 export function grantPerk(world: World, id: string): World {
   if (!isPerkId(id)) throw new CheatError(`No perk ${id}. Perks: ${PERK_IDS.join(', ')}`);
   const picked = pickedFromPair(world, id);
   if (picked) throw new CheatError(`${PERKS[picked].name} is already picked from the pair of ${PERKS[id].name}`);
   return update(world, (w) => { w.player.perks.push(id); });
-}
-
-function isSkillId(id: string): id is SkillId {
-  return (SKILL_IDS as readonly string[]).includes(id);
 }
 
 // Mounted and spare parts alike. Junk parts stay broken, since no repair rebuilds them.
@@ -112,6 +114,7 @@ export function damagePartTo(world: World, defId: string, hp: number): World {
     requireInteger('Hit points', hp, 0, maxHp(part));
     if (hp <= part.hp) {
       damagePart(part, part.hp - hp, 0);
+      spillDeadRows(w);
       return;
     }
     if (part.hp === 0 && isJunk(part)) throw new CheatError(`${partDef(defId).name} is junk and cannot be rebuilt`);
@@ -237,13 +240,25 @@ export function skipToHour(world: World, hour: number): World {
   throw new Error(`No turn within a day of ${world.turn} starts hour ${hour}`);
 }
 
-export function startWeather(world: World, kind: string): World {
+// Starts weather, replacing any of that kind. A turn count overrides the drawn duration.
+// A storm starts at the truck, or offsetTiles east of it as a still storm already at full strength, for driving into.
+export function startWeather(world: World, kind: string, turns: number | null, offsetTiles: number): World {
   const known = WEATHER_KINDS.find((k) => k === kind);
   if (!known) throw new CheatError(`Unknown weather ${kind}. Kinds: ${WEATHER_KINDS.join(', ')}`);
+  if (turns !== null) requireInteger('Turns', turns, 1, Number.MAX_SAFE_INTEGER);
+  requireInteger('Offset', offsetTiles, 0, Number.MAX_SAFE_INTEGER);
   return update(world, (w) => {
     w.weather = w.weather.filter((e) => e.kind !== known);
     const event = makeWeather(w, known);
-    if (event.kind === 'storm') event.pos = { ...playerVehicle(w).pos };
+    if (turns !== null) event.turnsLeft = turns;
+    if (event.kind === 'storm') {
+      const at = playerVehicle(w).pos;
+      event.pos = { x: Math.min(w.size, at.x + offsetTiles), y: at.y };
+      if (offsetTiles > 0) {
+        event.vel = { x: 0, y: 0 };
+        event.born = w.turn - WEATHER.sim.stormFadeTurns;
+      }
+    }
     w.weather.push(event);
     w.events.push({ t: 'weather', event, outcome: 'started' });
   });

@@ -1,0 +1,11 @@
+{
+  "turn": 60,
+  "player": { "vehicleId": "player", "scavenged": ["wreck3"] },
+  "vehicles": [
+    { "id": "player", "job": null },
+    { "id": "npc1", "job": null }
+  ],
+  "salvage": [
+    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
+  ]
+}

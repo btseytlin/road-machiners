@@ -1,19 +1,24 @@
 #!/bin/bash
 # Links the game's project skills from /work/game/.agents/skills into the ephemeral container home, then runs claude.
 # Claude Code loads user skills from ~/.claude/skills and does not discover .agents/skills.
+# The image ships the Blender image skill in ~/.claude/skills. A run without it would model from a reference blind, so it stops.
 set -euo pipefail
 
-src=/work/game/.agents/skills
+src=${FACTORY_GAME_SKILLS:-/work/game/.agents/skills}
 if [ ! -d "$src" ]; then
   echo "factory-agent: $src is missing" >&2
   exit 1
 fi
 
 mkdir -p "$HOME/.claude/skills"
+if [ ! -f "$HOME/.claude/skills/blender-image-to-3d/SKILL.md" ]; then
+  echo "factory-agent: the blender-image-to-3d skill is missing from $HOME/.claude/skills" >&2
+  exit 1
+fi
 for dir in "$src"/*/; do
-  if [ -f "${dir}SKILL.md" ]; then
+  if [ -f "${dir}SKILL.md" ] && [ ! -e "$HOME/.claude/skills/$(basename "$dir")" ]; then
     ln -s "${dir%/}" "$HOME/.claude/skills/$(basename "$dir")"
   fi
 done
 
-exec claude "$@"
+exec claude --append-system-prompt 'When your purpose changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, review, design, investigate, or waiting. Each time you start a new part of the work, run factory-status milestone with a short step in the task'"'"'s words, like "Building orchard buildings". Never name files, commands or secrets.' "$@"

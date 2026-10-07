@@ -14,7 +14,7 @@ import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
 import { siteGap } from '../sites';
 import { dist, type Vec } from '../vec';
-import { ObstacleBuckets, type Blocker } from './buckets';
+import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './buckets';
 
 export const CELL = 0.5; // tiles per grid cell
 export const CLEARANCE = 0.4; // extra gap from obstacles on top of the vehicle radius; covers RULES.maxBulge
@@ -26,6 +26,7 @@ export type TerrainNav = {
   cliffTile: Uint8Array; // 1 where the tile is too steep to drive
   tileCost: Float64Array; // route cost per tile driven: flatCost times the slope multiplier
   flatCost: Float64Array; // route cost per tile before the slope multiplier: 1 / terrain speed, times offRoadCost off the road
+  roadTile: Uint8Array; // 1 on a road tile that is not ground beside a site, for drivers who keep off roads
   slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
 };
 
@@ -78,20 +79,29 @@ function terrainEntry(t: Terrain) {
   let e = terrains.get(t);
   if (!e) {
     const n = Math.ceil(t.size / CELL);
-    const cliffTile = new Uint8Array(t.size * t.size);
-    const tileCost = new Float64Array(t.size * t.size);
-    const flatCost = new Float64Array(t.size * t.size);
-    for (let i = 0; i < t.size * t.size; i++) {
-      cliffTile[i] = isCliff(t, i) ? 1 : 0;
-      flatCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5));
-      tileCost[i] = flatCost[i] * slopeCost(t, i);
-    }
+    const tiles = tileLayers(t);
     const slow = new Float32Array(n * n);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, cliffTile, tileCost, flatCost, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tiles.tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
+    e = { nav: { size: t.size, n, ...tiles, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;
+}
+
+// The per-tile layers of a terrain, in one pass over its tiles.
+function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'flatCost' | 'roadTile'> {
+  const cliffTile = new Uint8Array(t.size * t.size);
+  const tileCost = new Float64Array(t.size * t.size);
+  const flatCost = new Float64Array(t.size * t.size);
+  const roadTile = new Uint8Array(t.size * t.size);
+  for (let i = 0; i < t.size * t.size; i++) {
+    cliffTile[i] = isCliff(t, i) ? 1 : 0;
+    const bySite = nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5);
+    flatCost[i] = routeCost(t.types[i], bySite);
+    tileCost[i] = flatCost[i] * slopeCost(t, i);
+    roadTile[i] = t.types[i] === 'road' && !bySite ? 1 : 0;
+  }
+  return { cliffTile, tileCost, flatCost, roadTile };
 }
 
 // Road tiles and the ground next to sites are on the road. Roads meet at site centers, but sites
@@ -120,6 +130,11 @@ export function terrainNav(t: Terrain): TerrainNav {
   return terrainEntry(t).nav;
 }
 
+// Whether map point (x, y) lies on a road tile that a driver keeping off roads pays extra for.
+export function onRouteRoad(nav: TerrainNav, x: number, y: number): boolean {
+  return nav.roadTile[tileIndex(nav.size, x, y)] === 1;
+}
+
 // Same clamping as tileAt.
 export function tileIndex(size: number, x: number, y: number): number {
   const tx = Math.min(size - 1, Math.max(0, Math.floor(x)));
@@ -134,16 +149,23 @@ export function nearCliff(nav: TerrainNav, x: number, y: number, reach: number):
   return c[tileIndex(s, x, y)] === 1 || c[tileIndex(s, x + reach, y)] === 1 || c[tileIndex(s, x - reach, y)] === 1 || c[tileIndex(s, x, y + reach)] === 1 || c[tileIndex(s, x, y - reach)] === 1;
 }
 
-// Built once per obstacles array and its content. Props break and grow back in place during a turn, so a hit
-// needs the same obstacle objects in the same order.
-const staticSets = new WeakMap<Obstacle[], { items: Obstacle[]; set: StaticSet }>();
+// Built once per obstacle list and terrain. The world is cloned every turn, so the list is keyed by each obstacle's
+// id and place in order, not by identity. Props break and grow back during play, which changes the list and rebuilds
+// the set. A live world and a preview world can alternate, so a few sets stay.
+const STATIC_SETS_KEPT = 4;
+const staticSets: { marks: ObstacleMark[]; terrain: Terrain; set: StaticSet }[] = [];
 
-export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
-  const hit = staticSets.get(obstacles);
-  if (hit && sameItems(hit.items, obstacles)) return hit.set;
+export function staticSet(obstacles: Obstacle[], terrain: Terrain): StaticSet {
+  const at = staticSets.findIndex((e) => e.terrain === terrain && sameMarks(e.marks, obstacles));
+  if (at === 0) return staticSets[0].set;
+  if (at > 0) {
+    const [hit] = staticSets.splice(at, 1);
+    staticSets.unshift(hit);
+    return hit.set;
+  }
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
   // A hazard zone blocks routes like a rock, but not driving: the player may still go in by hand.
-  const all = [...statics.map(driveBlocker), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
+  const all = [...statics.map((o) => driveBlocker(o, terrain)), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
   const breakable = statics.map(isBreakable);
   const solid = all.filter((_, i) => !breakable[i]);
   const set = {
@@ -151,28 +173,23 @@ export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
     solidKey: blockerKey(solid),
     solid,
     costly: all.filter((_, i) => breakable[i]),
-    buckets: new ObstacleBuckets(all, size),
+    buckets: new ObstacleBuckets(all, terrain.size),
   };
-  staticSets.set(obstacles, { items: obstacles.slice(), set });
+  staticSets.unshift({ marks: marksOf(obstacles), terrain, set });
+  staticSets.length = Math.min(staticSets.length, STATIC_SETS_KEPT);
   return set;
 }
 
-function sameItems(a: readonly Obstacle[], b: readonly Obstacle[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
 // Blockers that change during play: road and kill wrecks and the caller's extra circles.
-export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocker[] {
-  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map(driveBlocker), ...extra];
+export function dynamicBlockers(obstacles: Obstacle[], terrain: Terrain, extra: Blocker[]): Blocker[] {
+  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map((o) => driveBlocker(o, terrain)), ...extra];
 }
 
-// A site's edge blocks as a circle. A prop blocks with its boxes that start below truck roofs, so trucks pass
-// under canopies.
-function driveBlocker(o: Obstacle): Blocker {
+// A site's edge blocks as a circle. A prop blocks with its blocking boxes, so trucks pass under canopies and over
+// whatever lies under a deck.
+function driveBlocker(o: Obstacle, terrain: Terrain): Blocker {
   if (o.kind === 'site') return { pos: o.pos, r: o.r };
-  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o) } };
+  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o, terrain) } };
 }
 
 // Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.
@@ -182,7 +199,7 @@ export function blockerKey(blockers: Blocker[]): string {
 
 export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number): NavLayer {
   const e = terrainEntry(terrain);
-  const statics = staticSet(obstacles, terrain.size);
+  const statics = staticSet(obstacles, terrain);
   const key = `${radius}:${statics.key}`;
   const hit = e.layers.get(key);
   if (hit) return hit;
@@ -443,8 +460,9 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
 // between the same points take different ways. Value noise on a lattice of points
 // REGION.navigation.taste.scale tiles apart, smoothly blended between them. It multiplies route cost
 // by 1 - taste.strength / 2 to 1 + taste.strength / 2. Centering it on 1 keeps the A* estimate as tight
-// as for a plain route, so a tasted search visits about as many cells.
-export type Taste = { seed: number; side: number; values: Float32Array };
+// as for a plain route, so a tasted search visits about as many cells. An off-road taste also marks the road tiles
+// of a map `size` tiles wide, and multiplies their cost by REGION.navigation.roadShyCost.
+export type Taste = { seed: number; side: number; values: Float32Array; roads: Uint8Array | null; size: number };
 
 // Tastes are pure functions of seed and map size, and every route of a driver asks for its taste. 256 is many
 // times the NPC drivers alive at once.
@@ -472,7 +490,13 @@ export function makeTaste(seed: number, size: number): Taste {
   const side = Math.ceil(size / scale) + 2;
   const values = new Float32Array(side * side);
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) values[y * side + x] = 1 + strength * (hashRandom(seed, x, y) - 0.5);
-  return { seed, side, values };
+  return { seed, side, values, roads: null, size };
+}
+
+// The same taste for a driver who keeps off roads: road tiles cost more, so the route runs beside a road and
+// only crosses it.
+export function offRoadTaste(taste: Taste, nav: TerrainNav): Taste {
+  return { ...taste, roads: nav.roadTile, size: nav.size };
 }
 
 // Cost multiplier at map point (x, y) in tiles.
@@ -491,14 +515,18 @@ export function tasteAt(t: Taste, x: number, y: number): number {
   return top + (bottom - top) * fy;
 }
 
-// A step cost scaled by the taste at map point (x, y), or unchanged without a taste.
+// A step cost scaled by the taste at map point (x, y), or unchanged without a taste. An off-road taste scales a
+// road tile again.
 export function tasted(t: Taste | null, cost: number, x: number, y: number): number {
-  return t ? cost * tasteAt(t, x, y) : cost;
+  if (!t) return cost;
+  const c = cost * tasteAt(t, x, y);
+  return t.roads && t.roads[tileIndex(t.size, x, y)] === 1 ? c * REGION.navigation.roadShyCost : c;
 }
 
 // The part of a route cache key that tells tastes apart.
 export function tasteKey(t: Taste | null): string {
-  return t ? String(t.seed) : 'plain';
+  if (!t) return 'plain';
+  return t.roads ? `${t.seed}:off` : String(t.seed);
 }
 
 function smooth(f: number): number {

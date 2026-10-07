@@ -1,11 +1,13 @@
 {
-  "turn": 60,
-  "player": { "vehicleId": "player", "scavenged": ["wreck3"] },
-  "vehicles": [
-    { "id": "player", "job": null },
-    { "id": "npc1", "job": null }
-  ],
-  "salvage": [
-    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
-  ]
+  "player": {
+    "vehicleId": "player",
+    "money": 340,
+    "skills": { "driving": 0, "perception": 450, "machining": 600, "toughness": 3500, "social": 1999 },
+    "xpToday": { "driving": 0, "perception": 12.5, "machining": 80, "toughness": 0, "social": 40 },
+    "xpDay": 3,
+    "repeats": { "search:dump-1": { "count": 1, "turn": 610 }, "profit:bowl:salt": { "count": 2.5, "turn": 640 } },
+    "xpBySource": { "search": 600, "profit": 1999, "discover": 450, "heat": 3500 },
+    "perks": ["welder", "desertRat"]
+  },
+  "turn": 650
 }

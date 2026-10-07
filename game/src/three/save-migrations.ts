@@ -201,6 +201,213 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// Total XP a skill needed for each level at format 2.9; index is the level.
+const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
+
+// Step 9 to 10: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
+// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.10.
+export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+  let xp = 0;
+  const ranks: Record<string, number> = {};
+  for (const [skill, total] of Object.entries(skills)) {
+    let level = 0;
+    while (level < XP_TO_REACH_9_10.length - 1 && total >= XP_TO_REACH_9_10[level + 1]) level++;
+    ranks[skill] = level;
+    xp += total - XP_TO_REACH_9_10[level];
+  }
+  return { xp, ranks };
+}
+
+// A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
+// pressure stands in for what it saw, and the saved turn for when.
+// Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
+// keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 16.
+const STORM_FADE_TURNS_16_17 = 30;
+
+function withStormBorn_16_17(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_16_17;
+  const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
+  return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
+}
+
+// 17 to 18: a truck records how far each storm has got into it. A saved truck gets the share it would have settled to
+// where it stands, so loading inside a storm neither flashes nor drops. These are copies of WEATHER.sim.stormEdge and
+// stormFadeTurns, and of the stormDepth rule, at format 17.
+const STORM_EDGE_17_18 = 25;
+const STORM_FADE_TURNS_17_18 = 30;
+
+function settledShare_17_18(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
+  const centre = storm.pos as { x: number; y: number };
+  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_17_18);
+  if (edge <= 0) return 0;
+  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_17_18, (storm.turnsLeft as number) / STORM_FADE_TURNS_17_18);
+  return edge * strength;
+}
+
+function withStormExposure_17_18(world: SavedJson): SavedJson {
+  const storms = (world.weather as SavedJson[]).filter((e) => e.kind === 'storm');
+  const exposed = (v: SavedJson): SavedJson => {
+    const stormExposure: Record<string, number> = {};
+    for (const s of storms) {
+      const share = settledShare_17_18(world.turn as number, s, v.pos as { x: number; y: number });
+      if (share > 0) stormExposure[s.id as string] = share;
+    }
+    return { ...v, stormExposure };
+  };
+  const clear = (v: SavedJson): SavedJson => ({ ...v, stormExposure: {} });
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(exposed), removed: (world.removed as SavedJson[]).map(clear) };
+}
+
+function withMemories_11_12(world: SavedJson): SavedJson {
+  const shops = world.shops as Record<string, SavedJson>;
+  const turn = world.turn as number;
+  const remembering = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { lastTown, ...brain } = v.brain as SavedJson;
+    const shop = typeof lastTown === 'string' ? shops[lastTown] : undefined;
+    const memories = shop ? [{ turn, fact: { kind: 'prices', shop: lastTown, pressure: { ...(shop.pressure as SavedJson) } } }] : [];
+    return { ...v, brain: { ...brain, memories } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
+}
+
+// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
+// 0 HP. Settling keeps only those that are still patchable and below the target.
+function withPatchParts_13_14(world: SavedJson): SavedJson {
+  const vehicles = world.vehicles as SavedJson[];
+  const brokenIds = (id: string): string[] => {
+    const client = vehicles.find((v) => v.id === id);
+    const items = client ? (client.items as SavedJson[]) : [];
+    return items.flatMap((item) => (item.kind === 'part' && (item.part as SavedJson).hp === 0 ? [(item.part as SavedJson).id as string] : []));
+  };
+  const recording = (s: SavedJson): SavedJson => {
+    const data = s.data as SavedJson;
+    return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
+  };
+  return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
+// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// renderer plays its old miss.
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
+}
+
+// Every saved far route was planned with roads, since only newer raiders that retreat, flee or are stranded plan
+// them off roads.
+function withRouteStyle_18_19(world: SavedJson): SavedJson {
+  const styled = (v: SavedJson): SavedJson => {
+    const brain = v.brain as SavedJson | null;
+    if (!brain?.farRoute) return v;
+    return { ...v, brain: { ...brain, farRoute: { ...(brain.farRoute as SavedJson), offRoad: false } } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
+}
+
+// Town and camp gates lost their guns, so their shot events, their kill credit and a driver's note of the gate that
+// shot it go. A gun's credit named `guard-<site>`, no truck.
+function withoutGuards_19_20(world: SavedJson): SavedJson {
+  const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
+  const unnoted = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { gunnedBy: _, ...brain } = v.brain as SavedJson;
+    return { ...v, brain };
+  };
+  return {
+    ...world,
+    events: (world.events as SavedJson[]).filter((e) => e.t !== 'guardShot'),
+    vehicles: (world.vehicles as SavedJson[]).map((v) => unnoted(uncredited(v))),
+    removed: (world.removed as SavedJson[]).map(uncredited),
+  };
+}
+
+// A runner keeps on until its threat has been out of sight, earshot and gunfire for some turns, counted from this turn.
+function withFleePerceived_20_21(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+// A fight records the last turn it wore its target down. Taken as the save's turn at full condition, so the first
+// check after loading starts a fresh window.
+function withFightWorn_21_22(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'fight' ? { ...g, worn: { turn, condition: 1 } } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+// A driver tracks the trucks it senses and holds its choice on a hostile in the track, instead of noting hostiles
+// per sense. A hostile it noted seen or heard becomes a track it lets be, at the truck's place, on the turn it last
+// perceived it. Seen wins over heard. A fight or flee goal's target becomes a track it fights or runs from, at its
+// place on the goal's perceived turn, and a fight drops that turn. A noted truck no longer in the world is left out.
+// Trucks sensed but not decided on get tracks on the first turn after loading.
+function withTracks_22_23(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const places = new Map((world.vehicles as SavedJson[]).map((v) => [v.id as string, v.pos as SavedJson]));
+  const fromNoticed = (noticed: Record<string, number>): Record<string, SavedJson> => {
+    const tracks: Record<string, SavedJson> = {};
+    for (const decision of ['contactHeard', 'hostileSeen']) {
+      for (const [key, last] of Object.entries(noticed)) {
+        const [kind, id] = key.split(':');
+        const at = places.get(id);
+        const seen = decision === 'hostileSeen';
+        if (kind === decision && at) tracks[id] = { at: { ...at }, turn: last, sighted: seen, choice: 'keep', chosenInSight: seen };
+      }
+    }
+    return tracks;
+  };
+  const fromGoal = (tracks: Record<string, SavedJson>, g: SavedJson): void => {
+    const at = places.get(g.targetId as string);
+    if ((g.kind === 'fight' || g.kind === 'flee') && at) tracks[g.targetId as string] = { at: { ...at }, turn: (g.perceived as number | undefined) ?? turn, sighted: true, choice: g.kind, chosenInSight: true };
+  };
+  const untimed = (g: SavedJson): SavedJson => {
+    if (g.kind !== 'fight') return g;
+    const { perceived: _, ...rest } = g;
+    return rest;
+  };
+  const tracked = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const noticed = brain.noticed as Record<string, number>;
+    const goals = brain.goals as SavedJson[];
+    const tracks = fromNoticed(noticed);
+    for (const g of goals) fromGoal(tracks, g);
+    const kept = Object.fromEntries(Object.entries(noticed).filter(([key]) => !key.startsWith('hostileSeen:') && !key.startsWith('contactHeard:')));
+    return { ...v, brain: { ...brain, noticed: kept, goals: goals.map(untimed), tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(tracked), removed: (world.removed as SavedJson[]).map(tracked) };
+}
+
+// A track records the turn its truck came in sight. A saved track gets null, as out of sight, so the first turn after
+// loading sets it for a truck in sight.
+function withSeenSince_23_24(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const tracks = Object.fromEntries(Object.entries(brain.tracks as Record<string, SavedJson>).map(([id, t]) => [id, { ...t, seenSince: null }]));
+    return { ...v, brain: { ...brain, tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+// Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
+// their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
+// wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
+const FORTRESS_OBSTACLES_24_25 = new Set(
+  ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
+);
+
+function isGoneObstacle_24_25(o: SavedJson): boolean {
+  const id = o.id as string;
+  return FORTRESS_OBSTACLES_24_25.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
+    || id === 'pond-dustwell' || id === 'pond-green-pit' || id.startsWith('cw-salvage-yard-');
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -255,7 +462,43 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
-  // 9 to 10: jobs gain the business kind. No old save holds one, since NPC business was instant.
+  // 9 to 10: XP goes to one pool and levels become bought ranks.
+  (world) => {
+    const { skills, ...player } = world.player as SavedJson;
+    return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
+  },
+  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
+  (world) => world,
+  // 11 to 12: a driver's last town becomes a memory of its prices.
+  withMemories_11_12,
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: a patch records the parts it lifts.
+  withPatchParts_13_14,
+  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
+  // driver still on its retreat lies up when it gets home.
+  (world) => world,
+  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  // 16 to 17: a storm records the turn it was born, already past its build-up.
+  withStormBorn_16_17,
+  // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
+  withStormExposure_17_18,
+  // 18 to 19: a far route records whether it was planned off roads; every old one was not.
+  withRouteStyle_18_19,
+  // 19 to 20: gate guns are gone, with their shot events and kill credit.
+  withoutGuards_19_20,
+  // 20 to 21: a flee goal records the turn it last perceived its threat, taken as the save's turn.
+  withFleePerceived_20_21,
+  // 21 to 22: a fight records the last turn it wore its target down, taken as the save's turn.
+  withFightWorn_21_22,
+  // 22 to 23: a driver tracks the hostiles it decided on, and a fight reads its target's last place from the track.
+  withTracks_22_23,
+  // 23 to 24: a track records the turn its truck came in sight, null after loading.
+  withSeenSince_23_24,
+  // 24 to 25: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  // 25 to 26: jobs gain the business kind. No old save holds one, since NPC business was instant.
   (world) => world,
 ];
 

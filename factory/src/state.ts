@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { withLockSync } from './lock';
-import type { FactoryState, Job } from './types';
+import type { FactoryState, Job, PlaytestState, ReleaseState } from './types';
 
-export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], capNoticed: false, postCaptions: {}, devBuild: null, devFailed: null };
+export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, releasePost: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], cardStarts: {}, postCaptions: {}, devBuild: null, devFailed: null, devError: null, interrupted: [], testPhase: {}, patching: {}, unroutedReplies: {}, visualSendBacks: {},textPosts: [], lastWasteReview: null, held: {} };
 
 // A state update is a few file operations, so a writer that waits this long found a stuck lock.
 const STATE_LOCK_MS = 30_000;
@@ -14,9 +14,25 @@ export function readState(path: string): FactoryState {
   if (!existsSync(path)) return structuredClone(EMPTY_STATE);
   const { job, ...saved } = JSON.parse(readFileSync(path, 'utf8')) as SavedState;
   // A file from before parallel jobs holds one `job`. Its log name serves as its id.
-  const jobs = saved.jobs ?? (job ? [{ ...job, id: basename(job.log, '.log') }] : []);
+  const jobs = (saved.jobs ?? (job ? [{ ...job, id: basename(job.log, '.log') }] : [])).map(renameTesting);
   // Fields an old file lacks take the empty value.
-  return { ...structuredClone(EMPTY_STATE), ...saved, jobs };
+  const release = saved.release ? fillRelease(saved.release) : null;
+  return { ...structuredClone(EMPTY_STATE), ...saved, jobs, release };
+}
+
+// The seed of a release is its cut day as YYYYMMDD, so each release plays a seed of its own and every run of it plays the same one.
+export function newPlaytest(day: string): PlaytestState {
+  return { seed: Number(day.replaceAll('-', '')), runs: 0, streak: 0, passed: null, blocked: null, notes: [] };
+}
+
+// A release cut before the playtest has no playtest yet and no candidate commit. Its post, if any, stays, and the next tick drops it, since it names no commit.
+function fillRelease(release: Partial<ReleaseState> & Pick<ReleaseState, 'day'>): ReleaseState {
+  return { ...release, candidateSha: release.candidateSha ?? null, playtest: release.playtest ?? newPlaytest(release.day) } as ReleaseState;
+}
+
+// Testing split into verify and checks. A testing job saved before the split ran the agent half first, so the tick checks and resumes it as verify.
+function renameTesting(job: Job): Job {
+  return (job.stage as string) === 'testing' ? { ...job, stage: 'verify' } : job;
 }
 
 // Writes a temp file and renames it, so a crash never leaves half a state file.

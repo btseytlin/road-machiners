@@ -156,6 +156,7 @@ export type WeatherEvent =
       radius: number;
       vel: Vec;
       turnsLeft: number;
+      born: number; // world turn it spawned on; its strength builds from here, see stormStrength()
     }
   | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
@@ -169,15 +170,17 @@ export type DriverResources = {
 export type NpcActivity = {
   kind:
     | 'scavenge' | 'prowl' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
-    | 'meet' | 'retreat' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
+    | 'meet' | 'retreat' | 'rearm' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
   reason: string;
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
-  perceived?: number; // the turn a fight last saw or detected its target
+  perceived?: number; // a flee: the turn it last saw, heard or took a hit from anything hostile
+  worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
+  until?: number; // the turn a rearm's fresh gear is ready
 };
 
 export type NpcBrain = {
@@ -186,7 +189,10 @@ export type NpcBrain = {
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
+    tracks: Record<string, Track>; // trucks the driver senses or remembers, by id; only src/sim/tracks.ts keeps them
     hurt: number; // part damage taken last turn
+    fullAt?: number; // free cells when a sale would have made room for a loot the hold could not take, until the hold frees more
+    unfit?: string[]; // loot the driver reached and found would not fit its truck even after a sale
     // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
     // is true once the driver decided on the latest shots. Attackers may always be fired back at.
     attackers: Record<string, boolean>;
@@ -206,9 +212,22 @@ export type NpcBrain = {
     targetSeen?: { id: string; turn: number; pos: Vec; heading: number; speed: number };
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
-    farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    lastTown?: string; // id of the last town where this driver finished a service or trade
+    // Route points still ahead while far from the player, for the order's dest, and whether they were planned off roads.
+    farRoute?: { dest: Vec; points: Vec[]; offRoad: boolean };
+    // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
+    memories: Memory[];
 };
+
+// A truck a driver senses: where and on which turn it last saw or heard it, whether it has seen it while tracked, and
+// the turn it came in sight, null while out of sight. choice is what the driver chose on it as a hostile, null before
+// a choice, and chosenInSight whether it chose with the truck in sight. See src/sim/tracks.ts.
+export type TrackChoice = 'keep' | 'fight' | 'flee' | 'investigate';
+export type Track = { at: Vec; turn: number; sighted: boolean; seenSince: number | null; choice: TrackChoice | null; chosenInSight: boolean };
+
+// A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
+// prices: a shop's standing pressure for each good it trades, when the driver did business there.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
   id: string;
@@ -219,6 +238,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  stormExposure: Record<string, number>; // storm id to how far that storm has got into this truck, in (0, 1]; see advanceExposure()
   strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
   stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading
@@ -227,7 +247,7 @@ export type Vehicle = {
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
-  lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source, for kill credit
+  lastHitBy: string | null; // vehicle id of the last damage source; kill credit falls back to it when no damage landed this turn (see beatenBy in combat.ts)
   job: Job | null;
   defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
@@ -241,8 +261,13 @@ export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; 
 // Every baked prop but a rock is a landmark of its prop kind.
 export type LandmarkLook = Exclude<PropKind, "rock">;
 
+// The chassis a dead truck leaves as its wreck. yaw is the truck's heading when it died, in radians from map +x toward +y.
+export type Hulk = { chassisId: string; yaw: number };
+
 export type Obstacle =
-  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // Only a kill wreck has a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
@@ -272,7 +297,7 @@ export type StateData =
   | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'escort'; site: string | null; fee: number }
-  | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
+  | { kind: 'patch'; deal: PatchDeal; parts: number; partIds: string[]; price: number; work: number; workLeft: number } // holder patches other; partIds are the client parts it lifts, fixed at agreement
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
   | { kind: 'none' };
@@ -297,6 +322,7 @@ export type CallVar =
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
+  | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null } // a trading tip, or none
   | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 
@@ -311,8 +337,9 @@ export type TopicOutcome = "agreed" | "refused" | "done";
 export type Player = {
   vehicleId: string;
   money: number;
-  skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
-  xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
+  xp: number; // unspent XP, earned by any activity; see src/sim/progress.ts
+  ranks: Record<SkillId, number>; // bought ranks per skill, from 0 to MAX_RANK
+  xpToday: Record<SkillId, number>; // XP per activity family earned on day xpDay, for the daily soft cap
   xpDay: number;
   repeats: Record<string, Repeat>; // "source:target" to the earlier practice on that target; see XP_SOURCES
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
@@ -325,9 +352,10 @@ export type Player = {
   townPatched: boolean; // this visit to a town already got its free critical repair; leaving the town clears it
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
+  headlights: boolean; // the player's headlight switch; NPC lamps follow the clock, see src/three/render/daylight.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
-  storage: PartInstance[]; // spare parts kept in town garages, usable in any town
+  storage: PartInstance[]; // spare parts kept in garage storage, reachable at any shop
   contracts: Contract[]; // contracts taken and not yet ended; see src/sim/market.ts
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
@@ -350,7 +378,8 @@ export type Player = {
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
 // hit: the round landed on its target. struck: the truck it landed on, or null for the ground. hits: its direct
-// hits on that truck. blast: the part hits its explosion dealt, per truck.
+// hits on that truck. blast: the part hits its explosion dealt, per truck. burst: the ground point in tiles where an
+// exploding round burst, or null for a round that struck a truck or does not explode. Guard rounds never burst.
 export type ShotRound = {
   hit: boolean;
   crit: boolean;
@@ -358,6 +387,7 @@ export type ShotRound = {
   struck: string | null;
   hits: PartHit[];
   blast: VehicleHits[];
+  burst: Vec | null;
 };
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
@@ -368,8 +398,8 @@ export type GameEvent =
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
-  | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
+  | { t: 'cargoSpilled'; vehicle: string; part: string; pile: string; units: number }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'npcKnockout'; vehicle: string; by: string }
   | { t: 'npcWake'; vehicle: string }
@@ -378,7 +408,7 @@ export type GameEvent =
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
-  | { t: 'skillUp'; skill: SkillId; level: number }
+  | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
@@ -404,10 +434,15 @@ export type GameEvent =
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
   | { t: 'aidStarted'; giver: string; receiver: string }
-  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'lapsed' | 'broken' }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'done'; price: number } // money moved from client to patcher
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
+
+// A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
+// dug again. See src/sim/craters.ts.
+export type Crater = { id: string; pos: Vec; radius: number; turn: number };
 
 export type World = {
   seed: number;
@@ -420,6 +455,7 @@ export type World = {
   vehicles: Vehicle[];
   obstacles: Obstacle[];
   broken: BrokenProp[]; // props out of obstacles until they grow back; a prop is in one list or the other
+  craters: Crater[]; // blast craters until they fade out of sight; see src/sim/craters.ts
   salvage: SalvageStock[];
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file

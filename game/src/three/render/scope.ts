@@ -29,6 +29,7 @@ export class RenderScope {
   private readonly viewProjection = new THREE.Matrix4();
   private readonly test = new THREE.Box3();
   private readonly prepare: (obj: THREE.Object3D) => void;
+  private readonly frameHooks: (() => void)[] = [];
 
   // The root must stay at the world origin: chunk bounds are world boxes.
   // grey: objects out of clear sight drain to grey. The ground greys itself, so its scope passes false.
@@ -67,6 +68,11 @@ export class RenderScope {
     this.owner.delete(obj);
   }
 
+  // Runs fn at the end of every update, once per drawn frame.
+  onFrame(fn: () => void): void {
+    this.frameHooks.push(fn);
+  }
+
   update(camera: THREE.OrthographicCamera): void {
     this.root.updateWorldMatrix(true, false);
     if (!this.root.matrixWorld.equals(IDENTITY)) throw new Error('Render scope root moved away from the world origin');
@@ -81,6 +87,7 @@ export class RenderScope {
       else this.root.remove(chunk.group);
       chunk.shown = show;
     }
+    this.frameHooks.forEach((hook) => hook());
   }
 
   private shows(chunk: Chunk): boolean {

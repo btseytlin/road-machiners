@@ -1,20 +1,21 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
 // stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
-// crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it. A breakable prop
-// on the way breaks.
+// crash, but they cannot drive into another vehicle: a truck in the way holds them just short of it at its speed, and
+// the next route goes around it. A breakable prop on the way breaks.
 
 import { chassisDef } from '../data/chassis';
-import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
-import { TERRAIN } from '../data/terrain';
-import { playerVehicle } from './damage';
-import { boxSegmentDistance, isBreakable, propBoxes, propReach } from './mapgen';
+import { inLiveRange, isHeadless } from './fidelity';
+import { boxSegmentDistance, propBoxes, propReach } from './mapgen';
+import { keepsOffRoads } from './off-road';
 import { route } from './path';
+import { propSlotsAlong } from './prop-index';
 import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
-import { isOnRope } from './tow';
+import { isOnRope, ropeClientOf } from './tow';
+import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
 
@@ -22,8 +23,15 @@ import { bearing, dist, segmentDist, type Vec } from './vec';
 // A towed truck has no body: it follows its tower through followTower instead.
 export function isNear(w: World, v: Vehicle): boolean {
   if (isOnRope(w, v.id)) return false;
-  if (v.id === w.player.vehicleId) return true;
-  return dist(v.pos, playerVehicle(w).pos) <= TERRAIN.vision.radius + PERF.liveMargin;
+  return inLiveRange(w, v.pos);
+}
+
+// Why the tank limits the truck now: 'low' halves top speed, 'empty' leaves a crawl. Null when it limits nothing.
+export function fuelLimit(w: World, v: Vehicle, burnsFuel: boolean): 'low' | 'empty' | null {
+  if (!burnsFuel) return null;
+  const fuel = getResources(w, v).fuel;
+  if (fuel <= 0) return 'empty';
+  return fuel < fuelCap(v) * RULES.lowFuelThreshold ? 'low' : null;
 }
 
 // Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
@@ -32,7 +40,7 @@ export function isNear(w: World, v: Vehicle): boolean {
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
+  const low = fuelLimit(w, v, s.fuelPerTile > 0) === 'low';
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
@@ -59,10 +67,8 @@ export function advanceFar(w: World, v: Vehicle): void {
 
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
-  // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
-  const stored = v.brain?.farRoute;
-  // A new route steers around parked vehicles, like the physics driver's.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
+  const offRoad = keepsOffRoads(w, v);
+  const points = farPoints(w, v, order.dest, offRoad, full, s);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
   const block = firstContact(w, v, planned.path, full.radius);
@@ -76,23 +82,76 @@ export function advanceFar(w: World, v: Vehicle): void {
   v.trail = sample(start, walk.path, walk.moved);
   v.pos = { x: end.x, y: end.y };
   v.heading = v.trail[v.trail.length - 1].heading;
-  v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
+  // A truck that catches up with another falls in behind it at its speed, and a stop order ends at rest.
+  v.speed = done && order.kind === 'stopAt' ? 0 : block ? Math.min(next, block.other.speed) : next;
   burnFuel(w, v, walk.moved);
   breakCrossed(w, v, walk.path, full.radius);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
-  if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
+  keepFarRoute(v, done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead, offRoad });
   if (done) {
     w.events.push({ t: 'arrived', vehicle: v.id });
     v.order = null;
   }
 }
 
+// The kept route toward dest, or a new one. A new route steers around parked vehicles, like the physics driver's, and
+// around slower ones it could reach. A kept route planned on or off roads is dropped once the driver's style has changed.
+function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats): Vec[] {
+  const stored = keptFarRoute(v);
+  if (stored && stored.dest.x === dest.x && stored.dest.y === dest.y && keptOffRoad(stored) === offRoad) return stored.points;
+  return route(w, v.pos, dest, full.radius, farBlockers(w, v, s), v);
+}
+
+// The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
+// a turn's drive of it, so it overtakes them as a driver would instead of trailing them. A ram target stays a target.
+function farBlockers(w: World, v: Vehicle, s: VehicleStats): Blocker[] {
+  const target = v.brain?.ramTarget;
+  const reach = s.maxSpeed + radiusOf(v);
+  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
+  return [...parkedVehicles(w, v.id), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
+}
+
+function radiusOf(v: Vehicle): number {
+  return chassisDef(v.chassisId).radius;
+}
+
+// A truck without a brain has nowhere to store its route, so in a game it plans every turn. The recorder's player is
+// such a truck, and keeps its route here instead: the world is cloned each turn, so the route waits beside it, with
+// the spot it ended on. A truck moved from that spot by anything else plans anew.
+type FarRoute = { dest: Vec; points: Vec[]; offRoad: boolean };
+const playerRoutes = new Map<string, { route: FarRoute; at: Vec }>();
+
+export function clearFarRoutes(): void {
+  playerRoutes.clear();
+}
+
+// Whether a kept route was planned off roads. Every saved route has the flag since its save step.
+function keptOffRoad(stored: FarRoute): boolean {
+  if (typeof stored.offRoad !== 'boolean') throw new Error('A far route has no offRoad flag');
+  return stored.offRoad;
+}
+
+function keptFarRoute(v: Vehicle): FarRoute | undefined {
+  if (v.brain) return v.brain.farRoute;
+  const kept = isHeadless() ? playerRoutes.get(v.id) : undefined;
+  return kept && kept.at.x === v.pos.x && kept.at.y === v.pos.y ? kept.route : undefined;
+}
+
+function keepFarRoute(v: Vehicle, route: FarRoute | undefined): void {
+  if (v.brain) v.brain.farRoute = route;
+  else if (!isHeadless()) return;
+  else if (route) playerRoutes.set(v.id, { route, at: { x: v.pos.x, y: v.pos.y } });
+  else playerRoutes.delete(v.id);
+}
+
 const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
 
 // The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
-// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
+// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate. The truck on
+// the vehicle's own rope trails it and is never in its way.
 function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
-  const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+  const client = ropeClientOf(w, v.id);
+  const others = w.vehicles.filter((o) => o.id !== v.id && o.id !== client).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
   for (let seg = 1; seg < path.length; seg++) {
     const a = path[seg - 1];
@@ -114,8 +173,15 @@ function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { othe
 
 // Breaks every breakable prop the truck body touches along the walk.
 function breakCrossed(w: World, v: Vehicle, path: Vec[], radius: number): void {
-  const crossed = w.obstacles.filter((o) => isBreakable(o) && path.some((p, seg) => seg > 0 && touches(o, path[seg - 1], p, radius)));
-  for (const o of crossed) breakProp(w, o.id, v.id);
+  const crossed = new Set<number>();
+  for (let seg = 1; seg < path.length; seg++) {
+    for (const at of propSlotsAlong(w, 'breakable', path[seg - 1], path[seg], radius)) {
+      if (touches(w.obstacles[at], path[seg - 1], path[seg], radius)) crossed.add(at);
+    }
+  }
+  // Props break in world order, so the events and growback queue match a scan of every obstacle.
+  const ids = [...crossed].sort((a, b) => a - b).map((at) => w.obstacles[at].id);
+  for (const id of ids) breakProp(w, id, v.id);
 }
 
 // Whether a truck of this radius driving from a to b touches the prop's boxes. The reach test skips far props cheaply.

@@ -5,18 +5,15 @@ services:
     container_name: factory-caddy
     image: caddy:2.10-alpine
     restart: unless-stopped
-    # Docker skips UFW for published ports, and daemon.json binds them to 127.0.0.1 unless a port names its address.
-    # Caddy is the one service that asks for public ports. deploy.py fails on any other published port.
-    ports:
-      - "0.0.0.0:80:80"
-      - "0.0.0.0:443:443"
+    # Caddy publishes no ports. The tunnel reaches it at http://caddy:80 on this stack's network.
     environment:
       DOMAIN: ${FACTORY_DOMAIN:?set FACTORY_DOMAIN}
-      ACME_EMAIL: ${FACTORY_ACME_EMAIL:?set FACTORY_ACME_EMAIL}
       ITCH_URL: ${FACTORY_ITCH_URL:?set FACTORY_ITCH_URL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/factory/www:/srv/www:ro
+      - /opt/factory/dashboard:/opt/factory/dashboard:ro
+      - /opt/factory/errors:/opt/factory/errors:ro
       - /opt/factory/caddy/data:/data
       - /opt/factory/caddy/config:/config
     security_opt:
@@ -34,3 +31,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # The tunnel dials out to Cloudflare, so the host opens no inbound port. Its routes to http://caddy:80 live in the Cloudflare dashboard.
+  tunnel:
+    container_name: factory-tunnel
+    image: cloudflare/cloudflared:2026.7.3
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    # Deploy writes TUNNEL_TOKEN there. It sits outside this folder, since the stack sync deletes unknown files.
+    env_file: /opt/factory/tunnel.env
+    depends_on:
+      - caddy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cpus: 1
+    mem_limit: 256m
+    pids_limit: 128

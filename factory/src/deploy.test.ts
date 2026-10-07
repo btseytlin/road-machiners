@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildAndDeploy, deployDev, rebuildDev, recordBuild, removeStaleBuilds } from './deploy';
+import { readPublished } from './sourcemaps';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx } from './types';
 
@@ -12,6 +13,7 @@ function setup(): { ctx: Ctx; clone: string; webRoot: string; shells: string[][]
   const webRoot = join(root, 'web');
   mkdirSync(join(clone, 'game', 'dist'), { recursive: true });
   writeFileSync(join(clone, 'game', 'dist', 'index.html'), 'new');
+  writeFileSync(join(clone, 'game', 'dist', 'index.js.map'), '{}');
   const shells: string[][] = [];
   const container = { agent: async () => {}, shell: async (c: string, s: string, l: string, e?: Record<string, string>) => { shells.push([c, s, l, JSON.stringify(e)]); } };
   const ctx = { cfg: { webRoot, publicUrl: 'http://x/play' }, container } as unknown as Ctx;
@@ -36,6 +38,13 @@ describe('buildAndDeploy', () => {
     expect(existsSync(join(webRoot, 'dev', 'old.html'))).toBe(false);
     expect(existsSync(join(webRoot, '.dev.new'))).toBe(false);
   });
+
+  it('never publishes source maps, also for a card preview that sends no reports', async () => {
+    const { ctx, clone, webRoot } = setup();
+    await buildAndDeploy(ctx, clone, 'abc1234', '/l');
+    expect(existsSync(join(webRoot, 'abc1234', 'index.html'))).toBe(true);
+    expect(existsSync(join(webRoot, 'abc1234', 'index.js.map'))).toBe(false);
+  });
 });
 
 describe('removeStaleBuilds', () => {
@@ -50,32 +59,66 @@ describe('removeStaleBuilds', () => {
     expect(['dev', 'keep1', 'gone1', 'index.html'].map((n) => existsSync(join(webRoot, n)))).toEqual([true, true, false, true]);
   });
 
+  it('keeps the reserved concepts folder and its files while removing stale builds', () => {
+    const { webRoot } = setup();
+    mkdirSync(join(webRoot, 'concepts'), { recursive: true });
+    mkdirSync(join(webRoot, 'stale'), { recursive: true });
+    writeFileSync(join(webRoot, 'concepts', 'a.png'), 'img');
+    const removed = removeStaleBuilds(webRoot, new Set(), () => undefined);
+    expect(removed).toEqual(['stale']);
+    expect(readFileSync(join(webRoot, 'concepts', 'a.png'), 'utf8')).toBe('img');
+  });
+
   it('does nothing when the web root does not exist yet', () => {
     expect(removeStaleBuilds(join('tmp', 'factory-no-such-web'), new Set(), () => undefined)).toEqual([]);
   });
 });
 
 describe('deployDev', () => {
-  function devSetup(buildFails: boolean): { ctx: Ctx; statePath: string } {
+  const SHA = 'abc1234'.padEnd(40, '0');
+
+  function devSetup(buildFails: boolean): { ctx: Ctx; statePath: string; home: string; envs: Record<string, string>[] } {
     const { ctx, webRoot } = setup();
     const home = join(webRoot, '..');
     const statePath = join(home, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234' });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234', devError: 'old error' });
     const repo = {
       prepareWorkClone: async (_branch: string, _base: string, dir: string) => {
         mkdirSync(join(dir, 'game', 'dist'), { recursive: true });
         writeFileSync(join(dir, 'game', 'dist', 'index.html'), 'dev');
+        writeFileSync(join(dir, 'game', 'dist', 'index.js.map'), '{}');
       },
       headHash: async () => 'abc1234',
     };
-    const container = { agent: async () => {}, shell: async () => { if (buildFails) throw new Error('build broke'); } };
-    return { ctx: { ...ctx, cfg: { ...ctx.cfg, home }, repo, container, statePath } as unknown as Ctx, statePath };
+    const envs: Record<string, string>[] = [];
+    const container = { agent: async () => {}, shell: async (_c: string, _s: string, _l: string, env: Record<string, string>) => { envs.push(env); if (buildFails) throw new Error('build broke'); } };
+    const run = async () => ({ code: 0, stdout: `${SHA}\n`, stderr: '' });
+    const now = () => new Date('2026-10-07T12:00:00Z');
+    return { ctx: { ...ctx, cfg: { ...ctx.cfg, home, errorMapDays: 14 }, repo, container, run, now, statePath } as unknown as Ctx, statePath, home, envs };
   }
 
   it('publishes /dev/ and records the dev commit it serves', async () => {
     const { ctx, statePath } = devSetup(false);
     expect(await deployDev(ctx, '/l')).toBe('http://x/play/dev/');
-    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null });
+    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null, devError: null });
+  });
+
+  it('builds /dev/ with error reports on and keeps its maps on the host, not in the web root', async () => {
+    const { ctx, home, envs } = devSetup(false);
+    await deployDev(ctx, '/l');
+    expect(envs).toEqual([{ SAVE_SCOPE: 'dev', ERROR_REPORT_URL: 'http://x/errors', ERROR_REPORT_BUILD: 'dev' }]);
+    expect(existsSync(join(home, 'sourcemaps', SHA, 'index.js.map'))).toBe(true);
+    expect(existsSync(join(home, 'web', 'dev', 'index.js.map'))).toBe(false);
+    expect(readPublished(home)).toEqual([{ sha: SHA, kind: 'dev', publishedAt: '2026-10-07T12:00:00.000Z' }]);
+  });
+
+  it('builds /dev/ with error reports on and keeps its maps on the host, not in the web root', async () => {
+    const { ctx, home, envs } = devSetup(false);
+    await deployDev(ctx, '/l');
+    expect(envs).toEqual([{ SAVE_SCOPE: 'dev', ERROR_REPORT_URL: 'http://x/errors', ERROR_REPORT_BUILD: 'dev' }]);
+    expect(existsSync(join(home, 'sourcemaps', SHA, 'index.js.map'))).toBe(true);
+    expect(existsSync(join(home, 'web', 'dev', 'index.js.map'))).toBe(false);
+    expect(readPublished(home)).toEqual([{ sha: SHA, kind: 'dev', publishedAt: '2026-10-07T12:00:00.000Z' }]);
   });
 
   it('posts the dev link to the committee after a rebuild', async () => {
@@ -89,7 +132,7 @@ describe('deployDev', () => {
   it('records a failed dev commit and throws', async () => {
     const { ctx, statePath } = devSetup(true);
     await expect(deployDev(ctx, '/l')).rejects.toThrow('build broke');
-    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234' });
+    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234', devError: 'build broke' });
   });
 });
 
