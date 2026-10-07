@@ -46,12 +46,13 @@ import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary, contractWindow } from "./format";
+import { contractDue, contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
+import { vehicleHasPerk } from "../sim/progress";
 
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
@@ -160,17 +161,19 @@ export class TownScreen {
 
   // Runs a command; a thrown rule error shows in the screen instead of changing the world.
   private run(cmd: (w: World) => World): void {
-    try {
-      this.host.apply(cmd(this.host.world()));
-      this.error = "";
-    } catch (e) {
-      this.error = (e as Error).message;
-    }
-    this.render();
+    keepFocus(this.root, () => {
+      try {
+        this.host.apply(cmd(this.host.world()));
+        this.error = "";
+      } catch (e) {
+        this.error = (e as Error).message;
+      }
+      this.render();
+    });
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false, title = ""): HTMLElement {
-    return el("button", { disabled, title, onclick: () => this.run(cmd) }, label);
+  private button(label: string, cmd: (w: World) => World, disabled = false, title = "", key = ""): HTMLElement {
+    return el("button", { disabled, title, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
   }
 
   // Mount cells for a hovered card's part kind light up on the truck grid.
@@ -187,7 +190,7 @@ export class TownScreen {
       el(
         "div",
         { class: "goods" },
-        el("div", { class: "goods-head dim" }, el("span", {}, "Good"), el("span", {}, "Buy"), el("span", {}, "Sell"), el("span", {}, "In truck")),
+        goodsHead(false),
         ...def.goods.map((g) => this.goodRow(w, shopId, def, state, g)),
       ),
     );
@@ -209,19 +212,22 @@ export class TownScreen {
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade buy" },
+        caption(GOODS_COLUMNS.buy),
         priceEl(buyPrice(w, shopId, g)),
-        this.button("+1", (x) => buyGood(x, g, 1)),
-        this.button("+5", (x) => buyGood(x, g, 5), false, `5 for ${getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy")}`),
+        this.button("+1", (x) => buyGood(x, g, 1), false, "", `${g}:buy1`),
+        this.button("+5", (x) => buyGood(x, g, 5), false, lotTitle("buy", 5, getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy")), `${g}:buy5`),
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade sell" },
+        caption(GOODS_COLUMNS.sell),
         priceEl(sell),
-        this.button("−1", (x) => sellGood(x, g, 1), held === 0),
-        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? `${held} for ${getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")}` : ""),
+        this.button("−1", (x) => sellGood(x, g, 1), held === 0, "", `${g}:sell1`),
+        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? lotTitle("sell", held, getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")) : "", `${g}:sellAll`),
       ),
-      heldEl(held, sell, w.player.costBasis[g]),
+      countCell("held", held),
+      profitCell(saleEstimate(held, sell, w.player.costBasis[g])),
     );
   }
 
@@ -386,12 +392,17 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays on defeat");
+    if (c.kind === "bounty") return el("span", { class: "dim" }, bountyPays(w));
     const destination = c.kind === "haul" ? c.to : c.shop;
     if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
     if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
     return this.button("Deliver", (x) => deliverContract(x, c.id));
   }
+}
+
+// What a held bounty pays for. A raider that gives up counts only with Bounty talk.
+function bountyPays(w: World): string {
+  return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
 const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
@@ -439,16 +450,43 @@ function priceEl(price: number): HTMLElement {
   return el("span", { class: "price" }, createIcon("money"), `${price}`);
 }
 
-// The count in the truck and the profit per unit against the price paid, when sold here.
-function heldEl(held: number, sell: number, basis: number | undefined): HTMLElement {
-  if (held === 0) return el("span", { class: "dim" }, "–");
-  if (basis === undefined) return el("span", { class: "held" }, `×${held}`);
-  return el("span", { class: "held", title: `Paid about ${Math.round(basis)} each` }, `×${held}`, profitEl(Math.round(sell - basis)));
+const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
+
+// Visible only in the narrow layout, where the column heads are hidden.
+function caption(text: string): HTMLElement {
+  return el("span", { class: "cap" }, text);
 }
 
-function profitEl(profit: number): HTMLElement {
-  const gain = profit >= 0;
-  return el("span", { class: `delta ${gain ? "better" : "worse"}` }, `${gain ? "+" : "−"}${Math.abs(profit)} each`);
+function goodsHead(withTheirs: boolean): HTMLElement {
+  const c = GOODS_COLUMNS;
+  return el(
+    "div",
+    { class: "goods-head dim" },
+    el("span", {}, c.good),
+    withTheirs ? el("span", {}, c.theirs) : null,
+    el("span", {}, c.buy),
+    el("span", {}, c.sell),
+    el("span", {}, c.held),
+    el("span", { title: PROFIT_HEAD_TITLE, "aria-label": PROFIT_HEAD_TITLE }, c.profit),
+  );
+}
+
+function countCell(cls: "theirs" | "held", n: number): HTMLElement {
+  return el("div", { class: `count ${cls}` }, caption(GOODS_COLUMNS[cls]), el("span", { class: n === 0 ? "num dim" : "num" }, `${n}`));
+}
+
+function profitCell(e: SaleEstimate): HTMLElement {
+  if (e.kind === "none") return el("div", { class: "profit" });
+  const tone = e.kind === "unrecorded" ? "dim" : `delta ${PROFIT_TONE[e.kind]}`;
+  return el("div", { class: "profit", title: estimateTitle(e) }, caption(GOODS_COLUMNS.profit), el("span", { class: `num ${tone}` }, estimateText(e)));
+}
+
+// Runs a change that redraws a screen (apply may redraw it too) and puts focus back on the button the player pressed, found by its data-key.
+function keepFocus(root: HTMLElement, render: () => void): void {
+  const key = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
+  render();
+  if (!key) return;
+  root.querySelector<HTMLElement>(`button[data-key="${key}"]:not(:disabled)`)?.focus({ preventScroll: true });
 }
 
 function bar(share: number): HTMLElement {
@@ -584,17 +622,19 @@ export class TruckTradeScreen {
 
   // Runs a command. A thrown rule error shows in the screen instead of changing the world.
   private run(cmd: (w: World) => World): void {
-    try {
-      this.host.apply(cmd(this.host.world()));
-      this.error = "";
-    } catch (e) {
-      this.error = (e as Error).message;
-    }
-    this.render();
+    keepFocus(this.root, () => {
+      try {
+        this.host.apply(cmd(this.host.world()));
+        this.error = "";
+      } catch (e) {
+        this.error = (e as Error).message;
+      }
+      this.render();
+    });
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false): HTMLElement {
-    return el("button", { disabled, onclick: () => this.run(cmd) }, label);
+  private button(label: string, cmd: (w: World) => World, disabled = false, key = ""): HTMLElement {
+    return el("button", { disabled, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
   }
 
   private hintMounts(kind: PartKind): (on: boolean) => void {
@@ -606,12 +646,7 @@ export class TruckTradeScreen {
     const mine = goodsCount(playerVehicle(w));
     const listed = GOOD_IDS.filter((g) => truckGoodsForSale(npc, g) > 0 || (mine[g] ?? 0) > 0);
     if (listed.length === 0) return el("div", { class: "dim" }, "Neither truck carries goods to trade.");
-    return el(
-      "div",
-      { class: "goods" },
-      el("div", { class: "goods-head dim" }, el("span", {}, "Good"), el("span", {}, "Buy"), el("span", {}, "Sell"), el("span", {}, "In truck")),
-      ...listed.map((g) => this.goodRow(w, npc, g, mine[g] ?? 0)),
-    );
+    return el("div", { class: "goods truck" }, goodsHead(true), ...listed.map((g) => this.goodRow(w, npc, g, mine[g] ?? 0)));
   }
 
   private goodRow(w: World, npc: Vehicle, g: string, held: number): HTMLElement {
@@ -625,23 +660,26 @@ export class TruckTradeScreen {
         { class: "good-name" },
         createItemIcon(g),
         el("b", {}, GOODS[g].name),
-        el("span", { class: "dim" }, theirs ? `×${theirs} on offer` : "none on offer"),
       ),
+      countCell("theirs", theirs),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade buy" },
+        caption(GOODS_COLUMNS.buy),
         priceEl(truckGoodPrice(w, g, "buy")),
-        this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), theirs < 1),
-        this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), theirs < 1),
+        this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), theirs < 1, `${g}:buy1`),
+        this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), theirs < 1, `${g}:buyAll`),
       ),
       el(
         "div",
-        { class: "trade" },
+        { class: "trade sell" },
+        caption(GOODS_COLUMNS.sell),
         priceEl(sell),
-        this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), held === 0),
-        this.button("All", (x) => sellTruckGood(x, npc.id, g, held), held === 0),
+        this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), held === 0, `${g}:sell1`),
+        this.button("All", (x) => sellTruckGood(x, npc.id, g, held), held === 0, `${g}:sellAll`),
       ),
-      heldEl(held, sell, w.player.costBasis[g]),
+      countCell("held", held),
+      profitCell(saleEstimate(held, sell, w.player.costBasis[g])),
     );
   }
 

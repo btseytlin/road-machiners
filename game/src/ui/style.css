@@ -158,8 +158,52 @@ body {
   align-items: center;
 }
 .speed-max {
+  position: relative;
   font: 10px var(--font-mono);
   color: var(--muted);
+  cursor: help;
+}
+.speed-max:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.speed-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 8px 10px;
+  background: var(--metal);
+  border: 1px solid #838a8d;
+  color: var(--ink);
+  font: 12px var(--font-mono);
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.speed-max:hover .speed-tip,
+.speed-max:focus-within .speed-tip {
+  display: block;
+}
+.speed-row {
+  display: grid;
+  grid-template-columns: 1fr auto 3ch;
+  gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid #5a6165;
+}
+.speed-row span:not(:first-child) {
+  text-align: right;
+}
+.speed-row.total {
+  font-weight: bold;
+  border-bottom: 0;
+}
+.speed-notes p {
+  margin: 2px 0 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -613,15 +657,26 @@ body {
 }
 .radio-faceplate {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 4px;
+  gap: 0;
+}
+.radio-mute {
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
 }
 .knob-cell {
+  flex: 1 1 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
   font: 9px var(--font-mono);
   color: var(--muted);
   text-transform: uppercase;
@@ -630,12 +685,32 @@ body {
   width: var(--knob-size);
   height: var(--knob-size);
   border-radius: 50%;
-  cursor: ns-resize;
-  touch-action: none;
   background: #1c1f21;
   border: 2px dotted #3a4043;
   box-sizing: border-box;
   box-shadow: 0 2px 3px #000000a0;
+}
+/* The name and the level share one slot, so swapping them never shifts the layout. */
+.knob-labels {
+  display: grid;
+  justify-items: center;
+}
+.knob-label,
+.knob-readout {
+  grid-area: 1 / 1;
+}
+.knob-readout {
+  visibility: hidden;
+}
+.knob-cell:hover .knob-readout,
+.knob-cell.turning .knob-readout,
+.knob-cell:focus-within .knob-readout {
+  visibility: visible;
+}
+.knob-cell:hover .knob-label,
+.knob-cell.turning .knob-label,
+.knob-cell:focus-within .knob-label {
+  visibility: hidden;
 }
 .knob:focus-visible {
   outline: 2px solid var(--ink);
@@ -1115,6 +1190,7 @@ body {
 }
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   font: 13px var(--font-mono);
   color: var(--ink);
@@ -1161,6 +1237,9 @@ body {
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
+}
+.town-shop {
+  container-type: inline-size;
 }
 .town-truck {
   padding-right: 24px;
@@ -1478,6 +1557,11 @@ body {
   }
 }
 @media (max-width: 720px) {
+  .speed-tip {
+    position: fixed;
+    left: 12px;
+    bottom: 200px;
+  }
   .instrument-actions {
     flex-wrap: wrap;
   }
@@ -1957,14 +2041,22 @@ canvas.view {
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 0.9fr;
+  grid-template-columns: minmax(150px, 1fr) 132px 132px 44px 64px;
   gap: 10px;
   align-items: center;
   padding: 4px 6px;
   border-bottom: 1px solid #3b454b;
 }
+.goods.truck .goods-head,
+.goods.truck .good-row {
+  grid-template-columns: minmax(120px, 1fr) 48px 132px 132px 44px 64px;
+}
 .goods-head {
   font-size: 12px;
+}
+.goods-head span:nth-last-child(-n + 2),
+.goods.truck .goods-head span:nth-child(2) {
+  text-align: right;
 }
 .good-row:hover {
   background: #2c3438;
@@ -2005,11 +2097,59 @@ canvas.view {
 .tag.sell {
   color: #e8b86a;
 }
-.held {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
+.count,
+.profit {
+  text-align: right;
+  white-space: nowrap;
+}
+.num {
   font: 13px var(--font-mono);
+}
+.cap {
+  display: none;
+  margin-right: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+@container (max-width: 620px) {
+  .goods-head {
+    display: none;
+  }
+  .good-row {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas:
+      "name held profit"
+      "buy buy sell";
+    row-gap: 6px;
+  }
+  .goods.truck .good-row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas:
+      "name theirs held profit"
+      "buy buy sell sell";
+  }
+  .good-row .good-name {
+    grid-area: name;
+  }
+  .good-row .count.theirs {
+    grid-area: theirs;
+  }
+  .good-row .count.held {
+    grid-area: held;
+  }
+  .good-row .profit {
+    grid-area: profit;
+  }
+  .good-row .trade.buy {
+    grid-area: buy;
+  }
+  .good-row .trade.sell {
+    grid-area: sell;
+    justify-self: end;
+  }
+  .cap {
+    display: inline;
+  }
 }
 
 /* Garage services: fuel, supplies and repair, each a meter and its buttons. */
@@ -2155,6 +2295,10 @@ canvas.view {
 .job > .icon {
   width: 24px;
   height: 24px;
+}
+/* A note in place of an action wraps, so it never squeezes the contract summary. */
+.job > .dim {
+  max-width: 11em;
 }
 #ui .job button {
   padding: 3px 12px;
