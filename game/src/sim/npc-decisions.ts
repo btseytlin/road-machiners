@@ -33,7 +33,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, hasCargo, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
@@ -815,6 +815,12 @@ function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
 // Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
 export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   return !isStranded(world, vehicle) && traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+}
+
+// The one hold-up rule: the driver wants the prey's loot, the prey carries cargo, and the driver is not weak or
+// outgunned. A driver that holds up its prey names a price instead of granting a free truce.
+export function holdsUp(world: World, robber: Vehicle, prey: Vehicle, danger: number | null): boolean {
+  return wantsLoot(world, robber, prey) && hasCargo(prey) && !wantsPeace(world, robber, danger);
 }
 
 // The driver's hostility toward the target is only for its cargo.

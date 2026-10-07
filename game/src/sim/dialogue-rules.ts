@@ -51,6 +51,11 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
   return towns.reduce((a, b) => (dist(me, a.pos) <= dist(me, b.pos) ? a : b));
 }
 
+// A robber's once-only demand topic is settled when its price came up in a truce call.
+function settleDemand(world: World, npc: Vehicle, outcome: TopicOutcome): void {
+  world.player.talked[npc.id] = { ...world.player.talked[npc.id], demand: outcome };
+}
+
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
   if (!call.topic) throw new Error('Only a topic can be settled');
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
@@ -228,6 +233,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcHasCargo: (_world, npc) => hasCargo(npc),
   offersTruce: (world, npc) => pendingPlea(world, npc) === 'truce',
   begsMercy: (world, npc) => pendingPlea(world, npc) === 'mercy',
+  demandsToll: (_world, _npc, vars) => answerOf(vars) === 'demand',
   accepts: (_world, _npc, vars) => answerOf(vars) === 'yes',
   refuses: (_world, _npc, vars) => answerOf(vars) === 'no',
   complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
@@ -305,7 +311,23 @@ export const EFFECTS: Record<EffectId, Effect> = {
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
   settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
-  withdrawPlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), false),
+  withdrawPlea: (world, npc, call) => {
+    settlePlayerPlea(world, npc, playerPlea(call), false);
+    if (answerOf(call.vars) === 'demand') settleDemand(world, npc, 'refused');
+  },
+  // The player pays a robber's price for a truce: the same hand-over as the demand topic.
+  payToll: (world, npc, call) => {
+    if (answerOf(call.vars) !== 'demand') throw new Error('payToll needs a demand answer');
+    settlePlayerPlea(world, npc, 'truce', false);
+    yieldTo(world, playerVehicle(world), npc);
+    settleDemand(world, npc, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  refuseToll: (world, npc, call) => {
+    if (answerOf(call.vars) !== 'demand') throw new Error('refuseToll needs a demand answer');
+    settlePlayerPlea(world, npc, 'truce', false);
+    settleDemand(world, npc, 'refused');
+  },
   hitchNpc: (world, npc) => hitchNpc(world, npc, false),
   hitchNpcFree: (world, npc) => hitchNpc(world, npc, true),
   releaseNpc: (world, npc) => releaseNpc(world, npc),
@@ -348,8 +370,8 @@ export const EFFECTS: Record<EffectId, Effect> = {
 };
 
 export const PREPARES: Record<PrepareId, Prepare> = {
-  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
-  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
+  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') } }),
+  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') } }),
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),

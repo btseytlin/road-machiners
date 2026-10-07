@@ -26,7 +26,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -611,6 +611,15 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
   }
 }
 
+// Finding the heard truck is a new sighting, so the driver decides on it with the usual hostileSeen roll.
+function onContactSpotted(world: World, vehicle: Vehicle): void {
+  const goal = topGoal(vehicle);
+  if (goal?.kind !== 'investigate') return;
+  if (!canVehicleSee(world, vehicle, vehicleById(world, goal.targetId!).pos)) return;
+  delete vehicle.brain!.noticed[`hostileSeen:${goal.targetId}`];
+  finishGoal(world, vehicle, 'spotted the truck it heard');
+}
+
 // A driver in a fight or on the run ignores contacts beyond sight. It decides on them once the danger goal pops.
 function hostileContacts(world: World, vehicle: Vehicle, contacts: Contact[]): Contact[] {
   return inDanger(vehicle) ? [] : contacts.filter((contact) => isHostileContact(world, vehicle, contact));
@@ -806,7 +815,7 @@ export function startTow(world: World, vehicle: Vehicle, client: Vehicle, at: Ve
   pushGoal(world, vehicle, createActivity('tow', client.id, { ...at }, 'help a stranded truck'));
 }
 
-// A flee keeps running from where its threat is now. An investigation keeps the destination it started with.
+// A flee keeps running from where its threat is now. An investigation keeps the destination it started with until it sees its target.
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
   if (top) STEERS[top.kind]?.(world, vehicle, top, profile, contacts);
@@ -869,6 +878,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onParley(world, vehicle);
   // A truce ends hostility, so goals that held only against the truce partner end here.
   dropInvalidGoals(world, vehicle, contacts);
+  onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
@@ -1288,21 +1298,4 @@ export function resolveNpcActivities(world: World): void {
     const top = topGoal(vehicle);
     if (top) resolveActivity(world, vehicle, top);
   }
-}
-
-// The victim's truck while it lies knocked out, else its wreck.
-function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
-  const victim = w.vehicles.find((v) => v.id === victimId);
-  if (victim && isKnockedOut(victim)) return victim;
-  return w.salvage.find((s) => s.id === wreckStockId(victimId));
-}
-
-// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
-// fight loots nothing.
-export function lootRobbed(w: World, robberId: string, victimId: string): void {
-  const robber = w.vehicles.find((v) => v.id === robberId);
-  if (!robber) return;
-  const stock = robbedLoot(w, victimId);
-  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
-  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }
