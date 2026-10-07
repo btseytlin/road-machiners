@@ -272,6 +272,9 @@ body {
   flex-direction: column;
   white-space: nowrap;
 }
+.resource.unlabeled {
+  justify-content: flex-end;
+}
 .resource small {
   font: 10px / 1.1 var(--font-ui);
   color: var(--muted);

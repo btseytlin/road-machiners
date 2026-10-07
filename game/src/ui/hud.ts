@@ -466,19 +466,7 @@ export class Hud {
 
   private renderReadouts(readout: ReturnType<typeof getHudReadout>): void {
     this.readoutSlot.replaceChildren(
-      ...readout.resources.map((resource) =>
-        el(
-          "span",
-          {
-            class: `resource ${resource.warning ? "bad" : ""}`,
-            title: resource.label,
-            "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
-            "data-resource": resource.label,
-          },
-          el("small", {}, resource.label),
-          el("strong", {}, resource.warning ? "! " : "", resource.balance === undefined ? resource.value : balanceEl(resource.balance)),
-        ),
-      ),
+      ...readout.resources.map(resourceEl),
       ...readout.survival.map((entry) =>
         el(
           "span",
@@ -584,6 +572,23 @@ export class Hud {
 
 // An NPC reads as its driver's name, what it is doing now, then its template name. The player's truck keeps its own
 // name.
+type Resource = ReturnType<typeof getHudReadout>["resources"][number];
+
+function resourceEl(resource: Resource): HTMLElement {
+  const attrs = {
+    title: resource.label,
+    "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
+    "data-resource": resource.label,
+  };
+  const bad = resource.warning ? " bad" : "";
+  const mark = resource.warning ? "! " : "";
+  if (resource.balance === undefined) {
+    return el("span", { class: `resource${bad}`, ...attrs }, el("small", {}, resource.label), el("strong", {}, mark, resource.value));
+  }
+  // The coin is the balance's label.
+  return el("span", { class: `resource unlabeled${bad}`, ...attrs }, el("strong", {}, mark, balanceEl(resource.balance)));
+}
+
 function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, v.name)];
   const activity = formatNpcActivity(w, v);
