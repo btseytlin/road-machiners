@@ -25,3 +25,11 @@ Prepare a public release post in the Telegram channel.
 2. A member's reply to the draft reaches you with a header. Change the draft as they ask, send it again with the tool, and answer in one short sentence.
 3. Never post to the channel yourself unless explicitly asked, and even in this case ask for confirmation.
 
+## Example of a decent release post
+
+ROAM 2026-10-07 is out! Our first public release brings new scavenging territories, new cars, deeper combat, a new progression system, new music, the Waste of Time radio and a million bug fixes.
+
+The Fallen Sun and the Old Orchard are large areas to loot and fight in. Drive under the wing of a crashed ship. Buhanka, Lincoln and Niva join the road. J.J. on the radio reads you the weather, the raids and the gossip. In combat, guns no longer fire all at once and aim within their arcs. Parts wear and break visibly, casings fall, and wrecks keep their truck's shape. A hit to the cab can knock the driver out. A shot-up cargo rack spills its load, and the shooters will want it. Skills now grow from XP you spend as you choose. Every inhabited stop sells fuel and repairs, trucks burn less, and a broke driver gets a free tow. Headlights switch by hand, and item condition shows at a glance.
+
+Play it: https://btseytlin.itch.io/road-machiners
+Vote on what comes next: https://github.com/btseytlin/road-machiners/issues
