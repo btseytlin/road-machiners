@@ -32,6 +32,7 @@ export type PlayerSnapshot = {
 export type SnapshotLine = { k: 'snapshot'; turn: number; player: PlayerSnapshot; npcs: NpcSnapshot[] };
 // complete: every turn ran. death: the player died. error: the turn pipeline threw or the player truck stalled.
 export type EndLine = { k: 'end'; turn: number; reason: 'complete' | 'death' | 'error'; message: string | null };
+// moneyIn and moneyOut sum the player's money gained and spent turn by turn. hits counts the rounds that hit.
 export type SummaryLine = {
   k: 'summary'; turns: number; events: Record<string, number>; npcGoals: Record<string, number>; npcsSeen: number;
   shots: number; hits: number; destroyed: number; knockouts: number; deaths: number; stalls: number;
@@ -151,7 +152,6 @@ const TALLIES: Partial<Record<GameEvent['t'], (tally: Tally, e: GameEvent) => vo
   activity: (tally, e) => { if (e.t === 'activity' && e.activity) tally.count(tally.npcGoals, e.activity); },
   spawn: (tally, e) => { if (e.t === 'spawn') tally.seen.add(e.vehicle); },
   shot: (tally, e) => { if (e.t === 'shot') tally.shoot(e.rounds.filter((r) => r.hit).length); },
-  money: (tally, e) => { if (e.t === 'money') tally.pay(e.amount); },
 };
 
 // Counts the run for the summary line, so a reader sees a quiet run or a missing kind of activity at a glance.
@@ -165,9 +165,11 @@ class Tally {
   private moneyOut = 0;
   private tiles = 0;
   private last: Vec;
+  private money: number;
 
   constructor(start: World) {
     this.last = { ...playerVehicle(start).pos };
+    this.money = start.player.money;
     for (const v of start.vehicles) this.seen.add(v.id);
   }
 
@@ -185,15 +187,15 @@ class Tally {
     this.hits += hits;
   }
 
-  pay(amount: number): void {
-    if (amount > 0) this.moneyIn += amount;
-    else this.moneyOut -= amount;
-  }
-
+  // Trade, repairs and fees change the player's money without a money event, so the summary counts the change itself.
   move(world: World): void {
     const pos = playerVehicle(world).pos;
     this.tiles += dist(pos, this.last);
     this.last = { ...pos };
+    const change = world.player.money - this.money;
+    if (change > 0) this.moneyIn += change;
+    else this.moneyOut -= change;
+    this.money = world.player.money;
   }
 
   summary(world: World, turns: number): SummaryLine {

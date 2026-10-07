@@ -94,7 +94,7 @@ describe('playtest', () => {
     expect(task.body).toContain('Never remove or disable a feature');
     expect(task.body).toContain('replays the same seed');
     expect(f.calls).toContain('addCard Design');
-    expect(release(f).playtest).toMatchObject({ runs: 1, passed: null, blocked: null });
+    expect(release(f).playtest).toMatchObject({ runs: 1, streak: 1, passed: null, blocked: null });
     expect(comments(f)[0]).toContain('The fixes go to release task #11.');
   });
 
@@ -108,7 +108,7 @@ describe('playtest', () => {
     expect(second.shells[0]).toContain(`--seed ${SEED} --turns 100 --sha def5678`);
     const history = readFileSync(join(ROOT, 'work', 'release-playtest', 'game', '.factory', 'playtest-history.md'), 'utf8');
     expect(history).toContain('- run 1 at abc1234: fix, 2 planned fixes, fix task #11');
-    expect(release(second.f).playtest).toMatchObject({ runs: 2, passed: 'def5678' });
+    expect(release(second.f).playtest).toMatchObject({ runs: 2, streak: 0, passed: 'def5678' });
   });
 
   it('passes nothing when the release moved during the run, so the tick plays the new head', async () => {
@@ -128,11 +128,19 @@ describe('playtest', () => {
   });
 
   it('blocks instead of opening a fix task on the last run, so it never loops past the limit', async () => {
-    const { f } = setup(['abc1234'], { playtest: { ...RELEASE.playtest, runs: 2 } });
+    const { f } = setup(['abc1234'], { playtest: { ...RELEASE.playtest, runs: 5, streak: 2 } });
     f.agentWrites = { 'playtest.json': review({ verdict: 'fix', findings: [finding], plan: PLAN }) };
-    await expect(playtest(f.ctx, 11)).rejects.toThrow('The run 3 of 3 still has findings to fix');
+    await expect(playtest(f.ctx, 11)).rejects.toThrow('The run 3 of 3 since the last pass still has findings to fix');
     expect(f.created).toEqual([]);
-    expect(release(f).playtest).toMatchObject({ runs: 3, passed: null, blocked: { sha: 'abc1234' } });
+    expect(release(f).playtest).toMatchObject({ runs: 6, streak: 3, passed: null, blocked: { sha: 'abc1234' } });
+    expect(existsSync(join(auditDir(f.ctx, RELEASE, 6), 'meta.json'))).toBe(true);
+  });
+
+  it('gives a fresh budget after a clean pass, so a committee change later is not short of runs', async () => {
+    const { f } = setup(['abc1234'], { playtest: { ...RELEASE.playtest, runs: 2, streak: 2 } });
+    f.agentWrites = { 'playtest.json': review() };
+    await playtest(f.ctx, 11);
+    expect(release(f).playtest).toMatchObject({ runs: 3, streak: 0, passed: 'abc1234' });
   });
 
   it('blocks a clean verdict of a run that ended in an error', async () => {
@@ -148,10 +156,10 @@ describe('playtest', () => {
   });
 
   it('refuses to start past the run limit and blocks without playing', async () => {
-    const { f, shells } = setup(['abc1234'], { playtest: { ...RELEASE.playtest, runs: 3 } });
+    const { f, shells } = setup(['abc1234'], { playtest: { ...RELEASE.playtest, runs: 3, streak: 3 } });
     await expect(playtest(f.ctx, 11)).rejects.toThrow('spent all 3 playtest runs');
     expect(shells).toEqual([]);
-    expect(release(f).playtest.blocked).toEqual({ sha: 'abc1234', reason: 'The release spent all 3 playtest runs.' });
+    expect(release(f).playtest.blocked).toEqual({ sha: 'abc1234', reason: 'The release spent all 3 playtest runs since its last pass.' });
   });
 
   it('refuses while a release task is open or the playtest is blocked, and plays nothing', async () => {

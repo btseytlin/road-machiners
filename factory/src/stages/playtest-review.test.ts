@@ -18,7 +18,7 @@ describe('logFacts', () => {
 
   it('names each kind of activity the run never showed', () => {
     const read = logFacts(logText({ summary: { shots: 0, moneyIn: 0, moneyOut: 0, npcGoals: {}, playerTiles: 0 } }), WANT);
-    expect(read.quiet).toEqual(['no shots were fired', 'no money changed hands', 'no NPC took up a goal', 'the player truck never moved']);
+    expect(read.quiet).toEqual(['no shots were fired', "the player's money never changed", 'no NPC took up a goal', 'the player truck never moved']);
   });
 
   it('fails on a log of another seed, turn count or commit, so a review never passes a run it did not get', () => {

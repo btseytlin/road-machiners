@@ -26,7 +26,8 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const open = await openReleaseTasks(ctx);
   if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
   const sha = await ctx.repo.headHash(release.branch);
-  const run = startRun(ctx, release, sha);
+  const started = startRun(ctx, release, sha);
+  const run = started.runs;
   const startedAt = ctx.now().toISOString();
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
@@ -41,11 +42,11 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const facts = logFacts(readFileSync(join(home, LOG), 'utf8'), { seed, turns, sha });
   writeFileSync(join(home, OUT_DIR, 'playtest-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
   writeFileSync(join(home, OUT_DIR, 'playtest-history.md'), history(ctx, release));
-  const prompt = fillPrompt('release-playtest', { seed: String(seed), turns: String(turns), sha, run: String(run), runs: String(ctx.cfg.playtestRuns) });
+  const prompt = fillPrompt('release-playtest', { seed: String(seed), turns: String(turns), sha, streak: String(started.streak), runs: String(ctx.cfg.playtestRuns) });
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.designModel, prompt, log });
   const review = readReview(readOutput(home, 'playtest.json'));
   const report = readOutput(home, 'playtest.md') ?? review.summary;
-  const outcome = atLimit(judge(facts, review), run, ctx.cfg.playtestRuns);
+  const outcome = atLimit(judge(facts, review), started, ctx.cfg.playtestRuns);
   const task = outcome.outcome === 'fix' ? await openFixTask(ctx, release, run, sha, review) : null;
   const meta: RunMeta = { day: release.day, run, seed, turns, sha, startedAt, finishedAt: ctx.now().toISOString(), outcome: outcome.outcome, reason: outcome.reason, verdict: review.verdict, task, ending: facts.ending };
   keepAudit(ctx, release, home, meta);
@@ -53,21 +54,22 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   await settle(ctx, release, sha, outcome);
 }
 
-// The run is counted before it starts, so a run that times out or crashes still spends its budget.
-function startRun(ctx: Ctx, release: ReleaseState, sha: string): number {
+// The run is counted before it starts, so a run that times out or crashes still spends its budget. The limit holds the
+// runs since the last pass, so a fix loop ends, while a committee change after a pass gets a fresh budget.
+function startRun(ctx: Ctx, release: ReleaseState, sha: string): PlaytestState {
   if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
-  if (release.playtest.runs >= ctx.cfg.playtestRuns) {
-    const reason = `The release spent all ${ctx.cfg.playtestRuns} playtest runs.`;
+  if (release.playtest.streak >= ctx.cfg.playtestRuns) {
+    const reason = `The release spent all ${ctx.cfg.playtestRuns} playtest runs since its last pass.`;
     setPlaytest(ctx, (playtest) => ({ ...playtest, blocked: { sha, reason } }));
     throw new Error(reason);
   }
-  return setPlaytest(ctx, (playtest) => ({ ...playtest, runs: playtest.runs + 1 })).runs;
+  return setPlaytest(ctx, (playtest) => ({ ...playtest, runs: playtest.runs + 1, streak: playtest.streak + 1 }));
 }
 
-// A fix needs a run after it, so the last run can only pass or block.
-function atLimit(outcome: Outcome, run: number, runs: number): Outcome {
-  if (outcome.outcome !== 'fix' || run < runs) return outcome;
-  return { outcome: 'blocked', reason: `The run ${run} of ${runs} still has findings to fix: ${outcome.reason}.` };
+// A fix needs a run after it, so the last run of a streak can only pass or block.
+function atLimit(outcome: Outcome, playtest: PlaytestState, runs: number): Outcome {
+  if (outcome.outcome !== 'fix' || playtest.streak < runs) return outcome;
+  return { outcome: 'blocked', reason: `The run ${playtest.streak} of ${runs} since the last pass still has findings to fix: ${outcome.reason}.` };
 }
 
 // Clean passes the commit only while it is still the release head. Blocked fails the job, so the tracking card takes the stuck label and Hermes sees it.
@@ -80,7 +82,7 @@ async function settle(ctx: Ctx, release: ReleaseState, sha: string, outcome: Out
   await ctx.repo.fetch();
   const head = await ctx.repo.headHash(release.branch);
   if (head !== sha) return ctx.log('playtest', release.issue, `clean at ${sha}, but the release moved to ${head}, so it plays again`);
-  setPlaytest(ctx, (playtest) => ({ ...playtest, passed: sha }));
+  setPlaytest(ctx, (playtest) => ({ ...playtest, passed: sha, streak: 0 }));
   ctx.log('playtest', release.issue, `clean at ${sha}`);
 }
 

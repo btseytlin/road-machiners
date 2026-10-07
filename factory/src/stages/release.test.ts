@@ -34,7 +34,7 @@ describe('release cut', () => {
     expect(f.created[0].body).toContain('- #3 faster trucks');
     expect(f.created[1].body).toContain('slow spot');
     expect(f.created[2].body).toContain('stale doc');
-    expect(readState(f.ctx.statePath).release).toEqual({ issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], playtest: { seed: 20260929, runs: 0, passed: null, blocked: null, notes: [] } });
+    expect(readState(f.ctx.statePath).release).toEqual({ issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], playtest: { seed: 20260929, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } });
   });
 
   it('merges main into dev first when dev lacks it, so the release merges into main without conflicts', async () => {

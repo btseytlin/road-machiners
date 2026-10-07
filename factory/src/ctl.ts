@@ -190,7 +190,7 @@ function candidatePost(release: ReleaseState): string {
 }
 
 function playtestLines(playtest: PlaytestState, runs: number): string[] {
-  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} of ${runs} runs, passed ${playtest.passed ?? 'none'}`];
+  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} runs, ${playtest.streak} of ${runs} since the last pass, passed ${playtest.passed ?? 'none'}`];
   if (playtest.blocked) lines.push(`playtest blocked at ${playtest.blocked.sha}: ${playtest.blocked.reason}`);
   return [...lines, ...playtest.notes.map((note) => `playtest decision: ${note}`)];
 }
@@ -235,7 +235,7 @@ function retryPlaytest(ctx: Ctx, decision: string): string {
     if (state.release === null) return state;
     const playtest = state.release.playtest;
     const notes = decision === '' ? playtest.notes : [...playtest.notes, decision];
-    return { ...state, release: { ...state.release, playtest: { ...playtest, runs: 0, blocked: null, notes } } };
+    return { ...state, release: { ...state.release, playtest: { ...playtest, streak: 0, blocked: null, notes } } };
   });
   return `Lifted the playtest block of the release. It plays again with ${ctx.cfg.playtestRuns} runs${decision === '' ? '' : ' and reads the decision'}.`;
 }

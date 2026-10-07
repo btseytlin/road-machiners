@@ -1,6 +1,6 @@
 This is the release playtest of the ROAM factory.
 You work alone in a clone of the release branch at commit {{sha}}. Every feature of the release and its cleanup tasks is merged.
-This is run {{run}} of at most {{runs}} for this release.
+This is run {{streak}} of at most {{runs}} since the release last passed. The last one can only pass or block.
 
 Read CLAUDE.md first.
 Do not change the game, git state or any file outside `.factory/`. This stage only reviews. Fixes run as a release task.
@@ -11,7 +11,7 @@ Its full log is `.factory/playtest/log.jsonl`. Each line is JSON with a `k` fiel
 - `event`: one game event with its turn. `e.t` names the event. `src/sim/types.ts`, type `GameEvent`, describes each one.
 - `snapshot`: the player and every NPC every 50 turns: position, top goal, resources and defeat state.
 - `end`: complete, death or error, with the error message.
-- `summary`: counts of events, NPC goals, shots, hits, kills, money and XP.
+- `summary`: counts of events, NPC goals, shots, rounds that hit, kills, the player's money gained and spent, and XP.
 `.factory/playtest-facts.json` holds the facts the factory read from the log. `.factory/playtest-history.md` lists the earlier runs of this release and the committee's decisions. Respect those decisions.
 
 Read the whole log, start to end. It is long, so read it in chunks with jq, grep or a short script, and keep going until you covered every turn.

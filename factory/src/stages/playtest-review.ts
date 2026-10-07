@@ -48,7 +48,7 @@ function only(lines: Line[], kind: string): Line {
 export function quietParts(summary: LogSummary): string[] {
   const parts: string[] = [];
   if (summary.shots === 0) parts.push('no shots were fired');
-  if (summary.moneyIn + summary.moneyOut === 0) parts.push('no money changed hands');
+  if (summary.moneyIn + summary.moneyOut === 0) parts.push("the player's money never changed");
   if (Object.keys(summary.npcGoals).length === 0) parts.push('no NPC took up a goal');
   if (summary.playerTiles === 0) parts.push('the player truck never moved');
   return parts;

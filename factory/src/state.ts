@@ -22,7 +22,7 @@ export function readState(path: string): FactoryState {
 
 // The seed of a release is its cut day as YYYYMMDD, so each release plays a seed of its own and every run of it plays the same one.
 export function newPlaytest(day: string): PlaytestState {
-  return { seed: Number(day.replaceAll('-', '')), runs: 0, passed: null, blocked: null, notes: [] };
+  return { seed: Number(day.replaceAll('-', '')), runs: 0, streak: 0, passed: null, blocked: null, notes: [] };
 }
 
 // A release cut before the playtest has no playtest yet and no candidate commit. Its post, if any, stays, and the next tick drops it, since it names no commit.

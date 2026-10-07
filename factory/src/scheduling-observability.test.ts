@@ -33,7 +33,7 @@ it('explains author waits, failed work, approval waits and the daily cap', () =>
 it('reports the same candidate gate used by selection', () => {
   expect(scheduling).toHaveProperty('readReleaseGate');
   const state = createState();
-  state.release = { issue: 10, branch: 'release/2026-10-04', day: '2026-10-04', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
+  state.release = { issue: 10, branch: 'release/2026-10-04', day: '2026-10-04', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
   const cards = [createCard(10, 'Approval', ['release']), createCard(11, 'Testing', ['release-task'])];
   expect(scheduling.readReleaseGate(state, cards)).toEqual({ reason: 'release-tasks', issues: [11] });
   cards[1].column = 'Done';

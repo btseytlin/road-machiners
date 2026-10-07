@@ -79,7 +79,7 @@ The playtest checks that the merged features hold up together over a long run be
 - An Opus agent reads the whole log and writes `.factory/playtest.json` and the report `.factory/playtest.md`: observations, suspected issues, limitations, findings with severity and evidence, and a fix plan with priorities.
 - A clean verdict passes only with no important finding, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
 - A fix verdict opens one `release-task` and `maintenance` issue with the findings and the plan. It asks for the smallest fixes, and it forbids removing or disabling a feature or changing unrelated behavior. The task runs the card stages and merges into the release like a cleanup task. The playtest then replays the same seed on the new head.
-- A blocked verdict, or findings on the last of `FACTORY_PLAYTEST_RUNS` runs, blocks the release. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block, gives the runs back and hands the decision to the next review.
+- A blocked verdict, or findings on the last of `FACTORY_PLAYTEST_RUNS` runs since the last pass, blocks the release. A pass gives the budget back, so a committee change later plays with a full one. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block, gives the runs back and hands the decision to the next review.
 - Each run keeps its log, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`, and comments the report on the tracking issue.
 
 ## Candidate

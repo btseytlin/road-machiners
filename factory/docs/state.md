@@ -57,7 +57,7 @@ Flags hold on any position:
 - Candidate building: `release.playtest.passed` is the release head and no post is current. The candidate runs.
 - Candidate posted: `release.postId` holds the current candidate post, and `release.candidateSha` the commit it plays. Ship runs when a member presses Ship, or on `ship`. A tick that finds the release head past `candidateSha` drops the post and a queued Ship.
 
-`release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs` started, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
+`release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every run started, which names the audit folders; `streak`, the runs since the last pass or retry, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
 
 `factory audit` and `card N` flag three drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, and a candidate post of a commit the playtest did not pass. `factory release` flags nothing.
@@ -125,4 +125,4 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `merge` of a card the committee has not approved, `ship` and `merge-change` are gated by a rule Hermes keeps. Hermes names the member who ordered the action in `--by`. The CLI does not check who sent the message.
 
-Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its runs to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.
+Immediate, with no tick wait: `retry N [decision]`, `pause <reason>` and `resume`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member.

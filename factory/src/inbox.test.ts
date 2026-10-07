@@ -204,7 +204,7 @@ describe('drainInbox', () => {
   });
 });
 
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
 const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } }));
 
 describe('release commands', () => {

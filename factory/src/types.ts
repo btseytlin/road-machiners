@@ -126,7 +126,8 @@ export type Removal = { issue: number; by: string; text: string };
 // The release playtest. Every run of one release plays the same seed, so a rerun after a fix replays what found the bug.
 export type PlaytestState = {
   seed: number;
-  runs: number; // runs started for this release, up to FACTORY_PLAYTEST_RUNS
+  runs: number; // runs started for this release. It names each run's audit folder and never goes back.
+  streak: number; // runs since the last clean pass or a member's retry, up to FACTORY_PLAYTEST_RUNS
   passed: string | null; // the release head a clean run approved. The candidate builds only this commit.
   blocked: { sha: string; reason: string } | null; // the gate stopped the release here until a member's retry
   notes: string[]; // members' decisions from `factory retry`, which every later review reads

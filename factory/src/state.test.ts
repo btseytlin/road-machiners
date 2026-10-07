@@ -35,7 +35,7 @@ describe('state', () => {
   it('gives a release cut before the playtest its playtest, seeded by its day, and no candidate commit', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
     writeFileSync(path, JSON.stringify({ release: { issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: 9, removed: [] } }));
-    expect(readState(path).release).toEqual({ issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: 9, removed: [], candidateSha: null, playtest: { seed: 20261007, runs: 0, passed: null, blocked: null, notes: [] } });
+    expect(readState(path).release).toEqual({ issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: 9, removed: [], candidateSha: null, playtest: { seed: 20261007, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } });
   });
 
   it('turns the single job of an old state file into the job list', () => {
