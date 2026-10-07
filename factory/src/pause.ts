@@ -1,8 +1,20 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 // Hermes pauses the factory with this file while it repairs state by hand. Its text says why.
 // A line `pid: N` ties the pause to a process Hermes started, such as a step run by hand. The tick lifts the pause once that process ends, so a pause never outlives its work while Hermes is away.
 export const pauseFile = (home: string): string => `${home}/paused`;
+
+// An agent run that hit the Claude weekly usage limit. Every job started before the reset would fail the same way, so the factory pauses and the card keeps no stuck label.
+export class UsageLimitError extends Error {}
+
+// The note the dashboard reads as a usage-limit pause. Hermes lifts it after the reset the message names.
+// A pause already in place stays, since its reason belongs to someone else.
+export function pauseForUsageLimit(home: string, message: string): void {
+  try { writeFileSync(pauseFile(home), `Hermes: Claude weekly usage limit; ${message}\n`, { flag: 'wx' }); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+}
 
 // The reason the factory is paused, or null when it runs.
 export function pausedReason(home: string): string | null {

@@ -5,14 +5,14 @@ import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { corePart, coreParts, mountedParts } from './grid';
 import type { Vehicle, World } from './types';
 import { addState } from './states';
-import { fuelCap, groundSpeed, gunDraw, gunDrag, isStranded, maxSpeedSteps, workingEngineCapacity, suppliesCap, vehicleStats } from './stats';
+import { canOverdrive, fuelCap, groundSpeed, gunDraw, gunDrag, inOverdrive, isStranded, maxSpeedSteps, workingEngineCapacity, suppliesCap, vehicleStats } from './stats';
 import { endTurn } from './world';
 import { CHASSIS } from '../data/chassis';
 import { PARTS, type EngineDef, type StoreDef } from '../data/parts';
 import { makePart } from './factory';
 import { mountPart, stowPart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
-import { wornDef } from './wear';
+import { maxHp, wornDef } from './wear';
 
 describe('worn parts in vehicle stats', () => {
   it('a worn engine gives a lower top speed and acceleration', () => {
@@ -31,6 +31,60 @@ describe('worn parts in vehicle stats', () => {
     const fresh = vehicleStats(w, v).weapons[0].def.spread;
     mountedParts(v, 'weapon')[0].wear = 2;
     expect(vehicleStats(w, v).weapons[0].def.spread).toBeGreaterThan(fresh);
+  });
+});
+
+describe('the overdrive engine cutoff', () => {
+  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
+  function wornEngine() {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const engine = mountedParts(me, 'engine')[0];
+    engine.wear = 2;
+    engine.hp = maxHp(engine);
+    return { w, me, engine };
+  }
+
+  it('blocks at exactly 15% of the worn max HP and below, and allows one HP above', () => {
+    const { me, engine } = wornEngine();
+    expect(maxHp(engine)).toBe(40);
+    engine.hp = 6;
+    expect(canOverdrive(me)).toBe(false);
+    engine.hp = 5;
+    expect(canOverdrive(me)).toBe(false);
+    engine.hp = 7;
+    expect(canOverdrive(me)).toBe(true);
+  });
+
+  it('blocks with a broken engine and with no engine', () => {
+    const { w, me, engine } = wornEngine();
+    engine.hp = 0;
+    expect(canOverdrive(me)).toBe(false);
+    const bare = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
+    expect(canOverdrive(bare)).toBe(false);
+  });
+
+  it('gives no boost with the flag on and a blocked engine', () => {
+    const { w, me, engine } = wornEngine();
+    engine.hp = 6;
+    const off = vehicleStats(w, me);
+    w.player.overdrive = true;
+    expect(inOverdrive(w, me)).toBe(false);
+    const on = vehicleStats(w, me);
+    expect(on.maxSpeed).toBe(off.maxSpeed);
+    expect(on.accel).toBe(off.accel);
+    engine.hp = 7;
+    expect(inOverdrive(w, me)).toBe(true);
+    expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(off.maxSpeed * RULES.overdriveBoost);
+  });
+
+  it('leaves plain driving on a badly worn engine as it was', () => {
+    const { w, me, engine } = wornEngine();
+    const healthy = vehicleStats(w, me);
+    engine.hp = 4;
+    const low = vehicleStats(w, me);
+    expect(low.maxSpeed).toBe(healthy.maxSpeed);
+    expect(low.accel).toBe(healthy.accel);
   });
 });
 

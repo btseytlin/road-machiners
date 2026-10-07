@@ -2,11 +2,12 @@
 
 import { partDef } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
+import { instantMoveItem } from "../sim/cheats";
 import { isMounted } from "../sim/grid";
 import { installSpot, moveItem, storePart, stowSpot, takeFromStorage } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
-import { townAt } from "../sim/sites";
+import { shopAt } from "../sim/market";
 import type { GridItem, World } from "../sim/types";
 
 // A mounted part must be held this long before a drag starts. A plain press or click only selects it, so a
@@ -44,9 +45,10 @@ export function needsHold(chassisId: string, item: GridItem): boolean {
 }
 
 // The command a double click runs, or null when the double click does nothing here.
-// In a garage it swaps installed and stored parts. Elsewhere it only moves an item into the truck's own storage.
-export function doubleClickCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
-  if (c.source === "grid") return townAt(w) ? gridCommand(w, c) : null;
+// At a shop it swaps installed and stored parts. In the full shop (instant) it mounts a spare part or takes a
+// mounted one off to a free cell, at once. Elsewhere it only moves an item into the truck's own storage.
+export function doubleClickCommand(w: World, c: ClickedItem, instant = false): ((w: World) => World) | null {
+  if (c.source === "grid") return gridDoubleClick(w, c, instant);
   if (c.source === "storage") return storageCommand(w, c);
   return takeCommand(w, c);
 }
@@ -73,4 +75,17 @@ function gridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
   if (isMounted(me.chassisId, item)) return (next) => storePart(next, item.id);
   const spot = installSpot(me, item);
   return spot ? (next) => moveItem(next, item.id, spot) : null;
+}
+
+function gridDoubleClick(w: World, c: ClickedItem, instant: boolean): ((w: World) => World) | null {
+  if (instant) return instantGridCommand(w, c);
+  return shopAt(w) ? gridCommand(w, c) : null;
+}
+
+function instantGridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
+  const me = playerVehicle(w);
+  const item = me.items.find((it) => it.id === c.id);
+  if (!item || item.kind !== "part" || partDef(item.part.defId).kind === "core") return null;
+  const spot = isMounted(me.chassisId, item) ? stowSpot(me, item) : installSpot(me, item);
+  return spot ? (next) => instantMoveItem(next, item.id, spot) : null;
 }

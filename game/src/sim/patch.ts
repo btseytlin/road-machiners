@@ -7,7 +7,7 @@
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { REGION } from '../data/region';
-import { PATCH } from '../data/wear';
+import { PATCH, REPAIR } from '../data/wear';
 import { isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle, vehicleById } from './damage';
 import { getTradePrice } from './economy';
@@ -20,10 +20,13 @@ import { getResources } from './resources';
 import { addState, type WorkLeft } from './states';
 import { isStranded } from './stats';
 import { inTowReach } from './tow';
+import { workTimeMult } from './utility';
 import type { CallVar, NpcState, PartInstance, PatchDeal, StateData, Vehicle, World } from './types';
 import { dist } from './vec';
 
-export type PatchPlan = { parts: number; turns: number };
+// `turns` is the work, which the patcher's crane speeds up. `priceTurns` is the old estimate the price charges for, so
+// a slow patcher charges no more.
+export type PatchPlan = { parts: number; turns: number; priceTurns: number };
 type Roles = { patcher: Vehicle; client: Vehicle };
 
 // The parts a patch can fix: the first engine, the transmission and the tank, unless junk.
@@ -70,7 +73,9 @@ export function canFixItself(world: World, v: Vehicle): boolean {
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
   const mult = machiningMult(world, patcher);
   const plans = patchParts(world, client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
-  return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns: plans.reduce((sum, p) => sum + p.turns, 0) };
+  const time = workTimeMult(patcher);
+  const turns = plans.reduce((sum, p) => sum + Math.max(1, Math.ceil(p.parts * REPAIR.turnsPerPart * mult * time)), 0);
+  return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns, priceTurns: plans.reduce((sum, p) => sum + p.turns, 0) };
 }
 
 // Talk is between the player and one NPC. The one with the broken truck is the client. A worn NPC truck is the
@@ -94,7 +99,7 @@ function partsValue(world: World, client: Vehicle, parts: number): number {
 // The client's price. A player client's social skill talks it down, and the Road mechanic perk raises what a
 // player patcher charges.
 function priceOf(world: World, deal: PatchDeal, roles: Roles, plan: PatchPlan): number {
-  const labor = plan.turns * PATCH.laborPerTurn;
+  const labor = plan.priceTurns * PATCH.laborPerTurn;
   if (deal === 'free') return 0;
   const full = deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
   const mechanic = vehicleHasPerk(world, roles.patcher, 'roadMechanic') ? PERK_NUMBERS.roadMechanic.price : 1;
@@ -222,7 +227,7 @@ export function settlePatch(world: World, s: NpcState): void {
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
   liftAgreedParts(data, roles.client);
-  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
+  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done', price: data.price });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
   if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);

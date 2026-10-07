@@ -4,6 +4,7 @@
 import { PHYSICS } from "./physics";
 import { BROKEN_WING, BROKEN_WING_POINT, FALLEN_SUN_POS, MAP_SCALE, REGION, scalePoint } from "./region";
 import { FALLEN_SUN_DECKS } from "./territory";
+import type { PropKind } from "../sim/terrain";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -554,6 +555,23 @@ export type TankRules = {
   placeTries: number;
 };
 
+// One kind of ship debris the rule can draw. radius is the footprint in tiles, drawn from the range. aligned pieces
+// face the heading of the trail, the others turn at random.
+export type DebrisLook = { look: PropKind; weight: number; radius: [number, number]; aligned: boolean };
+
+export type ShipDebrisRules = {
+  seedOffset: number;
+  trail: Vec[];
+  clusterStep: number;
+  sideSpread: number;
+  clusterReach: number;
+  pieces: [number, number];
+  yawJitter: number;
+  trailLooks: DebrisLook[];
+  strays: { count: number; looks: DebrisLook[] };
+  placeTries: number;
+};
+
 export type FieldRules = {
   seedOffset: number;
   perFarm: [number, number];
@@ -576,6 +594,7 @@ export const OLD_WORLD: {
   billboards: BillboardRules;
   tanks: TankRules;
   fields: FieldRules;
+  shipDebris: ShipDebrisRules;
 } = {
   settlements: {
     seedOffset: 7001,
@@ -676,6 +695,33 @@ export const OLD_WORLD: {
     gap: 1, // tiles between a hulk and the old road edge
     radius: 1.5, // tiles of footprint, as the old landmark hulks
     placeTries: 6, // tries to fit each hulk before it is left out
+  },
+  shipDebris: {
+    seedOffset: 7009,
+    // The crash trail in region points: north-east of Podfield, east of Podfield (region (79,26) moved to (82.5,22) and (79,30), since Podfield's site clearance took the whole cluster), south of the Broken Wing road, and
+    // the Fallen Sun's north-east rim. It stays west of the canyon, so no piece blocks the canyon floor.
+    trail: [scalePoint({ x: 81, y: 12 }), scalePoint({ x: 82.5, y: 22 }), scalePoint({ x: 79, y: 30 }), scalePoint({ x: 72, y: 37 }), scalePoint({ x: 66, y: 44.5 })],
+    clusterStep: 22, // tiles between impact clusters along the trail
+    sideSpread: 6, // tiles a cluster centre lies across the trail
+    clusterReach: 5, // tiles a piece lies from its cluster centre
+    pieces: [4, 7], // pieces per cluster
+    yawJitter: 0.5, // radians a trail piece turns off the trail heading
+    trailLooks: [
+      { look: 'hullChunk', weight: 4, radius: [0.8, 1.5], aligned: true }, // the metal, posed at 0.53 to 1 of the model's size
+      { look: 'wingShard', weight: 2, radius: [1.75, 1.75], aligned: true },
+      { look: 'escapePod', weight: 2, radius: [0.6, 0.6], aligned: false },
+      { look: 'habitat', weight: 1, radius: [2, 2], aligned: true }, // at most one per cluster
+      { look: 'powerCell', weight: 1, radius: [0.4, 0.4], aligned: false },
+    ],
+    strays: {
+      count: 30, // single pieces over the map, escape pods that came down anywhere
+      looks: [
+        { look: 'escapePod', weight: 5, radius: [0.6, 0.6], aligned: false },
+        { look: 'hullChunk', weight: 3, radius: [0.8, 1.5], aligned: false },
+        { look: 'powerCell', weight: 1, radius: [0.4, 0.4], aligned: false },
+      ],
+    },
+    placeTries: 24, // tries to fit each piece before it is left out
   },
   fields: {
     seedOffset: 7008,

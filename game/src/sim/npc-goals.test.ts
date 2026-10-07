@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { REGION } from '../data/region';
 import { corePart } from './grid';
 import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
@@ -69,6 +70,7 @@ describe('goal stack', () => {
     thinkNpc(w, npc);
     expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['scavenge', 'resupply', 'flee']);
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
+    w.turn += NPC_BEHAVIOR.fleeCalmTurns + 1;
     expect(thinkNpc(w, npc).kind).toBe('resupply');
     const stop = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)!.targetId)!;
     npc.pos = { ...sitePads(stop)[0] };
@@ -89,6 +91,7 @@ describe('goal stack', () => {
     expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['raid', 'flee']);
     raider.pos = { x: 70, y: 10 };
     raider.speed = 0;
+    w.turn += NPC_BEHAVIOR.fleeCalmTurns + 1;
     w.rngState = rngStateForForcedRolls(6);
     expect(thinkNpc(w, npc).kind).not.toBe('raid');
     expect(npc.brain!.goals.some((g) => g.kind === 'raid')).toBe(false);
@@ -96,14 +99,14 @@ describe('goal stack', () => {
 });
 
 describe('damage taken', () => {
-  it('sums part damage from shots, guard shots and collisions this turn', () => {
+  it('sums part damage from shots and collisions this turn', () => {
     const { w, npc } = scavengerWorld();
     const other = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
     const round = (damage: number[]) => ({ hit: true, crit: false, offset: 0, struck: npc.id, hits: damage.map((d) => ({ part: 'x', damage: d })), blast: [], burst: null });
     npc.brain!.hurt = 7;
     w.events = [
       { t: 'shot', shooter: other.id, weapon: 'w', target: npc.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round([3, 2]), round([])] },
-      { t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: npc.id, rounds: [round([4])] },
+      { t: 'shot', shooter: other.id, weapon: 'w2', target: npc.id, aim: 'body', chance: 1, damageChance: 1, side: 'left', rounds: [round([4])] },
       { t: 'collision', a: npc.id, b: 'rock-1', hitsA: [{ part: 'x', damage: 1 }], hitsB: [] },
       { t: 'collision', a: other.id, b: npc.id, hitsA: [{ part: 'y', damage: 9 }], hitsB: [{ part: 'x', damage: 5 }] },
     ];

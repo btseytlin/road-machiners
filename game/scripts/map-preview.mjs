@@ -11,7 +11,10 @@ const SITE_EDGE = 0x8a1e14;
 // Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
 // Road bridge decks are as wide as the road. Billboards are boards across their facing. Fence segments are
 // one-pixel lines along their facing, r to each side of the center. Road bridges go first, since other props never overlap them.
+// Nose's rock masses are discs of their reach and go under everything else.
 const PROP_LOOKS = {
+  noseRise: { color: 0x9d6642, shape: 'disc' },
+  noseCrag: { color: 0x9d6642, shape: 'disc' },
   rock: { color: 0x3a3028, shape: 'disc' },
   crag: { color: 0x6a5a48, shape: 'disc' },
   ruin: { color: 0x6e2a1e, shape: 'box' },
@@ -27,6 +30,30 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  fortMasonryWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortMasonryTower: { color: 0xb8a888, shape: 'disc' },
+  fortMasonryGate: { color: 0xe05030, shape: 'long' },
+  fortMasonryBastion: { color: 0xb8a888, shape: 'box' },
+  fortMasonryInner: { color: 0xe05030, shape: 'long' },
+  fortShipWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortShipTower: { color: 0xb8a888, shape: 'disc' },
+  fortShipGate: { color: 0xe05030, shape: 'long' },
+  fortScrapWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortScrapTower: { color: 0xb8a888, shape: 'disc' },
+  fortScrapGate: { color: 0xe05030, shape: 'long' },
+  fortScrapBastion: { color: 0xb8a888, shape: 'box' },
+  fortScrapInner: { color: 0xe05030, shape: 'long' },
+  fortPatchworkWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortPatchworkTower: { color: 0xb8a888, shape: 'disc' },
+  fortPatchworkGate: { color: 0xe05030, shape: 'long' },
+  fortCompoundWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortCompoundTower: { color: 0xb8a888, shape: 'disc' },
+  fortCompoundGate: { color: 0xe05030, shape: 'long' },
+  fortRingWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortRingGate: { color: 0xe05030, shape: 'long' },
+  fortYardWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortYardTower: { color: 0xb8a888, shape: 'disc' },
+  fortYardGate: { color: 0xe05030, shape: 'long' },
   shipWing: { color: 0xd0d0d0, shape: 'box' },
   hullChunk: { color: 0x909090, shape: 'long' },
   shipCache: { color: 0x40d040, shape: 'disc' },
@@ -54,6 +81,10 @@ const PROP_LOOKS = {
   drums: { color: 0xc04820, shape: 'disc' },
   woodpile: { color: 0xa07040, shape: 'box' },
   tankTrap: { color: 0x5e3420, shape: 'disc' },
+  escapePod: { color: 0xe0e0ff, shape: 'disc' },
+  habitat: { color: 0xffa0ff, shape: 'long' },
+  wingShard: { color: 0xa0ffa0, shape: 'long' },
+  powerCell: { color: 0x00ffff, shape: 'disc' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);

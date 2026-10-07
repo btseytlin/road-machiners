@@ -243,7 +243,7 @@ export function hangUp(world: World): World {
 // and wants to raise a topic calls. A knocked-out driver keeps its old goals, so it must not read them here. The highest priority topic wins. A driver in a feud with the player calls only with a topic
 // raised during feuds. While the player is in combat, only topics raised during combat call. One call at a time.
 export function raiseCalls(world: World): void {
-  if (world.player.call || world.player.state !== 'active') return;
+  if (world.player.call || world.player.state !== 'active' || world.player.frozen) return;
   const me = playerVehicle(world);
   for (const npc of world.vehicles) {
     const topic = raisedTopic(world, npc, me);

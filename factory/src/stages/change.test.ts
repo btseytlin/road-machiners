@@ -31,7 +31,7 @@ describe('change', () => {
     const dirs: string[] = [];
     const runs: { model: string; prompt: string }[] = [];
     const agent = f.ctx.container.agent;
-    f.ctx.container.agent = async (run) => { dirs.push(run.dir); runs.push(run); await agent(run); };
+    f.ctx.container.agent = async (run) => { dirs.push(run.dir); runs.push(run); return agent(run); };
     const bases: string[] = [];
     const prepare = f.ctx.repo.prepareWorkClone;
     f.ctx.repo.prepareWorkClone = async (branch, base, dir) => { bases.push(base); await prepare(branch, base, dir); };

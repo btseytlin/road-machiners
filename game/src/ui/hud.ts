@@ -6,6 +6,7 @@ import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
+import { ERROR_REPORT_URL } from "../config";
 import {
   contractDue,
   contractSummary,
@@ -19,7 +20,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -41,7 +42,8 @@ export type ContextTarget =
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
-  | { kind: 'stock'; id: string }
+  | { kind: 'stock'; id: string } // search the stock
+  | { kind: 'loot'; id: string } // take the stock's revealed loot
   | { kind: 'empty' };
 export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
 
@@ -206,6 +208,7 @@ export class Hud {
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
     );
+    if (ERROR_REPORT_URL) guide.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
   }
 
   private toggleCameraMode(): void {
@@ -372,6 +375,7 @@ export class Hud {
 
   // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const od = overdriveSwitch(w);
     const headlights = createSwitch({
       on: "Lights on",
       off: "Lights off",
@@ -383,10 +387,10 @@ export class Hud {
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
-      checked: w.player.overdrive,
+      checked: od.checked,
       key: "O",
-      disabled: busy,
-      title: "Engine overdrive: faster, but the engine heats fast [O]",
+      disabled: busy || od.blocked,
+      title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
     const douse = el(
@@ -537,6 +541,11 @@ export class Hud {
     }
     this.log.add(w.turn, lines);
     this.radio.hear(w);
+  }
+
+  // The session's log text, newest first, for error reports.
+  logTexts(): string[] {
+    return this.log.texts;
   }
 
   // A log line from the UI itself, not from a sim event.

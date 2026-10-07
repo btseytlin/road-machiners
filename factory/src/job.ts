@@ -6,6 +6,7 @@ import { change } from './stages/change';
 import { runStage as design } from './stages/design';
 import { runStage as implement } from './stages/implement';
 import { candidate } from './stages/candidate';
+import { playtest } from './stages/playtest';
 import { release } from './stages/release';
 import { runStage as incident } from './stages/incident';
 import { remove } from './stages/remove';
@@ -13,6 +14,7 @@ import { ship } from './stages/ship';
 import { runStage as checks } from './stages/checks';
 import { runStage as patch } from './stages/patch';
 import { runStage as verify } from './stages/verify';
+import { runStage as harden } from './stages/harden';
 import { runStage as waste } from './stages/waste';
 import { runStage as triage } from './stages/triage';
 import { recordJob, type JobOutcome } from './ledger';
@@ -24,30 +26,13 @@ type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
 const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste'>, Handler> = {
-  triage,
-  design,
-  implement,
-  patch,
-  verify,
-  checks,
-  change,
-  adhoc,
-  candidate,
-  remove,
-  incident,
+  triage, design, implement, patch, verify, harden, checks, change, adhoc, playtest, candidate, remove, incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };
 
 // Card stages leave a progress comment on their issue, so the issue shows where its work stands.
-const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = {
-  triage: 'Triage',
-  design: 'Design',
-  implement: 'Implementation',
-  patch: 'Patch',
-  verify: 'Verify',
-  checks: 'Checks',
-};
+const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = { triage: 'Triage', design: 'Design', implement: 'Implementation', patch: 'Patch', verify: 'Verify', harden: 'Hardening', checks: 'Checks' };
 
 export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: 'finished' | 'failed'): string {
   const minutes = startedAt ? Math.round((ctx.now().getTime() - new Date(startedAt).getTime()) / 60_000) : null;
