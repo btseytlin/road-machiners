@@ -81,17 +81,6 @@ export type CameraMode = "centered" | "auto";
 
 const TOAST_MS = 3500;
 
-const WEATHER_NAMES: Record<World["weather"][number]["kind"], string> = {
-  storm: "Storm",
-  heatwave: "Heat wave",
-  overcast: "Overcast",
-};
-
-function weatherLabel(w: World): string {
-  if (w.weather.length === 0) return "Clear";
-  return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
-}
-
 // The HUD's max-speed readout and its breakdown tooltip. It is built once and the Hud never detaches it, so a pointer
 // hover or keyboard focus survives the per-frame HUD refresh. CSS alone opens the tooltip on :hover and :focus-within.
 export class MaxSpeedView {
@@ -105,8 +94,14 @@ export class MaxSpeedView {
     el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.rows, this.notes),
   );
 
+  private shown = '';
+
   render(maxSpeed: string, rows: SpeedRow[], notes: string[]): void {
     this.text.textContent = `max ${maxSpeed}`;
+    // The breakdown changes rarely, so most refreshes leave its nodes alone.
+    const key = JSON.stringify([rows, notes]);
+    if (key === this.shown) return;
+    this.shown = key;
     this.rows.replaceChildren(
       ...rows.map((row) =>
         el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, String(row.kph))),

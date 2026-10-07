@@ -78,66 +78,87 @@ export type SpeedStep =
   | { kind: 'weather'; factor: number; speed: number }
   | { kind: 'towing'; factor: number; speed: number };
 
-// The only max-speed rule. vehicleStats takes its last step, so the HUD breakdown and the number cannot drift apart.
+// The only max-speed rule. vehicleStats takes its speed, so the HUD breakdown and the number cannot drift apart.
 export function maxSpeedSteps(world: World, v: Vehicle): SpeedStep[] {
-  const broken = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
-  return speedSteps(world, v, limpSpeedOf(world, v), loadFactor(v), broken);
-}
-
-// The steps from values the caller has already worked out, so vehicleStats does not repeat them.
-function speedSteps(world: World, v: Vehicle, limpSpeed: number, load: number, brokenWheels: number): SpeedStep[] {
-  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed.
-  const steps = hasWorkingEngine(v) && !isStalled(world, v) ? drivingSteps(world, v, limpSpeed, load, brokenWheels) : [limpStep(v, limpSpeed)];
-  let speed = steps[steps.length - 1].speed;
-  const weather = weatherOn(world, v).speed;
-  if (weather !== 1) {
-    speed *= weather;
-    steps.push({ kind: 'weather', factor: weather, speed });
-  }
-  // A tower drives with care while a truck hangs on its rope.
-  if (isTowing(world, v.id)) steps.push({ kind: 'towing', factor: TOW.speedShare, speed: speed * TOW.speedShare });
+  const steps: SpeedStep[] = [];
+  walkSpeed(world, v, limpSpeedOf(world, v), loadFactor(v), brokenWheelCount(v), steps);
   return steps;
 }
 
-function limpStep(v: Vehicle, limpSpeed: number): SpeedStep {
+function brokenWheelCount(v: Vehicle): number {
+  return coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+}
+
+// Applies the max-speed rule in order to values the caller has already worked out. With a sink it also records each
+// step, so vehicleStats, which runs per truck and substep, allocates none.
+function walkSpeed(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number, steps: SpeedStep[] | null): number {
+  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed.
+  const driving = hasWorkingEngine(v) && !isStalled(world, v);
+  const speed = driving ? drivingSpeed(world, v, limpSpeed, load, broken, steps) : limpSpeedStep(v, limpSpeed, steps);
+  return conditionSpeed(world, v, speed, steps);
+}
+
+function limpSpeedStep(v: Vehicle, limpSpeed: number, steps: SpeedStep[] | null): number {
   const cause = mountedParts(v, 'engine').length === 0 ? 'noEngine' : !hasWorkingEngine(v) ? 'brokenEngine' : 'stalled';
-  return { kind: 'limp', cause, speed: limpSpeed };
+  steps?.push({ kind: 'limp', cause, speed: limpSpeed });
+  return limpSpeed;
 }
 
 // Chassis, engine, load, wheels and guns, then the floor, overdrive and transmission limits.
-function drivingSteps(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number): SpeedStep[] {
+function drivingSpeed(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number, steps: SpeedStep[] | null): number {
   const ch = chassisDef(v.chassisId);
   const engine = mountedParts(v, 'engine')[0];
   const e = wornDef<EngineDef>(engine);
   let speed = ch.maxSpeed + e.speedBonus;
-  const steps: SpeedStep[] = [{ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', worn: engine.wear > 0, speed }];
+  steps?.push({ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', worn: engine.wear > 0, speed });
   // Top speed follows loadFactor(), which drops hard past the rated mass.
   speed *= load;
-  steps.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
+  steps?.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
   // Each broken wheel cuts top speed by the same share.
   const wheels = (1 - RULES.wheelLoss) ** broken;
   speed *= wheels;
-  if (broken > 0) steps.push({ kind: 'wheels', broken, factor: wheels, speed });
+  if (broken > 0) steps?.push({ kind: 'wheels', broken, factor: wheels, speed });
   const draw = gunDraw(v);
   const drag = gunDragOf(draw, e.capacity);
   speed *= drag;
-  steps.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, speed });
-  limitSteps(world, v, limpSpeed, steps);
-  return steps;
+  steps?.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, speed });
+  return limitedSpeed(world, v, speed, limpSpeed, steps);
 }
 
-function limitSteps(world: World, v: Vehicle, limpSpeed: number, steps: SpeedStep[]): void {
-  let speed = steps[steps.length - 1].speed;
+function limitedSpeed(world: World, v: Vehicle, from: number, limpSpeed: number, steps: SpeedStep[] | null): number {
+  let speed = from;
   if (speed < RULES.minSpeedCap) {
     speed = RULES.minSpeedCap;
-    steps.push({ kind: 'floor', speed });
+    steps?.push({ kind: 'floor', speed });
   }
   if (inOverdrive(world, v)) {
     speed *= RULES.overdriveBoost;
-    steps.push({ kind: 'overdrive', factor: RULES.overdriveBoost, speed });
+    steps?.push({ kind: 'overdrive', factor: RULES.overdriveBoost, speed });
   }
-  // A broken transmission leaves only a crawl to limp home.
-  if (!isWorking(corePart(v, 'transmission')) && speed > limpSpeed) steps.push({ kind: 'transmission', speed: limpSpeed });
+  return transmissionSpeed(v, speed, limpSpeed, steps);
+}
+
+// A broken transmission leaves only a crawl to limp home.
+function transmissionSpeed(v: Vehicle, from: number, limpSpeed: number, steps: SpeedStep[] | null): number {
+  if (isWorking(corePart(v, 'transmission')) || from <= limpSpeed) return from;
+  steps?.push({ kind: 'transmission', speed: limpSpeed });
+  return limpSpeed;
+}
+
+// Weather and towing apply to the driving and the limping truck alike.
+function conditionSpeed(world: World, v: Vehicle, from: number, steps: SpeedStep[] | null): number {
+  let speed = from;
+  const weather = weatherOn(world, v).speed;
+  if (weather !== 1) {
+    speed *= weather;
+    steps?.push({ kind: 'weather', factor: weather, speed });
+  }
+  // A tower drives with care while a truck hangs on its rope.
+  if (isTowing(world, v.id)) {
+    speed *= TOW.speedShare;
+    steps?.push({ kind: 'towing', factor: TOW.speedShare, speed });
+  }
+  return speed;
 }
 
 export function vehicleStats(world: World, v: Vehicle): VehicleStats {
@@ -149,28 +170,27 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const load = loadFactor(v);
   const force = ch.handlingMass / mass;
   // Each broken wheel cuts top speed and turning by the same share.
-  const brokenWheels = coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  const brokenWheels = brokenWheelCount(v);
   const wheels = (1 - RULES.wheelLoss) ** brokenWheels;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
   const limpSpeed = limpSpeedOf(world, v);
   // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
   const limpAccel = limpSpeed * ch.accel;
 
-  const steps = speedSteps(world, v, limpSpeed, load, brokenWheels);
+  const maxSpeed = walkSpeed(world, v, limpSpeed, load, brokenWheels, null);
   let accel = limpAccel;
   let fuelMult = 0;
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
-  const guns = steps.find((s) => s.kind === 'guns');
-  if (guns) {
+  if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
-    const drag = guns.factor;
+    const drag = gunDragOf(gunDraw(v), e.capacity);
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
     if (inOverdrive(world, v)) accel *= RULES.overdriveBoost;
   }
 
   return {
-    maxSpeed: steps[steps.length - 1].speed,
+    maxSpeed,
     accel,
     brake: ch.brake * force,
     turnSlow: ch.turnSlow * DEG * turnMult,
