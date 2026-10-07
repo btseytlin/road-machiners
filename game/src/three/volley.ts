@@ -2,8 +2,8 @@ import { CONFIG } from "../config";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
 import { missPoint } from "../sim/combat";
+import { carriedPart } from "../sim/salvage";
 import type { Vec } from "../sim/vec";
-import { mountedParts } from "../sim/grid";
 import type { GameEvent, ShotRound, Vehicle, World } from "../sim/types";
 import type { BreakCues, PartBreak, ShotLike } from "./breakCues";
 import { roundLabel } from "../ui/format";
@@ -141,7 +141,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const w = host.world;
   const shooter = vehicleOf(w, e.shooter);
   const target = vehicleOf(w, e.target);
-  const gun = mountedParts(shooter).find((p) => p.id === e.weapon);
+  const gun = carriedPart(w, e.shooter, e.weapon);
   if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
   const view = viewOf(host.views, e.shooter);
   const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);

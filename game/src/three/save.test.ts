@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
-import { newWorld } from '../sim/world';
-import { addVehicle, emptyWorld } from '../sim/testkit';
-import { moveItem } from '../sim/inventory';
+import { newWorld, update } from '../sim/world';
+import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
+import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
+import { buyStockPart } from '../sim/economy';
+import { makePart } from '../sim/factory';
+import type { GridItem } from '../sim/types';
+import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, SaveQuotaError, writeSave } from './save';
@@ -70,6 +74,27 @@ describe('local game save', () => {
     expect(loaded?.vehicles[0].weaponOrders.w1).toEqual({ targetId: foe.id, aim: 'body' });
   });
 
+  it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    world.player.contracts = [bounty];
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected saved bounty');
+    expect(loaded.player.contracts).toEqual([bounty]);
+    const after = update(loaded, (d) => {
+      d.events = [{ t: 'npcKnockout', vehicle: raider.id, by: d.player.vehicleId }];
+      advanceContracts(d);
+    });
+    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: bounty, outcome: 'done' }]);
+    expect(after.player.money).toBe(loaded.player.money + 100);
+    writeSave(storage, 'auto', after, 1000);
+    expect(loadWorld(storage, 'auto', TEST_MAP)?.player.contracts).toEqual([]);
+  });
+
   it('resumes a pending refit after loading without losing progress', () => {
     const storage = makeStorage();
     const world = emptyWorld();
@@ -85,6 +110,31 @@ describe('local game save', () => {
     for (let turn = 0; turn < 4; turn++) advanceJobs(loaded);
     expect(loaded.vehicles[0].job).toBeNull();
     expect(loaded.vehicles[0].items.find((item) => item.id === weapon.id)).toMatchObject(to);
+  });
+
+  it('keeps a part bought into storage at a stall, and takes it out after loading', () => {
+    const storage = makeStorage();
+    let world = emptyWorld(sitePads(siteOf('pump-station'))[0]);
+    world.player.money = 100000;
+    const part = world.shops['pump-station'].stock[0];
+    while (canStowPart(world.vehicles[0], makePart(world, part.defId, 0))) stowPart(world, world.vehicles[0], makePart(world, part.defId, 0));
+    world = buyStockPart(world, part.id);
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected save');
+    expect(loaded.player.storage.find((p) => p.id === part.id)).toEqual({ ...part });
+    const stored = loaded.player.storage.find((p) => p.id === part.id)!;
+    const probe: GridItem = { id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part: stored };
+    let freed = loaded;
+    let spot = stowSpot(freed.vehicles[0], probe);
+    while (!spot) {
+      const filler = freed.vehicles[0].items.filter((it) => it.kind === 'part').at(-1);
+      if (!filler) throw new Error('Expected room for the stored part');
+      freed = storePart(freed, filler.id);
+      spot = stowSpot(freed.vehicles[0], probe);
+    }
+    const back = takeFromStorage(freed, part.id, spot);
+    expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
   it('stores explored as a string', () => {

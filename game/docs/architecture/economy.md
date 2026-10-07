@@ -8,6 +8,7 @@
 - `tripFuelCost()` in `src/sim/npc-decisions.ts` owns what the fuel for an NPC trip costs: tiles times the chassis fuel per tile times the fuel supply price. `runOffers()` drops a trade run whose load, sized by `affordableBuyCount()` as `resolveTrade()` buys it, does not earn more than that. The income harness's hauling margin index uses it too.
 - NPCs trade, sell and fuel at stalls as well as town garages, and stalls fuel and repair them like garages, except raiders, who sell cargo and get repairs only at their camps. A camp is a fence paying `campGoodPrice()`, with no shop state.
 - `src/sim/market.ts` owns shops: goods price pressure, finite part stock, restocks and contract boards. Its rolls draw from `world.marketRng`, a separate stream, so shop changes never shift combat or NPC randomness. `src/data/market.ts` holds shop profiles, the effort model and contract terms.
+- `shopAt()` and `requireShop()` in `src/sim/market.ts` gate the player's garage work. Every shop keeps garage storage and makes part moves instant, and away from a shop a part move is a refit job. Chassis sales and rebuilds still need `townAt()`.
 - `src/sim/wear.ts` owns part condition: max HP, worn stats, wear steps and junk. Only it writes part HP, and a test enforces that.
 
 ## Jobs

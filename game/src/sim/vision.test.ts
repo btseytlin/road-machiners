@@ -4,7 +4,7 @@ import { PHYSICS } from '../data/physics';
 import { hulkBoxes } from './body';
 import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
-import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, practiceOf, settleStorms } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
@@ -177,14 +177,14 @@ describe('terrain line of sight', () => {
   it('reaches gray vision a fixed number of sight radii out', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBe(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 
   it('shrinks gray vision at night with sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, w.vehicles[0], { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
-    expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBe(sightRadius(w, w.vehicles[0]) * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w)).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 });
 
@@ -277,8 +277,9 @@ describe('the storm rider perk', () => {
   function stormWorld() {
     const w = emptyWorld({ x: 60, y: 60 });
     w.turn = day();
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 62, y: 60 });
+    settleStorms(w);
     return { w, me: w.vehicles[0], npc };
   }
 

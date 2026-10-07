@@ -25,13 +25,21 @@ export function isNear(w: World, v: Vehicle): boolean {
   return inLiveRange(w, v.pos);
 }
 
+// Why the tank limits the truck now: 'low' halves top speed, 'empty' leaves a crawl. Null when it limits nothing.
+export function fuelLimit(w: World, v: Vehicle, burnsFuel: boolean): 'low' | 'empty' | null {
+  if (!burnsFuel) return null;
+  const fuel = getResources(w, v).fuel;
+  if (fuel <= 0) return 'empty';
+  return fuel < fuelCap(v) * RULES.lowFuelThreshold ? 'low' : null;
+}
+
 // Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
 // speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
 // A pushed truck burns no fuel, so its tank limits nothing.
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
+  const low = fuelLimit(w, v, s.fuelPerTile > 0) === 'low';
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
