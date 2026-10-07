@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
 import { TIME } from '../data/time';
 import { makePart } from './factory';
 import { corePart, mountedParts } from './grid';
 import { mountPart } from './inventory';
 import { autoOrders } from './combat';
 import { assignUtilityOrders } from './npc-utility';
-import { siteGates } from './sites';
 import { addState } from './states';
 import { sunAt } from './sun';
 import { activateUtilities } from './utility';
@@ -17,7 +15,6 @@ import { maxHp } from './wear';
 
 const NPC_POS = { x: 60, y: 40 };
 const NIGHT = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
-const GATE = siteGates(REGION.towns[0])[0];
 const DAY = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
 
 // A trader hauler facing east with one utility, far from the player.
@@ -228,16 +225,6 @@ describe('NPC emitter', () => {
   it('holds the pulse out of a fight', () => {
     const { w, npc, part } = npcWith('emitter');
     foeAt(w, npc, 4);
-
-    assignUtilityOrders(w);
-
-    expect(npc.utilityOrders[part.id]).toBeUndefined();
-  });
-
-  it('holds the pulse inside a town guard', () => {
-    const { w, npc, part } = npcWith('emitter');
-    npc.pos = { ...GATE };
-    startCombat(w, foeAt(w, npc, 4), npc);
 
     assignUtilityOrders(w);
 

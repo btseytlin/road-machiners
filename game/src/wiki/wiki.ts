@@ -179,8 +179,8 @@ const TABLES: WikiTable[] = [
   },
   {
     id: 'npc-templates',
-    headers: ['id', 'name', 'profession', 'faction', 'traits', 'extra traits (chance)', 'fight style', 'aggro range (tiles)', 'preferred range (tiles)', 'cap', 'spawn interval (turns)', 'spawn place'],
-    rows: () => Object.values(NPCS).map((n) => [n.id, n.name, n.profession, n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.preferredRange, n.cap, n.interval, n.spawn]),
+    headers: ['id', 'name', 'profession', 'faction', 'traits', 'extra traits (chance)', 'fight style', 'aggro range (tiles)', 'cap', 'spawn interval (turns)', 'spawn place'],
+    rows: () => Object.values(NPCS).map((n) => [n.id, n.name, n.profession, n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.cap, n.interval, n.spawn]),
   },
   {
     id: 'traits',
@@ -195,8 +195,13 @@ const TABLES: WikiTable[] = [
   { id: 'state-kinds', headers: ['kind', 'turns', 'binds a deal'], rows: stateKindRows },
   {
     id: 'gear-levels',
-    headers: ['level', 'gun fill chance', 'armor share', 'budget mult', 'wear shift', 'cargo mult'],
-    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.fill, g.armor, g.budget, g.wearShift, g.cargo]),
+    headers: ['level', 'budget mult', 'wear shift', 'cargo mult'],
+    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.budget, g.wearShift, g.cargo]),
+  },
+  {
+    id: 'loadout-priorities',
+    headers: ['template', 'speed', 'firepower', 'armor', 'cargo'],
+    rows: () => entries(NPCS).map(([id, t]) => [id, t.loadout.priorities.speed, t.loadout.priorities.firepower, t.loadout.priorities.armor, t.loadout.priorities.cargo]),
   },
   {
     id: 'skills',

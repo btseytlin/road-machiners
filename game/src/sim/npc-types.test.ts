@@ -302,7 +302,7 @@ describe('spawns of the new templates', () => {
 });
 
 describe('vultures', () => {
-  it('always carry a cargo part and only long-range guns', () => {
+  it('always carry a cargo part and a long-range main gun', () => {
     let seen = 0;
     for (let seed = 1; seed <= 15; seed++) {
       const x = emptyWorld({ x: 300, y: 300 });
@@ -312,7 +312,7 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        for (const d of defs) if (d.kind === 'weapon') expect(d.range).toBeGreaterThanOrEqual(15);
+        expect(defs.find((d) => d.kind === 'weapon')!.range).toBeGreaterThanOrEqual(15);
       }
     }
     expect(seen).toBeGreaterThan(10);

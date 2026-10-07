@@ -6,10 +6,10 @@ import { readLedger } from './ledger';
 import { resumedStage } from './sessions';
 import { chooseJobs, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
-import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
+import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
+const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, maxJobsPerCard: 2, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
 // One worker per agent queue, so a test sees which card each queue prefers.
 const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
@@ -20,6 +20,26 @@ const card = (issue: number, column: Card['column'], labels: string[] = []): Car
 const running = (stage: Job['stage'], issue: number | null): Job => ({ id: `${stage}-${issue}`, stage, issue, pid: 1, startedAt: '', log: '' });
 
 const starts = (...hoursAgo: number[]): string[] => hoursAgo.map((h) => new Date(NOW.getTime() - h * 3_600_000).toISOString());
+
+describe('chooseJobs card budget', () => {
+  const big = { ...CFG, maxJobsPerDay: 50 };
+
+  it('holds a card at its budget and leaves other cards running', () => {
+    const spent = state({ cardStarts: { 4: starts(23, 5) } });
+    expect(chooseJobs(spent, [card(4, 'Design'), card(5, 'Design')], NOW, big)).toEqual([{ stage: 'design', issue: 5 }]);
+  });
+
+  it('frees a slot when the oldest start leaves the window', () => {
+    const aged = state({ cardStarts: { 4: starts(25, 5) } });
+    expect(chooseJobs(aged, [card(4, 'Design')], NOW, big)).toEqual([{ stage: 'design', issue: 4 }]);
+  });
+
+  it('does not charge checks, and lets a hotfix run at the budget', () => {
+    const spent = state({ cardStarts: { 4: starts(5, 3), 6: starts(5, 3) }, testPhase: { 4: 'checks' } });
+    expect(chooseJobs(spent, [card(4, 'Testing')], NOW, big)).toEqual([{ stage: 'checks', issue: 4 }]);
+    expect(chooseJobs(spent, [card(6, 'Implementation', [HOTFIX_LABEL])], NOW, big)).toEqual([{ stage: 'implement', issue: 6 }]);
+  });
+});
 
 describe('chooseJobs daily cap', () => {
   const capped = state({ jobStarts: starts(23, 5, 1), lastRelease: null });
@@ -208,7 +228,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const pinned: string[] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, transcriptDays: 10, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus) => { spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus}`); return 77; }, cores: () => 4 };
@@ -368,9 +388,10 @@ describe('tick', () => {
 
   it('counts and prunes public-driven starts, not committee-driven ones', async () => {
     const h = harness(null, false, [card(8, 'Implementation')]);
-    writeState(h.ctx.statePath, state({ jobStarts: starts(30, 2) }));
+    writeState(h.ctx.statePath, state({ jobStarts: starts(30, 2), cardStarts: { 3: starts(30), 8: starts(30, 2) } }));
     await tick(h.ctx, '/code', h.deps);
     expect(readState(h.ctx.statePath).jobStarts).toEqual([...starts(2), NOW.toISOString()]);
+    expect(readState(h.ctx.statePath).cardStarts).toEqual({ 8: [...starts(2), NOW.toISOString()] });
     const c = harness(null, false, []);
     writeState(c.ctx.statePath, state({ jobStarts: starts(2), pendingApprovals: { '3': 'u' } }));
     await tick(c.ctx, '/code', c.deps);

@@ -63,9 +63,10 @@ import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
-import { WeatherView } from "./render/weather";
+import { stormTintStyle, WeatherView } from "./render/weather";
+import { stormShare } from "../sim/weather";
 import { ZonesView } from "./render/zones";
-import { daylightAt, lightScene, NightLights, sunLight, vehicleLampsOn } from "./render/daylight";
+import { daylightAt, lightScene, VehicleLights, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
@@ -107,7 +108,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly nightLights = new NightLights(this.scene);
+  private readonly vehicleLights = new VehicleLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -714,7 +715,7 @@ export class Game {
   }
 
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
-    const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
+    const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed, this.frames);
     this.world = world;
     // The score must follow this turn's combat before its crash accents arrive.
     this.updateLoops();
@@ -727,10 +728,9 @@ export class Game {
     };
     playback.combat = this.world.events.some(
       (e) =>
-        (e.t === "shot" &&
-          this.eventPoint(e.shooter) !== null &&
-          this.eventPoint(e.target) !== null) ||
-        (e.t === "guardShot" && this.eventPoint(e.target) !== null),
+        e.t === "shot" &&
+        this.eventPoint(e.shooter) !== null &&
+        this.eventPoint(e.target) !== null,
     );
     // Crashes are known now, so the score can time its accent's peak onto the step the trucks touch.
     const timed = collisionSteps(world.events, playback.result);
@@ -845,11 +845,12 @@ export class Game {
     if (sting) this.sound.ui(sting);
   }
 
+  // A stranded truck is pushed, so its engine stays quiet, as the sim's soundRange() rule says. Its brakes still hiss.
   private playDriveSound(result: TurnResult): void {
     const frames = result.frames[playerVehicle(this.world).id];
     const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, this.world.player.overdrive);
     if (!g) return;
-    this.loops.drive(g, playerVehicle(this.world).chassisId);
+    if (!isStranded(this.world, playerVehicle(this.world))) this.loops.drive(g, playerVehicle(this.world).chassisId);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
   }
 
@@ -858,7 +859,7 @@ export class Game {
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
-    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), inCombat: inCombat(this.world, me), place: musicPlaceAt(at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    this.loops.update({ stormShare: stormShare(me), inCombat: inCombat(this.world, me), place: musicPlaceAt(at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
@@ -973,20 +974,19 @@ export class Game {
     const truck = this.frames[playerVehicle(this.world).id].pos;
     // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
     // camera cannot pan past it.
-    const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
+    const sightRadius = grayRadius(this.world) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
-    this.nightLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck);
-    const at = playerVehicle(this.world).pos;
-    this.stormTint.style.display = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius) ? "" : "none";
+    this.vehicleLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck);
+    Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
     this.fx.tick(dt * speed, this.world);
     this.playPanelSounds();
     this.updateLoops();
-    this.weather.advance(dt);
     this.weather.sync(this.world);
+    this.weather.advance(dt);
     this.labels.update(this.world, this.rig, this.sightLimit);
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);

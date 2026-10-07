@@ -1055,3 +1055,80 @@ describe('trucks on the radio', () => {
     expect(radioSpeakers(done.events, done.player.vehicleId)).toContain(done.player.vehicleId);
   });
 });
+
+describe('robber truce', () => {
+  // A scumbag that opened fire on the player's cargo truck: a robbery feud, and no demand call.
+  function holdup(robbery = true): { w: World; robber: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    addGoods(w, playerVehicle(w), 'scrap', 2);
+    const robber = addVehicle(w, 'scavengers', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
+    robber.brain = npcBrain('scavenger', robber.pos, ['scavenger', 'scumbag']);
+    // Two mates make the robber's group clearly outgun the player, so the perceived danger never tips it to peace.
+    for (const y of [28, 32]) addVehicle(w, 'scavengers', 'buggy', ['stockEngine', 'mg'], { x: 40, y }, Math.PI).brain = npcBrain('scavenger', { x: 40, y }, ['scavenger']);
+    addState(w, 'feud', robber.id, w.player.vehicleId, { kind: 'feud', robbery });
+    addState(w, 'feud', w.player.vehicleId, robber.id, { kind: 'feud', robbery: false });
+    refreshVision(w);
+    return { w, robber };
+  }
+  const truceText = TOPICS.truce.ask!.text;
+  const askTruce = (w: World, id: string): World => {
+    let next = callVehicle(w, id);
+    next = chooseOption(next, optionIndex(next, truceText));
+    return chooseOption(next, optionIndex(next, 'We both drive away.'));
+  };
+
+  it('names its price and grants no truce, even when the roll would accept', () => {
+    forceOption('truceOffered', 'accept');
+    const { w, robber } = holdup();
+    const next = askTruce(w, robber.id);
+    expect(next.player.call?.node).toBe('demanded');
+    expect(currentOptions(next).map((o) => o.text)).toEqual(['Fine. Take it.', 'Come and get it.', 'Hang up.']);
+    expect(isHostile(next, next.vehicles.find((v) => v.id === robber.id)!, playerVehicle(next))).toBe(true);
+  });
+
+  it('paying drops the cargo for the robber, makes peace and settles its demand', () => {
+    const { w, robber } = holdup();
+    const next = chooseOption(askTruce(w, robber.id), 0);
+    const me = playerVehicle(next);
+    expect(hasCargo(me)).toBe(false);
+    expect(next.salvage.some((s) => s.id.startsWith(`cargo-${me.id}`))).toBe(true);
+    expect(isHostile(next, next.vehicles.find((v) => v.id === robber.id)!, me)).toBe(false);
+    expect(next.player.talked[robber.id]?.demand).toBe('agreed');
+  });
+
+  it('refusing keeps the feud, hides the truce and settles the radio demand', () => {
+    const { w, robber } = holdup();
+    const next = chooseOption(askTruce(w, robber.id), 1);
+    expect(isHostile(next, next.vehicles.find((v) => v.id === robber.id)!, playerVehicle(next))).toBe(true);
+    expect(next.player.talked[robber.id]?.demand).toBe('refused');
+    expect(hasCargo(playerVehicle(next))).toBe(true);
+    const again = callVehicle(next, robber.id);
+    expect(currentOptions(again).map((o) => o.text)).not.toContain(truceText);
+  });
+
+  it('hanging up at the price refuses, and survives a save round trip', () => {
+    const { w, robber } = holdup();
+    const open = structuredClone(askTruce(w, robber.id));
+    const next = hangUp(open);
+    expect(next.player.talked[robber.id]?.demand).toBe('refused');
+    expect(stateOf(next, 'plea', next.player.vehicleId, robber.id)).not.toBeNull();
+    expect(chooseOption(structuredClone(open), 1).player.talked[robber.id]?.demand).toBe('refused');
+  });
+
+  it('a defensive feud grants the truce for free', () => {
+    forceOption('truceOffered', 'accept');
+    const { w, robber } = holdup(false);
+    const next = askTruce(w, robber.id);
+    expect(next.player.call?.node).toBe('agreed');
+    expect(isHostile(next, next.vehicles.find((v) => v.id === robber.id)!, playerVehicle(next))).toBe(false);
+  });
+
+  it('a weak robber grants the truce for free', () => {
+    forceOption('truceOffered', 'accept');
+    const { w, robber } = holdup();
+    robber.resources = { fuel: 10, supplies: 10, money: 0, health: 1 };
+    const next = askTruce(w, robber.id);
+    expect(next.player.call?.node).toBe('agreed');
+  });
+});

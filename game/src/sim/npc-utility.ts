@@ -6,7 +6,6 @@ import { NPC_UTILITY } from '../data/npc-behavior';
 import { partDef } from '../data/parts';
 import { inCombat, isHostile } from './combat';
 import { corePart } from './grid';
-import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { visibleHostiles } from './npc-decisions';
 import { sunAt } from './sun';
@@ -68,11 +67,6 @@ function ahead(v: Vehicle, p: Vec): boolean {
   return Math.cos(v.heading) * (p.x - v.pos.x) + Math.sin(v.heading) * (p.y - v.pos.y) > 0;
 }
 
-// Whether a hostile use may hit the trucks: like a gun opening fire, never inside a town's guard.
-function unguarded(trucks: Vehicle[]): boolean {
-  return trucks.every((x) => !isTownGuarded(x.pos));
-}
-
 // Sprout: an attacker is in sight, and the driver flees a fight or its cab is below NPC_UTILITY.sproutCab.
 function wantsSmoke(world: World, v: Npc): boolean {
   if (seenAttackers(world, v).length === 0) return false;
@@ -99,12 +93,11 @@ function flareOrder(world: World, v: Npc): UtilityOrder | null {
   return { kind: 'point', pos: { ...goal.destination } };
 }
 
-// Emitter: in a fight, every truck the driver sees within the pulse radius is hostile, there is at least one, and none
-// is inside a town guard.
+// Emitter: in a fight, every truck the driver sees within the pulse radius is hostile, and there is at least one.
 function emitterOrder(world: World, v: Npc, part: PartInstance): UtilityOrder | null {
   const def = partDef(part.defId);
   if (def.kind !== 'utility' || def.effect.type !== 'emitter') throw new Error(`${def.name} is not an emitter`);
   const radius = def.effect.radius;
   const near = world.vehicles.filter((x) => x.id !== v.id && dist(x.pos, v.pos) <= radius && canVehicleSee(world, v, x.pos));
-  return self(near.length > 0 && inCombat(world, v) && unguarded([v, ...near]) && near.every((x) => isHostile(world, v, x)));
+  return self(near.length > 0 && inCombat(world, v) && near.every((x) => isHostile(world, v, x)));
 }

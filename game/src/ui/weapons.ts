@@ -10,11 +10,10 @@ import { workOf } from "../sim/states";
 import { playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
 import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError, wornReload } from "../sim/utility";
 import { oilShort } from "../sim/hazards";
-import { el, panel } from "./dom";
+import { bottomLeft, el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
-import { createIcon } from './cards';
-import { createSwitch } from "./switch";
+import { createIcon, createItemIcon } from './cards';
 import { canCall } from "./dialogue";
 import { workLabel, workProgress } from "./format";
 
@@ -34,6 +33,32 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   shutDown: "shut down",
   lineOut: "line out",
 };
+
+// The same reasons in one short word for the compact panel. A gun with no order shows nothing.
+export const BLOCK_SHORT: Record<FireBlock, string> = {
+  disabled: "broken",
+  cooldown: "wait",
+  empty: "load",
+  range: "range",
+  arc: "arc",
+  blocked: "blocked",
+  noTarget: "",
+  unseen: "unseen",
+  covered: "cover",
+  talking: "radio",
+  out: "out",
+  unmounted: "stowed",
+  shutDown: "off",
+  lineOut: "line",
+};
+
+export const WEAPONS_PER_ROW = 5;
+
+// Columns of the gun grid. Up to WEAPONS_PER_ROW guns fill one row. More fill two balanced rows of smaller elements.
+export function weaponGrid(count: number): { cols: number; small: boolean } {
+  if (count <= WEAPONS_PER_ROW) return { cols: count, small: false };
+  return { cols: Math.ceil(count / 2), small: true };
+}
 
 // One weapon aimed at a vehicle, as its marker shows it.
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
@@ -175,6 +200,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
         ? hitOdds(w, me, mw, target, order.aim).damageChance
         : null,
     canFire: block === null,
+    block,
   };
 }
 
@@ -260,7 +286,9 @@ export class UtilityRow {
   render(w: World): HTMLElement | null {
     const parts = utilitySlots(w);
     if (parts.length === 0) return null;
-    return el("div", { class: "weapon-slots utility-slots" }, ...parts.map((part, i) => this.renderSlot(w, part, i)));
+    const row = el("div", { class: "weapon-slots utility-slots" }, ...parts.map((part, i) => this.renderSlot(w, part, i)));
+    row.style.setProperty("--weapon-cols", String(parts.length));
+    return row;
   }
 
   private renderSlot(w: World, part: PartInstance, i: number): HTMLElement {
@@ -320,8 +348,24 @@ export class UtilityRow {
   }
 }
 
+// The visible state of a gun in a word: the hit chance when it can fire at a target, else why it cannot.
+export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWeaponReadout>): string {
+  if (readout.chance !== null) return `${Math.round(readout.chance * 100)}%`;
+  const { block } = readout;
+  if (block === null) return "";
+  const gun = gunOf(mw.part);
+  if (block === "cooldown") return `${BLOCK_SHORT[block]} ${gun.cooldown}`;
+  if (block === "empty") return `${BLOCK_SHORT[block]} ${mw.def.reload - gun.reloadWork}`;
+  return BLOCK_SHORT[block];
+}
+
+// Hold has something to do while the gun has an order or auto fire is on.
+function canHold(w: World, mw: MountedWeapon): boolean {
+  return w.player.autoFire || playerVehicle(w).weaponOrders[mw.part.id] !== undefined;
+}
+
 export class WeaponPanel {
-  private root = panel("weapons");
+  private root = panel("weapons", bottomLeft());
   private turn = panel('turn-control');
   private expanded = true;
   readonly utilities: UtilityRow;
@@ -338,6 +382,7 @@ export class WeaponPanel {
       "div",
       { class: "weapon-head" },
       el("h3", {}, "Weapons"),
+      this.expanded ? this.renderAutoButton(w, locked) : null,
       this.expanded ? this.renderAllButton(locked) : null,
       el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
     );
@@ -371,6 +416,20 @@ export class WeaponPanel {
     window.addEventListener('pointercancel', release);
   }
 
+  private renderAutoButton(w: World, locked: boolean): HTMLElement {
+    return el(
+      "button",
+      {
+        class: w.player.autoFire ? "on" : "",
+        "aria-pressed": String(w.player.autoFire),
+        disabled: locked,
+        title: "Auto fire: guns shoot at hostiles on their own [Q]",
+        onclick: () => this.host.runKey("KeyQ"),
+      },
+      "Auto fire [Q]",
+    );
+  }
+
   private renderAllButton(locked: boolean): HTMLElement {
     const all = this.host.selectedWeapon() === null;
     return el(
@@ -388,22 +447,17 @@ export class WeaponPanel {
 
   private renderControls(w: World, locked: boolean): HTMLElement {
     const weapons = vehicleStats(w, playerVehicle(w)).weapons;
+    const { cols, small } = weaponGrid(weapons.length);
+    const slots = el(
+      "div",
+      { class: small ? "weapon-slots two-rows" : "weapon-slots" },
+      ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
+    );
+    slots.style.setProperty("--weapon-cols", String(cols));
     return el(
       "fieldset",
       { disabled: locked },
-      createSwitch({
-        on: "Auto fire",
-        off: "Auto fire off",
-        checked: w.player.autoFire,
-        key: "Q",
-        title: "Auto fire: guns shoot at hostiles on their own [Q]",
-        onclick: () => this.host.runKey("KeyQ"),
-      }),
-      el(
-        "div",
-        { class: "weapon-slots" },
-        ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
-      ),
+      slots,
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
       this.utilities.render(w),
     );
@@ -412,57 +466,52 @@ export class WeaponPanel {
   private renderSlot(w: World, mw: MountedWeapon, i: number, locked: boolean): HTMLElement {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
-    const chance =
-      readout.chance === null ? "" : `, ${Math.round(readout.chance * 100)}%`;
-    const target =
-      readout.target?.name ??
-      (playerVehicle(w).weaponOrders[mw.part.id]
-        ? "target unavailable"
-        : "no target");
+    const order = playerVehicle(w).weaponOrders[mw.part.id];
+    const target = readout.target?.name ?? (order ? "target unavailable" : "no target");
     return el(
       "div",
-      { class: "weapon-slot", "data-weapon": mw.part.id },
+      { class: mw.part.hp <= 0 ? "weapon-slot broken" : "weapon-slot", "data-weapon": mw.part.id },
       el(
         "button",
         {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s). ${readout.status}, ${target}`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),
-        el("span", { class: "weapon-name" }, mw.def.name),
-        createIcon(mw.def.look === 'cannon' ? 'cannon' : 'mg'),
-        el(
-          "span",
-          { class: readout.canFire ? "good" : "dim", "data-status": "" },
-          readout.status + chance,
-        ),
-        el("span", { class: "weapon-target" }, target),
+        el("span", { class: readout.canFire ? "good" : "dim", "data-status": "" }, shortStatus(mw, readout)),
+        createItemIcon(mw.part.defId),
+        this.renderAmmo(mw),
       ),
-      this.renderAmmo(mw, locked),
+      this.renderActions(mw, locked, canHold(w, mw)),
     );
   }
 
-  // Rounds left and the button that forces a reload.
-  private renderAmmo(mw: MountedWeapon, locked: boolean): HTMLElement {
+  // Rounds left, one pip each.
+  private renderAmmo(mw: MountedWeapon): HTMLElement {
     const gun = gunOf(mw.part);
     const label = ammoLabel(mw);
     return el(
+      "span",
+      { class: "weapon-ammo", title: label },
+      el("span", { class: "sr-only" }, label),
+      ...ammoCells(mw.def.magazine, gun.ammo, gun.reloadWork, mw.def.reload).map((state) =>
+        el("span", { class: `ammo-cell ${state}`, "aria-hidden": "true" })),
+    );
+  }
+
+  // The button that drops a gun's order (nothing to hold with no order and auto fire off) and the one that forces a reload.
+  private renderActions(mw: MountedWeapon, locked: boolean, canHold: boolean): HTMLElement {
+    return el(
       "div",
-      { class: "weapon-ammo-row" },
-      el(
-        "span",
-        { class: "weapon-ammo", title: label },
-        el("span", { class: "sr-only" }, label),
-        ...ammoCells(mw.def.magazine, gun.ammo, gun.reloadWork, mw.def.reload).map((state) =>
-          el("span", { class: `ammo-cell ${state}`, "aria-hidden": "true" })),
-      ),
+      { class: "weapon-actions" },
       el(
         "button",
         {
           class: "weapon-hold",
+          disabled: !canHold,
           title: "Hold fire: stop auto fire and clear this gun's target",
           onclick: () => this.holdWeapon(mw.part.id),
         },

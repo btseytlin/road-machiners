@@ -86,7 +86,7 @@ A committee message starting with `/change`, Hermes's `factory_queue_change` too
 
 ## Ad hoc
 
-A member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". Hermes opens an `adhoc` issue in Implementation. The job runs Sonnet in a fresh clone of `dev` with the state and logs mounted read only. It may run any repo harness and pushes nothing. It answers the member's message with `.factory/report.md` and any files, as [evidence.md](evidence.md#ad-hoc-files) says.
+A member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". Hermes opens an `adhoc` issue in Implementation. The job runs Sonnet in a fresh clone of `dev` with the state, the job logs, the ledger and the archived agent transcripts mounted read only. A member can ask it what agents did on an issue, where they got stuck or what cost the most. It may run any repo harness and pushes nothing. It answers the member's message with `.factory/report.md` and any files, as [evidence.md](evidence.md#ad-hoc-files) says.
 
 ## Model routing
 

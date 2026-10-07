@@ -5,7 +5,7 @@
 import type { GameEvent, GridItem, ShotRound } from "../sim/types";
 
 export type PartBreak = { vehicle: string; part: string };
-export type ShotLike = Extract<GameEvent, { t: "shot" | "guardShot" }>;
+export type ShotLike = Extract<GameEvent, { t: "shot" }>;
 export type BreakRound = { brk: PartBreak; owner: ShotLike | null; round: number | null };
 
 const damageTo = (r: ShotRound, brk: PartBreak): number => {
@@ -14,7 +14,7 @@ const damageTo = (r: ShotRound, brk: PartBreak): number => {
 };
 
 // Events that deal part damage. The sim pushes each once its damage is dealt, after the partDisabled events it caused.
-const DAMAGING = new Set<GameEvent["t"]>(["shot", "guardShot", "collision", "claymore", "claymoreCookOff", "caltrops", "lineTorn"]);
+const DAMAGING = new Set<GameEvent["t"]>(["shot", "collision", "claymore", "claymoreCookOff", "caltrops", "lineTorn"]);
 
 // Pairs each partDisabled with the first damaging event after it. For a shot the round is the last that dealt
 // positive damage to the part. Any other owner, like a crash or a claymore blast, gives the break no round.
@@ -24,7 +24,7 @@ export function breakRounds(events: GameEvent[]): BreakRound[] {
     if (e.t !== "partDisabled") return;
     const brk = { vehicle: e.vehicle, part: e.part };
     const owner = events.slice(i + 1).find((x) => DAMAGING.has(x.t));
-    if (!owner || (owner.t !== "shot" && owner.t !== "guardShot")) return void out.push({ brk, owner: null, round: null });
+    if (!owner || owner.t !== "shot") return void out.push({ brk, owner: null, round: null });
     const round = owner.rounds.map((r) => damageTo(r, brk) > 0).lastIndexOf(true);
     if (round < 0) throw new Error(`Part ${brk.part} of ${brk.vehicle} was disabled but no round of the following ${owner.t} damaged it`);
     out.push({ brk, owner, round });

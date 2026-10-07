@@ -13,7 +13,7 @@ import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './map
 import { isCheapMeeting, isHeadless } from './fidelity';
 import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
@@ -30,12 +30,12 @@ function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
 // A dust screen: a circle that blocks sight lines through it.
 type Screen = { pos: Vec; r: number };
 
-// A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
+// A viewer's vision radius: the base radius, shrunk by the weather the viewer feels and at night, and widened by the
 // player's perception. Night eyes keeps it at night, and storm rider keeps it in weather. lit: the viewed ground lies in
 // a flare's light, which keeps the night from shrinking sight to it and leaves every other factor.
-export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos, lit = false): number {
+export function sightRadius(world: World, viewer: Vehicle, lit = false): number {
   const night = nightFactor(world, viewer, lit);
-  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherAt(world, at).sight;
+  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherOn(world, viewer).sight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
   return TERRAIN.vision.radius * weather * night * skill;
 }
@@ -45,9 +45,9 @@ function nightFactor(world: World, viewer: Vehicle, lit: boolean): number {
   return lit || sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
 }
 
-// Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.
-export function grayRadius(world: World, at: Vec): number {
-  return sightRadius(world, playerVehicle(world), at) * TERRAIN.vision.grayFactor;
+// Reach of the player's gray vision. It ignores rocks and hills, and it shows places but never vehicles.
+export function grayRadius(world: World): number {
+  return sightRadius(world, playerVehicle(world)) * TERRAIN.vision.grayFactor;
 }
 
 // Tile indices (y * world.size + x) the player would see from a point, within vision radius and line of sight.
@@ -68,9 +68,9 @@ export function exploreFrom(world: World, from: Vec): void {
 // own disk too. A tile in both is seen twice, which every caller takes as once.
 function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const me = playerVehicle(world);
-  const r = sightRadius(world, me, from);
+  const r = sightRadius(world, me);
   forTilesIn(world, from, r, { pos: from, r }, test, seen);
-  const lit = sightRadius(world, me, from, true);
+  const lit = sightRadius(world, me, true);
   if (lit > r) for (const f of litFlares(world)) if (dist(from, f.pos) - f.r < lit) forTilesIn(world, from, lit, f, test, seen);
 }
 
@@ -107,7 +107,7 @@ function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boole
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  if (dist(observer.pos, target) > sightRadius(world, observer, observer.pos, litAt(world, target))) return false;
+  if (dist(observer.pos, target) > sightRadius(world, observer, litAt(world, target))) return false;
   // Out of the player's live range, sight is the radius alone.
   return isCheapMeeting(world, observer.pos, target) || inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }

@@ -1,6 +1,7 @@
 import type { Tier } from './market';
 import { UNPRICED_WEAPONS } from './weapons';
 import { CLAYMORE, oilSlickLength, UNPRICED_UTILITIES } from './utilities';
+import { MASS_SCALE } from './mass-scale';
 
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
@@ -782,8 +783,15 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
 };
 
 export const PARTS: Record<string, PartDef> = Object.fromEntries(
-  Object.entries(UNPRICED_PARTS).map(([id, def]) => [id, pricePart(def)]),
+  Object.entries(UNPRICED_PARTS).map(([id, def]) => [id, pricePart(scaleMass(def))]),
 );
+
+// Armor and weapons take their kind's MASS_SCALE.
+function scaleMass(def: Unpriced<PartDef>): Unpriced<PartDef> {
+  if (def.kind === "armor") return { ...def, mass: def.mass * MASS_SCALE.armor };
+  if (def.kind === "weapon") return { ...def, mass: def.mass * MASS_SCALE.weapon };
+  return def;
+}
 
 export function partDef(id: string): PartDef {
   const def = PARTS[id];

@@ -102,6 +102,11 @@ export function isInTerritory(pos: Vec): boolean {
   return TERRITORIES.some((site) => dist(pos, site.pos) <= site.radius && siteGap(site, pos) < 0);
 }
 
+// Whether pos is within reach tiles of a town gate.
+export function isNearTown(pos: Vec, reach: number): boolean {
+  return REGION.towns.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
+}
+
 // Whether pos is within reach tiles of an outpost gate.
 export function isNearOutpost(pos: Vec, reach: number): boolean {
   return OUTPOSTS.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));

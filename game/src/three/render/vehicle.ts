@@ -10,7 +10,7 @@ import { partDef, type PartDef, type PartKind, type WeaponDef } from '../../data
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor';
-import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, surfaceSamples, type Body, type CellRect, type Rest } from '../../sim/body';
+import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, surfaceSamples, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
@@ -449,9 +449,11 @@ export class VehicleView {
     return obj;
   }
 
-  // A gun's post starts on the model's surface under it and rises to top, where the mount stands.
-  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
-    const { at, bottom } = weaponStand(v, item);
+  // A gun's post starts on the model's surface under it and rises to top, where the mount stands. A mount within
+  // CLIP_TOLERANCE of that surface, or over air, gets no post.
+  private riser(stand: ReturnType<typeof weaponStand>, item: PartItem, paint: number, into: THREE.Group, top: number): Placement {
+    const { at, foot } = stand;
+    const bottom = postBottom(foot, top);
     const mount = { ...at, pos: at.pos.clone().setY(top) };
     if (bottom >= top) return mount;
     const post = model('wmount_riser');
@@ -488,7 +490,7 @@ export class VehicleView {
     const top = Math.max(stand.top, clear - headAt.y - shape.bottom);
     if (!Number.isFinite(top)) throw new Error(`Gun ${item.part.id} on ${v.chassisId} has a post height of ${top}`);
 
-    const at = this.riser(v, item, paint, still, top);
+    const at = this.riser(stand, item, paint, still, top);
     place(mount, at);
     tint(mount, paint, wear);
     still.add(mount);
@@ -673,12 +675,34 @@ function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
   return cells;
 }
 
-// Where a weapon stands. The post starts on the model's surface under the gun and rises to the highest point ahead of it
-// in its own lane, so the turret clears the cab in front but not a stack or a tire off to the side. The post and the
-// mount share x and z, at the center of the footprint.
-export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number } {
-  const bottom = standingY(v, item);
-  return { at: footprint(v, item, bottom), bottom, top: Math.max(bottom, highestAhead(v.chassisId, rectOf(v, item))) };
+// Where a weapon stands. The mount stands at the gun's rest, or higher up to the highest point ahead of it in its own lane,
+// so the turret clears the cab in front but not a stack or a tire off to the side. The riser post stands on the highest
+// surface under its column, so a mount perched on a cab edge never hangs over the lower bed. A mount within
+// CLIP_TOLERANCE of that surface stands on it with no post. A spare over air gets no post. The post and the mount share
+// x and z, at the center of the footprint.
+export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number; foot: number } {
+  const rest = standingY(v, item);
+  const at = footprint(v, item, rest);
+  const top = Math.max(rest, highestAhead(v.chassisId, rectOf(v, item)));
+  const foot = highestUnder(v.chassisId, postColumn(at.pos));
+  if (foot === -Infinity && isMounted(v.chassisId, item)) {
+    const cells = itemCells(item).map((c) => `${c.x},${c.y}`).join(' ');
+    throw new Error(`The ${v.chassisId} model has no surface under the post of gun ${item.kind === 'part' ? item.part.defId : item.id} mounted on ${cells}`);
+  }
+  return { at, bottom: postBottom(foot, top), top, foot };
+}
+
+// Where a post starts under a mount at top, given the surface under the post. No post when the mount touches it or nothing holds one.
+export function postBottom(foot: number, top: number): number {
+  return foot !== -Infinity && top - foot > CLIP_TOLERANCE ? foot : top;
+}
+
+// The riser post's column, in body meters, centered under a gun mount at. The post stands on the highest surface under
+// it. Its thin foot plate and gussets may overlap a taller edge next to it, so a post beside a cab wall still stands.
+export function postColumn(at: THREE.Vector3): CellRect {
+  const corner = socket('wmount_riser', 'column');
+  const half = { x: Math.abs(corner.x), z: Math.abs(corner.z) };
+  return { x0: at.x - half.x, x1: at.x + half.x, z0: at.z - half.z, z1: at.z + half.z };
 }
 
 // The highest model surface between the front of a rect and the nose, over the rect's width, in body meters.

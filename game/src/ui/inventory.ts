@@ -1,5 +1,5 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
-// In a town the garage storage shows beside the grid.
+// At a shop the garage storage shows beside the grid.
 
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
@@ -30,7 +30,6 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
-import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, hiddenUnits, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
@@ -65,7 +64,8 @@ import {
   footprint,
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
-import { moneyLabel } from "./hud-readout";
+import { maxSpeedSteps } from "../sim/stats";
+import { moneyLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -379,18 +379,18 @@ export class InventoryView {
     ];
   }
 
-  // Beside the grid: a searched stock to loot, the garage storage in town, or how parts move here.
+  // Beside the grid: a searched stock to loot, the garage storage at a shop, or how parts move here.
   private sideList(w: World): HTMLElement {
     if (this.loot) return this.lootEl(w, this.loot);
     if (this.instant) return el("div", { class: "dim" }, "Parts fit at once: drag them onto a mount or off it.");
-    return townAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park to install or remove parts.");
+    return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage. Drag onto a mount to start a refit.");
   }
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !this.instant && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
+      ...(item.kind === "part" && !this.instant && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -963,7 +963,7 @@ export class InventoryScreen {
   }
 }
 
-// Header chips for the player's truck: chassis, money, free cells (unless left out) and load.
+// Header chips for the player's truck: chassis, money, free cells (unless left out), load and power.
 export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells: true }): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
@@ -980,7 +980,14 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
+    powerChipNode(w, me),
   );
+}
+
+// Engine power against the working guns' draw, and what the draw costs in top speed.
+function powerChipNode(w: World, me: Vehicle): HTMLElement {
+  const chip = powerChip(maxSpeedSteps(w, me), me);
+  return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
 // Why a Patch button is disabled, or null when the patch can start.

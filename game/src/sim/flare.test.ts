@@ -103,7 +103,7 @@ describe('flare light', () => {
 
   it('still loses sight to a storm around the viewer', () => {
     const { w, npc, east } = viewer(night());
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { ...npc.pos }, radius: 30, vel: { x: 0, y: 0 }, turnsLeft: 5 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { ...npc.pos }, radius: 30, vel: { x: 0, y: 0 }, turnsLeft: 5, born: 0 }];
 
     launchFlare(w, w.vehicles[0], east, burn());
 

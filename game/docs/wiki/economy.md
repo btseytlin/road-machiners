@@ -34,7 +34,7 @@ Repair costs `ECONOMY.repairShare` of a part's value per share of HP restored. A
 
 ## Contracts
 
-The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.valueShare` of the target's worth.
+The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.rewardTurns` turns of tier 1 wage for its raider type, whatever the target carries.
 
 ## Upkeep
 
@@ -69,5 +69,5 @@ The player's truck pays no upkeep. NPC drivers pay under `NPC_UPKEEP`.
 | `CONTRACTS.haul.rush.durationFactor` | 1.5 |
 | `CONTRACTS.haul.rush.premium` | 1.75 |
 | `CONTRACTS.fetch.searchFeeTurns` | 240 |
-| `CONTRACTS.bounty.valueShare` | 0.2 |
+| `CONTRACTS.bounty.rewardTurns` | {"buggy":900,"gunwagon":1350} |
 <!-- /wiki:numbers -->

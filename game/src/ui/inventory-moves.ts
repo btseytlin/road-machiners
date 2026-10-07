@@ -7,7 +7,7 @@ import { isMounted } from "../sim/grid";
 import { installSpot, moveItem, storePart, stowSpot, takeFromStorage } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
-import { townAt } from "../sim/sites";
+import { shopAt } from "../sim/market";
 import type { GridItem, World } from "../sim/types";
 
 // A mounted part must be held this long before a drag starts. A plain press or click only selects it, so a
@@ -45,7 +45,7 @@ export function needsHold(chassisId: string, item: GridItem): boolean {
 }
 
 // The command a double click runs, or null when the double click does nothing here.
-// In a garage it swaps installed and stored parts. In the full shop (instant) it mounts a spare part or takes a
+// At a shop it swaps installed and stored parts. In the full shop (instant) it mounts a spare part or takes a
 // mounted one off to a free cell, at once. Elsewhere it only moves an item into the truck's own storage.
 export function doubleClickCommand(w: World, c: ClickedItem, instant = false): ((w: World) => World) | null {
   if (c.source === "grid") return gridDoubleClick(w, c, instant);
@@ -79,7 +79,7 @@ function gridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
 
 function gridDoubleClick(w: World, c: ClickedItem, instant: boolean): ((w: World) => World) | null {
   if (instant) return instantGridCommand(w, c);
-  return townAt(w) ? gridCommand(w, c) : null;
+  return shopAt(w) ? gridCommand(w, c) : null;
 }
 
 function instantGridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {

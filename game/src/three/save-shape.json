@@ -1,5 +1,5 @@
 {
- "format": "2.22",
+ "format": "2.25",
  "shape": {
   "broken": [],
   "craters": [],
@@ -1032,6 +1032,7 @@
     },
     "resources": "null",
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
@@ -1051,6 +1052,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -1132,6 +1134,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
@@ -1151,6 +1154,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -1216,6 +1220,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
@@ -1246,6 +1251,7 @@
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -1256,30 +1262,6 @@
     "heading": "number",
     "id": "string",
     "items": [
-     {
-      "good": "string",
-      "id": "string",
-      "kind": "string",
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "charge": {
-        "reload": "number"
-       },
-       "defId": "string",
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
      {
       "id": "string",
       "kind": "string",
@@ -1327,6 +1309,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}

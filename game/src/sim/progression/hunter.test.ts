@@ -3,7 +3,7 @@ import { NPCS } from '../../data/npcs';
 import { advanceFar } from '../far';
 import { playerVehicle } from '../damage';
 import { addGoods } from '../inventory';
-import { ownDanger, vehicleDanger } from '../npc-decisions';
+import { judgeDanger } from '../npc-decisions';
 import { isTowed } from '../tow';
 import { dist } from '../vec';
 import { playerSees } from '../vision';
@@ -53,7 +53,8 @@ describe('the hunter against one strong raider', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     const w = endTurn(start, () => {}); // a turn with no movement, so the player has seen the raider
     expect(playerSees(w, raider.pos)).toBe(true);
-    expect(vehicleDanger(w, raider)).toBeGreaterThan(ownDanger(w, playerVehicle(w)));
+    // Too strong for the hunter's margin: it hunts only a foe four times weaker than itself.
+    expect(judgeDanger(w, playerVehicle(w), raider)).toBeGreaterThan(1 / 4);
 
     const turn = botOrders(w, 'hunter').world;
     const order = playerVehicle(turn).order;

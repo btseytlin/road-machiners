@@ -12,7 +12,7 @@ import { findRoadWreckSpot, isBreakable, propReach } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { findSpot, goodsCount, gridOf, isMounted, mountedParts, MOUNT_CELLS, type Spot } from './grid';
 import { addGoods, cargoMassRoom, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
@@ -24,7 +24,8 @@ import { cancelJob, startJob } from './jobs';
 import type { GridItem, HiddenLoot, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { canUseSite, townAt } from './sites';
+import { canUseSite } from './sites';
+import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
@@ -155,11 +156,11 @@ export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock):
   return hiddenUnits(stock) > 0 || canTakeRevealed(world, vehicle, stock);
 }
 
-// Whether a collect would move anything from the stock into the vehicle. Stores count only when a unit of them fits
-// (or what is left of the stock), so a nearly full tank does not keep a collector searching a stock for good.
+// Whether a collect would move anything from the stock into the vehicle. Stores pour in whole units, so they count
+// only when a unit fits.
 function canTakeRevealed(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
-  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= Math.min(stock[kind] ?? 0, 1))) return true;
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= 1)) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);
@@ -244,13 +245,14 @@ function stockBasis(stock: SalvageStock, good: string): number {
   return basis;
 }
 
-// Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
-// Whatever does not fit stays behind.
+// Pours the stock's fuel and supplies into the driver's tank and stores in whole units, up to their caps. Whatever
+// does not fit stays behind. A pour up to the exact cap left crumbs under a unit in the stock, which kept a picked
+// wreck counted as loot and drew every passing driver to it.
 export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   const resources = getResources(world, vehicle);
   const room = storesRoom(world, vehicle);
   for (const kind of ['fuel', 'supplies'] as const) {
-    const took = Math.min(stock[kind] ?? 0, room[kind]);
+    const took = Math.min(stock[kind] ?? 0, Math.floor(room[kind]));
     if (took <= 0) continue;
     resources[kind] += took;
     stock[kind] = (stock[kind] ?? 0) - took;
@@ -277,6 +279,14 @@ export function wreckStockId(vehicleId: string): string {
 
 function isTruckWreck(stock: SalvageStock): boolean {
   return stock.id.startsWith(TRUCK_WRECK);
+}
+
+// A part a truck has mounted, or had mounted until its wreck put the part on the wreck's stock, so this turn's
+// events can still name the parts of a truck they wrecked.
+export function carriedPart(world: World, vehicleId: string, partId: string): PartInstance | undefined {
+  const v = world.vehicles.find((x) => x.id === vehicleId) ?? world.removed.find((x) => x.id === vehicleId);
+  const wreck = world.salvage.find((s) => s.id === wreckStockId(vehicleId));
+  return (v && mountedParts(v).find((x) => x.id === partId)) ?? wreck?.parts.find((x) => x.id === partId);
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -517,11 +527,11 @@ function canRegrow(world: World, o: Obstacle): boolean {
 // Whether a thing reaching `reach` tiles around pos may appear or vanish unseen: no part of it lies in the player's
 // gray vision and no truck stands on it. Broken props and craters both wait for this.
 export function canVanish(world: World, pos: Vec, reach: number): boolean {
-  return dist(playerVehicle(world).pos, pos) > grayRadius(world, pos) + reach && clearOfVehicles(world, pos, reach);
+  return dist(playerVehicle(world).pos, pos) > grayRadius(world) + reach && clearOfVehicles(world, pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
@@ -549,7 +559,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 // Refit turns to move an item off the truck onto a spot: one part-worth to unmount it and one to mount it.
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
-  const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
+  const garage = looter.id === world.player.vehicleId && shopAt(world) !== null;
   return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 
@@ -686,6 +696,9 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 
 // ---- NPC looters
 
+// Why a loot ends when the looter's hold takes nothing more of it.
+export const CANNOT_HOLD = 'cargo cannot hold the loot';
+
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
 // installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
 // Returns why the loot ends, or null while work remains.
@@ -694,7 +707,7 @@ export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): s
   takeLooseItems(world, looter, target);
   if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
-  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? CANNOT_HOLD : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);
   return null;
 }

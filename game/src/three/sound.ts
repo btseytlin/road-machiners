@@ -14,8 +14,7 @@ import type {
 import type { V3, VehicleFrame } from "../phys/frames";
 import { PHYSICS } from "../data/physics";
 import type { GameEvent, ShotRound } from "../sim/types";
-import { isTownGuarded } from "../sim/guards";
-import { isInTerritory, isNearOutpost } from "../sim/sites";
+import { isInTerritory, isNearOutpost, isNearTown } from "../sim/sites";
 import type { Vec } from "../sim/vec";
 import type { CameraRig } from "./render/camera";
 
@@ -149,7 +148,6 @@ export class CombatScore {
 export function accentOf(e: GameEvent, playerId: string): AccentCue | null {
   if (e.t === "collision") return [e.a, e.b].includes(playerId) ? "accent-crash" : null;
   if (e.t === "shot") return volleyAccent(e.rounds, e.shooter === playerId, e.target === playerId);
-  if (e.t === "guardShot") return volleyAccent(e.rounds, false, e.target === playerId);
   return null;
 }
 
@@ -242,15 +240,16 @@ export class SoundDirector {
 // A place with its own music, or null on the open road.
 export type MusicPlace = "town" | "outpost" | "abandoned" | null;
 
-// Town music plays inside town guard range, outpost music near outpost gates, and abandoned music inside territories.
+// Town music plays near town gates, outpost music near outpost gates, and abandoned music inside territories.
 export function musicPlaceAt(pos: Vec): MusicPlace {
-  if (isTownGuarded(pos)) return "town";
-  if (isNearOutpost(pos, MIX.music.outpostReachTiles)) return "outpost";
+  if (isNearTown(pos, MIX.music.musicReachTiles)) return "town";
+  if (isNearOutpost(pos, MIX.music.musicReachTiles)) return "outpost";
   return isInTerritory(pos) ? "abandoned" : null;
 }
 
 // What the loops respond to each frame.
-export type LoopState = { stormTiles: number; inCombat: boolean; place: MusicPlace; paused: boolean };
+// stormShare is the player's storm exposure in [0, 1], from stormShare() in src/sim/weather.ts; it sets the storm's share of the wind.
+export type LoopState = { stormShare: number; inCombat: boolean; place: MusicPlace; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
@@ -271,7 +270,7 @@ function musicOf(s: LoopState): "calm" | "combat" | NonNullable<MusicPlace> {
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
-  const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const near = s.stormShare;
   const music = musicOf(s);
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,

@@ -227,7 +227,7 @@ export function settlePatch(world: World, s: NpcState): void {
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
   liftAgreedParts(data, roles.client);
-  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
+  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done', price: data.price });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
   if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);
