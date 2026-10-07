@@ -106,7 +106,7 @@ export function readCarried(raw: unknown): Carried {
   };
 }
 
-// Money in a save from before format 2.14 is in the old unit, a third of an M per fuel unit, as the 13 to 14 step
+// Money in a save from before format 2.19 is in the old unit, a third of an M per fuel unit, as the 18 to 19 step
 // reads it. A save with no format is older still. A newer major format is not old money.
 function moneyScale_18_19(raw: unknown): number {
   const format = objectOf(objectOf(raw)?.format);
