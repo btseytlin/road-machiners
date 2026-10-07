@@ -62,6 +62,21 @@ export const START_KITS: Record<string, StartKit> = {
     autoRepair: true,
     opening: null,
   },
+  // A reasonably prepared mid-game player, for the income harness: a hauler with a cargo box, two guns, armor and a
+  // diesel, and money for a few loads.
+  midgame: {
+    name: 'Your truck',
+    chassis: 'hauler',
+    parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
+    storage: [],
+    money: 3000,
+    fuel: CHASSIS.hauler.fuelCap,
+    supplies: RULES.baseSupplies,
+    cargo: { parts: 2 },
+    costBasis: {},
+    autoRepair: true,
+    opening: null,
+  },
   // The gear of a player who snowballed on raiders: a convertible with two machine guns, a slug cannon, a shotgun, a
   // ram and plates. Measures what that truck earns, not how it is earned.
   snowball: {

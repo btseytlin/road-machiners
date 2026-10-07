@@ -8,7 +8,7 @@ import { canVehicleSee } from '../sim/vision';
 import { playerVehicle } from '../sim/damage';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
-import { siteGates } from '../sim/sites';
+import { siteGates, sitePads } from '../sim/sites';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
@@ -182,7 +182,9 @@ describe('emergency beacon', () => {
   it('a raider comes to a beaconing truck with cargo', () => {
     const w = emptyWorld(player);
     w.player.fuel = 0;
-    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
+    // An armed raider: one with no gun is unfit to hunt and heads for its camp.
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 130, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, NPCS.buggy.traits);
     forceOption('contactHeard', 'investigate');
     const r = runUntil(setBeacon(w, true), 60, (x) => dist(find(x, raider.id).pos, playerVehicle(x).pos) < 15);
     expect(dist(find(r.w, raider.id).pos, playerVehicle(r.w).pos)).toBeLessThan(15);
@@ -232,9 +234,9 @@ describe('a client that jumps home as its NPC tow ends', () => {
     expect(after.events.some((e) => e.t === 'towDropped')).toBe(true);
     const c = after.vehicles.find((v) => v.id === client.id)!;
     expect(c.trail).toHaveLength(0);
-    expect(c.defeat).toBeUndefined();
+    expect(sitePads(npcHomeSite(c)!).some((pad) => dist(pad, c.pos) < 0.01)).toBe(true);
     const frames: Parameters<typeof addRopeFrames>[2] = {};
-    addRopeFrames(before, after, frames);
+    addRopeFrames(before, after, frames, {});
     expect(frames[client.id]).toHaveLength(TURN_STEPS);
   });
 });

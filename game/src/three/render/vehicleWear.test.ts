@@ -96,7 +96,7 @@ describe('part wear look', () => {
   it('answers a world point for every mounted part, a wheel at its mount', () => {
     const v = truck();
     const view = new VehicleView(v, true);
-    view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels: wheelMounts(bodyOf(v.chassisId)).map(() => ({ suspension: 0, steer: 0, spin: 0 })) }, 0.016);
+    view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels: wheelMounts(bodyOf(v.chassisId)).map(() => ({ suspension: 0, steer: 0, spin: 0, ground: true })) }, 0.016);
     for (const p of mountedParts(v)) expect(view.partPoint(p.id), p.id).toBeDefined();
     const mounts = wheelMounts(bodyOf(v.chassisId));
     const wheels = mountedParts(v, 'core').filter((p) => p.defId.startsWith('wheel'));
