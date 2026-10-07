@@ -56,6 +56,14 @@ describe('fight odds', () => {
     expect(fightOdds(w, [unarmed], [cannonWagon(w, 10)]).win).toBe(0);
   });
 
+  // A trader with no gun fled from a stranded buggy with no gun, as if the stand-off were a coin flip.
+  it('is never lost against a truck with no working gun', () => {
+    const w = setUp();
+    const unarmed = addVehicle(w, 'traders', 'van', ['stockEngine'], { x: 40, y: 10 });
+    const harmless = addVehicle(w, 'raiders', 'buggy', [], { x: 46, y: 10 });
+    expect(fightOdds(w, [unarmed], [harmless]).win).toBe(1);
+  });
+
   it('adds a mate\'s fire to its group', () => {
     const w = setUp();
     const me = addVehicle(w, 'traders', 'van', ['mg', 'stockEngine'], { x: 40, y: 10 });

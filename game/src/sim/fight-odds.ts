@@ -162,7 +162,8 @@ export type FightOdds = { win: number; getaway: number };
 
 // Our group against theirs. Each group stops the other's trucks one at a time, every member firing at each, so a
 // group's time to win is the sum over the foes of one over the rate it stops that foe. `win` is our odds to stop them
-// first. `getaway` is the lead's odds to get away when it loses.
+// first, and certain when they can never stop us, even when we cannot stop them either. `getaway` is the lead's odds
+// to get away when it loses.
 export function fightOdds(world: World, ours: Vehicle[], theirs: Vehicle[]): FightOdds {
   const targets = new Map([...ours, ...theirs].map((v) => [v.id, targetOf(v)]));
   const guns = new Map([...ours, ...theirs].map((v) => [v.id, gunsBySide(v)]));
@@ -170,7 +171,7 @@ export function fightOdds(world: World, ours: Vehicle[], theirs: Vehicle[]): Fig
   const table = ours.map((a) => theirs.map((b) => duelRates(world, duel(a, b))));
   const toWin = theirs.reduce((sum, _b, j) => sum + 1 / ours.reduce((r, _a, i) => r + table[i][j].mine, 0), 0);
   const toLose = ours.reduce((sum, _a, i) => sum + 1 / theirs.reduce((r, _b, j) => r + table[i][j].theirs, 0), 0);
-  return { win: firstShare(toWin, toLose), getaway: getaway(world, ours[0], theirs, targets.get(ours[0].id)!, guns) };
+  return { win: toLose === Infinity ? 1 : firstShare(toWin, toLose), getaway: getaway(world, ours[0], theirs, targets.get(ours[0].id)!, guns) };
 }
 
 // The lead gets away when no foe catches it and its rear outlasts their fire while it drives out of their range. A

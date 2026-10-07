@@ -178,6 +178,7 @@ describe('tow offer', () => {
 
   it('a hostile that only passes by does not hold back a tow offer to the player', () => {
     forceOption('strandedSeen', 'tow');
+    forceOption('hostileSeen', 'keep');
     const s = stranded();
     addVehicle(s.w, 'raiders', 'buggy', [], { x: 24, y: 30 });
     offered(s);

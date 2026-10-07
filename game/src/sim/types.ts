@@ -173,7 +173,7 @@ export type NpcActivity = {
   reason: string;
   purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
-  perceived?: number; // the turn a fight last saw or detected its target
+  perceived?: number; // the turn a fight last saw or detected its target, or a flee its threat
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
 };

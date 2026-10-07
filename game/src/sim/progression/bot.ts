@@ -30,7 +30,7 @@ import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
-import { firepower, getUpkeepReserve, isWeak, perceiveDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
 import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
@@ -781,12 +781,15 @@ function seenHostiles(world: World): Vehicle[] {
   return world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && !isKnockedOut(v) && playerSees(world, v.pos));
 }
 
+// The bot misjudges each foe by the same factor every turn, as an NPC judges a foe once per sighting. A new roll each
+// turn flipped the bot between running from a near-even gunwagon and driving on past it, so it stood still.
 function dangerOf(world: World, foe: Vehicle): number {
-  const rng = world.rngState;
-  const danger = perceiveDanger(world, playerVehicle(world), foe);
-  world.rngState = rng;
-  return danger;
+  const spread = NPC_BEHAVIOR.dangerSpread;
+  const roll = hashRandom(world.seed ^ JUDGE_SALT, ...[...foe.id].map((c) => c.charCodeAt(0)));
+  return judgeDanger(world, playerVehicle(world), foe) * (1 - spread + 2 * spread * roll);
 }
+
+const JUDGE_SALT = 0x6a756467;
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
 // stronger foe it runs as an NPC runs: for the nearest town away from the threat, where lawmen patrol. Only the

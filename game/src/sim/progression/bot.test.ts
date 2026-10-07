@@ -18,12 +18,12 @@ import { TERRAIN } from '../../data/terrain';
 import { isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway, type Vec } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from '../testkit';
-import { NPCS, TRAITS } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPCS, TRAITS } from '../../data/npcs';
 import { towData } from '../states';
 import { playerTow, startEscort } from '../tow';
 import { cloneWorld, endTurn, hostileToPlayer } from '../world';
 import { basicsRepairCost, driveRepairCost, getTradePrice, partTradePrice, repairCost } from '../economy';
-import { getKnownSite, getUpkeepReserve, tripFuelCost } from '../npc-decisions';
+import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
 
@@ -674,6 +674,25 @@ describe('the hunter', () => {
   });
 
   // The gunwagon dropped out of sight for a turn, and the trade route turned the bot back into its guns.
+  // A new misjudgment each turn flipped the bot between running from a near-even gunwagon and driving on, so it stood
+  // still for ten turns.
+  it('has a bot judge the same foe the same way whatever the turn rolls', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
+    raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
+    // A near-even foe, so a fresh misjudgment can land on either side of running.
+    expect(Math.abs(judgeDanger(w, me, raider) - 1)).toBeLessThan(NPC_BEHAVIOR.dangerSpread / 2);
+    const orders = Array.from({ length: 12 }, (_, i) => {
+      const x = structuredClone(w);
+      x.rngState = Math.imul(i + 1, 2654435761);
+      return playerVehicle(botOrders(x, 'trader').world).order;
+    });
+
+    for (const order of orders) expect(order).toEqual(orders[0]);
+  });
+
   it('has a bot keep running while it hears a stronger raider it no longer sees', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);

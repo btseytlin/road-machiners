@@ -767,6 +767,9 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('flee');
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     planNpcOrders(w);
+    expect(topGoal(npc)?.kind).toBe('flee');
+    w.turn += NPC_BEHAVIOR.fleeCalmTurns + 1;
+    planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 

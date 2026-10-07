@@ -313,6 +313,14 @@ function withoutGuards_18_19(world: SavedJson): SavedJson {
   };
 }
 
+// A runner keeps on until its threat has been out of sight, earshot and gunfire for some turns, counted from this turn.
+function withFleePerceived_19_20(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -391,6 +399,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withStormExposure_17_18,
   // 18 to 19: gate guns are gone, with their shot events and kill credit.
   withoutGuards_18_19,
+  // 19 to 20: a flee goal records the turn it last perceived its threat, taken as the save's turn.
+  withFleePerceived_19_20,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

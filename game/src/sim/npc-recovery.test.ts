@@ -129,7 +129,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario(template);
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, enemy, npc);
-    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'test flight' }];
+    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'test flight', perceived: world.turn }];
     npc.brain!.attackers[enemy.id] = true;
     npc.brain!.noticed[`hostileSeen:${enemy.id}`] = world.turn;
     npc.brain!.hurt = 0;
@@ -274,5 +274,49 @@ describe('NPC gameplay recovery', () => {
     const activity = thinkNpc(world, npc);
     expect(['resupply', 'repair']).toContain(activity.kind);
     if (activity.kind === 'repair') expect(activity.destination).toBeNull();
+  });
+
+  // A vulture's long gun shot a raider from beyond its sight. The flee ended as soon as nothing was in sight, and
+  // the raider drove back into range every two turns.
+  it('keeps running from a threat out of sight until it has been calm a while', () => {
+    const { world, npc } = createScenario('buggy');
+    const shooter = addVehicle(world, 'vultures', 'van', ['mg', 'stockEngine'], { x: 190, y: 190 });
+    const flee: NpcActivity = { kind: 'flee', targetId: shooter.id, destination: { x: 5, y: 5 }, phase: 'travel', reason: 'escape an attacker', perceived: world.turn };
+    npc.brain!.goals = [workGoal('buggy'), flee];
+
+    world.turn += NPC_BEHAVIOR.fleeCalmTurns;
+    thinkNpc(world, npc);
+    expect(topGoal(npc)).toBe(flee);
+
+    // A hit from the unseen gun starts the calm count again.
+    npc.brain!.hurt = 5;
+    planNpcOrders(world);
+    npc.brain!.hurt = 0;
+    world.turn += NPC_BEHAVIOR.fleeCalmTurns;
+    thinkNpc(world, npc);
+    expect(topGoal(npc)?.kind).toBe('flee');
+
+    world.turn += 1;
+    thinkNpc(world, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).not.toContain('flee');
+  });
+
+  // The investigate left under the flee sent the raider back to the truck it ran from as soon as the flee ended.
+  it('stops looking for a truck it runs from', () => {
+    const { world, npc } = createScenario('scavenger');
+    const enemy = addVehicle(world, 'raiders', 'wagon', ['heavyMg', 'mg', 'stockEngine'], { x: 36, y: 30 });
+    enemy.brain = npcBrain('gunwagon', enemy.pos, ['raider']);
+    const look: NpcActivity = { kind: 'investigate', targetId: enemy.id, destination: { ...enemy.pos }, phase: 'travel', reason: 'heard a hostile beyond sight' };
+    npc.brain!.goals = [workGoal('scavenger'), look];
+    fireAt(world, enemy, npc);
+    let fled = 0;
+    shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      if (topGoal(me)?.kind !== 'flee') return false;
+      fled++;
+      expect(me.brain!.goals.map((g) => g.kind)).not.toContain('investigate');
+      return true;
+    });
+    expect(fled).toBeGreaterThan(0);
   });
 });

@@ -400,9 +400,12 @@ function fightGoal(world: World, vehicle: Vehicle, target: Vehicle, reason: stri
   return goal;
 }
 
+// A driver keeps running until it has not seen, heard or been hit by anything for NPC_BEHAVIOR.fleeCalmTurns, so a
+// gun it cannot see does not turn it back into range.
 function fleeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   if (visibleHostiles(world, vehicle).length > 0 || contacts.some((c) => c.vehicleId === goal.targetId)) return null;
-  return 'no hostile in sight';
+  if (goal.perceived === undefined) throw new Error(`${vehicle.id} flees from ${goal.targetId} with no turn it last perceived it`);
+  return world.turn - goal.perceived > NPC_BEHAVIOR.fleeCalmTurns ? 'no hostile in sight' : null;
 }
 
 function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
@@ -585,11 +588,18 @@ function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
     dropTow(world, tow, 'danger');
     if (popGoal(world, vehicle, 'dropped the tow').kind !== 'tow') throw new Error(`${vehicle.id} held a tow without a tow goal on top`);
   }
+  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId);
   pushGoal(world, vehicle, goal);
 }
 
+// A driver that runs from a truck no longer goes to look for it. Without this, the investigate under the flee sends
+// it back the moment the flee ends.
+function dropChases(world: World, vehicle: Vehicle, threatId: string | null): void {
+  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === threatId)) dropGoal(world, vehicle, goal, 'ran from it');
+}
+
 function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: string): NpcActivity {
-  return createActivity('flee', threatId, fleeDestination(world, vehicle, profile, threatPos), reason);
+  return { ...createActivity('flee', threatId, fleeDestination(world, vehicle, profile, threatPos), reason), perceived: world.turn };
 }
 
 // One roll per new hostile in sight, nearest first. A reaction ends the turn's rolls. Later hostiles fire next turn.
@@ -840,10 +850,12 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   follow: steerFollow,
 };
 
+// A runner turns away from the threat each turn it perceives it. A hit from a gun it cannot see counts as perceived,
+// and with nothing perceived it runs on to the same point.
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);
-  if (!threat) throw new Error(`${vehicle.id} flees with no threat perceived`);
-  goal.destination = fleeDestination(world, vehicle, profile, threat);
+  if (threat) goal.destination = fleeDestination(world, vehicle, profile, threat);
+  if (threat || vehicle.brain!.hurt > 0) goal.perceived = world.turn;
 }
 
 // The fled target where the NPC sees it, else the nearest hostile in sight, else the target's contact circle.
