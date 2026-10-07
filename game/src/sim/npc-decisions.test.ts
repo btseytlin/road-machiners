@@ -6,9 +6,9 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, holdsUp, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, fitToHunt, holdsUp, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { isTerritory, siteGates, sitePads } from './sites';
+import { isTerritory, siteGap, siteGates, sitePads } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
@@ -18,6 +18,8 @@ import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
 import { fuelCap } from './stats';
+import { getResources } from './resources';
+import { RULES } from '../data/rules';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
@@ -204,6 +206,57 @@ describe('decision weights', () => {
   });
 });
 
+describe('fit to hunt', () => {
+  function raider(): { w: World; v: Vehicle } {
+    const w = emptyWorld({ x: 80, y: 80 });
+    return { w, v: addNpc(w, 'raiders', 'buggy', ['raider'], { x: 10, y: 10 }, ['mg', 'stockEngine', 'plates']) };
+  }
+
+  it('holds for a fresh raider', () => {
+    const { w, v } = raider();
+    expect(fitToHunt(w, v)).toBe(true);
+  });
+
+  it('fails with no working gun', () => {
+    const { w, v } = raider();
+    for (const gun of mountedParts(v, 'weapon')) gun.hp = 0;
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with only junk guns', () => {
+    const { w, v } = raider();
+    for (const gun of mountedParts(v, 'weapon')) { gun.wear = 5; gun.hp = 0; }
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with no gun at all', () => {
+    const { w, v } = raider();
+    v.items = v.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'weapon'));
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails with the body at the recover condition', () => {
+    const { w, v } = raider();
+    const cab = corePart(v, 'cab');
+    cab.hp = maxHp(cab) * NPC_BEHAVIOR.recoverCondition;
+    expect(fitToHunt(w, v)).toBe(false);
+    cab.hp = maxHp(cab) * NPC_BEHAVIOR.recoverCondition + 1;
+    expect(fitToHunt(w, v)).toBe(true);
+  });
+
+  it('fails with the driver at the recover condition', () => {
+    const { w, v } = raider();
+    getResources(w, v).health = RULES.maxHealth * NPC_BEHAVIOR.recoverCondition;
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+
+  it('fails when stranded', () => {
+    const { w, v } = raider();
+    getResources(w, v).fuel = 0;
+    expect(fitToHunt(w, v)).toBe(false);
+  });
+});
+
 describe('aid decisions', () => {
   // A driver with the given traits and full tanks beside a player low on fuel, so it can spare some.
   function aidChances(traits: TraitId[], decision: 'aidAsked' | 'needySeen'): Record<string, number> {
@@ -243,7 +296,7 @@ describe('aid decisions', () => {
 });
 
 describe('fight back', () => {
-  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [] });
+  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [], burst: null });
 
   // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
   // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
@@ -513,9 +566,39 @@ describe('hunting grounds', () => {
     for (const p of grounds) for (const z of hazardZones()) expect(dist(p, z.pos)).toBeGreaterThan(z.radius);
   });
 
+  describe('in Old Orchard', () => {
+    const orchard = territories.find((t) => t.id === 'orchard')!;
+    const orchardGrounds = territoryGrounds(orchard);
+    const isOrchardGround = (p: Vec) => orchardGrounds.some((q) => q.x === p.x && q.y === p.y);
+
+    it('hold every orchard ground', () => {
+      expect(orchardGrounds.length).toBeGreaterThan(0);
+      for (const p of orchardGrounds) expect(grounds).toContainEqual(p);
+    });
+
+    it('send a prowling vulture to an orchard ground', () => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const npc = addNpc(w, 'vultures', 'vulture', ['vulture'], { x: 30, y: 30 }, ['longRifle', 'stockEngine']);
+      forceOption('idle', 'prowl');
+      const goals = Array.from({ length: 40 }, (_, seed) => {
+        const x = cloneWorld(w);
+        x.rngState = Math.imul(seed + 1, 2654435761);
+        return thinkNpc(x, find(x, npc.id));
+      }).filter((g) => g.kind === 'prowl');
+      expect(goals.filter((g) => isOrchardGround(g.destination!)).length).toBeGreaterThan(0);
+    });
+
+    // Which camps' raiders wait in the orchard, and at how many of its grounds. Each ground belongs to its nearest camp.
+    it('are shared by the raiders of Scrapjaw and Kiln', () => {
+      const camps = REGION.locations.filter((l) => l.kind === 'camp');
+      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(c).filter(isOrchardGround).length]).filter(([, n]) => n > 0));
+      expect(covering).toEqual({ kiln: 3, scrapjaw: 6 });
+    });
+  });
+
   it('keeps road grounds far from every site, and none at a town or camp', () => {
     const sites = [...REGION.towns, ...REGION.locations];
-    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
+    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(siteGap(site, p)).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
   });

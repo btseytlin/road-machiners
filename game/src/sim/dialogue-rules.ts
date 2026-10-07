@@ -14,13 +14,13 @@ import { recall } from './memory';
 import { hasPerk, practice } from './progress';
 import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
-import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
+import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { spread, startTrade, tradeWith, transfer } from './economy';
-import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
+import { acceptOffer, canTowNpc, isTowing, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVar, CallVars, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
@@ -209,6 +209,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
+  npcWorn: (world, npc) => canTakeWornPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id) && !isTowing(world, npc.id) && !isStranded(world, playerVehicle(world)),
   // A towed truck is already being helped. Its tower owns it.
   npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,

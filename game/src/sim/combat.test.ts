@@ -5,15 +5,16 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, noteAttack, resolveDestroyed } from './combat';
+import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed } from './combat';
 import { thinkNpc, topGoal } from './npc-activities';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, settleStorms, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
+import { PHYSICS } from '../data/physics';
 import { endTurn, update } from './world';
 import { gunFor } from './factory';
 
@@ -686,7 +687,8 @@ describe('aim perks', () => {
 
   // A storm over both trucks.
   const storm = (w: World) => {
-    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
+    settleStorms(w);
   };
 
   it('storm rider takes the storm scatter away from the player', () => {
@@ -806,5 +808,19 @@ describe('betrayal', () => {
     thinkNpc(w, npc);
     expect(stateOf(w, 'trade', npc.id, me.id)).toBeNull();
     expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: me.id });
+  });
+});
+
+describe('missPoint', () => {
+  it('puts a positive offset on the shooter\'s right, offset meters from the target', () => {
+    const from = { x: 10, y: 10 };
+    const target = { x: 30, y: 10 };
+    const p = missPoint(from, target, 6);
+    expect(p.x).toBeCloseTo(30);
+    expect(p.y).toBeCloseTo(10 + 6 / PHYSICS.metersPerTile);
+  });
+
+  it('throws when the shooter stands on the target', () => {
+    expect(() => missPoint({ x: 5, y: 5 }, { x: 5, y: 5 }, 1)).toThrow();
   });
 });

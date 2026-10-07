@@ -24,6 +24,12 @@ body {
   --metal: #33383b;
   --inspection-width: 300px;
   --inspection-height: 340px;
+  --log-width: 282px;
+  --right-column: calc(var(--log-width) + 16px);
+  --weapon-card: 56px;
+  --weapon-gap: 4px;
+  --weapon-icon-w: 40px;
+  --weapon-icon-h: 22px;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -119,8 +125,6 @@ body {
 }
 
 #ui .instruments {
-  left: 14px;
-  bottom: 14px;
   padding: 5px 8px 5px 4px;
   display: grid;
   grid-template-columns: 66px auto;
@@ -373,92 +377,81 @@ body {
 }
 
 #ui .weapons {
-  left: 457px;
-  bottom: 14px;
-  max-width: calc(100vw - 587px);
   box-sizing: border-box;
-  padding: 6px 8px 8px;
+  padding: 4px 6px 6px;
 }
 .weapon-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 #ui .weapon-head h3 {
   margin: 0 auto 0 0;
-  font-size: 14px;
+  font-size: 12px;
 }
 #ui .weapon-head button {
-  padding: 2px 7px;
-  font: 11px var(--font-ui);
+  padding: 1px 5px;
+  font: 10px var(--font-ui);
 }
 .weapons fieldset {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
+  display: block;
   border: 0;
   margin: 0;
   padding: 0;
   min-width: 0;
 }
 .weapons .weapon-slots {
-  display: flex;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(var(--weapon-cols), var(--weapon-card));
+  gap: var(--weapon-gap);
+}
+.weapons .weapon-slots.two-rows {
+  --weapon-card: 46px;
+  --weapon-icon-w: 32px;
+  --weapon-icon-h: 18px;
+  font-size: 9px;
 }
 .weapons .weapon-slot {
-  width: 96px;
-  min-width: 0;
-}
-#ui .weapon-pick {
-  position: relative;
-  width: 100%;
-  padding: 4px;
+  width: var(--weapon-card);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
+}
+.weapons .weapon-slot.broken .weapon-pick {
+  opacity: 0.55;
+}
+#ui .weapon-pick {
+  width: 100%;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 2px;
+  justify-items: center;
   box-shadow: inset 0 0 0 2px #444b4e;
 }
-.weapon-pick .icon {
-  width: 38px;
-  height: 36px;
-}
 .weapon-number {
-  position: absolute;
-  top: 3px;
-  left: 5px;
-  font: 11px var(--font-mono);
+  font: 10px var(--font-mono);
   color: #e5c47c;
 }
-.weapon-name {
-  max-width: 100%;
-  padding-left: 10px;
-  box-sizing: border-box;
-  font-size: 10px;
-  line-height: 1.15;
-  text-align: center;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.weapon-pick .item-icon {
+  grid-column: 1 / 3;
+  width: var(--weapon-icon-w);
+  height: var(--weapon-icon-h);
 }
 .weapon-pick [data-status] {
-  font: 10px / 1.2 var(--font-mono);
-}
-.weapon-ammo-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 2px;
+  font: 9px / 1 var(--font-mono);
+  justify-self: end;
+  white-space: nowrap;
 }
 .weapon-ammo {
+  grid-column: 1 / 3;
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 .ammo-cell {
-  width: 6px;
-  height: 12px;
+  width: 4px;
+  height: 7px;
   border: 1px solid var(--edge);
   background: var(--ink);
 }
@@ -468,23 +461,25 @@ body {
 .ammo-cell.reloading {
   background: #e5c47c;
 }
-#ui .weapon-reload {
-  padding: 1px 4px;
+.weapon-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
 }
-.weapon-reload .icon {
-  width: 16px;
+#ui .weapon-hold,
+#ui .weapon-reload {
+  padding: 0;
+  font-size: 10px;
   height: 16px;
 }
-.weapon-target {
-  font-size: 10px;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.weapon-slots.two-rows .weapon-hold,
+.weapon-slots.two-rows .weapon-reload {
+  height: 14px;
+  font-size: 9px;
 }
-#ui .weapon-hold {
-  padding: 1px 4px;
-  font-size: 11px;
+.weapon-reload .icon {
+  width: 12px;
+  height: 12px;
 }
 #ui .turn-control {
   right: 16px;
@@ -517,9 +512,11 @@ body {
 #ui .log {
   right: 16px;
   bottom: 112px;
-  width: 282px;
+  width: var(--log-width);
   height: 122px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   padding: 8px 10px;
   background: #202529e8;
   border: 0;
@@ -532,7 +529,7 @@ body {
   position: absolute;
   right: 16px;
   bottom: 246px;
-  width: 282px;
+  width: var(--log-width);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -662,6 +659,37 @@ body {
   border-radius: 1px;
   background: var(--ink);
 }
+/* The next track key is a black plastic transport key from an old CD player, in a strip above the screen. */
+.radio-keys {
+  display: flex;
+  justify-content: flex-end;
+}
+#ui .radio-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--knob-size) * 1.3);
+  height: calc(var(--knob-size) * 0.65);
+  padding: 0;
+  background: linear-gradient(#4a5155, #2a2f32);
+  border: 1px solid #15191b;
+  border-radius: 3px;
+  box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #0000004d, 0 2px 3px #000000a0;
+  color: var(--ink);
+}
+#ui .radio-next:hover {
+  background: linear-gradient(#545b5f, #33393c);
+  border-color: #15191b;
+}
+#ui .radio-next:active {
+  transform: translateY(1px);
+  background: linear-gradient(#2a2f32, #3a4043);
+  box-shadow: inset 0 2px 3px #00000080, 0 1px 1px #000000a0;
+}
+.radio-next svg {
+  width: 50%;
+  fill: currentColor;
+}
 /* The mute switch is the metal toggle, shrunk to the knobs' height. */
 #ui .radio-faceplate button.switch {
   gap: 0;
@@ -684,29 +712,34 @@ body {
   margin: 0 !important;
 }
 .log-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
 }
-.log-expand {
+#ui .log-expand {
   padding: 0 6px;
   font-size: 12px;
   line-height: 16px;
 }
 .log-time {
+  white-space: nowrap;
   margin-right: 6px;
   font: 11px var(--font-mono);
   color: var(--muted);
 }
 .log-lines {
   overflow-anchor: none;
-  max-height: 86px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
 }
 .log-lines > div {
   padding: 3px 0;
+  overflow-wrap: anywhere;
 }
 /* A modal takes the screen, so the log only grows while none is open. */
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
@@ -714,13 +747,7 @@ body {
   width: 420px;
   height: calc(100dvh - 112px - 72px);
 }
-#ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded .log-lines {
-  max-height: calc(100% - 28px);
-}
 #ui .recenter {
-  left: 50%;
-  bottom: 124px;
-  transform: translateX(-50%);
   padding: 0;
   border: 0;
 }
@@ -1004,10 +1031,12 @@ body {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .instruments,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
 }
@@ -1173,31 +1202,31 @@ body {
   max-width: 260px;
   margin-top: 30px;
 }
+/* Room for the truck outline, which reaches past the grid. */
 .truck-shell {
-  position: relative;
-  padding: 45px 18px 18px;
-  background: #50595d;
-  border: 2px solid #8e9495;
-  border-top-left-radius: 40px;
-  border-top-right-radius: 40px;
-  box-shadow:
-    inset 0 0 0 5px #303b41,
-    -7px 35px 0 -5px #161c20,
-    7px 35px 0 -5px #161c20;
-}
-.truck-nose {
-  position: absolute;
-  top: 10px;
-  left: 25%;
-  right: 25%;
-  height: 25px;
-  background: #273f49;
-  border: 2px solid #929e9f;
-  transform: perspective(80px) rotateX(15deg);
+  padding: 24px 0;
 }
 .inv-grid {
   position: relative;
   background: #20292e;
+}
+/* The truck's outline from above. The condition panel fills it behind its parts. The inventory draws only its line,
+   over the cells and under the items. */
+.truck-outline {
+  position: absolute;
+  pointer-events: none;
+  --plan-line: #8d9ca1;
+  --plan-fill: #20282b;
+}
+.inv-grid .truck-outline {
+  --plan-line: #b9c6ca;
+  --plan-fill: none;
+}
+.truck-outline svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 .inv-cell {
   position: absolute;
@@ -1247,8 +1276,10 @@ body {
 .inv-item .icon {
   width: 100%;
   height: 100%;
-  max-width: 62px;
-  max-height: 62px;
+}
+/* Clear of the condition bar. */
+.inv-item:has(.inv-hp) {
+  padding-bottom: 6px;
 }
 .inv-item-name {
   position: absolute;
@@ -1308,32 +1339,21 @@ body {
 .inv-hp.broken {
   background: #f0a080;
 }
-.k-weapon {
-  background: #675347;
+/* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
+   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles. */
+.inv-item,
+.inv-chip,
+.item-icon {
+  background: var(--tone);
 }
-.k-engine {
-  background: #515f66;
+.item-icon {
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 2px;
 }
-.k-armor {
-  background: #59676e;
-}
-.k-cargo {
-  background: #655a4c;
-}
-.k-core {
-  background: #404f57;
-}
-.k-good {
-  background: #736352;
-}
-.g-scrap {
-  background: #666f73;
-}
-.g-salt {
-  background: #938e82;
-}
-.g-meds {
-  background: #556d66;
+.inv-item .item-icon {
+  padding: 0;
+  border-radius: 0;
 }
 .inv-side {
   display: flex;
@@ -1379,6 +1399,7 @@ body {
   font-size: 11px;
 }
 .inv-chip > .icon {
+  flex: none;
   width: 22px;
   height: 22px;
 }
@@ -1448,40 +1469,27 @@ body {
   background: #cc775555;
 }
 @media (max-width: 1100px) {
-  /* Room between the instruments and the narrower log. */
-  #ui .weapons {
-    max-width: calc(100vw - 689px);
+  #ui {
+    --log-width: 246px;
   }
   #ui .log,
   #ui .right-dock {
-    width: 246px;
-  }
-}
-@media (max-width: 900px) {
-  /* Too narrow beside the instruments, so the weapons sit above them. */
-  #ui .weapons {
-    left: 14px;
-    bottom: 224px;
-    max-width: calc(100vw - 30px);
+    width: var(--log-width);
   }
 }
 @media (max-width: 720px) {
   .instrument-actions {
     flex-wrap: wrap;
   }
-  #ui .weapons {
-    bottom: 196px;
-    max-width: calc(100vw - 30px);
+  #ui {
+    --log-width: 200px;
+    --right-column: calc(var(--log-width) + 14px);
   }
   #ui .log {
     top: auto;
     bottom: 176px;
     right: 14px;
-    width: 200px;
     height: 80px;
-  }
-  .log-lines {
-    max-height: 48px;
   }
   #ui .radio {
     --radio-line: 12px;
@@ -1568,6 +1576,8 @@ canvas.view {
     rgba(157, 121, 84, 0.18),
     rgba(120, 88, 58, 0.55)
   );
+  /* Opacity follows the player's storm exposure each turn; the transition glides between turns. */
+  transition: opacity 1s linear;
 }
 
 /* Progress of a parked job: repair or search. */
@@ -1593,6 +1603,37 @@ canvas.view {
 }
 #ui .top-left > .panel {
   position: static;
+}
+/* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
+.bottom-left {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100vw - 22px - var(--right-column));
+}
+#ui .bottom-left > .panel {
+  position: static;
+}
+#ui .bottom-left > .instruments {
+  order: 1;
+}
+#ui .bottom-left > .weapons {
+  order: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+#ui .bottom-left > .recenter {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  transform: none;
 }
 .top-right {
   position: absolute;
@@ -1686,18 +1727,8 @@ canvas.view {
 .card:hover {
   border-color: #8e8a73;
 }
-.card.k-weapon,
-.card.k-scanner {
-  border-left-color: #a07a5e;
-}
-.card.k-engine {
-  border-left-color: #6f8a96;
-}
-.card.k-armor {
-  border-left-color: #8d9ca3;
-}
-.card.k-cargo {
-  border-left-color: #a08c68;
+.card.toned {
+  border-left-color: var(--tone);
 }
 .card-head {
   display: flex;
@@ -1998,8 +2029,10 @@ canvas.view {
   border-bottom: 1px solid #3b454b;
   font: 13px var(--font-mono);
 }
-.town-repair .bad,
-.town-repair .dim {
+.town-repair > button:first-of-type {
+  margin-left: auto;
+}
+.town-repair .bad {
   flex: 1;
 }
 #ui .town-repair button {
@@ -2049,17 +2082,40 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
+/* The truck's portrait beside its grid. */
+.truck-pics {
+  --map-cell: 10px;
+  --map-gap: 1px;
+  --map-pad: 3px;
+  --portrait-w: 128px;
+  --portrait-h: 80px;
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+  /* One box for every truck, so the garage lines them up. The drawing fits inside it, centered. */
+  width: var(--portrait-w);
+  height: var(--portrait-h);
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .chassis-map {
   display: grid;
-  gap: 1px;
+  gap: var(--map-gap);
   align-self: flex-start;
   width: max-content;
-  padding: 3px;
+  padding: var(--map-pad);
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px;
-  height: 10px;
+  width: var(--map-cell);
+  height: var(--map-cell);
 }
 .chassis-map .hole {
   background: none;

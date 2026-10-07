@@ -9,24 +9,29 @@ import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
-import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
+import { groundAt, heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onDeck } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
-import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
+import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
+  let d = groundForTerritories(seed);
+  d = timed('territories', () => territoryLayer(seed, d));
+  d = timed('ground', () => groundLayer(seed, d));
+  return timed('rocks', () => rockLayer(seed, d));
+}
+
+// The layers before the territories: the ground and world a territory is laid out on.
+export function groundForTerritories(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
   d = timed('geology', () => geologyLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
-  d = timed('new world', () => newWorldLayer(seed, d));
-  d = timed('territories', () => territoryLayer(seed, d));
-  d = timed('ground', () => groundLayer(seed, d));
-  return timed('rocks', () => rockLayer(seed, d));
+  return timed('new world', () => newWorldLayer(seed, d));
 }
 
 function timed(layer: string, run: () => MapDraft): MapDraft {
@@ -84,6 +89,16 @@ export function tileSteepness(heights: ArrayLike<number>, size: number, tile: nu
   return Math.hypot((b - a + d - c) / 2, (c - a + d - b) / 2);
 }
 
+// How far the ground under a prop's footprint lies off its seat: the largest height between the ground at its centre,
+// where it stands upright, and the ground at its two ends for a segment prop, a line p.r to each side of its centre
+// along its yaw, or at 8 points round its edge for a disc. This is how far its footprint floats or sinks.
+export function footprintRelief(heights: ArrayLike<number>, size: number, p: BakedProp, segment: boolean): number {
+  const t = { size, heights };
+  const seat = groundAt(t, p.pos.x, p.pos.y);
+  const angles = segment ? [p.yaw, p.yaw + Math.PI] : Array.from({ length: 8 }, (_, k) => (k * Math.PI) / 4);
+  return Math.max(...angles.map((a) => Math.abs(groundAt(t, p.pos.x + Math.cos(a) * p.r, p.pos.y + Math.sin(a) * p.r) - seat)));
+}
+
 // Base layer: noise relief, ridges and the fixed landforms at full height, before any flattening.
 
 export function baseLayer(seed: number, size: number): MapDraft {
@@ -127,14 +142,13 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground types for tile marks of the old world, the new world and territories.
+// Ground types for old-world tile marks.
 const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_OLD_ROAD]: 'asphalt',
   [BUILT_FIELD]: 'field',
   [BUILT_SCRUB]: 'scrub',
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
-  [BUILT_HULL]: 'hull',
   [BUILT_TRACK]: 'track',
   [BUILT_CANAL]: 'canal',
   [BUILT_PAD]: 'concrete',
@@ -169,7 +183,9 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
   return pond;
 }
 
-// Road on roads and the decks, hardpan on and around sites, null elsewhere.
+// Road on roads and the decks, hardpan on and around sites, null elsewhere. Every deck tile is road, raised or not: a
+// deck is metal plate, so the Fallen Sun's wing and flaps drive as fast as a bridge, and the ground under a raised
+// deck is out of reach.
 function builtType(c: Vec): TerrainTypeId | null {
   if (deckAt(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
@@ -282,14 +298,22 @@ function placeBoulder(d: MapDraft, rng: Rng, i: number, j: number, kind: 'rock' 
   const [low, high] = kind === 'crag' ? B.crag.radius : B.radius;
   const r = randRange(rng, low, high);
   const yaw = kind === 'crag' ? randRange(rng, 0, Math.PI * 2) : 0;
-  if (fitsOffRoad(d.size, d.heights, d.props, pos, r)) d.props.push({ kind, pos, r, yaw, group: 0, step: 0 });
+  if (fitsOffRoad(d.size, d.heights, d.built, d.props, pos, r)) d.props.push({ kind, pos, r, yaw, group: 0, step: 0 });
 }
 
-function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: BakedProp[], pos: Vec, r: number): boolean {
+// Off the margin, the region roads, dirt tracks, cliffs, decks, sites and earlier props. A territory's dirt spurs run
+// out onto open land as track tiles, so a boulder keeps off the track tile under it and every track tile within its
+// radius. The test runs after the boulder's draws, so a rejected boulder shifts no later one.
+function fitsOffRoad(size: number, heights: ArrayLike<number>, built: Uint8Array, placed: BakedProp[], pos: Vec, r: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin) return false;
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
+  return fitsGround(size, heights, built, pos, r) && !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+}
+
+// Whether a boulder's tile is no cliff, and neither it nor any tile whose centre the boulder covers is a dirt track.
+function fitsGround(size: number, heights: ArrayLike<number>, built: Uint8Array, pos: Vec, r: number): boolean {
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
-  if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
-  return !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+  if ([tile, ...tilesWithin(size, pos, r)].some((k) => built[k] === BUILT_TRACK)) return false;
+  return tileSteepness(heights, size, tile) <= BOULDER_SLOPE_LIMIT;
 }

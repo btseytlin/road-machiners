@@ -7,9 +7,9 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'towFree' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'claim' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'tips' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand';
+export type TopicId = 'directions' | 'tow' | 'towFree' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'claim' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'offerPatchWorn' | 'marketNews' | 'rumor' | 'tips' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand';
 export type ConditionId =
-  | 'knowsTown' | 'offersPaidTow' | 'offersFreeTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'npcOffRope' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp' | 'guardsClaim'
+  | 'knowsTown' | 'offersPaidTow' | 'offersFreeTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'npcWorn' | 'npcOffRope' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp' | 'guardsClaim'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'demandsToll' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
@@ -513,6 +513,32 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
+  // The player offers to patch a driver whose engine, gearbox or tank is worn thin, before it strands.
+  offerPatchWorn: {
+    id: 'offerPatchWorn',
+    once: false,
+    ask: { text: 'Your engine sounds rough. Want me to patch it before it quits?', when: ['npcWorn', 'npcOffRope', 'npcCalm', 'atPeace'], duringFeud: false },
+    raise: null,
+    prepare: 'patchTerms',
+    hangUp: [],
+    start: 'ask',
+    nodes: {
+      ask: {
+        line: 'You know how? Then name it.',
+        options: [
+          { text: 'What can you offer?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'On second thought, I cannot.', when: ['noDeal'], effects: [], go: HUB },
+        ],
+      },
+      terms: {
+        line: '{deal}',
+        options: [
+          { text: 'Deal. Pull over and wait.', when: [], effects: ['agreePatch'], go: END },
+          { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
+        ],
+      },
+    },
+  },
   // A driver back from a town tells its prices. Needs the Market ears perk.
   marketNews: {
     id: 'marketNews',
@@ -712,7 +738,7 @@ export const HONK_RANGE = DETECT.sound.limp;
 
 // Every driver can be asked for peace, robbed, warned off a wreck, towed, patched and given fuel or supplies, and can
 // plead for peace.
-const PARLEY: TopicId[] = ['surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerAid'];
+const PARLEY: TopicId[] = ['surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerPatchWorn', 'offerAid'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
