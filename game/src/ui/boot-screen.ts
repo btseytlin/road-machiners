@@ -56,12 +56,12 @@ export class BootScreen {
 
   // Runs one boot step. A function waits for its label to paint first, since it blocks the page until it returns.
   async track<T>(step: BootStep, work: Promise<T> | (() => T), label?: string): Promise<T> {
-    this.progress.start(step, label);
-    this.render();
+    this.begin(step, label);
     try {
       if (typeof work === 'function') await this.painted();
       const result = await (typeof work === 'function' ? work() : work);
-      this.progress.finish(step);
+      // A failure elsewhere froze the bar. Work still running keeps its result and moves nothing.
+      if (!this.progress.failed) this.progress.finish(step);
       this.render();
       return result;
     } catch (err) {
@@ -74,9 +74,17 @@ export class BootScreen {
   // The progress callback for a counted step.
   count(step: BootStep): (done: number, total: number) => void {
     return (done, total) => {
+      if (this.progress.failed) return;
+      this.begin(step);
       this.progress.count(step, done, total);
       this.render();
     };
+  }
+
+  // A counted loader reports its first count before track() gets its promise, so either may start the step.
+  private begin(step: BootStep, label?: string): void {
+    if (this.progress.state(step) === 'waiting') this.progress.start(step, label);
+    this.render();
   }
 
   // Hides the screen while the player decides something, then brings it back.

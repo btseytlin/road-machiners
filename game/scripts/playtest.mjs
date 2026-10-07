@@ -59,6 +59,11 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
 await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
 await page.waitForTimeout(1000);
+if (await page.$('#boot')) {
+  await browser.close();
+  console.error('FAIL\nThe boot screen is still on the page after the game started.');
+  process.exit(1);
+}
 await page.screenshot({ path: '.playtest/start.png' });
 
 // A HUD panel that is just one control must give it clicks across the whole box, corners included.
