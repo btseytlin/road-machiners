@@ -40,7 +40,7 @@ import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
-import { vehicleStats } from './stats';
+import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
@@ -205,7 +205,15 @@ export function update(world: World, fn: (draft: World) => void): World {
   draft.removed = [];
   fn(draft);
   settleAims(draft);
+  settleOverdrive(draft);
   return draft;
+}
+
+// Overdrive cuts out once the engine is too worn for it, whatever wore it down. Only the player turns it back on.
+function settleOverdrive(w: World): void {
+  if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
+  w.player.overdrive = false;
+  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
 // Whether player commands are allowed now. The UI checks it before issuing one.
@@ -374,6 +382,9 @@ export function setAutoRepair(world: World, on: boolean): World {
 
 export function setOverdrive(world: World, on: boolean): World {
   return update(world, (w) => {
+    if (on && !canOverdrive(playerVehicle(w))) {
+      throw new Error(`Cannot overdrive: the engine is at or below ${RULES.overdriveMinEngineShare * 100}% of its max HP`);
+    }
     w.player.overdrive = on;
   });
 }

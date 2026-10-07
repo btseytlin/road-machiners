@@ -74,6 +74,11 @@ export function setSupplies(world: World, n: number): World {
   return update(world, (w) => { w.player.supplies = n; });
 }
 
+export function setEngineHeat(world: World, n: number): World {
+  requireRange('Engine heat', n, 0, 1);
+  return update(world, (w) => { w.player.engineHeat = n; });
+}
+
 export function setHealth(world: World, n: number): World {
   requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
