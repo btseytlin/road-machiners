@@ -189,16 +189,24 @@ describe('runAgent reference images', () => {
     expect(runs[0].prompt).toContain('from the comment by ann');
   });
 
-  it('fails the stage before the agent starts when an image cannot be fetched', async () => {
-    const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
-    await expect(runAgent(ctx, 7, 'design', 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
-    expect(runs).toHaveLength(0);
+  it('fetches an image that failed once more and runs the agent on the text with the image NOT AVAILABLE when it stays gone', async () => {
+    for (const stage of ['design', 'patch'] as const) {
+      let requests = 0;
+      const counted = ((input: URL | string) => { requests += 1; return hosted(403)(input); }) as typeof fetch;
+      const { ctx, runs } = agentCtx([], ASSET, [], counted);
+      await runAgent(ctx, 7, stage, stage, 'p');
+      expect(requests, stage).toBe(4);
+      expect(runs[0].prompt, stage).toContain(`1. NOT AVAILABLE, ${ASSET} (issue body): `);
+    }
   });
 
-  it('runs a patch on committee text when an issue image cannot be fetched, and marks the image NOT AVAILABLE', async () => {
-    const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
-    await runAgent(ctx, 7, 'patch', 'patch', 'p');
-    expect(runs[0].prompt).toContain(`1. NOT AVAILABLE, ${ASSET} (issue body): `);
+  it('runs the agent with the image when the second fetch works', async () => {
+    let first = true;
+    const flaky = ((input: URL | string) => { const status = first && String(input) !== ASSET ? 403 : 200; if (String(input) !== ASSET) first = false; return hosted(status)(input); }) as typeof fetch;
+    const { ctx, runs } = agentCtx([], ASSET, [], flaky);
+    await runAgent(ctx, 7, 'design', 'design', 'p');
+    expect(runs[0].prompt).not.toContain('NOT AVAILABLE, ');
+    expect(runs[0].prompt).toContain('/work/.factory-media/');
   });
 
   it('adds the committee images of earlier routes after the issue images', async () => {
@@ -213,11 +221,12 @@ describe('runAgent reference images', () => {
 
 describe('stage prompts for reference images', () => {
   const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '', playtest: 'npm run playtest' };
-  it('tell the patch to act on the words, never on an image it lacks, and to ask when only that image decides', () => {
+  it('tell the patch to act on the words, never on an image it lacks, and to go on with its reading when only that image decides', () => {
     const text = fillPrompt('patch', { ...vars, played: 'abc' });
     expect(text).toContain('act on the words, even when an image is NOT AVAILABLE');
     expect(text).toContain('never describe what it shows');
-    expect(text).toContain('Write the question to `.factory/needs-committee.md`');
+    expect(text).toContain('pick the most sensible reading of the text');
+    expect(text).toContain('That file is only for a game design fork or a major save bump.');
   });
 
   it('tell every stage to read the images and what a missing one means', () => {

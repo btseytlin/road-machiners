@@ -27,7 +27,7 @@ A card is one GitHub issue on the Project board. Its column is the state. Testin
 
 The loops:
 
-- unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, and triage runs again.
+- unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass with no answer. Triage then runs again. With no answer it picks the most sensible reading, and design writes each open question and its reading into the design comment as an assumption.
 - rebuild: the visual review found a shape, state or behavior that needs new code. The card keeps its branch.
 - plan wrong: the visual review found the plan contradicts the issue or the game docs. The card keeps its branch.
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
@@ -81,8 +81,9 @@ A patch or a redesign queues when its text has at least `FACTORY_ROUTE_MIN_WORDS
 
 - A member's Telegram images reach the agent best effort. The plugin copies each file of a reply to an approval post from Hermes's cache into `$FACTORY_HOME/inbox/media/post-<post>/`. A file it cannot copy leaves a note with the reason, and the plugin logs it.
 - A patch or a redesign route moves the post's files into the issue's media folder. The tick checks each file with the rules of `src/media.ts`. The feedback comment lists each image by type, size and sha256, or as not available with the reason. The pixels never reach GitHub. An answer leaves the files for a later route. Approve, deny and a route delete the files of the closed post.
-- An image that is missing, unreadable or on the issue but not downloadable is marked NOT AVAILABLE in the agent's prompt. The agent works from the text and never describes an image it did not get. The patch runs on in that case, and the other stages still stop.
-- An image the agent lacks matters only when the text leaves a visual detail open. Hermes then routes answer and asks the member for the detail in words. The patch agent writes `.factory/needs-committee.md`.
+- An image that is missing, unreadable or on the issue but not downloadable is fetched once more. If it still fails, it is marked NOT AVAILABLE in the agent's prompt. The agent works from the text, writes down what it could not see and never describes an image it did not get. No stage stops for it.
+- An image the agent lacks matters only when the text leaves a visual detail open. The patch agent then takes the most sensible reading of the text and writes it into the manifest description.
+- `.factory/needs-committee.md` is for a game design fork or a major save bump only. An unclear plan, a missing image or a failing tool never justify it. The agent picks the most sensible reading and writes the assumption into the task file.
 
 A reference that arrives while the card is in Design waits. The running design already read its images, so nothing interrupts it. The next stage reads every image on the issue again, and a member who needs the design to see it replies `redesign:` at the approval post.
 

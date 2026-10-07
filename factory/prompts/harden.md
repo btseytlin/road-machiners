@@ -48,5 +48,7 @@ Only a major save bump goes to the committee.
 
 If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.
 
 Never push.

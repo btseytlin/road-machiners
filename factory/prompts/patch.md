@@ -37,8 +37,9 @@ If the feedback is about a look, read the images and the feedback, take a screen
 The feedback text is your task. When it names the change in words, like a copy fix, act on the words, even when an image is NOT AVAILABLE.
 An image that only shows the build again, like the factory's own screenshot, is context, not a new request.
 Never say you looked at an image marked NOT AVAILABLE, and never describe what it shows.
-If the change depends on a visual detail that only a missing image shows, and the text leaves it open, do not guess.
-Write the question to `.factory/needs-committee.md` and commit nothing.
+If the change depends on a visual detail that only a missing image shows, and the text leaves it open, pick the most sensible reading of the text.
+Write what you could not see and your reading into the Patches line of the task file and into the description of the manifest.
+Do not stop.
 
 Write `.factory/approval.json` again: `{"description": "...", "howToTry": "..."}`.
 Lead the description with what this patch changed. The committee played the build before, so tell them where to look.
@@ -59,6 +60,7 @@ The factory rejects the manifest when `commit` is not the final head of the bran
 
 If the change needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
 
 Your very last step, after your last commit, is the factory's evidence check. Run `node /opt/factory-check/check.mjs patch` from your folder.
 It runs the checks the factory runs after you, on your clone as it is now, and prints each failure with the factory's message.

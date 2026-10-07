@@ -17,7 +17,7 @@ The check is a screenshot of the finished game from the image's view, put next t
 Gameplay tests alone cannot prove a look.
 An image marked NOT AVAILABLE was not seen.
 Never design as if you had seen it.
-When the request depends on it, write one question to `.factory/questions.md` that asks the author to upload it again.
+When the request depends on it and the author did not get this question yet, write one question to `.factory/questions.md` that asks the author to upload it again.
 
 Modeling an asset from a reference image: when the plan builds one, name the skill and the phases it uses in the task file.
 Use the `blender-image-to-3d` skill when the work builds or reshapes a game model that a reference image shows.
@@ -79,8 +79,15 @@ When in doubt, make a reasonable choice.
 Write it in the task file as an assumption.
 The committee corrects it at approval.
 
+A comment under "Questions from the factory" with no reply after it means the author did not answer in time.
+Never ask those questions again.
+Take the most sensible reading of the request, and write each open question and the reading you took into the task file as an assumption.
+The design comment on the issue shows the task file, so the committee sees the assumptions there.
+
 If the request needs a major save format bump, do not plan it.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+A gap in the request is not a fork. Pick the most sensible reading and write it into the task file as an assumption.
 Then stop.
 
 Git ignores the task file. Never commit it and never force-add it.
