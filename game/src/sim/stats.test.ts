@@ -313,6 +313,7 @@ describe('max speed steps', () => {
       build: () => {
         const s = base(['stockEngine']);
         s.w.weather = [{ id: 'w1', kind: 'storm', pos: { ...s.v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 10, born: s.w.turn }];
+        s.v.stormExposure = { w1: 1 };
         return s;
       },
       kinds: ['chassis', 'engine', 'load', 'guns', 'weather'],
@@ -328,11 +329,11 @@ describe('max speed steps', () => {
     },
   };
 
-  // Values measured before maxSpeed moved into maxSpeedSteps.
+  // Values measured before maxSpeed moved into maxSpeedSteps. The storm one is the stock speed times the full storm share.
   const FROZEN: Record<string, number> = {
     bare: 1.04, stock: 9.875716226804332, manyGuns: 5.641376805946041, brokenGun: 8.901316579936632, overload: 2.877966295841562,
     heavy: 1, worn: 9.217335145017376, wheels: 7.135204973866129, overdrive: 13.134702581649762, transmission: 1.04,
-    brokenEngine: 1.04, stalled: 1.04, storm: 6.715487034226945, towing: 5.9254297360826,
+    brokenEngine: 1.04, stalled: 1.04, storm: 5.925429736082600, towing: 5.9254297360826,
   };
 
   it('keeps every max speed bit for bit and ends the steps on it', () => {
