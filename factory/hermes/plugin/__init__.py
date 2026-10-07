@@ -7,6 +7,7 @@ A plain reply to an approval post goes to the inbox and to Hermes too, who route
 The host tick reads the inbox. Every other member message goes to Hermes as normal chat.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ from typing import Optional
 from .allowlist import write_allowlist
 from .committee import Committee, CommitteeError
 from .observability import register_observation
+from .readiness import Readiness, refusal
 from .status import register_status
 
 REQUIRED_KEYS = (
@@ -29,12 +31,10 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
-BUTTON_PATTERN = r"^factory:(approve|deny|ship|waste):\d+$"
+BUTTON_PATTERN = r"^factory:(approve|deny|ship):\d+$"
 BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
-BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued", "waste": "Change queued"}
-# The inbox kind of each button. The waste review button queues the change its review issue proposes.
-BUTTON_KINDS = {"approve": "approve", "deny": "deny", "ship": "ship", "waste": "waste-change"}
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
 BUTTON_STALE = "This release post is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 # A reply to an approval post that starts with one of these picks its route itself, with no Hermes judgment.
@@ -198,7 +198,7 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
 
 
 def parse_button(data) -> Optional[tuple]:
-    """Splits callback data `factory:<approve|deny|ship|waste>:<issue>` into (kind, issue). None for anything else."""
+    """Splits callback data `factory:<approve|deny|ship>:<issue>` into (kind, issue). None for anything else."""
     if not isinstance(data, str) or not BUTTON_DATA.fullmatch(data):
         return None
     _, kind, issue = data.split(":")
@@ -208,7 +208,7 @@ def parse_button(data) -> Optional[tuple]:
 def button_command(kind: str, issue: int, user_id, user_name, chat_id, message_id) -> dict:
     """A button sits on the post it acts on, so the pressed message is also the post."""
     return {
-        "kind": BUTTON_KINDS[kind], "issue": issue, "text": None,
+        "kind": kind, "issue": issue, "text": None,
         "by": str(user_id), "byName": user_name or None,
         "chat": str(chat_id), "messageId": int(message_id), "postId": int(message_id),
     }
@@ -286,7 +286,8 @@ CHANGE_TOOL = "factory_queue_change"
 CHANGE_SCHEMA = {
     "name": CHANGE_TOOL,
     "description": (
-        "Queue a change to the factory itself, its code or factory/settings.env, when a committee member asks for one. "
+        "Queue a change to the factory itself, its code or factory/settings.env, or to anything else in the repo, "
+        "like the quality gate or game text, when a committee member asks for one. "
         "A coding agent makes the change in a clone of main and opens a pull request to main. A member merges it, "
         "and the server deploys main by itself. Call it once per change."
     ),
@@ -317,7 +318,10 @@ ROUTE_SCHEMA = {
         "so you answer it in the chat and the card stays in Approval. patch: a small change that keeps the plan, "
         "like a constant, a copy fix, a look tweak or a missing view, so Sonnet fixes the build and the factory checks it again. "
         "redesign: the reply changes the plan, so the card goes back to Design. Call it once per reply, or once more "
-        "after an answer when the member then asks for a patch or a redesign."
+        "after an answer when the member then asks for a patch or a redesign. "
+        "A patch or a redesign queues when the text names what to change. Images never block it: the factory hands the member's Telegram images "
+        "to the agent itself, and a missing one is marked as not seen. When the change depends on a visual detail that only an image shows "
+        "and the text leaves it open, route answer and ask the member for the detail in words."
     ),
     "parameters": {
         "type": "object",
@@ -374,8 +378,9 @@ def make_queue_handler(cfg: Config, session_env=_session_env, kind: str = "adhoc
     return handle
 
 
-def make_route_handler(cfg: Config, session_env=_session_env):
-    """The post must still be an open approval post, so a route never acts on a card that left Approval."""
+def make_route_handler(cfg: Config, readiness: Readiness, session_env=_session_env):
+    """The post must still be an open approval post, so a route never acts on a card that left Approval.
+    A patch or a redesign also needs text that names what to change. Images never block it."""
     def handle(args: dict, **kwargs) -> str:
         route, text, post = args.get("route"), str(args.get("text") or "").strip(), args.get("post")
         if route not in ROUTES:
@@ -388,6 +393,9 @@ def make_route_handler(cfg: Config, session_env=_session_env):
         issue = read_approval_posts(cfg.state_dir).get(str(post))
         if issue is None:
             return _tool_error(f"Post {post} is no open approval post. Nothing was queued.")
+        problems = readiness.problems(text) if route != "answer" else []
+        if problems:
+            return _tool_error(refusal(problems))
         command = {
             "kind": "route", "issue": issue, "text": text, "route": route,
             "by": user, "byName": name or None, "chat": chat, "messageId": int(message), "postId": int(post),
@@ -409,7 +417,7 @@ async def _reply(gateway, event, text: str) -> None:
         raise RuntimeError(f"Factory reply was not sent: {result.error}")
 
 
-def make_hook(cfg: Config):
+def make_hook(cfg: Config, readiness: Readiness):
     async def on_dispatch(event, gateway, session_store, **kwargs):
         source = event.source
         if not cfg.committee.is_member(source.user_id):
@@ -429,6 +437,17 @@ def make_hook(cfg: Config):
         decision = route(event.text, event.reply_to_message_id, source.chat_id, posts, cfg, release)
         if decision is None:
             return None
+        if decision[0] in ("reply", "patch", "redesign"):
+            # Kept before any check, so a later route of the same post still finds them. A file that cannot be kept never stops the reply.
+            attachments = list(getattr(event, "media_urls", None) or [])
+            if attachments:
+                await asyncio.to_thread(readiness.save_attachments, int(event.reply_to_message_id), int(event.message_id), attachments)
+        if decision[0] in ("patch", "redesign"):
+            # A member's own patch: or redesign: skips Hermes, so the check runs here and the answer is a chat reply.
+            problems = readiness.problems(decision[2])
+            if problems:
+                await _reply(gateway, event, refusal(problems))
+                return {"action": "skip", "reason": "factory-not-ready"}
         command = inbox_command(
             decision, source.user_id, getattr(source, "user_name", None), source.chat_id, event.message_id,
             event.reply_to_message_id,
@@ -446,10 +465,11 @@ def make_hook(cfg: Config):
 def register(ctx) -> None:
     cfg = load_config(dict(os.environ))
     cfg.committee.seed()
-    ctx.register_hook("pre_gateway_dispatch", make_hook(cfg))
+    readiness = Readiness(min_words=int(os.environ["FACTORY_ROUTE_MIN_WORDS"]), inbox=cfg.inbox)
+    ctx.register_hook("pre_gateway_dispatch", make_hook(cfg, readiness))
     ctx.register_telegram_handler(make_button_factory(cfg))
     ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))
     ctx.register_tool(name=CHANGE_TOOL, toolset="factory", schema=CHANGE_SCHEMA, handler=make_queue_handler(cfg, kind="change", done=CHANGE_DONE))
-    ctx.register_tool(name=ROUTE_TOOL, toolset="factory", schema=ROUTE_SCHEMA, handler=make_route_handler(cfg))
+    ctx.register_tool(name=ROUTE_TOOL, toolset="factory", schema=ROUTE_SCHEMA, handler=make_route_handler(cfg, readiness))
     register_status(ctx, public_url=os.environ['FACTORY_PUBLIC_URL'], timeout_seconds=float(os.environ['FACTORY_STATUS_TIMEOUT_MS']) / 1000)
     register_observation(ctx, home=Path(cfg.state_dir).parent, heartbeat_ms=float(os.environ['FACTORY_OBSERVATION_HEARTBEAT_MS']))

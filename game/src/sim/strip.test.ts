@@ -18,6 +18,7 @@ import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS } from './grid';
 import { aimAt, offeredSurrenderBy, plead } from './parley';
 import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
+import { chooseOn } from './tracks';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 import { endTurn } from './world';
@@ -111,7 +112,8 @@ describe('surrender offer to a stranded player', () => {
     const me = playerVehicle(w);
     const mugger = w.vehicles.find((v) => v.id === raider.id)!;
     w.player.talked[mugger.id] = { surrender: 'refused' };
-    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test', perceived: w.turn });
+    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test' });
+    chooseOn(w, mugger, me.id, me.pos, 'fight', true);
     expect(w.player.call?.topic).not.toBe('surrender');
     expect(CONDITIONS.demandsSurrender(w, mugger, {})).toBe(false);
     w.vehicles = w.vehicles.filter((v) => v.id !== lawman.id);

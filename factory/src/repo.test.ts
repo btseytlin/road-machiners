@@ -101,18 +101,24 @@ describe('merging on GitHub', () => {
     expect(await head('dev')).toBe(before);
   });
 
-  it('fails when GitHub moved since the fetch, keeps nothing of the try, and a retry after a fetch merges', async () => {
+  it('merges again on the new tip when GitHub moved since the fetch, and keeps nothing of the first try', async () => {
     const { repo, host, commit, show } = await setup();
     await commit('factory/issue-5', 'f.txt', 'five\n');
     await repo.fetch();
     await commit('dev', 'g.txt', 'moved on GitHub\n');
-    const step = { branch: 'factory/issue-5', into: 'dev', message: 'Merge issue #5: t' };
-    await expect(repo.merge([step])).rejects.toThrow('git push');
-    expect((await host('for-each-ref', 'refs/heads')).trim()).toBe('');
-    await repo.fetch();
-    await repo.merge([step]);
+    await repo.merge([{ branch: 'factory/issue-5', into: 'dev', message: 'Merge issue #5: t' }]);
     expect(await show('dev', 'f.txt')).toBe('five\n');
     expect(await show('dev', 'g.txt')).toBe('moved on GitHub\n');
+    expect((await host('for-each-ref', 'refs/heads')).trim()).toBe('');
+  });
+
+  it('throws a conflict with the new tip when GitHub moved into one', async () => {
+    const { repo, commit, show } = await setup();
+    await commit('factory/issue-5', 'f.txt', 'five\n');
+    await repo.fetch();
+    await commit('dev', 'f.txt', 'dev moved\n');
+    await expect(repo.merge([{ branch: 'factory/issue-5', into: 'dev', message: 'Merge issue #5: t' }])).rejects.toBeInstanceOf(MergeConflictError);
+    expect(await show('dev', 'f.txt')).toBe('dev moved\n');
   });
 
   it('merges each step into the result of the steps before, in one push', async () => {
@@ -137,7 +143,7 @@ describe('merging on GitHub', () => {
     await expect(repo.merge([
       { branch: 'factory/issue-6', into: 'main', message: 'Hotfix #6: t' },
       { branch: 'main', into: 'dev', message: 'Merge main into dev after hotfix #6' },
-    ])).rejects.toThrow('git push');
+    ])).rejects.toThrow('push of main, dev failed');
     expect([await head('main'), await head('dev')]).toEqual([main, dev]);
   });
 
@@ -276,6 +282,26 @@ describe('work clones', () => {
     expect(readFileSync(join(work, 'game', '.factory-tasks', 'issue-10.md'), 'utf8')).toBe('# plan\n');
   });
 
+  it('clones again over a clone cut short with no commit checked out, and keeps a working clone as it is', async () => {
+    const { home, repo, commit } = await setup();
+    await commit('factory/issue-12', 'f.txt', 'twelve\n');
+    await repo.fetch();
+    const broken = join(home, 'work', 'issue-12');
+    const bare = join(home, 'work', 'issue-13');
+    for (const dir of [broken, bare]) {
+      mkdirSync(join(dir, 'game', '.factory'), { recursive: true });
+      writeFileSync(join(dir, 'game', '.factory', 'issue.md'), 'left over\n');
+    }
+    await git(broken, 'init', '--quiet');
+    await repo.prepareWorkClone('factory/issue-12', 'dev', broken);
+    await repo.prepareWorkClone('factory/issue-13', 'dev', bare);
+    expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('twelve\n');
+    expect(readFileSync(join(bare, 'f.txt'), 'utf8')).toBe('base\n');
+    writeFileSync(join(broken, 'f.txt'), 'local work\n');
+    await repo.prepareWorkClone('factory/issue-12', 'dev', broken);
+    expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('local work\n');
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');
@@ -320,5 +346,44 @@ describe('work clones', () => {
     const { repo, work } = await behindDev('f.txt');
     expect((await repo.mergeBaseIntoWork(work, 'dev')).conflicts).toEqual(['f.txt']);
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toContain('<<<<<<<');
+  });
+
+  // The work clone commits to `file` while a member pushes to `pushed` on the same branch on GitHub.
+  async function branchMoved(file: string, pushed: string) {
+    const env = await setup();
+    await env.commit('factory/issue-12', 'f.txt', 'twelve\n');
+    await env.repo.fetch();
+    const work = join(env.home, 'work', 'issue-12');
+    await env.repo.prepareWorkClone('factory/issue-12', 'dev', work);
+    writeFileSync(join(work, file), 'agent\n');
+    await git(work, 'commit', '-am', 'agent work');
+    await env.commit('factory/issue-12', pushed, 'member\n');
+    await env.repo.fetch();
+    return { ...env, work };
+  }
+
+  it('finds nothing to merge on a new branch or a branch the clone already holds', async () => {
+    const { home, repo } = await setup();
+    const work = join(home, 'work', 'issue-13');
+    await repo.prepareWorkClone('factory/issue-13', 'dev', work);
+    expect(await repo.mergeBranchIntoWork(work, 'factory/issue-13')).toEqual({ commit: null, conflicts: [] });
+    await repo.push(await repo.fetchFromWork(work, 'factory/issue-13'), 'factory/issue-13');
+    expect(await repo.mergeBranchIntoWork(work, 'factory/issue-13')).toEqual({ commit: null, conflicts: [] });
+  });
+
+  it('merges a member push on the branch into the work, so the next push holds both', async () => {
+    const { repo, work, head, show } = await branchMoved('g.txt', 'f.txt');
+    const branch = 'factory/issue-12';
+    await expect(repo.push(await repo.fetchFromWork(work, branch), branch)).rejects.toThrow();
+    expect(await repo.mergeBranchIntoWork(work, branch)).toEqual({ commit: await head(branch), conflicts: [] });
+    await repo.push(await repo.fetchFromWork(work, branch), branch);
+    expect(await show(branch, 'g.txt')).toBe('agent\n');
+    expect(await show(branch, 'f.txt')).toBe('member\n');
+  });
+
+  it('leaves a conflict with a member push open for the agent', async () => {
+    const { repo, work } = await branchMoved('g.txt', 'g.txt');
+    expect((await repo.mergeBranchIntoWork(work, 'factory/issue-12')).conflicts).toEqual(['g.txt']);
+    expect(readFileSync(join(work, 'g.txt'), 'utf8')).toContain('<<<<<<<');
   });
 });

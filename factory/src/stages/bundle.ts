@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { readState, updateState } from '../state';
 import { BUNDLED_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, STUCK_LABEL, type Card, type Ctx, type FactoryState } from '../types';
 
@@ -25,7 +26,7 @@ export async function addToBundle(ctx: Ctx, lead: number, issues: number[], reas
   for (const issue of issues) {
     await ctx.github.comment(issue, `Triage bundled this into #${lead}, which carries it from here: ${reason}\n\nIt closes when #${lead} ships.`);
     await ctx.github.addLabel(issue, BUNDLED_LABEL);
-    await ctx.github.move(issue, 'Done');
+    await moveCard(ctx, issue, 'Done', 'bundled');
   }
   updateState(ctx.statePath, (state) => ({ ...state, bundles: { ...state.bundles, [String(lead)]: [...bundleOf(state, lead), ...issues] } }));
 }
@@ -46,7 +47,7 @@ export async function releaseBundle(ctx: Ctx, lead: number, why: string): Promis
   for (const issue of bundleOf(readState(ctx.statePath), lead)) {
     await ctx.github.comment(issue, `#${lead} ${why}, so this issue goes back to triage on its own.`);
     await ctx.github.removeLabel(issue, BUNDLED_LABEL);
-    await ctx.github.move(issue, 'Triage');
+    await moveCard(ctx, issue, 'Triage', 'unbundled');
   }
   forgetBundle(ctx, lead);
 }

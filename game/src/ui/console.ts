@@ -16,6 +16,7 @@ import {
   randomKit,
   repairAll,
   revealMap,
+  setEngineHeat,
   setFuel,
   setHealth,
   setMoney,
@@ -98,6 +99,7 @@ export const COMMANDS: readonly Command[] = [
   setter("fuel", "Set fuel, capped by the tanks.", setFuel),
   setter("supplies", "Set supplies, capped by the storage.", setSupplies),
   setter("health", "Set driver health.", setHealth),
+  setter("engineheat", "Set engine heat, 0 cold to 1 overheated.", setEngineHeat),
   command("xp <n>", "Add XP to the pool to spend on ranks.", { min: 1, max: 1 }, (world, [text], usage) => {
     const n = parseNumber(text, usage);
     return changed(addXp(world, n), `XP added: ${n}`);
@@ -143,8 +145,8 @@ export const COMMANDS: readonly Command[] = [
     const hour = parseNumber(text, usage);
     return changed(skipToHour(world, hour), `skipped to hour ${hour}`);
   }),
-  command("weather <storm|heatwave|overcast>", "Start that weather.", { min: 1, max: 1 }, (world, [kind]) =>
-    changed(startWeather(world, kind), `${kind} started`),
+  command("weather <storm|heatwave|overcast> [turns] [offset]", "Start that weather, for that many turns if given. A storm with an offset starts that many tiles east of the truck, still and at full strength.", { min: 1, max: 3 }, (world, [kind, turns, offset], usage) =>
+    changed(startWeather(world, kind, turns === undefined ? null : parseNumber(turns, usage), offset === undefined ? 0 : parseNumber(offset, usage)), `${kind} started`),
   ),
   command("reveal", "Mark the whole map explored.", { min: 0, max: 0 }, (world) =>
     changed(revealMap(world), "map revealed"),

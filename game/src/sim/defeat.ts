@@ -1,13 +1,14 @@
 // A lost fight knocks a driver out, the player or an NPC alike. The truck keeps every item, trucks parked beside
 // it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
-// at 0 ends the player's run. A woken NPC retreats home, and nobody is its foe until it refits there.
+// at 0 ends the player's run. A woken NPC retreats home and lies up there, and nobody is its foe until it refits at
+// the end of the lie-up.
 
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
-import { isHostile } from "./combat";
+import { beatenBy, isHostile } from "./combat";
 import { rollCabKnock } from "./cab-knock";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
@@ -22,9 +23,11 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { lootRobbed } from "./npc-activities";
+import { pushGoal } from "./npc-activities";
+import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
-import type { Vehicle, World } from "./types";
+import type { SalvageStock, Vehicle, World } from "./types";
+import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
 
@@ -52,6 +55,9 @@ export function checkKnockout(world: World): void {
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  // Combat with the knocked-out truck ends now, as an NPC knockout's does in the same turn, so robbers keep their loot goal.
+  for (const s of world.states.filter((x) => x.kind === "combat" && (x.holder === me.id || x.other === me.id)))
+    endState(world, s, "broken");
   sendToLoot(world, me, robbers);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });
@@ -119,8 +125,9 @@ export function standDown(world: World, v: Vehicle, winnerId: string): void {
 
 export function knockOutNpc(world: World, v: Vehicle): void {
   layDown(world, v, foesOf(world, v), false);
-  world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
-  if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
+  const by = beatenBy(world, v);
+  world.events.push({ t: "npcKnockout", vehicle: v.id, by });
+  if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
   sendToLoot(world, v, strippers(world, v));
 }
@@ -202,15 +209,19 @@ function attackerWatches(world: World, v: Vehicle, foes: string[]): boolean {
 }
 
 // ---- The retreat home. The NPC drives or crawls to its home site, and towers may tow it there. Out of the player's
-// sight for long enough, it appears at the home pad instead. At home it refits and the defeat ends.
+// sight for long enough, it appears at the home pad instead. At home it lies up, and refits when the lie-up ends.
 
-// A truck on a tow rope or waiting for a tower stays where the tow puts it.
+// A truck on a tow rope or waiting for a tower stays where the tow puts it. A truck lying up at home stays put.
 function advanceRetreat(world: World, v: Vehicle): void {
   const defeat = v.defeat!;
   defeat.unseen = inPlayerView(world, v.pos) ? 0 : defeat.unseen + 1;
-  if (defeat.unseen < RULES.retreatTeleportTurns || towOf(world, v.id) || answered(world, v)) return;
+  if (defeat.unseen < RULES.retreatTeleportTurns || staysPut(world, v)) return;
   const spot = hiddenHomeSpot(world, v);
   if (spot) teleportHome(world, v, spot);
+}
+
+function staysPut(world: World, v: Vehicle): boolean {
+  return liesUp(v) || towOf(world, v.id) !== null || answered(world, v);
 }
 
 function answered(world: World, v: Vehicle): boolean {
@@ -218,7 +229,7 @@ function answered(world: World, v: Vehicle): boolean {
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 // A free pad of the home site beyond the player's gray vision, nearest the truck first, or null.
@@ -241,11 +252,11 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
   v.order = null;
   v.trail = [];
   delete v.brain!.farRoute;
-  refitAtHome(world, v);
 }
 
-// The truck at its home site gets a fresh loadout for its template on the same chassis, and spawn fuel, supplies
-// and health. The driver keeps its money, name, traits and goals. The defeat ends.
+// At the end of a lie-up, the truck at its site gets a fresh loadout for its template on the same chassis, and spawn
+// fuel, supplies and health. The old items are scrapped. The driver keeps its money, name, traits and goals. Any
+// defeat ends.
 export function refitAtHome(world: World, v: Vehicle): void {
   const template = NPCS[v.brain!.templateId];
   const loadout = generateNpcLoadout(world, template, v.chassisId);
@@ -254,4 +265,21 @@ export function refitAtHome(world: World, v: Vehicle): void {
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
   delete v.defeat;
+}
+
+// The victim's truck while it lies knocked out, else its wreck.
+function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  if (victim && isKnockedOut(victim)) return victim;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId));
+}
+
+// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
+// fight loots nothing.
+export function lootRobbed(w: World, robberId: string, victimId: string): void {
+  const robber = w.vehicles.find((v) => v.id === robberId);
+  if (!robber) return;
+  const stock = robbedLoot(w, victimId);
+  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

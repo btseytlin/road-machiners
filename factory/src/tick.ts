@@ -1,7 +1,7 @@
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import { sweepLogs, sweepWork } from './cleanup';
-import { POOL_OF, cpuSets } from './cpus';
+import { POOL_OF, cpuSets, vitestWorkersOf } from './cpus';
 import { removeStaleBuilds } from './deploy';
 import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
@@ -12,20 +12,21 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
+import { sweepTranscripts } from './transcript-archive';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
-import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
+import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, PlaytestState, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'maxJobsPerCard' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
-// Committee-driven jobs and the factory's own review never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste'];
-const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
+// Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
+const CARD_ORDER: Card['column'][] = ['Hardening', 'Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
@@ -64,17 +65,22 @@ function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
   );
 }
 
-// The card job of a column in CARD_ORDER.
+// The card job of each column in CARD_ORDER.
+const COLUMN_STAGE: Partial<Record<Card['column'], (state: FactoryState, issue: number) => JobStage>> = {
+  Hardening: (state, issue) => (checksDue(state, issue) ? 'checks' : 'harden'),
+  Testing: (state, issue) => (checksDue(state, issue) ? 'checks' : 'verify'),
+  Implementation: (state, issue) => (String(issue) in state.patching ? 'patch' : 'implement'),
+  Design: () => 'design',
+};
+
 function cardStage(state: FactoryState, card: Card): JobStage {
-  if (card.column === 'Testing') return testingStage(state, card.issue);
-  if (card.column === 'Implementation') return String(card.issue) in state.patching ? 'patch' : 'implement';
-  return card.column === 'Design' ? 'design' : 'triage';
+  return COLUMN_STAGE[card.column]?.(state, card.issue) ?? 'triage';
 }
 
-// A Testing card runs the factory checks once verify or a patch set its phase, and verify otherwise.
-function testingStage(state: FactoryState, issue: number): JobStage {
+// A Testing or Hardening card runs the factory checks once its agent stage or a patch set its phase, and the agent stage otherwise.
+function checksDue(state: FactoryState, issue: number): boolean {
   const phase = state.testPhase[String(issue)];
-  return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
+  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post';
 }
 
 const has =
@@ -101,21 +107,30 @@ function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
 }
 
-// The candidate waits until the tracking issue is healthy and every release task is done.
-export type ReleaseGate = { reason: 'uncut' | 'tracking-missing' | 'failed' | 'release-tasks' | 'candidate' | 'ship-approval'; issues: number[] };
-export function readReleaseGate(state: FactoryState, cards: Card[]): ReleaseGate {
+// The candidate waits until the tracking issue is healthy, every release task is done and the playtest passed the release head.
+// `releaseHead` is the short hash of the release branch on origin, or null when it is unknown, which holds both the playtest and the candidate.
+export type ReleaseGate = { reason: 'uncut' | 'tracking-missing' | 'failed' | 'release-tasks' | 'playtest' | 'playtest-blocked' | 'candidate' | 'ship-approval'; issues: number[] };
+export function readReleaseGate(state: FactoryState, cards: Card[], releaseHead: string | null = null): ReleaseGate {
   const release = state.release;
   if (release === null) return { reason: 'uncut', issues: [] };
   if (release.postId !== null) return { reason: 'ship-approval', issues: [] };
   const tracking = cards.find((card) => card.issue === release.issue);
   if (!tracking) return { reason: 'tracking-missing', issues: [] };
   if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
-  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
-  return issues.length ? { reason: 'release-tasks', issues } : { reason: 'candidate', issues: [] };
+  return playtestGate(cards, release.playtest, releaseHead);
 }
-function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
-  if (readReleaseGate(state, cards).reason !== 'candidate' || state.release === null) return null;
-  return { stage: 'candidate', issue: state.release.issue };
+function playtestGate(cards: Card[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
+  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+  if (issues.length) return { reason: 'release-tasks', issues };
+  if (playtest.blocked !== null) return { reason: 'playtest-blocked', issues: [] };
+  return releaseHead !== null && playtest.passed === releaseHead ? { reason: 'candidate', issues: [] } : { reason: 'playtest', issues: [] };
+}
+// The playtest and the candidate both need a known release head.
+function releaseJob(state: FactoryState, cards: Card[], releaseHead: string | null): JobPick | null {
+  if (state.release === null || releaseHead === null) return null;
+  const reason = readReleaseGate(state, cards, releaseHead).reason;
+  if (reason !== 'playtest' && reason !== 'candidate') return null;
+  return { stage: reason, issue: state.release.issue };
 }
 
 // An empty lastWasteReview waits: the tick sets it to now, so the first review covers a full period of ledger.
@@ -134,9 +149,10 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
   return { stage: 'dev', issue: null };
 }
 
-// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the candidate.
-function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null): Candidate[] {
-  const picks = [queued(state), devJob(state, devHead), releaseCut(state, now, cfg), candidateJob(state, cards)];
+// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the
+// release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
+function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
+  const picks = [queued(state), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
@@ -146,6 +162,16 @@ export function countsAgainstCap(stage: JobStage): boolean {
 
 export function recentStarts(state: FactoryState, now: Date): string[] {
   return state.jobStarts.filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
+}
+
+export function recentCardStarts(state: FactoryState, now: Date, issue: number): string[] {
+  return (state.cardStarts[issue] ?? []).filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
+}
+
+// Every card's starts in the last 24 hours. A card with none left drops out, so closed cards do not pile up in the state.
+function recentCardStartsAll(state: FactoryState, now: Date): Record<string, string[]> {
+  const entries = Object.keys(state.cardStarts).map((issue) => [issue, recentCardStarts(state, now, Number(issue))] as const);
+  return Object.fromEntries(entries.filter(([, starts]) => starts.length > 0));
 }
 
 export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, 'maxJobsPerDay'>): boolean {
@@ -164,7 +190,7 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval';
 export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
 export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
 function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
@@ -189,26 +215,47 @@ function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null 
   return new Date(Date.parse(recentStarts(state, now).sort()[0]) + DAY_MS).toISOString();
 }
 
+// Starts a card may still make in the 24 hours, counting the jobs this evaluation already picked for it. A job with no card has no budget.
+function readCardLeft(state: FactoryState, now: Date, cfg: Due, picked: Map<number, number>, issue: number | null): number {
+  if (issue === null) return Infinity;
+  return cfg.maxJobsPerCard - recentCardStarts(state, now, issue).length - (picked.get(issue) ?? 0);
+}
+function readCapReasons(capped: number, capLeft: number, cardLeft: number): WaitReason[] {
+  const reasons: WaitReason[] = [];
+  if (capped > capLeft) reasons.push('daily-cap');
+  if (capped > 0 && cardLeft < 1) reasons.push('card-budget');
+  return reasons;
+}
+function countCardPick(picked: Map<number, number>, capped: number, issue: number | null): void {
+  if (capped > 0 && issue !== null) picked.set(issue, (picked.get(issue) ?? 0) + 1);
+}
+
+// The short hashes of dev and the release branch on origin. A null skips the /dev/ check or holds the release jobs.
+export type Heads = { dev: string | null; release: string | null };
+const NO_HEADS: Heads = { dev: null, release: null };
+
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
-// At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
-export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
+// At the daily cap only the uncapped jobs start.
+export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads = NO_HEADS): ScheduleReport {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const picks: JobPick[] = [];
+  const pickedForCard = new Map<number, number>();
   const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
-  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
+  for (const candidate of [...branchCandidates(state, cards, now, cfg, heads), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
-    const reasons = findCapacityReasons(pick, [...state.jobs, ...picks], cfg);
-    if (capped > capLeft) reasons.push('daily-cap');
+    const cardLeft = readCardLeft(state, now, cfg, pickedForCard, pick.issue);
+    const reasons = [...findCapacityReasons(pick, [...state.jobs, ...picks], cfg), ...readCapReasons(capped, capLeft, cardLeft)];
     decisions.push({ ...pick, reasons });
     if (reasons.length) continue;
     capLeft -= capped;
+    countCardPick(pickedForCard, capped, pick.issue);
     picks.push(pick);
   }
-  return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards) };
+  return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards, heads.release) };
 }
-export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
-  return evaluateSchedule(state, cards, now, cfg, devHead).picks;
+export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads = NO_HEADS): JobPick[] {
+  return evaluateSchedule(state, cards, now, cfg, heads).picks;
 }
 
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
@@ -216,7 +263,7 @@ export type TickDeps = {
   isAlive: (pid: number) => boolean;
   kill: (run: Run, pid: number, id: string) => Promise<void>;
   removeContainers: (run: Run, id: string) => Promise<void>;
-  spawn: (args: string[], cwd: string, log: string, id: string, cpus: string) => number;
+  spawn: (args: string[], cwd: string, log: string, id: string, cpus: string, testWorkers: number | null) => number;
   cores: () => number;
 };
 export const REAL_DEPS: TickDeps = {
@@ -250,7 +297,7 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
 
 async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
-  recordJob(ctx.cfg.home, ctx.now(), job, alive ? 'timeout' : 'died');
+  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, alive ? 'timeout' : 'died');
   dropJob(ctx, job.id);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
@@ -295,17 +342,20 @@ function forgetResume(ctx: Ctx, job: Job): void {
 // Its card stays where it is, so the next tick starts the stage again. The dead job's cap slot frees, since the restart takes a new one.
 async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps): Promise<void> {
   await deps.removeContainers(ctx.run, job.id);
-  recordJob(ctx.cfg.home, ctx.now(), job, 'died');
+  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, 'died');
   markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => {
     // Jobs started by one tick share a start time, so only one of them goes.
     const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
     const jobStarts = state.jobStarts.filter((_, index) => index !== start);
+    const cardStart = (state.cardStarts[job.issue] ?? []).indexOf(job.startedAt);
+    const cardStarts = { ...state.cardStarts, [job.issue]: (state.cardStarts[job.issue] ?? []).filter((_, index) => index !== cardStart || start === -1) };
     const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
     return {
       ...state,
       jobs: state.jobs.filter((other) => other.id !== job.id),
       jobStarts,
+      cardStarts,
       interrupted,
     };
   });
@@ -316,10 +366,16 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const stamp = ctx.now().toISOString().replaceAll(':', '');
   const id = `${pick.stage}-${pick.issue ?? '-'}-${stamp}`;
   const log = join(ctx.cfg.home, 'logs', `${id}.log`);
-  const cpus = cpuSets(ctx.cfg, deps.cores())[POOL_OF[QUEUE_OF[pick.stage]]];
-  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus);
+  const pool = POOL_OF[QUEUE_OF[pick.stage]];
+  const cpus = cpuSets(ctx.cfg, deps.cores())[pool];
+  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus, vitestWorkersOf(ctx.cfg, pool));
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
-  updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  updateState(ctx.statePath, (state) => {
+    if (!countsAgainstCap(pick.stage)) return { ...state, jobs: [...state.jobs, job] };
+    const recent = recentCardStartsAll(state, ctx.now());
+    const cardStarts = pick.issue === null ? recent : { ...recent, [pick.issue]: [...(recent[pick.issue] ?? []), job.startedAt] };
+    return { ...state, jobs: [...state.jobs, job], jobStarts: [...recentStarts(state, ctx.now()), job.startedAt], cardStarts };
+  });
   reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
@@ -347,20 +403,17 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> 
   return released;
 }
 
-// Removes builds no card in Approval still needs.
+// Removes builds no card in Approval or Hardening still needs. A Hardening card keeps the build the committee played.
 // Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
-  const keep = cards
-    .filter((card) => card.column === 'Approval')
-    .map((card) => state.builds[String(card.issue)])
-    .filter((name) => name !== undefined);
+  const keep = cards.filter((card) => card.column === 'Approval' || card.column === 'Hardening').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
-// Deletes finished work clones and old job logs. Running jobs and resumable clones stay, see sweepWork.
+// Deletes finished work clones, old job logs and old agent transcripts. Running jobs and resumable clones stay, see sweepWork.
 function cleanWork(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
   const swept = sweepWork(join(ctx.cfg.home, 'work'), state, cards);
@@ -369,23 +422,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
-}
-
-// Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.
-async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise<void> {
-  const state = readState(ctx.statePath);
-  const now = ctx.now();
-  if (!atCap(state, now, ctx.cfg)) {
-    if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
-    return;
-  }
-  // Work waits when more jobs would start without the cap.
-  const waiting = chooseJobs(state, cards, now, { ...ctx.cfg, maxJobsPerDay: Infinity }, devHead).length > chooseJobs(state, cards, now, ctx.cfg, devHead).length;
-  if (state.capNoticed || !waiting) return;
-  const starts = recentStarts(state, now);
-  const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Daily job cap reached: ${starts.length} of ${ctx.cfg.maxJobsPerDay} agent jobs ran in the last 24 hours. Public work waits. The next slot frees at ${free}.`);
-  updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
+  const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
+  if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
 }
 
 // A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
@@ -410,11 +448,36 @@ async function settleRouting(ctx: Ctx): Promise<void> {
     }));
 }
 
-// One tick: check the running jobs, run intake, clean old builds, clones and logs, then start every job that fits while the disk has room. `deps` defaults to the real process control.
+// One tick: check the running jobs, clean old builds, clones and logs, start every job that fits while the disk has room, then run intake. `deps` defaults to the real process control.
+// Intake runs last, so a failed intake never holds back a job, like the factory change that would fix it. A card it adds starts on the next tick.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await settleRouting(ctx);
+  await startJobs(ctx, codeDir, deps);
   await intake(ctx);
+}
+
+async function releaseHead(ctx: Ctx): Promise<string | null> {
+  const release = readState(ctx.statePath).release;
+  return release === null ? null : ctx.repo.headHash(release.branch);
+}
+
+// A candidate post plays one commit. Once the release branch moves, by any path, the post and a queued Ship go, and the
+// playtest and a new candidate follow on the new head. A running ship moves the release itself when it merges main
+// into it, and its post must stay so a failed ship can run again.
+export function dropStaleCandidate(ctx: Ctx, head: string | null): void {
+  const state = readState(ctx.statePath);
+  const release = state.release;
+  if (release === null || release.postId === null || !movedPast(state, release.candidateSha, head)) return;
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
+  ctx.log('tick', release.issue, `release moved from ${release.candidateSha ?? 'an unknown commit'} to ${head}, dropped candidate post ${release.postId}`);
+}
+
+function movedPast(state: FactoryState, posted: string | null, head: string | null): boolean {
+  return head !== null && posted !== head && !state.jobs.some((job) => job.stage === 'ship');
+}
+
+async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
   cleanWork(ctx, cards);
@@ -426,9 +489,9 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
   }
   await ctx.repo.fetch();
-  const devHead = await ctx.repo.headHash('dev');
-  await noteCap(ctx, cards, devHead);
-  const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
+  const heads = { dev: await ctx.repo.headHash('dev'), release: await releaseHead(ctx) };
+  dropStaleCandidate(ctx, heads.release);
+  const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, heads);
   reportScheduler(ctx.cfg.home, 'ready', ctx.now(), report, cards);
   if (report.picks.length === 0) return ctx.log('tick', null, 'nothing to start');
   for (const pick of report.picks) startJob(ctx, codeDir, pick, deps);

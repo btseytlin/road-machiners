@@ -1,0 +1,74 @@
+#!/bin/sh
+# Runs a long command in the background under a time limit, so the agent can check on it and keep its status current.
+# The agent's Bash call returns at once. Each check prints the job's state and log tail, and reports the job's activity through factory-status.
+# Jobs live as long as the container, so the agent must not end its run while one is running.
+set -eu
+JOBS=/tmp/factory-jobs
+usage() {
+    printf '%s\n' 'Usage: factory-job start <name> <activity> <minutes> <command> | factory-job check <name> | factory-job stop <name>' >&2
+    exit 2
+}
+job_dir() {
+    case "$1" in
+        ''|*[!a-zA-Z0-9_-]*) printf '%s\n' 'A job name uses letters, digits, - and _ only' >&2; exit 2 ;;
+    esac
+    printf '%s/%s' "$JOBS" "$1"
+}
+minutes_since() {
+    echo $(( ($(date +%s) - $1) / 60 ))
+}
+[ "$#" -ge 2 ] || usage
+action=$1
+dir=$(job_dir "$2")
+case "$action" in
+    start)
+        [ "$#" -eq 5 ] || usage
+        case "$4" in ''|*[!0-9]*|0) printf '%s\n' 'The time limit is a whole number of minutes' >&2; exit 2 ;; esac
+        # The factory sets the highest limit. A bigger job is out of proportion for one agent check.
+        max=${FACTORY_JOB_MAX_MINUTES:?FACTORY_JOB_MAX_MINUTES is not set}
+        if [ "$4" -gt "$max" ]; then printf 'The time limit is at most %s minutes. Make the check smaller: fewer seeds, fewer turns or a direct test.\n' "$max" >&2; exit 2; fi
+        if [ -f "$dir/pid" ] && [ ! -f "$dir/exit" ]; then printf 'Job %s is already running\n' "$2" >&2; exit 2; fi
+        factory-status "$3"
+        rm -rf "$dir"
+        mkdir -p "$dir"
+        printf '%s' "$3" > "$dir/activity"
+        printf '%s' "$4" > "$dir/limit"
+        date +%s > "$dir/started"
+        # setsid detaches the job, so it outlives this call. timeout runs the command in a process group of its own, and its pid names that group for stop.
+        setsid sh -c 'timeout --kill-after=30s "$1m" sh -c "$2" > "$3/log" 2>&1 & echo $! > "$3/pid.tmp"; mv "$3/pid.tmp" "$3/pid"; wait $!; echo $? > "$3/exit"' _ "$4" "$5" "$dir" < /dev/null > /dev/null 2>&1 &
+        tries=0
+        until [ -f "$dir/pid" ]; do
+            tries=$((tries + 1))
+            [ "$tries" -le 50 ] || { printf 'Job %s did not start\n' "$2" >&2; exit 1; }
+            sleep 0.1
+        done
+        printf 'Started job %s with a limit of %s minutes. Its log is %s/log. Check it with: factory-job check %s\n' "$2" "$4" "$dir" "$2"
+        ;;
+    check)
+        [ "$#" -eq 2 ] || usage
+        [ -f "$dir/pid" ] || { printf 'No job %s\n' "$2" >&2; exit 2; }
+        elapsed=$(minutes_since "$(cat "$dir/started")")
+        if [ -f "$dir/exit" ]; then
+            code=$(cat "$dir/exit")
+            case "$code" in
+                0) printf 'Job %s finished after %s minutes.\n' "$2" "$elapsed" ;;
+                124|137) printf 'Job %s hit its limit of %s minutes and was stopped.\n' "$2" "$(cat "$dir/limit")" ;;
+                143) printf 'Job %s was stopped after %s minutes.\n' "$2" "$elapsed" ;;
+                *) printf 'Job %s failed with exit %s after %s minutes.\n' "$2" "$code" "$elapsed" ;;
+            esac
+        else
+            factory-status "$(cat "$dir/activity")"
+            quiet=$(minutes_since "$(stat -c %Y "$dir/log" 2>/dev/null || cat "$dir/started")")
+            printf 'Job %s is running: %s of %s minutes used, the log last changed %s minutes ago.\n' "$2" "$elapsed" "$(cat "$dir/limit")" "$quiet"
+        fi
+        tail -n 20 "$dir/log" 2>/dev/null || true
+        ;;
+    stop)
+        [ "$#" -eq 2 ] || usage
+        [ -f "$dir/pid" ] || { printf 'No job %s\n' "$2" >&2; exit 2; }
+        [ -f "$dir/exit" ] && { printf 'Job %s already ended\n' "$2"; exit 0; }
+        kill -s TERM -- "-$(cat "$dir/pid")"
+        printf 'Stopped job %s.\n' "$2"
+        ;;
+    *) usage ;;
+esac

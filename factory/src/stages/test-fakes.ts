@@ -7,14 +7,15 @@ import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
-export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r' } as FactoryConfig;
+export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10 } as FactoryConfig;
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
-export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[] };
+export type Text = { chat: string; text: string; buttons: InlineButton[][] };
+export type Fake = { ctx: Ctx; texts: Text[]; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[] };
 
 export function fake(): Fake {
-  const f: Fake = { ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [] };
+  const f: Fake = { texts: [], ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [] };
   const note = (text: string) => { f.calls.push(text); };
   f.ctx = {
     cfg,
@@ -48,6 +49,8 @@ export function fake(): Fake {
         return photos.map((_, i) => 60 + i);
       },
       editCaption: async (_chat: string, id: number, caption: string) => { note(`editCaption ${id} ${caption}`); },
+      editText: async (_chat: string, id: number, text: string) => { note(`editText ${id} ${text}`); },
+      sendButtons: async (chat: string, text: string, buttons: InlineButton[][]) => { note(`buttons ${chat}`); f.texts.push({ chat, text, buttons }); return 44; },
     },
     container: {
       shell: async () => note('shell'),
@@ -59,6 +62,7 @@ export function fake(): Fake {
           mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
           writeFileSync(join(home, '.factory', name), text, 'latin1');
         }
+        return '';
       },
     },
     repo: {
@@ -68,6 +72,7 @@ export function fake(): Fake {
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       merge: async (steps: MergeStep[]) => {
         for (const step of steps) note(`merge ${step.branch} ${step.into}`);
         note(`push ${steps.map((step) => step.into).join(' ')}`);

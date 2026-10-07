@@ -2,7 +2,7 @@
 
 The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it.
 
-Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec. Its diagrams are Graphviz files in `docs/diagrams/`. Read the `.dot` source, not the `.svg`. A change to the process updates its diagram and the matching doc in the same commit. Run `npm run diagrams` after a `.dot` edit, which needs Graphviz installed. [README](README.md) lists the other docs.
+Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec, and it says how to keep its diagrams in step with the code. [README](README.md) lists the other docs.
 
 ## Commands
 
@@ -28,8 +28,10 @@ Run these from `factory/`. Run `npm ci` first.
 - `settings.env` is tracked and holds limits, models and timeouts. `.env` holds secrets, committee ids and host paths, and never leaves its host. A key in both files stops the factory.
 - The server runs only GitHub's `main`. Factory changes reach it by a merge into `main`, never by a hand edit on the server.
 - GitHub holds every branch. Each git step runs in a throwaway worktree under a lock and pushes at once. A conflict or rejected push must leave GitHub and the host as they were.
+- Any branch can move on GitHub at any time. A step merges the moved branch and pushes again, and never fails because a branch moved.
 - Branch moves that go together, like a ship or a hotfix, go to GitHub in one atomic push.
 - An agent's work reaches GitHub only after the factory checks its diff. Only `butler push` on the host gets `BUTLER_API_KEY`.
 - Jobs share the host clone and the state file, so every state update runs under its lock.
-- Hermes's SOUL.md repeats no process detail. It points to `docs/process.md`.
+- Hermes's SOUL.md repeats no process detail. It points to `docs/process.md` and `docs/state.md`.
+- A change to factory state, like a new state field, queue or card position, updates `docs/state.md`, `src/position.ts` and the `factory` CLI in `src/ctl.ts` in the same commit.
 - The factory never imports game code.

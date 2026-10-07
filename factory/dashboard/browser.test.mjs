@@ -16,6 +16,7 @@ function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
   return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+    wasted: { cost: 4.25, tokens: { input: 400000, output: 50000, cacheRead: 0, cacheWrite: 0 } },
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
     buckets: [...(days > 1 ? [{ start: yesterday, cost: 2, tokens: null, stages: { design: { cost: 2, tokens: 0 } }, models: { unattributed: { cost: 2, tokens: 0 } } }] : []),
       { start: now.slice(0, days > 1 ? 10 : 13), cost: 14.5, tokens, stages: { design: { cost: 9.5, tokens: 1000000 }, verify: { cost: 5, tokens: 600000 } }, models: { 'claude-opus-5-5': { cost: 7.25, tokens: 850000 }, 'claude-sonnet-5-5': { cost: 7.25, tokens: 750000 } } }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
@@ -27,7 +28,16 @@ function createSummary(days) {
       { stage: 'verify', model: 'claude-sonnet-5-5', input: 300000, output: 80000, cacheRead: 50000, cacheWrite: 30000, cost: 5 },
       { stage: 'implement', model: 'claude-sonnet-5-5', input: 200000, output: 20000, cacheRead: 50000, cacheWrite: 20000, cost: 2.25 },
     ],
-    activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })) };
+    activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })), delivery: createDelivery(days) };
+}
+function createDelivery(days) {
+  const hour = 3600000;
+  const stage = (name, count, mean) => ({ stage: name, count, meanMs: count ? mean * hour : null, medianMs: count ? mean * hour : null, open: 2, openMeanMs: 5 * hour });
+  return { since: '2026-08-01T00:00:00.000Z', issues: 12 * days, excluded: 3, legacy: 4, lead: { count: 5, meanMs: 50 * hour, medianMs: 40 * hour, open: 7, openMeanMs: 20 * hour, missingStart: 1 },
+    stages: [stage('triage', 6, 2), stage('design', 6, 10), stage('implementation', 5, 5), stage('preview', 5, 3), stage('approval', 4, 24), stage('harden', 3, 4), stage('merge', 0, 0)],
+    loops: [{ step: 'questions', events: 2, issues: 2 }, { step: 'rebuild', events: 0, issues: 0 }, { step: 'patch', events: 3, issues: 1 }], looped: 3,
+    retries: [{ stage: 'design', runs: 2, issues: 1 }, { stage: 'verify', runs: 0, issues: 0 }],
+    rejections: [{ gate: 'triage', decided: 8, rejected: 2 }, { gate: 'design', decided: 6, rejected: 0 }, { gate: 'committee', decided: 0, rejected: 0 }] };
 }
 const fixture = {
   generatedAt: now, repoUrl: 'https://github.com/example/factory', playUrl: 'https://example.com/',
@@ -57,7 +67,7 @@ async function sendSnapshot(page, value) {
   await waitForRender(page);
 }
 async function checkLayout(page, size) {
-  for (const tab of ['overview', 'analytics']) {
+  for (const tab of ['overview', 'analytics', 'delivery']) {
     await page.locator(`#${tab}-tab`).click();
     await waitForRender(page);
     const overflow = await page.evaluate(() => ({
@@ -87,10 +97,10 @@ async function checkReleaseAndManager(page) {
   assert.equal(await page.locator('#connection').textContent(), 'Live');
   const waiting = structuredClone(fixture);
   waiting.live.value.manager = { activity: 'model', phase: 'running', status: 'ok', at: now, since: new Date(Date.now() - 16 * 60000).toISOString() };
-  waiting.live.value.workers[0].milestone = 'validating';
+  waiting.live.value.workers[0].milestone = 'Building orchard buildings';
   await sendSnapshot(page, waiting);
-  assert.match(await page.locator('#manager-action').textContent(), /Waiting for model · 16m in phase/);
-  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /Checking changes/);
+  assert.match(await page.locator('#manager-action').textContent(), /Waiting for model, 16m in phase/);
+  assert.match(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), /^Building orchard buildings: /);
   waiting.live.value.workers[0].status = 'stale';
   await sendSnapshot(page, waiting);
   assert.equal(await page.locator('#worker-rows tr').first().locator('td').nth(2).textContent(), 'Activity stale');
@@ -154,13 +164,15 @@ async function checkCounters(page) {
   assert.equal(await page.locator('.token-counter.panel').count(), 1);
   assert.equal(await page.locator('.token-counter .panel').count(), 0);
   assert.deepEqual(await page.locator('.token-counter .counter span').allTextContents(), ['Total tokens', 'Input incl. cache', 'Output']);
+  assert.equal(await page.locator('#usage-wasted-cost').textContent(), '$4.25');
+  assert.equal(await page.locator('#usage-wasted-tokens').textContent(), '450K tokens');
   assert.equal(await page.locator('#usage-input').textContent(), '1.3M');
   assert.equal(await page.locator('#usage-input').getAttribute('data-exact'), '1300000');
   assert.equal(await page.locator('#usage-output').textContent(), '300K');
   assert.equal(await page.locator('#usage-output').getAttribute('data-exact'), '300000');
   assert.deepEqual(await page.locator('#stage-model-header th').allTextContents(), ['Stage', 'claude-opus-5-5', 'claude-sonnet-5-5']);
   assert.deepEqual(await page.locator('#stage-model-measures th').allTextContents(), ['Input + cache', 'Output', 'Input + cache', 'Output']);
-  assert.ok(!(await page.locator('#analytics').textContent()).includes('Input incl. cache / output · measured runs'));
+  assert.ok(!(await page.locator('#analytics').textContent()).includes('Input incl. cache / output, measured runs'));
   const verify = page.locator('#stage-model-rows tr').filter({ has: page.locator('td:first-child', { hasText: 'Verify' }) });
   assert.deepEqual(await verify.locator('td').allTextContents(), ['Verify + review', '130K', '100K', '380K', '80K']);
   const extra = structuredClone(fixture);
@@ -195,6 +207,43 @@ async function checkCounters(page) {
   assert.equal(chart.labels.at(-1), `${now.slice(11, 13)}:00`);
   await page.screenshot({ path: `${evidence}/analytics-hourly-${page.viewportSize().width}.png` });
   for (const name of ['Stage', 'Cost', '7 days']) await page.getByRole('button', { name, exact: true }).click();
+}
+async function checkDelivery(page) {
+  await page.locator('#delivery-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.locator('#lead-mean').textContent(), '50h 0m');
+  assert.equal(await page.locator('#lead-median').textContent(), '40h 0m');
+  assert.equal(await page.locator('#lead-open').textContent(), '7');
+  assert.equal(await page.locator('#loop-rate').textContent(), '4%');
+  assert.match(await page.locator('#delivery-coverage').textContent(), /^84 cards, records since 2026-08-01 UTC$/);
+  assert.match(await page.locator('#delivery-coverage').getAttribute('data-exact'), /4 cards joined before records\. 3 hotfix.*1 merges lack a start/);
+  const dwell = await page.locator('#dwell-rows tr').evaluateAll((rows) => rows.map((row) => [...row.cells].map((cell) => cell.textContent)));
+  assert.deepEqual(dwell[0], ['Triage', '', '2h 0m', '2h 0m', '6', '2, 5h 0m']);
+  assert.ok(dwell.some((row) => row[0] === 'Merge queue' && row[2] === '—' && row[4] === '0'));
+  assert.deepEqual(await page.locator('#loop-rows td:first-child').allTextContents(), ['Design asks the author', 'Committee patch']);
+  assert.deepEqual(await page.locator('#triage-rate, #design-rate, #committee-rate').allTextContents(), ['25%', '0%', '—']);
+  assert.equal(await page.locator('#triage-rate').getAttribute('data-exact'), 'Triage wont-do: 2 of 8 decided cards');
+  assert.equal(await page.locator('#committee-rate').getAttribute('data-exact'), 'Committee Deny: 0 of 0 decided cards');
+  assert.deepEqual(await page.locator('#stage-retry-rows td').allTextContents(), ['Design', '2', '1']);
+  assert.equal(await page.getByRole('button', { name: '30 days', exact: true }).count(), 1);
+  await page.getByRole('button', { name: '30 days', exact: true }).click();
+  await waitForRender(page);
+  assert.match(await page.locator('#delivery-coverage').textContent(), /^360 cards, /);
+  await page.getByRole('button', { name: '7 days', exact: true }).click();
+  const unrecorded = structuredClone(fixture);
+  for (const range of unrecorded.analytics.value.ranges) range.delivery = null;
+  await sendSnapshot(page, unrecorded);
+  assert.equal(await page.locator('#lead-mean').textContent(), '—');
+  assert.equal(await page.locator('#loop-rate').textContent(), '—');
+  assert.match(await page.locator('#delivery-coverage').textContent(), /No card moves recorded yet/);
+  assert.equal(await page.locator('#dwell-rows').textContent(), 'No card moves recorded yet');
+  const stale = structuredClone(fixture);
+  stale.analytics.status = 'stale';
+  await sendSnapshot(page, stale);
+  assert.match(await page.locator('#delivery-coverage').textContent(), /^Last known: /);
+  await page.screenshot({ path: `${evidence}/delivery-${page.viewportSize().width}.png` });
+  await sendSnapshot(page, fixture);
+  await page.locator('#overview-tab').click();
 }
 async function checkPagination(page) {
   await page.locator('#overview-tab').click();
@@ -251,6 +300,11 @@ async function checkNarrow(page) {
   assert.equal(await page.locator('#stage-model-header th').count(), 3);
   assert.equal(await page.locator('#stage-model-measures th').count(), 4);
   await page.screenshot({ path: `${evidence}/analytics-narrow.png`, fullPage: true });
+  await page.locator('#delivery-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  assert.equal(await page.locator('#dwell-rows tr').count(), 7);
+  await page.screenshot({ path: `${evidence}/delivery-narrow.png`, fullPage: true });
 }
 async function checkUntrustedAndMissingData(page) {
   const malicious = structuredClone(fixture);
@@ -273,10 +327,17 @@ async function checkUntrustedAndMissingData(page) {
   await page.locator('#analytics-tab').click();
   await waitForRender(page);
   assert.equal(await page.locator('#usage-cost').textContent(), '—');
+  assert.equal(await page.locator('#usage-wasted-cost').textContent(), '—');
   assert.equal(await page.locator('#usage-wait').textContent(), '—');
   assert.equal(await page.locator('#usage-input').textContent(), '—');
   assert.equal(await page.locator('#usage-output').textContent(), '—');
   assert.equal(await page.locator('#stage-model-rows').textContent(), 'Unavailable');
+  await page.locator('#delivery-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.locator('#lead-mean').textContent(), '—');
+  assert.equal(await page.locator('#delivery-coverage').textContent(), 'Card records unavailable');
+  assert.equal(await page.locator('#dwell-rows').textContent(), 'Unavailable');
+  assert.equal(await page.locator('#committee-rate').textContent(), '—');
   await page.locator('#overview-tab').click();
   await waitForRender(page);
   assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—']);
@@ -313,6 +374,7 @@ try {
     await checkExpandedViews(page);
     await checkCapacityAndCpu(page);
     await checkCounters(page);
+    await checkDelivery(page);
     await checkPagination(page);
     await checkPause(page);
     await checkUntrustedAndMissingData(page);

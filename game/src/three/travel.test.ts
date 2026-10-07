@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RULES } from "../data/rules";
-import { buildDrive, freeDrive, initPhysics, TURN_STEPS, type Drive } from "../phys/drive";
+import { buildDrive, freeDrive, initPhysics, restFrame, TURN_STEPS, type Drive } from "../phys/drive";
 import { PHYSICS } from "../data/physics";
 import { physicsMove } from "../phys/turn";
 import { emptyWorld } from "../sim/testkit";
@@ -276,7 +276,6 @@ describe("automatic travel safety", () => {
   it.each([
     "collision",
     "shot",
-    "guardShot",
     "breakdown",
     "partDisabled",
     "knockout",
@@ -295,13 +294,6 @@ describe("automatic travel safety", () => {
         chance: 1,
         damageChance: 1,
         side: "front",
-        rounds: [],
-      },
-      guardShot: {
-        t: "guardShot",
-        site: "town",
-        from: { x: 0, y: 0 },
-        target: id,
         rounds: [],
       },
       breakdown: { t: "breakdown", vehicle: id, part: "engine" },
@@ -326,10 +318,30 @@ describe("rope frames", () => {
     playerVehicle(after).trail = [{ ...me.pos, heading: 0 }, { x: me.pos.x + 1, y: me.pos.y, heading: 0 }];
     const frames: Parameters<typeof addRopeFrames>[2] = {};
 
-    addRopeFrames(before, after, frames);
+    addRopeFrames(before, after, frames, {});
 
     expect(frames[me.id]?.length).toBeGreaterThan(0);
     expect(frames[tower.id]).toBeUndefined();
+  });
+});
+
+describe("rope frames carry wheel spin", () => {
+  it("continues a towed truck's wheels from the last shown frame", () => {
+    const before = makeSafeWorld();
+    const me = playerVehicle(before);
+    const tower = { ...me, id: "tower", pos: { x: me.pos.x + 3, y: me.pos.y } };
+    before.vehicles.push(tower);
+    addState(before, "tow", tower.id, me.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+    const after = structuredClone(before);
+    playerVehicle(after).trail = [{ ...me.pos, heading: 0 }, { x: me.pos.x + 1, y: me.pos.y, heading: 0 }];
+    const shown = restFrame(before, me);
+    shown.wheels = shown.wheels.map((wheel) => ({ ...wheel, spin: 5 }));
+    const frames: Parameters<typeof addRopeFrames>[2] = {};
+
+    addRopeFrames(before, after, frames, { [me.id]: shown });
+
+    for (const wheel of frames[me.id][0].wheels) expect(wheel.spin).toBeGreaterThan(5);
+    expect(Math.abs(frames[me.id][0].wheels[2].spin - 5)).toBeLessThan(0.2);
   });
 });
 
@@ -345,7 +357,7 @@ describe("rope frames for a truck that jumped", () => {
     playerVehicle(after).trail = [];
     const frames: Parameters<typeof addRopeFrames>[2] = {};
 
-    addRopeFrames(before, after, frames);
+    addRopeFrames(before, after, frames, {});
 
     expect(frames[me.id]).toHaveLength(TURN_STEPS);
     expect(frames[me.id]?.[0].pos.x).toBeCloseTo(me.pos.x * PHYSICS.metersPerTile, 5);

@@ -1,3 +1,4 @@
+import { addCard } from './card-events';
 import { githubLogins, readCommittee } from './committee';
 import { CANDIDATE_LABELS, HOTFIX_LABEL } from './types';
 import type { Ctx, Issue } from './types';
@@ -34,7 +35,7 @@ export async function intake(ctx: Ctx): Promise<number[]> {
 
 async function addToBoard(ctx: Ctx, issue: number, hotfix: boolean): Promise<void> {
   const column = hotfix ? 'Design' : 'Triage';
-  await ctx.github.addCard(issue, column);
+  await addCard(ctx, issue, column, hotfix ? 'hotfix' : undefined);
   await ctx.github.comment(issue, hotfix ? 'The factory picked this up as a hotfix. It goes to design now.' : 'The factory picked this up for triage.');
   ctx.log('intake', issue, `added to ${column}`);
 }

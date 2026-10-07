@@ -6,7 +6,7 @@ import { STATE_TURNS } from '../data/npcs';
 import { aidWork, checkAid, refreshAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
-import { lootRobbed } from './npc-activities';
+import { lootRobbed } from './defeat';
 import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, checkTowPromise, lapseClaim, payEscort } from './tow';

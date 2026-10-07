@@ -9,7 +9,7 @@ import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
-import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
+import { groundAt, heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onDeck } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
@@ -19,14 +19,19 @@ import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
+  let d = groundForTerritories(seed);
+  d = timed('territories', () => territoryLayer(seed, d));
+  d = timed('ground', () => groundLayer(seed, d));
+  return timed('rocks', () => rockLayer(seed, d));
+}
+
+// The layers before the territories: the ground and world a territory is laid out on.
+export function groundForTerritories(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
   d = timed('geology', () => geologyLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
-  d = timed('new world', () => newWorldLayer(seed, d));
-  d = timed('territories', () => territoryLayer(seed, d));
-  d = timed('ground', () => groundLayer(seed, d));
-  return timed('rocks', () => rockLayer(seed, d));
+  return timed('new world', () => newWorldLayer(seed, d));
 }
 
 function timed(layer: string, run: () => MapDraft): MapDraft {
@@ -82,6 +87,16 @@ export function tileSteepness(heights: ArrayLike<number>, size: number, tile: nu
   const c = heights[(j + 1) * w + i];
   const d = heights[(j + 1) * w + i + 1];
   return Math.hypot((b - a + d - c) / 2, (c - a + d - b) / 2);
+}
+
+// How far the ground under a prop's footprint lies off its seat: the largest height between the ground at its centre,
+// where it stands upright, and the ground at its two ends for a segment prop, a line p.r to each side of its centre
+// along its yaw, or at 8 points round its edge for a disc. This is how far its footprint floats or sinks.
+export function footprintRelief(heights: ArrayLike<number>, size: number, p: BakedProp, segment: boolean): number {
+  const t = { size, heights };
+  const seat = groundAt(t, p.pos.x, p.pos.y);
+  const angles = segment ? [p.yaw, p.yaw + Math.PI] : Array.from({ length: 8 }, (_, k) => (k * Math.PI) / 4);
+  return Math.max(...angles.map((a) => Math.abs(groundAt(t, p.pos.x + Math.cos(a) * p.r, p.pos.y + Math.sin(a) * p.r) - seat)));
 }
 
 // Base layer: noise relief, ridges and the fixed landforms at full height, before any flattening.

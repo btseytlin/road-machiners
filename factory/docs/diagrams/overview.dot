@@ -7,7 +7,7 @@ digraph overview {
   B [label="Agents build\nTriage to Testing"];
   C [label="Committee plays\nand approves", fillcolor="#fde68a", color="#b45309"];
   V [label="dev"];
-  R [label="Weekly release\ncandidate"];
+  R [label="Release\ncandidate"];
   S [label="Committee\nships", fillcolor="#fde68a", color="#b45309"];
   O [label="main\nand itch.io"];
   U -> B -> C -> V -> R -> S -> O [weight=100];

@@ -1,6 +1,6 @@
 // Draws one item or chassis icon from the game's own models, for npm run icons.
-// The style follows the category. An item icon is a vector blueprint from blueprint.ts, in shades of its category tone.
-// A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
+// The style follows the category. An item icon is a vector blueprint from blueprint.ts. A part draws in shades of its
+// category tone, and a good fills its outline with its model's own colors under see-through shading. A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
 // dark outline and darkened creases. Chassis drawn by the same model are told apart by 45° stripes.
 // Body space as in vehicle.ts: +x is the nose, +z the truck's right, +y up.
 
@@ -20,7 +20,7 @@ import { blueprintOf, blueprintPlanSvg, blueprintSvg, calmed, GLASS_MATERIAL, pa
 import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 10;
+export const ICON_STYLE_VERSION = 11;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -33,9 +33,10 @@ export const DIAGONAL_PITCH_DEG = 30;
 export type IconCategory = 'part' | 'good' | 'chassis';
 export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'diagonal', good: 'diagonal', chassis: 'diagonal' };
 
-// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon.
-export type IconStyle = 'line' | 'toon';
-export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'line', chassis: 'toon' };
+// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon. A line
+// blueprint fills in its tone, and a color blueprint in its model's own colors.
+export type IconStyle = 'line' | 'color' | 'toon';
+export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'color', chassis: 'toon' };
 
 // The one owner of which view the game shows for an entry.
 export function iconView(entry: IconEntry): IconView {
@@ -70,6 +71,9 @@ const RAMP = [0.45, 0.75, 1]; // toon light steps
 // The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
 const CREASE = { normal: 0.3, depth: 4 };
 const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
+// How much a color blueprint's shadow darkens and its light brightens the paints under them.
+const COLOR_SHADE = 0.35;
+const COLOR_LIGHT = 0.15;
 const INK = PAL.outline;
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
 const PAINT = 'paint';
@@ -100,10 +104,11 @@ export type RenderedIcon = { icon: HTMLCanvasElement; svg: string | null; tint: 
 export function renderIcon(entry: IconEntry, view: IconView, size: number): RenderedIcon {
   const big = size * SUPERSAMPLE;
   const { scene, camera } = stage(entry, view);
-  if (iconStyle(entry) === 'line') {
+  const style = iconStyle(entry);
+  if (style !== 'toon') {
     const perMeter = CELL.along * (big / (camera.right - camera.left));
     const pen = { outer: OUTER_CELLS * perMeter, inner: INNER_CELLS * perMeter };
-    const bp = blueprintOf(scene, camera, big, pen, (m) => draw(scene, camera, big, m));
+    const bp = blueprintOf(scene, camera, big, pen, (m) => draw(scene, camera, big, m), style === 'color');
     const colors = blueprintColors(entry);
     const icon = document.createElement('canvas');
     icon.width = size;
@@ -159,11 +164,14 @@ export function renderPlan(entry: IconEntry, size: number): string {
   return blueprintPlanSvg(calmed(bp, PLAN_CALM), PLAN_STROKE);
 }
 
-// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue.
+// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue. Over a
+// color blueprint's paints the shadow darkens and the light brightens whatever lies under them.
 export function blueprintColors(entry: IconEntry): BlueprintColors {
   const tone = new THREE.Color(ITEM_TONES[itemTone(entry.id)]);
   const mix = (to: number, t: number): string => `#${tone.clone().lerp(new THREE.Color(to), t).getHexString()}`;
-  return { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
+  const colors = { line: mix(0xdcecff, 0.75), fill: mix(0x0a1420, 0.45), shadow: mix(0x050a12, 0.75), glass: mix(0xdcecff, 0.3) };
+  if (iconStyle(entry) !== 'color') return colors;
+  return { ...colors, shadow: `rgba(0,0,0,${COLOR_SHADE})`, light: `rgba(255,255,255,${COLOR_LIGHT})` };
 }
 
 // Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
@@ -227,7 +235,7 @@ function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THRE
 function bareTruck(chassisId: string): THREE.Object3D {
   const v = bareVehicle({ nextId: 0 }, { name: chassisId, faction: 'player', chassisId, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const view = new VehicleView(v, false);
-  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest }));
+  const wheels = wheelMounts(bodyOf(chassisId)).map(() => ({ steer: 0, spin: 0, suspension: PHYSICS.truck.suspensionRest, ground: true }));
   view.pose({ pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc: { x: 0, y: 0, z: 0 }, wheels }, 0);
   return view.root;
 }
