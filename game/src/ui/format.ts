@@ -3,6 +3,7 @@
 import { GOODS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
+import { NOTES } from '../data/locals';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
@@ -582,6 +583,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  note: (_, e) => ({ text: `Noted in your journal: ${NOTES[e.id].title}.`, cls: 'good' }),
 };
 
 // Returns null for events not worth a log line.

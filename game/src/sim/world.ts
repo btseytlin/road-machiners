@@ -93,6 +93,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       perks: [],
       marked: [],
       rumored: [],
+      notes: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,

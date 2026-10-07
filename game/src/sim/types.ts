@@ -9,6 +9,7 @@ import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
+import type { NoteId } from "../data/locals";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -368,6 +369,7 @@ export type Player = {
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
   marked: { vehicleId: string; until: number }[]; // trucks the spotter perk tracks, to the last turn of each mark
   rumored: string[]; // salvage stock ids a driver told the player about; see the rumor topic
+  notes: { id: NoteId; turn: number }[]; // rumors and clues the player was told, with the turn each was learned; see src/sim/notes.ts
   hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
 };
 
@@ -407,6 +409,7 @@ export type GameEvent =
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
+  | { t: 'note'; id: NoteId } // the player wrote a rumor or clue into the journal
   | { t: 'supply'; what: string; text: string }
   | { t: 'death' }
   | { t: 'knockout' }
