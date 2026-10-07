@@ -492,32 +492,32 @@ function createLoopRow(row) { const node = createNode('tr'); node.append(createN
 function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
 function readDeliveryCoverage(delivery) {
   if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
-  if (!delivery) return 'No card moves recorded yet, so no delivery numbers';
+  if (!delivery) return 'No card moves recorded yet';
   const prefix = snapshot.analytics.status === 'ok' ? '' : 'Last known: ';
-  return `${prefix}Card records from ${delivery.since.slice(0, 10)} UTC. ${delivery.issues} cards moved in the period, ${delivery.legacy} joined before records, ${delivery.excluded} hotfix, release or private cards left out, ${delivery.lead.missingStart} merges lack a start`;
+  return `${prefix}${delivery.issues} cards, records since ${delivery.since.slice(0, 10)} UTC`;
+}
+function readDeliveryNotes(delivery) {
+  if (!delivery) return '';
+  return `${delivery.legacy} cards joined before records. ${delivery.excluded} hotfix, release or private cards left out. ${delivery.lead.missingStart} merges lack a start.`;
 }
 function renderDeliveryCounters(delivery) {
   if (!delivery) return clearDeliveryCounters();
   const { lead } = delivery;
   setCounter('lead-mean', formatDuration(lead.meanMs), lead.count ? `${lead.meanMs} ms mean of ${lead.count} cards` : null);
-  setText('lead-count', `n=${lead.count}`);
   setCounter('lead-median', formatDuration(lead.medianMs), lead.count ? `${lead.medianMs} ms median of ${lead.count} cards` : null);
-  setCounter('lead-open', String(lead.open), lead.open);
-  setText('lead-open-age', lead.open ? `age ${formatDuration(lead.openMeanMs)}` : '');
+  setCounter('lead-open', String(lead.open), lead.open ? `${lead.open} cards, mean age ${formatDuration(lead.openMeanMs)}` : 0);
   setCounter('loop-rate', formatRate(delivery.looped, delivery.issues), `${delivery.looped} of ${delivery.issues} cards`);
-  setText('loop-count', `${delivery.looped}/${delivery.issues}`);
   for (const row of delivery.rejections) {
     setCounter(`${row.gate}-rate`, formatRate(row.rejected, row.decided), `${gateNames[row.gate]}: ${row.rejected} of ${row.decided} decided cards`);
-    setText(`${row.gate}-count`, `${row.rejected}/${row.decided}`);
   }
 }
 function clearDeliveryCounters() {
   for (const id of ['lead-mean', 'lead-median', 'lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
-  for (const id of ['lead-count', 'lead-open-age', 'loop-count', 'triage-count', 'design-count', 'committee-count']) setText(id, '—');
 }
 function renderDelivery() {
   const delivery = readDelivery();
   setText('delivery-coverage', readDeliveryCoverage(delivery));
+  getElement('delivery-coverage').dataset.exact = readDeliveryNotes(delivery);
   renderDeliveryCounters(delivery);
   if (!delivery) return renderDeliveryEmpty(snapshot.analytics.value ? 'No card moves recorded yet' : 'Unavailable');
   const maximum = Math.max(1, ...delivery.stages.map((row) => row.meanMs ?? 0));
