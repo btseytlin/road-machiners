@@ -73,7 +73,7 @@ export class HazardViews {
     this.smoke.update(world, terrain, views, nowMs, clock, cutawayOf(world, views, camera));
     this.fields.update(world, terrain, clock);
     this.flares.update(world, terrain, views, nowMs, clock);
-    const fresh = new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
+    const fresh = clock === null ? NO_IDS : new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
     this.lines.update(world, views, nowMs, { fresh, moved: clock === null || clock.moved });
     this.pulses.update(world, terrain, views, nowMs, clock);
   }
@@ -90,6 +90,8 @@ export class HazardViews {
 }
 
 // ---- Reveal timing
+
+const NO_IDS: ReadonlySet<string> = new Set();
 
 type HazardList = 'smoke' | 'fields' | 'flares' | 'lines';
 

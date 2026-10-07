@@ -672,10 +672,12 @@ function oilInReach(patches: readonly { pos: Vec; r: number }[], v: Vehicle, s: 
   return patches.filter((p) => dist(p.pos, v.pos) <= reach + p.r).map((p) => toPhysCircle(p.pos, p.r));
 }
 
+const DRY_WHEELS: readonly boolean[] = [false, false, false, false];
+
 // Whether each wheel's hub, in wheelMounts order, lies over any oil patch the car can reach.
-function oiledWheels(c: Car): boolean[] {
+function oiledWheels(c: Car): readonly boolean[] {
   const oil = c.oil;
-  if (oil.length === 0) return [false, false, false, false];
+  if (oil.length === 0) return DRY_WHEELS;
   const p = c.body.translation();
   const h = headingOf(c.body.rotation());
   const cos = Math.cos(h);
