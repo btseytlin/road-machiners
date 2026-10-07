@@ -45,6 +45,7 @@ export type FactoryConfig = {
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
+  maxJobsPerCard: number; // public-driven agent jobs one card may start in any 24 hours
   triageWorkers: number; // jobs of the triage queue that run at once
   designWorkers: number; // jobs of the design queue that run at once
   implementWorkers: number; // jobs of the implement queue that run at once
@@ -140,6 +141,7 @@ export type FactoryState = {
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
+  cardStarts: Record<string, string[]>; // issue number -> ISO start times of its public-driven jobs in the last 24 hours
   capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
   postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves

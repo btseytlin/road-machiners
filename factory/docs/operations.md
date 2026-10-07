@@ -24,7 +24,9 @@ On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows fr
 
 ## Daily cap
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, checks, the release cut and the candidate. Approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The first time the cap blocks work, the committee chat gets one notice with the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, the release cut and the candidate. Checks, approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The first time the cap blocks work, the committee chat gets one notice with the time the next slot frees.
+
+One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 hours. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window, and other cards keep the daily cap. Hotfix jobs count but run at the limit.
 
 ## Resume
 
