@@ -8,7 +8,7 @@ From `factory/`:
 
 1. Run `npm ci` and copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
 2. Set `DASHBOARD_PORT`, or `DASHBOARD_SOCKET` for an absolute socket path.
-3. Set `DASHBOARD_HIDE_TELEGRAM=1` and leave `DASHBOARD_CHANNEL_URL` empty, since the factory has no separate public channel yet.
+3. Leave `DASHBOARD_CHANNEL_URL` empty to get the link of `FACTORY_PUBLIC_CHANNEL` from the bot, or set `DASHBOARD_HIDE_TELEGRAM=1` to show no channel.
 4. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads need `gh` logged in.
 
 ## What the numbers mean
