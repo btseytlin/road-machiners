@@ -41,13 +41,20 @@ export function initializeSalvage(world: World): void {
   });
   const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
   const wrecks = world.obstacles.filter(isRoadWreck).map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
-  world.salvage = [...sites, ...spots, ...wrecks, ...STORY_WRECKS.map(storyStock)];
+  world.salvage = [...sites, ...spots, ...wrecks, ...STORY_WRECKS.map(storyWreckStock)];
 }
 
 // A story wreck's fixed stock. It rolls nothing, so world creation draws the same numbers with it as without.
-function storyStock(w: StoryWreck): SalvageStock {
+function storyWreckStock(w: StoryWreck): SalvageStock {
   const part = partWithId(w.part.id, w.part.defId, w.part.wear);
   return { id: w.id, pos: { ...w.pos }, radius: w.r * RULES.wreckRadiusScale, goods: { ...w.goods }, parts: [part], fuel: w.fuel, supplies: w.supplies };
+}
+
+// A story wreck's stock, which every world holds from creation. Throws when it is missing.
+export function storyStock(world: World, id: string): SalvageStock {
+  const stock = world.salvage.find((s) => s.id === id);
+  if (!stock || !isStoryWreck(stock)) throw new Error(`No story wreck stock ${id}`);
+  return stock;
 }
 
 // A wreck placed by hand for a story, see STORY_WRECKS. It never refills and is never cleared.

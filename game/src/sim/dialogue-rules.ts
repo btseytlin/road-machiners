@@ -4,6 +4,7 @@
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { TRADE_TIP } from '../data/npcs';
 import { PERK_NUMBERS } from '../data/skills';
+import { WAGON_SEVEN } from '../data/salvage';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
@@ -13,7 +14,8 @@ import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './marke
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
 import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
-import { hasCargo, hasSalvage, isStoryWreck } from './salvage';
+import { hasCargo, hasSalvage, isStoryWreck, storyStock } from './salvage';
+import { holdsNote, learnNote } from './notes';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
@@ -256,6 +258,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   aidGiven: (_world, _npc, vars) => answerOf(vars) === 'give',
   aidRefused: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   offersAid: (world, npc) => pendingAid(world, npc) !== null,
+  heardWagonNearby: (world, npc) => holdsNote(world, 'wagonBowl') && dist(npc.pos, storyStock(world, WAGON_SEVEN).pos) <= PERK_NUMBERS.rumorMill.radius,
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -365,6 +368,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     agreeAid(world, npc, { giver, fuel, supplies, price, free });
   },
   refuseAidOffer: (world, npc) => refuseAid(world, npc),
+  noteWagonRoad: (world) => learnNote(world, 'wagonRoad'),
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };

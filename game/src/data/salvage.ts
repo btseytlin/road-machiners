@@ -115,13 +115,16 @@ export type StoryWreck = {
   part: { id: string; defId: string; wear: number };
 };
 
+// The id of wagon Seven, the wreck the locals' clue chain leads to.
+export const WAGON_SEVEN = 'story-wagon-seven';
+
 export const STORY_WRECKS: StoryWreck[] = [
   // Wagon Seven, a Nose Army gunwagon raiders ran off the Pump Station track on its way to Bowl. It lies in a shallow
   // hollow south of an old farm with a water tower, about 49 tiles off the Bowl north road and 68 off the Pump Station
   // track, so neither road shows it. Its load is about one good convoy roll: the convoy table's highs in scrap,
   // meds and fuel, a parts unit, a crew's supplies, and the spare cannon an Army wagon carries, worn halfway.
   {
-    id: 'story-wagon-seven',
+    id: WAGON_SEVEN,
     pos: { x: 171, y: 381 },
     r: 0.8,
     chassisId: 'wagon',
