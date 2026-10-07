@@ -257,8 +257,19 @@ const TOWER_R = 0.6;
 // map y. A ruin has settled a little, and its spot lies a little off its authored place.
 const ALONG_X = 0;
 const ALONG_Y = Math.PI / 2;
-const compound = (x: number, y: number, turn: number) => ({ at: { x, y }, r: COMPOUND_R, turn, shoulder: false });
-const tower = (x: number, y: number, yaw: number): HullPiece => ({ look: 'watchtower', at: { x, y }, yaw, r: TOWER_R });
+// The town is spread √5 times wider round the centre than the concept draws it, so Glass Flats covers five times the
+// concept's ground and its roads, ruins, towers and patches stand far apart across wide glass fields. Every position
+// below is in the concept's tiles and goes through wide, except the engine's: its pieces, its caches, the crossroads
+// before its mouth and the nook by its west feet keep the concept's shape.
+const SPREAD = Math.sqrt(5);
+const wide = (x: number, y: number): Vec => ({ x: x * SPREAD, y: y * SPREAD });
+const compound = (x: number, y: number, turn: number) => ({ at: wide(x, y), r: COMPOUND_R, turn, shoulder: false });
+// A tower at concept tiles (x, y) beside the compound at (cx, cy) keeps its offset from that compound, so it stays at
+// the compound's corner.
+const tower = (cx: number, cy: number, x: number, y: number, yaw: number): HullPiece => {
+  const c = wide(cx, cy);
+  return { look: 'watchtower', at: { x: c.x + x - cx, y: c.y + y - cy }, yaw, r: TOWER_R };
+};
 // The loose broken walls and junk of an outer patch, round its one dead truck.
 const RUINS: DebrisRule[] = [
   { look: 'scrapWall', count: 2, radius: [0.85, 1] },
@@ -270,7 +281,10 @@ const ENGINE_DEBRIS: DebrisRule[] = [
   { look: 'scrapWall', count: 1, radius: [0.85, 1] },
 ];
 // The crossroads before the engine mouth, where the four inner roads meet: concept pixels (697, 342).
-const CROSSROADS: [number, number] = [2.5, 0.5];
+const CROSSROADS: Vec = { x: 2.5, y: 0.5 };
+// A dirt road of the spread town: a point given as [x, y] is in concept tiles and goes through wide, a Vec stays.
+const townRoad = (width: number, points: (Vec | [number, number])[]): FarmRoad =>
+  dirt(width, points.map((p) => (Array.isArray(p) ? wide(p[0], p[1]) : p)));
 
 export const TERRITORIES: Record<string, TerritoryRules> = {
   'fallen-sun': {
@@ -838,15 +852,15 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // The collapsed frame, feet at (685,130) and (995,205) round a footprint centre at (838,159), yawed -0.75 so its
         // arches span its length as in the concept (tmp/models/engine_frame/asset-brief.md).
         { look: 'engineFrame', at: { x: -1.5, y: -8.5 }, yaw: -0.75, r: FRAME_R },
-        // Watchtowers at the concept's eight, each at a corner of its compound, off the roads.
-        tower(-5.5, -11, 0.1), // (796,67), moved 4.5 tiles north-east from (615,75) off the north-west lane, by the frame's west end
-        tower(-14.5, 1.5, -0.2), // (187,116), moved 4 tiles north from (115,175) off the west road
-        tower(-12.5, 7.3, 0.3), // (79,232), moved from (255,200) to compound A's north-west corner, off the west road
-        tower(-14.5, -4.2, 0), // (349,36), moved 5 tiles west from (440,120) to the back compound's north-west corner, off the north-west lane
-        tower(-1.6, -14.1, 0.15), // (994,78), moved from (1100,100) off the north compound to its corner
-        tower(8.8, -12.5, -0.1), // (1242,248), moved from (1005,250) off the north road to the east compound's north-west corner
-        tower(8.4, 4.9, 0.2), // (739,488), moved from (925,370) to compound B's south-west corner, south of the east road
-        tower(-0.8, 13.9, -0.15), // (224,492), moved from (640,550) west across the south road to the south compound's corner
+        // Watchtowers at the concept's eight: one by the engine, the rest each at a corner of its compound, off the roads.
+        { look: 'watchtower', at: { x: -5.5, y: -11 }, yaw: 0.1, r: TOWER_R }, // (796,67), moved 4.5 tiles north-east from (615,75), by the frame's west end
+        tower(-10.5, 0.5, -14.5, 3.5, -0.2), // (187,116), moved from (115,175) to the back compound's south-west corner
+        tower(-9, 9.8, -12.5, 7.3, 0.3), // (79,232), moved from (255,200) to compound A's north-west corner
+        tower(-13.3, -8.8, -15, -4.8, 0), // (349,36), moved from (440,120) to the top-left compound's south corner
+        tower(2.1, -18, -1.6, -15.5, 0.15), // (994,78), moved from (1100,100) off the north compound to its corner
+        tower(11.5, -8.5, 8.8, -12.5, -0.1), // (1242,248), moved from (1005,250) to the east compound's north-west corner
+        tower(12, 2.5, 8.4, 4.9, 0.2), // (739,488), moved from (925,370) to compound B's south-west corner
+        tower(2.2, 10.8, -0.8, 13.9, -0.15), // (224,492), moved from (640,550) to the south compound's corner
       ],
       // The rich loot lies in the engine, where sight is short.
       caches: [
@@ -863,15 +877,18 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       cacheTable: 'engineScrap',
       cacheRadius: 0.7,
       patches: [
-        // Five outer patches, each with a dead truck and broken walls, inferred from the setting image's ruins and
-        // vehicles out to the edge: north-east, east past the scarp, south, south-west and north-west.
-        { at: { x: 20, y: -22 }, radius: 6, debris: RUINS, spots: 1 },
-        { at: { x: 26, y: -3 }, radius: 6, debris: RUINS, spots: 1 },
-        { at: { x: 1, y: 26 }, radius: 6, debris: RUINS, spots: 1 },
-        { at: { x: -20, y: 19 }, radius: 6, debris: RUINS, spots: 1 },
-        { at: { x: -24, y: -13 }, radius: 6, debris: RUINS, spots: 1 },
+        // Outer patches, each with a dead truck and broken walls, inferred from the setting image's ruins and vehicles
+        // out to the edge: north-east, east, south, south-west and north-west, then two in the wide north-east, east
+        // of S2's lane and north under the cliffs.
+        { at: wide(18, -27), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(26, -3), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(1, 22), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(-20, 19), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(-19, -12), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(30, -17), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(9, -36), radius: 8, debris: RUINS, spots: 1 },
         // One inner patch by the engine (inferred: the concept's loose plates and walls round the engine pieces), north
-        // of the frame's west end: the one open ground near the engine between the pieces, the compounds and the roads.
+        // of the frame's west end.
         { at: { x: -5, y: -15 }, radius: 4.5, debris: ENGINE_DEBRIS, spots: 0 },
       ],
       spotLook: 'deadTruck',
@@ -887,16 +904,17 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
           poses: [
             // A, the compound with the tarp (290,290), moved 4.7 tiles south-west from (-6.5,5.8) across the west road.
             compound(-9, 9.8, ALONG_Y),
-            // Behind the nozzle (380,175), moved 2 tiles west from (-9,0.2) off the nozzle's back.
-            compound(-10.5, -1.5, ALONG_X),
+            // Behind the nozzle (380,175), moved 1.5 tiles west from (-9,0.2) off the nozzle's back, toward the west road.
+            compound(-10.5, 0.5, ALONG_X),
             // In front of the nozzle (545,295): the concept's (-1.9,1.5) lies on the nozzle, so it stands 9 tiles south
             // across the west road.
             compound(-3.5, 10.5, ALONG_X),
-            // Top left (400,40), moved 3.3 tiles south from (-13.4,-4.9) between the ring road and the north-west lane.
-            compound(-12.8, -8.2, ALONG_Y),
-            // Top right (1110,120): the concept's (1.9,-14.7) touches the frame's east feet, so it stands 2 tiles north,
-            // off the north road.
-            compound(2.1, -16.6, ALONG_X),
+            // Top left (400,40), moved 4 tiles south from (-13.4,-4.9) between the ring road and the north-west lane, onto
+            // flat ground.
+            compound(-13.3, -8.8, ALONG_Y),
+            // Top right (1110,120): the concept's (1.9,-14.7) touches the frame's east feet, so it stands 3.3 tiles north,
+            // off the north road and the bumps there.
+            compound(2.1, -18, ALONG_X),
             // Right of the frame (1000,260), moved 6.6 tiles east from (4.9,-7.8) off the frame's feet and the north road.
             compound(11.5, -8.5, ALONG_Y),
             // B (940,430), moved 3.7 tiles south-east from (9.9,-0.7) across the east road, clear of the pit's steep sides
@@ -906,10 +924,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
             // road.
             compound(2.2, 10.8, ALONG_Y),
             // Three outer compounds past the ring road, inferred from the setting image's ruins out to the edge: west,
-            // north and south-east.
-            compound(-26, 2, ALONG_Y),
+            // north and south-west, where the south-east edge leaves no room and the south has a cliff.
+            compound(-23, 2, ALONG_Y),
             compound(4, -26.3, ALONG_X),
-            compound(14, 24, ALONG_Y),
+            compound(-10.5, 20, ALONG_Y),
           ],
         },
       ],
@@ -924,40 +942,33 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // The four roads from the crossroads: west past the nozzle's south side between it and compound A, the concept's
         // track along (144,136)-(560,352); north between the nozzle's mouth and the frame's east feet; east, the
         // concept's track to the right edge; and south.
-        dirt(LANE, [CROSSROADS, [0, 5], [-10, 5.5], [-16.5, 5]]),
-        dirt(LANE, [CROSSROADS, [5, -6], [6.5, -12], [7, -21.5]]),
-        dirt(LANE, [CROSSROADS, [9, -2], [16, -5]]),
-        dirt(LANE, [CROSSROADS, [6.5, 7], [6.5, 16.6]]),
-        // The ring road, clockwise from the east, about 16 to 21 tiles out. Its east side keeps west of the east scarp
-        // at 18-21 tiles and east of the pit at (10-12, 6-8).
-        dirt(RING, [[16, -5], [16.5, -9], [13, -18.5], [7, -21.5], [-5, -20.5], [-12, -17], [-17.5, -11.5], [-19, -2], [-16.5, 5], [-13.5, 13], [-5, 17.5], [3.5, 18], [11, 14.5], [17.4, 10], [17.2, 4], [16, -5]]),
+        townRoad(LANE, [CROSSROADS, [0, 5], [-10, 5.5], [-16.5, 5]]),
+        townRoad(LANE, [CROSSROADS, [5, -6], [6.5, -12], [7, -21.5]]),
+        townRoad(LANE, [CROSSROADS, [9, -2], [16, -5]]),
+        townRoad(LANE, [CROSSROADS, [6.5, 7], [6.5, 16.6]]),
+        // The ring road, clockwise from the east, about 36 to 47 tiles out.
+        townRoad(RING, [[16, -5], [16.5, -9], [13, -18.5], [7, -21.5], [-5, -20.5], [-12, -17], [-17.5, -11.5], [-19, -2], [-16.5, 5], [-13.5, 13], [-5, 17.5], [3.5, 18], [11, 14.5], [17.4, 10], [17.2, 4], [16, -5]]),
         // The north-west lane, from the ring between the north-west compound and the frame to the nook by the frame's
         // west feet, where the third cache lies.
-        dirt(LANE, [[-12, -17], [-8.5, -10], [-8.5, -5.5]]),
+        townRoad(LANE, [[-12, -17], { x: -8.5, y: -10 }, { x: -8.5, y: -5.5 }]),
         // From S1's end at the south-east edge in to the ring's south-east corner.
-        dirt(LANE, [GLASS_FLATS_ENDS[0], [16, 18.5], [11, 14.5]]),
-        // From S2's end at the east-north-east edge round the north end of the east scarp to the ring's north-east
-        // corner.
-        dirt(LANE, [GLASS_FLATS_ENDS[1], [22, -18.5], [13, -18.5]]),
+        townRoad(LANE, [GLASS_FLATS_ENDS[0], [11, 14.5]]),
+        // From S2's end at the north-east edge, south of the north-east patch, to the ring's north-east corner.
+        townRoad(LANE, [GLASS_FLATS_ENDS[1], [13, -18.5]]),
       ],
-      // Spurs out past the edge into the wasteland, as the setting image's tracks leave outward (inferred): west toward
-      // the Kiln Camp track, between the two arms of the old asphalt road west of the edge, so raiders have a way in, and
-      // north past the cliffs.
-      spurs: [
-        dirt(LANE, [[-19, -2], [-30, -3], [-40, -4]]),
-        dirt(LANE, [[-5, -20.5], [-7, -30], [-9, -40]]),
-      ],
+      // A spur out past the edge into the wasteland, as the setting image's tracks leave outward (inferred), in tiles
+      // from the centre: south-west into the scrub between Kiln Camp and Green Pit, so raiders have a way in.
+      spurs: [dirt(LANE, [wide(-13.5, 13), [-60, 40], [-82, 55]])],
       spurFade: 5,
       decks: [],
       landing: 0,
     },
     farm: null,
-    // Glass is thinnest in the town core, where the tracks and the clear yards round the compounds and the engine leave
-    // little open ground, and covers about two fifths of the territory. The cover share is highest at the centre so
-    // that the core keeps about a quarter of its tiles glass, a third of its ground off the tracks, as concept 1 shows
-    // (V1 measured 25% after an earlier 0.3-to-0.6 share gave 8%). Cells of 6 tiles give fields as wide as the
-    // concept's. Spires of 0.6 to 1.2 tiles stand big and small as its pyramids do; 85 put 8 in the zoom-1 core view.
-    glass: { cell: 6, cover: [0.72, 0.6], clear: 1, spires: { look: 'glassSpire', count: 85, radius: [0.6, 1.2] } },
+    // Glass covers about two fifths of the territory, five times the glass of the territory before it was spread. The
+    // cover share is highest at the centre, where the tracks and the clear yards round the compounds and the engine
+    // leave less open ground. Cells of 6 tiles give fields as wide as the concept's. Spires of 0.6 to 1.2 tiles stand
+    // big and small as its pyramids do; 85 put 8 in the zoom-1 core view before the spread, so 425 keep that density.
+    glass: { cell: 6, cover: [0.55, 0.45], clear: 1, spires: { look: 'glassSpire', count: 425, radius: [0.6, 1.2] } },
     spotGap: 6,
     debrisGap: 1.5,
     reactor: null,

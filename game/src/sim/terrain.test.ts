@@ -180,7 +180,7 @@ describe("terrain grid", () => {
     // S1 is one straight piece from the south road's junction, which keeps the links through it.
     expect(s1).toHaveLength(2);
     expect(dist(s1[0], { x: 440, y: 420 })).toBeLessThan(0.01);
-    expect(dist(s2[0], { x: 465, y: 350 })).toBeLessThan(0.01);
+    expect(dist(s2[0], { x: 485, y: 310 })).toBeLessThan(0.01);
     for (const road of entering) {
       expect(REGION.roads.some((other) => other !== road && other.some((p) => dist(p, road[0]) < 0.01))).toBe(true);
       const firstInside = road.findIndex((p) => siteGap(flats, p) < 0);

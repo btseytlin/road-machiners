@@ -31,6 +31,10 @@ export type TerrainType = {
   speed: number;
   wear: number; // multiplies part wear per tile driven
   dust: number; // multiplies the range a moving truck's dust trail is seen from
+  grip: number; // multiplies tire grip along the wheel: 1 holds the road, less spins and brakes late
+  // Multiplies tire grip across the wheel: 1 holds the line, less lets a turning truck skid sideways. A truck skids
+  // when side grip is low and grip along the wheel is not, since the wheels still push it round the turn.
+  sideGrip: number;
   color: number;
   craters: boolean; // whether an exploding round leaves a crater here; false on water
   rut: number; // 0..1 darkness of the tire marks a truck leaves here; 0 leaves none
@@ -38,36 +42,37 @@ export type TerrainType = {
 
 // The order is the map file's type codes (TYPE_IDS in src/sim/terrain.ts): a reorder or removal bumps its VERSION.
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a, craters: true, rut: 0 },
-  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676, craters: true, rut: 0.5 },
-  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c, craters: true, rut: 0.8 },
-  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66, craters: true, rut: 0.6 },
-  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78, craters: true, rut: 0.2 },
-  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044, craters: true, rut: 1 },
-  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489, craters: true, rut: 0.3 },
-  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba, craters: true, rut: 0.5 },
-  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b, craters: true, rut: 0 },
-  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a, craters: true, rut: 0.8 },
+  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa8865a, craters: true, rut: 0 },
+  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xc8a676, craters: true, rut: 0.5 },
+  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, grip: 1, sideGrip: 1, color: 0xdcc08c, craters: true, rut: 0.8 },
+  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, grip: 1, sideGrip: 1, color: 0xa89a66, craters: true, rut: 0.6 },
+  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, grip: 1, sideGrip: 1, color: 0x9a8a78, craters: true, rut: 0.2 },
+  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 1, color: 0x665044, craters: true, rut: 1 },
+  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, grip: 1, sideGrip: 1, color: 0x9e9489, craters: true, rut: 0.3 },
+  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, grip: 1, sideGrip: 1, color: 0xe0d8ba, craters: true, rut: 0.5 },
+  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0x55565b, craters: true, rut: 0 },
+  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, grip: 1, sideGrip: 1, color: 0x77737a, craters: true, rut: 0.8 },
   // Dead fields: dry furrowed dirt. Furrows slow a truck like scrub and shake it a little more than
   // hardpan, and the tilled dirt throws more dust than hardpan.
-  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a, craters: true, rut: 0.8 },
+  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, grip: 1, sideGrip: 1, color: 0x8e6e4a, craters: true, rut: 0.8 },
   // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
   // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
-  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a, craters: false, rut: 0 },
-  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c, craters: false, rut: 0 },
+  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 1, color: 0x55583a, craters: false, rut: 0 },
+  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, grip: 1, sideGrip: 1, color: 0x9aa83c, craters: false, rut: 0 },
   // Dirt tracks: hardpan packed pale by wheels, the farm tracks of the Old Orchard. It drives like hardpan and only
   // looks paler than both hardpan and sand, so the tracks read from the camera.
-  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458, craters: true, rut: 0 },
+  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xa88458, craters: true, rut: 0 },
   // Irrigation canals: shallow water in a concrete channel, the Old Orchard's canals. A truck in one drags and wears
   // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools.
-  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a, craters: false, rut: 0 },
+  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 1, color: 0x5f6f7a, craters: false, rut: 0 },
   // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
   // their pale grey shows the slab apart from the dark road, as in the concept.
-  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94, craters: true, rut: 0 },
+  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa39e94, craters: true, rut: 0 },
   // Fused glass: sand melted flat into plates by a crashed ship's engine, at Glass Flats. Smooth plates roll nearly as
-  // fast as salt crust and wear parts like it, less than hardpan, with little loose dust. Its pale teal-grey shows
-  // the plates apart from the ochre sand and from the darker olive water.
-  glass: { id: "glass", name: "Fused glass", speed: 0.95, wear: 0.8, dust: 0.3, color: 0x86ada3, craters: true, rut: 0.1 },
+  // fast as salt crust and wear parts like it, less than hardpan, with little loose dust. Tires barely bite on it, so
+  // trucks slide, brake late and turn wide. Its pale teal-grey shows the plates apart from the ochre sand and from the
+  // darker olive water.
+  glass: { id: "glass", name: "Fused glass", speed: 0.95, wear: 0.8, dust: 0.3, grip: 0.2, sideGrip: 0.03, color: 0x86ada3, craters: true, rut: 0.1 },
 };
 
 // A deck station: a map point on the deck's axis and the deck line's rise there, in height units over the ground.

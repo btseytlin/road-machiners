@@ -175,31 +175,48 @@ function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Ve
 // docs/concepts/glass-flats-game-style-issue-112.jpg (TERRITORIES['glass-flats'] in src/data/territory.ts). The centre is
 // the crossroads ground before the engine mouth, on open roadless land of sand, gravel, hardpan and scrub.
 export const GLASS_FLATS_POS = scalePoint({ x: 81, y: 75.6 });
-// Glass Flats' edge, in tiles from its centre: 16 points about 34 tiles out, each [bearing in degrees from map east
-// toward south, distance in tiles]. It is pulled in where cliffs or old roads stand on the 34-tile circle, so they stay
-// outside.
+// Glass Flats' edge, in tiles from its centre: 32 points, each [bearing in degrees from map east toward south, distance
+// in tiles]. It fills the land between the region roads round it, Kiln Camp, Green Pit and the Salvage Yard, about 5
+// tiles short of each road's edge and 8 past each site's. The centre lies south-west of that land's middle, so the
+// edge runs 47 tiles out to the south-east and 95 to the north-east.
 const GLASS_FLATS_OUTLINE: Vec[] = [
-  [0, 34], // east: hardpan and gravel past the east scarp, 9 tiles short of the Salvage Yard road
-  [22.5, 34],
-  [45, 34], // south-east: scrub between the south road and the scarp's south end
-  [67.5, 34], // the open south
-  [90, 34],
-  [112.5, 34],
-  [135, 34], // south-west: scrub
-  [157.5, 34],
-  [180, 33], // west: sand and hardpan, a tile short of the old asphalt road west of it
-  [-157.5, 33],
-  [-135, 33], // north-west: scrub past the north-west scarps
-  [-112.5, 32],
-  [-90, 30], // north: pulled in off the cliffs at 33-37 tiles
-  [-67.5, 32],
-  [-45, 34], // north-east: hardpan
-  [-22.5, 34], // east-north-east: gravel, where S2 comes in
+  [0, 71], // east: toward the south road's bend north to Canyon Bridge
+  [11.25, 61],
+  [22.5, 56],
+  [33.75, 51],
+  [45, 47], // south-east: the south road, where S1 leaves its junction
+  [56.25, 48],
+  [67.5, 49],
+  [78.75, 55],
+  [90, 67], // south: the south road
+  [101.25, 76],
+  [112.5, 78],
+  [123.75, 66], // Green Pit
+  [135, 78],
+  [146.25, 90], // south-west: open scrub between Green Pit and Kiln Camp
+  [157.5, 80],
+  [168.75, 68],
+  [180, 60], // west: Kiln Camp and the west road
+  [-168.75, 58],
+  [-157.5, 59],
+  [-146.25, 60],
+  [-135, 58], // north-west: the west road
+  [-123.75, 62],
+  [-112.5, 74],
+  [-101.25, 86],
+  [-90, 95], // north: over the cliffs, short of the Salvage Yard
+  [-78.75, 95],
+  [-67.5, 95],
+  [-56.25, 95],
+  [-45, 95], // north-east: the Salvage Yard road, where S2 comes in
+  [-33.75, 95],
+  [-22.5, 95],
+  [-11.25, 83],
 ].map(([deg, r]) => ({ x: r * Math.cos((deg * Math.PI) / 180), y: r * Math.sin((deg * Math.PI) / 180) }));
 // Glass Flats' two approaches, each straight from a region road point toward the centre to just inside the edge, where
 // the dirt road web takes over. S1 leaves the south road's junction, S2 the Salvage Yard road.
 const GLASS_FLATS_S1 = scalePoint({ x: 88, y: 84 });
-const GLASS_FLATS_S2 = scalePoint({ x: 93, y: 70 });
+const GLASS_FLATS_S2 = scalePoint({ x: 97, y: 62 });
 const GLASS_FLATS_APPROACHES: Vec[][] = [GLASS_FLATS_S1, GLASS_FLATS_S2].map((from) => [from, edgePoint(from, GLASS_FLATS_POS, GLASS_FLATS_POS, GLASS_FLATS_OUTLINE)]);
 // Where S1 and S2 end, in tiles from the centre, so the web's lanes start there.
 export const GLASS_FLATS_ENDS: Vec[] = GLASS_FLATS_APPROACHES.map(([, end]) => ({ x: end.x - GLASS_FLATS_POS.x, y: end.y - GLASS_FLATS_POS.y }));
@@ -469,11 +486,13 @@ export const REGION = {
       { x: 48, y: 61 },
       { x: 43, y: 54 },
     ]),
+    // The Salvage Yard road runs south-east to the south road's bend north to Canyon Bridge, round Glass Flats' east
+    // edge, not south through the land Glass Flats covers.
     scaleRoad([
       { x: 82, y: 49 },
       { x: 90, y: 56 },
-      { x: 93, y: 70 },
-      { x: 88, y: 84 },
+      { x: 97, y: 62 },
+      { x: 103, y: 70 },
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     // The orchard's spur ends at the south end of its old road, just inside the edge.
@@ -490,9 +509,8 @@ export const REGION = {
     scaleRoad([{ x: 43, y: 54 }, { x: 40.7, y: 51.7 }], [0]),
     scaleRoad([{ x: 82, y: 49 }, { x: 82, y: 52.2 }], [0]),
     // Two approaches into Glass Flats, neither through it. S1, the south-east approach, is a 2-point spur from the
-    // south road's junction, which keeps the links to Green Pit, Canyon Bridge and the Salvage Yard through the
-    // junction. S2, the north-east approach, comes from the Salvage Yard road to the edge facing it, north of the east
-    // scarp, so it needs no bend.
+    // south road's junction. S2, the north-east approach, comes from the Salvage Yard road's middle point to the edge
+    // facing it, so it needs no bend.
     ...GLASS_FLATS_APPROACHES,
     // Dead-end tracks lead to the raider camps.
     scaleRoad([

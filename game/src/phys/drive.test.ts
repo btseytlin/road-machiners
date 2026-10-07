@@ -10,12 +10,14 @@ import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../si
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
+import { TERRAIN_TYPES } from '../data/terrain';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
+import type { VehicleFrame } from './frames';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
@@ -242,6 +244,79 @@ describe('physics turns', () => {
 
     it('a player at driving rank 5 covers more mud than at rank 0', () => {
       expect(me(mudSkill5).pos.x).toBeGreaterThan(me(mudSkill0).pos.x);
+    });
+  });
+
+  describe('glass grip', () => {
+    const SPEED = 6; // tiles per turn, in the middle of a truck's range
+
+    // A truck at speed on one ground type, given one order, played for some turns.
+    function onGround(type: 'sand' | 'glass', order: MoveOrder, turns: number): World {
+      const w = emptyWorld({ x: 20, y: 40 });
+      editableTerrain(w).types.fill(type);
+      w.vehicles[0].speed = SPEED;
+      const { w: after, d } = play(setMoveOrder(w, order), turns);
+      freeDrive(d);
+      return after;
+    }
+
+    it('only glass has less than full grip', () => {
+      const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1 || t.sideGrip !== 1).map((t) => t.id);
+      expect(slippery).toEqual(['glass']);
+    });
+
+    // The mean angle in degrees between where the truck moves and where its nose points, over the moving steps of
+    // a turn: how far it skids sideways.
+    function meanSkid(type: 'sand' | 'glass'): number {
+      let w = emptyWorld({ x: 20, y: 40 });
+      editableTerrain(w).types.fill(type);
+      w.vehicles[0].speed = SPEED;
+      w = setMoveOrder(w, { kind: 'through', dest: { x: 30, y: 70 } });
+      let d = buildDrive(w);
+      const frames: VehicleFrame[] = [];
+      for (let i = 0; i < 3; i++) {
+        let next: Drive | null = null;
+        w = endTurn(w, physicsMove(d, (r) => {
+          next = r.next;
+          frames.push(...r.frames[w.vehicles[0].id]);
+        }));
+        freeDrive(d);
+        d = next!;
+      }
+      freeDrive(d);
+      const skids = frames.slice(1).flatMap((f, i) => {
+        const [a, b, q] = [frames[i].pos, f.pos, f.rot];
+        if (Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond < 2) return [];
+        const nose = Math.atan2(2 * (q.x * q.z - q.w * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+        return [Math.abs(angleDiff(Math.atan2(b.z - a.z, b.x - a.x), nose)) * (180 / Math.PI)];
+      });
+      return skids.reduce((s, x) => s + x, 0) / skids.length;
+    }
+
+    it('a turning truck skids sideways on glass and holds its line on sand', () => {
+      expect(meanSkid('sand')).toBeLessThan(3);
+      expect(meanSkid('glass')).toBeGreaterThan(10);
+    });
+
+    it('a braking truck slides further on glass than on sand', () => {
+      const sand = onGround('sand', { kind: 'brake' }, 1);
+      const glass = onGround('glass', { kind: 'brake' }, 1);
+      expect(me(glass).pos.x - 20).toBeGreaterThan((me(sand).pos.x - 20) * 1.5);
+      expect(me(glass).speed).toBeGreaterThan(me(sand).speed);
+    });
+
+    it('a truck turns wider on glass than on sand with the same click', () => {
+      const click: MoveOrder = { kind: 'through', dest: { x: 20, y: 80 } }; // square to its heading, so it must curve
+      const sand = onGround('sand', click, 1);
+      const glass = onGround('glass', click, 1);
+      expect(Math.abs(angleDiff(me(glass).heading, Math.PI / 2))).toBeGreaterThan(Math.abs(angleDiff(me(sand).heading, Math.PI / 2)));
+    });
+
+    it('a truck sent to a point on glass still arrives and stops', () => {
+      const dest = { x: 60, y: 40 };
+      const after = onGround('glass', { kind: 'stopAt', dest }, 14); // it brakes gently, so the stop takes more turns than on sand
+      expect(dist(me(after).pos, dest)).toBeLessThan(RULES.arriveRadius * 2);
+      expect(me(after).speed).toBeLessThan(0.5);
     });
   });
 

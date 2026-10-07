@@ -7,7 +7,6 @@ import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
 import { bridgeCut, deckAt } from "../sim/bridge";
 import { isTerritory, siteGap } from "../sim/sites";
-import type { Terrain } from "../sim/terrain";
 import { territoryRoads } from "../sim/territory";
 import { dist, type Vec } from "../sim/vec";
 import type { PaintCanvas } from "./groundPaint";
@@ -36,18 +35,15 @@ const STONE_SHARE = 0.012; // share of detail pixels that are loose stones
 
 export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
-// The mask's channels: red for region roads, green for the dirt roads of every wreck territory, blue for fused glass
-// tiles. Each road channel is the stroked road on black, so the shader can tell a region road from a dirt road where
-// they meet.
+// The mask's channels: red for region roads, green for the dirt roads of every wreck territory. Each channel is the
+// stroked road on black, so the shader can tell a region road from a dirt road where they meet.
 export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
-export const GLASS_STYLE = "#00f";
 
 // Strokes every road on black and blurs it. Region roads stop at site edges, where pads take over, and at Canyon
 // Bridge, whose deck is its own model. Dirt roads run inside their territory and stop at decks too. The lighten mode
-// keeps the larger value of each channel, so the channels never paint over each other. Glass tiles of terrain `t` go
-// in last and unblurred, so the shader draws plate edges on the tile edges, as the ground paint does.
-export function paintRoadMask(c: PaintCanvas, t: Terrain): void {
+// keeps the larger value of each channel, so the two channels never paint over each other.
+export function paintRoadMask(c: PaintCanvas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
@@ -69,28 +65,7 @@ export function paintRoadMask(c: PaintCanvas, t: Terrain): void {
     for (const spur of spurs) strokeSpur(c, spur, fade);
   }
   ctx.filter = "none";
-  paintGlass(c, t);
   ctx.globalCompositeOperation = "source-over";
-}
-
-// Fills each row's runs of glass tiles in the blue channel, one rectangle per run.
-function paintGlass(c: PaintCanvas, t: Terrain): void {
-  c.ctx.fillStyle = GLASS_STYLE;
-  for (let y = 0; y < t.size; y++)
-    for (const [from, to] of glassRuns(t, y)) c.ctx.fillRect(c.toPx(from), c.toPx(y), (to - from) * c.res, c.res);
-}
-
-// The runs of glass tiles in row y, each as its first tile and the tile after its last.
-function glassRuns(t: Terrain, y: number): [number, number][] {
-  const glass = (x: number) => x < t.size && t.types[y * t.size + x] === "glass";
-  const runs: [number, number][] = [];
-  for (let x = 0; x < t.size; x++) {
-    if (!glass(x)) continue;
-    const from = x;
-    while (glass(x)) x++;
-    runs.push([from, x]);
-  }
-  return runs;
 }
 
 // Strokes the runs as one path at full strength, `width` tiles across.

@@ -234,7 +234,6 @@ type TileLook = {
   color: Int32Array;
   desert: Float32Array;
   shade: Float64Array;
-  glass: Uint8Array; // 1 on fused glass tiles
   broad: CellNoise;
   fine: CellNoise;
   patch: CellNoise;
@@ -246,15 +245,13 @@ function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const color = new Int32Array(count);
   const desert = new Float32Array(count);
   const shadeBy = new Float64Array(count);
-  const glass = new Uint8Array(count);
   const look = lookTypes(t);
   for (let i = 0; i < count; i++) {
-    glass[i] = t.types[i] === "glass" ? 1 : 0;
     color[i] = paintColor(t.types[i]);
-    desert[i] = desertWeight(look[i]);
+    desert[i] = desertWeight(look[i] === "glass" ? "hardpan" : look[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
-  return { t, color, desert, shade: shadeBy, glass, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
+  return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
 }
 
 // valueNoise that keeps the corner hashes of the last lattice cell. Neighbouring pixels share a cell, so most
@@ -307,8 +304,7 @@ function tileIndex(size: number, x: number, y: number): number {
   return j * size + i;
 }
 
-// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled. Glass edges stay ruled,
-// see keepGlassEdge().
+// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
 function typeColor(look: TileLook, cell: Cell): number {
   const a = look.color[cell.a];
   const b = look.color[cell.b];
@@ -357,19 +353,7 @@ function jittered(look: TileLook, x: number, y: number): Cell {
   cell.d = tileIndex(size, i + 1.5, j + 1.5);
   cell.fx = jx - i;
   cell.fy = jy - j;
-  keepGlassEdge(look, cell, tileIndex(size, x, y));
   return cell;
-}
-
-// Fused glass takes no type jitter or blend: plates have hard edges. A corner on the other side of a glass edge from
-// the pixel's own tile takes the own tile's place, so glass never bleeds into the ground beside it, nor that ground
-// into the glass. The ground shader draws its plates over the same tile edges, see three/render/roads.ts.
-function keepGlassEdge(look: TileLook, cell: Cell, own: number): void {
-  const g = look.glass[own];
-  if (look.glass[cell.a] !== g) cell.a = own;
-  if (look.glass[cell.b] !== g) cell.b = own;
-  if (look.glass[cell.c] !== g) cell.c = own;
-  if (look.glass[cell.d] !== g) cell.d = own;
 }
 
 // Warm sand with slow deep and light patches over open desert. Patch noise near 0.5 leaves the sand as it is.
@@ -394,9 +378,10 @@ function sandChannel(color: number, sand: number, patch: number, warm: number, k
   return (warmed + ((patch & 0xff) - warmed) * k + 0.5) | 0;
 }
 
-// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
+// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge. Fused glass tiles paint
+// as hardpan too, and the shader draws the glass over them with a smooth edge that ignores the tile grid.
 function paintColor(type: TerrainTypeId): number {
-  return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
+  return TERRAIN_TYPES[type === "road" || type === "glass" ? "hardpan" : type].color;
 }
 
 function groundColor(look: TileLook, x: number, y: number): number {
@@ -484,4 +469,42 @@ function polygon(c: PaintCanvas, points: readonly Vec[], style: string): void {
   points.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
   c.ctx.closePath();
   c.ctx.fill();
+}
+
+// Fused glass field for the ground shader: how much glass lies around each tile center, 0 to 255. Tiles of glass count
+// as 1 and every other tile as 0, then a Gaussian blur rounds the outline. The shader reads it with linear filtering,
+// adds noise and draws glass where the value is above half, so a glass field has a smooth, wandering edge and not the
+// tile grid's staircase. See three/render/roads.ts.
+const GLASS_BLUR = 0.75; // tiles of blur. A one tile wide strip still peaks above half, a lone tile does not.
+const GLASS_REACH = Math.ceil(GLASS_BLUR * 3); // tiles each side of a tile that the blur reads
+
+export function glassField(t: Terrain): Uint8Array {
+  const size = t.size;
+  const kernel = gaussian();
+  const member = new Float32Array(size * size);
+  for (let i = 0; i < member.length; i++) member[i] = t.types[i] === "glass" ? 1 : 0;
+  const rows = new Float32Array(member.length);
+  blur(member, rows, size, 1, size, kernel);
+  const blurred = new Float32Array(member.length);
+  blur(rows, blurred, size, size, 1, kernel);
+  return Uint8Array.from(blurred, (v) => Math.round(v * 255));
+}
+
+// Normalized weights of the taps from -GLASS_REACH to GLASS_REACH.
+function gaussian(): Float32Array {
+  const kernel = new Float32Array(2 * GLASS_REACH + 1);
+  let sum = 0;
+  for (let k = -GLASS_REACH; k <= GLASS_REACH; k++) sum += kernel[k + GLASS_REACH] = Math.exp(-(k * k) / (2 * GLASS_BLUR * GLASS_BLUR));
+  return kernel.map((w) => w / sum);
+}
+
+// One blur pass over every line of the square. `along` is the index step inside a line and `across` the step between
+// lines. Reads past a line's end repeat its last tile, as the clamped texture does.
+function blur(from: Float32Array, to: Float32Array, size: number, along: number, across: number, kernel: Float32Array): void {
+  for (let line = 0; line < size; line++)
+    for (let i = 0; i < size; i++) {
+      let v = 0;
+      for (let k = -GLASS_REACH; k <= GLASS_REACH; k++) v += from[line * across + Math.min(Math.max(i + k, 0), size - 1) * along] * kernel[k + GLASS_REACH];
+      to[line * across + i * along] = v;
+    }
 }

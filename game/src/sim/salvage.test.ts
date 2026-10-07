@@ -783,7 +783,7 @@ describe('territory loot spots', () => {
     const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
     const spots = spotsOf(w).filter((o) => siteGap(flats, o.pos) < 0);
     const tables: Record<string, LootTable> = { hullCache: SALVAGE.engineScrap, ruinCompound: SALVAGE.cityStores, deadTruck: SALVAGE.roadWreck };
-    expect(spots).toHaveLength(19);
+    expect(spots).toHaveLength(21);
     for (const o of spots) {
       const stocks = w.salvage.filter((s) => s.id === o.id);
       expect(stocks, o.id).toHaveLength(1);
