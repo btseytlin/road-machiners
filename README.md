@@ -1,4 +1,4 @@
-![ROAM](game/public/logo/logo.png)
+![ROAM](game/public/logo/logo-cover.png)
 
 # ROAM - Road Machiners
 
