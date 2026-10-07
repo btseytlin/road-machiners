@@ -2,7 +2,7 @@
 
 The factory turns voted GitHub issues into game changes and releases. Agents design, build and test each issue, and a human committee approves the result by playing it.
 
-Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec. Its diagrams are Graphviz files in `docs/diagrams/`. Read the `.dot` source, not the `.svg`. A change to the process updates its diagram and the matching doc in the same commit. Run `npm run diagrams` after a `.dot` edit, which needs Graphviz installed. [README](README.md) lists the other docs.
+Read [docs/process.md](docs/process.md) before any factory change and before answering any question about the factory. It is the spec, and it says how to keep its diagrams in step with the code. [README](README.md) lists the other docs.
 
 ## Commands
 

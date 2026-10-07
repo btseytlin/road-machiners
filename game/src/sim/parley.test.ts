@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
 import { SALVAGE } from '../data/salvage';
 import { NPCS, type TraitId } from '../data/npcs';
-import { isHostile, noteCollision } from './combat';
+import { isHostile, noteCollision, wreckVehicle } from './combat';
+import { advanceContracts } from './market';
+import { update } from './world';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentLine, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
 import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
-import { makePeace, plead, yieldTo } from './parley';
+import { makePeace, plead, standDownTo, yieldTo } from './parley';
 import { hasCargo, lootBlocker, looterOf } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
@@ -463,6 +465,39 @@ describe('bounty talk', () => {
     const w = pick(start, 'Dump your cargo and drive off.');
     expect(w.player.contracts).toEqual([bounty]);
     expect(w.player.money).toBe(0);
+  });
+
+  // The driver gives up to the player where it stands and lies as if knocked out.
+  function standsDown(start: World, npcId: string): World {
+    return update(start, (d) => standDownTo(d, d.vehicles.find((x) => x.id === npcId)!, playerVehicle(d)));
+  }
+
+  // The player shoots the driver that gave up into a wreck on a later turn.
+  function wreckGivenUp(start: World, npcId: string): World {
+    return update(start, (d) => {
+      const v = d.vehicles.find((x) => x.id === npcId)!;
+      d.events = [];
+      v.lastHitBy = d.player.vehicleId;
+      wreckVehicle(d, v);
+      advanceContracts(d);
+    });
+  }
+
+  it('a driver that gave up without the perk pays nothing when the player then wrecks it', () => {
+    const { w: start, npc } = beggar([]);
+    const w = wreckGivenUp(standsDown(start, npc.id), npc.id);
+    expect(w.events).toContainEqual({ t: 'destroyed', vehicle: npc.id, by: w.player.vehicleId });
+    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'done')).toEqual([]);
+    expect(w.player.money).toBe(0);
+  });
+
+  it('a driver that gave up with the perk pays once, though the player then wrecks it', () => {
+    const { w: start, npc } = beggar(['bountyTalk']);
+    const gaveUp = standsDown(start, npc.id);
+    expect(gaveUp.player.money).toBe(bounty.reward);
+    const w = wreckGivenUp(update(gaveUp, (d) => { d.player.contracts = [{ ...bounty, id: 'ct-b2' }]; }), npc.id);
+    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'done')).toEqual([]);
+    expect(w.player.money).toBe(bounty.reward);
   });
 
   it('pays nothing when the player gives up', () => {

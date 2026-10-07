@@ -4,7 +4,8 @@ import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
 import { emptyWorld } from '../sim/testkit';
-import type { Obstacle, Player, Vehicle } from '../sim/types';
+import type { Obstacle, Player, Vehicle, WeatherEvent, World } from '../sim/types';
+import { stormStrength, weatherAt, weatherOn } from '../sim/weather';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -19,6 +20,10 @@ import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import FORMAT_2_13 from './save-fixtures/format-2-13.json';
+import FORMAT_2_14 from './save-fixtures/format-2-14.json';
+import FORMAT_2_15 from './save-fixtures/format-2-15.json';
+import FORMAT_2_16 from './save-fixtures/format-2-16.json';
+import FORMAT_2_17 from './save-fixtures/format-2-17.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -314,5 +319,62 @@ describe('save migration 13 to 14', () => {
   it('leaves other states alone and does not mutate its input', () => {
     expect(next.states[2]).toEqual(FORMAT_2_13.states[2]);
     expect(FORMAT_2_13).toEqual(before);
+  });
+});
+
+describe('save migration 14 to 15', () => {
+  it('keeps a defeated driver on its retreat as it is, so it lies up when it gets home', () => {
+    expect(MIGRATIONS[14](structuredClone(FORMAT_2_14))).toEqual(FORMAT_2_14);
+  });
+});
+
+describe('save migration 15 to 16', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[15](FORMAT_2_15);
+    const [shot, guard, arrived] = FORMAT_2_15.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_15,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
+  });
+});
+
+describe('save migration 16 to 17', () => {
+  const next = MIGRATIONS[16](FORMAT_2_16) as { turn: number; weather: WeatherEvent[] };
+
+  it('gives a storm a birth turn past its build-up and changes nothing else', () => {
+    expect(next).toEqual({ ...FORMAT_2_16, weather: [{ ...FORMAT_2_16.weather[0], born: 470 }, FORMAT_2_16.weather[1]] });
+  });
+
+  it('leaves a storm with a long way to go at full strength', () => {
+    const storm = next.weather[0];
+    if (storm.kind !== 'storm') throw new Error('expected the storm first');
+    expect(stormStrength(next as unknown as World, storm)).toBe(1);
+  });
+});
+
+describe('save migration 17 to 18', () => {
+  const next = MIGRATIONS[17](FORMAT_2_17) as unknown as World;
+  const shares = (id: string) => next.vehicles.find((v) => v.id === id)!.stormExposure;
+
+  it('gives each truck the share each storm has settled to where it stands, and nothing outside', () => {
+    expect(shares('v-centre')).toEqual({ wx1: 1 });
+    expect(shares('v-edge').wx1).toBeCloseTo(0.5);
+    expect(Object.keys(shares('v-edge'))).toEqual(['wx1']);
+    expect(shares('v-building').wx2).toBeCloseTo(11 / 30);
+    expect(shares('v-out')).toEqual({});
+  });
+
+  it('gives a removed truck no shares and changes nothing else', () => {
+    expect(next.removed[0].stormExposure).toEqual({});
+    const strip = (vs: Vehicle[]) => vs.map((v) => Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'stormExposure')));
+    expect({ ...next, vehicles: strip(next.vehicles), removed: strip(next.removed) }).toEqual(FORMAT_2_17);
+  });
+
+  it('loads every truck feeling exactly the settled weather where it stands', () => {
+    for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
   });
 });
