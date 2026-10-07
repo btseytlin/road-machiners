@@ -498,7 +498,7 @@ describe('botOrders', () => {
   it('has a scavenging hunter that starts stripping a spare in town stay parked for the strip', () => {
     const w = parkedAt('bowl');
     w.player.discovered = [];
-    expect(stowPart(w, playerVehicle(w), makePart(w, 'mg', 0))).toBe(true);
+    expect(stowPart(w, playerVehicle(w), makePart(w, 'scanner', 0))).toBe(true);
 
     const me = playerVehicle(botOrders(w, 'hunter').world);
 
@@ -805,7 +805,7 @@ describe('the hunter', () => {
   it('has a hunter strip a spare part for repair parts where a trader sells it', () => {
     const turnOf = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
-      expect(stowPart(w, playerVehicle(w), makePart(w, 'mg', 0))).toBe(true);
+      expect(stowPart(w, playerVehicle(w), makePart(w, 'scanner', 0))).toBe(true);
       return botOrders(w, archetype);
     };
 

@@ -60,14 +60,15 @@ type Goal = Exclude<Policy, 'markov' | 'climber'>;
 const CLIMB_GUNS = 3;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
-// Traders and scavengers earn with cargo room, so their gear never takes it.
-const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
+// Each bot buys gear for its job. Traders and scavengers earn with cargo room, so their gear never takes it. Only a
+// trader keeps the money for a load, so a hunter spends its starting money on guns.
+const CARGO_GEAR: UpgradeStyle = { job: 'carrier', skip: [], chassis: 'value', keepRoom: true, keepCapital: false };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
-  trader: CARGO_GEAR,
+  trader: { ...CARGO_GEAR, job: 'trader', keepCapital: true },
   scavenger: CARGO_GEAR,
   // A hunter keeps the chassis it starts with: a swap pays the shop's spread, and gear is where its edge comes from.
-  hunter: { skip: [], chassis: 'keep', keepRoom: false },
-  fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
+  hunter: { job: 'fighter', skip: [], chassis: 'keep', keepRoom: false, keepCapital: false },
+  fastTrader: { job: 'courier', skip: ['armor'], chassis: 'speed', keepRoom: true, keepCapital: true },
   hauler: CARGO_GEAR,
   robber: CARGO_GEAR,
   convoyRobber: CARGO_GEAR,

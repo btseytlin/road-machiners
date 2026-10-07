@@ -1,14 +1,17 @@
 // A bot's player commands: Orders runs them one after another and keeps their events, and upgradeGear is the shop
-// upgrade routine every bot shares. At any shop it takes the part or chassis that adds the most within its money above
+// upgrade routine every bot shares. At any shop it takes the part that adds the most to its job within its money above
 // the upkeep reserve, and mounts it. The parts on offer are the shop's stock and the spares the bot holds, which cost
-// nothing. A part replaces the weakest mounted part of its kind when no mount is free. Gains are in money: a part's
-// value at its wear and health, a chassis's value, or its top speed for a bot that wants speed.
+// nothing. A part replaces the weakest mounted part of its kind when no mount is free. A part that adds nothing to the
+// job score is never taken, so a fighter saves for a gun instead of buying armor. A better chassis comes only when no
+// part gains, and counts by its value, or by its top speed for a bot that wants speed.
 
 import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
+import { ECONOMY, GOODS } from '../../data/goods';
 import { startKit } from '../../data/start';
 import { partDef, PARTS, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
+import { gunsBySide, killRate, targetOf } from '../fight-odds';
 import { freeCells, goodsCount, mountedItems, type Spot } from '../grid';
 import { getLayoutError, installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
@@ -72,27 +75,31 @@ export class Orders {
   }
 }
 
-// A bot keeps its starting money working as trade capital and buys gear from profit above it, since a bot spent down
-// to the upkeep reserve cannot buy a load and starves.
-const WORKING_CAPITAL = startKit('standard').money;
-
 // Kinds no bot uses: built-in parts cannot be traded, and no bot reads a scanner.
 const NEVER: readonly PartKind[] = ['core', 'scanner'];
 
-// skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot. keepRoom
-// marks a bot that lives off its cargo: it takes no part that leaves less room for goods. A bot with chassis keep stays
-// on the chassis it has, since every swap pays the shop's spread.
+// What a bot earns by, and so what its gear must grow: a fighter by its guns, a courier by its top speed, a trader and
+// a carrier by room times speed.
+export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
+
+// job is what the bot earns by, and it takes only parts that raise the job's score. skip names the part kinds a bot
+// also leaves alone. chassis is what a better chassis means to the bot. keepRoom marks a bot that lives off its cargo:
+// it takes no part that leaves less room for goods. keepCapital marks a bot that trades: it keeps the money for a load
+// out of its gear budget, since a bot spent down to the upkeep reserve cannot buy a load and starves. A bot with
+// chassis keep stays on the chassis it has, since every swap pays the shop's spread.
 // lootRoom is the cells a bot with a fighter's gear keeps free for loot, and minSpeed the top speed it keeps for the
 // chase. A part that leaves fewer free cells, or a top speed below the lower of minSpeed and the current one, stays on
 // the shelf.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean; lootRoom?: number; minSpeed?: number };
+export type UpgradeStyle = { job: GearJob; skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean; keepCapital: boolean; lootRoom?: number; minSpeed?: number };
 
 // The footprint of the biggest part in the game. A fighter that keeps this many cells free can always take the best
 // part of a wreck it knocked out.
 export const BIGGEST_PART_CELLS = Math.max(...Object.values(PARTS).map((p) => p.w * p.h));
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
-type Option = { gain: number; cost: number; take: (o: Orders) => void };
+// gain is the change in the job score for a part, and in the chassis measure for a chassis. worth breaks a tie between
+// parts: the change in the parts' worth.
+type Option = { gain: number; worth: number; cost: number; take: (o: Orders) => void };
 // A part the bot could mount, what it costs, and how it reaches the truck or garage storage.
 type Candidate = { part: PartInstance; price: number; acquire: (o: Orders) => void };
 
@@ -104,13 +111,37 @@ export function upgradeGear(o: Orders, style: UpgradeStyle): void {
 function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   const shop = shopAt(o.world);
   if (!shop) return null;
-  const spend = o.world.player.money - getUpkeepReserve(o.me) - WORKING_CAPITAL;
+  const spend = gearBudget(o, style);
   const chassis = strongest(chassisOptions(o, style).filter((option) => option.cost <= spend));
   if (style.chassis === 'speed' && chassis) return chassis;
   const wanted = (c: Candidate) => !isJunk(c.part) && ![...NEVER, ...style.skip].includes(partDef(c.part.defId).kind);
-  const parts = candidates(o, shop).filter(wanted);
-  const options = parts.flatMap((c) => partOption(o, c, style)).filter((option) => option.cost <= spend);
-  return strongest(chassis ? [chassis, ...options] : options);
+  const score = jobScorer(o, style.job);
+  const options = candidates(o, shop).filter(wanted).flatMap((c) => partOption(o, c, style, score)).filter((option) => option.cost <= spend);
+  return strongest(options) ?? chassis;
+}
+
+// What a bot may spend on gear: its money above the upkeep reserve, and above the cost of a load for a bot that trades.
+function gearBudget(o: Orders, style: UpgradeStyle): number {
+  const spendable = o.world.player.money - getUpkeepReserve(o.me);
+  return style.keepCapital ? spendable - tradeCapital(o.me) : spendable;
+}
+
+// The money a trader keeps to buy a load: one unit of an average good per free cell at the buy price.
+function tradeCapital(v: Vehicle): number {
+  const values = Object.values(GOODS).map((g) => g.value);
+  const average = values.reduce((a, b) => a + b, 0) / values.length;
+  return goodsRoom(v) * average * (1 + ECONOMY.spread);
+}
+
+// The number a job grows by, for a truck. A fighter's is the rate its guns stop a truck like the bot's own, head on,
+// by the damage rules of src/sim/fight-odds.ts, so armor adds nothing. A courier's is its top speed. A trader's and a
+// carrier's is room times speed.
+function jobScorer(o: Orders, job: GearJob): (v: Vehicle) => number {
+  const speed = (v: Vehicle) => vehicleStats(o.world, v).maxSpeed;
+  if (job === 'courier') return speed;
+  if (job !== 'fighter') return (v) => goodsRoom(v) * speed(v);
+  const foe = targetOf(o.me);
+  return (v) => Object.values(gunsBySide(v)).flat().reduce((sum, def) => sum + killRate(def, foe, 'front'), 0);
 }
 
 // A bot with no gun mounts the cheapest one the shop sells or it holds as a spare, from money above the upkeep
@@ -126,7 +157,7 @@ export function rearm(o: Orders): void {
 }
 
 function strongest(options: Option[]): Option | null {
-  return options.reduce<Option | null>((best, option) => (!best || option.gain > best.gain ? option : best), null);
+  return options.reduce<Option | null>((best, option) => (!best || option.gain > best.gain || (option.gain === best.gain && option.worth > best.worth) ? option : best), null);
 }
 
 // What a part adds: its value at its wear, cut by its damage.
@@ -146,7 +177,7 @@ function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);
     const gain = style.chassis === 'speed' ? def.maxSpeed - current.maxSpeed : def.value - current.value;
-    return gain > 0 ? [{ gain, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id), 'gear') }] : [];
+    return gain > 0 ? [{ gain, worth: 0, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id), 'gear') }] : [];
   });
 }
 
@@ -159,31 +190,42 @@ function candidates(o: Orders, shop: string): Candidate[] {
 }
 
 // Mounting the candidate, with the weakest mounted part of its kind sold first when no mount is free. Nothing when
-// the part would not mount or adds nothing, or, with keepRoom, when it leaves less room for goods.
-function partOption(o: Orders, c: Candidate, style: UpgradeStyle): Option[] {
-  const topSpeed = (v: Vehicle) => vehicleStats(o.world, v).maxSpeed;
-  const speedFloor = style.minSpeed === undefined ? 0 : Math.min(topSpeed(o.me), style.minSpeed);
-  const fits = (v: Vehicle) => {
-    const spot = installSpot(v, probe(c.part));
-    if (spot === null) return false;
-    const after = mounted(v, c.part, spot);
-    if (style.keepRoom && goodsRoom(after) < goodsRoom(o.me)) return false;
-    if (style.lootRoom !== undefined && freeCells(after) < Math.min(style.lootRoom, freeCells(o.me))) return false;
-    return topSpeed(after) >= speedFloor;
+// the part would not mount or adds nothing to the job score, or, with keepRoom, when it leaves less room for goods.
+function partOption(o: Orders, c: Candidate, style: UpgradeStyle, score: (v: Vehicle) => number): Option[] {
+  const now = score(o.me);
+  const option = (after: Vehicle, cost: number, replaced: PartItem | null): Option[] => {
+    const gain = score(after) - now;
+    if (gain <= 0 || !keeps(o, style, after)) return [];
+    return [{ gain, worth: quality(c.part) - (replaced ? quality(replaced.part) : 0), cost, take: (orders) => mount(orders, c, replaced) }];
   };
-  if (installSpot(o.me, probe(c.part))) return fits(o.me) ? [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }] : [];
+  const free = withPart(o.me, c.part);
+  if (free) return option(free, c.price, null);
   const weakest = weakestOfKind(o.me, partDef(c.part.defId).kind);
-  if (!canSwap(o.me, c.part, weakest, fits)) return [];
-  const resale = partTradePrice(o.world, o.me, weakest.part, 'sell');
-  return [{ gain: quality(c.part) - quality(weakest.part), cost: c.price - resale, take: (orders) => mount(orders, c, weakest) }];
+  if (!weakest || quality(c.part) <= quality(weakest.part)) return [];
+  const swapped = withoutPart(o.me, weakest, c.part);
+  return swapped ? option(swapped, c.price - partTradePrice(o.world, o.me, weakest.part, 'sell'), weakest) : [];
 }
 
-// Whether the part is better than the weakest mounted part of its kind and the truck holds together without that one.
-// Goods stowed on cells the old part provides, such as a cargo rack, would fall off the grid without it.
-function canSwap(me: Vehicle, part: PartInstance, weakest: PartItem | null, fits: (v: Vehicle) => boolean): weakest is PartItem {
-  if (!weakest || quality(part) <= quality(weakest.part)) return false;
-  const items = me.items.filter((it) => it.id !== weakest.id);
-  return getLayoutError(me, items) === null && fits({ ...me, items });
+// Whether the truck after a purchase keeps what its style keeps: goods room, free cells for loot and the chase speed.
+function keeps(o: Orders, style: UpgradeStyle, after: Vehicle): boolean {
+  const topSpeed = (v: Vehicle) => vehicleStats(o.world, v).maxSpeed;
+  const speedFloor = style.minSpeed === undefined ? 0 : Math.min(topSpeed(o.me), style.minSpeed);
+  if (style.keepRoom && goodsRoom(after) < goodsRoom(o.me)) return false;
+  if (style.lootRoom !== undefined && freeCells(after) < Math.min(style.lootRoom, freeCells(o.me))) return false;
+  return topSpeed(after) >= speedFloor;
+}
+
+// The truck with the part on the first spot it fits, or nothing when no mount is free.
+function withPart(v: Vehicle, part: PartInstance): Vehicle | null {
+  const spot = installSpot(v, probe(part));
+  return spot ? mounted(v, part, spot) : null;
+}
+
+// The truck with the part on the mount of the replaced one, or nothing when it fits nowhere. Goods stowed on cells the
+// old part provides, such as a cargo rack, would fall off the grid without it.
+function withoutPart(v: Vehicle, replaced: PartItem, part: PartInstance): Vehicle | null {
+  const rest = { ...v, items: v.items.filter((it) => it.id !== replaced.id) };
+  return getLayoutError(v, rest.items) === null ? withPart(rest, part) : null;
 }
 
 // The cells goods could use if the truck carried none.
