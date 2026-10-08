@@ -315,6 +315,21 @@ describe('work clones', () => {
     expect(existsSync(join(home, 'fresh-15'))).toBe(false);
   });
 
+  it('clones the commit it was given, even after the branch moved on', async () => {
+    const { home, repo, commit, head } = await setup();
+    await commit('factory/issue-16', 'f.txt', 'sixteen\n');
+    await repo.fetch();
+    const checked = await repo.headHash('factory/issue-16');
+    await commit('factory/issue-16', 'f.txt', 'pushed later\n');
+    await repo.fetch();
+    const work = join(home, 'check-16');
+    const cloned = await repo.cloneCommit(checked, work);
+    expect(cloned.startsWith(checked)).toBe(true);
+    expect(cloned).not.toBe(await head('factory/issue-16'));
+    expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('sixteen\n');
+    await expect(repo.cloneCommit(checked, work)).rejects.toThrow('exists already');
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');

@@ -292,6 +292,8 @@ export interface HostRepo {
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   // Clones GitHub's `branch` into the new folder `dir`, with no fallback to a base, and returns its head. Throws when the host clone lacks the branch.
   cloneBranch(branch: string, dir: string): Promise<string>;
+  // Clones the host clone into the new folder `dir`, detached at `commit`, and returns its full hash. Later pushes to the branch do not change what it holds.
+  cloneCommit(commit: string, dir: string): Promise<string>;
   // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
   untrackFactoryFiles(dir: string): Promise<string[]>;
   // Brings the work clone's branch head into the host clone, without pushing it, and returns its full hash.

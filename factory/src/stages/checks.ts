@@ -92,10 +92,10 @@ function checksPhase(ctx: Ctx, issue: number): TestPhase {
 async function checkOrBuild(ctx: Ctx, issue: number, phase: TestPhase, base: string, build: string): Promise<string | null> {
   if (phase !== 'post' && await docsOnly(ctx, issue, base)) {
     ctx.log('checks', issue, 'the branch changes docs only, so it builds with no tests, typecheck or playtest');
-    return runScript(ctx, issue, base, build, buildScript);
+    return runScript(ctx, issue, build, buildScript);
   }
-  if (phase !== 'post') return checkPatiently(ctx, issue, base, build);
-  const failure = await runScript(ctx, issue, base, build, buildScript);
+  if (phase !== 'post') return checkPatiently(ctx, issue, build);
+  const failure = await runScript(ctx, issue, build, buildScript);
   if (failure !== null) throw new Error(`The build failed, no factory checks ran.\n${failure}`);
   return null;
 }
@@ -132,18 +132,19 @@ function checkDir(ctx: Ctx, issue: number): string {
   return `${ctx.cfg.home}/work/check-issue-${issue}`;
 }
 
-// The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
+// The host runs its own checks in a fresh clone of the pushed branch head `build`. Agent claims do not count.
 // Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
-async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
-  return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg, false)));
+async function runChecks(ctx: Ctx, issue: number, build: string): Promise<string | null> {
+  return runScript(ctx, issue, build, checkScript(playtestCommand(ctx.cfg, false)));
 }
 
-async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {
+async function runScript(ctx: Ctx, issue: number, build: string, script: string): Promise<string | null> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(`${ctx.cfg.home}/work`, { recursive: true });
-  await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
+  // The clone stands on `build` itself, so a push to the branch meanwhile never puts an untested commit behind the recorded build.
+  await ctx.repo.cloneCommit(build, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
     await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build });
@@ -168,9 +169,9 @@ const CHECK_RUNS = 3;
 
 // Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
 // since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
-async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+async function checkPatiently(ctx: Ctx, issue: number, build: string): Promise<string | null> {
   for (let run = 1; ; run++) {
-    const failure = await runChecks(ctx, issue, base, build);
+    const failure = await runChecks(ctx, issue, build);
     if (failure === null || !timeoutOnly(failure)) return failure;
     if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
     ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);

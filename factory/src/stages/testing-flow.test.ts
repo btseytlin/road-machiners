@@ -6,7 +6,13 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import { isCleanupTask, type AgentRun, type Ctx } from '../types';
 import type { Finding } from './review';
 
-vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
+// The builds checks published and recorded, in order.
+const deployed = vi.hoisted(() => ({ published: [] as string[], recorded: [] as string[] }));
+vi.mock('../deploy', () => ({
+  checkScope: () => undefined,
+  publishBuild: (_ctx: unknown, _clone: string, scope: string) => { deployed.published.push(scope); return `https://play.test/${scope}/`; },
+  recordBuild: (_path: string, _issue: number, name: string) => { deployed.recorded.push(name); },
+}));
 const { runStage: runChecks, approvalCaption, approvalButtons, timeoutOnly } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
 const { runStage: runHarden } = await import('./harden');
@@ -58,6 +64,8 @@ const BOILERPLATE = ['Approve runs the review', 'Deny closes the issue', 'Reply 
 let reviewPrompts: string[] = [];
 
 beforeEach(() => {
+  deployed.published = [];
+  deployed.recorded = [];
   albums = [];
   albumFails = false;
   reviews = [];
@@ -126,6 +134,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
     },
     repo: {
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
+      cloneCommit: async (commit: string, dir: string) => { calls.push(`clone ${commit}`); mkdirSync(dir, { recursive: true }); return commit.padEnd(40, '0'); },
       // The review reads the incident log and the principles from dev, whatever the card's base.
       readFile: async (branch: string, path: string) => {
         if (branch !== 'dev') throw new Error(`readFile from ${branch}`);
@@ -434,26 +443,73 @@ describe('testing stage', () => {
       expect(queued()).toEqual({ 7: 'Ann' });
     });
 
-    it('hardens an approved card without merging the base, since approve merges it', async () => {
-      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
-      await runStage(fakeCtx(agent), 7);
-      expect(bases).not.toContain('merge dev');
-    });
-
-    it('runs no checks when hardening left the head on the build the committee played', async () => {
+    it('merges no base and runs no checks when hardening left the head on the build the committee played', async () => {
       writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
       await runStage(fakeCtx(agent), 7);
-      expect(calls).not.toContain('checks');
+      expect(bases).not.toContain('merge dev');
+      expect(calls.filter((call) => call.startsWith('push') || call.startsWith('clone') || call === 'checks')).toEqual(['push w1 factory/issue-7']);
       expect(calls.at(-1)).toBe('move 7 Approval');
       expect(queued()).toEqual({ 7: 'Ann' });
       expect(readState(`${home}/state.json`).testPhase).toEqual({});
     });
 
-    it('runs the checks when hardening moved the head past the played build', async () => {
+    it('merges a base that moved cleanly after the review and before the checks, with no merge agent', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.']);
+      expect(bases).toContain('merge dev');
+      expect(bases).toContain('isMerged base0001');
+      const order = calls.filter((call) => call.startsWith('review') || call.startsWith('push') || call === 'checks');
+      expect(order.slice(-3)).toEqual(['review sonnet /code-review', 'push w1 factory/issue-7', 'checks']);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('lets the merge agent resolve a base that conflicts before the checks, then checks once', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      conflicts = ['game/src/three/save-migrations.ts'];
+      const prompts: string[] = [];
+      await runStage(fakeCtx((run) => { prompts.push(run.prompt); agent(run); }), 7);
+      expect(rounds).toEqual(['This is the hardening round of the ROAM factory.', 'This is a merge round of the ROAM factory.']);
+      expect(prompts[1]).toContain('- game/src/three/save-migrations.ts');
+      expect(calls.findIndex((call) => call.startsWith('review'))).toBeLessThan(calls.lastIndexOf('push w1 factory/issue-7'));
+      expect(calls.lastIndexOf('push w1 factory/issue-7')).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('fails the stage when the merge agent leaves the base merge before the checks unfinished', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      conflicts = ['game/src/a.ts'];
+      merged = false;
+      await expect(runStage(fakeCtx(agent), 7)).rejects.toThrow('left the merge of dev at base000 into factory/issue-7 unfinished');
+      expect(calls).not.toContain('checks');
+      expect(queued()).toEqual({});
+    });
+
+    it('checks, publishes and records the one commit it read as the branch head', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(calls.filter((call) => call.startsWith('clone'))).toEqual(['clone abc123']);
+      expect(shellEnv).toEqual({ BUILD_SCOPE: 'abc123' });
+      expect(deployed.published).toEqual(['abc123']);
+      expect(deployed.recorded).toEqual(['abc123']);
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('resolves and checks again when the base moved during the checks and approve met a conflict', async () => {
       writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
       await runStage(fakeCtx(agent), 7);
       expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
-      expect(calls.at(-1)).toBe('move 7 Approval');
+      // Approve met a conflict with the newer base, as mergeOrResolve leaves it.
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), pendingApprovals: {}, testPhase: { 7: 'resolve' } });
+      conflicts = ['docs/tools.md'];
+      rounds = [];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is a merge round of the ROAM factory.']);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
       expect(queued()).toEqual({ 7: 'Ann' });
     });
 
