@@ -22,4 +22,6 @@ export const CONFIG = {
   travelHoldMs: 250,
   travelFastSpeed: 4,
   playbackFrameMs: 50,
+  questCharMs: 18,
+  questWordMs: 70,
 };
