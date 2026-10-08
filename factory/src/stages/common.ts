@@ -100,12 +100,17 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
 
 // The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
 // design-sonnet moves design to the build model. implementation-opus moves implementation to the design model.
-// Triage, testing and hardening always run on the build model.
+// Triage always runs on the triage model. Testing and hardening always run on the build model.
 // The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
-export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
+export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel' | 'triageModel'>, stage: CardStage, labels: string[]): string {
+  if (stage === 'triage') return cfg.triageModel;
   if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;
   if (stage === 'implement') return labels.includes(IMPLEMENTATION_OPUS_LABEL) ? cfg.designModel : cfg.buildModel;
   return cfg.buildModel;
+}
+
+function advisorFor(cfg: Pick<FactoryConfig, 'buildModel' | 'advisorModel'>, stage: CardStage, model: string): string | undefined {
+  return stage === 'implement' && model === cfg.buildModel ? cfg.advisorModel : undefined;
 }
 
 export function mediaDir(ctx: Ctx, issue: number): string {
@@ -173,13 +178,14 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const { labels } = await ctx.github.issue(issue);
   const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
+  const advisor = advisorFor(ctx.cfg, stage, model);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
   const reports = issueReports(ctx.cfg.home, issue);
   const full = session.resume ? (extras.continue === true ? prompt : resumeNote(ctx, issue)) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, disallowedTools: extras.disallowedTools });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, disallowedTools: extras.disallowedTools, advisor });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.

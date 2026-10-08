@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
@@ -15,9 +15,18 @@ function writeSource(content, name = 'game/src/example.ts') {
   writeFileSync(path.join(directory, name), content);
 }
 
-function runCheck(mode = '--staged') {
+function runCheck(mode = '--staged', env = process.env) {
   const args = mode === '--working' ? [] : [mode];
-  return spawnSync(process.execPath, ['quality/quality.mjs', ...args], { cwd: directory, encoding: 'utf8' });
+  return spawnSync(process.execPath, ['quality/quality.mjs', ...args], { cwd: directory, encoding: 'utf8', env });
+}
+
+// A docker that records its arguments and exits with the given status, put first on PATH.
+function fakeDocker(status) {
+  const bin = path.join(directory, 'fake-bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(path.join(bin, 'docker'), '#!/bin/sh\necho "$@" > "$DOCKER_LOG"\necho "browser output line"\nexit "$DOCKER_STATUS"\n', { mode: 0o755 });
+  const log = path.join(directory, 'docker.log');
+  return { log, env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DOCKER_LOG: log, DOCKER_STATUS: String(status) } };
 }
 
 function assertRejected(result, pattern) {
@@ -33,6 +42,11 @@ beforeEach(() => {
     mkdirSync(path.join(directory, project, 'node_modules'));
     writeFileSync(path.join(directory, project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, skipLibCheck: true }, include: ['src'] }));
   }
+  mkdirSync(path.join(directory, 'factory/dashboard'));
+  writeFileSync(path.join(directory, 'factory/dashboard/tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, allowJs: true, checkJs: true, noEmit: true, skipLibCheck: true }, include: ['dashboard.js'] }));
+  writeFileSync(path.join(directory, 'factory/dashboard/dashboard.js'), 'export const value = 1;\n');
+  mkdirSync(path.join(directory, 'game/node_modules/playwright'));
+  writeFileSync(path.join(directory, 'game/node_modules/playwright/package.json'), JSON.stringify({ version: '9.9.9' }));
   writeFileSync(path.join(directory, 'factory/src/example.ts'), 'export const value = 1;\n');
   mkdirSync(path.join(directory, 'quality'));
   mkdirSync(path.join(directory, '.githooks'));
@@ -161,7 +175,8 @@ test('checks a first commit without HEAD', () => {
   runGit('checkout', '--orphan', 'first-commit');
   writeSource(Array.from({ length: 200 }, (_, i) => `export const value${i} = ${i};`).join('\n'));
   runGit('add', 'game');
-  const result = runCheck();
+  // A first commit stages the dashboard files too, so the browser test runs.
+  const result = runCheck('--staged', fakeDocker(0).env);
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
@@ -263,4 +278,52 @@ test('rejects staged type errors in the factory project', () => {
   writeSource('export const value: number = "wrong";\n', 'factory/src/example.ts');
   runGit('add', 'factory');
   assertRejected(runCheck(), /not assignable/);
+});
+
+test('rejects staged type errors in the dashboard page', () => {
+  writeSource('/** @type {number} */\nexport const value = "wrong";\n', 'factory/dashboard/dashboard.js');
+  runGit('add', 'factory');
+  assertRejected(runCheck(), /not assignable/);
+});
+
+test('runs the dashboard browser test in the Playwright image when a commit touches the dashboard', () => {
+  const docker = fakeDocker(0);
+  writeSource('export const value = 2;\n', 'factory/dashboard/dashboard.js');
+  runGit('add', 'factory');
+  const result = runCheck('--staged', docker.env);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const args = readFileSync(docker.log, 'utf8');
+  assert.match(args, /mcr\.microsoft\.com\/playwright:v9\.9\.9-noble/);
+  assert.match(args, /--network none/);
+  assert.match(args, /dst=\/work\/factory\/node_modules,readonly/);
+  assert.match(args, /dst=\/work\/game\/node_modules,readonly/);
+  assert.match(args, /factory\/dashboard\/browser\.test\.mjs/);
+});
+
+test('runs the dashboard browser test when a commit touches the dashboard server code', () => {
+  const docker = fakeDocker(0);
+  mkdirSync(path.join(directory, 'factory/src/dashboard'));
+  writeSource('export const value = 3;\n', 'factory/src/dashboard/example.ts');
+  runGit('add', 'factory');
+  assert.equal(runCheck('--staged', docker.env).status, 0);
+  assert.match(readFileSync(docker.log, 'utf8'), /playwright/);
+});
+
+test('rejects a commit when the dashboard browser test fails and keeps its output', () => {
+  const docker = fakeDocker(1);
+  writeSource('export const value = 2;\n', 'factory/dashboard/dashboard.js');
+  runGit('add', 'factory');
+  const result = runCheck('--staged', docker.env);
+  assertRejected(result, /dashboard browser test failed/);
+  assert.match(result.stderr, /browser output line/);
+  assert.match(readFileSync(path.join(directory, 'tmp/browser-check.log'), 'utf8'), /browser output line/);
+});
+
+test('skips the dashboard browser test when a commit leaves the dashboard alone', () => {
+  const docker = fakeDocker(1);
+  writeSource('export const value = 4;\n', 'factory/src/example.ts');
+  runGit('add', 'factory');
+  const result = runCheck('--staged', docker.env);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(docker.log), false);
 });

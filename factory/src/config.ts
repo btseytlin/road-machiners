@@ -33,6 +33,8 @@ const KEYS = {
   sfxMaxGenerations: 'SFX_MAX_GENERATIONS',
   designModel: 'FACTORY_DESIGN_MODEL',
   buildModel: 'FACTORY_BUILD_MODEL',
+  triageModel: 'FACTORY_TRIAGE_MODEL',
+  advisorModel: 'FACTORY_ADVISOR_MODEL',
   triageEffort: 'FACTORY_TRIAGE_EFFORT',
   designEffort: 'FACTORY_DESIGN_EFFORT',
   tokenPrices: 'FACTORY_MODEL_PRICES',
@@ -104,7 +106,7 @@ export function loadConfig(env: Record<string, string | undefined>): FactoryConf
 
 // Every model the factory picks must have a price, so a run cut off before its result can still be priced.
 function checkPrices(cfg: FactoryConfig): void {
-  const unpriced = [cfg.designModel, cfg.buildModel].filter((model) => !(model in cfg.tokenPrices));
+  const unpriced = [cfg.designModel, cfg.buildModel, cfg.triageModel, cfg.advisorModel].filter((model) => !(model in cfg.tokenPrices));
   if (unpriced.length) throw new Error(`FACTORY_MODEL_PRICES has no price for ${unpriced.join(', ')}.`);
 }
 

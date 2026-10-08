@@ -33,8 +33,7 @@ describe('summarizeDelivery', () => {
     expect(summary!.stages.map((row) => [row.stage, row.count, row.meanMs! / HOUR])).toEqual([
       ['triage', 1, 2], ['design', 1, 10], ['implementation', 1, 5], ['preview', 1, 3], ['approval', 1, 24], ['harden', 1, 4], ['merge', 1, 1],
     ]);
-    // Lead time starts at the triage acceptance, so the 2 hours in Triage are not in it.
-    expect(summary!.lead).toEqual({ count: 1, meanMs: 47 * HOUR, medianMs: 47 * HOUR, open: 0, openMeanMs: null, missingStart: 0 });
+    expect(summary!.lead).toEqual({ open: 0, openMeanMs: null, missingStart: 0 });
     expect(summary!.looped).toBe(0);
     expect(summary!.rejections).toEqual([{ gate: 'triage', decided: 1, rejected: 0 }, { gate: 'design', decided: 1, rejected: 0 }, { gate: 'committee', decided: 1, rejected: 0 }]);
   });
@@ -64,8 +63,7 @@ describe('summarizeDelivery', () => {
     expect(summary!.retries.find((row) => row.stage === 'verify')!.runs).toBe(1);
     expect(summary!.retries.find((row) => row.stage === 'checks')!.runs).toBe(0);
     expect(summary!.retries.find((row) => row.stage === 'implement')?.runs ?? 0).toBe(0);
-    // The first acceptance starts the lead time. Issue 2 is open again in Design, so it is open since that acceptance.
-    expect(summary!.lead.count).toBe(1);
+    // The first acceptance starts the wait. Issue 2 is open again in Design, so it is open since that acceptance.
     expect(summary!.lead.open).toBe(1);
     expect(summary!.lead.openMeanMs).toBe(49 * HOUR);
     expect(stage(summary, 'design').count).toBe(3);
@@ -106,7 +104,6 @@ describe('summarizeDelivery', () => {
     const summary = summarizeDelivery(lines, [job(2, 'implement', 'failed', 35), job(4, 'design', 'timeout', 45)], NOW, 7);
     expect(summary!.issues).toBe(1);
     expect(summary!.excluded).toBe(5);
-    expect(summary!.lead.count).toBe(1);
     expect(gate(summary, 'committee')).toEqual({ gate: 'committee', decided: 1, rejected: 0 });
     expect(stage(summary, 'design').count).toBe(1);
     expect(summary!.retries.every((row) => row.runs === 0)).toBe(true);
@@ -118,7 +115,7 @@ describe('summarizeDelivery', () => {
     expect(summary!.legacy).toBe(1);
     expect(stage(summary, 'design')).toMatchObject({ count: 0, meanMs: null, open: 0 });
     expect(stage(summary, 'implementation')).toMatchObject({ count: 1, meanMs: 10 * HOUR });
-    expect(summary!.lead).toMatchObject({ count: 0, meanMs: null, missingStart: 1 });
+    expect(summary!.lead).toMatchObject({ open: 0, missingStart: 1 });
   });
 
   it('returns null with no card lines, so the page never shows unrecorded numbers as zero', () => {

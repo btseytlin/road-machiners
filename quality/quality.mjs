@@ -7,7 +7,8 @@ import { SEPARATOR, checkFragmentation, checkGuidance, checkSeparators, collectC
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const ignoredPattern = /(?:^|\/)(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
-const typeProjects = ['game', 'factory'];
+const typeProjects = ['game', 'factory', 'factory/dashboard'];
+const browserPaths = /^factory\/(?:dashboard|src\/dashboard)\//;
 const maxBuffer = 64 * 1024 * 1024; // Bounds captured Git and linter output, including the repo-wide baseline.
 
 function runGit(...args) {
@@ -154,15 +155,60 @@ function componentOf(failure) {
   return failure.slice(0, failure.indexOf(':'));
 }
 
+// A project with no node_modules of its own, like factory/dashboard, resolves packages from its parent folder.
+function linkModules(directory, project) {
+  const installed = path.join(root, project, 'node_modules');
+  const modules = path.join(directory, project, 'node_modules');
+  if (directory !== root && existsSync(installed) && !existsSync(modules)) symlinkSync(installed, modules);
+}
+
 function checkTypes(directory) {
   const compiler = fileURLToPath(new URL('./bin/tsc', import.meta.resolve('typescript/package.json')));
   for (const project of typeProjects) {
-    const modules = path.join(directory, project, 'node_modules');
-    if (directory !== root && !existsSync(modules)) symlinkSync(path.join(root, project, 'node_modules'), modules);
+    linkModules(directory, project);
     const result = spawnSync(process.execPath, [compiler, '--project', path.join(directory, project, 'tsconfig.json')], { cwd: path.join(directory, project), stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`Typecheck failed in ${project}.`);
   }
+}
+
+// A commit that touches the dashboard or its server side runs the page against fixtures in the Playwright image, so a stale page fails the commit.
+// The image tag follows the installed Playwright version. Missing Docker or Playwright fails the commit and never skips the test.
+function mount(source, target, readonly) {
+  return ['--mount', `type=bind,src=${source},dst=${target}${readonly ? ',readonly' : ''}`];
+}
+
+// The snapshot holds symlinks to the real node_modules, which dangle inside the container. Each one becomes an empty folder with the real one mounted over it.
+function mountModules(directory) {
+  return ['game', 'factory'].flatMap(project => {
+    const mountPoint = path.join(directory, project, 'node_modules');
+    rmSync(mountPoint, { recursive: true, force: true });
+    mkdirSync(mountPoint, { recursive: true });
+    return mount(path.join(root, project, 'node_modules'), `/work/${project}/node_modules`, true);
+  });
+}
+
+function readPlaywrightVersion() {
+  const manifest = path.join(root, 'game/node_modules/playwright/package.json');
+  if (!existsSync(manifest) || !existsSync(path.join(root, 'factory/node_modules'))) throw new Error('The dashboard browser test needs Playwright and the factory packages. Run npm ci in game/ and factory/.');
+  return JSON.parse(readFileSync(manifest, 'utf8')).version;
+}
+
+function checkDashboardBrowser(directory) {
+  if (!splitPaths(runGit('diff', '--cached', '--name-only', '-z')).some(file => browserPaths.test(file))) return;
+  const version = readPlaywrightVersion();
+  const evidence = path.join(root, 'tmp/browser-evidence');
+  mkdirSync(evidence, { recursive: true });
+  const args = ['run', '--rm', '--init', '--network', 'none', '--memory', '2g', '--cpus', '2', '--shm-size', '512m',
+    ...mount(directory, '/work', true), ...mountModules(directory), ...mount(evidence, '/evidence', false), '--workdir', '/work',
+    `mcr.microsoft.com/playwright:v${version}-noble`, 'node', 'factory/dashboard/browser.test.mjs', '/work/game/node_modules/playwright/index.mjs', '/evidence'];
+  const result = spawnSync('docker', args, { encoding: 'utf8', maxBuffer });
+  if (result.error) throw new Error(`The dashboard browser test needs Docker: ${result.error.message}`);
+  const log = path.join(root, 'tmp/browser-check.log');
+  writeFileSync(log, result.stdout + result.stderr);
+  if (result.status === 0) return;
+  console.error((result.stdout + result.stderr).split('\n').slice(-40).join('\n'));
+  throw new Error('The dashboard browser test failed. The full output is in tmp/browser-check.log.');
 }
 
 function assertStagedTooling() {
@@ -194,6 +240,7 @@ function checkSnapshot(staged, temporary) {
   const files = [...tracked, ...others].filter(file => existsSync(path.join(directory, file)));
   checkQuality(directory, path.join(temporary, 'parents'), files, readParents(), staged);
   checkTypes(directory);
+  if (staged) checkDashboardBrowser(directory);
 }
 
 runChecks();

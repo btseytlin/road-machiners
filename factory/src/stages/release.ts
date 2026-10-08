@@ -7,7 +7,7 @@ import { featureLine, featureMerges, recordReleaseTask } from './release-common'
 
 // The two cleanup tasks of a release. Each runs the normal stages on the release branch and needs no committee post.
 const CLEANUP_TASKS = [
-  { title: 'Optimize one slow spot', prompt: 'release-optimize' },
+  { title: 'Optimize against the speed budget', prompt: 'release-optimize' },
   { title: 'Code janitor pass', prompt: 'release-janitor' },
 ] as const;
 

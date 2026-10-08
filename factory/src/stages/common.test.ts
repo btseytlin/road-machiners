@@ -11,7 +11,7 @@ function agentCtx(labels: string[], body = '', comments: { login: string; body: 
   const runs: AgentRun[] = [];
   const logs: string[] = [];
   const ctx = {
-    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id' },
+    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id', triageModel: 'haiku-id', advisorModel: 'advisor-id' },
     github: { issue: async () => ({ labels, body }), comments: async () => comments },
     fetch: fetchFn,
     run: async () => ({ code: 0, stdout: 'tok\n', stderr: '' }),
@@ -137,24 +137,24 @@ describe('prepareOutputs', () => {
 });
 
 describe('model routing', () => {
-  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id' };
+  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id', triageModel: 'haiku-id' };
   const stages = ['triage', 'design', 'implement', 'verify'] as const;
   const pick = (labels: string[]) => stages.map((stage) => modelFor(cfg, stage, labels));
 
-  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and verify Sonnet', () => {
-    expect(pick([])).toEqual(['sonnet-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
+  it('keeps the baseline with no label: triage Haiku, design Opus, implementation and verify Sonnet', () => {
+    expect(pick([])).toEqual(['haiku-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
   });
 
   it('design-sonnet forces Sonnet for design only', () => {
-    expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
+    expect(pick(['design-sonnet'])).toEqual(['haiku-id','sonnet-id', 'sonnet-id', 'sonnet-id']);
   });
 
   it('implementation-opus changes implementation only, leaving verification on Sonnet', () => {
-    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'sonnet-id']);
+    expect(pick(['implementation-opus'])).toEqual(['haiku-id','opus-id', 'opus-id', 'sonnet-id']);
   });
 
   it('both labels apply independently', () => {
-    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'sonnet-id']);
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['haiku-id','sonnet-id', 'opus-id', 'sonnet-id']);
   });
 
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
@@ -164,6 +164,16 @@ describe('model routing', () => {
     labels.length = 0;
     await runAgent(ctx, 7, 'implement', 'implement', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
+  });
+
+  it('runAgent gives the advisor to implementation on the build model only', async () => {
+    const labels: string[] = [];
+    const { ctx, runs } = agentCtx(labels);
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    labels.push('implementation-opus');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    expect(runs.map((run) => run.advisor)).toEqual(['advisor-id', undefined, undefined]);
   });
 });
 

@@ -115,6 +115,15 @@ describe('dockerContainer', () => {
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
   });
 
+  it('passes an advisor only when a stage names one', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', advisor: 'opus' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log' });
+    const [advised, plain] = calls.filter((call) => call.args.includes('--model')).map((call) => call.args);
+    expect(advised.slice(advised.indexOf('--advisor'), advised.indexOf('--advisor') + 2)).toEqual(['--advisor', 'opus']);
+    expect(plain).not.toContain('--advisor');
+  });
+
   it('passes disallowed tools only when a stage names them', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', disallowedTools: ['Agent'] });
