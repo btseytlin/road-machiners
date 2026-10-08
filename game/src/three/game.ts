@@ -635,8 +635,7 @@ export class Game {
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
-    if (this.live && f)
-      return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
+    if (this.live && f) return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
     return playerSees(this.world, v.pos);
   }
 
