@@ -33,7 +33,7 @@ import { answersHoldUp, judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Track, Vehicle, World } from './types';
-import { canUseSite, isTerritory, nearestPad, type Site } from './sites';
+import { canUseSite, GOAL_REACH, isTerritory, nearestPad, type Site } from './sites';
 import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, pointsAway, type Vec } from './vec';
 import { heatAt } from './sun';
@@ -1226,7 +1226,7 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
 
 // The goal reach rule: within twice the stop radius of the destination.
 export function withinReach(vehicle: Vehicle, activity: NpcActivity): boolean {
-  return activity.destination !== null && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2;
+  return activity.destination !== null && dist(vehicle.pos, activity.destination) <= GOAL_REACH;
 }
 
 // A point goal ends within reach, or when its move order arrived this turn. A move arrives at the closest point the

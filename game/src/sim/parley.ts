@@ -33,19 +33,24 @@ function sideOf(world: World, v: Vehicle): Vehicle[] {
   return world.vehicles.filter((x) => x.id === v.id || (x.brain && x.faction === v.faction && dist(x.pos, v.pos) <= SPAWN.neighborHelp));
 }
 
-// Every feud between the two sides ends, and each pair holds a truce both ways. Nobody on either side keeps aiming at the
-// other side.
+// Every feud and fight between the two sides ends at once, and each pair holds a truce both ways. Nobody on either side
+// keeps aiming at the other side, and a job like taking a handed-over pile can start this turn.
 export function makePeace(world: World, a: Vehicle, b: Vehicle): void {
   for (const p of sideOf(world, a)) {
     for (const q of sideOf(world, b)) {
       if (p.id === q.id) continue;
-      for (const s of [stateOf(world, 'feud', p.id, q.id), stateOf(world, 'feud', q.id, p.id)]) if (s) endState(world, s, 'broken');
+      endBetween(world, 'feud', p, q);
+      endBetween(world, 'combat', p, q);
       addState(world, 'truce', p.id, q.id, { kind: 'none' });
       addState(world, 'truce', q.id, p.id, { kind: 'none' });
       holdFire(p, q);
       holdFire(q, p);
     }
   }
+}
+
+function endBetween(world: World, kind: 'feud' | 'combat', p: Vehicle, q: Vehicle): void {
+  for (const s of [stateOf(world, kind, p.id, q.id), stateOf(world, kind, q.id, p.id)]) if (s) endState(world, s, 'broken');
 }
 
 function holdFire(v: Vehicle, target: Vehicle): void {
@@ -93,14 +98,10 @@ export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
 }
 
 // A beaten NPC gives up to the player where it stands. It lies as if knocked out, so the player strips its truck on the
-// loot grid, and both sides make peace. Combat states end at once, so a job can start this turn.
+// loot grid, and both sides make peace.
 export function standDownTo(world: World, loser: Vehicle, winner: Vehicle): void {
   standDown(world, loser, winner.id);
   makePeace(world, loser, winner);
-  for (const [a, b] of [[loser, winner], [winner, loser]]) {
-    const fight = stateOf(world, 'combat', a.id, b.id);
-    if (fight) endState(world, fight, 'broken');
-  }
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   creditYield(world, loser, winner);

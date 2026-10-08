@@ -32,7 +32,7 @@ import { route, routeLength } from './path';
 import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
-import { canUseSite, nearestPad, type Site } from './sites';
+import { canUseSite, nearestPad, reachedSite, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import { getResources } from './resources';
@@ -583,7 +583,7 @@ export function checkEscort(w: World, s: NpcState): StateEnding | null {
   if (!escort || !leader) return null;
   if (escortBroken(w, escort, leader)) return 'broken';
   const site = escortData(s).site;
-  return site !== null && canUseSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
+  return site !== null && reachedSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
 }
 
 function escortBroken(w: World, escort: Vehicle, leader: Vehicle): boolean {

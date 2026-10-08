@@ -70,6 +70,14 @@ export function canUseSite(pos: Vec, site: Site): boolean {
   return sitePads(site).some((pad) => onPad(pos, pad, site.pos));
 }
 
+// A goal ends within this distance of its point.
+export const GOAL_REACH = RULES.arriveRadius * 2;
+
+// Whether a truck at pos has reached the site, where a trip there ends: a territory at its edge, any other site where it can be used.
+export function reachedSite(pos: Vec, site: Site): boolean {
+  return isTerritory(site) ? siteGap(site, pos) <= GOAL_REACH : canUseSite(pos, site);
+}
+
 // Whether pos lies on the pad rectangle, which runs out from the site center.
 function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
   const a = Math.atan2(pad.y - center.y, pad.x - center.x);

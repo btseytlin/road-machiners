@@ -11,8 +11,8 @@ import { addGoods } from './inventory';
 import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
-import { makePeace, plead, standDownTo, yieldTo } from './parley';
-import { hasCargo, lootBlocker, looterOf } from './salvage';
+import { makePeace, plead, standDownTo, surrenderTo, yieldTo } from './parley';
+import { claimantOf, hasCargo, lootBlocker, looterOf } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -567,6 +567,69 @@ describe('pile claims', () => {
   it('an NPC winner claims the handed-over pile', () => {
     const { w, robber, victim, pile } = handover('npc');
     expect(pile.pile!.claim).toEqual({ by: robber.id, until: w.turn + SALVAGE.claimTurns, warned: [victim.id] });
+  });
+
+  describe('with a fight open', () => {
+    const fightBetween = (w: World, a: Vehicle, b: Vehicle) => {
+      addState(w, 'combat', a.id, b.id, { kind: 'none' });
+      addState(w, 'combat', b.id, a.id, { kind: 'none' });
+    };
+    const fights = (w: World, a: Vehicle, b: Vehicle) =>
+      [stateOf(w, 'combat', a.id, b.id), stateOf(w, 'combat', b.id, a.id)].filter(Boolean);
+
+    function setup(loser: 'npc' | 'player') {
+      const w = quietWorld();
+      const robber = npcAt(w, 'scavengers', ['raider'], 36);
+      const victim = loser === 'player' ? playerVehicle(w) : addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 37, y: 30 });
+      if (loser === 'npc') victim.brain = npcBrain('trader', victim.pos, ['raider']);
+      addGoods(w, victim, 'scrap', 2);
+      pushGoal(w, robber, { kind: 'fight', targetId: victim.id, destination: null, phase: 'travel', reason: 'robbery' });
+      fightBetween(w, robber, victim);
+      refreshVision(w);
+      return { w, robber, victim };
+    }
+
+    function expectsLoot(w: World, robber: Vehicle, victim: Vehicle) {
+      const pile = w.salvage.find((s) => s.pile)!;
+      thinkNpc(w, robber);
+      expect(fights(w, robber, victim)).toEqual([]);
+      expect(topGoal(robber)?.kind).toBe('loot');
+      expect(claimantOf(w, pile)?.id).toBe(robber.id);
+    }
+
+    it('an NPC victim hands over and the robber keeps its loot goal', () => {
+      const { w, robber, victim } = setup('npc');
+      yieldTo(w, victim, robber);
+      expectsLoot(w, robber, victim);
+    });
+
+    it('the player hands over cargo and the robber keeps its loot goal', () => {
+      const { w, robber, victim } = setup('player');
+      yieldTo(w, victim, robber);
+      expectsLoot(w, robber, victim);
+    });
+
+    it('the player surrenders and the robber keeps its loot goal', () => {
+      const { w, robber, victim } = setup('player');
+      surrenderTo(w, victim, robber);
+      expectsLoot(w, robber, victim);
+    });
+
+    it('peace also ends the fights of a faction mate of either side', () => {
+      const { w, robber, victim } = setup('npc');
+      const mate = npcAt(w, 'scavengers', ['raider'], 38);
+      fightBetween(w, mate, victim);
+      makePeace(w, robber, victim);
+      expect(fights(w, mate, victim)).toEqual([]);
+    });
+
+    it('a fight with a third truck stays', () => {
+      const { w, robber, victim } = setup('npc');
+      const other = addVehicle(w, 'raiders', 'scout', ['mg'], { x: 20, y: 20 });
+      fightBetween(w, robber, other);
+      yieldTo(w, victim, robber);
+      expect(fights(w, robber, other)).toHaveLength(2);
+    });
   });
 
   it('a player winner makes no claim', () => {
