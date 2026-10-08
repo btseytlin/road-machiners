@@ -15,17 +15,18 @@ import { siteOf } from '../market';
 import { playerSees } from '../vision';
 import { nearestPad, nearestTown, siteGates } from '../sites';
 import { TERRAIN } from '../../data/terrain';
-import { isStranded, vehicleStats } from '../stats';
+import { fuelCap, isStranded, vehicleStats } from '../stats';
 import { dist, pointsAway, type Vec } from '../vec';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from '../testkit';
-import { NPC_BEHAVIOR, NPCS, TRAITS } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS } from '../../data/npcs';
 import { towData } from '../states';
 import { playerTow, startEscort } from '../tow';
 import { cloneWorld, endTurn, hostileToPlayer } from '../world';
 import { basicsRepairCost, driveRepairCost, getTradePrice, partTradePrice, repairCost } from '../economy';
+import { heatAt } from '../sun';
 import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
-import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
+import { botOrders, CONVOY_ROB_PATROL, fuelReaches, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -143,6 +144,50 @@ describe('botOrders', () => {
     const order = playerVehicle(turn.world).order;
     const nose = town('nose');
     expect(order).toEqual({ kind: 'stopAt', dest: nearestPad(nose, playerVehicle(w).pos) });
+  });
+
+  // The player on the Salvage Yard pad with cargo that sells best at Bowl, and every town known.
+  function atYardWithCargo(fuel: number) {
+    const yard = siteOf('salvage-yard');
+    const w = emptyWorld(nearestPad(yard, yard.pos));
+    const me = playerVehicle(w);
+    removeAllGoods(me);
+    addGoods(w, me, 'electronics', 2);
+    w.player.costBasis.electronics = 1;
+    me.speed = 0;
+    w.player.discovered = ['bowl'];
+    w.player.fuel = fuel;
+    w.player.money = fuel === 0 ? 0 : w.player.money;
+    return w;
+  }
+
+  it('has a trader with an empty tank away from every shop not count any shop as a destination', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.fuel = 0;
+    for (const id of ['bowl', 'nose', 'salvage-yard', 'pump-station']) expect(fuelReaches(w, siteOf(id))).toBe(false);
+  });
+
+  it('has a hop longer than the fuel reach only through a nearer fuel stop', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const yard = siteOf('salvage-yard').pos;
+    const perTile = vehicleStats(w, playerVehicle(w)).fuelPerTile;
+    const reach = (tiles: number) => ({ pos: yard, fuel: tiles * perTile * heatAt(w, playerVehicle(w).pos) * NPC_UPKEEP.fuelReserve });
+    // Pump Station lies 207 tiles from the yard, and Granary 187.
+    expect(fuelReaches(w, siteOf('pump-station'), reach(150))).toBe(false);
+    expect(fuelReaches(w, siteOf('pump-station'), reach(190))).toBe(true);
+    expect(fuelReaches(w, siteOf('pump-station'), reach(210))).toBe(true);
+  });
+
+  it('has fuel for the way to a shop reach it, and a full tank chain to Bowl through the shops between', () => {
+    const w = atYardWithCargo(fuelCap(playerVehicle(emptyWorld({ x: 30, y: 30 }))));
+    expect(fuelReaches(w, siteOf('nose'))).toBe(true);
+    expect(fuelReaches(w, siteOf('bowl'))).toBe(true);
+  });
+
+  it('has a trader with fuel that reaches the fuel stops carry its cargo toward a market', () => {
+    const w = atYardWithCargo(fuelCap(playerVehicle(emptyWorld({ x: 30, y: 30 }))));
+    const turn = botOrders(w, 'trader');
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(town('bowl'), playerVehicle(w).pos) });
   });
 
   it('has a scavenger with no salvage left and every site found trade instead', () => {
