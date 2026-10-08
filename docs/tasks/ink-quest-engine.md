@@ -1,6 +1,6 @@
 # Ink quest engine core
 
-**Status:** executing
+**Status:** done
 **Branch:** ink-quest-engine (from dev)
 **Worktree:** .worktrees/ink-quest-engine
 **Goal:** From the terminal, a person or agent plays a sample quest, saves mid-quest, edits the quest script inside the current section, loads, and resumes at the last checkpoint with the variables kept. A second sample quest branches on a variable the first one set. `npm run quests:check` fails on planted script errors and passes on the samples.
@@ -186,6 +186,35 @@ Notes: CK1 needed one fix: `--load` of a state with no open quest now starts the
 
 ## Conclusion
 
+Outcome: Goal achieved, demonstrated by CK1 through the terminal player, at 1a81492e.
+
+Invariants:
+- IV1 — the save test finds no `live` and no ink JSON in a stored envelope.
+- IV2 — the restore tests and CK1 give the same choices and variables after a load.
+- IV3 — the load tests and CK6 raise `SaveError` on unknown or malformed quest state.
+- IV4 — the quest-names test and `save:shape` both refused a renamed checkpoint in CK7.
+- IV5 — compile tests reject a mismatched tag, and the checker starts every checkpoint fresh.
+- IV6 — the checker test fails an external with no hook. `hookProblems()` also checks the other way.
+- IV7 — the determinism test and CK3 pass.
+- IV8 — the bundle test passes, and `quests:check` caught a stale bundle in CK8.
+- IV9 — checker tests plant a dead end, a trap loop, a missing divert, an unreached section, a throwing effect and an outgrown limit, and each one fails.
+- IV10 — the out-of-range test and CK4 leave the world unchanged.
+
+### Assumptions check
+- AS1 — held — 3.7 ms per pick on a hub loop.
+- AS2 — held — `vite build` bundles the ink runtime and no compiler.
+- AS3 — held — the samples walk 15 states, and the whole checker test file runs in under 3 s.
+
+### Unknowns outcome
+- UK1 — resolved — the walk hashes ink's position, choices, variables, visit counts capped at 3, the random state, the session and money, and it stops at 5,000 states.
+- UK2 — resolved for now — queries answer from a new-game world. Covering both answers is left for stage 4.
+- UK3 — resolved — the samples ship in `game/src/data/quests/`, and no game code starts them.
+
+Review findings:
+- Important: a load replayed the checkpoint opening with effects bound, so an effect or a variable change there would repeat on every load. Fixed in 1a81492e: `restoreQuest()` throws on an effect or a changed variable, the checker tries a load at every walked state, and the docs state the rule.
+
+Verified by: `npm run playtest` PASS, plus the CK1 terminal run of the full Goal path.
+
 ### Hands-off decisions
 - make: switched to hands-off after the user approved the plan — the user asked for a hands-off build.
 - make: branch `ink-quest-engine` from `dev` in `.worktrees/ink-quest-engine` — the engine does not depend on #347.
@@ -193,6 +222,7 @@ Notes: CK1 needed one fix: `--load` of a state with no open quest now starts the
 - uexecute: the explorer stops at 5,000 states and reports that as a failure (UK1) — the samples need 15. A quest that needs more should be split or should raise the limit in `quest-check.ts` as a reviewed edit.
 - uexecute: the explorer reads game queries from a new-game world only (UK2, RK2) — branching both ways on query answers is left for stage 4.
 - uexecute: the checker treats ink compile warnings as failures — ink warns on loose ends, which are dead ends in play.
+- ureview: fixed effect replay on load — `restoreQuest()` refuses effects and variable changes in a checkpoint opening, and the checker tries a load at every state.
 
 ### Deviations from plan
 - PH1: the compiler lives in `game/src/test/quest-compile.ts`, not a new `game/src/quests/` folder — the quality gate's fragmentation rule rejects a new folder holding one 100-line file, and `src/test/` already holds the other Node-only harnesses that scripts and tests use. The PH4 checker goes there too.
