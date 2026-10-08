@@ -2,13 +2,13 @@ import { expect, it } from 'vitest';
 import { PublicGitHub } from './snapshot';
 import { EMPTY_STATE } from '../state';
 import type { DashboardConfig } from './config';
-import type { Run } from '../types';
+import { COLUMNS, type Run } from '../types';
 
 it('pins both comparison refs and fetches only public issue data through read calls', async () => {
   const head = 'a'.repeat(40);
   const base = 'b'.repeat(40);
   const calls: string[][] = [];
-  const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
+  const columns = [...COLUMNS];
   const run: Run = async (_cmd, args) => {
     calls.push(args);
     const endpoint = args[1];
