@@ -17,7 +17,7 @@ The check is a screenshot of the finished game from the image's view, put next t
 Gameplay tests alone cannot prove a look.
 An image marked NOT AVAILABLE was not seen.
 Never design as if you had seen it.
-When the request depends on it, write one question to `.factory/questions.md` that asks the author to upload it again.
+When the request depends on it and the author did not get this question yet, write one question to `.factory/questions.md` that asks the author to upload it again.
 
 Modeling an asset from a reference image: when the plan builds one, name the skill and the phases it uses in the task file.
 Use the `blender-image-to-3d` skill when the work builds or reshapes a game model that a reference image shows.
@@ -59,13 +59,6 @@ Revise the task file to answer it.
 Feedback "routed as patch" was already applied by a patch, and the Conclusion lists it under "Patches". Keep those changes unless newer feedback says otherwise.
 Comments under "## Committee question" were questions Hermes answered in the chat. They are context, not requirements.
 
-Review findings sit in the issue comments under the heading "## Review findings".
-They mean the review blocked the built change twice.
-Treat them as a sign of a core flaw in the design, not as bugs to patch.
-Find the root cause behind them and revise the design to remove it.
-
-Visual review findings sit in the issue comments too, under "## Visual review findings". The testing agent looked at the captured gameplay of the build and found a mismatch with the issue or the game docs that the plan caused. Revise the plan so the mismatch cannot come back. Say in the plan how the result must look and where it goes, and how a player will check it.
-
 Triage already refused most requests that go against DESIGN.md.
 If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.
@@ -79,8 +72,15 @@ When in doubt, make a reasonable choice.
 Write it in the task file as an assumption.
 The committee corrects it at approval.
 
+A comment under "Questions from the factory" with no reply after it means the author did not answer in time.
+Never ask those questions again.
+Take the most sensible reading of the request, and write each open question and the reading you took into the task file as an assumption.
+The design comment on the issue shows the task file, so the committee sees the assumptions there.
+
 If the request needs a major save format bump, do not plan it.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+A gap in the request is not a fork. Pick the most sensible reading and write it into the task file as an assumption.
 Then stop.
 
 Git ignores the task file. Never commit it and never force-add it.

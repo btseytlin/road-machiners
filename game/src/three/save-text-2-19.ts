@@ -4,6 +4,17 @@
 
 // Goal reasons, as NpcActivity.reason held them.
 export const GOAL_REASONS_2_19: Readonly<Record<string, string>> = {
+  'the hold is full': 'holdFull',
+  'the loot will not fit': 'lootWontFit',
+  'take the spilled cargo': 'takeSpilledCargo',
+  'salvage out of reach': 'salvageOutOfReach',
+  'left its post': 'leftPost',
+  'cannot wear the target down': 'cannotWearDown',
+  'watched the road': 'watchedRoad',
+  'ran from it': 'ranFromIt',
+  'avoid a truck it ran from': 'avoidRanFrom',
+  'break off a losing fight': 'breakOffFight',
+  'cornered': 'cornered',
   'Explore': 'explore',
   'a foe in sight stops the repair': 'combatStopsRepair',
   'a foe in sight stops the search': 'combatStopsSearch',

@@ -4,7 +4,7 @@ Knockouts, looting, stranding, tows, the beacon, healing, death and saves. The p
 
 Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-A broken cab knocks the player out while health is above 0. A cab below half may do so earlier, but not while health is 75 or more. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe.
+A broken cab knocks the player out while health is above 0. A cab below half may do so earlier, but not while health is 75 or more. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe. Combat with the player ends in the same turn, so robbers that set out to loot keep that goal.
 
 While knocked out, turns run on their own and the player gives no orders. Looters strip the truck by the same rules as a knocked-out NPC truck, below. The player comes to when the trucks that fought it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP.
 
@@ -37,7 +37,7 @@ NPCs tow each other by the same decision. A stranded driver waits once a tower i
 
 The player can radio a stranded NPC in reach and offer a tow to the place it names. The NPC offers what it can pay. The player can take the fee or tow for free. A free tow gives Social XP on arrival, as much as earning the waived fee in trade profit.
 
-Health at 0 kills the player. The death screen offers Load save and New game. A dead world is never saved. The game keeps three manual save slots, an Autosave every 20 turns and in town, and a Day start autosave at the start of each game day. Load lists them all, newest first, and New game deletes only the autosaves. A save that no longer loads, like one from an older map, offers Migrate save, which keeps skills, perks, money, truck, parts and cargo and moves the truck to a town, or New game. Cab damage costs health at a quarter of its amount, so a lost fight costs about 30 health.
+Health at 0 kills the player. The death screen offers Load save and New game. New game opens the new game setup and starts on a confirmed Start. A dead world is never saved. The game keeps three manual save slots, an Autosave every 20 turns and in town, and a Day start autosave at the start of each game day. Load lists them all, newest first, and New game deletes only the autosaves. A save that no longer loads, like one from an older map, offers Migrate save, which keeps skills, perks, money, truck, parts and cargo and moves the truck to a town, or New game. Cab damage costs health at a quarter of its amount, so a lost fight costs about 30 health.
 
 A parked driver with supplies heals each turn, five times as fast in a town. Healing spends extra supplies. Starving takes health down to 30 and no lower, so only cab damage can kill. Only a fight or a crash can knock the driver out.
 

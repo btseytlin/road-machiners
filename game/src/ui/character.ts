@@ -31,7 +31,6 @@ export class CharacterScreen {
     this.render();
   }
 
-  // Closed windows drop their contents, so hidden copies never answer clicks or drops.
   close(): void {
     this.root.style.display = 'none';
     this.root.replaceChildren();
@@ -69,7 +68,6 @@ export class CharacterScreen {
     );
   }
 
-  // The button that buys the next rank, disabled with its reason when it cannot, or "max" at the top rank.
   private buy(world: World, skill: SkillId, rank: number): HTMLElement {
     if (rank >= MAX_RANK) return el('span', {}, t('character.max'));
     const blocked = canBuyRank(world, skill);
@@ -82,7 +80,6 @@ export class CharacterScreen {
     }, t('character.buy', next));
   }
 
-  // One line per perk pair: the picked perk, both perks as buttons once the rank is reached, or what it needs.
   private perks(world: World, skill: SkillId): HTMLElement[] {
     const open = pendingPerkPairs(world);
     return PERK_LEVELS.map((level) => perkPair(skill, level)).map((pair) => {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { fireWeapons, isHostile, noteAttack } from './combat';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
 import { optionWeights } from './npc-decisions';
 import { REGION } from '../data/region';
-import { RULES } from '../data/rules';
 import { siteGates } from './sites';
 import { stateOf } from './states';
 import { vehicleStats } from './stats';
@@ -30,7 +30,6 @@ function shoot(w: World, shooter: Vehicle, target: Vehicle): void {
   expect(w.events.some((e) => e.t === 'shot' && e.shooter === shooter.id)).toBe(true);
 }
 
-// A point d tiles out from the Bowl gate, away from the town.
 const BOWL = REGION.towns[0];
 const GATE = siteGates(BOWL)[0];
 function outFromGate(d: number): Vec {
@@ -41,7 +40,6 @@ function outFromGate(d: number): Vec {
 const hostileEvents = (w: World, against: string) => w.events.filter((e): e is Extract<GameEvent, { t: 'hostile' }> => e.t === 'hostile' && e.against === against);
 
 describe('lawmen', () => {
-  // Mounted guns and engines count as loot, so a truck with nothing to take has only core parts.
   it('a lawman and a raider with nothing to take are hostile both ways', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const lawman = addLawman(w, { x: 10, y: 10 }, []);
@@ -113,7 +111,6 @@ describe('lawmen', () => {
     expect(stateOf(w, 'feud', lawman.id, robber.id)).not.toBeNull();
   });
 
-  // Lawmen protect neutral NPCs only. The attack is noted as calm, so only the victim rule keeps lawmen out.
   it('a raider attack on the player calls nobody', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -125,8 +122,8 @@ describe('lawmen', () => {
 
   it('a lawman picks a fight at a town gate as freely as away from towns', () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    const atGate = addLawman(w, outFromGate(RULES.guards.range / 2));
-    const raider = addNpc(w, 'raiders', ['raider'], outFromGate(RULES.guards.range / 2 + 3));
+    const atGate = addLawman(w, outFromGate(NPC_BEHAVIOR.lawGateReach / 2));
+    const raider = addNpc(w, 'raiders', ['raider'], outFromGate(NPC_BEHAVIOR.lawGateReach / 2 + 3));
     const far = emptyWorld({ x: 200, y: 200 });
     const away = addLawman(far, { x: 10, y: 10 });
     const farRaider = addNpc(far, 'raiders', ['raider'], { x: 13, y: 10 });

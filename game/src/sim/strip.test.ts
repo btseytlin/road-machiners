@@ -18,6 +18,7 @@ import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS } from './grid';
 import { aimAt, offeredSurrenderBy, plead } from './parley';
 import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
+import { chooseOn } from './tracks';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 import { endTurn } from './world';
@@ -27,7 +28,6 @@ import { entryText } from '../text/resolve';
 // A line's English words, so the tests read like the talk they check.
 const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
-// A raider with a machine gun sees a stranded player who carries goods. It always picks the fight.
 function strandedAmbush(): { w: World; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -116,7 +116,8 @@ describe('surrender offer to a stranded player', () => {
     const me = playerVehicle(w);
     const mugger = w.vehicles.find((v) => v.id === raider.id)!;
     w.player.talked[mugger.id] = { surrender: 'refused' };
-    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite', perceived: w.turn });
+    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite' });
+    chooseOn(w, mugger, me.id, me.pos, 'fight', true);
     expect(w.player.call?.topic).not.toBe('surrender');
     expect(CONDITIONS.demandsSurrender(w, mugger, {})).toBe(false);
     w.vehicles = w.vehicles.filter((v) => v.id !== lawman.id);
@@ -127,7 +128,6 @@ describe('surrender offer to a stranded player', () => {
   });
 });
 
-// A lawman on patrol with a machine gun fights a stranded player who carries goods. It takes nothing.
 function strandedByLawman(judge: 'offer' | 'spare' = 'offer'): { w: World; lawman: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -161,7 +161,7 @@ describe('plain surrender to a stranded player', () => {
     for (let i = 0; i < 5; i++) {
       w = endTurn(w, testDrive);
       expect(shotsAtPlayer(w, lawman)).toEqual([]);
-      if (w.player.call?.topic === 'tow' || w.player.call?.topic === 'towFree') w = hangUp(w); // a lawman at peace may offer the stranded player a tow
+      if (w.player.call?.topic === 'tow' || w.player.call?.topic === 'towFree') w = hangUp(w);
     }
   });
 
@@ -197,7 +197,6 @@ describe('a stranded player not worth the trouble', () => {
   });
 });
 
-// A raider beside a stranded trader far from the player, feuding over the trader's cargo.
 function npcAmbush(answer: 'accept' | 'refuse'): { w: World; raider: Vehicle; trader: Vehicle } {
   const w = emptyWorld({ x: 5, y: 5 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -239,7 +238,6 @@ describe('surrender between NPCs', () => {
 describe('the player demands a beaten NPC give up', () => {
   const DEMAND = 'Your truck is finished. Stand down and let me strip it, and you live.';
 
-  // A trader with cargo and spare mounted parts, feuding with the player within sight.
   function beaten(): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -265,7 +263,6 @@ describe('the player demands a beaten NPC give up', () => {
     expect(asks(callVehicle(healthy.w, healthy.npc.id))).toBe(false);
   });
 
-  // Accepts the demand and returns the world and the NPC after it.
   function accepted(start: World, npc: Vehicle): { w: World; after: Vehicle } {
     forceOption('surrenderOffered', 'accept');
     let w = pick(callVehicle(start, npc.id), DEMAND);
@@ -351,7 +348,6 @@ describe('a beggar offers to stand down and be stripped', () => {
   const STRIP = 'Stand down and let me strip your truck.';
   const CARGO = 'Dump your cargo and drive off.';
 
-  // A healthy trader with cargo and spare parts begs the player for mercy, and the player's call opens.
   function begging(): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;

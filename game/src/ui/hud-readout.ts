@@ -2,14 +2,14 @@ import { GAME_VERSION } from "../config";
 import { playerAid, readyAid } from "../sim/aid";
 import { aidData } from "../sim/states";
 import { aidGoods } from "./format";
-import { tradePartner, tradeReady } from "../sim/economy";
+import { inMeetingReach, isMeeting, playerTrades } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, itemSize } from "../sim/grid";
-import { fuelCap, gunDraw, hasWorkingEngine, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
+import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
 import { fuelLimit } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -17,23 +17,33 @@ import { playerTow } from "../sim/tow";
 import { heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { SalvageStock, Vehicle, World } from "../sim/types";
+import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clock, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyM } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedListNear, emptySalvageNear, lootBlockerHere, salvageListNear } from '../sim/locations';
+import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
 import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { list, num, t, type Msg } from '../text/msg';
 import { partName, siteName, vehicleTitle } from '../text/names';
+
+export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean; title: Msg } {
+  const me = playerVehicle(w);
+  const blocked = !canOverdrive(me);
+  return {
+    checked: inOverdrive(w, me),
+    blocked,
+    title: blocked ? t("hud.overdriveWorn", { pct: Math.round(RULES.overdriveMinEngineShare * 100) }) : t("hud.overdriveTitle"),
+  };
+}
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): string | null {
@@ -42,18 +52,15 @@ function shopNear(world: World): string | null {
   return sites.find((s) => canUseSite(pos, s))?.id ?? null;
 }
 
-// Holds which of the actions in reach the E key runs. The selection is UI state only and is never saved.
 export class ContextPicker {
   private selected: string | null = null;
 
-  // The selected action while it is still listed, else the first one, which becomes the selection.
   pick(actions: ContextAction[]): ContextAction | null {
     const found = actions.find((a) => contextKey(a.target) === this.selected) ?? actions[0] ?? null;
     this.selected = found && contextKey(found.target);
     return found;
   }
 
-  // Moves the selection by one entry and wraps at both ends.
   cycle(actions: ContextAction[], step: 1 | -1): void {
     const current = this.pick(actions);
     if (!current) return;
@@ -62,33 +69,35 @@ export class ContextPicker {
   }
 }
 
-// Every action in reach, the default first. The player picks between them with the arrow keys.
 export function getContextActions(world: World, playing: boolean): ContextAction[] {
   if (playing || !playerCanAct(world)) return [];
-  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
-  const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
+  const deals = [getAidAction(world), ...getTradeActions(world)].filter((d) => d !== null);
   return [...deals.filter((d) => d.ready), ...getPlaceActions(world), ...deals.filter((d) => !d.ready)];
+}
+
+function awaitsStart(s: NpcState): boolean {
+  return aidData(s).agreed && !aidData(s).started;
 }
 
 // An agreed aid deal the player has not started yet.
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
-  if (!s || !aidData(s).agreed || aidData(s).started) return null;
+  if (!s || !awaitsStart(s) || !inMeetingReach(world, s)) return null;
   const words = { goods: aidGoods(s), truck: vehicleTitle(world, vehicleById(world, s.holder)) };
   const label = aidData(s).giver === "player" ? t("action.giveAid", words) : t("action.takeAid", words);
-  return { label, ready: readyAid(world) !== null, target: { kind: 'aid' } };
+  return { label, ready: readyAid(world)?.id === s.id, target: { kind: 'aid', id: s.holder } };
 }
 
-function getTradeAction(world: World): ContextAction | null {
-  const partner = tradePartner(world);
-  return partner && { label: t("action.trade", { truck: vehicleTitle(world, partner) }), ready: tradeReady(world) !== null, target: { kind: 'trade' } };
+function getTradeActions(world: World): ContextAction[] {
+  return playerTrades(world)
+    .filter((s) => inMeetingReach(world, s))
+    .map((s) => ({ label: t("action.trade", { truck: vehicleTitle(world, vehicleById(world, s.holder)) }), ready: isMeeting(world, s), target: { kind: 'trade', id: s.holder } }));
 }
 
 function getPlaceActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   const shop = shopNear(world);
   if (shop) actions.push({ label: t("action.enter", { site: siteName(shop) }), ready: shopAt(world) === shop, target: { kind: 'shop' } });
-  // A knocked-out truck stays open to looting while a removal from it runs.
   for (const downed of downedListNear(world)) {
     actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
@@ -101,7 +110,7 @@ function getSiteActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   if (oasis?.kind === 'oasis') actions.push({ label: t("action.refill", { site: siteName(oasis.id) }), ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
-  actions.push(...stocks.map((stock) => getStockAction(world, stock)));
+  actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
     if (empty) actions.push({ label: stockLabel('empty', empty), ready: false, hint: t("action.noLoot"), target: { kind: 'empty' } });
@@ -110,15 +119,22 @@ function getSiteActions(world: World): ContextAction[] {
 }
 
 // A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
-function getStockAction(world: World, stock: SalvageStock): ContextAction {
-  const target = { kind: 'stock', id: stock.id } as const;
-  const searched = world.player.scavenged.includes(stock.id);
-  const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: stockLabel(searched ? 'loot' : 'search', stock), ready: false, hint: t("action.lootingIt", { truck: vehicleTitle(world, blocker) }), target };
-  const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: stockLabel('loot', stock), ready: reachable, target };
+function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
+  const actions: ContextAction[] = [];
+  if (needsSearch(world, stock)) actions.push(getSearchAction(world, stock));
+  if (hasLootFor(world, stock)) actions.push(withBlocker(world, stock, { label: stockLabel('loot', stock), ready: canReachSalvage(playerVehicle(world), stock), target: { kind: 'loot', id: stock.id } }));
+  return actions;
+}
+
+function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: stockLabel('search', stock), ready: combat === undefined && reachable, combat, target };
+  const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
+  return withBlocker(world, stock, { label: stockLabel('search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });
+}
+
+function withBlocker(world: World, stock: SalvageStock, action: ContextAction): ContextAction {
+  const blocker = lootBlockerHere(world, stock.id);
+  return blocker ? { label: action.label, ready: false, hint: t("action.lootingIt", { truck: vehicleTitle(world, blocker) }), target: action.target } : action;
 }
 
 // What the prompt does with the stock: the verb alone at a loot spot that has no name, since a farmhouse or a hangar
@@ -202,11 +218,9 @@ function weatherLabel(w: World, pos: Vec): { text: Msg; clear: boolean } {
 
 // Negative money is debt. It shows as a positive amount owed.
 export function moneyLabel(money: number): Msg {
-  return money < 0 ? t("money.debt", { n: -money }) : t("money.amount", { n: money });
+  return money < 0 ? t("money.debt", { n: -moneyM(money) }) : t("money.amount", { n: moneyM(money) });
 }
 
-// What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
-// when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: Msg; town: Msg; fee: number }
@@ -301,7 +315,6 @@ export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): Msg[] {
   return notes;
 }
 
-// The guns step, and the speed before it. Null while a stalled or missing engine skips the engine path.
 function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | null {
   const i = steps.findIndex((s) => s.kind === 'guns');
   const step = steps[i];
@@ -318,7 +331,6 @@ function gunCost(steps: SpeedStep[]): { short: Msg; long: Msg } {
   return { short: t("power.cost", { pct }), long: t("power.costLong", { pct, n: lost }) };
 }
 
-// The header chip: working-gun draw against engine capacity, and what the draw costs in top speed.
 export function powerChip(steps: SpeedStep[], v: Vehicle): PowerChip {
   const capacity = workingEngineCapacity(v);
   if (capacity === null) {
@@ -369,7 +381,6 @@ export function getHudReadout(w: World) {
   };
 }
 
-// The issue forms in .github/ISSUE_TEMPLATE/.
 const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";
 
 function issueFormUrl(template: string, fields: Record<string, string>): string {
@@ -384,12 +395,10 @@ export function versionLabel(): string {
   return `v${GAME_VERSION}`;
 }
 
-// The form field id is `version`, so GitHub prefills that field.
 export function bugReportUrl(version: string): string {
   return issueFormUrl("bug.yml", { version });
 }
 
-// The feature form has no version field.
 export function featureRequestUrl(): string {
   return issueFormUrl("feature-request.yml", {});
 }

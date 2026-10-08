@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { sweepLogs, sweepWork } from './cleanup';
+import { sweepLogs, sweepTestCache, sweepWork } from './cleanup';
 import { EMPTY_STATE } from './state';
 import type { Card, FactoryState, Job } from './types';
 
@@ -10,7 +10,6 @@ const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structur
 const card = (issue: number, column: Card['column']): Card => ({ itemId: `i${issue}`, issue, column, labels: [] });
 const running = (stage: Job['stage'], issue: number | null): Job => ({ id: `${stage}-${issue}`, stage, issue, pid: 1, startedAt: '', log: '' });
 
-// A work root with each named clone, each holding a task file and installed packages.
 function work(...names: string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'work-'));
   for (const name of names) {
@@ -47,7 +46,7 @@ describe('sweepWork', () => {
 
   it('keeps queued changes and incidents and the candidate of an open release', () => {
     const root = work('change-12', 'incident-6', 'release-candidate');
-    const release = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [] };
+    const release = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
     const swept = sweepWork(root, state({ pendingChanges: [{ id: 12, text: 't', by: 'u' }], pendingIncidents: [6], release }), []);
     expect(swept.removed).toEqual([]);
     expect(swept.stripped.sort()).toEqual(['change-12', 'incident-6', 'release-candidate']);
@@ -94,5 +93,35 @@ describe('sweepLogs', () => {
     const root = logs(['checks-5-old.log', 20]);
     const failures = [{ stage: 'checks' as const, issue: 5, error: 'e', log: join(root, 'checks-5-old.log'), at: '' }];
     expect(sweepLogs(root, state({ failures }), NOW, 14)).toEqual([]);
+  });
+});
+
+describe('sweepTestCache', () => {
+  const NOW = new Date('2026-01-30T00:00:00Z');
+
+  function cache(...entries: [string, number][]): string {
+    const root = mkdtempSync(join(tmpdir(), 'cache-'));
+    for (const [path, daysOld] of entries) {
+      mkdirSync(join(root, path, '..'), { recursive: true });
+      writeFileSync(join(root, path), 'entry');
+      const at = new Date(NOW.getTime() - daysOld * 24 * 3_600_000);
+      utimesSync(join(root, path), at, at);
+    }
+    return root;
+  }
+
+  it('removes old files and the folders they leave empty, and keeps fresh files', () => {
+    const root = cache(['entries/aa/old.json', 20], ['entries/aa/new.json', 2], ['entries/bb/old.json', 15]);
+    expect(sweepTestCache(root, NOW, 14)).toBe(2);
+    expect(['entries/aa/new.json', 'entries/aa/old.json', 'entries/bb'].map((path) => has(root, path))).toEqual([true, false, false]);
+    expect(has(root, 'entries')).toBe(true);
+  });
+
+  it('keeps the cache folder itself and counts nothing for a missing one', () => {
+    const root = cache(['entries/aa/old.json', 20]);
+    expect(sweepTestCache(root, NOW, 14)).toBe(1);
+    expect(has(root, 'entries')).toBe(false);
+    expect(has(root, '.')).toBe(true);
+    expect(sweepTestCache(join(tmpdir(), 'no-such-cache-root'), NOW, 14)).toBe(0);
   });
 });

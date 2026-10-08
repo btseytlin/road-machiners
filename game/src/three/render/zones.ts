@@ -1,4 +1,4 @@
-// Throttle zones fanned ahead of the truck, draped on the ground, like the 2D src/render/throttle.ts.
+// Bands draped on the ground. Throttle zones fanned ahead of the truck, like the 2D src/render/throttle.ts.
 // The caller supplies the half-angle (it already clamps a minimum so barely-turning trucks keep
 // visible zones) and the hover color (throttle color under the cursor, or PAL.plan off any zone).
 
@@ -10,11 +10,10 @@ import { heightAt, markHeightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-// Strong enough to read over the light desert sand.
 const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.24, hold: 0.28, accelerate: 0.28 };
-const SAMPLE_TILES = 0.5; // most tiles between ground samples, so a band follows the per-tile ground mesh
-const LIFT = 0.1; // meters above the ground, so bumps between samples do not swallow a band
-const HOVER_RADIUS_TILES = 0.6; // matches the 2D hover ring radius
+const SAMPLE_TILES = 0.5;
+const LIFT = 0.1;
+const HOVER_RADIUS_TILES = 0.6;
 const HOVER_WIDTH_TILES = 0.08;
 const HOVER_SEGMENTS = 32;
 
@@ -40,7 +39,6 @@ export class ZonesView {
   }
 
   private makeBand(color: number, opacity: number): THREE.Mesh {
-    // Depth test keeps the zones under trucks. Polygon offset keeps them above the ground between arc points.
     const material = new THREE.MeshBasicMaterial({
       color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
@@ -51,8 +49,6 @@ export class ZonesView {
     return mesh;
   }
 
-  // halfAngle: the zones fan out over half of the truck's turn limit on each side of its heading.
-  // At rest there is no hold zone: red covers the first third of reach and green the rest.
   update(terrain: Terrain, pos: Vec, heading: number, speed: number, halfAngle: number): void {
     const z = zoneEdges();
     const brakeEnd = speed === 0 ? z.restBrakeEnd : z.brakeEnd;
@@ -100,7 +96,6 @@ function pushPoint(out: number[], terrain: Terrain, pos: Vec, a: number, r: numb
   out.push(x * S, h, y * S);
 }
 
-// Two triangles per grid cell. Points run outward along each arc step.
 function gridIndices(arcSteps: number, radialSteps: number): number[] {
   const idx: number[] = [];
   const row = radialSteps + 1;
@@ -113,4 +108,50 @@ function gridIndices(arcSteps: number, radialSteps: number): number[] {
       idx.push(a, b, c, b, d, c);
     }
   return idx;
+}
+
+export type BandLook = { color: number; opacity: number; renderOrder: number; overTrucks: boolean };
+
+export class GroundBand {
+  readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private key = '';
+
+  constructor(look: BandLook) {
+    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+      color: look.color, transparent: true, opacity: look.opacity, depthWrite: false, depthTest: !look.overTrucks,
+      side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    }));
+    this.mesh.renderOrder = look.renderOrder;
+    this.mesh.visible = false;
+  }
+
+  set(terrain: Terrain, center: Vec, inner: number, outer: number): void {
+    this.mesh.visible = true;
+    const key = `${center.x},${center.y},${inner},${outer}`;
+    if (key === this.key) return;
+    this.key = key;
+    const arcSteps = Math.max(HOVER_SEGMENTS, Math.ceil((2 * Math.PI * outer) / SAMPLE_TILES));
+    const positions: number[] = [];
+    for (let i = 0; i <= arcSteps; i++) {
+      const a = (2 * Math.PI * i) / arcSteps;
+      pushPoint(positions, terrain, center, a, inner);
+      pushPoint(positions, terrain, center, a, outer);
+    }
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.mesh.geometry.setIndex(gridIndices(arcSteps, 1));
+  }
+
+  color(hex: number): void {
+    this.mesh.material.color.setHex(hex);
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+  }
 }

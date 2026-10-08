@@ -1,8 +1,7 @@
 import { must } from './exec';
-import { FACTORY_MARK } from './types';
-import type { Card, Column, FactoryConfig, GitHub, Issue, IssueComment, Run } from './types';
+import { COLUMNS, ERROR_REPORT_LABEL, FACTORY_MARK, fingerprintLine } from './types';
+import type { Card, Column, FactoryConfig, FingerprintIssue, GitHub, Issue, IssueComment, Run, RunResult } from './types';
 
-const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state,author';
 
 type Board = { projectId: string; fieldId: string; options: Record<string, string> };
@@ -21,7 +20,21 @@ const ITEMS_QUERY = `query($project: ID!, $cursor: String) { node(id: $project) 
     fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
     content { ... on Issue { number repository { nameWithOwner } labels(first: 50) { nodes { name } } } } } } } } }`;
 
-const ADD_ITEM = `mutation($project: ID!, $content: ID!) { addProjectV2ItemById(input: {projectId: $project, contentId: $content}) { item { id } } }`;
+const CANDIDATES_QUERY = `query($search: String!, $cursor: String) { search(type: ISSUE, query: $search, first: 100, after: $cursor) {
+  pageInfo { hasNextPage endCursor } nodes { ... on Issue { number title body createdAt state author { login } labels(first: 50) { nodes { name } }
+    reactions(content: THUMBS_UP, first: 100) { pageInfo { hasNextPage } nodes { user { login } } } } } } }`;
+
+type CandidateNode = {
+  number: number; title: string; body: string; createdAt: string; state: Issue['state']; author: { login: string } | null;
+  labels: { nodes: { name: string }[] };
+  reactions: { pageInfo: { hasNextPage: boolean }; nodes: { user: { login: string } | null }[] };
+};
+
+type CandidatesPage = {
+  data: { search: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: CandidateNode[] } };
+};
+
+const ADD_ITEM =`mutation($project: ID!, $content: ID!) { addProjectV2ItemById(input: {projectId: $project, contentId: $content}) { item { id } } }`;
 
 const SET_STATUS = `mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
   updateProjectV2ItemFieldValue(input: {projectId: $project, itemId: $item, fieldId: $field, value: {singleSelectOptionId: $option}}) { projectV2Item { id } } }`;
@@ -38,12 +51,34 @@ type ItemsPage = {
 
 const NOT_THIS_KIND = /Could not resolve to an? (User|Organization)/;
 
-export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwner' | 'projectNumber'>): GitHub {
+const RATE_LIMITED = /rate limit|HTTP 429|submitted too quickly/i;
+
+type Wait = (ms: number) => Promise<void>;
+const sleep: Wait = (ms) => new Promise((done) => setTimeout(done, ms));
+
+type ClientConfig = Pick<FactoryConfig, 'repo' | 'projectOwner' | 'projectNumber' | 'githubRetries' | 'githubRetryBaseSeconds' | 'githubTimeoutSeconds'>;
+
+export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHub {
   const repo = cfg.repo;
   let board: Board | null = null;
+  let queue: Promise<unknown> = Promise.resolve();
+
+  async function attempt(args: string[]): Promise<RunResult> {
+    for (let retry = 0; ; retry++) {
+      const result = await run('gh', args, { timeoutMs: cfg.githubTimeoutSeconds * 1000 });
+      if (result.code === 0 || !RATE_LIMITED.test(result.stderr) || retry === cfg.githubRetries) return result;
+      await wait(cfg.githubRetryBaseSeconds * 1000 * 2 ** retry);
+    }
+  }
+
+  function call(args: string[]): Promise<RunResult> {
+    const result = queue.then(() => attempt(args));
+    queue = result.catch(() => undefined);
+    return result;
+  }
 
   async function gh(args: string[]): Promise<string> {
-    return must(await run('gh', args), `gh ${args.slice(0, 3).join(' ')}`);
+    return must(await call(args), `gh ${args.slice(0, 3).join(' ')}`);
   }
 
   async function graphql(query: string, vars: Vars): Promise<string> {
@@ -63,17 +98,23 @@ export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwn
     return { ...raw, author: raw.author.login, labels: raw.labels.map((label) => label.name), thumbsUp: await thumbsUp(raw.number) };
   }
 
-  async function list(label: string): Promise<RawIssue[]> {
-    const out = await gh(['issue', 'list', '-R', repo, '--state', 'open', '--label', label,
-      '--json', ISSUE_FIELDS, '--limit', '500']);
-    return JSON.parse(out) as RawIssue[];
+  async function candidates(labels: string[]): Promise<Issue[]> {
+    const search = `repo:${repo} is:issue is:open label:${labels.map((label) => `"${label}"`).join(',')}`;
+    const found: Issue[] = [];
+    let cursor = '';
+    for (;;) {
+      const vars: Vars = cursor ? { search, cursor } : { search };
+      const page = JSON.parse(await graphql(CANDIDATES_QUERY, vars)) as CandidatesPage;
+      for (const node of page.data.search.nodes) found.push(toIssue(node));
+      if (!page.data.search.pageInfo.hasNextPage) return found;
+      cursor = page.data.search.pageInfo.endCursor;
+    }
   }
 
   async function findProject(): Promise<BoardData> {
     for (const kind of ['user', 'organization']) {
       const query = `query($owner: String!, $number: Int!) { ${kind}(login: $owner) { projectV2(number: $number) { ${PROJECT_FIELDS} } } }`;
-      const result = await run('gh', graphqlArgs(query, { owner: cfg.projectOwner, number: cfg.projectNumber }));
-      // Only a wrong owner kind moves on to the next kind. Any other error is real and stops here.
+      const result = await call(graphqlArgs(query, { owner: cfg.projectOwner, number: cfg.projectNumber }));
       if (result.code !== 0 && NOT_THIS_KIND.test(result.stderr)) continue;
       must(result, `gh api graphql ${kind} project`);
       const data = JSON.parse(result.stdout) as { data: Record<string, { projectV2: BoardData | null } | null> };
@@ -124,17 +165,11 @@ export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwn
   }
 
   return {
-    async candidates(labels) {
-      const byNumber = new Map<number, RawIssue>();
-      for (const label of labels) {
-        for (const raw of await list(label)) byNumber.set(raw.number, raw);
-      }
-      return Promise.all([...byNumber.values()].map(fill));
-    },
+    candidates,
     issue,
     async comments(number): Promise<IssueComment[]> {
       const rows = await lines(['api', `repos/${repo}/issues/${number}/comments`, '--paginate',
-        '--jq', '.[] | {login: .user.login, body: .body}']);
+        '--jq', '.[] | {login: .user.login, body: .body, createdAt: .created_at}']);
       return rows.map((row) => JSON.parse(row) as IssueComment);
     },
     async comment(number, body) {
@@ -151,7 +186,6 @@ export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwn
       await gh(['issue', 'close', String(number), '-R', repo, '--reason', reason]);
     },
     async createIssue(title, body, labels) {
-      // `gh issue create --label` fails on a label the repo lacks, so the labels exist first.
       for (const label of labels) await gh(['label', 'create', label, '-R', repo, '--force']);
       const args = ['issue', 'create', '-R', repo, '--title', title, '--body', body];
       for (const label of labels) args.push('--label', label);
@@ -192,13 +226,26 @@ export function ghClient(run: Run, cfg: Pick<FactoryConfig, 'repo' | 'projectOwn
     async closePullRequest(branch, comment) {
       await gh(['pr', 'close', branch, '-R', repo, '--comment', comment]);
     },
+    async mergePullRequest(branch) {
+      await gh(['pr', 'merge', branch, '-R', repo, '--merge']);
+    },
     async reopen(number) {
       await gh(['issue', 'reopen', String(number), '-R', repo]);
+    },
+    async findByFingerprint(fingerprint) {
+      const out = await gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', ERROR_REPORT_LABEL, '--search', `"${fingerprint}" in:body`, '--json', 'number,state,stateReason,closedAt,body']);
+      const found = (JSON.parse(out) as (FingerprintIssue & { body: string })[]).filter((issue) => issue.body.includes(fingerprintLine(fingerprint)));
+      if (found.length === 0) return null;
+      const { body: _body, ...issue } = found.sort((a, b) => a.number - b.number)[0];
+      return { ...issue, stateReason: issue.stateReason || null, closedAt: issue.closedAt || null };
+    },
+    async errorIssue(number) {
+      const issue = JSON.parse(await gh(['issue', 'view', String(number), '-R', repo, '--json', 'number,state,stateReason,closedAt'])) as FingerprintIssue;
+      return { ...issue, stateReason: issue.stateReason || null, closedAt: issue.closedAt || null };
     },
   };
 }
 
-// Strings go as -f fields and numbers as -F fields, so gh types them right.
 function graphqlArgs(query: string, vars: Vars): string[] {
   const args = ['api', 'graphql', '-f', `query=${query}`];
   for (const [name, value] of Object.entries(vars)) {
@@ -207,7 +254,15 @@ function graphqlArgs(query: string, vars: Vars): string[] {
   return args;
 }
 
-// Skips items that are not issues of this repo or have no Status.
+function toIssue(node: CandidateNode): Issue {
+  if (node.reactions.pageInfo.hasNextPage) throw new Error(`Issue ${node.number} has over 100 thumbs-up, and intake reads only the first 100`);
+  return {
+    number: node.number, title: node.title, body: node.body, createdAt: node.createdAt, state: node.state,
+    author: node.author?.login ?? 'ghost', labels: node.labels.nodes.map((label) => label.name),
+    thumbsUp: node.reactions.nodes.flatMap((reaction) => reaction.user ? [reaction.user.login] : []),
+  };
+}
+
 function toCard(node: ItemNode, repo: string): Card | null {
   const content = node.content;
   const column = node.fieldValueByName?.name;

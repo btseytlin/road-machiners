@@ -1,11 +1,12 @@
-import type { FactoryConfig, Queue } from './types';
+import { QUEUE_OF, type FactoryConfig, type JobStage, type Queue } from './types';
 
-// Job containers are pinned to whole CPUs by pool, with docker's --cpuset-cpus. Pinning, unlike a CPU quota, also shows inside the container:
-// node's availableParallelism() follows it, so the game's test runner starts one worker per CPU it got.
 export type Pool = 'light' | 'implement' | 'test';
 
-// Verify agents run focused tests like implement agents, so they share that pool, and the test pool stays for the factory's checks.
-export const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
+const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
+
+export function poolOf(stage: JobStage): Pool {
+  return stage === 'merge' ? 'test' : POOL_OF[QUEUE_OF[stage]];
+}
 
 const ORDER: Pool[] = ['light', 'implement', 'test'];
 
@@ -13,10 +14,12 @@ type Shares = Pick<FactoryConfig, 'cpuLight' | 'cpuImplement' | 'cpuTest'>;
 
 const shareOf = (cfg: Shares, pool: Pool): number => ({ light: cfg.cpuLight, implement: cfg.cpuImplement, test: cfg.cpuTest })[pool];
 
-const cpuRange = (first: number, count: number): string => (count === 1 ? String(first) : `${first}-${first + count - 1}`);
+export function vitestWorkersOf(cfg: Pick<FactoryConfig, 'vitestWorkersImplement' | 'vitestWorkersTest'>, pool: Pool): number | null {
+  return { light: null, implement: cfg.vitestWorkersImplement, test: cfg.vitestWorkersTest }[pool];
+}
 
-// The CPUs of each pool, as cpuset strings like "2-3". Pools take consecutive CPUs in ORDER, so the light pool sits on CPU 0.
-// Throws when the pools need more CPUs than the server has, since an overlap would void the guarantee.
+const cpuRange =(first: number, count: number): string => (count === 1 ? String(first) : `${first}-${first + count - 1}`);
+
 export function cpuSets(cfg: Shares, cores: number): Record<Pool, string> {
   const counts = ORDER.map((pool) => Math.max(1, Math.round(shareOf(cfg, pool) * cores)));
   const needed = counts.reduce((sum, count) => sum + count, 0);

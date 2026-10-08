@@ -1,5 +1,6 @@
 // The Save and Load panels. Save lists the manual slots and writes the world into the one clicked. Load lists every
 // filled slot, newest first, and loads the one clicked. Save writes at once. Load asks first, since it drops progress.
+// Save also downloads the game or the run log as a file.
 
 import type { SlotId, SlotInfo } from "../three/save-slots";
 import { slotLabel } from "../three/save-slots";
@@ -12,7 +13,9 @@ export type SavePanelActions = {
   list: () => SlotInfo[];
   manualSlots: () => SlotId[];
   save: (slot: SlotId) => void;
-  requestBoot: (slot: SlotId) => void;
+  reboot: (slot: SlotId) => void;
+  exportSave: () => void;
+  exportLog: () => void;
 };
 
 // The game time a save was made at, and the real time when the save has one.
@@ -45,7 +48,13 @@ export class SavePanel {
   openSave(): void {
     const infos = new Map(this.actions.list().map((info) => [info.slot, info]));
     const rows = this.actions.manualSlots().map((slot) => this.row(slot, infos.get(slot) ?? null, () => this.saveInto(slot)));
-    this.show(t("menu.save"), rows);
+    const exports = el(
+      "div",
+      { class: "save-exports" },
+      el("button", { onclick: () => this.actions.exportSave(), title: t("save.exportSaveTitle") }, t("save.exportSave")),
+      el("button", { onclick: () => this.actions.exportLog(), title: t("save.exportLogTitle") }, t("save.exportLog")),
+    );
+    this.show(t("menu.save"), [...rows, exports]);
   }
 
   openLoad(): void {
@@ -60,8 +69,7 @@ export class SavePanel {
 
   private loadFrom(slot: SlotId): void {
     if (!window.confirm(say(t("save.confirmLoad")))) return;
-    this.actions.requestBoot(slot);
-    window.location.reload();
+    this.actions.reboot(slot);
   }
 
   private row(slot: SlotId, info: SlotInfo | null, onclick: () => void): HTMLElement {

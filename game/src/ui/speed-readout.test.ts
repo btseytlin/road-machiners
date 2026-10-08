@@ -14,7 +14,6 @@ import { resolve } from '../text/resolve';
 const en = (msg: Msg): string => resolve(msg, 'en');
 const CLEAR = t('weather.clear');
 
-// The test world's player truck, with the given change applied.
 function playerWith(tweak: (w: World, v: Vehicle) => void = () => undefined): { w: World; v: Vehicle } {
   const w = emptyWorld();
   const v = w.vehicles[0];

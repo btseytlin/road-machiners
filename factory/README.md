@@ -5,8 +5,9 @@ The public files and votes on GitHub issues. Agents design and build the top one
 ## Docs
 
 - [docs/process.md](docs/process.md) is the spec, with a diagram of each flow. Read it first.
+- [docs/state.md](docs/state.md) describes all factory state as one model: the stores, card positions, queues and the commands that change them.
 - [docs/stages.md](docs/stages.md) holds the rules of each stage, model routing and reference images.
-- [docs/evidence.md](docs/evidence.md) covers screenshots, the visual review and ad hoc files.
+- [docs/evidence.md](docs/evidence.md) covers screenshots, the diff guard and ad hoc files.
 - [docs/operations.md](docs/operations.md) covers queues, CPU pools, the daily cap, resume, cleanup, failures, the ledger and deploys.
 - [hermes/SOUL.md](hermes/SOUL.md) is Hermes's identity and rules.
 - [infra/README.md](infra/README.md) sets up the server. [mac/README.md](mac/README.md) runs the factory on a Mac. [dashboard/README.md](dashboard/README.md) covers the public dashboard.
@@ -29,8 +30,8 @@ Run every command in this file from `factory/`. The factory reads two files.
 ## GitHub setup
 
 - The host needs `gh` logged in with the `repo`, `project` and `read:org` scopes. Run `gh auth setup-git` so git pushes with it.
-- The host needs a git identity, since approvals make merge commits.
-- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval and Done. Put its owner and number in `settings.env`.
+- The host needs a git identity, since the merge queue makes merge commits.
+- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval, Hardening, Merging and Done. Put its owner and number in `settings.env`.
 - The repo needs a `dev` branch.
 
 ## Parts

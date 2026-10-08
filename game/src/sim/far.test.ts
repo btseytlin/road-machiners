@@ -9,12 +9,12 @@ import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
 import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
+import { addState } from './states';
 import { fuelCap, vehicleStats } from './stats';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
-import { addState } from './states';
 import { REGION } from '../data/region';
 
 beforeAll(async () => {
@@ -23,7 +23,6 @@ beforeAll(async () => {
 
 const LIVE = TERRAIN.vision.radius + PERF.liveMargin;
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World; d: Drive; last: TurnResult } {
   let d = buildDrive(w);
   let last: TurnResult | null = null;
@@ -43,7 +42,6 @@ function pathLength(trail: Pose[]): number {
   return total;
 }
 
-// Player at (30, 30); one NPC inside the live radius and one far beyond it.
 function mixedWorld(): World {
   const w = emptyWorld();
   const near = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 });
@@ -203,7 +201,6 @@ describe('far NPC travel', () => {
       { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'heardHostile' as const },
     ];
     npc.brain.goals = structuredClone(goals);
-    // The investigation needs a hostile target, so the NPC holds a feud toward the player.
     w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
     const { w: after, d } = play(w, 1);
     w = after;
@@ -239,7 +236,7 @@ describe('far NPC travel', () => {
     for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
     const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
     far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
-    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
+    far.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
     advanceFar(w, far);
     expect(far.brain.farRoute!.offRoad).toBe(false);
@@ -316,7 +313,7 @@ describe('far travel contact', () => {
   it('holds just short of a faster truck in the way and keeps its speed', () => {
     const { w, mover } = far();
     const ahead = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
-    ahead.speed = 2 * vehicleStats(w, mover).maxSpeed; // faster, so the route planner does not steer around it
+    ahead.speed = 2 * vehicleStats(w, mover).maxSpeed;
     mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, mover);
     const contact = vehicleStats(w, mover).radius + vehicleStats(w, ahead).radius;
@@ -349,6 +346,20 @@ describe('far travel contact', () => {
     expect(mover.speed).toBe(0);
   });
 
+  it('drives through the position of a truck hitched to its tow rope', () => {
+    const { w, mover } = far();
+    const towed = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 121, y: 120 });
+    addState(w, 'tow', mover.id, towed.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true });
+    const dest = { x: 200, y: 120 };
+    mover.brain = npcBrain('trader', mover.pos, ['trader']);
+    mover.brain.farRoute = { dest, points: [dest], offRoad: false };
+    mover.order = { kind: 'through', dest };
+
+    advanceFar(w, mover);
+
+    expect(mover.pos.x).toBeGreaterThan(120);
+  });
+
   it('lets two trucks on the same point drive apart', () => {
     const { w, mover } = far();
     addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
@@ -359,7 +370,6 @@ describe('far travel contact', () => {
 });
 
 describe('far NPCs and breakable props', () => {
-  // A fence line along map y at x, 60 tiles long: going around it costs far more than smashing through.
   function fenceLine(x: number, y: number): Obstacle[] {
     return Array.from({ length: 64 }, (_, k) => ({ id: `fence-${k}`, pos: { x, y: y - 30 + k * 0.95 }, r: 0.5, kind: 'landmark' as const, look: 'fence' as const, yaw: Math.PI / 2 }));
   }
@@ -382,7 +392,6 @@ describe('far NPCs and breakable props', () => {
   it('leaves a fence beside its route standing', () => {
     const w = emptyWorld();
     const x = 30 + LIVE + 50;
-    // Yaw 0 lays the fence along map x, two tiles beside the straight way.
     const fence: Obstacle = { id: 'fence-0', pos: { x, y: 80 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: 0 };
     w.obstacles = [fence];
     const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: x - 10, y: 82 });
@@ -396,7 +405,6 @@ describe('far NPCs and breakable props', () => {
 });
 
 describe('far tower and its rope', () => {
-  // A tower boxed in by parked trucks on three sides, with its hitched client parked behind it on the fourth.
   function boxedTower() {
     const w = emptyWorld();
     const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });

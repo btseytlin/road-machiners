@@ -4,15 +4,10 @@
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { GOAL_REASONS_2_19, LINES_2_19 } from './save-text-2-19';
 
-// A saved world as raw JSON. Steps read it without game types, since those change after a step is written.
 export type SavedJson = Record<string, unknown>;
 
-// Bump for a change old saves cannot follow, and empty MIGRATIONS with it. Boot then carries the player's progression over into a new world, since the save screen handles every save that cannot load. A new map needs no bump.
 export const SAVE_MAJOR = 2;
 
-// Step 1 to 2: the chassis grids follow the cab, transmission and tank rules. Cores move, and what stood on their new
-// cells moves to the nearest free deck spot. Parts are 1x1 unless listed here, a copy of the sizes at format 2.1
-// since the parts table changes later.
 const SIZES_2_1: Record<string, readonly [number, number]> = {
   shotgun: [1, 2],
   longRifle: [1, 2],
@@ -59,7 +54,6 @@ type Item = SavedJson & { x: number; y: number; rot: number; part?: SavedJson & 
 type Spot = { x: number; y: number; rot: number };
 type Player = SavedJson & { vehicleId: string; storage: SavedJson[]; money: number };
 
-// The money value of each good at format 2.1.
 const GOOD_VALUES_2_1: Record<string, number> = {
   scrap: 19, salt: 26, meds: 70, grain: 21, textiles: 35, tools: 110, batteries: 76, electronics: 155, parts: 20, fuelDrums: 28, water: 18,
 };
@@ -74,8 +68,6 @@ function cellsAt(item: Item, spot: Spot): Cell[] {
 
 const cellsOf = (item: Item) => cellsAt(item, item);
 
-// The nearest spot from the item's anchor where every cell is free deck, by distance, then row, then column. The
-// item's own turn comes first at each anchor.
 function nearestSpot(item: Item, free: Set<string>): Spot | null {
   const anchors = [...free].map((k) => ({ x: Number(k.split(',')[0]), y: Number(k.split(',')[1]) }));
   const dist = (c: Cell) => (c.x - item.x) ** 2 + (c.y - item.y) ** 2;
@@ -91,12 +83,10 @@ function nearestSpot(item: Item, free: Set<string>): Spot | null {
 
 const isWheel = (item: Item) => item.part?.defId.startsWith('wheel') ?? false;
 
-// The marked cells of the new layout of a chassis.
 function markedCells(layout: readonly string[], mark: string): Set<string> {
   return new Set(layout.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === mark ? [key({ x, y })] : []))));
 }
 
-// Each old core item paired with its copy on the new cells, wearing the new part id. The wheels never moved.
 function relaidCores(vehicle: SavedJson): Map<Item, Item> {
   const before = CORES_2_1[vehicle.chassisId as string];
   const after = CORES_2_2[vehicle.chassisId as string];
@@ -110,14 +100,12 @@ function relaidCores(vehicle: SavedJson): Map<Item, Item> {
   return moved;
 }
 
-// What the player gets for an item that has no spot: the part into storage, the good as cash. Others get nothing.
 function refund(item: Item, player: Player | null): void {
   if (!player) return;
   if (item.part) player.storage.push(item.part);
   else player.money += GOOD_VALUES_2_1[item.good ?? ''] ?? 0;
 }
 
-// Where a displaced item goes: a deck spot, else a refund, else nowhere.
 function rehome(item: Item, free: Set<string>, player: Player | null): Item | null {
   const spot = nearestSpot(item, free);
   if (!spot) {
@@ -128,8 +116,6 @@ function rehome(item: Item, free: Set<string>, player: Player | null): Item | nu
   return { ...item, ...spot };
 }
 
-// A vehicle of a known chassis gets its cores on their new cells. Non-core items that lie on a core cell move to a
-// free deck spot. What has no spot goes to the player's storage or becomes cash, or is dropped for anyone else.
 function relayVehicle(vehicle: SavedJson, player: Player | null): SavedJson {
   const layout = LAYOUTS_2_2[vehicle.chassisId as string];
   if (!layout) return vehicle;
@@ -144,12 +130,10 @@ function relayVehicle(vehicle: SavedJson, player: Player | null): SavedJson {
   return { ...vehicle, items: [...items, ...homed.filter((item) => item !== null)], job: withoutRefit(vehicle.job) };
 }
 
-// Only a refit is tied to the old cells; other jobs do not touch the grid.
 function withoutRefit(job: unknown): unknown {
   return (job as SavedJson | null)?.kind === 'refit' ? null : job;
 }
 
-// Step 3 to 4: a frozen copy of the explored packer, a base64 bitset with the least significant bit first.
 function packExplored_3_4(list: unknown[]): string {
   const bytes = new Uint8Array(Math.ceil(list.length / 8));
   list.forEach((value, i) => {
@@ -164,7 +148,6 @@ function packExplored_3_4(list: unknown[]): string {
 const HANDOVER_TURNS_5_6 = 1;
 const CAB_IDS_6_7 = ['cab', 'cabPickup', 'cabHardtop'];
 
-// A saved defeat gave up when its driver lay out with a working cab, the rule the game used before it saved the fact.
 function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   const defeat = vehicle.defeat as SavedJson | undefined;
   if (!defeat) return vehicle;
@@ -172,8 +155,6 @@ function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
 }
 
-// The Fallen Sun became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
-// ends with it.
 const RETIRED_STOCK_7_8 = 'fallen-sun';
 
 function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
@@ -187,8 +168,6 @@ function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
   };
 }
 
-// Old Orchard became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
-// ends with it. The step repeats the 7 to 8 one, since a committed step is never edited.
 const RETIRED_STOCK_8_9 = 'orchard';
 
 function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
@@ -202,11 +181,8 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
-// Total XP a skill needed for each level at format 2.9; index is the level.
 const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
 
-// Step 9 to 10: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
-// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.10.
 export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
   let xp = 0;
   const ranks: Record<string, number> = {};
@@ -219,10 +195,6 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
   return { xp, ranks };
 }
 
-// A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
-// pressure stands in for what it saw, and the saved turn for when.
-// Storms build over their first turns from the turn they were born. A saved storm is already past its build-up, so it
-// keeps the strength it had. This is a copy of WEATHER.sim.stormFadeTurns at format 16.
 const STORM_FADE_TURNS_16_17 = 30;
 
 function withStormBorn_16_17(world: SavedJson): SavedJson {
@@ -231,9 +203,6 @@ function withStormBorn_16_17(world: SavedJson): SavedJson {
   return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
 }
 
-// 17 to 18: a truck records how far each storm has got into it. A saved truck gets the share it would have settled to
-// where it stands, so loading inside a storm neither flashes nor drops. These are copies of WEATHER.sim.stormEdge and
-// stormFadeTurns, and of the stormDepth rule, at format 17.
 const STORM_EDGE_17_18 = 25;
 const STORM_FADE_TURNS_17_18 = 30;
 
@@ -272,8 +241,6 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
-// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
-// 0 HP. Settling keeps only those that are still patchable and below the target.
 function withPatchParts_13_14(world: SavedJson): SavedJson {
   const vehicles = world.vehicles as SavedJson[];
   const brokenIds = (id: string): string[] => {
@@ -288,8 +255,6 @@ function withPatchParts_13_14(world: SavedJson): SavedJson {
   return { ...world, states: (world.states as SavedJson[]).map(recording) };
 }
 
-// Step 15 to 16: a shot round records the ground point where an exploding round burst. A saved round has none, so the
-// renderer plays its old miss.
 const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
 
 function withBurst_15_16(event: SavedJson): SavedJson {
@@ -297,8 +262,6 @@ function withBurst_15_16(event: SavedJson): SavedJson {
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
-// Every saved far route was planned with roads, since only newer raiders that retreat, flee or are stranded plan
-// them off roads.
 function withRouteStyle_18_19(world: SavedJson): SavedJson {
   const styled = (v: SavedJson): SavedJson => {
     const brain = v.brain as SavedJson | null;
@@ -308,14 +271,259 @@ function withRouteStyle_18_19(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
 }
 
-// The sim keeps ids where it kept English. Goal reasons become ids, and a phrase no table knows becomes 'legacy',
-// since an old save must load over a display phrase. An open call's line becomes its id, and a call on a line no
-// table knows hangs up, as do counted values of a unit other than parts. Trucks and bounty contracts lose their
-// names, which texts now derive. The last turn's text events go, since nothing reads them after a load.
-const UNITS_2_19 = new Set(['part']);
-const TEXT_EVENTS_2_19 = new Set(['info', 'supply', 'money', 'say', 'activity', 'stall']);
+function withoutGuards_19_20(world: SavedJson): SavedJson {
+  const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
+  const unnoted = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { gunnedBy: _, ...brain } = v.brain as SavedJson;
+    return { ...v, brain };
+  };
+  return {
+    ...world,
+    events: (world.events as SavedJson[]).filter((e) => e.t !== 'guardShot'),
+    vehicles: (world.vehicles as SavedJson[]).map((v) => unnoted(uncredited(v))),
+    removed: (world.removed as SavedJson[]).map(uncredited),
+  };
+}
 
-function withGoalIds_19_20(v: SavedJson): SavedJson {
+function withFleePerceived_20_21(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+function withFightWorn_21_22(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'fight' ? { ...g, worn: { turn, condition: 1 } } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+function withTracks_22_23(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const places = new Map((world.vehicles as SavedJson[]).map((v) => [v.id as string, v.pos as SavedJson]));
+  const fromNoticed = (noticed: Record<string, number>): Record<string, SavedJson> => {
+    const tracks: Record<string, SavedJson> = {};
+    for (const decision of ['contactHeard', 'hostileSeen']) {
+      for (const [key, last] of Object.entries(noticed)) {
+        const [kind, id] = key.split(':');
+        const at = places.get(id);
+        const seen = decision === 'hostileSeen';
+        if (kind === decision && at) tracks[id] = { at: { ...at }, turn: last, sighted: seen, choice: 'keep', chosenInSight: seen };
+      }
+    }
+    return tracks;
+  };
+  const fromGoal = (tracks: Record<string, SavedJson>, g: SavedJson): void => {
+    const at = places.get(g.targetId as string);
+    if ((g.kind === 'fight' || g.kind === 'flee') && at) tracks[g.targetId as string] = { at: { ...at }, turn: (g.perceived as number | undefined) ?? turn, sighted: true, choice: g.kind, chosenInSight: true };
+  };
+  const untimed = (g: SavedJson): SavedJson => {
+    if (g.kind !== 'fight') return g;
+    const { perceived: _, ...rest } = g;
+    return rest;
+  };
+  const tracked = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const noticed = brain.noticed as Record<string, number>;
+    const goals = brain.goals as SavedJson[];
+    const tracks = fromNoticed(noticed);
+    for (const g of goals) fromGoal(tracks, g);
+    const kept = Object.fromEntries(Object.entries(noticed).filter(([key]) => !key.startsWith('hostileSeen:') && !key.startsWith('contactHeard:')));
+    return { ...v, brain: { ...brain, noticed: kept, goals: goals.map(untimed), tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(tracked), removed: (world.removed as SavedJson[]).map(tracked) };
+}
+
+function withSeenSince_23_24(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const tracks = Object.fromEntries(Object.entries(brain.tracks as Record<string, SavedJson>).map(([id, t]) => [id, { ...t, seenSince: null }]));
+    return { ...v, brain: { ...brain, tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+const RETIRED_STOCK_27_28 = 'glass-flats';
+
+function withoutRetiredStock_27_28(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_27_28 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_27_28),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_27_28) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+const FORTRESS_OBSTACLES_24_25 = new Set(
+  ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
+);
+
+function isGoneObstacle_24_25(o: SavedJson): boolean {
+  const id = o.id as string;
+  return FORTRESS_OBSTACLES_24_25.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-')
+    || id === 'pond-dustwell' || id === 'pond-green-pit' || id.startsWith('cw-salvage-yard-');
+}
+
+const SEARCH_SALT_25_26 = 0x73656172;
+const NO_HIDDEN_25_26 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+
+function withUtilities_25_26(world: SavedJson): SavedJson {
+  const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
+  return {
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(ordered),
+    removed: (world.removed as SavedJson[]).map(ordered),
+    smoke: [],
+    fields: [],
+    flares: [],
+    lines: [],
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_25_26 },
+  };
+}
+
+const LOOT_SITES_25_26 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_25_26 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_25_26 = /^wreck\d+$/;
+
+function isRolledStock_25_26(stock: SavedJson): boolean {
+  const id = stock.id as string;
+  return !stock.pile && (LOOT_SITES_25_26.has(id) || LOOT_SPOT_25_26.test(id) || ROAD_WRECK_25_26.test(id));
+}
+
+function withHiddenStock_25_26(world: SavedJson): SavedJson {
+  const searched = new Set((world.player as SavedJson).scavenged as string[]);
+  const hide = (stock: SavedJson): SavedJson => {
+    if (searched.has(stock.id as string) || !isRolledStock_25_26(stock)) return { ...stock, hidden: NO_HIDDEN_25_26() };
+    const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
+    return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
+  };
+  return { ...world, salvage: (world.salvage as SavedJson[]).map(hide) };
+}
+
+function withFreeze_25_26(world: SavedJson): SavedJson {
+  return { ...world, player: { ...(world.player as SavedJson), frozen: false } };
+}
+
+function withFulfilledFlag_26_27(world: SavedJson): SavedJson {
+  const flagged = (c: SavedJson): SavedJson => (c.kind === 'bounty' ? { ...c, fulfilled: false } : c);
+  const player = world.player as SavedJson;
+  const shops = Object.fromEntries(
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(flagged) }]),
+  );
+  return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(flagged) }, shops };
+}
+
+export const CENTS_PER_MONEY_29_30 = 100 / 3;
+const MONEY_PRACTICE_29_30 = ['profit', 'freeTow', 'aid'];
+
+function scaled_29_30(value: unknown, what: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Saved ${what} is ${String(value)}, not a number`);
+  return value * CENTS_PER_MONEY_29_30;
+}
+
+function cents_29_30(value: unknown, what: string): number {
+  return Math.round(scaled_29_30(value, what));
+}
+
+function scaledRecord_29_30(record: SavedJson, what: string): SavedJson {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_29_30(v, `${what} ${k}`)]));
+}
+
+function contractCents_29_30(c: SavedJson): SavedJson {
+  return { ...c, reward: cents_29_30(c.reward, `contract ${String(c.id)} reward`) };
+}
+
+function callVarsCents_29_30(vars: SavedJson): SavedJson {
+  const centsVar = (v: SavedJson): SavedJson => {
+    if (v.kind === 'money') return { ...v, amount: cents_29_30(v.amount, 'call money') };
+    if (v.kind === 'deal') return { ...v, price: cents_29_30(v.price, 'call deal price') };
+    if (v.kind === 'prices') {
+      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_29_30(g.buy, 'call buy price'), sell: cents_29_30(g.sell, 'call sell price') }));
+      return { ...v, goods };
+    }
+    return v;
+  };
+  return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, centsVar(v as SavedJson)]));
+}
+
+function callCents_29_30(call: SavedJson): SavedJson {
+  const line = call.line as SavedJson;
+  return { ...call, vars: callVarsCents_29_30(call.vars as SavedJson), line: { ...line, vars: callVarsCents_29_30(line.vars as SavedJson) } };
+}
+
+function stateCents_29_30(state: SavedJson): SavedJson {
+  const data = state.data as SavedJson;
+  const what = `${String(data.kind)} state ${String(state.id)}`;
+  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_29_30(data.fee, `${what} fee`), waived: cents_29_30(data.waived, `${what} waived fee`) } };
+  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_29_30(data.fee, `${what} fee`) } };
+  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_29_30(data.price, `${what} price`) } };
+  return state;
+}
+
+function feeCents_29_30(e: SavedJson): SavedJson {
+  return { ...e, fee: cents_29_30(e.fee, `${String(e.t)} fee`) };
+}
+
+const EVENT_CENTS_29_30: Record<string, (e: SavedJson) => SavedJson> = {
+  money: (e) => ({ ...e, amount: cents_29_30(e.amount, 'money event') }),
+  practice: (e) => (MONEY_PRACTICE_29_30.includes(e.source as string) ? { ...e, amount: scaled_29_30(e.amount, `${String(e.source)} practice`) } : e),
+  contract: (e) => ({ ...e, contract: contractCents_29_30(e.contract as SavedJson) }),
+  towOffer: feeCents_29_30,
+  towDone: feeCents_29_30,
+  escortPaid: feeCents_29_30,
+  escortHired: feeCents_29_30,
+  aid: (e) => ({ ...e, paid: cents_29_30(e.paid, 'aid paid') }),
+  stateEnded: (e) => ({ ...e, state: stateCents_29_30(e.state as SavedJson) }),
+  say: (e) => ({ ...e, vars: callVarsCents_29_30(e.vars as SavedJson) }),
+};
+
+function eventCents_29_30(e: SavedJson): SavedJson {
+  const convert = EVENT_CENTS_29_30[e.t as string];
+  return convert ? convert(e) : e;
+}
+
+function vehicleCents_29_30(v: SavedJson): SavedJson {
+  const resources = v.resources as SavedJson | null;
+  if (!resources) return v;
+  return { ...v, resources: { ...resources, money: cents_29_30(resources.money, `vehicle ${String(v.id)} money`) } };
+}
+
+function withCents_29_30(world: SavedJson): SavedJson {
+  const player = world.player as SavedJson;
+  const call = player.call as SavedJson | null;
+  return {
+    ...world,
+    player: {
+      ...player,
+      money: cents_29_30(player.money, 'player money'),
+      costBasis: scaledRecord_29_30(player.costBasis as SavedJson, 'cost basis'),
+      contracts: (player.contracts as SavedJson[]).map(contractCents_29_30),
+      call: call ? callCents_29_30(call) : null,
+    },
+    shops: Object.fromEntries(
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_29_30) }]),
+    ),
+    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_29_30),
+    removed: (world.removed as SavedJson[]).map(vehicleCents_29_30),
+    salvage: (world.salvage as SavedJson[]).map((stock) => {
+      const pile = stock.pile as SavedJson | undefined;
+      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_29_30(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
+    }),
+    states: (world.states as SavedJson[]).map(stateCents_29_30),
+    events: (world.events as SavedJson[]).map(eventCents_29_30),
+  };
+}
+
+
+const UNITS_2_19 = new Set(['part']);
+
+function withGoalIds_33_34(v: SavedJson): SavedJson {
   const { name: _name, ...rest } = v;
   const brain = v.brain as SavedJson | null;
   if (!brain) return rest;
@@ -323,63 +531,55 @@ function withGoalIds_19_20(v: SavedJson): SavedJson {
   return { ...rest, brain: { ...brain, goals } };
 }
 
-function knownUnits_19_20(vars: SavedJson): boolean {
+function knownUnits_33_34(vars: SavedJson): boolean {
   return Object.values(vars).every((v) => (v as SavedJson).kind !== 'count' || UNITS_2_19.has((v as SavedJson).unit as string));
 }
 
 // The open call with its line as an id, or null when the call hangs up.
-function callWithLineId_19_20(call: SavedJson | null): SavedJson | null {
+function callWithLineId_33_34(call: SavedJson | null): SavedJson | null {
   if (!call) return null;
   const said = call.line as SavedJson;
   const line = LINES_2_19[said.text as string];
-  if (!line || !knownUnits_19_20(call.vars as SavedJson) || !knownUnits_19_20(said.vars as SavedJson)) return null;
+  if (!line || !knownUnits_33_34(call.vars as SavedJson) || !knownUnits_33_34(said.vars as SavedJson)) return null;
   return { ...call, line: { line, vars: said.vars } };
 }
 
-const withoutTargetName_19_20 = (c: SavedJson): SavedJson => {
+const withoutTargetName_33_34 = (c: SavedJson): SavedJson => {
   const { targetName: _targetName, ...rest } = c;
   return rest;
 };
 
-function withTextIds_19_20(world: SavedJson): SavedJson {
+function withTextIds_33_34(world: SavedJson): SavedJson {
   const player = world.player as SavedJson;
   const shops = Object.fromEntries(
-    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_19_20) }]),
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_33_34) }]),
   );
   return {
     ...world,
-    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_19_20),
-    removed: (world.removed as SavedJson[]).map(withGoalIds_19_20),
-    player: { ...player, call: callWithLineId_19_20(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_19_20) },
+    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_33_34),
+    player: { ...player, call: callWithLineId_33_34(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_33_34) },
     shops,
-    events: (world.events as SavedJson[]).filter((e) => !TEXT_EVENTS_2_19.has(e.t as string)),
   };
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
-  // 0 to 1: the player gets townPatched, as a new game does.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
-  // 1 to 2: chassis grids follow the cab, transmission and tank rules; cores move, and what stood on their new cells
-  // moves to a free deck spot or the garage.
   (world) => {
     const player = { ...(world.player as Player), storage: [...(world.player as Player).storage] };
     const vehicles = (world.vehicles as SavedJson[]).map((v) => relayVehicle(v, v.id === player.vehicleId ? player : null));
     const removed = (world.removed as SavedJson[]).map((v) => relayVehicle(v, null));
     return { ...world, player, vehicles, removed };
   },
-  // 2 to 3: the new aid XP source starts at 0, as in a new game.
   (world) => {
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
   },
-  // 3 to 4: player.explored becomes a base64 bitset.
   (world) => {
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, explored: packExplored_3_4(player.explored as unknown[]) } };
   },
-  // 4 to 5: a contract gets the turns it has left as its window, so no deadline or reward changes. A haul is no rush.
   (world) => {
     const turn = world.turn as number;
     const windowed = (c: SavedJson): SavedJson => {
@@ -392,7 +592,6 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     );
     return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(windowed) }, shops };
   },
-  // 5 to 6: an aid deal waits for the player's [E] handover, one turn of work.
   (world) => {
     const handover = (s: SavedJson): SavedJson => {
       const data = s.data as SavedJson;
@@ -400,42 +599,50 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     };
     return { ...world, states: (world.states as SavedJson[]).map(handover) };
   },
-  // 6 to 7: a defeat records whether its driver gave up, where it used to be read from the cab.
   (world) => ({
     ...world,
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
-  // 7 to 8: the Fallen Sun is a territory, so its site stock goes.
   withoutRetiredStock_7_8,
-  // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
-  // 9 to 10: XP goes to one pool and levels become bought ranks.
   (world) => {
     const { skills, ...player } = world.player as SavedJson;
     return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
-  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
   (world) => world,
-  // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
-  // 12 to 13: the player gets the headlight switch, off as in a new game.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
-  // 13 to 14: a patch records the parts it lifts.
   withPatchParts_13_14,
-  // 14 to 15: goals may be a rearm lie-up with an until turn. Old saves hold none, so nothing changes. A defeated
-  // driver still on its retreat lies up when it gets home.
   (world) => world,
-  // 15 to 16: craters and the burst point of shot rounds. A new game has no craters.
   (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
-  // 16 to 17: a storm records the turn it was born, already past its build-up.
   withStormBorn_16_17,
-  // 17 to 18: a truck records how far each storm has got into it, settled where it stands.
   withStormExposure_17_18,
-  // 18 to 19: a far route records whether it was planned off roads; every old one was not.
   withRouteStyle_18_19,
-  // 19 to 20: the sim keeps ids where it kept English text, so every language can show it.
-  withTextIds_19_20,
+  withoutGuards_19_20,
+  withFleePerceived_20_21,
+  withFightWorn_21_22,
+  withTracks_22_23,
+  withSeenSince_23_24,
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
+  withFulfilledFlag_26_27,
+  withoutRetiredStock_27_28,
+  (world) => ({ ...world, setup: { mode: 'roaming', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } } }),
+  withCents_29_30,
+  (world) => world,
+  (world) => {
+    const { events: _events, removed: _removed, ...rest } = world;
+    const { visible: _visible, ...player } = world.player as SavedJson;
+    const vehicles = (world.vehicles as SavedJson[]).map(({ trail: _trail, ...vehicle }) => vehicle);
+    const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
+    return { ...rest, player, vehicles, broken };
+  },
+  (world) => {
+    const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
+    return { ...world, player };
+  },
+  withTextIds_33_34,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

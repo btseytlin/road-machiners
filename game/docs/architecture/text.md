@@ -80,7 +80,7 @@ Each fault prints the screen, language, window size, a CSS path, the text, the s
 
 Each of these stays as it is, with a follow-up where one makes sense.
 
-- The debug console, the cheats it runs, the perf panel, `icons.html`, `sound.html` and the progression and income reports are dev tools. They stay English. The full-log debug lines go through the catalog but name goal kinds as the code does.
+- The debug console, the cheats it runs, the full shop it opens, the perf panel, `icons.html`, `sound.html` and the progression and income reports are dev tools. They stay English. The full-log debug lines go through the catalog but name goal kinds as the code does.
 - The crash screen shows the raw error and its stack, for a bug report. Its title and hint are translated.
 - Internal `Error` messages are for the console and bug reports. No `Error` message is shown to a player.
 - Driver names stay in Latin script in every language, as proper names. They are rolled from `nameRng` and stored in saves. Follow-up: a Cyrillic name list, which needs a save step and a decision on the name roll.

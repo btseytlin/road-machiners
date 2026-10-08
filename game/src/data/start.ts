@@ -5,40 +5,52 @@ import { RULES } from './rules';
 
 export type StartKit = {
   chassis: string;
-  parts: string[]; // mounted in order on the first free fitting mount
-  storage: string[]; // spare parts in the town garage
+  parts: string[];
+  storage: string[];
   money: number;
   fuel: number;
   supplies: number;
   cargo: Record<string, number>;
   costBasis: Record<string, number>;
+  autoRepair: boolean;
+  opening: Opening | null;
+};
+
+export type Opening = {
+  log: 'stranded';
+  condition: Record<string, number>;
+  stock: { goods: Record<string, number>; parts: string[] };
 };
 
 export const START_KITS: Record<string, StartKit> = {
-  // The normal start: a light scout with one gun and some scrap to trade.
   standard: {
     chassis: 'scout',
-    parts: ['panniers', 'mg', 'stockEngine', 'cage'],
+    parts: ['panniers', 'mg', 'stockEngine'],
     storage: [],
-    money: 1000,
+    money: 33300,
     fuel: CHASSIS.scout.fuelCap,
     supplies: RULES.baseSupplies,
     cargo: { scrap: 2, parts: 2 },
-    costBasis: { scrap: 10 },
+    costBasis: { scrap: 333 },
+    autoRepair: false,
+    opening: {
+      log: 'stranded',
+      condition: { stockEngine: 0.18, cabPickup: 0.3 },
+      stock: { goods: { scrap: 0, parts: 3 }, parts: ['cage'] },
+    },
   },
-  // For testing combat: both weapons, a front ram and armor, with spares in the town garage.
   combat: {
     chassis: 'hauler',
     parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
     storage: ['plates', 'cage', 'mg'],
-    money: 1500,
+    money: 50000,
     fuel: 60,
     supplies: RULES.baseSupplies,
     cargo: { scrap: 2 },
-    costBasis: { scrap: 10 },
+    costBasis: { scrap: 333 },
+    autoRepair: true,
+    opening: null,
   },
-  // A reasonably prepared mid-game player, for the income harness: a hauler with a cargo box, two guns, armor and a
-  // diesel, and money for a few loads.
   midgame: {
     chassis: 'hauler',
     parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
@@ -48,18 +60,20 @@ export const START_KITS: Record<string, StartKit> = {
     supplies: RULES.baseSupplies,
     cargo: { parts: 2 },
     costBasis: {},
+    autoRepair: true,
+    opening: null,
   },
-  // The gear of a player who snowballed on raiders: a convertible with two machine guns, a slug cannon, a shotgun, a
-  // ram and plates. Measures what that truck earns, not how it is earned.
   snowball: {
     chassis: 'convertible',
     parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
     storage: [],
-    money: 2500,
+    money: 83300,
     fuel: CHASSIS.convertible.fuelCap,
     supplies: RULES.baseSupplies,
     cargo: {},
     costBasis: {},
+    autoRepair: true,
+    opening: null,
   },
 };
 

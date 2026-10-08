@@ -1,25 +1,24 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EVIDENCE_CHECK_COMMAND, dockerContainer } from './container';
-import { takeUsage } from './ledger';
+import { EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb, usageLimitMessage } from './container';
+import { recordJob, takeUsage } from './ledger';
+import { UsageLimitError } from './pause';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
 
 const HOME = resolve('tmp/factory-container-test');
 const tokenPrices: FactoryConfig['tokenPrices'] = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
-const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME, tokenPrices } as FactoryConfig;
+const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, agentJobMaxMinutes: 30, home: HOME, tokenPrices } as FactoryConfig;
 
-// A finished agent run ends with this event, which the job's ledger line reads.
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
 
-// Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
-function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}): { run: Run; calls: Call[] } {
+function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}, stderr = 'boom'): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
-    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr: 'boom' };
+    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr };
     const stdout = args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '';
     const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout };
     return { code: answer.code, stdout: answer.stdout ?? '', stderr: 'setup failed' };
@@ -42,56 +41,51 @@ describe('dockerContainer', () => {
     expect(runCall(free.calls).args).not.toContain('--cpuset-cpus');
   });
 
-  it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
+  it('passes the secrets by env only and mounts only the clone, the npm cache and the check command', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
-    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' });
+    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', FACTORY_JOB_MAX_MINUTES: '30' });
+    expect(call.opts?.input).toContain('The limit is at most 30 minutes.');
     expect(call.opts?.input).toMatch(/^Your folder is \/work\/game\./);
     expect(call.opts?.input).toContain('When your activity changes, run factory-status');
     expect(call.opts?.input).toContain('factory-status milestone');
     expect(call.opts?.input).toMatch(/\n\ndo it$/);
     expect(call.opts?.logPath).toBe('/l.log');
-    expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
+    expect(call.args.filter((a) => a === '-v')).toHaveLength(3);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
-    expect(call.args.filter((a) => a === '-e')).toHaveLength(11);
-    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
+    expect(call.args.filter((a) => a === '-e')).toHaveLength(12);
+    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'bash', '-c', expect.stringMatching(/memory\.peak.*; factory-agent "\$@"$/), 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
   it('mounts the folders the stage names read only', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', readOnly: { '/h/state': '/factory/state' } });
     const args = runCall(calls).args;
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args).toContain('/h/state:/factory/state:ro');
   });
 
-  it('mounts the bundled evidence check read only, and only when the run asks for it', async () => {
+  it('mounts the bundled check command read only for every agent, since the commit hook runs it', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', evidenceCheck: true });
-    const args = runCall(calls).args;
-    expect(args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(runCall(calls).args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
     expect(existsSync(`${HOME}/agent-check/check.mjs`)).toBe(true);
-    const plain = fakeRun();
-    await dockerContainer(plain.run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
-    expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
   });
 
-  it('tells the agents that write evidence to run the mounted command as their last step', () => {
-    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch']]) {
-      expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
-    }
+  it('tells the testing agent to run the mounted command before it ends', () => {
+    expect(readFileSync('prompts/test.md', 'utf8')).toContain(`${EVIDENCE_CHECK_COMMAND} test`);
   });
 
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });
     expect(runCall(calls).args).toContain('/h/media/issue-7:/work/.factory-media:ro');
-    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(4);
   });
 
   it('mounts the session folder under the agent projects folder and starts the session by id', async () => {
@@ -99,7 +93,7 @@ describe('dockerContainer', () => {
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/sessions/issue-7', id: 'abc', resume: false } });
     const { args } = runCall(calls);
     expect(args).toContain('/h/sessions/issue-7:/home/pwuser/.claude/projects');
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--session-id', 'abc']);
     expect(args).not.toContain('--resume');
   });
@@ -117,6 +111,24 @@ describe('dockerContainer', () => {
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', effort: 'low' });
     const args = runCall(calls).args;
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
+  });
+
+  it('passes an advisor only when a stage names one', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', advisor: 'opus' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log' });
+    const [advised, plain] = calls.filter((call) => call.args.includes('--model')).map((call) => call.args);
+    expect(advised.slice(advised.indexOf('--advisor'), advised.indexOf('--advisor') + 2)).toEqual(['--advisor', 'opus']);
+    expect(plain).not.toContain('--advisor');
+  });
+
+  it('passes disallowed tools only when a stage names them', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', disallowedTools: ['Agent'] });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log' });
+    const [blocked, open] = calls.filter((call) => call.args.includes('--model')).map((call) => call.args);
+    expect(blocked.slice(blocked.indexOf('--disallowedTools'), blocked.indexOf('--disallowedTools') + 2)).toEqual(['--disallowedTools', 'Agent']);
+    expect(open).not.toContain('--disallowedTools');
   });
 
   it('puts a skill command on the first line, before the outputs note', async () => {
@@ -172,6 +184,28 @@ describe('dockerContainer', () => {
     expect(runCall(calls).args.slice(0, 6)).toEqual(['run', '--rm', '--label', 'factory=1', '--label', 'factory-job=testing-8-x']);
   });
 
+  it('passes the pool test worker count, and none for a pool without one', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, 'testing-8-x', '2-3', 2).shell('/c', 'x', '/l');
+    expect(runCall(calls).args.join(' ')).toContain('-e TEST_WORKERS=2');
+    const light = fakeRun();
+    await dockerContainer(light.run, cfg, 'testing-8-x', '0').shell('/c', 'x', '/l');
+    expect(runCall(light.calls).args.join(' ')).not.toContain('TEST_WORKERS');
+  });
+
+  it('records the highest container peak of a job on its ledger line, also from a failed run', async () => {
+    rmSync(HOME, { recursive: true, force: true });
+    const peak = (gib: number): string => `log line\nFACTORY_MEMORY_PEAK ${gib * 1024 ** 3}\n`;
+    await dockerContainer(fakeRun(0, {}, peak(2.5)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    await expect(dockerContainer(fakeRun(1, {}, peak(3)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l')).rejects.toThrow('exit 1');
+    await dockerContainer(fakeRun(0, {}, peak(1)).run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    await dockerContainer(fakeRun(0, {}, 'killed, no mark').run, cfg, 'checks-8-x').shell('/c', 'x', '/l');
+    recordJob(HOME, tokenPrices, new Date('2026-10-06T12:00:00Z'), { id: 'checks-8-x', stage: 'checks', issue: 8, startedAt: '2026-10-06T11:50:00Z' }, 'done');
+    const lines = readFileSync(`${HOME}/ledger.jsonl`, 'utf8').trim().split('\n').map((text) => JSON.parse(text) as { kind: string; peakGb?: number });
+    expect(lines.find((line) => line.kind === 'job')?.peakGb).toBe(3);
+    expect(readPeakGb('no mark')).toBeUndefined();
+  });
+
   it('takes the time limits off the game tests in every container', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).shell('/c', 'x', '/l');
@@ -216,6 +250,15 @@ describe('dockerContainer', () => {
     await expect(dockerContainer(fakeRun(2).run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('exit 2');
   });
 
+  it('mounts each given host folder read write in a shell, and mounts none by default', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).shell('/w/c', 'x', '/l.log', {}, { '/h/test-cache': '/test-cache' });
+    expect(runCall(calls).args).toContain('/h/test-cache:/test-cache');
+    const plain = fakeRun();
+    await dockerContainer(plain.run, cfg, null).shell('/w/c', 'x', '/l.log');
+    expect(runCall(plain.calls).args.join(' ')).not.toContain(':/test-cache');
+  });
+
   it('runs a shell script with the given env and no token', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).shell('/w/c', 'npm ci', '/l.log', { SAVE_SCOPE: 'dev' });
@@ -223,7 +266,7 @@ describe('dockerContainer', () => {
     expect(call.args).toContain('SAVE_SCOPE=dev');
     expect(call.args).toContain('/work/game');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
-    expect(call.args.slice(-3)).toEqual(['bash', '-lc', 'npm ci']);
+    expect(call.args.slice(-3)).toEqual(['bash', '-lc', expect.stringMatching(/memory\.peak.*\nnpm ci$/)]);
     expect(call.opts?.env).toBeUndefined();
     expect(call.args).toContain('roam-factory-agents');
     expect(call.args).toContain('HTTPS_PROXY=http://roam-factory-proxy:8888');
@@ -273,5 +316,33 @@ describe('agent usage', () => {
     const [usage] = takeUsage(HOME, 'job-10');
     expect([usage.costUsd, usage.fromTranscript]).toEqual([2, true]);
     expect(existsSync(`${HOME}/usage/job-10.projects`)).toBe(false);
+  });
+});
+
+describe('usage limit', () => {
+  const LIMIT_RESULT = JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, total_cost_usd: 0, result: "You've hit your weekly limit, resets 11pm (UTC)" });
+  const limitRun = (stdout: string): Run => async (_cmd, args) => (args[0] === 'run' && args[1] === '--rm' ? { code: 1, stdout, stderr: '' } : { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : 'sha:1\n', stderr: '' });
+  const pause = `${HOME}/paused`;
+
+  it('pauses the factory and throws a usage-limit error', async () => {
+    mkdirSync(HOME, { recursive: true });
+    rmSync(pause, { force: true });
+    const agent = dockerContainer(limitRun(`{"type":"system"}\n${LIMIT_RESULT}\n`), cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    await expect(agent).rejects.toBeInstanceOf(UsageLimitError);
+    expect(readFileSync(pause, 'utf8')).toBe("Hermes: Claude weekly usage limit; You've hit your weekly limit, resets 11pm (UTC)\n");
+    rmSync(pause);
+  });
+
+  it('keeps a pause someone else wrote', async () => {
+    mkdirSync(HOME, { recursive: true });
+    writeFileSync(pause, 'Hermes repairs #4\n');
+    await expect(dockerContainer(limitRun(LIMIT_RESULT), cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toBeInstanceOf(UsageLimitError);
+    expect(readFileSync(pause, 'utf8')).toBe('Hermes repairs #4\n');
+    rmSync(pause);
+  });
+
+  it('finds no limit in a normal failure, and fails loud on a limit result with no message', () => {
+    expect(usageLimitMessage(`${AGENT_RESULT}\n`)).toBeNull();
+    expect(() => usageLimitMessage(JSON.stringify({ type: 'result', api_error_status: 429 }))).toThrow('no message');
   });
 });

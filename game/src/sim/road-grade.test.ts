@@ -8,12 +8,11 @@ import { deckSegments, heightFromElevation } from './terrain';
 import { gradePaths, gradeRoads } from './road-grade';
 import { TEST_MAP } from '../test/map';
 import { dist, type Vec } from './vec';
+import { insideCurtain } from './fortress';
+import { isFortress } from './sites';
 
-// Heights are stored as whole steps of 1 / heightScale, so a grade read from the map file can pass
-// its limit by up to one step per tile.
 const STORED_STEP = 1 / MAPGEN.heightScale;
 
-// Points every quarter tile along a road.
 function walk(road: readonly Vec[]): Vec[] {
   const points: Vec[] = [];
   for (let i = 1; i < road.length; i++) {
@@ -25,13 +24,18 @@ function walk(road: readonly Vec[]): Vec[] {
   return points;
 }
 
-// Steepest height change per tile between the corners of the tiles a road crosses. Tiles over the
-// canyon under Canyon Bridge are skipped, since the road runs on the deck there.
+const FORTRESSES = [...REGION.towns, ...REGION.locations].filter(isFortress);
+
+function behindCurtain(p: Vec): boolean {
+  return FORTRESSES.some((site) => insideCurtain(site, p, 0));
+}
+
 function steepest(road: readonly Vec[]): number {
   const t = TEST_MAP.terrain;
   const n = t.size + 1;
   let max = 0;
   for (const p of walk(road)) {
+    if (behindCurtain(p)) continue;
     const x = Math.floor(p.x);
     const y = Math.floor(p.y);
     const corners = [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
@@ -48,6 +52,15 @@ describe('road grades', () => {
   it('keeps every road of the baked map within the road grade', () => {
     const grades = REGION.roads.map((road) => steepest(road));
     for (const grade of grades) expect(grade).toBeLessThanOrEqual(TERRAIN.roadGrade + STORED_STEP);
+  });
+
+  it('skips only road behind fortress curtains, which includes the road into the Bowl pit', () => {
+    const skipped = REGION.roads.flatMap((road) => walk(road).filter(behindCurtain));
+    const bowl = FORTRESSES.find((site) => site.id === 'bowl');
+    if (bowl === undefined) throw new Error('Bowl is no fortress');
+    expect(skipped.some((p) => insideCurtain(bowl, p, 0))).toBe(true);
+    const outside = REGION.roads.flatMap((road) => walk(road).filter((p) => !behindCurtain(p)));
+    expect(outside.length).toBeGreaterThan(skipped.length);
   });
 
   it('keeps the Canyon Bridge deck of the baked map within the road grade', () => {
@@ -73,7 +86,6 @@ describe('road grades', () => {
 });
 
 describe('path grades', () => {
-  // A hump across a straight path: 2 units high, rising up to 0.24 per tile, flat across the path.
   const SIZE = 40;
   const ROW = SIZE + 1;
   const hump = (x: number) => 2 * Math.exp(-((x - 20) ** 2) / (2 * 5 ** 2));

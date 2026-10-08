@@ -9,6 +9,11 @@ import { startEscort } from './tow';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
 
+function lowerIdFirst(first: Vehicle, second: Vehicle): void {
+  if (first.id < second.id) return;
+  [first.id, second.id] = [second.id, first.id];
+}
+
 describe('NPC driving', () => {
   it('uses the obstacle-aware driver on every turn', () => {
     const w = emptyWorld({ x: 40, y: 30 });
@@ -27,14 +32,13 @@ describe('NPC driving', () => {
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
     second.brain.goals.push({ kind: 'loot', targetId: 'cargo-gone', destination: { x: 130, y: 100 }, phase: 'travel', reason: 'takeHandedCargo' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(topGoal(second)?.kind).not.toBe('loot');
   });
 });
 
 describe('face offs', () => {
-  // Two traders parked nose to nose. The first has the lower id, so it is the one that may wait.
   function noseToNose(): { w: World; first: Vehicle; second: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
@@ -44,7 +48,7 @@ describe('face offs', () => {
     const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 104, y: 100 });
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     return { w, first, second };
   }
 
@@ -70,7 +74,6 @@ describe('face offs', () => {
   });
 });
 
-// The NPC drives east from (100, 100) toward (130, 100). The player truck is placed with a heading and a speed.
 function scene(x: number, y: number, heading: number, speed: number): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x, y });
   const me = w.vehicles[0];
@@ -85,7 +88,6 @@ function scene(x: number, y: number, heading: number, speed: number): { w: World
 
 const DEST = { x: 130, y: 100 };
 
-// Rocks lining both sides of the NPC's way, from x 90 to 140, leave a lane just wide enough for one truck.
 function corridor(w: World): void {
   for (let x = 90; x <= 140; x++) {
     w.obstacles.push({ id: `n${x}`, kind: 'rock', pos: { x, y: 97 }, r: 1 });
@@ -131,9 +133,6 @@ describe('NPC traffic', () => {
     expect(trafficStops(w, npc, DEST)).toBe(false);
   });
 
-  // Two scouts merging onto one road, at the poses of a touch found in physics traffic. The driver closes from behind
-  // and to the side, faster than the truck ahead. The truck ahead's centre passes the point where the driver's way
-  // meets its line just before the driver gets there, but its body still covers that point then.
   it('routes around the stretch a truck ahead still covers when the driver gets there', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const driver = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 100, y: 100 }, (-53 * Math.PI) / 180);
@@ -171,7 +170,6 @@ describe('NPC traffic', () => {
 });
 
 describe('oncoming NPCs', () => {
-  // Two traders on open ground closing head-on, each bound past the other. The first has the lower id.
   function headOn(): { w: World; first: Vehicle; second: Vehicle } {
     const w = emptyWorld({ x: 100, y: 130 });
     const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
@@ -183,7 +181,7 @@ describe('oncoming NPCs', () => {
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.speed = 4;
     second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'tripToSite' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     return { w, first, second };
   }
 
@@ -194,9 +192,6 @@ describe('oncoming NPCs', () => {
     expect(second.order?.kind).toBe('stopAt');
   });
 
-  // Two scouts nose to nose and slightly askew, each bound past the other, at the poses of a crash found in
-  // physics traffic. The first stands still and has the lower id. The second routes around it like any parked
-  // truck, so if the first set off around the second's path, both would swerve the same way.
   it('a lower id at rest waits for the higher id closing on it, which goes around', () => {
     const w = emptyWorld({ x: 270, y: 190 });
     const first = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 268.77, y: 160.4 }, (-40.78 * Math.PI) / 180);
@@ -206,7 +201,7 @@ describe('oncoming NPCs', () => {
     second.brain = npcBrain('roamer', second.pos, ['roamer']);
     second.speed = 3.22;
     second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'tripToSite' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(first.order?.kind).toBe('brake');
     expect(second.order?.kind).toBe('stopAt');
@@ -243,7 +238,6 @@ describe('oncoming NPCs', () => {
 });
 
 describe('getting unstuck', () => {
-  // A leader bound east whose following escort lags far behind, so the leader waits for it.
   function waitingLeader(): { w: World; leader: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     const leader = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 100, y: 100 });

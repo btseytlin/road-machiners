@@ -1,6 +1,6 @@
 // The radio call panel and dialogue text. The panel shows who is on the line, what they said, and the
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
-// hovered truck and H honks.
+// inspected truck and H honks.
 
 import type { LineId } from '../data/dialogue';
 import { FACTION_COLORS } from '../render/palette';
@@ -14,7 +14,7 @@ import { byId, list, t, type Msg } from '../text/msg';
 import { goodLower, lineKey, siteName, unitCount, vehicleTitle } from '../text/names';
 import { schemaOf } from '../text/resolve';
 import { el, isBrowserChord, panel } from './dom';
-import { fuelLiters, meters } from './units';
+import { fuelLiters, meters, moneyM } from './units';
 
 const COMPASS = ['east', 'southEast', 'south', 'southWest', 'west', 'northWest', 'north', 'northEast'] as const;
 const METERS_PER_KM = 1000;
@@ -31,7 +31,7 @@ function distanceText(tiles: number): Msg {
   return m >= METERS_PER_KM ? t('call.km', { km: m / METERS_PER_KM }) : t('call.m', { m });
 }
 
-const money = (amount: number): Msg => t('call.money', { amount });
+const money = (amount: number): Msg => t('call.money', { amount: moneyM(amount) });
 
 // A patch deal in words, from the NPC's side, with its numbers filled in.
 function dealText(v: Extract<CallVar, { kind: 'deal' }>): Msg {
@@ -42,7 +42,7 @@ function dealText(v: Extract<CallVar, { kind: 'deal' }>): Msg {
 
 // A town's goods prices in words: "salt buy 14 sell 9, grain buy 6 sell 4".
 function pricesText(v: Extract<CallVar, { kind: 'prices' }>): Msg {
-  return list(v.goods.map((g) => t('call.price', { good: goodLower(g.good), buy: g.buy, sell: g.sell })));
+  return list(v.goods.map((g) => t('call.price', { good: goodLower(g.good), buy: money(g.buy), sell: money(g.sell) })));
 }
 
 // Fuel and supplies in words: "12 L of fuel and 3 supplies", leaving out a zero part.
@@ -97,7 +97,6 @@ function isTyping(): boolean {
   return document.activeElement?.matches('input, select, textarea') ?? false;
 }
 
-// Whether T would call this vehicle now: an awake NPC driver the player sees, while the player can act.
 export function canCall(w: World, id: string): boolean {
   const v = w.vehicles.find((x) => x.id === id);
   return !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
@@ -106,18 +105,15 @@ export function canCall(w: World, id: string): boolean {
 export type DialogueHost = {
   world(): World;
   talk(next: World): void; // apply a dialogue command and log its lines
-  hovered(): string | null; // the vehicle under the cursor
+  inspected(): string | null; // the pinned vehicle, else the one under the cursor
   busy(): boolean; // a turn plays
   commit(next: World): void; // take a honked world without pausing travel
   log(next: World): void; // log the events of a command
   playHorn(vehicleId: string, delayMs: number): void; // sound one truck's horn where it is drawn
 };
 
-const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
+const HONK_REPLY_MS = 500;
 
-// The player's horn. It sounds at once, also while a turn plays. A command clears the world's turn events, which a
-// playing turn still shows, so a horn during playback sends its command once the playback ends. The finished turn's
-// events stay after a honk, so travel still sees what stopped the truck. Travel goes on either way.
 class Horn {
   private queued = false;
 
@@ -130,15 +126,11 @@ class Horn {
     this.host.playHorn(playerVehicle(this.host.world()).id, 0);
   }
 
-  // Sends a horn pressed during the turn that just ended. A rescue command run at that end may have put the truck on
-  // a rope, and a towed driver cannot honk.
   flush(): void {
     if (this.queued && playerCanAct(this.host.world())) this.send(true);
     this.queued = false;
   }
 
-  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so
-  // unseen trucks are heard.
   private send(ownHornPlayed: boolean): void {
     const before = this.host.world();
     const next = honk(before);
@@ -158,7 +150,6 @@ export class DialoguePanel {
   private readonly root = panel('dialogue');
   private readonly horn: Horn;
 
-  // Keys go through the capture phase, so an open call takes 1 to 9 and Escape before the game sees them.
   constructor(private readonly host: DialogueHost) {
     this.horn = new Horn(host);
     this.root.style.display = 'none';
@@ -189,12 +180,10 @@ export class DialoguePanel {
   }
 
   private onFreeKey(code: string): boolean {
-    if (code === 'KeyT') return this.callHovered();
+    if (code === 'KeyT') return this.callInspected();
     return code === 'KeyH' && this.honk();
   }
 
-  // While a turn plays, only the horn works.
-  // Sends a horn pressed during the turn that just ended.
   flushHorn(): void {
     this.horn.flush();
   }
@@ -223,9 +212,8 @@ export class DialoguePanel {
     this.host.talk(chooseOption(this.host.world(), index));
   }
 
-  // Calls the hovered truck when it can take a call. Returns whether a call was made.
-  private callHovered(): boolean {
-    const id = this.host.hovered();
+  private callInspected(): boolean {
+    const id = this.host.inspected();
     if (!id || !canCall(this.host.world(), id)) return false;
     this.host.talk(callVehicle(this.host.world(), id));
     return true;

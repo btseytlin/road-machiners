@@ -6,8 +6,9 @@ import { ROAD_INDEX } from '../sim/road-index';
 import { hashRandom } from '../sim/rng';
 import type { BakedProp } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
+import { TEST_MAP } from '../test/map';
 import { padReach } from '../test/sites';
-import { bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import {
   BUILT_FIELD,
@@ -21,8 +22,10 @@ import {
   oldRoads,
   oldWorldLayer,
   overlooks,
+  pickLook,
   powerLines,
   settlements,
+  shipDebris,
   tankHulks,
   type OldSettlement,
 } from './oldworld';
@@ -34,7 +37,6 @@ const SITES = [...REGION.towns, ...REGION.locations];
 const WET = GEOLOGY.ground.washFlow * 2;
 const SEED = 1337;
 
-// IV2: off every road surface, clear of sites with their pads, and off the Canyon Bridge deck.
 function expectOffBuilt(p: BakedProp): void {
   const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
@@ -55,7 +57,6 @@ function tilesMarked(d: MapDraft, code: number): Vec[] {
   return out;
 }
 
-// The nearest road to p and the distance along it of its nearest point, to half a tile.
 function nearestOnRoads(p: Vec): { line: RoadLine; s: number; road: number } {
   let best = { line: new RoadLine(REGION.roads[0]), s: 0, road: 0, d: Infinity };
   REGION.roads.forEach((points, road) => {
@@ -70,7 +71,6 @@ function nearestOnRoads(p: Vec): { line: RoadLine; s: number; road: number } {
 
 describe('settlements', () => {
   it('stand on flat, dry ground and keep their spacing', () => {
-    // Steep random ground west of x = 300, flat ground east of it, with a wash band across the flat.
     const d = newDraft(SIZE);
     setCorners(d, 'heights', (i, j) => (i < 300 ? hashRandom(3, i, j) * 2 : 0));
     setCorners(d, 'flow', (i, j) => (i >= 300 && j >= 400 && j <= 420 ? WET : 0));
@@ -106,7 +106,6 @@ describe('settlements', () => {
 });
 
 describe('overlooks', () => {
-  // A mesa 4 units high with a steep rim, far from roads and sites, on flat ground.
   const MESA = { x: 60, y: 200 };
   const MESA_RADIUS = 25;
 
@@ -158,9 +157,6 @@ describe('bend buildings', () => {
 });
 
 describe('old roads', () => {
-  // Two settlements on flat ground with a wash bed running north to south between them, off every road
-  // and site of the region. The wash is a trench `depth` deep, with a floor from x 38 to 42 and sides
-  // sloping over 4 tiles.
   function washDraft(depth = 4): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(80);
     setCorners(d, 'flow', (i) => (i >= 34 && i <= 46 ? WET : 0));
@@ -229,7 +225,6 @@ describe('old roads', () => {
 });
 
 describe('old highway', () => {
-  // A trench 3 units deep along the dry river, and one settlement on each side of it.
   function riverDraft(): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(REGION.size);
     const river = TERRAIN.features.dryRiver.path;
@@ -275,7 +270,6 @@ describe('power lines', () => {
       expect(sides.size).toBe(1);
       for (let k = 1; k < poles.length; k++) {
         if (poles[k].step !== poles[k - 1].step + 1) continue;
-        // Where the road turns between two poles, their offsets from it move them closer or farther apart.
         expect(Math.abs(dist(poles[k].pos, poles[k - 1].pos) - rules.spacing)).toBeLessThanOrEqual(2 * (HALF + rules.gap + rules.radius));
       }
     }
@@ -295,7 +289,6 @@ describe('power lines', () => {
   });
 });
 
-// +1 or -1: the side of the road's nearest segment that p lies on.
 function sideOfRoad(road: readonly Vec[], p: Vec): number {
   let best = 0;
   for (let k = 1; k < road.length; k++) if (segmentDist(p, road[k - 1], road[k]) < segmentDist(p, road[best], road[best + 1])) best = k - 1;
@@ -355,8 +348,106 @@ describe('tank hulks', () => {
   });
 });
 
+describe('ship debris', () => {
+  const rules = OLD_WORLD.shipDebris;
+  const trail = new RoadLine(rules.trail);
+  const reach = rules.sideSpread + rules.clusterStep / 3 + rules.clusterReach;
+
+  function debrisDraft(): MapDraft {
+    const d = newDraft(SIZE);
+    for (let x = 0; x < SIZE; x++) for (let y = 300; y < 302; y++) d.built[y * SIZE + x] = BUILT_OLD_ROAD;
+    return d;
+  }
+  function lay(seed: number, r = rules): BakedProp[] {
+    const d = debrisDraft();
+    shipDebris(seed, d, r);
+    return d.props;
+  }
+  function trailDistance(p: Vec): number {
+    return polylineDist(p, trail.points);
+  }
+
+  it('keeps place() rules and covers no old road tile (IV1)', () => {
+    const d = debrisDraft();
+    shipDebris(SEED, d, rules);
+
+    expect(d.props.length).toBeGreaterThan(30);
+    for (const p of d.props) {
+      expectOffBuilt(p);
+      expect(Math.abs(p.pos.y - 301)).toBeGreaterThan(1 + p.r);
+    }
+    for (let a = 0; a < d.props.length; a++) for (let b = a + 1; b < d.props.length; b++) {
+      expect(dist(d.props[a].pos, d.props[b].pos)).toBeGreaterThanOrEqual(d.props[a].r + d.props[b].r);
+    }
+  });
+
+  it('gives the same debris for the same seed and other debris for another (IV2)', () => {
+    expect(lay(SEED)).toEqual(lay(SEED));
+    expect(lay(SEED + 1)).not.toEqual(lay(SEED));
+  });
+
+  it('lays trail pieces near the trail, aligned ones facing along it (IV3)', () => {
+    const near = lay(SEED).filter((p) => trailDistance(p.pos) <= reach);
+    expect(near.length).toBeGreaterThan(rules.pieces[0]);
+    const aligned = near.filter((p) => rules.trailLooks.some((l) => l.look === p.kind && l.aligned && p.kind === 'wingShard'));
+    expect(aligned.length).toBeGreaterThan(0);
+    for (const p of aligned) {
+      let best = Infinity;
+      for (let s = 0; s <= trail.length; s += 1) {
+        if (dist(trail.pointAt(s), p.pos) <= reach) best = Math.min(best, angleDiff(p.yaw, Math.atan2(trail.dirAt(s).y, trail.dirAt(s).x)));
+      }
+      expect(best).toBeLessThanOrEqual(rules.yawJitter + 1e-6);
+    }
+  });
+
+  it('puts at most one habitat in a cluster (IV4)', () => {
+    const heavy = { ...rules, strays: { ...rules.strays, count: 0 }, trailLooks: rules.trailLooks.map((l) => (l.look === 'habitat' ? { ...l, weight: 50 } : l)) };
+    const habitats = lay(SEED, heavy).filter((p) => p.kind === 'habitat');
+
+    expect(habitats.length).toBeGreaterThan(0);
+    for (let a = 0; a < habitats.length; a++) for (let b = a + 1; b < habitats.length; b++) {
+      expect(dist(habitats[a].pos, habitats[b].pos)).toBeGreaterThan(rules.clusterReach * 2 - 1e-6);
+    }
+  });
+
+  it('refuses an empty look table', () => {
+    expect(() => pickLook({ rngState: 1 }, [])).toThrow(/look/);
+  });
+});
+
+describe('ship debris on the baked map', () => {
+  const rules = OLD_WORLD.shipDebris;
+  const trail = new RoadLine(rules.trail);
+  const reach = rules.sideSpread + rules.clusterStep / 3 + rules.clusterReach;
+  const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun');
+  if (fallenSun === undefined) throw new Error('No Fallen Sun site');
+  const NEW_KINDS = ['escapePod', 'habitat', 'wingShard', 'powerCell'];
+  const debris = TEST_MAP.props.filter((p) => NEW_KINDS.includes(p.kind) || (p.kind === 'hullChunk' && dist(p.pos, fallenSun.pos) > fallenSun.radius + O.siteClearance));
+  const clusters = Math.floor(trail.length / rules.clusterStep) + 1;
+
+  it('holds every new kind', () => {
+    for (const kind of NEW_KINDS) expect(TEST_MAP.props.some((p) => p.kind === kind)).toBe(true);
+  });
+
+  it('places at least 80% of the planned trail pieces and strays (IV5)', () => {
+    const onTrail = debris.filter((p) => polylineDist(p.pos, trail.points) <= reach);
+    expect(onTrail.length).toBeGreaterThanOrEqual(0.8 * clusters * rules.pieces[0]);
+    const lone = debris.filter((p) => p.kind === 'escapePod' && polylineDist(p.pos, trail.points) > reach);
+    expect(lone.length).toBeGreaterThanOrEqual(0.8 * rules.strays.count * (5 / 9) * 0.6);
+  });
+
+  it('keeps clear of the Fallen Sun and Old Orchard (IV6)', () => {
+    for (const p of TEST_MAP.props.filter((q) => NEW_KINDS.includes(q.kind))) {
+      for (const id of ['fallen-sun', 'orchard']) {
+        const site = SITES.find((s) => s.id === id);
+        if (site === undefined) throw new Error(`No site ${id}`);
+        expect(siteGap(site, p.pos)).toBeGreaterThan(O.siteClearance + p.r);
+      }
+    }
+  });
+});
+
 describe('fields', () => {
-  // Flat ground at height 0 with a high plateau east of x = 60.
   function farmDraft(): MapDraft {
     const d = newDraft(80);
     setCorners(d, 'heights', (i) => (i >= 60 ? 3 : 0));
@@ -389,7 +480,6 @@ describe('fields', () => {
 });
 
 describe('old-world layer', () => {
-  // Gentle rolling ground with wash beds along two sine valleys, over the whole map.
   function rollingDraft(): MapDraft {
     const d = newDraft(SIZE);
     setCorners(d, 'heights', (i, j) => Math.sin(i / 40) * 1.5 + Math.cos(j / 55) * 1.5);
@@ -402,7 +492,6 @@ describe('old-world layer', () => {
 
     const standing = d.props;
     expect(new Set(standing.map((p) => p.kind)).size).toBeGreaterThan(5);
-    // The Broken Wing hoop arches over its road by design.
     for (const p of standing.filter((q) => q.kind !== 'shipWing')) expectOffBuilt(p);
     for (let a = 0; a < standing.length; a++) for (let b = a + 1; b < standing.length; b++) {
       expect(dist(standing[a].pos, standing[b].pos)).toBeGreaterThanOrEqual(standing[a].r + standing[b].r);
@@ -418,7 +507,6 @@ describe('old-world layer', () => {
     for (const c of marked) {
       expect(ROAD_INDEX.nearestWithin(c.x, c.y, Infinity)).toBeGreaterThanOrEqual(HALF);
       expect(deckAt(c.x, c.y)).toBeNull();
-      // The far corners of a pad reach this far from the site center.
       for (const site of SITES) expect(siteGap(site, c)).toBeGreaterThan(padReach(site));
     }
     expect(d.built.every((b) => b === BUILT_NONE || b === BUILT_OLD_ROAD || b === BUILT_FIELD)).toBe(true);

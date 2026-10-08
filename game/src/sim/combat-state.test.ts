@@ -8,7 +8,6 @@ import { addGoods } from './inventory';
 
 const TURNS = STATE_TURNS.combat!;
 
-// The player with cargo worth robbing, and a raider parked in sight of it.
 function passingRaider() {
   const w = emptyWorld({ x: 30, y: 30 });
   const me = w.vehicles[0];

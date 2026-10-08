@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { STRIP } from '../data/salvage';
+import { WORK } from '../data/utilities';
 import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf , startCombat } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
-import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
+import { addGoods, moveItem, mountPart, removeGoods, stowPart } from './inventory';
 import { advanceJobs, cancelRefit, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
 import { PERK_NUMBERS } from '../data/skills';
 import { repairPlan } from './repair';
@@ -48,11 +49,11 @@ describe('field repair job', () => {
     addGoods(w, me, 'parts', 20);
     const held = goodsCount(me).parts ?? 0;
     const next = startRepair(w, cage.id);
-    advanceJobs(next); // one turn parked, progress made
-    next.vehicles[0].speed = 5; // moves before the job finishes
+    advanceJobs(next);
+    next.vehicles[0].speed = 5;
     advanceJobs(next);
     expect(next.vehicles[0].job).toBeNull();
-    expect(armorPart(next.vehicles[0]).hp).toBe(1); // no HP gained, parts untouched
+    expect(armorPart(next.vehicles[0]).hp).toBe(1);
     expect(goodsCount(next.vehicles[0]).parts).toBe(held);
   });
 
@@ -67,7 +68,7 @@ describe('field repair job', () => {
     expect(plan.turns).toBeGreaterThan(1);
     const next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns - 1; i++) advanceJobs(next);
-    expect(goodsCount(next.vehicles[0]).parts).toBe(held); // not yet spent
+    expect(goodsCount(next.vehicles[0]).parts).toBe(held);
     advanceJobs(next);
     expect(goodsCount(next.vehicles[0]).parts).toBe(held - plan.parts);
   });
@@ -189,7 +190,6 @@ describe('repair without parts', () => {
 });
 
 describe('auto patch and promised parts', () => {
-  // A damaged, parked player holding exactly `held` parts, and an NPC client a patch deal can name.
   function setup(held: number, deal: 'paid' | 'ownParts', playerIsPatcher: boolean) {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -199,7 +199,7 @@ describe('auto patch and promised parts', () => {
     addGoods(w, me, 'parts', held);
     const other = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 5, y: 0 }, 0);
     const [holder, client] = playerIsPatcher ? [me, other] : [other, me];
-    const data = { kind: 'patch' as const, deal, parts: 2, partIds: [], price: 10, work: 4, workLeft: 4 };
+    const data = { kind: 'patch' as const, deal, parts: 2, partIds: [], price: 333, work: 4, workLeft: 4 };
     return { w, me, add: () => addState(w, 'patch', holder.id, client.id, data) };
   }
 
@@ -246,7 +246,7 @@ describe('auto patch and promised parts', () => {
   it('spends only the parts above what a haul contract carries', () => {
     const { w, me } = setup(4, 'paid', true);
     w.player.autoRepair = true;
-    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'parts', units: 3, to: 'nose', reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'parts', units: 3, to: 'nose', reward: 10000, deadline: 500, window: 500, rush: false, tier: 1 });
     for (let i = 0; i < 100; i++) {
       startAutoRepair(w);
       advanceJobs(w);
@@ -383,6 +383,23 @@ describe('strip job', () => {
     expect((goodsCount(truck).parts ?? 0) - held).toBe(units);
   });
 
+  it("pays the Scraper's knife share of the part's value with a working scraper", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    if (!mountPart(w, me, makePart(w, 'scrapersKnife', 0))) throw new Error('No deck room for the scraper');
+    const spare = makePart(w, 'mg', 0);
+    if (!stowPart(w, me, spare)) throw new Error('No room for the spare');
+    const held = goodsCount(me).parts ?? 0;
+    const plain = Math.max(1, Math.round((partValue(spare) * STRIP.yieldShare) / GOODS.parts.value));
+    const units = Math.max(1, Math.round((partValue(spare) * WORK.scraperStripShare) / GOODS.parts.value));
+    expect(units).toBeGreaterThan(plain);
+
+    const next = startStrip(w, spare.id);
+    for (let i = 0; i < STRIP.turns; i++) advanceJobs(next);
+
+    expect((goodsCount(next.vehicles[0]).parts ?? 0) - held).toBe(units);
+  });
+
   it('strips a broken, junk part too', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -471,7 +488,6 @@ describe('field job practice', () => {
 });
 
 describe('jobs in combat', () => {
-  // A player with a damaged part, spare parts, and a raider parked in sight that shoots at it unless told not to.
   function underFire(attacking = true) {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
@@ -514,7 +530,6 @@ describe('jobs in combat', () => {
 describe('weld job', () => {
   const { scrap, turns, part } = PERK_NUMBERS.welder;
 
-  // Sets the truck's scrap metal to exactly n units.
   function holdScrap(w: ReturnType<typeof emptyWorld>, n: number): void {
     const me = w.vehicles[0];
     removeGoods(me, 'scrap', goodsCount(me).scrap ?? 0);

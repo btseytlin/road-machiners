@@ -1,0 +1,22 @@
+[Unit]
+Description=ROAM factory error service, which files game error reports as GitHub issues
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ service_user }}
+WorkingDirectory={{ code_dir }}/factory
+Environment=ERROR_SOCKET={{ factory_root }}/errors/http.sock
+ExecStart={{ code_dir }}/factory/node_modules/.bin/vite-node src/error-reports/main.ts
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+# The socket, and the store, reports and alert under the factory home. The source maps are only read.
+ReadWritePaths={{ factory_root }}/errors {{ factory_root }}/home/error-reports
+StandardOutput=append:{{ home_dir }}/logs/errors.log
+StandardError=append:{{ home_dir }}/logs/errors.log
+
+[Install]
+WantedBy=multi-user.target

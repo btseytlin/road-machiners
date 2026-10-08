@@ -1,7 +1,6 @@
 // HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
 // follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
 // undiscovered sites show ???, discovered sites show their name. setText writes a label only when its words change. A wreck a driver told of shows a rumor label,
-// also under fog, until its stock is gone.
 
 import { REGION } from '../../data/region';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
@@ -18,7 +17,8 @@ import { setText } from '../../text/language';
 import { num, t } from '../../text/msg';
 import { siteName } from '../../text/names';
 
-const LABEL_LIFT_PX = 90; // pixels above the ground point, matches the old 2D label offset
+const LABEL_LIFT_PX = 90;
+
 type Site = { id: string; pos: { x: number; y: number } };
 
 function labelEl(container: HTMLElement): HTMLDivElement {
@@ -27,7 +27,7 @@ function labelEl(container: HTMLElement): HTMLDivElement {
   el.style.transform = 'translate(-50%, -100%)';
   el.style.font = '15px var(--font-mono)';
   el.style.color = PAL.text;
-  el.style.background = '#1a1410aa'; // PAL.bg with alpha, matches the old 2D label backing
+  el.style.background = '#1a1410aa';
   el.style.padding = '3px 6px';
   el.style.whiteSpace = 'nowrap';
   el.style.pointerEvents = 'none';
@@ -35,7 +35,6 @@ function labelEl(container: HTMLElement): HTMLDivElement {
   return el;
 }
 
-// Shows the label at a map point, or hides it past gray vision.
 function place(el: HTMLDivElement, world: World, pos: Vec, rig: CameraRig, limit: SightLimit, explored: boolean): void {
   const ground = groundPoint(world.terrain, pos);
   const seen = explored && limit.covers(ground);
@@ -48,7 +47,7 @@ function place(el: HTMLDivElement, world: World, pos: Vec, rig: CameraRig, limit
 
 export class Labels {
   private els = new Map<string, HTMLDivElement>();
-  private rumors = new Map<string, HTMLDivElement>(); // by salvage stock id
+  private rumors = new Map<string, HTMLDivElement>();
 
   constructor(private readonly container: HTMLElement) {
     for (const s of sites()) this.els.set(s.id, labelEl(container));
@@ -115,12 +114,10 @@ function markerNode(mark: VehicleMark): HTMLElement {
   );
 }
 
-const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
+const MARKER_LIFT = 3.5;
 
-// Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
-// truck, a knocked-out driver, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
-  private readonly els = new Map<string, HTMLElement>(); // by vehicle id
+  private readonly els = new Map<string, HTMLElement>();
 
   constructor(private readonly container: HTMLElement, private readonly rig: CameraRig) {}
 
@@ -134,7 +131,6 @@ export class VehicleMarkers {
     }
   }
 
-  // Weapons and the radio key hide while turns advance. Jobs stay, so their bars step each turn.
   place(frames: Record<string, VehicleFrame>, hideAims: boolean, hideAll: boolean): void {
     for (const [id, node] of this.els) {
       const f = frames[id];

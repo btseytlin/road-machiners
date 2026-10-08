@@ -1,14 +1,16 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { stepScript } from '../activity';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readPublished } from '../sourcemaps';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { Card, ReleaseState } from '../types';
-import { ROOT, fake, reset, type Fake } from './test-fakes';
+import { CLONE_SHA, ROOT, fake, reset, type Fake } from './test-fakes';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { ship } = await import('./ship');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6] };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6], tasks: [], candidateSha: 'abc1234', playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 const done = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Done', labels });
 
 beforeEach(() => {
@@ -29,10 +31,10 @@ function shippable(): Fake {
 }
 
 describe('ship', () => {
-  it('merges, builds main in a fresh clone, pushes with butler alone, and posts publicly only afterwards', async () => {
+  it('merges, builds main in a fresh clone, pushes with butler alone, and leaves the public post to Hermes and a member', async () => {
     const f = shippable();
     const runs: { cmd: string; args: string[]; env?: Record<string, string> }[] = [];
-    f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd}`); return { code: 0, stdout: '', stderr: '' }; };
+    f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd}`); return { code: 0, stdout: cmd === 'git' ? CLONE_SHA : '', stderr: '' }; };
     const shells: { script: string; env?: Record<string, string> }[] = [];
     f.ctx.container.shell = async (clone, script, _log, env) => { shells.push({ script, env }); f.calls.push(`shell ${clone}`); };
     await ship(f.ctx, 11, 'Ann');
@@ -40,13 +42,19 @@ describe('ship', () => {
     expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
     expect(at('push main dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(at('run butler')).toBeLessThan(at('photo public'));
-    expect(at('photo public')).toBeLessThan(at('message public'));
-    expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '' } }]);
-    expect(runs).toEqual([{ cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } }]);
-    const publicNote = f.calls.find((call) => call.startsWith('message public')) ?? '';
-    expect(publicNote).toContain('- [#3] Trucks are faster.');
-    expect(publicNote).not.toContain('#6');
+    expect(shells).toEqual([{ script: stepScript('Building the release', [['npm ci', 'npm ci'], ['build', 'npm run build']]), env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
+    expect(runs).toEqual([
+      { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
+      { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
+    ]);
+    expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
+    expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
+    expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);
+    expect(f.calls.some((call) => / public/.test(call.split(' ').slice(0, 2).join(' ')))).toBe(false);
+    const post = readState(f.ctx.statePath).releasePost;
+    expect(post).toEqual({ issue: 11, day: '2026-09-29', changelog: '- [#3] Trucks are faster.', screenshot: join(ROOT, 'release-posts', '2026-09-29', 'screenshot.png'), postId: null, draft: null });
+    expect(readFileSync(post!.screenshot, 'utf8')).toBe('png');
+    expect(f.calls.some((call) => call.startsWith('message committee') && call.includes('Hermes drafts the public post'))).toBe(true);
   });
 
   it('fails on a dev merge conflict before the build, the butler push and any public post', async () => {
@@ -63,7 +71,7 @@ describe('ship', () => {
     await ship(f.ctx, 11, 'Ann');
     expect(f.calls).toContain('close completed');
     expect(f.calls).toContain('move Done');
-    expect(f.calls.at(-1)).toBe('message committee - Release 2026-09-29 shipped with 1 changes.');
+    expect(f.calls.at(-1)).toBe('message committee - Release 2026-09-29 shipped with 1 changes. Hermes drafts the public post next.');
     const state = readState(f.ctx.statePath);
     expect(state.release).toBeNull();
     expect(state.lastRelease).toBe('2026-09-29T10:00:00.000Z');
@@ -109,12 +117,35 @@ describe('ship', () => {
     expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
   });
 
-  it('stops before it merges anything when main has game changes the release lacks', async () => {
+  it('merges main into the release and stops when main has game changes the release lacks, so a new candidate follows', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
     f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
-    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('main changed 1 game files that release/2026-09-29 lacks, like game/src/sim/sun.ts');
-    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('push'))).toBe(false);
+    await ship(f.ctx, 11, 'Ann');
+    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29']);
+    expect(f.calls.some((call) => call.startsWith('run butler') || call.startsWith('photo'))).toBe(false);
+    expect(f.calls).toContain('comment main changed 1 game files that release/2026-09-29 lacked, like game/src/sim/sun.ts, so the committee had not played them. The factory merged main into release/2026-09-29. A new candidate follows, and Ship works on that one.');
+    const state = readState(f.ctx.statePath);
+    expect(state.release).toMatchObject({ postId: null });
+    expect(state.pendingShip).toBeNull();
+  });
+
+  it('has an agent resolve a conflict of main into the release when main has game changes, and pushes the release', async () => {
+    const f = shippable();
+    f.ctx.repo.isMerged = async () => false;
+    f.ctx.repo.changedFiles = async () => ['game/src/sim/sun.ts'];
+    f.mergeConflicts = ['main release/2026-09-29'];
+    await ship(f.ctx, 11, 'Ann');
+    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'push release/2026-09-29']);
+  });
+
+  it('has an agent resolve a conflict of the release into main, then ships', async () => {
+    const f = shippable();
+    f.mergeConflicts = ['release/2026-09-29 main'];
+    await ship(f.ctx, 11, 'Ann');
+    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge release/2026-09-29 main', 'open main', 'agent', 'close main', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
+    expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
+    expect(f.calls.some((call) => call.startsWith('addLabel'))).toBe(false);
   });
 
   it('merges main into the release first when main has only other changes', async () => {
@@ -153,6 +184,13 @@ describe('ship', () => {
     expect(f.calls.some((call) => call.startsWith('merge'))).toBe(false);
   });
 
+  it('refuses when the release moved after the candidate was posted, before it merges anything', async () => {
+    const f = shippable();
+    f.ctx.repo.headHash = async () => 'def5678';
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('moved to def5678 after the candidate of abc1234');
+    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('run butler'))).toBe(false);
+  });
+
   it('refuses while a release task is outside Done (IV3)', async () => {
     const f = shippable();
     f.cards.push({ itemId: 'i13', issue: 13, column: 'Testing', labels: ['release-task'] });
@@ -169,7 +207,7 @@ describe('ship', () => {
 
   it('posts nothing publicly when butler fails', async () => {
     const f = shippable();
-    f.ctx.run = async () => ({ code: 1, stdout: '', stderr: 'bad key' });
+    f.ctx.run = async (cmd) => (cmd === 'butler' ? { code: 1, stdout: '', stderr: 'bad key' } : { code: 0, stdout: CLONE_SHA, stderr: '' });
     await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('butler push failed');
     expect(f.calls.some((call) => call.startsWith('photo') || call.startsWith('message'))).toBe(false);
     expect(readState(f.ctx.statePath).release).not.toBeNull();

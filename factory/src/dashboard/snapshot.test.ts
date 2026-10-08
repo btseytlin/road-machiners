@@ -23,7 +23,7 @@ it('publishes only explicit operational fields, never private state or raw error
 });
 
 it('only publishes a candidate link while the current candidate is valid', () => {
-  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [] }, builds: { '3': 'rc' } };
+  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
   const config = { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' };
   expect(buildOperations(state, false, config).candidateUrl).toBeNull();
   state.release!.postId = 10;
@@ -31,13 +31,13 @@ it('only publishes a candidate link while the current candidate is valid', () =>
 });
 
 function createConfig(home: string): DashboardConfig {
-  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, observationHeartbeatMs: 10000, tickIntervalMs: 60000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
+  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, githubRetries: 3, githubRetryBaseSeconds: 15, githubTimeoutSeconds: 60, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/fixture_channel_not_real', publicChannel: '@fixture_channel_not_real', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, observationHeartbeatMs: 10000, tickIntervalMs: 60000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
 }
 class FixtureGithub extends PublicGitHub {
   failed = false;
   override async read(state: FactoryState) {
     if (this.failed) throw new Error('PRIVATE credential failure');
-    return { cards: [], features: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
+    return { cards: [], features: [], merges: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
   }
 }
 class FixtureHost extends HostSampler {
@@ -59,6 +59,7 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     await collector.refreshLocal();
     await collector.refreshGithub();
     const good = collector.getSnapshot();
+    expect(good.labels.columns.Merging).toBe('Merging');
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 120_000);
     expect(collector.getSnapshot().operations.status).toBe('stale');
@@ -108,6 +109,26 @@ it('does not expose committee posts when Telegram is hidden', async () => {
     const snapshot = collector.getSnapshot();
     expect(snapshot.channelUrl).toBeNull();
     expect(snapshot.analytics.value?.posts).toEqual([]);
+    expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+it('publishes delivery numbers from card lines in every range with no committee text', async () => {
+  const home = mkdtempSync(resolve('tmp/snapshot-'));
+  try {
+    mkdirSync(join(home, 'state'));
+    writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
+    const hour = 3_600_000;
+    const at = (hoursAgo: number): string => new Date(Date.now() - hoursAgo * hour).toISOString();
+    appendLedger(home, { kind: 'card', issue: 5, step: 'entered', to: 'Triage', at: at(5) });
+    appendLedger(home, { kind: 'card', issue: 5, step: 'accepted', to: 'Design', at: at(4) });
+    appendLedger(home, { kind: 'route', issue: 5, route: 'redesign', by: 'PRIVATE member', at: at(3) });
+    appendLedger(home, { kind: 'control', action: 'move', issue: 5, by: 'PRIVATE', reason: 'PRIVATE reason', at: at(3) });
+    const config = createConfig(home);
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    await collector.refreshLocal();
+    const snapshot = collector.getSnapshot();
+    expect(snapshot.analytics.value?.ranges.map((range) => range.delivery?.issues)).toEqual([1, 1, 1]);
+    expect(snapshot.analytics.value?.ranges[0].delivery?.stages.find((row) => row.stage === 'triage')?.count).toBe(1);
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });

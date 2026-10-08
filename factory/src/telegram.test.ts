@@ -21,8 +21,8 @@ const body = (call: Call) => JSON.parse(call.init.body as string);
 describe('botClient sendButtons', () => {
   it('sends one message with an inline keyboard', async () => {
     const { fetchFn, calls } = fakeFetch([ok(51)]);
-    expect(await botClient('T', fetchFn).sendButtons('-100', 'review', [[{ text: 'Queue as change', data: 'factory:waste:9' }]])).toBe(51);
-    expect(body(calls[0]!)).toEqual({ chat_id: '-100', text: 'review', reply_markup: { inline_keyboard: [[{ text: 'Queue as change', callback_data: 'factory:waste:9' }]] } });
+    expect(await botClient('T', fetchFn).sendButtons('-100', 'build', [[{ text: 'Approve', data: 'factory:approve:9' }]])).toBe(51);
+    expect(body(calls[0]!)).toEqual({ chat_id: '-100', text: 'build', reply_markup: { inline_keyboard: [[{ text: 'Approve', callback_data: 'factory:approve:9' }]] } });
   });
 
   it('refuses a text it would have to split', async () => {

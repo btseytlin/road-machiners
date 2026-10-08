@@ -1,0 +1,32 @@
+// Hardening and Merging columns. One hardening session reviews and fixes an approved card. The merge queue checks every waiting card merged together before the base takes them.
+// Red: loops back. Grey: leaves the column or enters from outside.
+digraph hardening {
+  rankdir=LR; nodesep=0.35; ranksep=0.55; bgcolor=white; pad=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.1", penwidth=1.3, width=1.3];
+  edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
+  subgraph cluster_harden {
+    label="Hardening job"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
+    HM [label="Merge new branch\ncommits and the base"]; HH [label="Hardening session\nattack, /code-review,\nfix every finding"];
+    HM -> HH [weight=100];
+  }
+  subgraph cluster_merge {
+    label="Merge job: every Merging card of one base"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
+    MM [label="Merge each card\ninto a clone of the base"]; MC [label="Merge checkpoint\nfull suite, typecheck,\nplaytest, build"]; MP [label="Push the base\nrebuild /dev/"];
+    MM -> MC -> MP [weight=100];
+  }
+  HH -> MM [label="Merging column"];
+  XA [label="Approve", fillcolor="#f3f4f6", color="#6b7280"];
+  XO [label="factory merge", fillcolor="#f3f4f6", color="#6b7280"];
+  XS [label="factory-stuck\nevery card of the batch", fillcolor="#f3f4f6", color="#6b7280"];
+  XN [label="Done", fillcolor="#f3f4f6", color="#6b7280"];
+  edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
+  MM -> MM [label="conflict: the merge\nsession resolves it"];
+  MC -> MM [label="failure: back into\nthe merge session"];
+  MP -> MM [label="base moved:\nmerge it in, check again"];
+  edge [color="#6b7280", fontcolor="#6b7280"];
+  XA -> HM;
+  HM -> MM [label="docs only:\nno session"];
+  XO -> MM;
+  MC -> XS [label="budget spent"];
+  MP -> XN;
+}

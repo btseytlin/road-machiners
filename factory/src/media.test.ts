@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { solidPng } from './media-fixtures';
-import { MAX_BYTES, MAX_FILES, MEDIA_MOUNT, allowedSource, firstPartySource, detectType, extractMediaUrls, fetchMedia, imageSize, mediaSection, requireMedia } from './media';
+import { MAX_BYTES, MAX_FILES, MEDIA_MOUNT, allowedSource, firstPartySource, detectType, extractMediaUrls, fetchMedia, imageSize, mediaSection } from './media';
 
 const UUID = '24c78bbf-b445-42bb-a191-2eba2e36379e';
 const ASSET = `https://github.com/user-attachments/assets/${UUID}`;
@@ -12,7 +12,6 @@ const S3 = 'https://github-production-user-asset-6210df.s3.amazonaws.com/1/2?X-A
 type Reply = { status: number; location?: string; body?: Buffer; length?: string };
 type Seen = { url: string; auth: string | undefined; redirect: string | undefined };
 
-// Answers by URL without a query. Unknown URLs fail the test, since they would be real network.
 function fakeFetch(replies: Record<string, Reply>): { fetch: typeof fetch; seen: Seen[] } {
   const seen: Seen[] = [];
   const fake = async (input: URL | string, init?: RequestInit): Promise<Response> => {
@@ -116,7 +115,6 @@ describe('fetchMedia', () => {
     expect(entries.map((e) => e.status)).toEqual(['skipped', 'skipped']);
     expect(entries[1].reason).toContain('i.imgur.com');
     expect(seen).toHaveLength(1);
-    expect(() => requireMedia(7, entries)).not.toThrow();
   });
 
   it('adds the images of feedback comments to those of the body, and keeps every earlier one', async () => {
@@ -146,13 +144,6 @@ describe('fetchMedia', () => {
     const { fetch } = fakeFetch(OK);
     await fetchMedia({ fetch, dir, texts: [{ source: 'issue body', text: `${ASSET}?token=abc` }] });
     expect(readFileSync(join(dir, 'manifest.json'), 'utf8')).not.toContain('abc');
-  });
-});
-
-describe('requireMedia', () => {
-  it('throws a clear failure naming each image that could not be fetched', async () => {
-    const entries = await fetchMedia({ fetch: fakeFetch({ [ASSET]: { status: 403 } }).fetch, dir, texts: [{ source: 'issue body', text: ASSET }] });
-    expect(() => requireMedia(114, entries)).toThrow(/Issue 114 shows 1 reference image\(s\).*no agent ran.*HTTP 403/s);
   });
 });
 
@@ -209,11 +200,10 @@ describe('first-party images', () => {
     expect(mediaSection(entries)).toContain(`${MEDIA_MOUNT}/${entries[0].file}`);
   });
 
-  it('fails the stage for a missing url and for wrong content', async () => {
+  it('marks a missing url and for wrong content', async () => {
     for (const reply of [{ status: 404 }, { status: 200, body: Buffer.from('<html>not an image</html>') }, { status: 200, body: Buffer.concat([PNG.subarray(0, 8), Buffer.alloc(5)]) }]) {
       const { entries } = await run({ [FP]: reply });
       expect(entries[0].status).toBe('failed');
-      expect(() => requireMedia(1, entries)).toThrow();
     }
   });
 

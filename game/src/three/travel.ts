@@ -27,7 +27,6 @@ export type LiveVision = {
 
 export type Playback = {
   result: TurnResult;
-  // The worker's snapshot that `result.next` was restored from, which the next turn starts from.
   nextSnapshot: DriveSnapshot;
   before: World;
   lastTick: number | null;
@@ -57,15 +56,11 @@ function interruptsTravel(event: GameEvent, id: string): boolean {
       return [event.a, event.b].includes(id);
     case "shot":
       return [event.shooter, event.target].includes(id);
-    case "guardShot":
-      return event.target === id;
     default:
       return stopsVehicle(event, id);
   }
 }
 
-// Whether a turn passes the drive-through point and ends farther from it than the truck is now.
-// Travel stops before such a turn, so control returns at the turn end nearest the point.
 export function overshoots(world: World, next: Pick<World, "events" | "vehicles">): boolean {
   const me = playerVehicle(world);
   if (me.order?.kind !== "through") return false;
@@ -75,9 +70,6 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
   return dist(after.pos, me.order.dest) > dist(me.pos, me.order.dest);
 }
 
-// A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
-// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too. One that
-// jumped this turn, like a retreating truck sent home, has no trail and stands at its new pose.
 export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"], shown: Record<string, VehicleFrame>): void {
   for (const v of after.vehicles) {
     if (!isOnRope(after, v.id) && (frames[v.id] || !isOnRope(before, v.id))) continue;
@@ -85,7 +77,6 @@ export function addRopeFrames(before: World, after: World, frames: TurnResult["f
   }
 }
 
-// The wheels a rope truck starts the turn with: as last shown, or at rest when nothing of it was shown.
 function startWheels(v: Vehicle, shown: Record<string, VehicleFrame>): WheelFrame[] {
   return shown[v.id]?.wheels ?? restWheels(v.chassisId);
 }
@@ -127,7 +118,6 @@ export class Travel {
     return step;
   }
 
-  // Returns whether to play one turn now.
   pressTurn(playing: boolean, world: World): boolean {
     if (autoRuns(world)) {
       this.toggleAutoHalt();
@@ -138,25 +128,20 @@ export class Travel {
     return this.press(performance.now(), playing, follow);
   }
 
-  // A turn press stops the turns that run on their own while the player is stranded, and the next press restarts them.
-  // Holding the restarting press fast-forwards, as in travel.
   private toggleAutoHalt(): void {
     this.autoHalted = !this.autoHalted;
     if (!this.autoHalted) this.pressedAt = performance.now();
   }
 
-  // Whether turns run on their own now. A stop lasts until a turn press or until the stranded spell ends.
   autoAllowed(world: World): boolean {
     if (!autoRuns(world)) this.autoHalted = false;
     return autoRuns(world) && !this.autoHalted;
   }
 
-  // Whether turns follow each other without a key press: travel to the order point or turns while stranded.
   isAuto(world: World): boolean {
     return this.automatic || (autoRuns(world) && !this.autoHalted);
   }
 
-  // Stops automatic turns as Space does. Returns whether any were running.
   stopAuto(world: World): boolean {
     if (!this.isAuto(world)) return false;
     if (autoRuns(world)) this.autoHalted = true;
@@ -164,7 +149,6 @@ export class Travel {
     return true;
   }
 
-  // A failed turn stops every automatic turn, so the same turn is not retried each frame.
   abandon(world: World): void {
     this.stopAuto(world);
     this.pause();
@@ -209,7 +193,6 @@ export class Travel {
     this.turns.prepare(world, drive);
   }
 
-  // Turns on a tow rope chain like waypoint travel: the next turn is prepared during playback and starts with no pause.
   private onRope(world: World): boolean {
     return isTowed(world) && this.autoAllowed(world);
   }
@@ -249,7 +232,6 @@ export class Travel {
     shown: Record<string, VehicleFrame>,
   ): { world: World; playback: Playback; towed: boolean } {
     const world = { ...prepared.world, terrain: before.terrain };
-    // Frames first: a throw here must not leave a restored Rapier world behind.
     addRopeFrames(before, world, prepared.result.frames, shown);
     const nextSnapshot = prepared.result.next;
     const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
@@ -287,6 +269,16 @@ export class Travel {
   }
 }
 
+export class TurnFailure extends Error {
+  constructor(workerStack: string, readonly drive: DriveSnapshot) {
+    const head = workerStack.split("\n")[0];
+    const named = /^(\w*Error): (.*)$/.exec(head);
+    super(named ? named[2] : head);
+    if (named) this.name = named[1];
+    this.stack = workerStack;
+  }
+}
+
 export class TurnPreparation {
   private worker: Worker | null = null;
   private terrain: World["terrain"] | null = null;
@@ -295,6 +287,7 @@ export class TurnPreparation {
   private pending: {
     id: number;
     before: World;
+    drive: DriveSnapshot;
     ready: PreparedTurn | null;
     failure: string | null;
   } | null = null;
@@ -306,7 +299,6 @@ export class TurnPreparation {
     worker.onmessage = (event: MessageEvent<TurnResponse>) => {
       const response = event.data;
       if ("error" in response) return this.fail(response.id, response.error);
-      // A warm-up turn is no player turn, so it keeps its own timer.
       mergePerf(response.id === this.warmId ? { "turn-warm": response.perf.turn } : response.perf);
       if (this.pending?.id === response.id) this.pending.ready = response.turn;
     };
@@ -315,15 +307,11 @@ export class TurnPreparation {
     return worker;
   }
 
-  // A failure of the pending turn waits in it for take() to throw. A failure that belongs to no pending turn, like the
-  // warm-up's, goes to the error route. A worker event without a request id belongs to the pending turn.
   private fail(id: number | null, message: string): void {
     if (this.pending && (id === null || this.pending.id === id)) this.pending.failure = message;
     else reportError(new Error(message));
   }
 
-  // Runs the turn after `world` once and drops it. The worker then has its route grids built, its code compiled
-  // and the routes of that turn cached before the player's first turn. No turn runs during a radio call or after death.
   warm(world: World, drive: Drive): void {
     if (world.player.call || world.player.state === "dead") return;
     this.warmId = this.post(world, captureDrive(drive));
@@ -333,18 +321,15 @@ export class TurnPreparation {
     if (this.pending?.before !== world) this.prepareFrom(world, captureDrive(drive));
   }
 
-  // Prepares the turn after `world` from a snapshot already in hand. It posts a copy, since a post transfers its
-  // buffer and the caller keeps the snapshot for a retry.
   prepareFrom(world: World, saved: DriveSnapshot): void {
     if (this.pending?.before === world) return;
     const copy = { ...saved, snapshot: saved.snapshot.slice() };
-    this.pending = { id: this.post(world, copy), before: world, ready: null, failure: null };
+    this.pending = { id: this.post(world, copy), before: world, drive: saved, ready: null, failure: null };
   }
 
   private post(world: World, saved: DriveSnapshot): number {
     const { terrain, ...state } = world;
     const id = ++this.serial;
-    // Terrain identity owns route caches, so keep one terrain instance in the worker.
     this.worker ??= this.createWorker();
     this.worker.postMessage(
       {
@@ -359,14 +344,12 @@ export class TurnPreparation {
     return id;
   }
 
-  // The prepared turn after `world`, or null while it is not ready. It throws the worker's failure once and then
-  // forgets the turn, so the next prepare() asks again.
   take(world: World): PreparedTurn | null {
     const pending = this.pending;
     if (pending?.before !== world) return null;
     if (pending.failure) {
       this.pending = null;
-      throw new Error(pending.failure);
+      throw new TurnFailure(pending.failure, pending.drive);
     }
     if (!pending.ready) return null;
     this.pending = null;

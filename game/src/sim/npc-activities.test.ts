@@ -2,24 +2,28 @@ import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
 import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
-import { planNpcOrders } from './ai';
+import { planNpcOrders, turnCornered } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { partDef } from '../data/parts';
-import { getKnownSite, getUpkeepReserve, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
-import { affordableBuyCount, getTradePrice } from './economy';
+import { damagePart } from './wear';
+import { getKnownSite, getUpkeepReserve, judgeDanger, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
+import { affordableBuyCount, getLotTradePrice, getTradePrice } from './economy';
 import { cargoRoom } from './inventory';
-import { ECONOMY } from '../data/goods';
+import { ECONOMY, GOODS } from '../data/goods';
 import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
-import { addGoods } from './inventory';
-import { backOffLoot, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { addGoods, hasCargoRoom } from './inventory';
+import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { chooseOn, trackOf } from './tracks';
+import { watchStalls } from './npc-watchdog';
+import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
-import { salvageUnits } from './salvage';
+import { hiddenUnits, salvageInRange, salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
@@ -35,7 +39,13 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
 import { inCombat } from './combat';
 import { refreshVision } from './vision';
+import { emptyHidden } from './salvage';
 import { recall } from './memory';
+import { defaultSetup } from './settings';
+
+function overlookSalvage(w: World, npc: Vehicle): void {
+  for (const stock of w.salvage) npc.brain!.noticed[`salvageSeen:${stock.id}`] = w.turn;
+}
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -51,8 +61,6 @@ function createTrader() {
   return { w, npc };
 }
 
-// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or a service stall,
-// with no misjudgment.
 function reserveOfTrader(): number {
   const { w, npc } = createTrader();
   const pumps = [...TRAITS.trader.towns, ...Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id)].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
@@ -120,7 +128,7 @@ describe('NPC activities', () => {
     expect(new Set(stops.map((p) => `${p.x},${p.y}`)).size).toBe(stops.length);
   });
 
-  it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
+  it.each(['sell', 'resupply'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
@@ -199,19 +207,19 @@ describe('NPC activities', () => {
   it('drops a scavenge goal when nothing left in the stock fits its cargo', () => {
     const { w, npc } = createScavenger();
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
-    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     npc.speed = 0;
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
     w.events = [];
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
-    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargoFullSalvage' })]);
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargoFullLoot' })]);
   });
 
   it('does not see a reachable stock as salvage when nothing in it fits', () => {
     const { w, npc } = createScavenger();
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
-    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     npc.speed = 0;
     expect(visibleSalvage(w, npc)).toEqual([]);
     w.salvage[0].goods.scrap = 1;
@@ -231,14 +239,12 @@ describe('NPC activities', () => {
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
     for (const key of Object.keys(w.spawnTimer)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    // Spawn timers are initialized lazily, so disable every template explicitly.
     for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const id = npc.id;
     const initialMoney = npc.resources!.money;
     let collected = false;
     let sold = false;
     let serviced = false;
-    // Observed completion is well under 500 turns; keep a generous cap so a stalled NPC fails fast.
     for (let turn = 0; turn < 800; turn++) {
       w = endTurn(w, testDrive);
       npc = w.vehicles.find((v) => v.id === id)!;
@@ -255,7 +261,7 @@ describe('NPC activities', () => {
 
   it('cannot inspect distant salvage contents', () => {
     const { w, npc } = createScavenger();
-    w.salvage = [{ id: 'wreck-test', pos: { x: 17, y: 10 }, radius: 0.6, goods: { scrap: 0 }, parts: [] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 17, y: 10 }, radius: 0.6, goods: { scrap: 0 }, parts: [], hidden: emptyHidden() }];
     const full = cloneWorld(w);
     full.salvage[0].goods.scrap = 5;
     expect(thinkNpc(full, full.vehicles.find((v) => v.id === npc.id)!)).toEqual(thinkNpc(w, npc));
@@ -287,14 +293,14 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 50, y: 50 });
     const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
-    npc.resources!.money = 5000;
+    npc.resources!.money = 166700;
     forceOption('idle', 'trade');
     planNpcOrders(w);
     const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
     npc.pos = { ...sitePads(source)[0] };
     resolveNpcActivities(w);
     expect(topGoal(npc)?.kind).toBe('sell');
-    expect(5000 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
+    expect(166700 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
   });
 
   it('gives a trade the wallet above the upkeep reserve, capped by the stake', () => {
@@ -302,7 +308,7 @@ describe('NPC activities', () => {
     const reserve = getUpkeepReserve(npc);
     npc.resources!.money = reserve + 200;
     expect(tradeSpend(w, npc)).toBe(200);
-    npc.resources!.money = reserve + 10_000;
+    npc.resources!.money = reserve + TRAITS.trader.tradeStake * 2;
     expect(tradeSpend(w, npc)).toBe(TRAITS.trader.tradeStake);
   });
 
@@ -315,7 +321,6 @@ describe('NPC activities', () => {
       return { w, npc };
     }
 
-    // Every pair the driver could buy a unit of at a unit profit, with the load it can afford and fit.
     function pairs(w: World, npc: Vehicle) {
       const spend = tradeSpend(w, npc);
       const shops = Object.values(SHOPS);
@@ -332,7 +337,7 @@ describe('NPC activities', () => {
     }
 
     it('drops a run whose load profit does not cover the trip fuel', () => {
-      const { w, npc } = hauler(50);
+      const { w, npc } = hauler(1700);
       const losing = pairs(w, npc).filter((p) => p.loadProfit <= p.fuel);
       expect(losing.length).toBeGreaterThan(0);
       const offers = tradeOffers(w, npc).map((o) => `${o.value.source}:${o.value.good}:${o.value.sellShop}`);
@@ -359,7 +364,7 @@ describe('NPC activities', () => {
     });
 
     it('sends a driver with no paying run to other idle work without a stall', () => {
-      const { w, npc } = hauler(50);
+      const { w, npc } = hauler(1700);
       expect(tradeOffers(w, npc)).toHaveLength(0);
       expect(optionChances(optionWeights(w, npc, 'idle', null, null)).trade).toBeUndefined();
       let world = w;
@@ -385,14 +390,13 @@ describe('NPC activities', () => {
   });
 
   it('a raider can knock out an NPC, strip its cargo and sell it', () => {
-    // The player waits far off the raider's way to any shop, so the raider has no reason to stop for it.
     const w0 = emptyWorld({ x: 450, y: 60 });
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('hostileSeen', 'fight');
     forceOption('idle', 'scavenge');
-    // The engineless victim is stranded. It holds out when offered a way out, so the fight ends in a knockout.
     forceOption('surrenderOffered', 'refuse');
+    forceOption('mugging', 'attack');
     const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
     victim.brain = npcBrain('scavenger', victim.pos, ['scavenger']);
     corePart(victim, 'cab').hp = 1;
@@ -403,7 +407,6 @@ describe('NPC activities', () => {
     let looted = false;
     let sold = false;
     let knockedOut = false;
-    // The broken cab knocks the victim out. A death roll would leave a wreck instead.
     const deathChance = RULES.npcDeathChance;
     (RULES as { npcDeathChance: number }).npcDeathChance = 0;
     try {
@@ -413,7 +416,6 @@ describe('NPC activities', () => {
         const actor = w.vehicles.find((v) => v.id === raider.id)!;
         const scrap = goodsCount(actor).scrap ?? 0;
         if (scrap > 0) looted = true;
-        // The sale pays for the scrap. The raider may buy fuel on the way, so its money can end below the start.
         if (looted && scrap === 0 && actor.resources!.money > money) { sold = true; break; }
         money = actor.resources!.money;
       }
@@ -430,13 +432,11 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('scavenge');
     const target = topGoal(npc)?.targetId;
-    // A territory is searched at one of its loot spots.
     const spotOf = w.salvage.find((stock) => stock.id === target && territoryOfStock(stock));
     expect(spotOf ? 'fallen-sun' : target).toSatisfy((id: string) => TRAITS.scavenger.salvageSites.includes(id));
   });
 
   describe('in a territory', () => {
-    // A scavenger that knows only the given territory, with the player far away.
     function territoryScavenger(territoryId: string, at: { x: number; y: number }) {
       const { w, npc } = createScavenger();
       npc.pos = { ...at };
@@ -465,6 +465,27 @@ describe('NPC activities', () => {
       }
     });
 
+    it('targets a Glass Flats spot and takes its loot on arrival', () => {
+      const { w, npc, restore } = territoryScavenger('glass-flats', { x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const goal = topGoal(npc)!;
+        expect(goal.kind).toBe('scavenge');
+        const spot = territorySpots(w, 'glass-flats').find((s) => s.id === goal.targetId)!;
+        expect(spot).toBeDefined();
+        npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+        let next = w;
+        let took = false;
+        for (let turn = 0; turn < 80 && !took; turn++) {
+          next = endTurn(next, testDrive);
+          took = (goodsCount(next.vehicles.find((v) => v.id === npc.id)!).scrap ?? 0) > 0;
+        }
+        expect(took).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
     it('parks beside the spot, searches it and takes its loot', () => {
       const { w, npc, restore } = territoryScavenger('fallen-sun', { x: 10, y: 10 });
       try {
@@ -485,24 +506,25 @@ describe('NPC activities', () => {
     });
 
     it('drives into the cage by its open end to a cache inside, searches it and takes its loot', () => {
-      // The real map, and the scavenger on the floor 3 tiles past the cage's south end, on its axis.
-      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       const cage = territoryPieces(sun as never).find((p) => p.look === 'shipCage')!;
       const along = { x: Math.cos(cage.yaw), y: Math.sin(cage.yaw) };
       const back = { x: cage.pos.x - along.x * (cage.r + 3), y: cage.pos.y - along.y * (cage.r + 3) };
       const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], back);
       npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-      // The cache in the cage's north half, so the driver passes the whole south half inside the tube.
       const alongOf = (p: Vec) => (p.x - cage.pos.x) * along.x + (p.y - cage.pos.y) * along.y;
       const offAxis = (p: Vec) => Math.abs((p.x - cage.pos.x) * along.y - (p.y - cage.pos.y) * along.x);
       const cache = w.salvage.find((s) => s.id.startsWith('hullCache-') && dist(s.pos, cage.pos) < cage.r && alongOf(s.pos) > 0)!;
       expect(cache).toBeDefined();
       npc.brain.goals = [{ kind: 'scavenge', targetId: cache.id, destination: { ...cache.pos }, phase: 'travel', reason: 'searchSpot' }];
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
-      // The other cache on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
-      const scrapIn = (world: World) => world.salvage.find((s) => s.id === cache.id)!.goods.scrap ?? 0;
+      overlookSalvage(w, npc);
+      const scrapIn = (world: World) => {
+        const stock = world.salvage.find((s) => s.id === cache.id)!;
+        return (stock.goods.scrap ?? 0) + (stock.hidden.goods.scrap ?? 0);
+      };
       const before = scrapIn(w);
 
       let next = w;
@@ -517,7 +539,6 @@ describe('NPC activities', () => {
 
       expect(took).not.toBeNull();
       expect(scrapIn(next)).toBeLessThan(before);
-      // It entered by the south end and stayed between the walls past the cage's middle.
       const inTube = path.filter((p) => alongOf(p) > -cage.r * 0.8 && alongOf(p) < 0);
       expect(inTube.length).toBeGreaterThan(0);
       for (const p of inTube) expect(offAxis(p)).toBeLessThan(3.5);
@@ -525,22 +546,23 @@ describe('NPC activities', () => {
     });
 
     it('drives from the west road down into the crash furrow to a spot there, searches it and takes its loot', () => {
-      // The real map, and the scavenger at the west road's end, the entry nearest the furrow.
-      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       const furrow = TERRAIN.features.furrow;
       const start = territoryEntries(sun as never)[0];
       const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], start);
       npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-      // The furrow spot farthest from the entry.
       const inFurrow = territorySpots(w, 'fallen-sun').filter((s) => polylineDist(s.pos, furrow.path) < furrow.width);
       expect(inFurrow.length).toBeGreaterThan(0);
       const spot = inFurrow.reduce((a, b) => (dist(b.pos, start) > dist(a.pos, start) ? b : a));
       npc.brain.goals = [{ kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'searchSpot' }];
       const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
-      // A spot seen on the way would pull the driver off this one.
       forceOption('salvageSeen', 'keep');
-      const scrapIn = (world: World) => world.salvage.find((s) => s.id === spot.id)!.goods.scrap ?? 0;
+      overlookSalvage(w, npc);
+      const scrapIn = (world: World) => {
+        const stock = world.salvage.find((s) => s.id === spot.id)!;
+        return (stock.goods.scrap ?? 0) + (stock.hidden.goods.scrap ?? 0);
+      };
       const before = scrapIn(w);
 
       let next = w;
@@ -583,9 +605,9 @@ describe('NPC activities', () => {
           const spotId = topGoal(npc)!.targetId!;
           const spot = territorySpots(w, 'orchard').find((s) => s.id === spotId)!;
           npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
-          // The orchard's spots stand close together, and one in sight would pull the driver off this one.
           forceOption('salvageSeen', 'keep');
-          const unitsBefore = salvageUnits(spot);
+          overlookSalvage(w, npc);
+          const unitsBefore = salvageUnits(spot) + hiddenUnits(spot);
           const carriedBefore = npc.items.length;
           let next = w;
           let searching = false;
@@ -599,9 +621,8 @@ describe('NPC activities', () => {
           }
           expect(searching).toBe(true);
           expect(took).toBe(true);
-          // A searched-out stock leaves the world.
           const after = next.salvage.find((s) => s.id === spotId);
-          expect(after ? salvageUnits(after) : 0).toBeLessThan(unitsBefore);
+          expect(after ? salvageUnits(after) + hiddenUnits(after) : 0).toBeLessThan(unitsBefore);
         } finally {
           restore();
         }
@@ -645,6 +666,18 @@ describe('NPC activities', () => {
     });
   });
 
+  it('heads for a town, not the stall it is parked at, once stranded for good with no engine', () => {
+    const yard = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    expect(SHOPS['salvage-yard'].kind).toBe('stall');
+    const w = emptyWorld({ x: yard.pos.x + 100, y: yard.pos.y + 100 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg'], { ...sitePads(yard)[0] });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    getResources(w, npc).money = 500;
+    planNpcOrders(w);
+    expect(topGoal(npc)?.kind).toBe('resupply');
+    expect(REGION.towns.map((t) => t.id)).toContain(topGoal(npc)?.targetId);
+  });
+
   it('drives on near a town with a tank well below a fifth', () => {
     const { w, npc } = createTrader();
     const pad = sitePads(REGION.towns[0])[0];
@@ -672,14 +705,14 @@ describe('NPC activities', () => {
       const { w, npc } = createTrader();
       at(npc, 'bowl');
       addGoods(w, npc, 'salt', 2);
-      tankAt(w, npc, 0.1, 500);
+      tankAt(w, npc, 0.1, 16700);
       npc.brain!.goals = [goal('sell', 'bowl')];
       const fuel = getResources(w, npc).fuel;
-      const salt = getTradePrice(w, npc, 'bowl', 'salt', 'sell') * 2;
+      const salt = getLotTradePrice(w, npc, 'bowl', 'salt', 2, 'sell');
       resolveNpcActivities(w);
       expect(goodsCount(npc).salt ?? 0).toBe(0);
       expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
-      expect(getResources(w, npc).money).toBe(500 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
+      expect(getResources(w, npc).money).toBe(16700 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
     });
 
     it('a trader that buys trade cargo at a town buys the planned cargo first, then fills the tank from the rest', () => {
@@ -696,7 +729,7 @@ describe('NPC activities', () => {
     it('a trader with plenty of money buying trade cargo also tops up its tank', () => {
       const { w, npc } = createTrader();
       at(npc, 'bowl');
-      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 5000);
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 166700);
       npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
       resolveNpcActivities(w);
       expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
@@ -707,9 +740,9 @@ describe('NPC activities', () => {
       const raider = () => {
         const w = emptyWorld({ x: 50, y: 50 });
         const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
-        npc.brain = npcBrain('raider', npc.pos, ['raider']);
+        npc.brain = npcBrain('buggy', npc.pos, ['raider']);
         addGoods(w, npc, 'scrap', 2);
-        tankAt(w, npc, 0.1, 500);
+        tankAt(w, npc, 0.1, 16700);
         return { w, npc };
       };
       for (const [site, full] of [['salvage-yard', false], ['scrapjaw', true]] as const) {
@@ -764,6 +797,9 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('flee');
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
+    planNpcOrders(w);
+    expect(topGoal(npc)?.kind).toBe('flee');
+    w.turn += NPC_BEHAVIOR.fleeCalmTurns + 1;
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
@@ -820,8 +856,8 @@ describe('NPC activities', () => {
   it('a raider investigates a nearby heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
-    player.speed = 4; // loud enough to be heard far past sight range
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
+    player.speed = 4;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('contactHeard', 'investigate');
     planNpcOrders(w);
@@ -830,7 +866,7 @@ describe('NPC activities', () => {
   });
 
   describe('an investigation that finds its truck', () => {
-    function investigating(noticed: Record<string, number> = {}) {
+    function investigating() {
       const w = emptyWorld({ x: 30, y: 30 });
       const player = w.vehicles[0];
       const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
@@ -839,14 +875,13 @@ describe('NPC activities', () => {
         { kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'tripToSite' },
         { kind: 'investigate', targetId: player.id, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heardHostile' },
       ];
-      raider.brain.noticed = noticed;
+      chooseOn(w, raider, player.id, { x: 30, y: 30 }, 'investigate', false);
       return { w, player, raider };
     }
     const closeIn = (w: World, player: Vehicle, raider: Vehicle) => { player.pos = { x: raider.pos.x - 4, y: raider.pos.y }; };
 
-    it('fights a truck it saw before, whatever it noticed earlier', () => {
+    it('rolls on the sighting of a truck it only heard, however long ago', () => {
       const { w, player, raider } = investigating();
-      raider.brain!.noticed[`hostileSeen:${player.id}`] = w.turn;
       w.turn += NPC_BEHAVIOR.noticeMemory + 2;
       closeIn(w, player, raider);
       forceOption('hostileSeen', 'fight');
@@ -862,7 +897,7 @@ describe('NPC activities', () => {
       thinkNpc(w, raider);
       expect(raider.brain!.goals.some((g) => g.kind === 'investigate')).toBe(false);
       expect(topGoal(raider)?.kind).toBe('raid');
-      expect(raider.brain!.noticed).toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'keep', chosenInSight: true });
     });
 
     it('flees on a flee roll', () => {
@@ -880,7 +915,7 @@ describe('NPC activities', () => {
       forceOption('hostileSeen', 'fight');
       thinkNpc(w, raider);
       expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
-      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'investigate', chosenInSight: false });
     });
 
     it('ends the same way on an NPC target', () => {
@@ -904,7 +939,60 @@ describe('NPC activities', () => {
         expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
         w.turn += 1;
       }
-      expect(raider.brain!.noticed).not.toHaveProperty([`hostileSeen:${player.id}`]);
+      expect(trackOf(raider, player.id)).toMatchObject({ sighted: false, choice: 'investigate', chosenInSight: false });
+    });
+  });
+
+  describe('a truck the driver ran from', () => {
+    function ranFrom() {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const player = w.vehicles[0];
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      raider.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'raid' }];
+      chooseOn(w, raider, player.id, player.pos, 'flee', true);
+      w.turn += NPC_BEHAVIOR.fleeCalmTurns + 2;
+      thinkNpc(w, raider);
+      w.turn += 1;
+      return { w, player, raider };
+    }
+
+    it('is not looked for when heard again', () => {
+      const { w, player, raider } = ranFrom();
+      player.speed = 4;
+      forceOption('contactHeard', 'investigate');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)?.kind).toBe('raid');
+      expect(trackOf(raider, player.id)).toMatchObject({ choice: 'flee', turn: w.turn });
+    });
+
+    it('is run from again on sight, with no roll', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'flee', targetId: player.id, reason: 'avoidRanFrom' });
+    });
+
+    it('is not run from again while it stays in sight after a run that went as far as it could', () => {
+      const { w, player, raider } = ranFrom();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      thinkNpc(w, raider);
+      raider.brain!.goals.pop();
+      w.turn += 1;
+      thinkNpc(w, raider);
+      expect(topGoal(raider)?.kind).toBe('raid');
+    });
+
+    it('is judged fresh once forgotten', () => {
+      const { w, player, raider } = ranFrom();
+      w.turn += NPC_BEHAVIOR.fleeMemory;
+      thinkNpc(w, raider);
+      expect(trackOf(raider, player.id)).toBeUndefined();
+      player.pos = { x: raider.pos.x - 4, y: raider.pos.y };
+      forceOption('hostileSeen', 'fight');
+      thinkNpc(w, raider);
+      expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: player.id });
     });
   });
 
@@ -912,7 +1000,7 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 4;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // hears the player just past sight
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: raider.pos.x + 5, y: 30 });
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
@@ -927,7 +1015,7 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 180, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 40 tiles: heard, but the contact circle is wider than the reaction limit
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('contactHeard', 'investigate');
     forceOption('idle', 'raid');
@@ -941,7 +1029,7 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
     raider.speed = 4;
     forceOption('contactHeard', 'flee');
     planNpcOrders(w);
@@ -952,11 +1040,11 @@ describe('NPC activities', () => {
   it('a parked player behind a hill goes unnoticed', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
-    player.speed = 0; // parked: no sound, no dust
+    player.speed = 0;
     editableTerrain(w);
     const size = w.terrain.size;
     for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).not.toBe('investigate');
@@ -990,8 +1078,6 @@ describe('a defeated driver with a deal goal', () => {
 });
 
 describe('hunting a lost fight target', () => {
-  // A raider 15 tiles from the player sees it and fights it. The player then parks 25 tiles from the raider, out of
-  // sight and silent.
   function raiderLosesPlayer() {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
@@ -1021,6 +1107,29 @@ describe('hunting a lost fight target', () => {
     expect(topGoal(raider)?.kind).not.toBe('fight');
   });
 
+  it('drops the fight once every mounted gun is broken', () => {
+    const { w, raider } = raiderLosesPlayer();
+    const gun = vehicleStats(w, raider).weapons[0].part;
+    damagePart(gun, gun.hp, 0);
+    w.turn++;
+    planNpcOrders(w);
+    expect(vehicleStats(w, raider).weapons).toHaveLength(1);
+    expect(topGoal(raider)?.kind).not.toBe('fight');
+  });
+
+  it('runs from a hostile in sight once every mounted gun is broken', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const gun = vehicleStats(w, raider).weapons[0].part;
+    damagePart(gun, gun.hp, 0);
+    const weights = optionWeights(w, raider, 'hostileSeen', player.id, judgeDanger(w, raider, player));
+    expect(weights.fight).toBeUndefined();
+    const heaviest = Object.entries(weights).sort((a, b) => b[1] - a[1])[0][0];
+    expect(heaviest).toBe('flee');
+  });
+
   it('re-aims at the heard engine of the target and restarts the search', () => {
     const { w, player, raider } = raiderLosesPlayer();
     player.speed = 4;
@@ -1028,7 +1137,8 @@ describe('hunting a lost fight target', () => {
     const contact = contactsOf(w, raider, Infinity).find((c) => c.vehicleId === player.id)!;
     expect(contact.sources).toContain('sound');
     planNpcOrders(w);
-    expect(topGoal(raider)).toMatchObject({ kind: 'fight', destination: contact.center, perceived: w.turn });
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', destination: contact.center });
+    expect(trackOf(raider, player.id)).toMatchObject({ at: contact.center, turn: w.turn });
   });
 
   it('gives up once the search turns pass with no sight or contact', () => {
@@ -1045,12 +1155,11 @@ describe('hunting a lost fight target', () => {
 });
 
 describe('salvage on the way', () => {
-  // A scavenger driving to a known site, with a road wreck in sight off its route.
   function passingWreck(traits: TraitId[] = ['scavenger']) {
     const { w, npc } = createScavenger();
     npc.brain = npcBrain('scavenger', npc.pos, traits);
     npc.brain.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'searchSite' }];
-    w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     return { w, npc };
   }
 
@@ -1073,6 +1182,41 @@ describe('salvage on the way', () => {
     npc.speed = 0;
     thinkNpc(w, npc);
     expect(topGoal(npc)?.targetId).toBe('podfield');
+  });
+
+  it('a driver whose hold could not take a loot passes up wrecks until it sells', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc } = passingWreck();
+    addGoods(w, npc, 'scrap', freeCells(npc) - 1);
+    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'longRifle', 0)], hidden: emptyHidden() });
+    npc.speed = 0;
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 10.5, y: 10 }, phase: 'travel', reason: 'lootOnTheWay' });
+    resolveNpcActivities(w);
+    expect(npc.brain!.fullAt).toBe(1);
+    expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).not.toHaveProperty('loot');
+    expect(optionWeights(w, npc, 'idle', null, null)).not.toHaveProperty('scavenge');
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).not.toContain('loot');
+    npc.items = npc.items.filter((it) => it.kind !== 'good');
+    thinkNpc(w, npc);
+    expect(npc.brain!.fullAt).toBeUndefined();
+    expect(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).toHaveProperty('loot');
+  });
+
+  it('a driver that a sale would not make room for passes up only that loot', () => {
+    const { w, npc } = passingWreck();
+    w.salvage.push({ id: 'wreck901', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() });
+    addGoods(w, npc, 'scrap', 2);
+    npc.speed = 0;
+    expect(canTakeAny(w, npc, w.salvage.find((s) => s.id === 'wreck901')!)).toBe(false);
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck901', destination: { x: 10.5, y: 10 }, phase: 'travel', reason: 'lootOnTheWay' });
+    finishGoal(w, npc, CANNOT_HOLD);
+    expect(npc.brain!.fullAt).toBeUndefined();
+    expect(npc.brain!.unfit).toEqual(['wreck901']);
+    expect(visibleSalvage(w, npc).map((s) => s.id)).toEqual(['wreck900']);
+    w.salvage = w.salvage.filter((s) => s.id !== 'wreck901');
+    thinkNpc(w, npc);
+    expect(npc.brain!.unfit).toBeUndefined();
   });
 
   it('rolls once per sighting', () => {
@@ -1120,13 +1264,45 @@ describe('point goals', () => {
     npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 150 }, phase: 'travel', reason: 'searchSpot' }];
     addVehicle(w0, 'traders', 'hauler', [], { x: 170, y: 150 });
     const moveFar = (w: World) => w.vehicles.forEach((v) => advanceFar(w, v));
-    // Salvage on the way would pull the driver off its point.
     forceOption('salvageSeen', 'keep');
     let w = w0;
     for (let i = 0; i < 20 && topGoal(w.vehicles.find((v) => v.id === npc.id)!)?.kind === 'explore'; i++) w = endTurn(w, moveFar);
     const after = w.vehicles.find((v) => v.id === npc.id)!;
     expect(topGoal(after)?.kind).not.toBe('explore');
     expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
+  });
+});
+
+describe('loot out of reach', () => {
+  function besideCache(gap: number) {
+    const w = emptyWorld({ x: 10, y: 10 });
+    const stock = w.salvage.find((s) => s.id.startsWith('hullCache-'))!;
+    const npc = addVehicle(w, 'scavengers', 'van', ['stockEngine'], { x: stock.pos.x, y: stock.pos.y + gap });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.brain.goals = [{ kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'lootOnTheWay' }];
+    npc.speed = 0;
+    return { w, npc, stock };
+  }
+
+  it('gives the salvage up when the move arrives out of search range', () => {
+    const { w, npc, stock } = besideCache(4.2);
+    expect(salvageInRange(npc, stock)).toBe(false);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toBeNull();
+  });
+
+  it('keeps the goal while the move is still under way', () => {
+    const { w, npc } = besideCache(4.2);
+    resolveNpcActivities(w);
+    expect(topGoal(npc)?.kind).toBe('loot');
+  });
+
+  it('searches when the move arrives in range', () => {
+    const { w, npc } = besideCache(2);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', phase: 'act' });
   });
 });
 
@@ -1141,6 +1317,51 @@ describe('a trader too poor to trade', () => {
 });
 
 describe('repair goal in combat', () => {
+  it('turns on a visible foe when the driver cannot reach repairs, even after the combat timer expires', () => {
+    const { w, npc } = createScavenger();
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    addState(w, 'feud', npc.id, foe.id, { kind: 'feud', robbery: false });
+    npc.brain!.goals = [
+      { kind: 'fight', targetId: foe.id, destination: { ...foe.pos }, phase: 'travel', reason: 'fightBack' },
+      { kind: 'resupply', targetId: 'bowl', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'needsRepairs' },
+    ];
+    refreshVision(w);
+    expect(inCombat(w, npc)).toBe(false);
+
+    expect(turnCornered(w, npc)).toBe(true);
+    expect(topGoal(npc)?.kind).toBe('fight');
+    expect(topGoal(npc)?.targetId).toBe(foe.id);
+  });
+
+  it('does not turn back without a gun, and its stuck recovery starts', () => {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
+    startCombat(w, foe, npc);
+    refreshVision(w);
+    expect(turnCornered(w, npc)).toBe(false);
+    npc.brain!.goals = [{ kind: 'flee', targetId: foe.id, destination: { x: 40, y: 10 }, phase: 'travel', reason: 'escapeThreat' }];
+    for (let i = 0; i < RULES.unstick.turns + 2 && !npc.brain!.recovery; i++) {
+      startCombat(w, foe, npc);
+      planNpcOrders(w);
+    }
+    expect(npc.brain!.recovery).toBeGreaterThan(0);
+  });
+
+  it('turns only on the foe it is in combat with, not on a nearer one it only feuds with', () => {
+    const { w, npc } = createScavenger();
+    const near = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 10 });
+    const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 18, y: 10 });
+    addState(w, 'feud', npc.id, near.id, { kind: 'feud', robbery: false });
+    addState(w, 'feud', far.id, npc.id, { kind: 'feud', robbery: false });
+    startCombat(w, far, npc);
+    refreshVision(w);
+    expect(turnCornered(w, npc)).toBe(true);
+    expect(topGoal(npc)?.targetId).toBe(far.id);
+  });
+
   it('is given up when no repair is under way, since none can start', () => {
     const { w, npc } = createScavenger();
     npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patchParts' }];
@@ -1157,7 +1378,7 @@ describe('repair goal in combat', () => {
 describe('salvage in combat', () => {
   it('is given up at the stock when no search runs, since none can start', () => {
     const { w, npc } = createScavenger();
-    w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collectSalvage' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
@@ -1183,10 +1404,9 @@ describe('one looter per target', () => {
     return npc;
   }
 
-  // Two scavengers parked beside a road wreck. The first one searches it.
   function contestedWreck() {
     const { w, npc: first } = createScavenger();
-    const wreck = { id: 'wreck901', pos: { x: 10.5, y: 10.5 }, radius: 0.6, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { x: 10.5, y: 10.5 }, radius: 0.6, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     first.speed = 0;
     first.brain!.goals = [lootGoal('scavenge', wreck.id, 'act', wreck.pos)];
@@ -1196,7 +1416,6 @@ describe('one looter per target', () => {
     return { w, first, second, wreck };
   }
 
-  // Two raiders parked on either side of a knocked-out buggy with a gun and two scrap.
   function contestedTruck() {
     const w = emptyWorld({ x: 50, y: 50 });
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 20, y: 10 });
@@ -1299,7 +1518,7 @@ describe('one looter per target', () => {
   it('never lets two drivers search one wreck at once, through full turns', () => {
     const w0 = emptyWorld({ x: 50, y: 50 });
     for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    const wreck = { id: 'wreck902', pos: { x: 15, y: 12 }, radius: 0.6, goods: { scrap: 8 }, parts: [] };
+    const wreck = { id: 'wreck902', pos: { x: 15, y: 12 }, radius: 0.6, goods: { scrap: 8 }, parts: [], hidden: emptyHidden() };
     w0.salvage.push(wreck);
     const ids = [{ x: 10, y: 12 }, { x: 20, y: 12 }].map((pos) => {
       const npc = parkedScavenger(w0, pos);
@@ -1348,7 +1567,6 @@ describe('one looter per target', () => {
 });
 
 describe('stall watchdog', () => {
-  // A scavenger pinned to one tile with a goal it never works on.
   function frozen() {
     const { w, npc } = createScavenger();
     npc.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'tripToSite' }];
@@ -1406,6 +1624,26 @@ describe('stall watchdog', () => {
     }
     expect(w.events.some((e) => e.t === 'stall')).toBe(false);
   });
+
+  it('counts a driver shut down by an emitter pulse as making progress', () => {
+    const { w, npc } = frozen();
+    run(w, NPC_BEHAVIOR.stallTurns - 1);
+    npc.shutDown = { from: w.turn + 1, until: w.turn + 2 };
+    run(w, 2);
+    expect(npc.brain!.progress!.since).toBe(w.turn);
+    expect(w.events.some((e) => e.t === 'stall')).toBe(false);
+  });
+
+  it('counts a follower parked at its spot as waiting on its leader, and one short of its spot as stuck', () => {
+    const follower = (off: number) => {
+      const { w, npc } = createScavenger();
+      npc.brain!.goals = [{ kind: 'follow', targetId: 'v-leader', destination: { x: npc.pos.x + off, y: npc.pos.y }, phase: 'travel', reason: 'followLeader' }];
+      run(w, NPC_BEHAVIOR.stallTurns + 1);
+      return w.events.some((e) => e.t === 'stall');
+    };
+    expect(follower(0)).toBe(false);
+    expect(follower(RULES.arriveRadius + 2)).toBe(true);
+  });
 });
 
 describe('parking beside a truck', () => {
@@ -1433,5 +1671,82 @@ describe('parking beside a truck', () => {
     const spot = stop();
     expect(dist(spot, blocker.pos)).toBeGreaterThanOrEqual(chassisDef(blocker.chassisId).radius + vehicleStats(w, tower).radius);
     expect(dist(spot, client.pos)).toBeCloseTo(dist(taken, client.pos));
+  });
+});
+
+describe('a full hold', () => {
+  function heavyLoaded() {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'scavengers', 'hauler', ['mg', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    for (const good of Object.keys(GOODS).sort((a, b) => GOODS[b].mass - GOODS[a].mass)) addGoods(w, npc, good, 1000);
+    expect(freeCells(npc)).toBeGreaterThan(0);
+    expect(hasCargoRoom(npc)).toBe(false);
+    return { w, npc };
+  }
+
+  it('sends no driver to salvage on the way, and goes on selling its cargo', () => {
+    forceOption('salvageSeen', 'loot');
+    forceOption('idle', 'scavenge');
+    const { w, npc } = heavyLoaded();
+    w.salvage = [{ id: 'wreck-on-road', pos: { x: 18, y: 10 }, radius: 0.6, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() }];
+    npc.speed = 3;
+    npc.brain!.goals = [{ kind: 'sell', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'sellCargo' }];
+    refreshVision(w);
+    expect(visibleSalvage(w, npc).map((s) => s.id)).toContain('wreck-on-road');
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['sell']);
+    expect(`salvageSeen:wreck-on-road` in npc.brain!.noticed).toBe(false);
+  });
+
+  it('picks no scavenge goal when idle, and sells instead', () => {
+    forceOption('idle', 'scavenge');
+    const { w, npc } = heavyLoaded();
+    w.salvage = [{ id: 'wreck-in-sight', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() }];
+    refreshVision(w);
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('sell');
+  });
+});
+
+describe('a loot refit under way', () => {
+  function strippingLooter() {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 20, y: 10 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    corePart(buggy, 'cab').hp = 0;
+    knockOutNpc(w, buggy);
+    const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 20 - gap, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    npc.brain.goals = [{ kind: 'loot', targetId: buggy.id, destination: { ...buggy.pos }, phase: 'travel', reason: 'lootOnTheWay' }];
+    refreshVision(w);
+    resolveNpcActivities(w);
+    expect(npc.job?.kind).toBe('refit');
+    return { w, npc, buggy };
+  }
+
+  function needsRepair(w: World, npc: Vehicle): void {
+    addGoods(w, npc, 'parts', 4);
+    corePart(npc, 'cab').hp = 1;
+  }
+
+  it('is not cancelled by a repair, and the loot goal stays on top', () => {
+    const { w, npc, buggy } = strippingLooter();
+    needsRepair(w, npc);
+    thinkNpc(w, npc);
+    expect(npc.job?.kind).toBe('refit');
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', targetId: buggy.id });
+    expect(npc.brain!.goals.some((g) => g.kind === 'repair')).toBe(false);
+  });
+
+  it('gives way to a repair once the refit ends', () => {
+    const { w, npc } = strippingLooter();
+    needsRepair(w, npc);
+    npc.job = null;
+    npc.brain!.goals = [];
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.some((g) => g.kind === 'repair')).toBe(true);
   });
 });

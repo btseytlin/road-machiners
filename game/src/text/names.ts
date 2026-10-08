@@ -1,10 +1,11 @@
 // Words for the sim's ids and data ids. Each lookup returns a Msg, so the words follow the active language. The
 // coverage test checks that every id has its words in every language.
+import { WORLD_SETTINGS } from '../data/modes';
 import type { LineId } from '../data/dialogue';
 import type { TraitId } from '../data/npcs';
 import type { PerkId } from '../data/skills';
-import type { Faction, GoalReason, MoneyReason, Refusal, SimNote, SkillId, UnitId, Vehicle, World } from '../sim/types';
-import { byId, t, verbatim, type Msg } from './msg';
+import type { Faction, GameModeId, GoalReason, MoneyReason, Refusal, SimNote, SkillId, UnitId, Vehicle, World, WorldSetup, WorldSettings } from '../sim/types';
+import { byId, list, t, verbatim, type Msg } from './msg';
 
 export const partName = (defId: string): Msg => byId(`part.${defId}`);
 export const chassisName = (id: string): Msg => byId(`chassis.${id}`);
@@ -24,6 +25,16 @@ export const perkRule = (id: PerkId): Msg => t(`perk.${id}.rule`);
 export const goalText = (reason: GoalReason): Msg => t(`goal.${reason}`);
 export const lineKey = (id: LineId): `line.${LineId}` => `line.${id}`;
 export const unitCount = (unit: UnitId, n: number): Msg => t(`unit.${unit}`, { n });
+export const modeName = (id: GameModeId): Msg => t(`mode.${id}`);
+export const modeDescription = (id: GameModeId): Msg => t(`mode.${id}.description`);
+export const settingName = (id: keyof WorldSettings): Msg => t(`setting.${id}`);
+export const settingDescription = (id: keyof WorldSettings): Msg => t(`setting.${id}.description`);
+
+export function setupText(setup: WorldSetup): Msg {
+  const settings = (Object.keys(WORLD_SETTINGS) as (keyof WorldSettings)[]).map((id) =>
+    t('setup.part', { setting: settingName(id), pct: t('setting.percent', { n: Math.round(setup.settings[id] * 100) }) }));
+  return list([modeName(setup.mode), ...settings]);
+}
 
 // A truck as texts name it: the player's own truck, an NPC's profession and driver, like "Roamer Silas Kane", or for
 // a truck with no driver, like a test truck, its chassis.
@@ -50,6 +61,7 @@ type NoteWords = { [K in SimNote['id']]: (note: Extract<SimNote, { id: K }>) => 
 const NOTES: NoteWords = {
   engineHot: () => t('note.engineHot'),
   engineOverheat: (n) => t('note.engineOverheat', { hp: n.hp }),
+  overdriveCutOut: () => t('note.overdriveCutOut'),
   engineDoused: (n) => t('note.engineDoused', { supplies: n.supplies }),
   outOfSupplies: (n) => t('note.outOfSupplies', { health: n.health }),
   noRoomFuel: (n) => t('note.noRoomFuel', { fuel: n.fuel }),
@@ -76,6 +88,9 @@ const REFUSALS: RefusalWords = {
   looting: (world, r) => t(`refusal.looting.${r.place}`, { by: vehicleTitleOf(world, r.by) }),
   notActive: (_, r) => t(`refusal.notActive.${r.state}`),
   topRank: (_, r) => t('refusal.topRank', { skill: skillName(r.skill) }),
+  utilityPassive: (_, r) => t('refusal.utilityPassive', { part: partName(r.part) }),
+  utilityOrder: (_, r) => t(`refusal.utilityOrder.${r.order}`, { part: partName(r.part) }),
+  utilityBlocked: (_, r) => t('refusal.utilityBlocked', { part: partName(r.part), reason: t(`block.${r.block}`) }),
   needsXp: (_, r) => t('refusal.needsXp', { cost: r.cost, have: r.have }),
 };
 

@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -14,15 +14,20 @@ import { TEST_MAP } from "../test/map";
 import type { Msg } from "../text/msg";
 import { resolve } from "../text/resolve";
 import { chassisName, goodName, partName } from "../text/names";
+import { defaultSetup, parseSetup } from "../sim/settings";
+import { emptyWorld } from "../sim/testkit";
+import { roundDamage } from "../sim/combat";
+import { partDef, type WeaponDef } from "../data/parts";
 
 const en = (msg: Msg): string => resolve(msg, "en");
 
 const boxOf = ([x, y, w, h]: number[]) => ({ x, y, w, h });
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
+const world = emptyWorld();
 
 describe("part stats and their change against the player's part", () => {
   it("marks a faster engine better and its higher fuel use worse", () => {
-    const diffs = diffStats(partStats(part("turbine")), partStats(part("stockEngine")));
+    const diffs = diffStats(partStats(world, part("turbine")), partStats(world, part("stockEngine")));
     const byIcon = Object.fromEntries(diffs.map((d) => [d.stat.icon, d.delta === null ? null : d.verdict]));
     expect(byIcon.speed).toBe("better");
     expect(byIcon.fuel).toBe("worse");
@@ -30,17 +35,27 @@ describe("part stats and their change against the player's part", () => {
 
   it("marks lower mass better, since less is the better side", () => {
     const [light, heavy] = [part("ceramicTile"), part("steelPlate")];
-    const mass = diffStats(partStats(light), partStats(heavy)).find((d) => d.stat.icon === "mass");
+    const mass = diffStats(partStats(world, light), partStats(world, heavy)).find((d) => d.stat.icon === "mass");
     expect(mass).toMatchObject({ verdict: "better" });
   });
 
   it("gives no change without a part to compare with", () => {
-    expect(diffStats(partStats(part("turbine")), null).every((d) => d.delta === null)).toBe(true);
+    expect(diffStats(partStats(world, part("turbine")), null).every((d) => d.delta === null)).toBe(true);
   });
 
   it("shows worn stats, so a rebuilt engine reads slower than a pristine one", () => {
-    const speed = (p: PartInstance) => partStats(p).find((s) => s.icon === "speed")?.value;
+    const speed = (p: PartInstance) => partStats(world, p).find((s) => s.icon === "speed")?.value;
     expect(speed(part("turbine", 2))).toBeLessThan(speed(part("turbine")) ?? 0);
+  });
+
+  it("shows a gun's damage per shot as the world deals it, so a Damage 200% world reads twice the default", () => {
+    const damaging = emptyWorld();
+    damaging.setup = parseSetup({ mode: "roaming", settings: { damage: 2, fuelUse: 1, supplyUse: 1 } });
+    const shot = (w: typeof world) => partStats(w, part("mg")).find((s) => s.icon === "damage")?.value;
+
+    expect(shot(damaging)).toBeCloseTo(2 * (shot(world) ?? 0));
+    const mg = partDef("mg") as WeaponDef;
+    expect(shot(damaging)).toBeCloseTo(mg.rounds * roundDamage(damaging, mg));
   });
 
   it("compares trucks stat by stat", () => {
@@ -49,9 +64,24 @@ describe("part stats and their change against the player's part", () => {
   });
 });
 
+describe("the headline stat of a shop row", () => {
+  it("is the first stat, with no change without a base", () => {
+    const head = headlineStat(world, part("turbine"), null);
+    expect(head.stat).toEqual(partStats(world, part("turbine"))[0]);
+    expect(head.delta).toBeNull();
+  });
+
+  it("carries the change and verdict against a base of the same kind", () => {
+    const head = headlineStat(world, part("turbine"), part("stockEngine"));
+    const same = diffStats(partStats(world, part("turbine")), partStats(world, part("stockEngine")))[0];
+    expect(head).toEqual(same);
+    expect(head.delta).not.toBeNull();
+  });
+});
+
 describe("the part a new part is weighed against", () => {
   it("is the most valuable mounted part of the same kind", () => {
-    const me = playerVehicle(newWorld(1, START_KITS.standard, TEST_MAP));
+    const me = playerVehicle(newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming')));
     const engines = mountedParts(me, "engine");
     expect(baselinePart(me, "engine")).toBe(engines[0]);
     expect(baselinePart(me, "scanner")).toBeNull();
@@ -69,6 +99,16 @@ describe("the part a shop card compares with", () => {
 
   it("is nothing for the selected part's own card", () => {
     expect(compareBase(part("turbine"), part("turbine"))).toBeNull();
+  });
+});
+
+describe("the speed dial's needle", () => {
+  it("shows the speed's share of the top speed, capped at full", () => {
+    expect([dialShare(3, 6), dialShare(-3, 6), dialShare(9, 6)]).toEqual([0.5, 0.5, 1]);
+  });
+
+  it("is a number for a truck with no top speed, as one shut down: full while rolling, empty at rest", () => {
+    expect([dialShare(4, 0), dialShare(0, 0)]).toEqual([1, 0]);
   });
 });
 

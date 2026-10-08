@@ -30,7 +30,6 @@ describe('the vendored Blender image skill', () => {
   });
 });
 
-// Runs the real entry script with a stub claude that lists what it would discover.
 function runEntry(home: string, gameSkills: string): { code: number | null; out: string; err: string } {
   const bin = join(home, 'bin');
   mkdirSync(bin, { recursive: true });
@@ -66,9 +65,6 @@ describe('factory-agent', () => {
   });
 });
 
-// The real check that the agent sees pixels. It needs the built agent image, a Claude token and the network, so it runs only when
-// FACTORY_SMOKE_IMAGE names the image and CLAUDE_CODE_OAUTH_TOKEN is set. Run it after a Dockerfile change:
-//   FACTORY_SMOKE_IMAGE=roam-factory-agent npx vitest run agent-image
 const smoke = process.env.FACTORY_SMOKE_IMAGE !== undefined && process.env.CLAUDE_CODE_OAUTH_TOKEN !== undefined;
 
 describe.skipIf(!smoke)('reference image in the real agent container', () => {

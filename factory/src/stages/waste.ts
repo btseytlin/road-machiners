@@ -10,18 +10,20 @@ import { agentHome, fillPrompt, issueText, readOutput, resetOutputs } from './co
 const DAY_MS = 24 * 3_600_000;
 const BOTTLENECK = 'BOTTLENECK: ';
 const CHANGE = 'CHANGE:';
-export const PROPOSAL_HEADING = '## Proposed change';
+const PROPOSAL_HEADING = '## Proposed change';
+const PREVIOUS_HEADING = '## Previous period';
+export const reviewPendingPath = (factoryHome: string): string => join(factoryHome, 'review-pending');
 
 export type Brief = { bottleneck: string; change: string | null };
 
-// Names the biggest waste of the period and proposes one factory change. The committee queues it with a button, so the review never changes the factory itself.
-// The period starts at the last review. The start is recorded first, so a failed review waits a full period, and Hermes reruns it by hand.
 export async function runStage(ctx: Ctx): Promise<void> {
   const to = ctx.now();
   const from = periodStart(ctx, to);
+  const before = new Date(from.getTime() - (to.getTime() - from.getTime()));
   updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: to.toISOString() }));
-  const computed = wasteNumbers(readLedger(ctx.cfg.home, from), from, to);
-  const numbers = formatNumbers(computed);
+  const lines = readLedger(ctx.cfg.home, before);
+  const computed = wasteNumbers(lines, from, to);
+  const numbers = `${formatNumbers(computed)}\n\n${PREVIOUS_HEADING}\n\n${formatNumbers(wasteNumbers(lines, before, from))}`;
   const dir = `${ctx.cfg.home}/work/waste`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.fetch();
@@ -36,7 +38,6 @@ export async function runStage(ctx: Ctx): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
 }
 
-// Agents have no GitHub login, so the job hands the agent the histories of the most expensive issues and the earlier reviews.
 async function writeInputs(ctx: Ctx, home: string, issues: number[]): Promise<void> {
   mkdirSync(`${home}/${OUT_DIR}/issues`, { recursive: true });
   for (const issue of issues) {
@@ -60,7 +61,6 @@ function periodStart(ctx: Ctx, to: Date): Date {
 
 async function runReviewAgent(ctx: Ctx, dir: string): Promise<void> {
   const ledger = join(ctx.cfg.home, 'ledger.jsonl');
-  // Docker mounts a missing file as an empty folder, so the review refuses to start without a ledger.
   if (!existsSync(ledger)) throw new Error(`The factory has no ledger at ${ledger} yet`);
   const readOnly = { [ledger]: FACTORY_LEDGER_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT };
   const prompt = fillPrompt('waste', { days: String(ctx.cfg.wasteReviewDays), ledger: FACTORY_LEDGER_MOUNT, logs: FACTORY_LOGS_MOUNT, state: FACTORY_STATE_MOUNT });
@@ -82,7 +82,6 @@ function parseChange(lines: string[]): string {
   return change;
 }
 
-// The issue keeps the numbers and the brief, so later reviews see what was tried. The post links it.
 async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promise<void> {
   const day = to.toISOString().slice(0, 10);
   const proposal = brief.change === null ? 'No change proposed.' : brief.change;
@@ -90,17 +89,5 @@ async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promi
   const issue = await ctx.github.createIssue(`Factory review ${day}`, body, [WASTE_LABEL]);
   await ctx.github.close(issue, 'completed');
   appendFileSync(reviewsPath(ctx.cfg.home), `## ${day}, #${issue}\n\nBottleneck: ${brief.bottleneck}\n\nProposed change: ${proposal}\n\n`);
-  const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
-  if (brief.change === null) return void (await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `🔎 Weekly factory review: no waste stands out.\n${link}`));
-  const text = `🔎 Weekly factory review\n\nBottleneck: ${brief.bottleneck}\n\nThe proposed change and the numbers: ${link}\nThe button queues the change as a /change pull request.`;
-  await ctx.telegram.sendButtons(ctx.cfg.committeeChat, text, [[{ text: 'Queue as change', data: `factory:waste:${issue}` }]]);
-}
-
-// The change text of a review issue, for the button that queues it.
-export function proposalOf(body: string): string {
-  const at = body.indexOf(`${PROPOSAL_HEADING}\n\n`);
-  if (at < 0) throw new Error('The review issue has no proposed change');
-  const proposal = body.slice(at + PROPOSAL_HEADING.length + 2).trim();
-  if (proposal === 'No change proposed.') throw new Error('The review proposed no change');
-  return proposal;
+  writeFileSync(reviewPendingPath(ctx.cfg.home), `#${issue} https://github.com/${ctx.cfg.repo}/issues/${issue}\n`);
 }

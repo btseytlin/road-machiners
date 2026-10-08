@@ -7,14 +7,15 @@ import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
 import { ROOT, fake, reset } from './test-fakes';
 
+const SHOT = pngBytes(0).toString('latin1');
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
-  buildAndDeploy: async (_ctx: unknown, _clone: string, scope: string) => { deployed.push(scope); return `https://play.test/${scope}/`; },
+  buildAndDeploy: async (_ctx: unknown, _clone: string, scope: string, _log: string, reports: string | null) => { deployed.push(`${scope} reports ${reports}`); return `https://play.test/${scope}/`; },
   recordBuild: (_statePath: string, issue: number, name: string) => { deployed.push(`record ${issue} ${name}`); },
 }));
 const { candidate, candidateCaption } = await import('./candidate');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: 'abc1234', blocked: null, notes: [] } };
 const CHANGES = '- [#3] Trucks are faster.\n- [#5] The horn is louder.\n';
 
 beforeEach(() => {
@@ -28,35 +29,69 @@ describe('candidate', () => {
     const f = fake();
     f.ctx.cfg = { ...f.ctx.cfg, designModel: 'opus', buildModel: 'sonnet' };
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     const original = f.ctx.container.agent;
     const models: string[] = [];
-    f.ctx.container.agent = async (run) => { models.push(run.model); await original(run); };
+    f.ctx.container.agent = async (run) => { models.push(run.model); return original(run); };
     await candidate(f.ctx, 11);
     expect(models).toEqual(['opus']);
+  });
+
+  it('checks the frame rate in its playtest on a GPU host, unlike issue checks', async () => {
+    const f = fake();
+    f.ctx.cfg = { ...f.ctx.cfg, gpu: true };
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
+    const scripts: string[] = [];
+    f.ctx.container.shell = async (_dir, script) => { scripts.push(script); };
+    await candidate(f.ctx, 11);
+    expect(scripts[0]).toContain('  npm run playtest || status=$?');
+    expect(scripts[0]).not.toContain('--no-fps-gate');
   });
 
   it('posts one photo with a Ship button, stores the post id and puts the whole changelog in a reply to it', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn', 'Merge issue #6: gone'];
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, removed: [6] } });
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
-    expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['fetch', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
-    expect(deployed).toEqual(['rc', 'record 11 rc']);
+    expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['fetch', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'fetch', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
+    expect(deployed).toEqual(['rc reports candidate', 'record 11 rc']);
     expect(f.calls.find((call) => call.startsWith('comment'))).toContain('- [#5] The horn is louder.');
     const photo = f.photos[0];
     expect(photo.buttons).toEqual([[{ text: 'Ship', data: 'factory:ship:11' }]]);
     expect(photo.caption).toContain('Play: https://play.test/rc/');
     expect(photo.caption).toContain('2 changes, listed in the message under this post.');
-    expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+    expect(readState(f.ctx.statePath).release).toMatchObject({ postId: 42, candidateSha: 'abc1234' });
+  });
+
+  it('refuses to build before the release playtest passed the release head', async () => {
+    const f = fake();
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest: { ...RELEASE.playtest, passed: 'old0001' } } });
+    await expect(candidate(f.ctx, 11)).rejects.toThrow('has not passed the release head abc1234, only old0001');
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest: { ...RELEASE.playtest, passed: null } } });
+    await expect(candidate(f.ctx, 11)).rejects.toThrow('has not passed the release head abc1234');
+    expect(f.calls.filter((call) => call.startsWith('prepare') || call === 'shell' || call === 'agent')).toEqual([]);
+    expect(deployed).toEqual([]);
+    expect(f.photos).toEqual([]);
+  });
+
+  it('does not post when the release moved during the build, so the tick plays the new head first', async () => {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks'];
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
+    const heads = ['abc1234', 'def5678'];
+    f.ctx.repo.headHash = async () => heads.shift() ?? 'def5678';
+    await candidate(f.ctx, 11);
+    expect(f.photos).toEqual([]);
+    expect(readState(f.ctx.statePath).release).toMatchObject({ postId: null, candidateSha: null });
   });
 
   it('lists the issues bundled into a change under it, so the changelog sums up the bundle in one line', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, bundles: { '3': [8, 9] } });
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
     const input = readFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'changelog.md'), 'utf8');
     expect(input).toBe('#3 faster trucks\n  bundled: #8 T\n  bundled: #9 T\n#5 louder horn\n');
@@ -65,7 +100,7 @@ describe('candidate', () => {
   it('opens the pull request to main when none is open', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
     expect(f.calls).toContain('pr release/2026-09-29 main Release 2026-09-29');
     expect(f.photos[0].caption).toContain('PR: http://pr');
@@ -85,7 +120,7 @@ describe('candidate', () => {
 
   it('throws when the agent wrote no notes, before it builds anything', async () => {
     const f = fake();
-    f.agentWrites = { 'screenshot.png': 'png' };
+    f.agentWrites = { 'screenshot.png': SHOT };
     await expect(candidate(f.ctx, 11)).rejects.toThrow('no .factory/release.md');
     expect(deployed).toEqual([]);
   });
@@ -93,7 +128,7 @@ describe('candidate', () => {
   it('does not post a build when a release task opened during it, so the old post stays dead', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     f.cards = [{ itemId: 'i74', issue: 74, column: 'Design', labels: ['release-task'] }];
     await candidate(f.ctx, 11);
     expect(f.photos).toEqual([]);
@@ -104,7 +139,7 @@ describe('candidate', () => {
   it('throws when the changelog misses a change, before it builds or posts anything', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     await expect(candidate(f.ctx, 11)).rejects.toThrow('release.md names #3, but the release holds #3, #5');
     expect(deployed).toEqual([]);
     expect(f.photos).toEqual([]);
@@ -112,11 +147,10 @@ describe('candidate', () => {
 });
 
 describe('candidate evidence', () => {
-  // The fake agent writes into the clone's .factory, and the fake shell leaves the screenshot there.
-  function setup(commit = 'abc1234'): ReturnType<typeof fake> {
+  function setup(manifest = JSON.stringify({ images: [{ file: 'screenshot.png', description: 'Faster trucks' }, { file: 'view1.png', description: 'Louder horn' }] })): ReturnType<typeof fake> {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': pngBytes(0).toString('latin1'), 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': JSON.stringify({ commit, features: [{ name: '#3', kind: 'other' }, { name: '#5', kind: 'other' }], images: [{ file: 'screenshot.png', description: 'Faster trucks', covers: ['#3'] }, { file: 'view1.png', description: 'Louder horn', covers: ['#5'] }] }) };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT, 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': manifest };
     return f;
   }
 
@@ -131,8 +165,8 @@ describe('candidate evidence', () => {
     expect(readState(f.ctx.statePath).release?.postId).toBe(42);
   });
 
-  it('falls back to the one screenshot when the manifest is for another commit', async () => {
-    const f = setup('ffffff0');
+  it('posts the one screenshot when the manifest cannot be read', async () => {
+    const f = setup('{');
     await candidate(f.ctx, 11);
     expect(f.albums).toEqual([]);
     expect(f.photos).toHaveLength(1);
@@ -154,7 +188,9 @@ describe('candidateCaption', () => {
     const caption = candidateCaption('2026-09-29', 'https://p/rc/', 'https://i', 'https://pr', 33);
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('33 changes, listed in the message under this post.');
-    expect(caption).toContain('Reply to this post with "remove #N"');
+    expect(caption).toContain('Play: https://p/rc/\nPR: https://pr\nIssue: https://i');
+    expect(caption.endsWith('33 changes, listed in the message under this post.')).toBe(true);
+    for (const tail of ['Ship publishes it', 'remove #N', 'Reply to this post', 'holds the release']) expect(caption).not.toContain(tail);
   });
 
   it('says so when no change is left', () => {

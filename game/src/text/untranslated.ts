@@ -7,9 +7,36 @@ const DEBUG_CONSOLE = 'The debug console is a dev tool. It stays English.';
 const DEV_REPORT = 'Progression and income reports are dev tools read in a terminal. They stay English.';
 const SVG = 'Static SVG markup of an icon, with no words in it.';
 
+const MIGRATION_LABEL = 'A label inside a save migration error, which only the console and a bug report show.';
+const SETTING_LABEL = 'A label inside a setup parse error, which only the console and a bug report show.';
+
 export const UNTRANSLATED: readonly Untranslated[] = [
+  { file: 'src/three/main.ts', text: 'confirm()', reason: 'The browser adapter shows text its caller already resolved with say().' },
+  { file: 'src/three/save.ts', text: 'confirm()', reason: 'The browser adapter shows text its caller already resolved with say().' },
+  { file: 'src/three/render/interiors/bowl.ts', text: 'stilt tank', reason: 'A label inside a site build error, which only a bake or a test shows.' },
+  { file: 'src/three/render/shadowFilter.ts', text: 'float getPointShadow', reason: 'A GLSL snippet patched into the shadow shader, with no words in it.' },
+  { file: 'src/three/save-migrations.ts', text: 'contract   reward', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'call money', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'call deal price', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'call buy price', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'call sell price', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: '  waived fee', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'money event', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'aid paid', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'vehicle   money', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'player money', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'cost basis', reason: MIGRATION_LABEL },
+  { file: 'src/three/save-migrations.ts', text: 'pile   basis', reason: MIGRATION_LABEL },
+  { file: 'src/sim/progression/activity.ts', text: '*', reason: DEV_REPORT },
+  { file: 'src/sim/progression/job-checks.ts', text: '*', reason: DEV_REPORT },
+  { file: 'src/sim/settings.ts', text: 'World setup', reason: SETTING_LABEL },
+  { file: 'src/sim/settings.ts', text: 'world setup field', reason: SETTING_LABEL },
+  { file: 'src/sim/settings.ts', text: 'World settings', reason: SETTING_LABEL },
+  { file: 'src/sim/settings.ts', text: 'world setting', reason: SETTING_LABEL },
   { file: 'src/ui/console.ts', text: '*', reason: DEBUG_CONSOLE },
   { file: 'src/sim/cheats.ts', text: '*', reason: 'Cheats answer the debug console, a dev tool. Their words stay English.' },
+  { file: 'src/ui/new-game.ts', text: 'confirm()', reason: 'The browser adapter shows text its caller already resolved with say().' },
+  { file: 'src/ui/full-shop.ts', text: '*', reason: 'The full shop is a debug screen the console opens. It stays English.' },
   { file: 'src/ui/perf-panel.ts', text: '.textContent =', reason: 'The perf panel is a dev readout of frame timings. It stays English.' },
   { file: 'src/three/icons/page.ts', text: '*', reason: 'icons.html is a dev page for checking the icon sheets. It stays English.' },
   { file: 'src/data/sounds.ts', text: '*', reason: 'Sound prompts feed the dev sound generator and the sound board, never the player.' },

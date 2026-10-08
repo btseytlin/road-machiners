@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS } from "./goods";
@@ -5,6 +6,7 @@ import { EFFORT, SHOPS, type ItemKind } from "./market";
 import { goodBasePrice } from "../sim/market";
 import { PARTS, type PartDef, type PartKind, type WeaponDef } from "./parts";
 import { REGION } from "./region";
+import { SALVAGE, type LootTable } from "./salvage";
 import { bodyOf } from "../sim/body";
 import {
   buyChassis,
@@ -28,7 +30,7 @@ import { TEST_MAP } from "../test/map";
 let world: World;
 beforeAll(() => {
   world = emptyWorld(sitePads(REGION.towns[0])[0]);
-  world.player.money = 100000;
+  world.player.money = 3333333;
 });
 
 const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
@@ -36,7 +38,7 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   weapon: [
     "shotgun", "longRifle", "flamer", "pneumobolter", "slugCannon",
     "heavyMg", "amRifle", "autocannon", "recoilless", "battleRifle",
-    "gatling", "rocketRack", "sniperCannon", "grenadeLauncher", "tankGun", "flechette",
+    "gatling", "rocketRack", "sniperCannon", "grenadeLauncher", "tankGun", "flechette", "harpoon",
   ],
   engine: ["flatFour", "workhorseDiesel", "racingV6", "heavyDiesel", "turbine"],
   armor: [
@@ -48,8 +50,13 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
     "steelPlate",
     "scrapSheet",
     "ceramicTile",
+    "claymoreRam",
   ],
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
+  utility: [
+    "sprout", "caltrops", "oilSpiller", "patcherCrane",
+    "smokeMortar", "flareCannon", "scrapersKnife", "emitter",
+  ],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
 const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader", "niva", "bukhanka", "lincoln"];
@@ -65,8 +72,8 @@ describe("equipment variety", () => {
     }
   });
 
-  it("gives each tier one gun per class set: three pure classes and three pairs", () => {
-    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon");
+  it("gives each tier one gun per class set: three pure classes and three pairs, beside the harpoon", () => {
+    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon" && p.line === undefined);
     for (const tier of [1, 2, 3]) {
       const sets = weapons.filter((w) => w.tier === tier).map((w) => [...w.classes].sort().join("+")).sort();
       expect(sets, `tier ${tier}`).toEqual(["chip", "chip+damager", "chip+precision", "damager", "damager+precision", "precision"]);
@@ -102,6 +109,7 @@ describe("equipment variety", () => {
         armor: 3,
         cargo: 2,
         store: 0,
+        utility: 0,
       };
       expect(Object.values(PARTS).filter((p) => p.kind === kind)).toHaveLength(
         originalCounts[kind] + ids.length,
@@ -181,7 +189,6 @@ describe("equipment variety", () => {
   });
 
   it("adds five goods with profitable routes and real buy/sell transactions", () => {
-    // three base goods, five trade goods, parts for field repair, and fuel drums and water for supply convoys
     expect(Object.keys(GOODS)).toHaveLength(11);
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
@@ -212,6 +219,62 @@ describe("equipment variety", () => {
   });
 });
 
+describe("utilities", () => {
+  const utilities = Object.values(PARTS).filter((p) => p.kind === "utility");
+
+  it("prices each of the eight utilities inside its one tier's effort band", () => {
+    expect(utilities).toHaveLength(8);
+    for (const def of utilities) {
+      const [lo, hi] = EFFORT.bands[def.tier].utility;
+      const effort = def.value / EFFORT.wage[def.tier];
+      expect(effort, `${def.id} tier ${def.tier}: ${effort.toFixed(1)} turns`).toBeGreaterThanOrEqual(lo);
+      expect(effort, `${def.id} tier ${def.tier}: ${effort.toFixed(1)} turns`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it("gives a reload to every active utility and none to the crane and the scraper", () => {
+    const passive = utilities.filter((def) => def.reload === null).map((def) => def.effect.type).sort();
+    expect(passive).toEqual(["crane", "scraper"]);
+  });
+
+  it("stocks every utility in a stall or garage and drops it as field loot", () => {
+    const stalls = Object.values(SHOPS).filter((shop) => shop.kind === "stall");
+    const tables = Object.values(SALVAGE).filter((entry): entry is LootTable => typeof entry === "object" && "spareParts" in entry);
+    for (const def of utilities) {
+      expect(Object.values(SHOPS).some((shop) => shop.partStock.parts.some((e) => e.value === def.id)), def.id).toBe(true);
+      expect(tables.some((table) => table.spareParts.includes(def.id)), `${def.id} is in no loot table`).toBe(true);
+    }
+    expect(stalls.some((shop) => shop.partStock.parts.some((e) => e.value === "claymoreRam"))).toBe(true);
+  });
+
+  it("stocks garages with utilities three times as often as other parts, and the emitter at 0.6", () => {
+    const garages = Object.values(SHOPS).filter((shop) => shop.kind === "garage");
+    for (const shop of garages) {
+      const weightOf = (id: string) => shop.partStock.parts.find((e) => e.value === id)?.weight;
+      expect(weightOf("emitter"), shop.id).toBe(0.6);
+      for (const def of utilities.filter((u) => u.id !== "emitter")) expect(weightOf(def.id), `${shop.id} ${def.id}`).toBe(3);
+      expect(weightOf("mg"), shop.id).toBe(1);
+    }
+  });
+
+  it("lists each utility twice in the loot tables that have it, and the emitter only at landmarks", () => {
+    const tables = Object.entries(SALVAGE).filter((entry): entry is [string, LootTable] => typeof entry[1] === "object" && "spareParts" in entry[1]);
+    for (const [id, table] of tables) {
+      for (const def of utilities) {
+        const count = table.spareParts.filter((part) => part === def.id).length;
+        expect([0, 2], `${id} ${def.id}`).toContain(count);
+      }
+    }
+    const holders = tables.filter(([, table]) => table.spareParts.includes("emitter"));
+    expect(holders.map(([id]) => id)).toEqual(["landmark"]);
+  });
+
+  it("keeps the claymore ram an armor ram with a claymore", () => {
+    const def = PARTS.claymoreRam;
+    expect(def.kind === "armor" && def.look === "ram" && def.claymore !== undefined).toBe(true);
+  });
+});
+
 describe("one-cell armor plates", () => {
   it.each(["steelPlate", "scrapSheet", "ceramicTile"])("%s fills one cell with its plate line's armor", (id) => {
     const line = { steelPlate: "plates", scrapSheet: "scrapPanels", ceramicTile: "ceramicPlates" }[id]!;
@@ -220,8 +283,6 @@ describe("one-cell armor plates", () => {
   });
 });
 
-// Every part must pay for its strengths somewhere other than its price. Higher is better on every axis.
-// Armor compares per cell, because a longer plate covers more of a side rather than being worse.
 function partAxes(def: PartDef): number[] {
   const cells = def.w * def.h;
   const tall = def.tall ? -1 : 0;
@@ -239,6 +300,8 @@ function partAxes(def: PartDef): number[] {
     }
     case "cargo":
       return [def.hp, -def.mass, def.armor, -cells, tall, def.extraRows];
+    case "utility":
+      return [def.hp, -def.mass, def.armor, -cells, tall, -(def.reload ?? 0)];
     default:
       return [];
   }
@@ -246,17 +309,16 @@ function partAxes(def: PartDef): number[] {
 
 function dominates(a: PartDef, b: PartDef): boolean {
   if (a.kind === "weapon" && b.kind === "weapon" && a.round.blast !== b.round.blast) return false;
+  if (a.kind === "utility" && b.kind === "utility" && a.effect.type !== b.effect.type) return false;
   const x = partAxes(a);
   const y = partAxes(b);
   return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
 }
 
 describe("part weight by tier", () => {
-  // Armor, weapons and engines weigh per cell. Cargo parts weigh per extra row they add.
   const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
   const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-  // Armor compares within its job: rams against rams, other armor against other armor.
   const isRam = (p: PartDef): boolean => p.kind === "armor" && p.look === "ram";
   const meanAt = (defs: PartDef[], tier: number): number => mean(defs.filter((p) => p.tier === tier).map(perUnit));
 
@@ -315,14 +377,13 @@ describe("chassis drive parts", () => {
 });
 
 describe("NPC wallets and trade stakes", () => {
-  // Every driver may roll a trade at the minimum chance, so every trait needs a stake.
   it("gives every trait a trade stake", () => {
     for (const [id, trait] of Object.entries(TRAITS)) expect(trait.tradeStake, id).toBeGreaterThan(0);
   });
 
   it("starts every spawned driver with at least its upkeep reserve", () => {
     for (const seed of [1, 2, 3]) {
-      const w = newWorld(seed, START_KITS.standard, TEST_MAP);
+      const w = newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       for (const v of w.vehicles.filter((x) => x.brain)) expect(v.resources!.money, v.brain!.templateId).toBeGreaterThanOrEqual(getUpkeepReserve(v));
     }
   }, 30_000);

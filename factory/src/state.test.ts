@@ -11,11 +11,18 @@ describe('state', () => {
     expect(readState(path).adhocReplies).toEqual({});
   });
 
-  it('reads an old state file without builds, jobStarts or capNoticed', () => {
+  it('reads an old state file without builds or jobStarts', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
     writeFileSync(path, JSON.stringify({ job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [] }));
     const state = readState(path);
-    expect([state.builds, state.jobStarts, state.capNoticed]).toEqual([{}, [], false]);
+    expect([state.builds, state.jobStarts]).toEqual([{}, []]);
+  });
+
+  it('reads a state file that still holds the dropped capNoticed flag', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    const starts = ['2026-01-10T11:00:00.000Z'];
+    writeFileSync(path, JSON.stringify({ jobs: [], jobStarts: starts, capNoticed: true }));
+    expect(readState(path).jobStarts).toEqual(starts);
   });
 
   it('reads an old state file without the release fields, with lastMaintenance left in it', () => {
@@ -23,6 +30,19 @@ describe('state', () => {
     writeFileSync(path, JSON.stringify({ job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: '2026-01-01T00:00:00Z', pendingApprovals: {}, pendingChanges: [] }));
     const state = readState(path);
     expect([state.release, state.pendingShip, state.pendingRemovals]).toEqual([null, null, []]);
+  });
+
+  it('gives a release cut before the playtest its playtest, seeded by its day, no candidate commit and no recorded tasks', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    writeFileSync(path, JSON.stringify({ release: { issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: 9, removed: [] } }));
+    expect(readState(path).release).toEqual({ issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: 9, removed: [], tasks: [], candidateSha: null, playtest: { seed: 20261007, runs: 0, passed: null, blocked: null, notes: [] } });
+  });
+
+  it('drops the run streak of a playtest saved before one job did all its plays', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    const playtest = { seed: 20261007, runs: 6, streak: 3, passed: '367351f', blocked: null, notes: [] };
+    writeFileSync(path, JSON.stringify({ release: { issue: 3, branch: 'release/2026-10-07', day: '2026-10-07', postId: null, removed: [], candidateSha: null, playtest } }));
+    expect(readState(path).release?.playtest).toEqual({ seed: 20261007, runs: 6, passed: '367351f', blocked: null, notes: [] });
   });
 
   it('turns the single job of an old state file into the job list', () => {

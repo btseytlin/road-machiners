@@ -1,23 +1,24 @@
 // Sweeps the turn logs of a recorded batch for every kind of trouble at once, so one batch answers every question
 // without a replay. It reads <dir>/*.turns.jsonl from progression:record and prints per run: how the turns were spent,
 // each fight, each big loss with the events before it, tows, stalls, debt and dry tanks.
-// Usage: npm run progression:analyze -- <dir> [--run trader-1]
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { JobTally } from '../src/sim/progression/job-checks.ts';
+import { HUNT } from '../src/data/npc-behavior.ts';
+import { moneyText } from '../src/ui/units.ts';
 
-// A loss of more than this share of net worth within LOSS_TURNS counts as a big loss: about one stolen gun.
 const LOSS_SHARE = 0.1;
 const LOSS_TURNS = 30;
-// Event lines shown before a big loss and at the start of a fight.
 const CONTEXT_TURNS = 5;
-// Moving less than STALL_TILES in STALL_TURNS outside a shop, a job or a tow is a stall. A truck crawls about a tile a turn.
 const STALL_TILES = 5;
 const STALL_TURNS = 60;
 
-// A kind of event seen more than FLAP_COUNT times for one truck within FLAP_TURNS turns means a rule flaps.
 const FLAP_COUNT = 6;
 const FLAP_TURNS = 40;
 const FLAP_KINDS = new Set(['towDropped', 'towOffer', 'towHitched', 'stateEnded', 'hostile']);
+
+const HUNT_ROAD_TARGET = 0.25;
+const HUNT_GOALS = new Set(HUNT.offRoadGoals);
 
 const argv = process.argv.slice(2).filter((a) => a !== '--');
 const dir = argv[0];
@@ -40,8 +41,9 @@ async function readLines(path) {
 
 function analyze(name, turns) {
   const last = turns[turns.length - 1];
-  console.log(`\n=== ${name}: turns ${turns[0].t}-${last.t}, net worth ${turns[0].nw} -> ${last.nw}, money ${last.money}, ${last.chassis}`);
+  console.log(`\n=== ${name}: turns ${turns[0].t}-${last.t}, net worth ${moneyText(turns[0].nw)} -> ${moneyText(last.nw)}, money ${moneyText(last.money)}, ${last.chassis}`);
   printTime(turns);
+  printJob(name.slice(0, name.lastIndexOf('-')), turns);
   printFights(turns);
   printLosses(turns);
   printTows(turns);
@@ -50,14 +52,22 @@ function analyze(name, turns) {
   printEpisodes('dry tank', turns, (l) => l.fuel <= 0);
 }
 
-// The share of turns with each flag, parked in a shop, on a job, and with no order.
 function printTime(turns) {
   const share = (test) => `${Math.round((100 * turns.filter(test).length) / turns.length)}%`;
   const flags = ['combat', 'stranded', 'towed', 'beacon'].map((f) => `${f} ${share((l) => l.flags.includes(f))}`);
   console.log(`time: ${flags.join(', ')}, job ${share((l) => l.job !== null)}, no order ${share((l) => l.order === null)}`);
 }
 
-// Stretches of turns where a test holds, with start, end and length.
+function printJob(archetype, turns) {
+  const tally = new JobTally();
+  for (const line of turns) {
+    tally.note(line);
+    const failure = tally.failure(archetype);
+    if (failure) return console.log(`job: FAIL turn ${line.t}: ${failure}`);
+  }
+  console.log('job: ok');
+}
+
 function episodes(turns, test) {
   const found = [];
   let from = 0;
@@ -81,20 +91,33 @@ function printEpisodes(label, turns, test) {
   console.log(`${label}: ${found.length} stretches, ${found.reduce((n, e) => n + e.to - e.from + 1, 0)} turns: ${list}`);
 }
 
-// Each combat stretch: who shot first, the foes and their danger and speed against the truck's, how many turns the
-// truck stood still under fire, and the net worth, cargo and parts it came out with.
 function printFights(turns) {
-  for (const e of episodes(turns, (l) => l.flags.includes('combat'))) {
+  const stretches = episodes(turns, (l) => l.flags.includes('combat'));
+  const hasShot = (e) => turns.slice(e.from, e.to + 1).some((l) => l.ev.some((x) => x.startsWith('shot ')));
+  printStandoffs(turns, stretches.filter((e) => !hasShot(e)));
+  for (const e of stretches.filter(hasShot)) {
     const span = turns.slice(Math.max(0, e.from - CONTEXT_TURNS), e.to + 1);
     const fight = turns.slice(e.from, e.to + 1);
     const before = turns[Math.max(0, e.from - 1)];
     const after = turns[Math.min(turns.length - 1, e.to + 1)];
     const firstShot = span.flatMap((l) => l.ev.filter((x) => x.startsWith('shot ')).map((x) => `${l.t} ${x}`))[0] ?? 'none';
-    const foes = new Map(fight.flatMap((l) => l.foes).map((f) => [f.id, f]));
+    const foes = firstSeen(fight);
     const still = fight.filter((l, i) => i > 0 && l.pos[0] === fight[i - 1].pos[0] && l.pos[1] === fight[i - 1].pos[1]).length;
-    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me danger ${before.danger} speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} d${f.danger} s${f.speed}`).join(', ') || 'unseen'}`);
-    console.log(`  first shot ${firstShot}; still ${still} turns; nw ${before.nw} -> ${after.nw}; ${outcome(fight, before, after)}`);
+    console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} win ${f.odds}% s${f.speed}`).join(', ') || 'unseen'}`);
+    console.log(`  first shot ${firstShot}; still ${still} turns; nw ${moneyText(before.nw)} -> ${moneyText(after.nw)}; ${outcome(fight, before, after)}`);
   }
+}
+
+function printStandoffs(turns, standoffs) {
+  if (standoffs.length === 0) return;
+  const list = standoffs.map((e) => `${turns[e.from].t}-${turns[e.to].t}`).join(' ');
+  console.log(`standoffs, combat with no shots: ${standoffs.length} stretches, ${standoffs.reduce((n, e) => n + e.to - e.from + 1, 0)} turns: ${list}`);
+}
+
+function firstSeen(fight) {
+  const foes = new Map();
+  for (const f of fight.flatMap((l) => l.foes)) if (!foes.has(f.id)) foes.set(f.id, f);
+  return foes;
 }
 
 function outcome(fight, before, after) {
@@ -108,7 +131,6 @@ function count(goods) {
   return Object.values(goods).reduce((a, b) => a + b, 0);
 }
 
-// Each turn where net worth fell by more than LOSS_SHARE within LOSS_TURNS, once per loss, with the events before it.
 function printLosses(turns) {
   let i = 0;
   while (i < turns.length) {
@@ -117,7 +139,7 @@ function printLosses(turns) {
       i++;
       continue;
     }
-    console.log(`loss ${turns[i].t}-${turns[j].t}: nw ${turns[i].nw} -> ${turns[j].nw}, money ${turns[i].money} -> ${turns[j].money}, at ${turns[j].pos.join(',')}`);
+    console.log(`loss ${turns[i].t}-${turns[j].t}: nw ${moneyText(turns[i].nw)} -> ${moneyText(turns[j].nw)}, money ${moneyText(turns[i].money)} -> ${moneyText(turns[j].money)}, at ${turns[j].pos.join(',')}`);
     for (const l of turns.slice(Math.max(0, j - CONTEXT_TURNS), j + 1)) for (const x of l.ev) console.log(`  ${l.t} ${x.slice(0, 160)}`);
     i = j + 1;
   }
@@ -128,7 +150,6 @@ function lossEnd(turns, i) {
   return null;
 }
 
-// Every tow: where it started and ended, its fee, and the money and fuel at arrival.
 function printTows(turns) {
   const tows = episodes(turns, (l) => l.flags.includes('towed'));
   if (tows.length === 0) return;
@@ -136,11 +157,10 @@ function printTows(turns) {
   for (const e of tows) {
     const end = turns[Math.min(turns.length - 1, e.to + 1)];
     const fee = end.ev.find((x) => x.startsWith('towDone')) ?? 'no towDone';
-    console.log(`  ${turns[e.from].t}-${end.t}: ${turns[e.from].pos.join(',')} -> ${end.pos.join(',')}, ${fee.slice(0, 60)}, money ${end.money}, fuel ${end.fuel}, parts ${end.parts.filter((p) => p.endsWith(':0')).join(' ') || 'sound'}`);
+    console.log(`  ${turns[e.from].t}-${end.t}: ${turns[e.from].pos.join(',')} -> ${end.pos.join(',')}, ${fee.slice(0, 60)}, money ${moneyText(end.money)}, fuel ${end.fuel}, parts ${end.parts.filter((p) => p.endsWith(':0')).join(' ') || 'sound'}`);
   }
 }
 
-// Stretches where the truck stays within STALL_TILES for STALL_TURNS while not parked for a reason.
 function printStalls(turns) {
   const stalls = [];
   for (let i = 0; i + STALL_TURNS < turns.length; i += STALL_TURNS) {
@@ -152,8 +172,6 @@ function printStalls(turns) {
   }
   if (stalls.length > 0) console.log(`still ${STALL_TURNS}+ turns: ${stalls.join('; ')}`);
 }
-
-// ---- The world log: what every truck did, not only the player.
 
 async function worldLog(path) {
   const lines = [];
@@ -178,7 +196,6 @@ function eventTotals(events) {
   return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).slice(0, 14).join(', ');
 }
 
-// The truck an event is about, by the field that names it.
 function actorOf(e) {
   return e.vehicle ?? e.by ?? e.shooter ?? e.state?.holder;
 }
@@ -195,20 +212,17 @@ function flapping(events) {
   return [...flaps];
 }
 
-// Trucks per faction and their mean money at the first, middle and last snapshot.
 function printPopulation(lines) {
   const snaps = lines.filter((l) => l.trucks);
   if (snaps.length === 0) return;
   for (const snap of [snaps[0], snaps[Math.floor(snaps.length / 2)], snaps[snaps.length - 1]]) {
     const by = new Map();
     for (const v of snap.trucks) by.set(v.faction, [...(by.get(v.faction) ?? []), v]);
-    const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} ($${Math.round(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
+    const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} (${moneyText(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
     console.log(`turn ${snap.t}: ${text}`);
   }
 }
 
-// Moving raiders in the snapshots: the share on a road of those that keep off roads, by top goal, against the share of
-// healthy raiders. A stranded raider shows as stranded whatever its goal.
 function printOffRoad(lines) {
   const moving = lines.flatMap((l) => l.trucks ?? []).filter((v) => v.faction === 'raiders' && v.speed > 0);
   if (moving.length === 0) return;
@@ -216,14 +230,17 @@ function printOffRoad(lines) {
   const by = Map.groupBy(moving.filter((v) => v.offRoad), offRoadReason);
   const off = [...by.entries()].map(([why, vs]) => `${why} ${share(vs)}`).join(', ') || 'none';
   console.log(`raiders keeping off roads: ${off}; healthy raiders ${share(moving.filter((v) => !v.offRoad))}`);
+  const hunting = by.get('hunting') ?? [];
+  const onRoad = hunting.filter((v) => v.onRoad).length;
+  if (hunting.length > 0 && onRoad / hunting.length > HUNT_ROAD_TARGET) console.log(`MISS: hunting raiders on road above ${100 * HUNT_ROAD_TARGET}%`);
 }
 
 function offRoadReason(v) {
   const top = v.goals.at(-1)?.split(':')[0];
-  return top === 'retreat' || top === 'flee' ? top : 'stranded';
+  if (top === 'retreat' || top === 'flee') return top;
+  return HUNT_GOALS.has(top) ? 'hunting' : 'stranded';
 }
 
-// Every truck lost or knocked out, with the turn and who did it.
 function printNpcDeaths(lines) {
   const lost = lines.flatMap((l) => (l.events ?? []).filter((e) => e.t === 'destroyed' || e.t === 'npcKnockout').map((e) => `${l.t} ${e.t} ${e.vehicle}${e.by ? ` by ${e.by}` : ''}`));
   if (lost.length > 0) console.log(`lost trucks: ${lost.length}: ${lost.slice(0, 20).join('; ')}`);

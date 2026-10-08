@@ -6,7 +6,7 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
-import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
+import { canLootTruck, canReachSalvage, collectSalvage, hasRevealed, hasSalvage, hiddenUnits, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
 import { takeClaimed } from './parley';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
@@ -15,14 +15,13 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, siteGap, type Site } from './sites';
+import { isFortress, locationAt, siteGap, type Site } from './sites';
 import { shopAt } from './market';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { playerCommand, Refused } from './world';
 import { suppliesCap } from './stats';
 
-// A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center.
 export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
@@ -57,85 +56,82 @@ export function useOasis(world: World): World {
 }
 
 function seesArea(world: World, site: Site): boolean {
-  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= 0);
+  const reach = isFortress(site) ? REGION.sites.pad.length : 0;
+  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= reach);
 }
 
-// The stock with loot left that the parked player truck can reach, or null.
 export function salvageHere(world: World): SalvageStock | null {
   const me = playerVehicle(world);
   return world.salvage.find((stock) => hasSalvage(stock) && canReachSalvage(me, stock)) ?? null;
 }
 
-// The stock with loot left in range of the player truck at any speed, or null. Moving trucks must stop to use it.
 export function salvageNear(world: World): SalvageStock | null {
   return salvageListNear(world)[0] ?? null;
 }
 
-// Every stock with loot left in range of the player truck at any speed.
 export function salvageListNear(world: World): SalvageStock[] {
   const me = playerVehicle(world);
   return world.salvage.filter((stock) => hasSalvage(stock) && salvageInRange(me, stock));
 }
 
-// A knocked-out truck in reach of the player truck at any speed, or null. Moving trucks must stop to loot it.
 export function downedNear(world: World): Vehicle | null {
   return downedListNear(world)[0] ?? null;
 }
 
-// Every knocked-out truck in reach of the player truck at any speed.
 export function downedListNear(world: World): Vehicle[] {
   const me = playerVehicle(world);
   return world.vehicles.filter((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v));
 }
 
-// A knocked-out truck the parked player truck can loot now, or null.
 export function downedHere(world: World): Vehicle | null {
   const me = playerVehicle(world);
   return world.vehicles.find((v) => canLootTruck(me, v)) ?? null;
 }
 
-// A site or wreck stock in range of the player truck with no loot left, or null. Collectors emptied it.
-// An empty pile is gone from the ground, so it never counts.
 export function emptySalvageNear(world: World): SalvageStock | null {
   const me = playerVehicle(world);
   return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
-// The truck looting the given stock or knocked-out truck, which keeps the player off it, or null.
 export function lootBlockerHere(world: World, targetId: string): Vehicle | null {
   return lootBlocker(world, playerVehicle(world), targetId);
 }
 
-// The stock with loot left that the parked player truck reaches, or null.
 function reachableStock(world: World, stockId: string): SalvageStock | null {
   const me = playerVehicle(world);
   const stock = world.salvage.find((s) => s.id === stockId);
   return stock && hasSalvage(stock) && canReachSalvage(me, stock) ? stock : null;
 }
 
-// The stock is unsearched, in reach and nobody else loots it: the player can start a search.
+export function needsSearch(world: World, stock: SalvageStock): boolean {
+  return hiddenUnits(stock) > 0 || !world.player.scavenged.includes(stock.id);
+}
+
 export function canScavenge(world: World, stockId: string): boolean {
   const me = playerVehicle(world);
-  return reachableStock(world, stockId) !== null && !world.player.scavenged.includes(stockId) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
+  const stock = reachableStock(world, stockId);
+  return stock !== null && needsSearch(world, stock) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
 }
 
-// The stock is searched and in reach: the player can take its loot.
+export function hasLootFor(world: World, stock: SalvageStock): boolean {
+  return world.player.scavenged.includes(stock.id) && hasRevealed(stock);
+}
+
 export function canLoot(world: World, stockId: string): boolean {
-  return reachableStock(world, stockId) !== null && world.player.scavenged.includes(stockId);
+  const stock = reachableStock(world, stockId);
+  return stock !== null && hasLootFor(world, stock);
 }
 
-// Starts a timed search of the given stock. When it ends, the stock opens for looting.
 export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
-    if (!canScavenge(w, stockId)) throw new Error('Nothing unsearched in reach');
+    if (!canScavenge(w, stockId)) throw new Error('Nothing to search in reach');
     beginSearch(w, playerVehicle(w), stockId);
   });
 }
 
 export type LootPick = { kind: 'part'; partId: string } | { kind: 'good'; good: string };
 
-// Moves one loot item from a searched stock to a chosen grid spot.
 export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot): World {
   return playerCommand(world, (w) => {
     const stock = requireLootable(w, stockId);
@@ -165,7 +161,6 @@ function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spo
   placeLoot(world, stock, item);
 }
 
-// Moves a loot item from the stock straight into the grid. A part mounted from a wreck gets careful stripping.
 function placeLoot(world: World, stock: SalvageStock, item: GridItem): void {
   const me = playerVehicle(world);
   if (item.kind === 'good') {
@@ -178,7 +173,6 @@ function placeLoot(world: World, stock: SalvageStock, item: GridItem): void {
   stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
 }
 
-// Moves everything that fits from a searched stock into the grid. The rest stays behind.
 export function takeAllLoot(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     requireLootable(w, stockId);
@@ -187,7 +181,6 @@ export function takeAllLoot(world: World, stockId: string): World {
   });
 }
 
-// Pours the fuel and supplies of a searched stock into the tank and stores, up to their caps.
 export function takeStores(world: World, stockId: string): World {
   return playerCommand(world, (w) => pourStores(w, playerVehicle(w), requireLootable(w, stockId)));
 }

@@ -83,11 +83,10 @@ it('hides NPC traits without the read the driver perk', () => {
   expect(en(formatNpcTraits(w, npc))).toBeNull();
 });
 
-// A seen hauler carrying two salt, one scrap and a spare machine gun.
 function loadedHauler() {
   const w = emptyWorld();
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
-  npc.brain = npcBrain('hauler', npc.pos, ['trader']);
+  npc.brain = npcBrain('trader', npc.pos, ['trader']);
   expect(addGoods(w, npc, 'salt', 2) + addGoods(w, npc, 'scrap', 1)).toBe(3);
   if (!stowPart(w, npc, makePart(w, 'mg', 0))) throw new Error('No room for the spare gun');
   return { w, npc };
@@ -280,7 +279,7 @@ it('names both trucks, the destination and the fee in a tow between NPCs', () =>
   client.brain = { ...npcBrain('trader', client.pos, ['trader']), driver: 'Cal Reed' };
   refreshVision(w);
   expect(lineEn(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Scavenger Tom Ward takes Trader Cal Reed in tow to Kiln Camp.', cls: 'dim' });
-  expect(lineEn(w, { t: 'towDone', by: tower.id, client: client.id, fee: 12 })).toEqual({ text: 'Scavenger Tom Ward tows Trader Cal Reed in and takes 12.', cls: 'dim' });
+  expect(lineEn(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Scavenger Tom Ward tows Trader Cal Reed in and takes 13 M.', cls: 'dim' });
   expect(lineEn(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Scavenger Tom Ward drops the tow of Trader Cal Reed.', cls: 'dim' });
-  expect(lineEn(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 12 })).toEqual({ text: 'Scavenger Tom Ward tows you into town and takes 12.', cls: 'bad' });
+  expect(lineEn(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Scavenger Tom Ward tows you into town and takes 12 M.', cls: 'bad' });
 });

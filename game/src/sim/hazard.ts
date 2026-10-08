@@ -11,7 +11,6 @@ function inside(zone: HazardZone, pos: Vec): boolean {
   return dist(pos, zone.pos) < zone.radius;
 }
 
-// Runs once a turn after the trucks have moved. Health already below a zone's floor stays as it is.
 export function applyHazards(world: World): void {
   for (const zone of hazardZones()) {
     for (const vehicle of world.vehicles) if (!isKnockedOut(vehicle) && inside(zone, vehicle.pos)) hurt(world, vehicle, zone);

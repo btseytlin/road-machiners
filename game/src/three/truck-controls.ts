@@ -5,6 +5,7 @@ import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
+import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
@@ -15,16 +16,15 @@ import { ContextPicker, getContextActions } from "../ui/hud-readout";
 export type ControlsHost = {
   world: () => World;
   apply: (next: World) => void;
-  commit: (next: World) => void; // sets the world without pausing travel, for switches no turn reads
+  commit: (next: World) => void;
   refreshPlan: () => void;
-  doused: () => void; // plays the steam cloud and logs the douse
-  revved: () => void; // plays the engine rev when overdrive comes on
+  doused: () => void;
+  revved: () => void;
 };
 
 export class TruckControls {
   constructor(private host: ControlsHost) {}
 
-  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
   toggleManual(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
@@ -37,17 +37,17 @@ export class TruckControls {
     this.host.apply(setAutoRepair(w, !w.player.autoRepair));
   }
 
-  // Overdrive changes speed, so the preview must rerun.
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
-    const on = !w.player.overdrive;
+    const me = playerVehicle(w);
+    const on = !inOverdrive(w, me);
+    if (on && !canOverdrive(me)) return;
     this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
     if (on) this.host.revved();
   }
 
-  // The lamps change no rule, so they switch at any time, even while a turn plays or the truck travels on its own.
   toggleHeadlights(): void {
     const w = this.host.world();
     this.host.commit(setHeadlights(w, !w.player.headlights));
@@ -67,19 +67,17 @@ export type ContextHost = {
   apply: (next: World) => void;
   pushEvents: () => void;
   note: (text: Msg) => void;
-  openTrade: () => void;
+  openTrade: (npcId: string) => void;
   openTown: () => void;
   openDowned: (vehicleId: string) => void;
   openLoot: (stockId: string) => void;
 };
 
-// The E key. The HUD shows one of the actions in reach, the arrow keys choose which, and E runs the shown one.
 export class TruckContext {
   private readonly picker = new ContextPicker();
 
   constructor(private host: ContextHost) {}
 
-  // The action the box shows, with how many there are and its place among them.
   shown(): { action: ContextAction | null; count: number; index: number } {
     const actions = getContextActions(this.host.world(), this.host.playing());
     const action = this.picker.pick(actions);
@@ -101,21 +99,22 @@ export class TruckContext {
     const target: ContextTarget = action.target;
     const h = this.host;
     const handlers: { [K in ContextTarget['kind']]: () => void } = {
-      aid: () => this.startAid(),
-      trade: h.openTrade,
+      aid: () => 'id' in target && this.startAid(target.id),
+      trade: () => 'id' in target && h.openTrade(target.id),
       shop: () => shopAt(h.world()) && h.openTown(),
       downed: () => 'id' in target && h.openDowned(target.id),
       oasis: () => this.refill(),
-      stock: () => 'id' in target && this.useStock(target.id, action.combat),
+      stock: () => 'id' in target && this.searchStock(target.id, action.combat),
+      loot: () => 'id' in target && this.lootStock(target.id),
       empty: () => undefined,
     };
     handlers[target.kind]();
   }
 
-  private startAid(): void {
+  private startAid(npcId: string): void {
     const aid = readyAid(this.host.world());
-    if (!aid) return;
-    this.host.apply(startAid(this.host.world(), aid.holder));
+    if (aid?.holder !== npcId) return;
+    this.host.apply(startAid(this.host.world(), npcId));
     this.host.pushEvents();
   }
 
@@ -126,14 +125,18 @@ export class TruckContext {
     this.host.pushEvents();
   }
 
-  // A search that combat blocks says so in the log, with the turns left.
-  private useStock(stockId: string, combat: number | undefined): void {
+  private searchStock(stockId: string, combat: number | undefined): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) this.host.note(combatBlocked(combat));
     else if (canScavenge(w, stockId)) {
       this.host.apply(scavenge(w, stockId));
       this.host.pushEvents();
-    } else if (canLoot(w, stockId)) this.host.openLoot(stockId);
+    }
+  }
+
+  private lootStock(stockId: string): void {
+    const w = this.host.world();
+    if (!isBusy(playerVehicle(w)) && canLoot(w, stockId)) this.host.openLoot(stockId);
   }
 }

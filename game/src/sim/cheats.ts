@@ -14,8 +14,9 @@ import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart, makeVehicle } from './factory';
 import { maxHealthOf } from './health';
-import { corePart, mountedParts } from './grid';
-import { addGoods, stowPart } from './inventory';
+import { corePart, mountedParts, type Spot } from './grid';
+import { addGoods, applyRefitLayout, planItemMove, stowPart } from './inventory';
+import { disarm } from './claymore';
 import { generateNpcLoadout } from './npc-loadout';
 import { grantXp, isPerkId, pickedFromPair } from './progress';
 import { isTerritory, nearestPad, type Site } from './sites';
@@ -32,8 +33,8 @@ import { WEATHER } from '../data/weather';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
 import { fuelCap, suppliesCap } from './stats';
+import { spillDeadRows } from './spill';
 
-// Bad user input to a cheat. Any other error from a cheat is a bug.
 export class CheatError extends Error {}
 
 export type VehicleRow = {
@@ -41,7 +42,7 @@ export type VehicleRow = {
   driver: string | null; // null for a vehicle without an NPC brain
   templateId: string | null; // null for a vehicle without an NPC brain
   faction: Faction;
-  distance: number; // tiles from the player truck
+  distance: number;
   hostile: boolean;
 };
 
@@ -73,6 +74,11 @@ export function setSupplies(world: World, n: number): World {
   return update(world, (w) => { w.player.supplies = n; });
 }
 
+export function setEngineHeat(world: World, n: number): World {
+  requireRange('Engine heat', n, 0, 1);
+  return update(world, (w) => { w.player.engineHeat = n; });
+}
+
 export function setHealth(world: World, n: number): World {
   requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
@@ -83,7 +89,6 @@ export function addXp(world: World, n: number): World {
   return update(world, (w) => grantXp(w, n));
 }
 
-// Grants a perk whatever the skill rank. A pair still holds one pick.
 export function grantPerk(world: World, id: string): World {
   if (!isPerkId(id)) throw new CheatError(`No perk ${id}. Perks: ${PERK_IDS.join(', ')}`);
   const picked = pickedFromPair(world, id);
@@ -91,7 +96,6 @@ export function grantPerk(world: World, id: string): World {
   return update(world, (w) => { w.player.perks.push(id); });
 }
 
-// Mounted and spare parts alike. Junk parts stay broken, since no repair rebuilds them.
 function repairParts(v: Vehicle): void {
   for (const it of v.items) if (it.kind === 'part' && !isJunk(it.part)) restorePart(it.part, maxHp(it.part));
 }
@@ -108,6 +112,7 @@ export function damagePartTo(world: World, defId: string, hp: number): World {
     requireInteger('Hit points', hp, 0, maxHp(part));
     if (hp <= part.hp) {
       damagePart(part, part.hp - hp, 0);
+      spillDeadRows(w);
       return;
     }
     if (part.hp === 0 && isJunk(part)) throw new CheatError(`${defId} is junk and cannot be rebuilt`);
@@ -133,6 +138,17 @@ function giveGoods(w: World, good: string, count: number): void {
   if (addGoods(w, playerVehicle(w), good, count) < count) throw new CheatError(`No room for ${count} ${good}`);
 }
 
+export function instantMoveItem(world: World, itemId: string, to: Spot): World {
+  return update(world, (w) => {
+    const me = playerVehicle(w);
+    const result = planItemMove(me, itemId, to);
+    if (result.error !== null) throw new CheatError(result.error.id);
+    const item = me.items.find((it) => it.id === itemId);
+    if (item?.kind === 'part') disarm(item.part);
+    applyRefitLayout(w, me, result.plan.items);
+  });
+}
+
 export function toggleGod(world: World): World {
   return update(world, (w) => { w.player.god = !w.player.god; });
 }
@@ -141,7 +157,27 @@ export function toggleFullLog(world: World): World {
   return update(world, (w) => { w.player.fullLog = !w.player.fullLog; });
 }
 
-// Runs on the turn draft before destruction and defeat checks, so nothing the turn did can break the truck.
+export function toggleFrozen(world: World): World {
+  return update(world, (w) => { w.player.frozen = !w.player.frozen; });
+}
+
+export function freezeDriving(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) v.order = null;
+}
+
+export function freezeFire(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) {
+    v.weaponOrders = {};
+    v.utilityOrders = {};
+  }
+}
+
+function npcs(world: World): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain !== null && v.id !== world.player.vehicleId);
+}
+
 export function applyGodMode(world: World): void {
   if (!world.player.god) return;
   const me = playerVehicle(world);
@@ -151,7 +187,6 @@ export function applyGodMode(world: World): void {
   world.player.supplies = suppliesCap(me);
 }
 
-// The first free point on rings around center, nearest ring first. Null when all rings are blocked.
 function freeSpotNear(w: World, center: Vec, radius: number, ignoreId: string | null): Vec | null {
   if (isFree(w, center, radius, ignoreId)) return { ...center };
   for (let ring = 1; ring <= CHEATS.searchRings; ring++) {
@@ -166,6 +201,14 @@ function freeSpotNear(w: World, center: Vec, radius: number, ignoreId: string | 
 function circlePoints(center: Vec, r: number, count: number): Vec[] {
   return Array.from({ length: count }, (_, i) => {
     const a = (2 * Math.PI * i) / count;
+    return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
+  });
+}
+
+function frontFirst(center: Vec, heading: number, r: number, count: number): Vec[] {
+  const step = (2 * Math.PI) / count;
+  return Array.from({ length: count }, (_, i) => {
+    const a = heading + Math.ceil(i / 2) * step * (i % 2 === 0 ? -1 : 1);
     return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
   });
 }
@@ -189,14 +232,12 @@ export function teleport(world: World, target: Vec): World {
   });
 }
 
-// What keeps the player from acting: a tow rope, an open radio call or a driver who is not active.
 function whyPlayerCannotAct(world: World): string {
   if (isTowed(world)) return 'the player is towed';
   if (world.player.call) return 'a radio call is open';
   return `the player is ${world.player.state}`;
 }
 
-// Noclip flight: puts the player truck at a map point, clamped to the map, without checking obstacles.
 export function noclipMove(world: World, target: Vec): World {
   if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new CheatError(`Bad target ${target.x}, ${target.y}`);
   if (!playerCanAct(world)) throw new CheatError(`Cannot fly while ${whyPlayerCannotAct(world)}`);
@@ -210,13 +251,11 @@ export function noclipMove(world: World, target: Vec): World {
   });
 }
 
-// Where a place's services work, nearest the truck: the pad of its nearest gate, or a territory's nearest road end.
 export function placeSpot(world: World, id: string): Vec {
   const places: Site[] = [...REGION.towns, ...REGION.locations];
   const place = places.find((p) => p.id === id);
   if (!place) throw new CheatError(`Unknown place ${id}. Places: ${places.map((p) => p.id).join(', ')}`);
   const from = playerVehicle(world).pos;
-  // A territory has no pads: its nearest road end is where its ground starts.
   if (isTerritory(place)) return { ...territoryEntries(place).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b)) };
   return { ...nearestPad(place, from) };
 }
@@ -233,8 +272,6 @@ export function skipToHour(world: World, hour: number): World {
   throw new Error(`No turn within a day of ${world.turn} starts hour ${hour}`);
 }
 
-// Starts weather, replacing any of that kind. A turn count overrides the drawn duration.
-// A storm starts at the truck, or offsetTiles east of it as a still storm already at full strength, for driving into.
 export function startWeather(world: World, kind: string, turns: number | null, offsetTiles: number): World {
   const known = WEATHER_KINDS.find((k) => k === kind);
   if (!known) throw new CheatError(`Unknown weather ${kind}. Kinds: ${WEATHER_KINDS.join(', ')}`);
@@ -270,13 +307,11 @@ export function spawnNear(world: World, templateId: string, hostile: boolean): W
   return update(world, (w) => spawnInDraft(w, tpl, hostile));
 }
 
-// Spawns a hostile NPC of any template, picked with the world RNG.
 export function startBattle(world: World): World {
   const templates = Object.values(NPCS);
   return update(world, (w) => spawnInDraft(w, templates[randInt(w, 0, templates.length - 1)], true));
 }
 
-// Every NPC template paired with each player chassis its loadout table can roll, or only `templateId`'s pairs.
 export function kitChoices(templateId: string | null = null): { tpl: NpcTemplate; chassisId: string }[] {
   if (templateId !== null && !NPCS[templateId]) throw new CheatError(`Unknown template ${templateId}. Templates: ${Object.keys(NPCS).join(', ')}`);
   const templates = templateId === null ? Object.values(NPCS) : [NPCS[templateId]];
@@ -286,9 +321,6 @@ export function kitChoices(templateId: string | null = null): { tpl: NpcTemplate
   return choices;
 }
 
-// Swaps the player truck for a random template's chassis with a loadout rolled like an NPC's, picked with the world
-// RNG. level is a gear level from 1 for poor to 5 for loaded, or null for one picked evenly at random. The truck
-// keeps its id, name and place. Its goods and spares go, and fuel and supplies are cut to the new caps.
 export function randomKit(world: World, level: number | null): World {
   if (!playerCanAct(world)) throw new CheatError(`Cannot swap trucks while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
   if (level !== null) gearLevelOf(level);
@@ -309,7 +341,6 @@ export function randomKit(world: World, level: number | null): World {
   });
 }
 
-// Gear level 1 is the first of GEAR_LEVEL_IDS, poor, and the last is loaded.
 function gearLevelOf(level: number): GearLevel {
   const found = Number.isInteger(level) ? GEAR_LEVEL_IDS[level - 1] : undefined;
   if (!found) throw new CheatError(`Gear level must be 1 to ${GEAR_LEVEL_IDS.length}: ${GEAR_LEVEL_IDS.join(', ')}`);
@@ -319,16 +350,14 @@ function gearLevelOf(level: number): GearLevel {
 function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
   const loadout = generateNpcLoadout(w, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
-  const center = playerVehicle(w).pos;
-  const circle = circlePoints(center, CHEATS.spawnDistance, CHEATS.spawnAngles);
-  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, center, radius, null);
+  const me = playerVehicle(w);
+  const circle = frontFirst(me.pos, me.heading, CHEATS.spawnDistance, CHEATS.spawnAngles);
+  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, me.pos, radius, null);
   if (!spot) throw new CheatError(`No free spot to spawn ${tpl.id}`);
   const v = spawnAt(w, tpl, loadout, spot);
   if (hostile) turnHostile(w, v);
 }
 
-// The vehicle starts a feud with the player and counts the player as its attacker, so it decides at once whether
-// to fight back.
 function turnHostile(w: World, v: Vehicle): void {
   const me = w.player.vehicleId;
   if (!stateOf(w, 'feud', v.id, me)) {
@@ -356,8 +385,6 @@ function killTargets(w: World, target: string): Vehicle[] {
   return [otherVehicle(w, target)];
 }
 
-// Zeroes each target's cab and turns it into a wreck with salvage, never a knockout. No kill is credited.
-// States with a killed party end at once, as they do after destruction in a turn. So a killed tower drops its tow.
 export function killVehicles(world: World, target: string): World {
   return update(world, (w) => {
     for (const v of killTargets(w, target)) {
@@ -366,7 +393,6 @@ export function killVehicles(world: World, target: string): World {
       v.lastHitBy = null;
       wreckVehicle(w, v);
     }
-    // Clears old wrecks and orders at the dead.
     resolveDestroyed(w);
     settleStates(w);
   });

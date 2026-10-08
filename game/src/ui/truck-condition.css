@@ -2,10 +2,6 @@
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
-  padding: 22px 22px 18px;
-  border: 1px solid #505b5d;
-  border-radius: 5px;
-  background: #191e20eb;
 }
 /* The bare truck's outline sits behind the parts. A part's tile takes its condition color, set inline as --tone and
    --tint-line. The icon's own fill is clear, so only its lines and shading show, in the same hue. Line widths stay in
@@ -19,6 +15,7 @@
 .condition-chassis .outline-line {
   z-index: 1;
   --plan-fill: none;
+  filter: drop-shadow(0 0 1px #000000b0);
 }
 .condition-part {
   position: absolute;

@@ -2,13 +2,14 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SEPARATOR, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const ignoredPattern = /(?:^|\/)(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
-const typeProjects = ['game', 'factory'];
-const maxBuffer = 64 * 1024 * 1024; // Bounds captured Git and linter output, including the repo-wide baseline.
+const typeProjects = ['game', 'factory', 'factory/dashboard'];
+const browserPaths = /^factory\/(?:dashboard|src\/dashboard)\//;
+const maxBuffer = 64 * 1024 * 1024;
 
 function runGit(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer });
@@ -27,6 +28,18 @@ function readHeadFiles() {
   return [];
 }
 
+function readMergeHeads() {
+  const file = path.resolve(root, runGit('rev-parse', '--git-path', 'MERGE_HEAD').trim());
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean);
+}
+
+function readParents() {
+  const head = { ref: 'HEAD', files: readHeadFiles() };
+  const merged = readMergeHeads().map(ref => ({ ref, files: splitPaths(runGit('ls-tree', '-rz', '--name-only', ref)) }));
+  return [head, ...merged];
+}
+
 function selectSources(files) {
   return [...new Set(files)].filter(file => sourcePattern.test(file) && !ignoredPattern.test(file));
 }
@@ -40,7 +53,6 @@ function readGuidance(directory, files) {
   return readSources(directory, docs.filter(file => !lstatSync(path.join(directory, file)).isSymbolicLink()));
 }
 
-// Text files holding the separator, found by git grep, which skips binary files. Staged mode searches the index.
 function readSeparatorFiles(directory, staged) {
   const result = spawnSync('git', ['grep', staged ? '--cached' : '--untracked', '-lzIF', '-e', SEPARATOR], { cwd: root, encoding: 'utf8', maxBuffer });
   if (result.status !== 0 && result.status !== 1) throw new Error(result.stderr || 'git grep failed.');
@@ -72,9 +84,9 @@ function readLintReport(result) {
   return report.diagnostics;
 }
 
-function collectFindings(directory, sources, config) {
+function collectFindings(directory, sources, config, maxDocstringLines) {
   const findings = runLint(directory, [...sources.keys()], config);
-  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings);
+  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings, ...checkComments(file, source, maxDocstringLines));
   return findings;
 }
 
@@ -110,17 +122,25 @@ function findRegressions(current, previous) {
   });
 }
 
-function checkQuality(directory, baseline, files, headFiles, staged) {
-  const current = readSources(directory, selectSources(files));
-  const previous = new Map(selectSources(headFiles).map(file => [file, runGit('show', `HEAD:${file}`)]));
+function readParentSources(parent, baseline, config, maxDocstringLines) {
+  const sources = new Map(selectSources(parent.files).map(file => [file, runGit('show', `${parent.ref}:${file}`)]));
   mkdirSync(baseline, { recursive: true });
-  writeSources(baseline, previous);
-  const config = path.join(directory, '.oxlintrc.json');
+  writeSources(baseline, sources);
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  const findings = findRegressions(collectFindings(directory, current, config), collectFindings(baseline, previous, baselineConfig));
-  const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
-  const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
+  return { sources, findings: collectFindings(baseline, sources, baselineConfig, maxDocstringLines) };
+}
+
+function checkQuality(directory, baseline, files, parents, staged) {
+  const current = readSources(directory, selectSources(files));
+  const config = path.join(directory, '.oxlintrc.json');
+  const { maxFilesPerKloc, maxGuidanceWords, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config, maxDocstringLines));
+  const currentFindings = collectFindings(directory, current, config, maxDocstringLines);
+  const regressions = previous.map(parent => new Set(findRegressions(currentFindings, parent.findings)));
+  const findings = currentFindings.filter(finding => regressions.every(set => set.has(finding)));
+  const fragmented = previous.map(parent => checkFragmentation(current, collectComponents(parent.sources), maxFilesPerKloc));
+  const failures = fragmented[0].filter(failure => fragmented.every(list => list.some(other => componentOf(other) === componentOf(failure))));
   failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
   failures.push(...checkSeparators(readSeparatorFiles(directory, staged)));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);
@@ -128,15 +148,60 @@ function checkQuality(directory, baseline, files, headFiles, staged) {
   if (findings.length + failures.length) throw new Error('Quality regressed against HEAD. Fix the code. Do not weaken the checks.');
 }
 
+function componentOf(failure) {
+  return failure.slice(0, failure.indexOf(':'));
+}
+
+function linkModules(directory, project) {
+  const installed = path.join(root, project, 'node_modules');
+  const modules = path.join(directory, project, 'node_modules');
+  if (directory !== root && existsSync(installed) && !existsSync(modules)) symlinkSync(installed, modules);
+}
+
 function checkTypes(directory) {
   const compiler = fileURLToPath(new URL('./bin/tsc', import.meta.resolve('typescript/package.json')));
   for (const project of typeProjects) {
-    const modules = path.join(directory, project, 'node_modules');
-    if (directory !== root && !existsSync(modules)) symlinkSync(path.join(root, project, 'node_modules'), modules);
+    linkModules(directory, project);
     const result = spawnSync(process.execPath, [compiler, '--project', path.join(directory, project, 'tsconfig.json')], { cwd: path.join(directory, project), stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`Typecheck failed in ${project}.`);
   }
+}
+
+function mount(source, target, readonly) {
+  return ['--mount', `type=bind,src=${source},dst=${target}${readonly ? ',readonly' : ''}`];
+}
+
+function mountModules(directory) {
+  return ['game', 'factory'].flatMap(project => {
+    const mountPoint = path.join(directory, project, 'node_modules');
+    rmSync(mountPoint, { recursive: true, force: true });
+    mkdirSync(mountPoint, { recursive: true });
+    return mount(path.join(root, project, 'node_modules'), `/work/${project}/node_modules`, true);
+  });
+}
+
+function readPlaywrightVersion() {
+  const manifest = path.join(root, 'game/node_modules/playwright/package.json');
+  if (!existsSync(manifest) || !existsSync(path.join(root, 'factory/node_modules'))) throw new Error('The dashboard browser test needs Playwright and the factory packages. Run npm ci in game/ and factory/.');
+  return JSON.parse(readFileSync(manifest, 'utf8')).version;
+}
+
+function checkDashboardBrowser(directory) {
+  if (!splitPaths(runGit('diff', '--cached', '--name-only', '-z')).some(file => browserPaths.test(file))) return;
+  const version = readPlaywrightVersion();
+  const evidence = path.join(root, 'tmp/browser-evidence');
+  mkdirSync(evidence, { recursive: true });
+  const args = ['run', '--rm', '--init', '--network', 'none', '--memory', '2g', '--cpus', '2', '--shm-size', '512m',
+    ...mount(directory, '/work', true), ...mountModules(directory), ...mount(evidence, '/evidence', false), '--workdir', '/work',
+    `mcr.microsoft.com/playwright:v${version}-noble`, 'node', 'factory/dashboard/browser.test.mjs', '/work/game/node_modules/playwright/index.mjs', '/evidence'];
+  const result = spawnSync('docker', args, { encoding: 'utf8', maxBuffer });
+  if (result.error) throw new Error(`The dashboard browser test needs Docker: ${result.error.message}`);
+  const log = path.join(root, 'tmp/browser-check.log');
+  writeFileSync(log, result.stdout + result.stderr);
+  if (result.status === 0) return;
+  console.error((result.stdout + result.stderr).split('\n').slice(-40).join('\n'));
+  throw new Error('The dashboard browser test failed. The full output is in tmp/browser-check.log.');
 }
 
 function assertStagedTooling() {
@@ -166,8 +231,9 @@ function checkSnapshot(staged, temporary) {
   const tracked = splitPaths(runGit('ls-files', '--cached', '-z'));
   const others = staged ? [] : splitPaths(runGit('ls-files', '--others', '--exclude-standard', '-z'));
   const files = [...tracked, ...others].filter(file => existsSync(path.join(directory, file)));
-  checkQuality(directory, path.join(temporary, 'head'), files, readHeadFiles(), staged);
+  checkQuality(directory, path.join(temporary, 'parents'), files, readParents(), staged);
   checkTypes(directory);
+  if (staged) checkDashboardBrowser(directory);
 }
 
 runChecks();

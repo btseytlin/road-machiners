@@ -2,7 +2,7 @@
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { UNITS } from '../data/units';
-import { t, type Msg } from '../text/msg';
+import { num, t, type Msg } from '../text/msg';
 
 const MS_TO_KPH = 3.6;
 
@@ -10,7 +10,6 @@ export function kph(tilesPerTurn: number): number {
   return Math.round((tilesPerTurn * PHYSICS.metersPerTile) / PHYSICS.turnSeconds * MS_TO_KPH);
 }
 
-// Acceleration in tiles per turn per turn, as m/s².
 export function mps2(tilesPerTurn2: number): number {
   return Math.round((tilesPerTurn2 * PHYSICS.metersPerTile) / PHYSICS.turnSeconds ** 2 * 10) / 10;
 }
@@ -39,12 +38,35 @@ export function engineCelsius(engineHeat: number): number {
   return Math.round(UNITS.engineColdCelsius + engineHeat * (UNITS.engineHotCelsius - UNITS.engineColdCelsius));
 }
 
-// Part HP and player health are fractional in the sim. A working part never reads 0.
 export function hp(value: number): number {
   return Math.ceil(value);
 }
 
-// Damage is fractional in the sim. Any damage reads at least 1.
 export function damage(value: number): number {
   return Math.ceil(value);
+}
+
+const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+export function moneyM(cents: number): number {
+  const whole = Math.round(cents);
+  if (whole === 0) return 0;
+  return Math.sign(whole) * Math.ceil(Math.abs(whole) / UNITS.centsPerM);
+}
+
+export function moneyAmount(cents: number): string {
+  const m = moneyM(cents);
+  return m === 0 ? '0' : WHOLE_M.format(m);
+}
+
+export function moneyText(cents: number): string {
+  return `${moneyAmount(cents)} M`;
+}
+
+export function moneyNum(cents: number): Msg {
+  return num(moneyM(cents), 'int');
+}
+
+export function moneyMsg(cents: number): Msg {
+  return t('money.m', { n: moneyM(cents) });
 }

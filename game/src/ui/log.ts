@@ -1,4 +1,4 @@
-import { bindAttr } from "../text/language";
+import { bindAttr, say } from "../text/language";
 import { t } from "../text/msg";
 import { el, panel } from "./dom";
 import { clock, type LogLine } from "./format";
@@ -36,7 +36,6 @@ function lineRow(l: LogLine): HTMLElement {
   );
 }
 
-// The log panel. New lines go on top, and a reader scrolled back in the history keeps their place.
 export class LogPanel {
   private book = new LogBook();
   private root = panel("log");
@@ -58,6 +57,10 @@ export class LogPanel {
       el("div", { class: "log-head" }, el("h3", {}, t("log.title")), this.toggle),
       this.box,
     );
+  }
+
+  get texts(): string[] {
+    return this.book.lines.map((line) => say(line.text));
   }
 
   add(turn: number, lines: LogLine[]): void {

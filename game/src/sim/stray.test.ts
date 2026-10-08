@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { blastLanes, laneCount, lanePoint } from './armor';
-import { fireWeapons, inFeud, shotDamage } from './combat';
+import { fireWeapons, inFeud, shotDamage, startFeuds } from './combat';
 import { gunFor } from './factory';
 import { mountedParts } from './grid';
 import { addState, stateOf, strayData } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
 
-// The player fires a shotgun at a raider buggy 6 tiles east. A trader stands on the line of fire 1 tile past the
-// buggy, and another trader stands far off the line.
 function range(): { w: World; me: Vehicle; target: Vehicle; onLine: Vehicle; offLine: Vehicle } {
   const w = emptyWorld();
   const me = addVehicle(w, 'player', 'scout', ['shotgun', 'stockEngine'], { x: 30, y: 30 });
@@ -26,7 +24,6 @@ function range(): { w: World; me: Vehicle; target: Vehicle; onLine: Vehicle; off
   return { w, me, target, onLine, offLine };
 }
 
-// Plays turns with the gun kept loaded and the target kept alive, and sums the damage each truck took.
 function fire(w: World, me: Vehicle, turns: number): Map<string, number> {
   const total = new Map<string, number>();
   for (let i = 0; i < turns; i++) {
@@ -66,6 +63,36 @@ describe('stray fire', () => {
     for (let i = 0; i < 20 && !inFeud(w, onLine, me); i++) fire(w, me, 1);
     expect(inFeud(w, onLine, me)).toBe(true);
     expect(stateOf(w, 'strayFire', onLine.id, me.id)).toBeNull();
+  });
+
+  it('a faction mate or deal partner of the shooter forgives its stray fire', () => {
+    for (const side of ['mate', 'partner'] as const) {
+      const w = emptyWorld();
+      const convoy = addVehicle(w, 'convoys', 'scout', ['shotgun', 'stockEngine'], { x: 30, y: 30 });
+      convoy.brain = npcBrain('convoy', convoy.pos, ['trader']);
+      const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI / 2);
+      target.brain = npcBrain('buggy', target.pos, ['raider']);
+      const guard = addVehicle(w, side === 'mate' ? 'convoys' : 'mercs', 'hauler', ['stockEngine'], { x: 37, y: 30.3 }, Math.PI / 2);
+      guard.brain = npcBrain(side === 'mate' ? 'convoyGuard' : 'merc', guard.pos, ['trader']);
+      if (side === 'partner') addState(w, 'escort', guard.id, convoy.id, { kind: 'escort', site: null, fee: 0 });
+      convoy.weaponOrders[mountedParts(convoy, 'weapon')[0].id] = { targetId: target.id, aim: 'body' };
+      const dealt = fire(w, convoy, 60);
+      expect(dealt.get(guard.id) ?? 0).toBeGreaterThan(RULES.stray.feudDamage);
+      expect(inFeud(w, guard, convoy)).toBe(false);
+      expect(stateOf(w, 'strayFire', guard.id, convoy.id)).toBeNull();
+    }
+  });
+
+  it('a shooter that attacks a faction mate never feuds itself', () => {
+    const w = emptyWorld();
+    const convoy = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    convoy.brain = npcBrain('convoy', convoy.pos, ['trader']);
+    const guard = addVehicle(w, 'convoys', 'hauler', ['mg', 'stockEngine'], { x: 34, y: 30 });
+    guard.brain = npcBrain('convoyGuard', guard.pos, ['trader']);
+    startFeuds(w, convoy, guard);
+    expect(inFeud(w, guard, convoy)).toBe(true);
+    expect(stateOf(w, 'feud', convoy.id, convoy.id)).toBeNull();
+    expect(w.events.some((e) => e.t === 'hostile' && e.vehicle === e.against)).toBe(false);
   });
 
   it('the player keeps no stray fire state', () => {

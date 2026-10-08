@@ -3,7 +3,9 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { progressNote, runJob } from './job';
 import { appendUsage, readLedger } from './ledger';
-import { markResumed } from './sessions';
+import { markResumed, resumeError, resumedStage } from './sessions';
+import { BudgetError } from './stages/checkpoint';
+import { CommitteeDecisionError } from './diff-guard';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryConfig, JobStage } from './types';
 
@@ -39,12 +41,64 @@ describe('runJob', () => {
     const state = readState(statePath);
     expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
-    // A change resumes like an agent job, so its end clears its mark and sessions.
     expect(state.interrupted).toEqual([]);
     expect(existsSync(join(ROOT, 'sessions', 'issue-9'))).toBe(false);
     expect(posts).toEqual([]);
     expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
     expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
+  });
+
+  describe('a failed card stage', () => {
+    const setup = (interrupted: number[]) => {
+      rmSync(ROOT, { recursive: true, force: true });
+      mkdirSync(join(ROOT, 'sessions', 'issue-4'), { recursive: true });
+      const statePath = join(ROOT, 'state.json');
+      writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'v', stage: 'verify', issue: 4, pid: 1, startedAt: '', log: 'l' }], interrupted });
+      const comments: string[] = [];
+      const labels: string[] = [];
+      const ctx = {
+        cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
+        github: {
+          issue: async () => { throw new Error('GitHub is down'); },
+          comment: async (_n: number, body: string) => { comments.push(body); },
+          addLabel: async (_n: number, label: string) => { labels.push(label); },
+        },
+      } as unknown as Ctx;
+      return { ctx, statePath, comments, labels };
+    };
+
+    it('resumes once in its sessions with the error, with no stuck label and no failure for Hermes', async () => {
+      const { ctx, statePath, comments, labels } = setup([]);
+      await runJob(ctx, 'verify', 4);
+      const state = readState(statePath);
+      expect(state.interrupted).toEqual([4]);
+      expect(state.failures).toEqual([]);
+      expect(labels).toEqual([]);
+      expect(resumedStage(ROOT, 4)).toBe('verify');
+      expect(resumeError(ROOT, 4)).toContain('GitHub is down');
+      expect(comments).toEqual(['Testing stopped. It resumes in its own session on the next tick, with the error.']);
+    });
+
+    it('goes to Hermes when it fails again after its resume', async () => {
+      const { ctx, statePath, labels } = setup([4]);
+      markResumed(ROOT, 4, 'verify');
+      await runJob(ctx, 'verify', 4);
+      const state = readState(statePath);
+      expect(state.interrupted).toEqual([]);
+      expect(state.failures).toMatchObject([{ stage: 'verify', issue: 4 }]);
+      expect(labels).toEqual(['factory-stuck']);
+      expect(existsSync(join(ROOT, 'sessions', 'issue-4'))).toBe(false);
+    });
+
+    it('goes to Hermes at once on an empty budget or a question for the committee', async () => {
+      for (const error of [new BudgetError('spent'), new CommitteeDecisionError('a save bump')]) {
+        const { ctx, statePath, labels } = setup([]);
+        ctx.github.issue = async () => { throw error; };
+        await runJob(ctx, 'verify', 4);
+        expect(readState(statePath).interrupted).toEqual([]);
+        expect(labels).toEqual(['factory-stuck']);
+      }
+    });
   });
 
   it('writes one ledger line with the agent runs of a job that finished', async () => {
@@ -81,18 +135,7 @@ describe('runJob', () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, {
-      ...structuredClone(EMPTY_STATE),
-      jobs: [{ id: 'a', stage: 'ship', issue: 20, pid: 1, startedAt: '', log: 'l' }],
-      pendingShip: 'Ann',
-      release: {
-        issue: 20,
-        branch: 'release/x',
-        day: 'd',
-        postId: 5,
-        removed: [],
-      },
-    });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'ship', issue: 20, pid: 1, startedAt: '', log: 'l' }], pendingShip: 'Ann', release: { issue: 20, branch: 'release/x', day: 'd', postId: 5, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
     const labels: string[] = [];
     const ctx = {
       cfg: {
@@ -172,7 +215,6 @@ describe('runJob', () => {
   describe('sessions', () => {
     const sessions = (issue: number) => join(ROOT, 'sessions', `issue-${issue}`);
 
-    // The design stage asks GitHub for the issue first, so the fake sees the sessions as the job starts.
     async function run(stage: 'design' | 'approve', issue: number, interrupted: number[], died: JobStage | null = null): Promise<boolean[]> {
       rmSync(ROOT, { recursive: true, force: true });
       mkdirSync(sessions(issue), { recursive: true });
@@ -233,8 +275,8 @@ describe('runJob', () => {
       now: () => new Date('2026-01-10T12:00:00Z'),
     } as unknown as Ctx;
     expect(progressNote(ctx, 'implement', '2026-01-10T11:15:00Z', 'finished')).toBe('Implementation finished after 45 min.');
-    expect(progressNote(ctx, 'verify', null, 'finished')).toBe('Verify finished.');
-    expect(progressNote(ctx, 'checks', null, 'failed')).toBe('Checks failed. Hermes is looking into it.');
+    expect(progressNote(ctx, 'verify', null, 'finished')).toBe('Testing finished.');
+    expect(progressNote(ctx, 'checks', null, 'failed')).toBe('Post failed. Hermes is looking into it.');
   });
 
   it('drops only the failed removal from the queue', async () => {

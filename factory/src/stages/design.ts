@@ -1,12 +1,10 @@
-import { updateState } from '../state';
+import { moveCard } from '../card-events';
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
 import { releaseBundle } from './bundle';
 import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
-  // A card in Design gets a new plan, so a patch queued before it moved here, by a route or by Hermes, no longer applies.
-  updateState(ctx.statePath, (state) => ({ ...state, patching: Object.fromEntries(Object.entries(state.patching).filter(([key]) => key !== String(issue))) }));
   const clone = workDir(ctx, issue);
   const base = await baseBranchOf(ctx, issue);
   await ctx.repo.fetch();
@@ -24,21 +22,21 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   requirePlan(home, TASK_FILE(issue));
   await guardAndPush(ctx, issue, base, 'design');
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
-  await ctx.github.move(issue, 'Implementation');
+  await moveCard(ctx, issue, 'Implementation', 'planned');
 }
 
 async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
   const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
   if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
   await askAuthor(ctx, issue, questions, 'design');
-  await ctx.github.move(issue, 'Triage');
+  await moveCard(ctx, issue, 'Triage', 'questions');
 }
 
 async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
   await ctx.github.comment(issue, reason.trim());
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'design-wont-do');
   await releaseBundle(ctx, issue, 'will not be built');
 }
 
@@ -57,7 +55,6 @@ function planText(task: string): string {
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-// The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
 async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
   const body = fitComment(taskFile, 'the factory work clone');
   await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);

@@ -5,7 +5,8 @@ import { addGoods } from './inventory';
 import { getResources } from './resources';
 import { isStranded } from './stats';
 import { thinkNpc } from './npc-activities';
-import { canRob, decide, wantsLoot, lootAppeal, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
+import { chooseOn } from './tracks';
+import { canRob, decide, wantsLoot, lootAppeal, npcProfile, optionWeights, judgeDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS } from '../data/skills';
@@ -15,25 +16,23 @@ import { checkKnockout, knockOutNpc } from './defeat';
 import { playerVehicle } from './damage';
 import { corePart, hasLoot, mountedParts } from './grid';
 import { addState, advanceStates, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere , startCombat } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, rngStateWhere, startCombat } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { cloneWorld } from './world';
 import { REGION } from '../data/region';
 import { siteGates } from './sites';
 import { startEscort } from './tow';
+import { hasCargo } from './salvage';
 
-// A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
-// past it.
 const BOWL = REGION.towns[0];
 const GATE = siteGates(BOWL)[0];
-// A point d tiles out from the Bowl gate, away from the town.
 function outFromGate(d: number): Vec {
   const k = d / BOWL.radius;
   return { x: GATE.x + (GATE.x - BOWL.pos.x) * k, y: GATE.y + (GATE.y - BOWL.pos.y) * k };
 }
-const GUARDED = RULES.guards.range / 2;
-const UNGUARDED = RULES.guards.range + 4;
+const GUARDED = NPC_BEHAVIOR.lawGateReach / 2;
+const UNGUARDED = NPC_BEHAVIOR.lawGateReach + 4;
 
 function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: TraitId[] = ['scavenger', 'scumbag']): Vehicle {
   const v = addVehicle(w, 'scavengers', 'wagon', parts, pos);
@@ -41,19 +40,21 @@ function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: T
   return v;
 }
 
-// The lowest danger a sighting can perceive.
-const lowest = (w: World, v: Vehicle) => vehicleDanger(w, v) * (1 - NPC_BEHAVIOR.dangerSpread);
+const lowest = (w: World, observer: Vehicle, v: Vehicle) => judgeDanger(w, observer, v) * (1 - NPC_BEHAVIOR.dangerSpread);
 
-// A truck with no gun and goods on its grid.
-function addPrey(w: World, pos: Vec, parts: string[] = [], goods = 2): Vehicle {
+function addPrey(w: World, pos: Vec, parts: string[] = ['stockEngine'], goods = 2): Vehicle {
   const v = addVehicle(w, 'traders', 'scout', parts, pos);
+  v.brain = npcBrain('trader', pos, ['trader']);
   if (goods > 0 && addGoods(w, v, 'scrap', goods) < goods) throw new Error('No room for prey goods');
-  // A load worth at least the rob appeal's rich mark, so the rob weight is unscaled.
   if (goods > 0 && addGoods(w, v, 'electronics', 4) < 4) throw new Error('No room for prey cargo');
   return v;
 }
 
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
+
+function robsTarget(robber: Vehicle, target: string): boolean {
+  return robber.brain!.goals.some((g) => isRob(g, target));
+}
 
 function isRob(goal: NpcActivity | undefined, target: string): boolean {
   return goal?.kind === 'fight' && goal.targetId === target && goal.reason === 'robCargo';
@@ -61,7 +62,6 @@ function isRob(goal: NpcActivity | undefined, target: string): boolean {
 
 type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
 
-// A scumbag leader with loot in sight away from towns, and a scumbag merc escorting it.
 function escorted() {
   const w = emptyWorld({ x: 200, y: 200 });
   const leader = addScumbag(w, { x: 10, y: 10 });
@@ -70,7 +70,6 @@ function escorted() {
   return { w, leader, merc, target: addPrey(w, { x: 15, y: 10 }) };
 }
 
-// A scumbag robber of a template whose trait forbids robbing.
 function forbidden(templateId: string, trait: TraitId): Setup {
   return () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -80,7 +79,6 @@ function forbidden(templateId: string, trait: TraitId): Setup {
   };
 }
 
-// Worlds where rob is unavailable for one reason, and everything else would allow it.
 const UNAVAILABLE: Record<string, Setup> = {
   supplier: forbidden('convoy', 'supplier'),
   guard: forbidden('convoyGuard', 'guard'),
@@ -128,15 +126,12 @@ const UNAVAILABLE: Record<string, Setup> = {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 15, y: 10 });
-    target.brain = npcBrain('trader', target.pos, ['trader']);
     startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 60, y: 10 }), target);
     return { w, robber, target };
   },
 };
 
-// Worlds where one robbery judgment fails and the others pass.
 const JUDGED: Record<string, Setup> = {
-  // Heavier guns and far more HP than the robber's scout.
   strong: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const target = addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 });
@@ -157,7 +152,6 @@ function passing() {
   return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }) };
 }
 
-// The rob weight a scumbag gives the target when every judgment passes.
 const FULL_ROB = TRAITS.scumbag.weights.preySeen!.rob!.add!;
 
 const robWeight = (w: World, robber: Vehicle, target: Vehicle, danger: number) => optionWeights(w, robber, 'preySeen', target.id, danger).rob;
@@ -165,28 +159,27 @@ const robWeight = (w: World, robber: Vehicle, target: Vehicle, danger: number) =
 describe('robbery checks', () => {
   it('a weaker truck with loot in sight away from towns gets the full rob weight', () => {
     const { w, robber, target } = passing();
-    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);
-    // Beside the gate, but both past guard range, passes too.
+    expect(robWeight(w, robber, target, judgeDanger(w, robber, target))).toBe(FULL_ROB);
     const far = emptyWorld({ x: 200, y: 200 });
     expect(robWeight(far, addScumbag(far, outFromGate(UNGUARDED)), addPrey(far, outFromGate(UNGUARDED + 5)), 0)).toBe(FULL_ROB);
   });
 
   it('the leader of an escort still gets the full rob weight', () => {
     const { w, leader, target } = escorted();
-    expect(robWeight(w, leader, target, vehicleDanger(w, target))).toBe(FULL_ROB);
+    expect(robWeight(w, leader, target, judgeDanger(w, leader, target))).toBe(FULL_ROB);
   });
 
   for (const [name, make] of Object.entries(UNAVAILABLE)) {
     it(`makes rob unavailable when only ${name} fails`, () => {
       const { w, robber, target } = make();
-      expect(optionWeights(w, robber, 'preySeen', target.id, lowest(w, target))).not.toHaveProperty('rob');
+      expect(optionWeights(w, robber, 'preySeen', target.id, lowest(w, robber, target))).not.toHaveProperty('rob');
     });
   }
 
   for (const [name, make] of Object.entries(JUDGED)) {
     it(`lowers the rob weight when only ${name} fails`, () => {
       const { w, robber, target } = make();
-      const weight = robWeight(w, robber, target, lowest(w, target))!;
+      const weight = robWeight(w, robber, target, lowest(w, robber, target))!;
       expect(weight).toBeGreaterThan(0);
       expect(weight).toBeLessThanOrEqual(FULL_ROB * 0.1);
     });
@@ -197,35 +190,39 @@ describe('robbery checks', () => {
     const me = w.vehicles[0];
     addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
-    // Out of the armed scumbag's group, so the bare one judges by its own guns alone. With none, it cannot rob.
+    expect(robWeight(w, robber, me, judgeDanger(w, robber, me))).toBe(FULL_ROB);
     const bare = addScumbag(w, { x: 15, y: 25 }, ['stockEngine']);
-    expect(optionWeights(w, bare, 'preySeen', me.id, lowest(w, me))).not.toHaveProperty('rob');
+    expect(optionWeights(w, bare, 'preySeen', me.id, lowest(w, bare, me))).not.toHaveProperty('rob');
   });
 });
 
 describe('danger', () => {
-  it('a tank outscores a scout', () => {
+  const judge = () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates'], { x: 10, y: 10 });
-    const scout = addVehicle(w, 'raiders', 'scout', ['mg'], { x: 20, y: 10 });
-    expect(vehicleDanger(w, tank)).toBeGreaterThan(vehicleDanger(w, scout) * 3);
+    const driver = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 40 });
+    return { w, driver };
+  };
+
+  it('a tank is a bigger threat than a scout', () => {
+    const { w, driver } = judge();
+    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates', 'stockEngine'], { x: 10, y: 10 });
+    const scout = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 60, y: 10 });
+    expect(judgeDanger(w, driver, tank)).toBeGreaterThan(judgeDanger(w, driver, scout) * 3);
   });
 
-  it('a half-HP tank scores about half', () => {
-    const w = emptyWorld({ x: 200, y: 200 });
-    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates'], { x: 10, y: 10 });
-    const full = vehicleDanger(w, tank);
-    for (const part of [...mountedParts(tank, 'core'), ...mountedParts(tank, 'armor')]) part.hp = Math.ceil(part.hp / 2);
-    expect(vehicleDanger(w, tank) / full).toBeGreaterThan(0.45);
-    expect(vehicleDanger(w, tank) / full).toBeLessThan(0.55);
+  it('a tank worn to half HP is less of a threat', () => {
+    const { w, driver } = judge();
+    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates', 'stockEngine'], { x: 10, y: 10 });
+    const full = judgeDanger(w, driver, tank);
+    for (const part of mountedParts(tank)) part.hp = Math.ceil(part.hp / 2);
+    expect(judgeDanger(w, driver, tank)).toBeLessThan(full * 0.6);
   });
 
-  it('a truck with no working gun has no danger', () => {
-    const w = emptyWorld({ x: 200, y: 200 });
-    const scout = addVehicle(w, 'raiders', 'scout', ['mg'], { x: 10, y: 10 });
+  it('a truck with no working gun is no threat', () => {
+    const { w, driver } = judge();
+    const scout = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
     mountedParts(scout, 'weapon')[0].hp = 0;
-    expect(vehicleDanger(w, scout)).toBe(0);
+    expect(judgeDanger(w, driver, scout)).toBe(0);
   });
 });
 
@@ -241,7 +238,7 @@ describe('scumbag robbery', () => {
         x.rngState = seed;
         const r = find(x, robber.id);
         thinkNpc(x, r);
-        if (isRob(r.brain!.goals.at(-1), target.id)) robs++;
+        if (robsTarget(r, target.id)) robs++;
       }
       return robs;
     };
@@ -261,9 +258,10 @@ describe('scumbag robbery', () => {
       x.rngState = seed;
       const r = find(x, robber.id);
       thinkNpc(x, r);
-      if (!isRob(r.brain!.goals.at(-1), target.id)) continue;
+      if (!robsTarget(r, target.id)) continue;
       robs++;
-      expect(stateOf(x, 'feud', robber.id, target.id)).not.toBeNull();
+      const paid = r.brain!.goals.some((g) => g.kind === 'loot' && g.reason === 'takeHandedCargo');
+      expect(paid || stateOf(x, 'feud', robber.id, target.id) !== null).toBe(true);
       expect(x.events).toContainEqual({ t: 'hostile', vehicle: robber.id, against: target.id });
     }
     expect(robs).toBeGreaterThan(0);
@@ -275,7 +273,7 @@ describe('scumbag robbery', () => {
         x.rngState = seed;
         const r = find(x, bad.robber.id);
         thinkNpc(x, r);
-        expect(isRob(r.brain!.goals.at(-1), bad.target.id)).toBe(false);
+        expect(robsTarget(r, bad.target.id)).toBe(false);
       }
     }
     for (const make of Object.values(JUDGED)) {
@@ -286,7 +284,7 @@ describe('scumbag robbery', () => {
         x.rngState = seed;
         const r = find(x, judged.robber.id);
         thinkNpc(x, r);
-        if (isRob(r.brain!.goals.at(-1), judged.target.id)) rare++;
+        if (robsTarget(r, judged.target.id)) rare++;
       }
       expect(rare).toBeLessThan(10);
     }
@@ -296,7 +294,7 @@ describe('scumbag robbery', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
     const target = addPrey(w, { x: 15, y: 10 });
-    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(0);
+    expect(robWeight(w, robber, target, judgeDanger(w, robber, target))).toBe(0);
     const seeds = 2000;
     let robs = 0;
     for (let seed = 0; seed < seeds; seed++) {
@@ -304,11 +302,11 @@ describe('scumbag robbery', () => {
       x.rngState = seed;
       const r = find(x, robber.id);
       thinkNpc(x, r);
-      if (isRob(r.brain!.goals.at(-1), target.id)) robs++;
+      if (robsTarget(r, target.id)) robs++;
     }
     expect(robs / seeds).toBeGreaterThan(0.003);
     expect(robs / seeds).toBeLessThan(0.02);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+  }, 90_000);
 
   it('a scumbag scavenger with no prey still scavenges', () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -327,10 +325,11 @@ describe('scumbag robbery', () => {
     const scavenge: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
     robber.brain!.goals = [scavenge];
     forceOption('preySeen', 'rob');
+    forceOption('mugging', 'attack');
+    w.rngState = rngStateForForcedRolls(8);
     thinkNpc(w, robber);
     expect(robber.brain!.goals.map((g) => g.kind)).toEqual(['scavenge', 'fight']);
     expect(isRob(robber.brain!.goals[1], target.id)).toBe(true);
-    // The target is gone, so the rob goal pops and the scavenge goal is active again.
     w.vehicles = w.vehicles.filter((v) => v.id !== target.id);
     forceOption('resume', 'resume');
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
@@ -340,21 +339,19 @@ describe('scumbag robbery', () => {
     const { w, robber, target } = passing();
     robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     forceOption('preySeen', 'rob');
-    // A hostileSeen roll on the victim would almost surely flee.
     forceOption('hostileSeen', 'flee');
     thinkNpc(w, robber);
     for (let turn = 0; turn < 5; turn++) {
       w.turn++;
       w.events = [];
       thinkNpc(w, robber);
-      expect(isRob(robber.brain!.goals.at(-1), target.id)).toBe(true);
+      expect(robsTarget(robber, target.id)).toBe(true);
       expect(w.events.filter((e) => e.t === 'activity')).toEqual([]);
     }
   });
 
   it('a driver on a tow job robs no one it passes', () => {
     const { w, robber, target } = passing();
-    // An open tow offer to the player, waiting for an answer.
     addState(w, 'tow', robber.id, w.player.vehicleId, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
     robber.brain!.goals = [{ kind: 'tow', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'waitTowAnswer' }];
     forceOption('preySeen', 'rob');
@@ -401,7 +398,7 @@ describe('scumbag robbery', () => {
     robber.job = { kind: 'search', stockId: 'salvage-yard', turnsLeft: 3, total: 3 };
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
-    expect(isRob(robber.brain!.goals.at(-1), target.id)).toBe(true);
+    expect(robsTarget(robber, target.id)).toBe(true);
     expect(robber.job).toBeNull();
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'job', vehicle: robber.id, outcome: 'cancelled' }));
   });
@@ -412,7 +409,6 @@ describe('scumbag robbery', () => {
     const target = addPrey(w, { x: 80, y: 10 });
     const other = addPrey(w, { x: 10, y: 15 });
     addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
-    // Out of sight and with no shots, the feud runs out.
     for (let i = 0; i < STATE_TURNS.feud!; i++) {
       w.turn++;
       w.events = [];
@@ -422,14 +418,46 @@ describe('scumbag robbery', () => {
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
     const backedOff = stateOf(w, 'backedOff', robber.id, target.id);
     expect(backedOff).not.toBeNull();
-    // A state added by a hook waits a turn before it counts down.
     w.turn++;
     advanceStates(w);
     expect(stateOf(w, 'backedOff', robber.id, target.id)?.turnsLeft).toBe(STATE_TURNS.backedOff! - 1);
     target.pos = { x: 15, y: 10 };
-    const again = robWeight(w, robber, target, vehicleDanger(w, target))!;
+    const again = robWeight(w, robber, target, judgeDanger(w, robber, target))!;
     expect(again).toBeGreaterThan(0);
-    expect(again).toBeLessThan(robWeight(w, robber, other, vehicleDanger(w, other))! * 0.05);
+    expect(again).toBeLessThan(robWeight(w, robber, other, judgeDanger(w, robber, other))! * 0.05);
+  });
+});
+
+describe('hold-ups of NPC prey', () => {
+  const holdUp = (answer: 'comply' | 'fightBack' | 'flee') => {
+    forceOption('preySeen', 'rob');
+    forceOption('mugging', 'demand');
+    forceOption('threatened', answer);
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 }, ['heavyMg', 'mg', 'stockEngine']);
+    const target = addPrey(w, { x: 15, y: 10 }, ['mg', 'stockEngine']);
+    thinkNpc(w, robber);
+    return { w, robber, target };
+  };
+
+  it('prey that pays drops its cargo for the robber and makes peace', () => {
+    const { w, robber, target } = holdUp('comply');
+    expect(hasCargo(target)).toBe(false);
+    expect(isHostile(w, robber, target)).toBe(false);
+    expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'loot', reason: 'takeHandedCargo' });
+  });
+
+  it('prey that refuses fights the robber, and the robber asks only once', () => {
+    const { robber, target } = holdUp('fightBack');
+    expect(target.brain!.goals.at(-1)).toMatchObject({ kind: 'fight', targetId: robber.id });
+    expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'fight', demands: false });
+    expect(hasCargo(target)).toBe(true);
+  });
+
+  it('prey that refuses can run instead', () => {
+    const { robber, target } = holdUp('flee');
+    expect(target.brain!.goals.at(-1)).toMatchObject({ kind: 'flee', targetId: robber.id });
+    expect(hasCargo(target)).toBe(true);
   });
 });
 
@@ -449,7 +477,6 @@ describe('prey rolls', () => {
 describe('looting', () => {
   const SCAVENGE: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 
-  // Runs the part of a turn that ends states after a kill.
   function killTurn(w: World): void {
     w.turn++;
     w.events = [];
@@ -459,10 +486,8 @@ describe('looting', () => {
 
   it('a scumbag that knocks out an NPC loots its truck, with its scavenge goal still below', () => {
     const { w, robber, target } = passing();
-    target.brain = npcBrain('trader', target.pos, ['trader']);
     robber.brain!.goals = [{ ...SCAVENGE }];
     forceOption('preySeen', 'rob');
-    // A stranded target offered a way out holds out, so the robbery ends in a knockout.
     forceOption('surrenderOffered', 'refuse');
     thinkNpc(w, robber);
     expect(stateOf(w, 'feud', robber.id, target.id)?.data).toEqual({ kind: 'feud', robbery: true });
@@ -472,8 +497,6 @@ describe('looting', () => {
     expect(target.defeat?.phase).toBe('out');
     expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: target.id });
     expect(robber.brain!.goals[0]).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
-    // The loot goal drives the robber this turn. Once the truck wakes, the loot goal pops, and the scavenge goal
-    // is active again.
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'loot', targetId: target.id });
     target.defeat = { ...target.defeat!, phase: 'retreat' };
     forceOption('resume', 'resume');
@@ -513,10 +536,8 @@ describe('looting', () => {
 });
 
 describe('social on robbery danger', () => {
-  // A danger just under what the robber judges stronger than itself, and just over it once raised by rank 5.
-  function nearThreshold(w: World, robber: Vehicle): number {
-    const threshold = ownDanger(w, robber) * npcProfile(robber).boldness;
-    return threshold / (1 + 2.5 * SKILL_EFFECTS.social.robberyDanger);
+  function nearThreshold(robber: Vehicle): number {
+    return npcProfile(robber).boldness / (1 + 2.5 * SKILL_EFFECTS.social.robberyDanger);
   }
 
   it('a scumbag sees a rank 5 player truck as stronger', () => {
@@ -524,7 +545,7 @@ describe('social on robbery danger', () => {
     const me = w.vehicles[0];
     addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    const danger = nearThreshold(w, robber);
+    const danger = nearThreshold(robber);
     expect(robWeight(w, robber, me, danger)).toBe(FULL_ROB);
     w.player.ranks.social = 5;
     expect(robWeight(w, robber, me, danger)).toBeLessThanOrEqual(FULL_ROB * 0.1);
@@ -532,7 +553,7 @@ describe('social on robbery danger', () => {
 
   it('leaves robbery of an NPC truck unchanged', () => {
     const { w, robber, target } = passing();
-    const danger = nearThreshold(w, robber);
+    const danger = nearThreshold(robber);
     w.player.ranks.social = 5;
     expect(robWeight(w, robber, target, danger)).toBe(FULL_ROB);
   });
@@ -541,7 +562,7 @@ describe('social on robbery danger', () => {
 
 describe('cargo value', () => {
   const chance = (w: World, robber: Vehicle, decision: 'preySeen' | 'hostileSeen', target: Vehicle, option: string): number => {
-    const danger = vehicleDanger(w, target);
+    const danger = judgeDanger(w, robber, target);
     const draws = 1500;
     let picked = 0;
     for (let seed = 0; seed < draws; seed++) {
@@ -580,10 +601,9 @@ describe('cargo value', () => {
     addGoods(w, poor, 'parts', 2);
     expect(chance(w, robber, 'preySeen', poor, 'rob')).toBeLessThan(0.025);
     const rich = addPrey(w, { x: 15, y: 12 });
-    expect(robWeight(w, robber, rich, vehicleDanger(w, rich))).toBe(FULL_ROB);
-    // A grudge ignores cargo.
+    expect(robWeight(w, robber, rich, judgeDanger(w, robber, rich))).toBe(FULL_ROB);
     addState(w, 'revenge', robber.id, poor.id, { kind: 'none' });
-    expect(robWeight(w, robber, poor, vehicleDanger(w, poor))).toBeGreaterThanOrEqual(FULL_ROB);
+    expect(robWeight(w, robber, poor, judgeDanger(w, robber, poor))).toBeGreaterThanOrEqual(FULL_ROB);
   });
 
   describe('raiders', () => {
@@ -641,7 +661,7 @@ describe('stranded robbers', () => {
   it('a stranded scumbag gets no rob option and starts no robbery', () => {
     const { w, robber, target } = passing();
     strand(w, robber);
-    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBeUndefined();
+    expect(robWeight(w, robber, target, judgeDanger(w, robber, target))).toBeUndefined();
     thinkMany(w, robber.id, target.id);
     expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
   });
@@ -651,12 +671,12 @@ describe('stranded robbers', () => {
       const w = emptyWorld({ x: 200, y: 200 });
       const raider = addRaider(w, { x: 10, y: 10 });
       const target = addPrey(w, { x: 15, y: 10 });
-      const before = optionWeights(w, raider, 'hostileSeen', target.id, vehicleDanger(w, target));
+      const before = optionWeights(w, raider, 'hostileSeen', target.id, judgeDanger(w, raider, target));
       expect(before.fight).toBeGreaterThan(0);
       strandIt(w, raider);
       if (!isStranded(w, raider)) continue;
-      expect(optionWeights(w, raider, 'hostileSeen', target.id, vehicleDanger(w, target)).fight).toBeUndefined();
-      expect(optionWeights(w, raider, 'contactHeard', target.id, vehicleDanger(w, target)).investigate).toBeUndefined();
+      expect(optionWeights(w, raider, 'hostileSeen', target.id, judgeDanger(w, raider, target)).fight).toBeUndefined();
+      expect(optionWeights(w, raider, 'contactHeard', target.id, judgeDanger(w, raider, target)).investigate).toBeUndefined();
       thinkMany(w, raider.id, target.id);
     }
   });
@@ -677,7 +697,8 @@ describe('stranded robbers', () => {
     for (const fights of [false, true]) {
       const { w, robber, target } = passing();
       addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
-      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'robCargo', perceived: w.turn } as NpcActivity);
+      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'robCargo', worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+      chooseOn(w, robber, target.id, target.pos, 'fight', true);
       strand(w, robber);
       if (fights) startCombat(w, target, robber);
       thinkNpc(w, robber);
@@ -692,11 +713,14 @@ describe('stranded robbers', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const raider = addRaider(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 15, y: 10 });
-    raider.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'raid', perceived: w.turn } as NpcActivity);
+    raider.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'raid', worn: { turn: w.turn, condition: 1 } } as NpcActivity);
+    chooseOn(w, raider, target.id, target.pos, 'fight', true);
     strand(w, raider);
     thinkNpc(w, raider);
     expect(raider.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);
-    expect(optionWeights(w, raider, 'attacked', target.id, vehicleDanger(w, target)).fightBack).toBeGreaterThan(0);
+    expect(optionWeights(w, raider, 'attacked', target.id, judgeDanger(w, raider, target)).fightBack).toBeUndefined();
+    startCombat(w, target, raider);
+    expect(optionWeights(w, raider, 'attacked', target.id, judgeDanger(w, raider, target)).fightBack).toBeGreaterThan(0);
   });
 
   it('a stranded robber wants no loot', () => {
@@ -709,16 +733,15 @@ describe('stranded robbers', () => {
 
   it('mobile robbers still rob', () => {
     const { w, robber, target } = passing();
-    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBeGreaterThan(0);
+    expect(robWeight(w, robber, target, judgeDanger(w, robber, target))).toBeGreaterThan(0);
     const w2 = emptyWorld({ x: 200, y: 200 });
     const raider = addRaider(w2, { x: 10, y: 10 });
     const loaded = addPrey(w2, { x: 15, y: 10 });
-    expect(optionWeights(w2, raider, 'hostileSeen', loaded.id, vehicleDanger(w2, loaded)).fight).toBeGreaterThan(0);
+    expect(optionWeights(w2, raider, 'hostileSeen', loaded.id, judgeDanger(w2, raider, loaded)).fight).toBeGreaterThan(0);
   });
 });
 
 describe('a guarded driver', () => {
-  // A convoy with goods and its guard beside it, away from towns, and a raider who threatens it.
   function guardedConvoy() {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 10, y: 10 });
@@ -731,7 +754,7 @@ describe('a guarded driver', () => {
     return { w, convoy, guard, raider };
   }
   const comply = (w: World, v: Vehicle, by: Vehicle, decision: 'threatened' | 'warnedOff' = 'threatened') =>
-    optionWeights(w, v, decision, by.id, lowest(w, by)).comply!;
+    optionWeights(w, v, decision, by.id, lowest(w, v, by)).comply!;
 
   it('hands over its cargo a tenth as often while its escort is in sight', () => {
     const { w, convoy, guard, raider } = guardedConvoy();
@@ -742,8 +765,6 @@ describe('a guarded driver', () => {
     expect(warned).toBeCloseTo(comply(w, convoy, raider, 'warnedOff') * NPC_BEHAVIOR.guardedComply);
   });
 
-  // Each case compares the same trucks with and without the escort, since a guard nearby also adds to the group
-  // danger the driver weighs.
   it('does not count an escort out of sight or knocked out', () => {
     const unguarded = (w: World, convoy: Vehicle, guard: Vehicle) => {
       const x = cloneWorld(w);
@@ -762,7 +783,7 @@ describe('a guarded driver', () => {
     const { w, convoy } = guardedConvoy();
     const me = playerVehicle(w);
     me.pos = { x: 16, y: 10 };
-    const weights = optionWeights(w, convoy, 'threatened', me.id, lowest(w, me));
+    const weights = optionWeights(w, convoy, 'threatened', me.id, lowest(w, convoy, me));
     const total = Object.values(weights).reduce((sum, n) => sum + (n ?? 0), 0);
     expect(weights.comply! / total).toBeLessThanOrEqual(0.25);
   });

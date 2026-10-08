@@ -9,8 +9,7 @@ export function encodePng(width, height, rgba) {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
-  header.set([8, 6, 0, 0, 0], 8); // bit depth 8, color type RGBA, deflate, adaptive filter, no interlace
-  // Each row starts with filter type 0, no filter.
+  header.set([8, 6, 0, 0, 0], 8);
   const rows = Buffer.alloc(height * (width * 4 + 1));
   for (let y = 0; y < height; y++) rows.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * (width * 4 + 1) + 1);
   return Buffer.concat([SIGNATURE, chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);

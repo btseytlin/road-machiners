@@ -1,19 +1,46 @@
-const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
-const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
-const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
-const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
+// Labels arrive with each snapshot from src/dashboard/labels.ts. A key with no label, like a stage from an old ledger line, shows as itself.
+/** @param {Record<string, string>} labels @returns {Record<string, string>} */
+function showRawKeys(labels) { return new Proxy(labels, { get: (target, key) => (typeof key === 'string' && Object.hasOwn(target, key) ? target[key] : String(key)) }); }
+/** @typedef {NonNullable<ReturnType<typeof readSummary>>} Summary */
+/** @typedef {NonNullable<ReturnType<typeof readDelivery>>} Delivery */
+/** @typedef {NonNullable<ReturnType<typeof readOperations>>} Operations */
+/** @typedef {ReturnType<typeof getRelease>} Release */
+let stages = showRawKeys({});
+let actions = showRawKeys({});
+let reasons = showRawKeys({});
+let queueNames = showRawKeys({});
+let dwellNames = showRawKeys({});
+let loopNames = showRawKeys({});
+let gateNames = showRawKeys({});
+/** @type {Record<string, string>} */
+let columnNames = {};
+/** @param {import('../src/dashboard/labels').Labels} labels */
+function readLabels(labels) {
+  stages = showRawKeys(labels.stages);
+  actions = showRawKeys(labels.activities);
+  reasons = showRawKeys(labels.reasons);
+  queueNames = showRawKeys(labels.queues);
+  dwellNames = showRawKeys(labels.dwell);
+  loopNames = showRawKeys(labels.loops);
+  gateNames = showRawKeys(labels.gates);
+  columnNames = labels.columns;
+}
 const pages = new Map();
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
-let snapshot = null;
+/** @type {import('../src/dashboard/snapshot').Snapshot} */
+let snapshot = /** @type {any} */ (null);
 let selectedDays = 7;
 let metric = 'cost';
 let grouping = 'stage';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
+/** @type {HTMLElement | null} */
 let detailOwner = null;
+/** @param {string} selector @returns {HTMLElement[]} */
+function queryAll(selector) { return /** @type {HTMLElement[]} */ ([...document.querySelectorAll(selector)]); }
+/** @param {string} id @returns {any} The page's own ids exist, so a missing one throws at its first use. */
 function getElement(id) { return document.getElementById(id); }
 function createNode(tag, text = '', className = '') { const node = document.createElement(tag); node.textContent = text; node.className = className; return node; }
 function setText(id, value) { getElement(id).textContent = value; }
@@ -24,6 +51,11 @@ function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return '—';
   const minutes = Math.floor(Math.max(0, ms) / 60000);
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+/** @param {Summary} summary */
+function formatAverageWaiting(summary) {
+  if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
+  return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
 }
 function formatAge(at) {
   if (!at) return 'unknown';
@@ -45,7 +77,7 @@ function createLink(text, href) {
 function getIssueUrl(issue) { return `${snapshot.repoUrl}/issues/${issue}`; }
 function replaceContents(id, nodes) {
   const target = getElement(id);
-  const key = target.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const key = target.contains(document.activeElement) ? /** @type {HTMLElement} */ (document.activeElement).dataset.key : null;
   target.replaceChildren(...nodes);
   if (key) target.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 }
@@ -127,6 +159,7 @@ function readQueueWaits() {
   const decisions = readLive()?.scheduler?.decisions ?? [];
   return decisions.filter((item) => item.reasons.length > 0 && !item.reasons.includes('issue-running'));
 }
+/** @param {Operations | null} operations */
 function readWaitingStatus(operations) {
   if (!operations) return 'State unavailable';
   if (operations.status === 'paused') return 'Starts paused';
@@ -138,6 +171,7 @@ function readSchedulerAvailability(scheduler) {
   if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
   return null;
 }
+/** @param {Operations | null} operations */
 function renderFreeSlots(operations) {
   if (!operations) {
     setText('free-count', '');
@@ -155,6 +189,7 @@ function createWaitingRow(item) {
   row.append(createNode('span', item.issue === null ? stages[item.stage] : `#${item.issue} ${stages[item.stage]}`), createNode('span', item.reasons.map((reason) => reasons[reason]).join(', ')));
   return row;
 }
+/** @param {Operations | null} operations */
 function renderCapacity(operations) {
   renderFreeSlots(operations);
   const status = readWaitingStatus(operations);
@@ -167,10 +202,10 @@ function renderCapacity(operations) {
 }
 function renderFunnel() {
   const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
-  replaceContents('funnel', columns.map((column) => {
+  replaceContents('funnel', Object.keys(columnNames).map((column) => {
     const item = createNode('div');
     const value = cards ? cards.filter((card) => card.column === column).length : null;
-    item.append(createNode('span', column.replace('Implementation', 'Implement').replace('Testing', 'Test')), createNode('strong', formatNumber(value)));
+    item.append(createNode('span', columnNames[column]), createNode('strong', formatNumber(value)));
     item.lastChild.title = value === null ? 'Unavailable' : value.toLocaleString();
     return item;
   }));
@@ -185,7 +220,7 @@ function formatReleaseGate(gate) {
   if (readOperations()?.release === null) return 'Release not cut';
   if (!gate) return 'Readiness not checked';
   if (gate.reason === 'release-tasks') return `${gate.issues.length} release tasks remain: ${gate.issues.map((issue) => `#${issue}`).join(', ')}`;
-  const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
+  const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', playtest: 'Release playtest pending', 'playtest-blocked': 'Release playtest blocked', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
   return labels[gate.reason];
 }
 function renderRelease() {
@@ -200,6 +235,7 @@ function createReleaseItem(feature) {
   item.append(createLink(`#${feature.issue} ${feature.title}`, getIssueUrl(feature.issue)));
   return item;
 }
+/** @param {Release | null} release */
 function renderReleaseItems(release) {
   const features = release?.features ?? [];
   setText('release-count', release ? `${features.length} changes` : '');
@@ -213,6 +249,7 @@ function readDialogCapacity(id) {
   if (!Number.isFinite(row) || row <= 0) throw new Error('Invalid dialog row height');
   return Math.max(1, Math.floor(list.clientHeight / row));
 }
+/** @param {Release | null} release */
 function renderReleaseDialog(release) {
   const features = release?.features ?? [];
   setText('release-dialog-count', release ? `${features.length} changes` : '');
@@ -224,6 +261,7 @@ function renderReleaseDialogItems(features, available) {
   const empty = available ? 'No changes on dev' : 'Contents unavailable';
   replaceContents('release-dialog-rows', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
+/** @param {Release | null} release */
 function renderReleaseLinks(release) {
   const operations = readOperations();
   const tracking = operations?.release;
@@ -314,6 +352,7 @@ function renderEvents() {
   replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events ? 'No recorded events' : 'Events unavailable', 'muted')]);
   if (getElement('event-dialog').open) renderEventDialog(events);
 }
+/** @param {Summary | null} summary */
 function renderCounters(summary) {
   if (!summary) return clearCounters();
   renderTokenCounters(summary.tokens);
@@ -321,7 +360,7 @@ function renderCounters(summary) {
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
   setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
-  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
+  setCounter('usage-wait', formatAverageWaiting(summary), summary.waitingMs === null ? null : `${formatDuration(summary.waitingMs)} summed card-time`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function renderTokenCounters(tokens) {
@@ -334,12 +373,11 @@ function clearCounters() {
   for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
-// The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
+/** @param {Summary} summary */
 function readUsageSlots(summary) {
   const hourly = summary.days === 1;
   const end = new Date(snapshot.generatedAt);
   if (hourly) end.setUTCMinutes(0, 0, 0); else end.setUTCHours(0, 0, 0, 0);
-  // The range starts inside the first slot, so it spans one slot more than its length.
   const count = hourly ? 25 : summary.days + 1;
   return Array.from({ length: count }, (_, index) => {
     const start = new Date(end.getTime() - (count - 1 - index) * (hourly ? 3600000 : 86400000)).toISOString().slice(0, hourly ? 13 : 10);
@@ -357,12 +395,11 @@ function readSegmentKeys(slots) {
   return [...totals.keys()].filter((key) => totals.get(key) > 0).sort((a, b) => totals.get(b) - totals.get(a));
 }
 function readSegmentLabel(key) {
-  if (grouping === 'stage') return stages[key] ?? key;
+  if (grouping === 'stage') return stages[key];
   return key === 'unattributed' ? 'No model data' : key.replace(/^claude-/, '');
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
 const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
-// Matches the #full-text detail popup: dark panel, gold border, readable body text. Lists every segment of the hovered bar, largest first, then the total.
 const usageTooltip = {
   backgroundColor: '#171c1f', borderColor: '#dac7a2', borderWidth: 1, cornerRadius: 0, padding: 12, boxPadding: 6,
   titleColor: '#dac7a2', titleFont: { family: 'Plex', size: 12 }, bodyColor: '#e0d8ca', bodyFont: { family: 'Barlow', size: 15 }, footerColor: '#e0d8ca', footerFont: { family: 'Barlow', size: 15, weight: 'bold' },
@@ -373,6 +410,7 @@ const usageTooltip = {
     footer: (items) => `Total: ${formatUsageValue(items.reduce((sum, item) => sum + item.raw, 0))}`,
   },
 };
+/** @type {any} */
 let usageChart = null;
 function createUsageChart() {
   Chart.defaults.color = '#a5aaa7';
@@ -385,6 +423,7 @@ function createUsageChart() {
     interaction: { mode: 'index', intersect: false },
   } });
 }
+/** @param {Summary | null} summary */
 function renderUsageChart(summary) {
   setText('usage-title', metric === 'cost' ? 'Spend' : 'Tokens');
   usageChart ??= createUsageChart();
@@ -399,6 +438,7 @@ function renderUsageChart(summary) {
   usageChart.update();
   getElement('usage-empty').hidden = keys.length > 0;
 }
+/** @param {Summary | null} summary */
 function readStageRows(summary) {
   if (!summary) return [];
   const names = new Set([...summary.stages.map((row) => row.stage), ...summary.waitingStages.map((row) => row.stage)]);
@@ -418,15 +458,16 @@ function createStageBar(row, maximum, waitingKnown) {
   node.dataset.detail = `${stages[row.stage]}: ${formatDuration(row.run)} running, ${wait} waiting`;
   return node;
 }
+/** @param {Summary | null} summary */
 function renderStageChart(summary) {
   const rows = readStageRows(summary);
   const maximum = Math.max(1, ...rows.map((row) => row.run + row.wait));
   const capacity = Math.max(1, Math.floor(getElement('stage-chart').clientHeight / 34));
   const visible = selectPage('stage', rows, capacity);
-  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
+  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary?.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
-function readStageModelLabel(stage) { return stage === null ? 'Total' : stage === 'verify' ? 'Verify + review' : stages[stage]; }
+function readStageModelLabel(stage) { return stage === null ? 'Total' : stages[stage]; }
 function createStageModelCell(stage, model, usage, measure) {
   const value = usage ? measure === 'input' ? countInputTokens(usage) : usage.output : null;
   const cell = createNode('td', formatNumber(value), 'numeric');
@@ -449,8 +490,8 @@ function readStageModelNames(rows) {
   for (const row of rows) totals.set(row.stage, (totals.get(row.stage) ?? 0) + countTokens(row));
   return [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a));
 }
+/** @param {Summary | null} summary */
 function renderStageModels(summary) {
-  // Two model columns fit beside stage names at the narrowest desktop width.
   const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
   const visible = selectPage('model-column', models, 2);
   const stageHeader = createNode('th', 'Stage');
@@ -460,7 +501,7 @@ function renderStageModels(summary) {
   replaceContents('stage-model-header', [stageHeader, ...modelHeaders]);
   const measureHeaders = visible.flatMap(() => ['Input + cache', 'Output'].map((name) => { const header = createNode('th', name); header.scope = 'col'; return header; }));
   replaceContents('stage-model-measures', measureHeaders);
-  const rows = models.length ? [null, ...readStageModelNames(summary.stageModels)] : [];
+  const rows = models.length ? [null, ...readStageModelNames(summary?.stageModels ?? [])] : [];
   renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length * 2 + 1);
 }
 function renderAnalytics() {
@@ -470,6 +511,77 @@ function renderAnalytics() {
   renderStageChart(summary);
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderStageModels(summary);
+}
+function readDelivery() { return readSummary()?.delivery ?? null; }
+function formatRate(part, whole) { return whole ? `${Math.round(100 * part / whole)}%` : '—'; }
+function createDwellRow(row, maximum) {
+  const node = createNode('tr');
+  const bar = createNode('td', '', 'dwell-bar');
+  const fill = createNode('span');
+  fill.style.width = `${row.meanMs === null ? 0 : 100 * row.meanMs / maximum}%`;
+  bar.append(fill);
+  bar.setAttribute('aria-hidden', 'true');
+  const open = row.open ? `${row.open}, ${formatDuration(row.openMeanMs)}` : '0';
+  node.append(createNode('td', dwellNames[row.stage]), bar, createNode('td', formatDuration(row.meanMs), 'numeric'), createNode('td', formatDuration(row.medianMs), 'numeric'), createNode('td', String(row.count), 'numeric'), createNode('td', open, 'numeric'));
+  node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.openMeanMs)}. Open stages are not in the means.`;
+  return node;
+}
+function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step]), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+/** @param {Delivery | null} delivery */
+function readDeliveryCoverage(delivery) {
+  if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
+  if (!delivery) return 'No card moves recorded yet';
+  const prefix = snapshot.analytics.status === 'ok' ? '' : 'Last known: ';
+  return `${prefix}${delivery.issues} cards, records since ${delivery.since.slice(0, 10)} UTC`;
+}
+/** @param {Delivery | null} delivery */
+function readDeliveryNotes(delivery) {
+  if (!delivery) return '';
+  return `${delivery.legacy} cards joined before records. ${delivery.excluded} hotfix, release or private cards left out. ${delivery.lead.missingStart} merges lack a start.`;
+}
+function renderIssueToDev() {
+  const merges = snapshot.github.value?.merges;
+  const end = Date.parse(snapshot.generatedAt);
+  const ages = (merges ?? []).filter((merge) => Date.parse(merge.mergedAt) > end - selectedDays * 86400000 && Date.parse(merge.mergedAt) <= end).map((merge) => Date.parse(merge.mergedAt) - Date.parse(merge.createdAt)).sort((a, b) => a - b);
+  if (!ages.length) {
+    const reason = merges ? 'No issue merged into dev in the period' : null;
+    setCounter('issue-mean', '—', reason);
+    return setCounter('issue-median', '—', reason);
+  }
+  const mean = ages.reduce((sum, age) => sum + age, 0) / ages.length;
+  const middle = Math.floor(ages.length / 2);
+  const median = ages.length % 2 ? ages[middle] : (ages[middle - 1] + ages[middle]) / 2;
+  setCounter('issue-mean', formatDuration(mean), `${mean} ms mean of ${ages.length} issues`);
+  setCounter('issue-median', formatDuration(median), `${median} ms median of ${ages.length} issues`);
+}
+/** @param {Delivery | null} delivery */
+function renderDeliveryCounters(delivery) {
+  if (!delivery) return clearDeliveryCounters();
+  const { lead } = delivery;
+  setCounter('lead-open', String(lead.open), lead.open ? `${lead.open} cards, mean age ${formatDuration(lead.openMeanMs)}` : 0);
+  setCounter('loop-rate', formatRate(delivery.looped, delivery.issues), `${delivery.looped} of ${delivery.issues} cards`);
+  for (const row of delivery.rejections) {
+    setCounter(`${row.gate}-rate`, formatRate(row.rejected, row.decided), `${gateNames[row.gate]}: ${row.rejected} of ${row.decided} decided cards`);
+  }
+}
+function clearDeliveryCounters() {
+  for (const id of ['lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
+}
+function renderDelivery() {
+  const delivery = readDelivery();
+  setText('delivery-coverage', readDeliveryCoverage(delivery));
+  getElement('delivery-coverage').dataset.exact = readDeliveryNotes(delivery);
+  renderIssueToDev();
+  renderDeliveryCounters(delivery);
+  if (!delivery) return renderDeliveryEmpty(snapshot.analytics.value ? 'No card moves recorded yet' : 'Unavailable');
+  const maximum = Math.max(1, ...delivery.stages.map((row) => row.meanMs ?? 0));
+  renderTable('dwell', delivery.stages, (row) => createDwellRow(row, maximum), '', 6);
+  renderTable('loop', delivery.loops.filter((row) => row.events > 0), createLoopRow, 'No card sent back in the period', 3);
+  renderTable('stage-retry', delivery.retries.filter((row) => row.runs > 0), createStageRetryRow, 'No failed card job in the period', 3);
+}
+function renderDeliveryEmpty(text) {
+  for (const [key, columnCount] of [['dwell', 6], ['loop', 3], ['stage-retry', 3]]) renderTable(key, [], null, text, columnCount);
 }
 function readPauseNotice() {
   const operations = readOperations();
@@ -481,8 +593,8 @@ function readPauseNotice() {
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
-  // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
   setText('connection', connected ? 'Live' : 'Reconnecting');
+  /** @type {[string, import('../src/dashboard/snapshot').Source<unknown>][]} */
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
   const pause = readPauseNotice();
@@ -497,10 +609,11 @@ function renderSnapshot() {
   renderFreshness();
   if (!getElement('overview').hidden) renderOverview();
   if (!getElement('analytics').hidden) renderAnalytics();
+  if (!getElement('delivery').hidden) renderDelivery();
   updateOverflow();
 }
 function updateOverflow() {
-  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
+  for (const node of queryAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
     if (!node.getClientRects().length) continue;
     if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
     const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
@@ -522,9 +635,9 @@ function showDetail(node) {
   node.setAttribute('aria-describedby', tooltip.id);
 }
 function hideDetail() { getElement('full-text').hidden = true; }
-const tabs = [...document.querySelectorAll('[role="tab"]')];
+const tabs = [...queryAll('[role="tab"]')];
 function selectTab(tab) {
-  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(choice.getAttribute('aria-controls')).hidden = !selected; }
+  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(String(choice.getAttribute('aria-controls'))).hidden = !selected; }
   hideDetail();
   requestRender();
 }
@@ -539,18 +652,18 @@ function navigateTabs(event, tab) {
   next.focus();
 }
 for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
-for (const button of document.querySelectorAll('[data-dialog]')) button.addEventListener('click', () => {
-  const dialog = getElement(button.dataset.dialog);
+for (const button of queryAll('[data-dialog]')) button.addEventListener('click', () => {
+  const dialog = getElement(String(button.dataset.dialog));
   dialog.showModal();
   if (dialog.id === 'release-dialog') renderReleaseDialog(getRelease());
   else renderEventDialog(readEvents());
 });
-for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
-function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
-for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
-for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
-for (const button of document.querySelectorAll('[data-grouping]')) button.addEventListener('click', () => { grouping = button.dataset.grouping; selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
-document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
+for (const button of queryAll('[data-close]')) button.addEventListener('click', () => /** @type {HTMLDialogElement} */ (button.closest('dialog')).close());
+function selectButtons(selector, chosen, attribute) { for (const button of queryAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
+for (const button of queryAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', String(button.dataset.days), 'days'); pages.clear(); requestRender(); });
+for (const button of queryAll('[data-metric]')) button.addEventListener('click', () => { metric = String(button.dataset.metric); selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+for (const button of queryAll('[data-grouping]')) button.addEventListener('click', () => { grouping = String(button.dataset.grouping); selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
+document.addEventListener('mouseover', (event) => showDetail(/** @type {HTMLElement} */ (event.target).closest('[data-detail]')));
 document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
@@ -559,13 +672,14 @@ document.addEventListener('keydown', (event) => {
     if (document.querySelector('dialog[open]')) { hideDetail(); return; }
     detailOwner?.focus({ preventScroll: true }); hideDetail();
   }
-  if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
+  const target = /** @type {HTMLElement} */ (event.target);
+  if (event.key === 'Enter' && target.dataset.detail) { event.preventDefault(); showDetail(target); getElement('full-text').focus(); }
 });
 window.addEventListener('resize', () => { hideDetail(); requestRender(); });
 document.fonts.ready.then(requestRender);
 const stream = new EventSource('/factory/api/events');
 stream.addEventListener('snapshot', (event) => {
-  try { snapshot = JSON.parse(event.data); connected = true; requestRender(); }
+  try { snapshot = JSON.parse(event.data); readLabels(snapshot.labels); connected = true; requestRender(); }
   catch (error) { renderFailed = true; console.error('Invalid dashboard snapshot', error); setText('connection', 'Invalid data'); }
 });
 stream.addEventListener('error', () => { connected = false; setText('connection', 'Reconnecting'); });

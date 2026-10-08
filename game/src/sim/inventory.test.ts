@@ -18,14 +18,13 @@ import { advanceJobs } from './jobs';
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
 const good = (w: World) => w.vehicles[0].items.find((it) => it.kind === 'good')!;
-// The panniers' row, just below the scout's own layout.
 const rackRow = CHASSIS.scout.layout.length;
 
 describe('inventory grid', () => {
-  it('the standard kit starts with a scout, 1000 money, two cargo parts, and full resources', () => {
+  it('the standard kit starts with a scout, 333 M, two cargo parts, and full resources', () => {
     const w = emptyWorld();
     expect(w.vehicles[0].chassisId).toBe('scout');
-    expect(w.player.money).toBe(1000);
+    expect(w.player.money).toBe(33300);
     expect(goodsCount(w.vehicles[0]).parts).toBe(2);
     expect(w.player.fuel).toBe(CHASSIS.scout.fuelCap);
     expect(w.player.supplies).toBe(RULES.baseSupplies);
@@ -56,12 +55,28 @@ describe('inventory grid', () => {
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow('Refused: badLayout');
   });
 
-  it('unmounting takes three turns in the field and is instant in town', () => {
+  it('disarms a claymore ram that is moved or stored', () => {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const claymore = makePart(w, 'claymoreRam', 0);
+    if (!mountPart(w, w.vehicles[0], claymore)) throw new Error('No room for the claymore ram');
+    claymore.charge = { reload: 0, armed: true };
+    const it = item(w, 'claymoreRam');
+    const spot = stowSpot(w.vehicles[0], it);
+    if (!spot) throw new Error('No storage room');
+
+    const moved = moveItem(w, it.id, spot);
+    const stored = storePart(update(w, (d) => { (item(d, 'claymoreRam') as Extract<GridItem, { kind: 'part' }>).part.charge = { reload: 0, armed: true }; }), it.id);
+
+    expect((item(moved, 'claymoreRam') as Extract<GridItem, { kind: 'part' }>).part.charge).toEqual({ reload: 0 });
+    expect(stored.player.storage.find((p) => p.defId === 'claymoreRam')?.charge).toEqual({ reload: 0 });
+  });
+
+  it('unmounting takes five turns in the field and is instant in town', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     const field = moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 });
-    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 3 });
-    for (let turn = 0; turn < 2; turn++) advanceJobs(field);
+    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
+    for (let turn = 0; turn < 4; turn++) advanceJobs(field);
     expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(1);
     advanceJobs(field);
     expect(field.vehicles[0].job).toBeNull();
@@ -72,14 +87,14 @@ describe('inventory grid', () => {
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
   });
 
-  it('swaps a spare with a mounted weapon after five turns', () => {
+  it('swaps a spare with a mounted weapon after ten turns', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     if (mg.kind !== 'part') throw new Error('Expected weapon');
     w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 4, y: rackRow });
     const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
-    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 5 });
-    for (let turn = 0; turn < 4; turn++) advanceJobs(next);
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 10 });
+    for (let turn = 0; turn < 9; turn++) advanceJobs(next);
     expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: mg.x, y: mg.y });
     advanceJobs(next);
     expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 4, y: rackRow });
@@ -101,12 +116,11 @@ describe('inventory grid', () => {
   it('a gun works only lying fully on deck cells', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
-    removeAllGoods(w.vehicles[0]); // free the cells the gun test claims, regardless of start cargo
+    removeAllGoods(w.vehicles[0]);
     w = storePart(w, item(w, 'mg').id);
     w = storePart(w, item(w, 'panniers').id);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'heavyMg', 0)); });
     const id = w.player.storage.find((p) => p.defId === 'heavyMg')!.id;
-    // The scout has two deck cells stacked beside the engine at (4,1) and (4,2). Lying on the front armor row, the gun is no deck gun.
     const stacked = takeFromStorage(w, id, { x: 4, y: 1, rot: 0 });
     expect(vehicleStats(stacked, stacked.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['heavyMg']);
     const across = takeFromStorage(w, id, { x: 4, y: 0, rot: 1 });
@@ -172,7 +186,6 @@ describe('auto mounting on the deck', () => {
   });
 });
 
-// Takes the start kit's gun, panniers and cargo off the truck, which frees both deck cells.
 function freeDeck(v: Vehicle): void {
   removeAllGoods(v);
   v.items = v.items.filter((it) => it.kind === 'good' || !['mg', 'panniers'].includes(it.part.defId));

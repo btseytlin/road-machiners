@@ -10,12 +10,14 @@ import { advanceJobs } from './jobs';
 import { optionWeights } from './npc-decisions';
 import { thinkNpc, topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
-import { lootTruckTurn, takeFromTruck } from './salvage';
+import { lootTruckTurn, takeFromTruck, emptyHidden } from './salvage';
 import { lootBlockerHere } from './locations';
 import type { GridItem, Vehicle, World } from './types';
 import { refreshVision } from './vision';
+import { WORK } from '../data/utilities';
 
-// The player's parked scout at 30,30 beside a knocked-out raider buggy with a gun, an engine and two scrap.
+const FIELD_TURNS = Math.ceil(RULES.refitTurnsPerPart * WORK.noCraneTime);
+
 function downed(): { w: World; me: Vehicle; buggy: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -39,7 +41,6 @@ const gunOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'part' && it.part.de
 const scrapOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'good' && it.good === 'scrap');
 const cabOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core' && it.part.id === corePart(v, 'cab').id);
 
-// A free spot off the mounts on the player's grid.
 function spareSpot(me: Vehicle, item: GridItem): Spot {
   const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
   const spot = findSpot(gridOf(me), me.items, { ...item, id: 'probe' }, null, avoid);
@@ -62,8 +63,8 @@ describe('the player looting a knocked-out truck', () => {
     const { w, me, buggy } = downed();
     const gun = gunOn(buggy);
     const next = takeFromTruck(w, buggy.id, gun.id, spareSpot(me, gun));
-    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: Math.ceil(RULES.refitTurnsPerPart) });
-    for (let turn = 1; turn < Math.ceil(RULES.refitTurnsPerPart); turn++) advanceJobs(next);
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: FIELD_TURNS });
+    for (let turn = 1; turn < FIELD_TURNS; turn++) advanceJobs(next);
     const target = () => next.vehicles.find((v) => v.id === buggy.id)!;
     expect(target().items.some((it) => it.id === gun.id)).toBe(true);
     advanceJobs(next);
@@ -143,13 +144,13 @@ describe('an NPC looting a knocked-out truck', () => {
     const looter = looterBeside(w, buggy);
     expect(lootTruckTurn(w, looter, buggy)).toBeNull();
     expect(goodsCount(looter).scrap).toBe(2);
-    expect(looter.job).toMatchObject({ kind: 'refit', turnsLeft: Math.ceil(RULES.refitTurnsPerPart) });
-    for (let turn = 0; turn < Math.ceil(RULES.refitTurnsPerPart); turn++) advanceJobs(w);
+    expect(looter.job).toMatchObject({ kind: 'refit', turnsLeft: FIELD_TURNS });
+    for (let turn = 0; turn < FIELD_TURNS; turn++) advanceJobs(w);
     const left = buggy.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind !== 'core');
     expect(left).toHaveLength(1);
     expect(looter.items.filter((it) => it.kind === 'part' && !isMounted(looter.chassisId, it))).toHaveLength(1);
     expect(lootTruckTurn(w, looter, buggy)).toBeNull();
-    for (let turn = 0; turn < Math.ceil(RULES.refitTurnsPerPart); turn++) advanceJobs(w);
+    for (let turn = 0; turn < FIELD_TURNS; turn++) advanceJobs(w);
     expect(lootTruckTurn(w, looter, buggy)).toBe('nothingToLoot');
   });
 
@@ -159,7 +160,7 @@ describe('an NPC looting a knocked-out truck', () => {
     me.pos = { x: 200, y: 200 };
     const looter = looterBeside(w, buggy);
     lootTruckTurn(w, looter, buggy);
-    expect(looter.job).toMatchObject({ kind: 'refit', turnsLeft: Math.ceil(RULES.refitTurnsPerPart) });
+    expect(looter.job).toMatchObject({ kind: 'refit', turnsLeft: FIELD_TURNS });
   });
 
   it('rolls the same loot decision for a knocked-out truck as for a wreck in sight', () => {
@@ -167,7 +168,7 @@ describe('an NPC looting a knocked-out truck', () => {
     me.pos = { x: 200, y: 200 };
     const looter = looterBeside(w, buggy);
     looter.pos = { x: buggy.pos.x, y: buggy.pos.y + 6 };
-    w.salvage.push({ id: 'wreck-road', pos: { x: buggy.pos.x + 1, y: buggy.pos.y + 6 }, radius: 0.7, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck-road', pos: { x: buggy.pos.x + 1, y: buggy.pos.y + 6 }, radius: 0.7, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     refreshVision(w);
     expect(optionWeights(w, looter, 'salvageSeen', buggy.id, null)).toEqual(optionWeights(w, looter, 'salvageSeen', 'wreck-road', null));
   });

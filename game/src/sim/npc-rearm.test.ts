@@ -5,7 +5,8 @@ import { RULES } from '../data/rules';
 import { advanceNpcKnockouts, isDefeated } from './defeat';
 import { corePart, mountedParts } from './grid';
 import { fitToHunt } from './npc-decisions';
-import { resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
+import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { watchStalls } from './npc-watchdog';
 import { liesUp } from './npc-service';
 import { getResources } from './resources';
 import { siteGates, sitePads } from './sites';
@@ -19,12 +20,10 @@ import { dist, type Vec } from './vec';
 const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
 const gate = siteGates(kiln)[0];
 
-// A point `d` tiles out from the kiln gate, away from the camp. One tile out stands on its pad.
 function outside(d: number): Vec {
   return { x: gate.x + ((gate.x - kiln.pos.x) / kiln.radius) * d, y: gate.y + ((gate.y - kiln.pos.y) / kiln.radius) * d };
 }
 
-// A raider buggy far from the player, out on the road from the kiln, with a gun and armor plates.
 function raider(): { w: World; v: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine', 'plates'], outside(20));
@@ -35,7 +34,6 @@ function raider(): { w: World; v: Vehicle } {
 const gunsOf = (v: Vehicle): PartInstance[] => mountedParts(v, 'weapon');
 const armorOf = (v: Vehicle): PartInstance[] => mountedParts(v, 'armor');
 
-// Breaks every gun and wears the armor down, leaving the cab, engine and drive sound.
 function crippleGear(v: Vehicle): void {
   for (const gun of gunsOf(v)) gun.hp = 0;
   for (const plate of armorOf(v)) plate.hp = Math.floor(maxHp(plate) * 0.2);
@@ -61,12 +59,12 @@ describe('a raider unfit to hunt', () => {
   it('is repaired at camp, guns and armor included, when it can pay, and then may raid again', () => {
     const { w, v } = raider();
     crippleGear(v);
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
     parkAtCamp(v);
     resolveNpcActivities(w);
     for (const part of [...gunsOf(v), ...armorOf(v)]) expect(part.hp).toBe(maxHp(part));
-    expect(getResources(w, v).money).toBeLessThan(5000);
+    expect(getResources(w, v).money).toBeLessThan(166667);
     expect(topGoal(v)).toBeNull();
     expect(fitToHunt(w, v)).toBe(true);
     forceOption('idle', 'raid');
@@ -74,13 +72,11 @@ describe('a raider unfit to hunt', () => {
   });
 });
 
-// The turns a buggy lies up: its camp's refill time.
 const RAIDER_LIE_UP = NPCS.buggy.cap * NPCS.buggy.interval;
 
 const itemIds = (v: Vehicle): string[] => v.items.map((it) => it.id).sort();
 const goalKinds = (v: Vehicle): string[] => v.brain!.goals.map((g) => g.kind);
 
-// One NPC turn without physics: the driver thinks, works on its goal, and the stall watchdog runs.
 function npcTurn(w: World, v: Vehicle): void {
   w.events = [];
   w.turn++;
@@ -90,7 +86,6 @@ function npcTurn(w: World, v: Vehicle): void {
   expect(w.events.filter((e) => e.t === 'stall')).toEqual([]);
 }
 
-// Runs NPC turns up to the turn before `turn`, checking each one. The driver keeps its items and never raids or patrols.
 function lieUpUntil(w: World, v: Vehicle, turn: number): void {
   const items = itemIds(v);
   while (w.turn < turn - 1) {
@@ -102,7 +97,6 @@ function lieUpUntil(w: World, v: Vehicle, turn: number): void {
   }
 }
 
-// Drives the raider to its camp for service and lets the camp serve it.
 function serveAtCamp(w: World, v: Vehicle): void {
   expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
   parkAtCamp(v);
@@ -130,7 +124,7 @@ describe('the lie-up for fresh gear', () => {
   it('holds a raider with junk guns that camp service cannot rebuild', () => {
     const { w, v } = raider();
     for (const gun of gunsOf(v)) { gun.wear = 5; gun.hp = 0; }
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     serveAtCamp(w, v);
     for (const plate of armorOf(v)) expect(plate.hp).toBe(maxHp(plate));
     expect(topGoal(v)).toMatchObject({ kind: 'rearm', until: w.turn + RAIDER_LIE_UP });
@@ -144,7 +138,7 @@ describe('the lie-up for fresh gear', () => {
   it('ends without fresh gear once the driver is fit again', () => {
     const { w, v } = raider();
     getResources(w, v).health = RULES.maxHealth * 0.4;
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     serveAtCamp(w, v);
     expect(topGoal(v)?.kind).toBe('rearm');
     const items = itemIds(v);
@@ -196,7 +190,6 @@ describe('the lie-up for fresh gear', () => {
 });
 
 describe('a defeated raider', () => {
-  // A raider buggy that woke from a knockout far from the player, stripped of its gun.
   function retreating(): { w: World; v: Vehicle } {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 150, y: 150 });
@@ -246,7 +239,6 @@ describe('a defeated raider', () => {
     let minted = 0;
     let held = new Set(itemIds(v));
     for (let turn = 0; turn < RAIDER_LIE_UP * 2; turn++) {
-      // The player knocks it out and strips it again the moment it is back on its feet.
       if (!isDefeated(v) && topGoal(v)?.kind !== 'rearm') strip(v);
       npcTurn(w, v);
       if (itemIds(v).some((id) => !held.has(id))) minted++;

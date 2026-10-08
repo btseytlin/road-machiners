@@ -3,34 +3,32 @@ import { join } from 'node:path';
 import { withLockSync } from './lock';
 import { transcriptUsage } from './transcript';
 import { archiveTranscripts } from './transcript-archive';
-import type { JobStage, Route, TokenPrice } from './types';
+import type { CardFlow, CardStep } from './card-events';
+import type { Column, JobStage, Route, TokenPrice } from './types';
 import { reportAttempt, type Observation } from './observability';
 
-// One agent run: its model, its cost in dollars and its run time.
 export type ModelUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
-// `fromTranscript` marks a run cut off before its result event, priced from its session transcript at list prices.
 export type AgentUsage = { model: string; costUsd: number; minutes: number; modelUsage?: ModelUsage[]; sessionId?: string; resumed?: boolean; fromTranscript?: true };
-// The agent run a job has going. Its file outlives a killed job process, so whoever ends the job prices the run from its transcript.
 export type OpenRun = { model: string; projects: string; sessionId: string; resumed: boolean; startedAt: string };
-export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout';
+export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout' | 'stopped' | 'held';
+export const isFailedOutcome = (outcome: JobOutcome): boolean => outcome !== 'done' && outcome !== 'held';
 
-// One line per ended job and per routed committee reply. The waste review derives queue wait and reruns from these lines.
 export type LedgerLine =
   | Observation
-  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; retryOf?: string | null }
+  | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[]; peakGb?: number; retryOf?: string | null }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
-  | { kind: 'post'; id: number; channel?: string; text: string; at: string };
+  | { kind: 'post'; id: number; channel?: string; text: string; at: string }
+  | { kind: 'control'; action: string; issue: number | null; by: string; reason: string; at: string }
+  | { kind: 'card'; issue: number; step: CardStep; to: Column; at: string; flow?: CardFlow };
 
-// An append is one small write, so a writer that waits this long found a stuck lock.
 const LEDGER_LOCK_MS = 30_000;
 
 const ledgerPath = (home: string): string => join(home, 'ledger.jsonl');
 const usagePath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.jsonl`);
-const openRunPath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.run.json`);
-// A run with no issue session keeps its transcript here, so a cut-off run can still be priced.
+const peakPath = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.peak`);
+const openRunPath =(home: string, jobId: string): string => join(home, 'usage', `${jobId}.run.json`);
 export const runProjectsDir = (home: string, jobId: string): string => join(home, 'usage', `${jobId}.projects`);
 
-// Claude's stream-json output ends with a `result` event that holds the run's cost and duration.
 function readResult(stdout: string): Record<string, unknown> & { total_cost_usd: number; duration_ms: number } {
   const result = stdout.trimEnd().split('\n').reverse().map(parseLine).find((event) => event?.type === 'result' && !event.parent_tool_use_id);
   if (result === undefined) throw new Error('The agent output has no result event, so its cost is unknown');
@@ -72,7 +70,6 @@ function parseLine(line: string): Record<string, unknown> | undefined {
   }
 }
 
-// A job's agents run one after another in its own process, so its usage file has one writer.
 export function appendUsage(home: string, jobId: string, usage: AgentUsage): void {
   mkdirSync(join(home, 'usage'), { recursive: true });
   appendFileSync(usagePath(home, jobId), `${JSON.stringify(usage)}\n`);
@@ -83,13 +80,11 @@ export function openRun(home: string, jobId: string, run: OpenRun): void {
   writeFileSync(openRunPath(home, jobId), JSON.stringify(run));
 }
 
-// The run reported its own cost.
 export function closeRun(home: string, jobId: string, usage: AgentUsage): void {
   appendUsage(home, jobId, usage);
   forgetRun(home, jobId);
 }
 
-// A run with no result event, or one whose job process was killed, is priced from what its transcript recorded. A run that saved no transcript spent nothing that can be counted.
 export function closeRunFromTranscript(home: string, jobId: string, prices: Record<string, TokenPrice>, endedAt: Date): void {
   const path = openRunPath(home, jobId);
   if (!existsSync(path)) return;
@@ -109,7 +104,21 @@ function forgetRun(home: string, jobId: string): void {
   rmSync(runProjectsDir(home, jobId), { recursive: true, force: true });
 }
 
-// Returns every agent run the job recorded and removes the file, so the job's ledger line holds them once.
+export function recordPeak(home: string, jobId: string, gb: number): void {
+  mkdirSync(join(home, 'usage'), { recursive: true });
+  const path = peakPath(home, jobId);
+  const before = existsSync(path) ? Number(readFileSync(path, 'utf8')) : 0;
+  writeFileSync(path, String(Math.max(before, gb)));
+}
+
+function takePeak(home: string, jobId: string): number | undefined {
+  const path = peakPath(home, jobId);
+  if (!existsSync(path)) return undefined;
+  const gb = Number(readFileSync(path, 'utf8'));
+  rmSync(path);
+  return gb;
+}
+
 export function takeUsage(home: string, jobId: string): AgentUsage[] {
   const path = usagePath(home, jobId);
   if (!existsSync(path)) return [];
@@ -118,21 +127,23 @@ export function takeUsage(home: string, jobId: string): AgentUsage[] {
   return runs;
 }
 
-// The ledger line of a job that ended, with the agent runs it recorded. A job run by hand has no id and records no usage.
-// A run still open when the job ends was cut off, so it is priced from its transcript before the issue's sessions go.
 export function recordJob(home: string, prices: Record<string, TokenPrice>, endedAt: Date, job: { id: string | null; stage: JobStage; issue: number | null; startedAt: string }, outcome: JobOutcome): void {
-  const id = job.id ?? 'hand-run';
-  if (job.id !== null) closeRunFromTranscript(home, job.id, prices, endedAt);
-  const agents = job.id === null ? [] : takeUsage(home, job.id);
-  const retryOf = job.id === null ? undefined : reportAttempt(home, { ...job, id }, outcome, endedAt);
-  appendLedger(home, { kind: 'job', id, stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, agents, ...(retryOf === undefined ? {} : { retryOf }) });
+  const records = job.id === null ? { agents: [] } : takeJobRecords(home, prices, endedAt, { ...job, id: job.id }, outcome);
+  appendLedger(home, { kind: 'job', id: job.id ?? 'hand-run', stage: job.stage, issue: job.issue, startedAt: job.startedAt, endedAt: endedAt.toISOString(), outcome, ...records });
+}
+
+function takeJobRecords(home: string, prices: Record<string, TokenPrice>, endedAt: Date, job: { id: string; stage: JobStage; issue: number | null; startedAt: string }, outcome: JobOutcome): { agents: AgentUsage[]; peakGb?: number; retryOf?: string | null } {
+  closeRunFromTranscript(home, job.id, prices, endedAt);
+  const agents = takeUsage(home, job.id);
+  const peakGb = takePeak(home, job.id);
+  const retryOf = reportAttempt(home, job, outcome, endedAt);
+  return { agents, ...(peakGb === undefined ? {} : { peakGb }), ...(retryOf === undefined ? {} : { retryOf }) };
 }
 
 export function appendLedger(home: string, line: LedgerLine): void {
   withLockSync(join(home, 'ledger.lock'), LEDGER_LOCK_MS, () => appendFileSync(ledgerPath(home), `${JSON.stringify(line)}\n`));
 }
 
-// The lines that ended at or after `since`.
 export function readLedger(home: string, since: Date): LedgerLine[] {
   const path = ledgerPath(home);
   if (!existsSync(path)) return [];

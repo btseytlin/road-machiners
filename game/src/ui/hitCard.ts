@@ -5,6 +5,7 @@ import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
+import { shutDownTurnsLeft } from '../sim/utility';
 import { DEG } from '../sim/vec';
 import { concat, list, t, type Msg } from '../text/msg';
 import { partName, vehicleTitle } from '../text/names';
@@ -13,7 +14,7 @@ import { ammoText, blockText } from './weapons';
 
 // `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
 export type HitRow = { label: Msg; odds: HitOdds | null; text: Msg; cause: Msg | null; detail: Msg | null };
-export type HitCardData = { name: Msg; mine: HitRow[]; theirs: HitRow[] };
+export type HitCardData = { name: Msg; shutDown: Msg | null; mine: HitRow[]; theirs: HitRow[] };
 
 function deg(r: number): number {
   return Math.round((Math.abs(r) / DEG) * 10) / 10;
@@ -22,14 +23,13 @@ function deg(r: number): number {
 // "18 m, shows 4.1 m wide, scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
 function detailLine(o: HitOdds): Msg {
-  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'skill'], [o.causes.weather, 'weather'], [o.causes.still, 'still']] as const)
+  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'skill'], [o.causes.weather, 'weather'], [o.causes.smoke, 'smoke'], [o.causes.still, 'still']] as const)
     .filter(([r]) => deg(r) !== 0)
     .map(([r, name]) => t(r < 0 ? 'hit.causeLess' : 'hit.causeMore', { deg: deg(r), cause: t(`hit.cause.${name}`) }));
   const head = t('hit.detail', { pct: Math.round(o.chance * 100), m: Math.round(o.distance), wide: o.width, deg: deg(o.causes.weapon) });
   return concat([head, ...extra]);
 }
 
-// A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.
 const MAIN_SHARE = 0.25;
 const MAX_REASONS = 2;
 
@@ -43,9 +43,13 @@ function reasonLine(o: HitOdds, aim: Aim): Msg {
     .sort((a, b) => b[0] - a[0])
     .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
     .map(([, name]) => t(`hit.reason.${name}`));
-  if (covered) reasons.unshift(t('hit.reason.covered'));
-  if (deg(c.still) !== 0) reasons.unshift(t('hit.reason.parked'));
+  reasons.unshift(...leadReasons(c, covered));
   return reasons.length > 0 ? list(reasons) : t('hit.reason.clear');
+}
+
+function leadReasons(c: HitOdds['causes'], covered: boolean): Msg[] {
+  const lead: [boolean, Msg][] = [[deg(c.still) !== 0, t('hit.reason.parked')], [c.smoke > 0, t('hit.reason.smoke')], [covered, t('hit.reason.covered')]];
+  return lead.filter(([on]) => on).map(([, msg]) => msg);
 }
 
 function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: Msg): HitRow {
@@ -56,20 +60,20 @@ function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle,
   return { label, odds, text: t('hit.chance', { pct: Math.round(odds.damageChance * 100) }), cause: reasonLine(odds, aim), detail: detailLine(odds) };
 }
 
-// A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.
 function aimAt(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): Aim {
   const order = shooter.weaponOrders[mw.part.id];
   return order && order.targetId === target.id ? order.aim : 'body';
 }
 
-// The card for the hovered truck, or null for my own truck.
 export function hitCardRows(world: World, hoveredId: string): HitCardData | null {
   const me = playerVehicle(world);
   if (hoveredId === me.id) return null;
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
+  const left = shutDownTurnsLeft(world, it);
   return {
     name: vehicleTitle(world, it),
+    shutDown: left > 0 ? t('hit.shutDown', { n: left }) : null,
     mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), t('hit.slot', { n: i + 1, gun: partName(mw.def.id) }))),
     theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), partName(mw.def.id))),
   };
@@ -83,7 +87,6 @@ export class HitCard {
     container.append(this.root);
   }
 
-  // Combat details share the fixed vehicle inspection panel.
   render(world: World, hoveredId: string | null): void {
     const card = hoveredId === null ? null : hitCardRows(world, hoveredId);
     if (!card) {
@@ -97,7 +100,8 @@ export class HitCard {
         ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? undefined }, r.cause)] : []),
       ])),
     ];
-    this.root.replaceChildren(...section(t('hit.mine'), card.mine), ...section(t('hit.theirs'), card.theirs));
+    const shutDown = card.shutDown ? [el('div', { class: 'hc-cause' }, card.shutDown)] : [];
+    this.root.replaceChildren(...shutDown, ...section(t('hit.mine'), card.mine), ...section(t('hit.theirs'), card.theirs));
   }
 
   hide(): void {

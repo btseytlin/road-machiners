@@ -8,14 +8,14 @@ import { lineKey } from '../text/names';
 import { entryText, schemaOf } from '../text/resolve';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, onAir, radioSpeakers, raiseCalls } from './dialogue';
+import { callVehicle, callTrucks, chooseOption, currentOptions, endCallIfOut, hangUp, honk, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
 import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
 import { addGoods } from './inventory';
-import { hasCargo } from './salvage';
+import { hasCargo, emptyHidden } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, aidData, endState, stateOf } from './states';
@@ -189,7 +189,6 @@ describe('directions', () => {
 });
 
 describe('NPC calls', () => {
-  // Directions stands in for a topic NPCs raise once, so the raise rules run without real raised content.
   const original = { ...TOPICS.directions };
   beforeEach(() => Object.assign(TOPICS.directions, { once: true, raise: { when: ['knowsTown'], priority: 1, duringFeud: false, duringCombat: false }, hangUp: ['settleRefused'] } satisfies Partial<Topic>));
   afterEach(() => Object.assign(TOPICS.directions, original));
@@ -219,7 +218,6 @@ describe('NPC calls', () => {
     expect(w.player.call).toBeNull();
   });
 
-  // A raider with no brain in the player's sight. It puts the player in combat only when it attacks.
   function withRaiderInSight(w: World, attacking = true): void {
     const raider = addVehicle(w, 'raiders', 'scout', [], { x: 26, y: 30 });
     refreshVision(w);
@@ -252,7 +250,7 @@ describe('NPC calls', () => {
 
   it('only the fight topics call during combat', () => {
     const fight = Object.values(TOPICS).filter((t) => t.raise?.duringCombat).map((t) => t.id);
-    expect(fight.sort()).toEqual(['demand', 'giveUp', 'mercyPlea', 'surrender', 'truceOffer']);
+    expect(fight.sort()).toEqual(['demand', 'giveUp', 'mercyPlea', 'spillClaim', 'surrender', 'truceOffer']);
   });
 
   it('an NPC that does not see the player stays quiet', () => {
@@ -366,8 +364,6 @@ describe('calls during a turn', () => {
 });
 
 describe('demand', () => {
-  // A raider with a machine gun spots a player who carries goods. It always picks the fight, and calls first unless
-  // told to open fire unwarned.
   function ambush(mugging: 'demand' | 'attack' = 'demand'): { w: World; raider: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -403,7 +399,6 @@ describe('demand', () => {
 
   it('a raider that picks attack opens fire with no call', () => {
     const { w: start, raider } = ambush('attack');
-    // Demand keeps its minimum chance, so take the first seed that rolls attack.
     const seed = Array.from({ length: 20 }, (_, i) => i).find((i) => endTurn({ ...start, rngState: i }, testDrive).player.call === null);
     if (seed === undefined) throw new Error('No seed in 20 attacks unwarned');
     let w = endTurn({ ...start, rngState: seed }, testDrive);
@@ -455,7 +450,6 @@ describe('demand', () => {
     let shots = 0;
     for (let i = 0; i < 8; i++) {
       w = endTurn(w, testDrive);
-      // A raider that shot the player to a standstill may offer surrender. The demand itself never returns.
       expect(w.player.call?.topic).not.toBe('demand');
       if (w.player.call) w = hangUp(w);
       shots += shotsBetween(w, raider.id, w.player.vehicleId).length;
@@ -482,10 +476,9 @@ describe('warn off', () => {
   const WARN = en(TOPICS.warnOff.ask!.say);
   const asks = (w: World, npcId: string) => currentOptions(callVehicle(w, npcId)).map((o) => en(o.line));
 
-  // A scavenger parked at a road wreck at `at` with a scavenge goal in the act phase. With `search` it searches it.
   function looterAt(at: { x: number; y: number }, search: boolean): { w: World; npc: Vehicle; wreckId: string } {
     const w = emptyWorld({ x: 30, y: 30 });
-    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: at.x + 1, y: at.y });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
@@ -609,7 +602,6 @@ describe('call practice', () => {
 describe('market ears', () => {
   const askText = en(TOPICS.marketNews.ask!.say);
 
-  // The trader did business at Nose this turn, at its standing prices.
   function backFromNose(w: World, npc: Vehicle): void {
     remember(w, npc, { kind: 'prices', shop: 'nose', pressure: { ...w.shops.nose.pressure } });
   }
@@ -669,7 +661,6 @@ describe('trading tips', () => {
     return PREPARES.tradeTip(w, npc).tip;
   }
 
-  // Pressure that puts the good's standing price at `ratio` of its value.
   function pressureFor(shop: string, good: string, ratio: number): number {
     return (ratio * goodValue(good)) / goodBasePrice(shop, good) - 1;
   }
@@ -764,7 +755,7 @@ describe('rumor mill', () => {
   }
 
   function wreck(id: string, pos: { x: number; y: number }): SalvageStock {
-    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [] };
+    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() };
   }
 
   it('names the nearest wreck to the driver and marks it rumored', () => {
@@ -894,10 +885,9 @@ describe('fuel and supply aid', () => {
   const offerText = en(TOPICS.offerAid.ask!.say);
   const askText = en(TOPICS.askAid.ask!.say);
 
-  // A driver with full tanks and 500 money beside the player, both at peace.
   function aidWorld(templateId = 'trader', faction: Vehicle['faction'] = 'traders'): { w: World; npc: Vehicle } {
     const { w, npc } = withNpc(templateId, faction);
-    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 500, health: 100 };
+    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 16667, health: 100 };
     return { w, npc };
   }
 
@@ -1028,14 +1018,14 @@ describe('fuel and supply aid', () => {
 });
 
 describe('trucks on the radio', () => {
-  it('lists both trucks of an open call, and the player while the beacon is on', () => {
+  it('lists both trucks of an open call, and none with only the beacon on', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    expect(onAir(w)).toEqual([]);
+    expect(callTrucks(w)).toEqual([]);
     const open = callVehicle(w, npc.id);
-    expect(onAir(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
+    expect(callTrucks(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
     const beacon = structuredClone(w);
     beacon.player.beacon = true;
-    expect(onAir(beacon)).toEqual([w.player.vehicleId]);
+    expect(callTrucks(beacon)).toEqual([]);
   });
 
   it('reads the radio talk events and nothing else', () => {
@@ -1062,14 +1052,12 @@ describe('trucks on the radio', () => {
 });
 
 describe('robber truce', () => {
-  // A scumbag that opened fire on the player's cargo truck: a robbery feud, and no demand call.
   function holdup(robbery = true): { w: World; robber: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     addGoods(w, playerVehicle(w), 'scrap', 2);
     const robber = addVehicle(w, 'scavengers', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
     robber.brain = npcBrain('scavenger', robber.pos, ['scavenger', 'scumbag']);
-    // Two mates make the robber's group clearly outgun the player, so the perceived danger never tips it to peace.
     for (const y of [28, 32]) addVehicle(w, 'scavengers', 'buggy', ['stockEngine', 'mg'], { x: 40, y }, Math.PI).brain = npcBrain('scavenger', { x: 40, y }, ['scavenger']);
     addState(w, 'feud', robber.id, w.player.vehicleId, { kind: 'feud', robbery });
     addState(w, 'feud', w.player.vehicleId, robber.id, { kind: 'feud', robbery: false });

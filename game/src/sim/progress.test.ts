@@ -121,7 +121,7 @@ describe('xpFor', () => {
 
   it('splits a gain that crosses the daily cap', () => {
     const near = { ...fresh, xpToday: { ...fresh.xpToday, social: XP_RULES.dailyCap - 10 } };
-    const units = 100 / XP_SOURCES.profit.weight; // 100 XP at the full rate
+    const units = 100 / XP_SOURCES.profit.weight;
     expect(xpFor(near, 'profit', units, null, 'bowl:salt', 1)).toBeCloseTo(10 + 90 * XP_RULES.overCap);
   });
 

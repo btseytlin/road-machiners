@@ -2,16 +2,15 @@
 // and the report of what the migration kept, refunded and lost.
 
 import type { CarryReport } from '../sim/world';
-import { bindAttr, language, say } from '../text/language';
+import { bindAttr, language } from '../text/language';
 import { LanguageSwitch } from './language-switch';
 import { list, t, verbatim, type Msg } from '../text/msg';
-import { goodName, partName } from '../text/names';
+import { goodName, partName, settingName } from '../text/names';
+import { WORLD_SETTINGS } from '../data/modes';
 import type { SaveError } from '../three/save';
-import { el, panel } from './dom';
-
-export type SaveFate = 'migrate' | 'new';
-
-export const CONFIRM_NEW_GAME = t('save.confirmNew');
+import { download, el, panel } from './dom';
+import { openNewGame, type NewGameActions } from './new-game';
+import { moneyMsg } from './units';
 
 // Why a save does not load, in words.
 export function saveErrorText(error: SaveError): Msg {
@@ -21,16 +20,12 @@ export function saveErrorText(error: SaveError): Msg {
   return t(`save.error.${code}`, error.format);
 }
 
-// Shows the choice and resolves with the player's pick. New game asks first, and a no leaves the screen up.
-export function chooseSaveFate(reason: Msg, canMigrate: boolean): Promise<SaveFate> {
+export function chooseSaveFate(reason: Msg, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel(t('save.needsMigrating'));
-    const done = (fate: SaveFate) => {
+    const migrate = () => {
       root.remove();
-      resolve(fate);
-    };
-    const confirmNew = () => {
-      if (window.confirm(say(CONFIRM_NEW_GAME))) done('new');
+      resolve();
     };
     root.append(
       el('div', {}, t('save.migrateExplain')),
@@ -38,15 +33,16 @@ export function chooseSaveFate(reason: Msg, canMigrate: boolean): Promise<SaveFa
       el(
         'div',
         { class: 'death-buttons' },
-        el('button', { onclick: () => done('migrate'), disabled: !canMigrate }, t('save.migrate')),
-        el('button', { onclick: confirmNew }, t('menu.newGame')),
+        el('button', { onclick: migrate, disabled: !canMigrate }, t('save.migrate')),
+        el('button', { onclick: () => openNewGame(newGame, () => {}) }, t('menu.newGame')),
+        el('button', { onclick: () => downloadSave(stored) }, t('save.download')),
       ),
     );
     if (!canMigrate) root.append(el('div', { class: 'dim' }, t('save.unreadable')));
+    root.append(el('div', { class: 'dim' }, t('save.reportBug')));
   });
 }
 
-// Shows what the migration did. Resolves when the player drives on.
 export function showCarryReport(report: CarryReport): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel(t('save.migrated'));
@@ -56,6 +52,10 @@ export function showCarryReport(report: CarryReport): Promise<void> {
       el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, t('save.driveOn'))),
     );
   });
+}
+
+function downloadSave(stored: unknown): void {
+  download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
 function savePanel(title: Msg): HTMLElement {
@@ -70,10 +70,11 @@ function savePanel(title: Msg): HTMLElement {
 
 // Lost ids are no longer in the game, so they have no words. They show as the ids the save held.
 function reportLines(report: CarryReport): Msg[] {
-  const sold = report.sold.map((s) => t('save.sold', { n: s.units, good: goodName(s.good), money: s.money }));
+  const sold = report.sold.map((s) => t('save.sold', { n: s.units, good: goodName(s.good), money: moneyMsg(s.money) }));
   return [
     ...(report.toGarage.length > 0 ? [t('save.toGarage', { parts: list(report.toGarage.map(partName)) })] : []),
     ...sold,
     ...(report.lost.length > 0 ? [t('save.lost', { ids: list(report.lost.map(verbatim)) })] : []),
+    ...report.settingsReset.map((id) => t('save.settingReset', { setting: settingName(id), pct: Math.round(WORLD_SETTINGS[id].default * 100) })),
   ];
 }

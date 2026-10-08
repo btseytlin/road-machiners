@@ -8,7 +8,7 @@ import type { SpeedRow } from "./hud-readout";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -20,36 +20,33 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimMarks } from "./weapons";
+import { aimLine, aimMarks, type AimState } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { kph } from "./units";
+import { kph, moneyMsg } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
-import { bindAttr, setText } from "../text/language";
+import { bindAttr, say, setText } from "../text/language";
 import { num, t, verbatim, type Msg } from "../text/msg";
-import { factionName, templateName, vehicleTitle } from "../text/names";
+import { factionName, setupText, templateName, vehicleTitle } from "../text/names";
 
-// The E key action. ready is false while the truck must stop first.
-// A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
-// target names what the action acts on, so the key runs the shown action and nothing re-decides it.
 export type ContextTarget =
-  | { kind: 'aid' }
-  | { kind: 'trade' }
+  | { kind: 'aid'; id: string }
+  | { kind: 'trade'; id: string }
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
   | { kind: 'stock'; id: string }
+  | { kind: 'loot'; id: string }
   | { kind: 'empty' };
 export type ContextAction = { label: Msg; ready: boolean; target: ContextTarget; hint?: Msg; combat?: number };
 
-// Identifies an action across renders, so a selection can stay on it.
 export function contextKey(target: ContextTarget): string {
   return 'id' in target ? `${target.kind}:${target.id}` : target.kind;
 }
@@ -69,7 +66,7 @@ type HudActions = {
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
   toggleHeadlights: () => void;
-  headlightsOn: () => boolean; // the live switch, since the HUD draws the world before the turn while it plays
+  headlightsOn: () => boolean;
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -78,17 +75,14 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
+  aimBody: (vehicleId: string) => void;
+  aimState: (vehicleId: string) => AimState;
 };
-// The lines of the ? guide, in order.
-const GUIDE = ["hud.guide.drive", "hud.guide.space", "hud.guide.manual", "hud.guide.pads", "hud.guide.radio", "hud.guide.combat", "hud.guide.keys", "hud.guide.camera"] as const;
-
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
 
 const TOAST_MS = 3500;
 
-// The HUD's max-speed readout and its breakdown tooltip. It is built once and the Hud never detaches it, so a pointer
-// hover or keyboard focus survives the per-frame HUD refresh. CSS alone opens the tooltip on :hover and :focus-within.
 export class MaxSpeedView {
   private readonly text = el('span', { class: 'speed-max-text' });
   private readonly rows = el('div', { class: 'speed-rows' });
@@ -131,14 +125,11 @@ export class Hud {
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
-  private help = panel("help", topLeft());
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
-  // Stands on top of the part condition panel.
   private stranded = panel("stranded", this.condition.root);
-  // Shows only while a pan has left the truck.
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
@@ -147,8 +138,6 @@ export class Hud {
 
   private readonly dialogue: DialoguePanel;
 
-  // The hover panel wins the right column: the radio steps away while the shown hover panel overlaps it. Visibility
-  // keeps the radio's box, so the step-away never changes what it measures.
   private keepRadioClear = (): void => {
     const shown = this.info.style.display !== "none";
     const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
@@ -161,7 +150,6 @@ export class Hud {
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
-    // Any change in the hover panel's size or the dock's, or a layout switch, rechecks the radio.
     const observer = new ResizeObserver(this.keepRadioClear);
     observer.observe(this.info);
     observer.observe(rightDock());
@@ -175,12 +163,7 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    const guide = el(
-      "details",
-      {},
-      el("summary", { title: t("hud.guideTitle") }, t("hud.guideMark")),
-    );
-    this.help.append(guide);
+    const setup = say(setupText(this.actions.dialogue.world().setup));
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: Msg) =>
       el(
@@ -199,19 +182,14 @@ export class Hud {
         { title: t("hud.feedbackTitle"), "aria-label": t("hud.feedbackTitle") },
         t("hud.feedbackMark"),
       ),
-      feedbackLink(bugReportUrl(versionLabel()), t("hud.reportBug")),
+      feedbackLink(bugReportUrl(`${versionLabel()}, ${setup}`), t("hud.reportBug")),
       feedbackLink(featureRequestUrl(), t("hud.requestFeature")),
     );
     this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
       if (e.code !== "Escape") return;
-      guide.removeAttribute("open");
       feedbackMenu.removeAttribute("open");
     });
-    guide.append(
-      ...GUIDE.map((key) => el("div", {}, t(key))),
-      el("div", { class: "version" }, verbatim(versionLabel())),
-    );
   }
 
   private toggleCameraMode(): void {
@@ -250,8 +228,6 @@ export class Hud {
     );
   }
 
-  // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
-  // Work shows its progress instead, except work that blocks no job, which yields to any action.
   renderAction(
     action: ContextAction | null,
     count: number,
@@ -311,8 +287,6 @@ export class Hud {
     );
   }
 
-  // The rescue prompts: an open radio call and the knockout banner or tow in the middle of the screen,
-  // and the beacon switch of a stranded truck above the part condition panel.
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
@@ -328,7 +302,7 @@ export class Hud {
     this.rescue.replaceChildren(
       el("h3", {}, t("hud.underTow")),
       el("div", {}, t("hud.towsYou", { who: r.tower, town: r.town })),
-      el("div", { class: "dim" }, t("hud.towFee", { fee: moneyLabel(r.fee) })),
+      el("div", { class: "dim" }, t("hud.towFee", { fee: moneyMsg(r.fee) })),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -357,7 +331,6 @@ export class Hud {
     );
   }
 
-  // Compact list of held contracts and their due times. Hidden while the player holds none.
   private renderContracts(w: World): void {
     if (w.player.contracts.length === 0) {
       this.contracts.style.display = "none";
@@ -370,14 +343,14 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          t("hud.contractLine", { what: contractSummary(c), due: contractDue(c) }),
+          t("hud.contractLine", { what: contractSummary(c), due: heldContractDue(c) }),
         ),
       ),
     );
   }
 
-  // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const od = overdriveSwitch(w);
     const headlights = createSwitch({
       on: t("hud.lightsOn"),
       off: t("hud.lightsOff"),
@@ -389,10 +362,10 @@ export class Hud {
     const overdrive = createSwitch({
       on: t("hud.overdrive"),
       off: t("hud.normal"),
-      checked: w.player.overdrive,
+      checked: od.checked,
       key: "O",
-      disabled: busy,
-      title: t("hud.overdriveTitle"),
+      disabled: busy || od.blocked,
+      title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
     const douse = el(
@@ -408,7 +381,6 @@ export class Hud {
     return [headlights, overdrive, douse];
   }
 
-  // The character button, marked while a perk pair waits for a pick or the XP pool pays for a rank.
   private characterButton(w: World, busy: boolean): HTMLElement {
     const marked = pendingPerkPairs(w).length > 0 || affordableRanks(w).length > 0;
     return el(
@@ -430,7 +402,6 @@ export class Hud {
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
     this.tips.update(w, this.actions.autoTravel());
-    // The panel keeps its slots. Only their contents change, so the max-speed node keeps its hover and focus.
     if (!this.top.firstChild) this.top.append(this.clockSlot, this.speedSlot, this.readoutSlot, this.actionSlot);
     this.renderClock(readout.clock);
     this.renderSpeedometer(readout, busy);
@@ -527,7 +498,6 @@ export class Hud {
     );
   }
 
-  // Sends a horn pressed during the turn that just ended.
   flushHorn(): void {
     this.dialogue.flushHorn();
   }
@@ -544,15 +514,26 @@ export class Hud {
     this.radio.hear(w);
   }
 
+  logTexts(): string[] {
+    return this.log.texts;
+  }
+
   // A log line from the UI itself, not from a sim event.
   note(w: World, text: Msg, cls: string): void {
     this.log.add(w.turn, [{ text, cls }]);
   }
 
-  // Parts of another truck take clicks that aim the guns.
   private aimOf(w: World, v: Vehicle): ConditionAim | undefined {
     if (v.id === playerVehicle(w).id) return undefined;
+    if (this.actions.aimState(v.id).locked) return undefined;
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
+  }
+
+  // The aim line above the diagram, for another truck only.
+  private aimControls(w: World, v: Vehicle): HTMLElement[] {
+    if (v.id === playerVehicle(w).id) return [];
+    const line = aimLine(this.actions.aimState(v.id), () => this.actions.aimBody(v.id));
+    return line ? [line] : [];
   }
 
   showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
@@ -567,8 +548,8 @@ export class Hud {
       el("div", { class: hostile ? "bad" : "dim" }, stanceText(v, hostile)),
       el("div", {}, t("hud.speed", { n: kph(v.speed) })),
       ...npcLines(w, v),
+      ...this.aimControls(w, v),
       this.inspected.root,
-      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, t("hud.aimHint"))] : []),
     );
   }
 }
@@ -592,8 +573,6 @@ function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// The NPC's traits, cargo and mark once perks show them, and the states it holds toward the player. The player's own
-// truck has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
   const traits = formatNpcTraits(w, v);
@@ -609,8 +588,6 @@ function npcLines(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// Work that blocks no job, like an auto patch or a patch deal, gives way to any usable context action, so the
-// player can still act.
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {
   const blocks = work?.from === "job" && !isAutoPatch(work.job);
   return action && !action.hint && !blocks ? null : work;

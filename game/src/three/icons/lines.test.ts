@@ -26,9 +26,9 @@ describe('icon masks', () => {
 
     const band = edgeBand(square, 2);
 
-    expect(band.bits[15 * 30 + 3]).toBe(1); // outside the left edge
-    expect(band.bits[15 * 30 + 6]).toBe(1); // inside the left edge
-    expect(band.bits[15 * 30 + 15]).toBe(0); // the middle
+    expect(band.bits[15 * 30 + 3]).toBe(1);
+    expect(band.bits[15 * 30 + 6]).toBe(1);
+    expect(band.bits[15 * 30 + 15]).toBe(0);
   });
 
   it('thicken a point to a disc', () => {

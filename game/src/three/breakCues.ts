@@ -5,7 +5,7 @@
 import type { GameEvent, GridItem, ShotRound } from "../sim/types";
 
 export type PartBreak = { vehicle: string; part: string };
-export type ShotLike = Extract<GameEvent, { t: "shot" | "guardShot" }>;
+export type ShotLike = Extract<GameEvent, { t: "shot" }>;
 export type BreakRound = { brk: PartBreak; owner: ShotLike | null; round: number | null };
 
 const damageTo = (r: ShotRound, brk: PartBreak): number => {
@@ -13,15 +13,15 @@ const damageTo = (r: ShotRound, brk: PartBreak): number => {
   return hits.filter((h) => h.part === brk.part).reduce((sum, h) => sum + h.damage, 0);
 };
 
-// Pairs each partDisabled with the first shot, guardShot or collision after it, since the sim pushes the owning event
-// once its damage is dealt. For a shot the round is the last that dealt positive damage to the part.
+const DAMAGING = new Set<GameEvent["t"]>(["shot", "collision", "claymore", "claymoreCookOff", "caltrops", "lineTorn"]);
+
 export function breakRounds(events: GameEvent[]): BreakRound[] {
   const out: BreakRound[] = [];
   events.forEach((e, i) => {
     if (e.t !== "partDisabled") return;
     const brk = { vehicle: e.vehicle, part: e.part };
-    const owner = events.slice(i + 1).find((x) => x.t === "shot" || x.t === "guardShot" || x.t === "collision");
-    if (!owner || owner.t === "collision") return void out.push({ brk, owner: null, round: null });
+    const owner = events.slice(i + 1).find((x) => DAMAGING.has(x.t));
+    if (!owner || owner.t !== "shot") return void out.push({ brk, owner: null, round: null });
     const round = owner.rounds.map((r) => damageTo(r, brk) > 0).lastIndexOf(true);
     if (round < 0) throw new Error(`Part ${brk.part} of ${brk.vehicle} was disabled but no round of the following ${owner.t} damaged it`);
     out.push({ brk, owner, round });
@@ -29,7 +29,6 @@ export function breakRounds(events: GameEvent[]): BreakRound[] {
   return out;
 }
 
-// Hands out each break of a turn once.
 export class BreakCues {
   private readonly pending: BreakRound[];
   private readonly played = new Map<string, Set<string>>();
@@ -38,17 +37,14 @@ export class BreakCues {
     this.pending = breakRounds(events);
   }
 
-  // The unplayed breaks this round of this shot causes.
   ofRound(owner: ShotLike, round: number): PartBreak[] {
     return this.take((b) => b.owner === owner && b.round === round);
   }
 
-  // Every unplayed break.
   rest(): PartBreak[] {
     return this.take(() => true);
   }
 
-  // Ids of the parts of this vehicle that have played their break.
   shown(vehicleId: string): ReadonlySet<string> {
     return this.played.get(vehicleId) ?? new Set();
   }
@@ -65,7 +61,6 @@ export class BreakCues {
   }
 }
 
-// The before-turn items, where each part whose break has played takes its after-turn look at its drawn place.
 export function shownItems(before: GridItem[], after: GridItem[], shown: ReadonlySet<string>): GridItem[] {
   if (shown.size === 0) return before;
   return before.map((it) => {

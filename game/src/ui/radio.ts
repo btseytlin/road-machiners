@@ -31,7 +31,6 @@ const WEATHER_TOPICS: Record<WeatherEvent['kind'], Partial<Record<'started' | 'e
   storm: { started: 'stormStart', ended: 'stormEnd' },
 };
 
-// The clock calls in the order they come after midnight.
 const CLOCK_CALLS: { topic: RadioTopic; hour: number }[] = [
   { topic: 'midnight', hour: RADIO_HOURS.midnight },
   { topic: 'dawn', hour: TIME.sunrise },
@@ -74,12 +73,10 @@ export class RadioStation {
     if (this.queue.length === 0 && world.turn - this.lastAir >= RADIO.idleTurns) this.push('wisdom', {}, 'filler');
   }
 
-  // A load or a new game: the seed changed or the clock went back.
   private retuned(world: World, prev: number): boolean {
     return world.seed !== this.seed || world.turn < prev;
   }
 
-  // The best broadcast that is not stale, or null while the gap since the last one lasts.
   next(): Broadcast | null {
     if (this.turn === null) return null;
     const now = this.turn;
@@ -97,7 +94,6 @@ export class RadioStation {
     return null;
   }
 
-  // A new game, a load or a first world: everything on the boards counts as old, and J.J. says hello.
   private tuneIn(world: World): void {
     this.turn = world.turn;
     this.seed = world.seed;
@@ -122,7 +118,6 @@ export class RadioStation {
     this.push(topic, w.kind === 'storm' ? { place: placeOf(world, w.pos).words, heading: t(`radio.heading.${compass(w.vel)}`) } : {}, 'news');
   }
 
-  // A raider's robbery or knockout of another driver, never one touching the player.
   private raidNews(world: World, topic: RadioTopic, attackerId: string, victimId: string): void {
     const place = raidPlace(world, attackerId, victimId);
     if (place === null || this.recentlyHeard(place.key, world.turn)) return;
@@ -135,7 +130,6 @@ export class RadioStation {
     return heard !== undefined && turn - heard < RADIO.placeCooldownTurns;
   }
 
-  // The best paid contract posted since the last world, on a found board to a found place.
   private contractNews(world: World): void {
     const old = this.board;
     const fresh: Contract[] = [];
@@ -153,11 +147,9 @@ export class RadioStation {
     if (best) this.push(best.kind, contractVars(best), 'news');
   }
 
-  // The latest clock call crossed between two heard worlds.
   private timeCall(prevTurn: number, turn: number): void {
     const from = hoursOf(prevTurn);
     const to = hoursOf(turn);
-    // Calls fall on whole hours, so none lies between two times in the same hour.
     if (Math.floor(from) === Math.floor(to)) return;
     const latest = clockCalls(from, to).filter((c) => c.at > from && c.at <= to).at(-1);
     if (latest && this.random() < RADIO.clockChance) this.push(latest.topic, {}, 'time');
@@ -180,7 +172,6 @@ export class RadioStation {
   }
 }
 
-// Every clock call on the days from one hour count to another, in order.
 function clockCalls(from: number, to: number): { topic: RadioTopic; at: number }[] {
   const calls: { topic: RadioTopic; at: number }[] = [];
   for (let day = Math.floor(from / 24); day <= Math.floor(to / 24); day++) {
@@ -197,7 +188,6 @@ function raidPlace(world: World, attackerId: string, victimId: string): Place | 
   return placeOf(world, victim.pos);
 }
 
-// The queued broadcast to drop when full: the oldest of the lowest rank.
 function dropFirst(queue: Broadcast[]): Broadcast {
   for (const rank of [...RANKS].reverse()) {
     const oldest = queue.find((b) => b.rank === rank);
@@ -217,12 +207,10 @@ function contractVars(c: Contract): Slots {
   return { shop, target: templateName(c.template) };
 }
 
-// A vehicle can leave the world in the step that reported it. It then has no place to report.
 function vehicleIn(world: World, id: string): Vehicle | undefined {
   return world.vehicles.find((v) => v.id === id);
 }
 
-// Hours since the start of day 1.
 function hoursOf(turn: number): number {
   const { day, hour } = clockOf(turn);
   return (day - 1) * 24 + hour;
@@ -246,18 +234,14 @@ function compass(v: Vec): Direction {
   return DIRECTIONS[(Math.round(turns * 8) + 8) % 8];
 }
 
-// The start of a broadcast shown after some real time of typing.
 export function revealed(text: string, elapsedMs: number, charsPerSecond: number): string {
   return text.slice(0, Math.max(0, Math.floor((elapsedMs / 1000) * charsPerSecond)));
 }
 
-// The car radio above the log. It only streams and draws. The station picks every line.
 export class RadioPanel {
   readonly root = panel('radio', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
-  // The transport keys sit in a strip above the screen.
   readonly keys = el('div', { class: 'radio-keys' });
-  // Screen readers wait for aria-busy to clear, so they read a broadcast once, whole.
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
   private streaming: { text: string; start: number } | null = null;
   // The broadcast on screen, so a language switch can show it again in the new words.
@@ -274,7 +258,6 @@ export class RadioPanel {
     if (!this.streaming) this.play();
   }
 
-  // Starts the next broadcast. A finished one stays on screen until a new one replaces it.
   private play(): void {
     const b = this.station.next();
     if (!b) return;

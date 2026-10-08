@@ -1,7 +1,6 @@
 // Blender-made models from public/models/, built by the scripts in tools/blender/.
 // loadModels() runs once at boot. model() hands out clones with their own materials.
 // socket() gives the attach points that scripts mark with Kit.socket().
-// outlineOf() and outlineProps() give models their dark outline.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -59,7 +58,6 @@ const NAMES = [
   'bridge',
   'pump_station',
   'lock_gate',
-  'glass_flats',
   'power_pole',
   'billboard',
   'crag',
@@ -68,6 +66,10 @@ const NAMES = [
   'bridge_broken',
   'gas_station',
   'ship_wing',
+  'escape_pod',
+  'habitat_cylinder',
+  'wing_shard',
+  'power_cell',
   'wing_deck',
   'ship_wing_deck',
   'ship_flap',
@@ -82,6 +84,62 @@ const NAMES = [
   'guard_post',
   'army_truck',
   'barrier',
+  'engine_nozzle',
+  'engine_frame',
+  'ruin_compound',
+  'watchtower',
+  'glass_spire',
+  'scrap_wall',
+  'fort_masonry_wall',
+  'fort_masonry_tower',
+  'fort_masonry_gate',
+  'fort_masonry_bastion',
+  'fort_masonry_inner',
+  'fort_ship_wall',
+  'fort_ship_tower',
+  'fort_ship_gate',
+  'fort_scrap_wall',
+  'fort_scrap_tower',
+  'fort_scrap_gate',
+  'fort_scrap_bastion',
+  'fort_scrap_inner',
+  'fort_patchwork_wall',
+  'fort_patchwork_tower',
+  'fort_patchwork_gate',
+  'fort_compound_wall',
+  'fort_compound_tower',
+  'fort_compound_gate',
+  'fort_ring_wall',
+  'fort_ring_gate',
+  'fort_yard_wall',
+  'fort_yard_tower',
+  'fort_yard_gate',
+  'bowl_house_rust',
+  'bowl_house_red',
+  'bowl_house_grey',
+  'windmill_tower',
+  'windmill_rotor',
+  'stilt_tank',
+  'fruit_tree',
+  'pumpjack_base',
+  'pumpjack_beam',
+  'storage_tank',
+  'grain_silo',
+  'grain_elevator',
+  'lean_to',
+  'crane_base',
+  'crane_upper',
+  'crane_grab',
+  'ship_hull_ring',
+  'ship_hull_ribs',
+  'ship_hull_stern',
+  'nose_rise',
+  'nose_crag',
+  'radar_dish',
+  'scrap_shelter_flat',
+  'scrap_shelter_lean',
+  'hull_scaffold',
+  'jib_crane',
 
   'bumper_front',
   'bumper_rear',
@@ -96,6 +154,14 @@ const NAMES = [
   'store_jerrycans',
   'store_locker',
 
+  'util_sprout',
+  'util_caltrops',
+  'util_oil',
+  'util_crane',
+  'util_mortar',
+  'util_flare',
+  'util_scraper',
+  'util_emitter',
   'cab_seat',
   'cab_pickup',
   'cab_hardtop',
@@ -119,6 +185,7 @@ const NAMES = [
   'arm_plate',
   'arm_scrap_sheet',
   'arm_ceramic_tile',
+  'arm_claymore_ram',
 
   'cargo_rack',
   'cargo_trailer_box',
@@ -153,6 +220,7 @@ const NAMES = [
   'wrec_tank',
   'wrec_rocket_pod',
   'wrec_sniper',
+  'wrec_harpoon',
 
   'wbar_mg_short',
   'wbar_mg_long',
@@ -163,6 +231,7 @@ const NAMES = [
   'wbar_tank',
   'wbar_sniper',
   'wbar_rocket_tubes',
+  'wbar_harpoon',
 
   'wext_scope',
   'wext_shield',
@@ -175,7 +244,6 @@ const SOCKET_PREFIX = 'socket_';
 const loaded = new Map<ModelName, THREE.Object3D>();
 const sockets = new Map<ModelName, Map<string, THREE.Vector3>>();
 
-// read returns a model's .glb bytes. The default fetches from public/models/; tests read the files from disk.
 export async function loadModels(read: (name: ModelName) => Promise<ArrayBuffer> = fetchModel): Promise<void> {
   const loader = new GLTFLoader();
   await Promise.all(
@@ -188,7 +256,6 @@ export async function loadModels(read: (name: ModelName) => Promise<ArrayBuffer>
   checkWeaponSockets();
 }
 
-// Position of a socket in the model's own space, as authored in Blender.
 export function socket(name: ModelName, socketName: string): THREE.Vector3 {
   const own = sockets.get(name);
   if (!own) throw new Error(`Model ${name} is not loaded. Call loadModels() before building views.`);
@@ -197,7 +264,6 @@ export function socket(name: ModelName, socketName: string): THREE.Vector3 {
   return at.clone();
 }
 
-// Records each socket_* node position and removes the node, so clones carry only meshes.
 function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.Vector3> {
   root.updateMatrixWorld(true);
   const found: THREE.Object3D[] = [];
@@ -215,7 +281,6 @@ function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.V
   return out;
 }
 
-// Mounts carry the head. Receivers carry the barrel and the extra. Barrels mark the tip rounds leave from.
 function checkWeaponSockets(): void {
   for (const pool of Object.values(WEAPON_POOLS)) {
     for (const m of pool.mount) socket(m, 'head');
@@ -240,7 +305,6 @@ function source(name: ModelName): THREE.Object3D {
   return src;
 }
 
-// A fresh copy. Materials are cloned too, because obstacle views dispose them on removal.
 export function model(name: ModelName): THREE.Object3D {
   const copy = source(name).clone(true);
   copy.traverse((o) => {
@@ -252,9 +316,6 @@ export function model(name: ModelName): THREE.Object3D {
   return copy;
 }
 
-// Many copies of one model as one InstancedMesh per model mesh. Each placement is a model-to-world
-// matrix. tints scale each copy's colors, one gray level per placement. The meshes share the loaded
-// geometry and materials, so they must never be disposed.
 export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tints: number[]): THREE.Group {
   if (placements.length === 0) throw new Error(`Instanced ${name} needs at least one placement`);
   if (tints.length !== placements.length) throw new Error(`Instanced ${name} has ${placements.length} placements but ${tints.length} tints`);
@@ -284,7 +345,8 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
   return group;
 }
 
-// glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.
+const GLOW_MATERIAL = 'glow';
+
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
@@ -292,6 +354,7 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
+      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
       m.dispose();
       return l;
     });
@@ -302,25 +365,20 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
   return root;
 }
 
-// A dark outline around trucks, a fixed number of screen pixels wide. It is real geometry, so the renderer's
-// antialiasing smooths it. Back faces are pushed outward along smoothed normals in screen space, so the width
-// holds at any zoom. The camera is orthographic, so clip w is 1 and an offset in clip units maps straight to pixels.
 const OUTLINE = {
-  width: { value: 0.5 }, // CSS pixels
-  viewport: { value: new THREE.Vector2(1, 1) }, // CSS pixel size of the canvas, read from the renderer before each outline draws
+  width: { value: 0.5 },
+  viewport: { value: new THREE.Vector2(1, 1) },
 };
 
 function readViewport(renderer: THREE.WebGLRenderer): void {
   renderer.getSize(OUTLINE.viewport.value);
 }
 
-// Stencil bits models mark on their pixels. Outlines draw only where neither bit is set, so a pushed back face of a
-// thin panel never pokes through a model. Outlines draw after opaque models, so the marks are there by then.
 export const TRUCK_BIT = 1;
 export const PROP_BIT = 2;
-export const READY_ARC_BIT = 4; // ready arcs and the selected gun's reach mark their pixels, so where they overlap a spot is shaded once
+export const READY_ARC_BIT = 4;
 export const SPENT_ARC_BIT = 8;
-export const OUTLINE_ORDER = 805; // after opaque models mark the stencil, before truck silhouettes
+export const OUTLINE_ORDER = 805;
 
 function outlineMaterial(): THREE.MeshBasicMaterial {
   const material = new THREE.MeshBasicMaterial({
@@ -348,12 +406,9 @@ function outlineMaterial(): THREE.MeshBasicMaterial {
   return material;
 }
 
-// Trucks and props keep separate materials, because the sight limit patches prop materials to clip at its edge.
 const truckOutline = outlineMaterial();
 const propOutline = outlineMaterial();
 
-// Faces split at hard edges, so vertices merge by position before normals are smoothed, or the pushed faces would
-// open cracks at every corner.
 function weld(geos: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   const plain = geos.map((g) => {
     const p = new THREE.BufferGeometry();
@@ -370,8 +425,6 @@ function weld(geos: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   return welded;
 }
 
-// One outline mesh around all truck geos, which share one space.
-// A group of lamps alone has no geos and gets no outline, so the result is empty or one mesh.
 export function outlineOf(geos: readonly THREE.BufferGeometry[]): THREE.Mesh[] {
   if (geos.length === 0) return [];
   const mesh = new THREE.Mesh(weld(geos), truckOutline);
@@ -381,10 +434,8 @@ export function outlineOf(geos: readonly THREE.BufferGeometry[]): THREE.Mesh[] {
   return [mesh];
 }
 
-// Instanced props share their model's geometry, so their welded outlines are shared too.
 const welded = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 
-// Gives every mesh under obj an outline child, and makes its materials mark their pixels for outlines.
 export function outlineProps(obj: THREE.Object3D): void {
   const meshes: THREE.Mesh[] = [];
   obj.traverse((o) => {

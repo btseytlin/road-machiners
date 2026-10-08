@@ -13,7 +13,7 @@ import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, settleStorms, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, partHp, practiceOf, rngStateWhere, settleStorms, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { PHYSICS } from '../data/physics';
@@ -34,7 +34,6 @@ function duel(targetPos = { x: 33, y: 30 }) {
   return { w, me, buggy, mg };
 }
 
-// The player's scout swapped for a hauler with a forward cannon on deck beside its cab, where the cannon can fire forward.
 function cannonHauler(w: World): Vehicle {
   const old = w.vehicles[0];
   const v = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], old.pos, old.heading);
@@ -49,7 +48,7 @@ function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
 
 describe('combat', () => {
   it('does not fire out of range', () => {
-    const { w, me, buggy, mg } = duel({ x: 44, y: 30 }) // 14 tiles: past the gun's 13.5, still in sight;
+    const { w, me, buggy, mg } = duel({ x: 44, y: 30 })
     order(me, mg.part.id, buggy.id);
     fireWeapons(w);
     expect(w.events.filter((e) => e.t === 'shot')).toHaveLength(0);
@@ -214,7 +213,6 @@ describe('combat', () => {
 type Shot = Extract<GameEvent, { t: 'shot' }>;
 const shotsBy = (events: GameEvent[], id: string) => events.filter((e): e is Shot => e.t === 'shot' && e.shooter === id);
 
-// Player at (30, 30) facing +x, a buggy `d` tiles ahead. Heading PI / 2 shows its left side, PI its nose.
 function range(d: number, heading: number, speed = 0) {
   const { w, me, buggy, mg } = duel({ x: 30 + d, y: 30 });
   buggy.heading = heading;
@@ -222,7 +220,6 @@ function range(d: number, heading: number, speed = 0) {
   return { w, me, buggy, mg };
 }
 
-// The player on a scout with one gun, and a whole target truck d tiles ahead that never loses HP.
 function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
   const w = emptyWorld();
   const old = w.vehicles[0];
@@ -234,7 +231,6 @@ function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
   return { w, me, target, gun: vehicleStats(w, me).weapons[0] };
 }
 
-// Fires many shots and checks the share of rounds that damage the aim, directly or by splash, against damageChance.
 function expectShownChance(t: ReturnType<typeof aimTest> & { aim: string }) {
   const { w, me, target, gun, aim } = t;
   const shown = hitOdds(w, me, gun, target, aim).damageChance;
@@ -391,7 +387,7 @@ describe('rounds', () => {
   it('rounds hit as often as the odds say', () => {
     const { w, me, buggy, mg } = range(5, Math.PI / 2, 5);
     me.speed = 3;
-    for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
+    for (const p of mountedParts(buggy)) p.hp = 1e9;
     order(me, mg.part.id, buggy.id);
     const p = hitOdds(w, me, mg, buggy, 'body').chance;
     let hits = 0;
@@ -410,8 +406,8 @@ describe('rounds', () => {
 
   it('an aimed miss that lands on the truck hits the lane where it landed', () => {
     const { w, me, buggy, mg } = range(4, Math.PI);
-    for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
-    const wheel = mountedItems(buggy).find((it) => it.x === 1 && it.y === 1)!.part; // front left, lane 1 from the front
+    for (const p of mountedParts(buggy)) p.hp = 1e9;
+    const wheel = mountedItems(buggy).find((it) => it.x === 1 && it.y === 1)!.part;
     order(me, mg.part.id, buggy.id, wheel.id);
     const odds = hitOdds(w, me, mg, buggy, wheel.id);
     expect(odds.bodyChance).toBeGreaterThan(odds.chance);
@@ -427,7 +423,6 @@ describe('rounds', () => {
         rounds++;
         if (!r.hit) continue;
         hits++;
-        // A round in an empty armor column lane grazes the skin and hits no part.
         if (r.hits.length > 0) struck.add(r.hits[0].part);
       }
     }
@@ -473,10 +468,8 @@ describe('rounds', () => {
 
   it('a hit lands on the lane under its offset', () => {
     const n = 4;
-    // Seen from behind, the shooter's right is the target's right, the high columns.
     expect(laneOfOffset('rear', 1.9, n, 0.9)).toBe(n - 1);
     expect(laneOfOffset('rear', 1.9, n, -0.9)).toBe(0);
-    // Seen from the front, the shooter's right is the target's left, column 0.
     expect(laneOfOffset('front', 1.9, n, 0.9)).toBe(0);
     expect(laneOfOffset('front', 1.9, n, -0.9)).toBe(n - 1);
   });
@@ -597,7 +590,7 @@ describe('NPC attack records and defensive fire', () => {
     expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
   });
 
-  it('an NPC opens fire only on its fight target away from guards, and always on an attacker', () => {
+  it('an NPC opens fire only on its fight target, also at a town gate, and always on an attacker', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
@@ -612,27 +605,41 @@ describe('NPC attack records and defensive fire', () => {
     npc.pos = { x: gate.x + 3, y: gate.y };
     prey.pos = { ...gate };
     autoOrders(w, npc);
-    expect(aimed()).toEqual([]);
+    expect(aimed()).toEqual([prey.id]);
     npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'escapeAttacker' }];
     npc.brain.attackers = { [prey.id]: true };
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
   });
 
-  // A robber chased its victim to a town gate. The victim's return fire must not open the gate to the robber's guns.
-  it('a robber holds its fire in guard range even after its victim shoots back', () => {
+  it('a robber off its robbery holds its fire even after its victim shoots back', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const gate = siteGates(REGION.towns[0])[0];
     const robber = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: gate.x + 3, y: gate.y });
     robber.brain = npcBrain('trader', robber.pos, ['scumbag']);
     const victim = addVehicle(w, 'traders', 'scout', ['mg'], { ...gate });
     addState(w, 'feud', robber.id, victim.id, { kind: 'feud', robbery: true });
-    robber.brain.goals = [{ kind: 'fight', targetId: victim.id, destination: { ...victim.pos }, phase: 'travel', reason: 'robCargo' }];
+    robber.brain.goals = [];
     robber.brain.attackers = { [victim.id]: true };
 
     autoOrders(w, robber);
 
     expect(Object.values(robber.weaponOrders)).toEqual([]);
+  });
+
+  it('a truck that fires at a trader at a town gate takes no damage from the gate', () => {
+    const gate = siteGates(REGION.towns[0])[0];
+    const w = emptyWorld({ x: gate.x - 3, y: gate.y });
+    const me = w.vehicles[0];
+    const trader = addVehicle(w, 'traders', 'scout', ['stockEngine'], { ...gate });
+    const mg = vehicleStats(w, me).weapons[0];
+    order(me, mg.part.id, trader.id);
+    const before = partHp(me);
+
+    const after = endTurn(w, testDrive);
+
+    expect(after.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(true);
+    expect(partHp(after.vehicles.find((v) => v.id === me.id)!)).toBe(before);
   });
 });
 
@@ -692,7 +699,6 @@ describe('aim perks', () => {
     expect(hitOdds(w, buggy, gun, me, 'body').causes.own).toBe(before.causes.own);
   });
 
-  // A storm over both trucks.
   const storm = (w: World) => {
     w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
     settleStorms(w);
@@ -718,7 +724,6 @@ describe('aim perks', () => {
 });
 
 describe('recoil and shake', () => {
-  // A tank gun on the given chassis, facing a buggy 5 tiles ahead.
   function tankGunOn(chassisId: string) {
     const w = emptyWorld();
     const shooter = addVehicle(w, 'player', chassisId, ['stockEngine', 'tankGun'], { x: 60, y: 60 });
@@ -752,7 +757,6 @@ describe('recoil and shake', () => {
 });
 
 describe('weapon damage multiplier', () => {
-  // A cannon on a hauler fires at a sturdy buggy from the given RNG state. Returns the damage of each part hit.
   function dealt(mult: number, rngState: number): number[] {
     const saved = RULES.weaponDamage;
     (RULES as { weaponDamage: number }).weaponDamage = mult;
@@ -770,10 +774,7 @@ describe('weapon damage multiplier', () => {
     }
   }
 
-  // Each hit rounds to whole HP, so each can differ from the exact half by up to 0.5.
   it('scales every hit by the one multiplier', () => {
-    // The first RNG state from 1 whose shot lands, so both multipliers roll the same hits. A shot that
-    // misses a sturdy buggy at 4 tiles in a thousand states in a row fails the length check below.
     let state = 1;
     while (state < 1000 && dealt(1, state).length === 0) state++;
     const full = dealt(1, state);
@@ -819,7 +820,6 @@ describe('betrayal', () => {
 });
 
 describe('who beat a truck', () => {
-  // A raider one hit from breaking its cab, with the player and a Bowl Farmers lawman both firing at it.
   function sharedFight(seed: number) {
     const { w, me, buggy, mg } = duel();
     w.rngState = seed;
@@ -889,13 +889,12 @@ describe('who beat a truck', () => {
     expect(beatenBy(w, buggy)).toBe(me.id);
   });
 
-  it('a guard shot counts for its gate, a ram for the other truck, and a crash into a rock for nobody', () => {
+  it('a ram counts for the other truck, and a crash into a rock for nobody', () => {
     const { w, me, buggy } = duel();
     const cab = corePart(buggy, 'cab').id;
-    w.events.push({ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: buggy.id, rounds: [{ hit: true, crit: false, offset: 0, struck: buggy.id, hits: [{ part: cab, damage: 6 }], blast: [], burst: null }] });
     w.events.push({ t: 'collision', a: me.id, b: buggy.id, hitsA: [], hitsB: [{ part: cab, damage: 4 }] });
     w.events.push({ t: 'collision', a: buggy.id, b: 'rock', hitsA: [{ part: cab, damage: 20 }], hitsB: [] });
-    expect(beatenBy(w, buggy)).toBe('guard-bowl');
+    expect(beatenBy(w, buggy)).toBe(me.id);
     w.events.push({ t: 'collision', a: buggy.id, b: me.id, hitsA: [{ part: cab, damage: 3 }], hitsB: [] });
     expect(beatenBy(w, buggy)).toBe(me.id);
   });

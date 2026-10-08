@@ -1,40 +1,17 @@
 {
-  "turn": 900,
+  "turn": 410,
+  "events": [
+    { "t": "shot", "shooter": "npc-3", "weapon": "p-7", "target": "player", "aim": "body", "chance": 0.6, "damageChance": 1, "side": "front", "rounds": [] },
+    { "t": "guardShot", "site": "bowl", "from": { "x": 120, "y": 88 }, "target": "player", "rounds": [] },
+    { "t": "npcKnockout", "vehicle": "npc-9", "by": "npc-3" }
+  ],
   "vehicles": [
-    { "id": "player", "name": "Your truck", "brain": null },
-    { "id": "npc1", "name": "Trader caravan", "brain": { "templateId": "trader", "driver": "Ada Stone", "goals": [
-      { "kind": "trade", "targetId": "bowl", "destination": { "x": 80, "y": 470 }, "phase": "travel", "reason": "buy profitable cargo" },
-      { "kind": "resupply", "targetId": "nose", "destination": { "x": 510, "y": 175 }, "phase": "travel", "reason": "low fuel" }
-    ] } },
-    { "id": "npc2", "name": "Roamer", "brain": { "templateId": "roamer", "driver": "Cal Reed", "goals": [
-      { "kind": "explore", "targetId": null, "destination": { "x": 300, "y": 300 }, "phase": "travel", "reason": "explore the open map" },
-      { "kind": "wait", "targetId": null, "destination": null, "phase": "act", "reason": "ponder the horizon" }
-    ] } }
+    { "id": "player", "lastHitBy": "guard-bowl" },
+    { "id": "npc-3", "lastHitBy": "player" },
+    { "id": "npc-4", "lastHitBy": null, "brain": { "goals": [], "gunnedBy": "kiln" } }
   ],
   "removed": [
-    { "id": "npc3", "name": "Raider outrider", "brain": { "templateId": "buggy", "driver": "Dora Vane", "goals": [
-      { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 60 }, "phase": "travel", "reason": "look for prey at known hunting grounds" }
-    ] } }
-  ],
-  "player": {
-    "vehicleId": "player",
-    "call": { "with": "npc1", "topic": "patch", "node": "terms", "vars": { "deal": { "kind": "deal", "deal": "paid", "patcher": "npc", "price": 120, "parts": 2, "turns": 3 } },
-      "line": { "text": "{deal}", "vars": { "deal": { "kind": "deal", "deal": "paid", "patcher": "npc", "price": 120, "parts": 2, "turns": 3 } } } },
-    "contracts": [
-      { "id": "c1", "shop": "bowl", "kind": "bounty", "template": "buggy", "targetName": "Raider outrider", "reward": 400, "deadline": 990, "window": 300, "tier": 2 },
-      { "id": "c2", "shop": "bowl", "kind": "fetch", "defId": "mg", "reward": 200, "deadline": 990, "window": 300, "tier": 1 }
-    ]
-  },
-  "shops": {
-    "nose": { "contracts": [{ "id": "c3", "shop": "nose", "kind": "bounty", "template": "gunwagon", "targetName": "Gunwagon", "reward": 700, "deadline": 1500, "window": 600, "tier": 3 }] }
-  },
-  "events": [
-    { "t": "info", "text": "Engine running hot." },
-    { "t": "supply", "what": "fuel", "text": "Fuel tank leaks: fuel -0.5" },
-    { "t": "money", "amount": 400, "reason": "contract" },
-    { "t": "say", "speaker": "npc1", "text": "{deal}", "vars": {} },
-    { "t": "activity", "vehicle": "npc1", "previous": null, "activity": "trade", "reason": "buy profitable cargo" },
-    { "t": "stall", "vehicle": "npc2", "goal": "wait", "reason": "ponder the horizon" },
-    { "t": "arrived", "vehicle": "npc1" }
+    { "id": "npc-8", "lastHitBy": "guard-kiln" },
+    { "id": "npc-9", "lastHitBy": "npc-3" }
   ]
 }

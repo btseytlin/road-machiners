@@ -32,7 +32,6 @@ export const RADIO = {
   maxChars: 90, // a filled line fits the three-line screen
 };
 
-// Hours of the clock calls. Dawn and dusk follow TIME.sunrise and TIME.sunset.
 export const RADIO_HOURS = { noon: 12, midnight: 0 };
 
 // How many lines J.J. has for each topic. Their words live in src/text/ as radio.<topic>.<variant>, the same count in

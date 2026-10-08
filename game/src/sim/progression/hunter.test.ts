@@ -3,7 +3,7 @@ import { NPCS } from '../../data/npcs';
 import { advanceFar } from '../far';
 import { playerVehicle } from '../damage';
 import { addGoods } from '../inventory';
-import { ownDanger, vehicleDanger } from '../npc-decisions';
+import { judgeDanger } from '../npc-decisions';
 import { isTowed } from '../tow';
 import { dist } from '../vec';
 import { playerSees } from '../vision';
@@ -53,14 +53,13 @@ describe('the hunter against one strong raider', () => {
     for (const id of Object.keys(NPCS)) start.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const raider = addVehicle(start, 'raiders', 'jeep', ['autocannon', 'ram', 'ram', 'ram'], { x: 118, y: 100 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const w = endTurn(start, () => {}); // a turn with no movement, so the player has seen the raider
+    const w = endTurn(start, () => {});
     expect(playerSees(w, raider.pos)).toBe(true);
-    expect(vehicleDanger(w, raider)).toBeGreaterThan(ownDanger(w, playerVehicle(w)));
+    expect(judgeDanger(w, playerVehicle(w), raider)).toBeGreaterThan(1 / 4);
 
     const turn = botOrders(w, 'hunter').world;
     const order = playerVehicle(turn).order;
 
-    // It holds its fire and keeps patrolling toward a shop instead.
     expect(turn.player.autoFire).toBe(false);
     expect(order?.kind).toBe('stopAt');
     expect(order?.kind === 'stopAt' && dist(order.dest, raider.pos)).toBeGreaterThan(50);

@@ -5,5 +5,6 @@ import { LOG } from './log';
 import { NAMES } from './names';
 import { SCREENS } from './screens';
 import { TALK } from './talk';
+import { UI } from './ui';
 
-export const RU: Translation<typeof EN> = { ...LOG, ...NAMES, ...SCREENS, ...TALK };
+export const RU: Translation<typeof EN> = { ...LOG, ...NAMES, ...SCREENS, ...TALK, ...UI };

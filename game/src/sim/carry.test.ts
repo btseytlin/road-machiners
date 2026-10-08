@@ -11,6 +11,7 @@ import { perkPair } from './progress';
 import { townAt } from './sites';
 import { MAX_RANK, PERKS } from '../data/skills';
 import { CONDITION } from '../data/wear';
+import { defaultSetup } from './settings';
 
 
 const KIT = START_KITS.standard;
@@ -20,9 +21,8 @@ function part(defId: string, over: Partial<Extract<CarriedItem, { kind: 'part' }
   return { defId, wear: 0, hp: 1000, rebuilt: false, ...over };
 }
 
-// The kit truck as the reader would hand it over.
 function kitItems(): CarriedItem[] {
-  const w = newWorld(1, KIT, TEST_MAP, false);
+  const w = newWorld(1, KIT, TEST_MAP, defaultSetup('roaming'), false);
   return playerVehicle(w).items.map((it): CarriedItem =>
     it.kind === 'good'
       ? { kind: 'good', good: it.good, x: it.x, y: it.y, rot: it.rot }
@@ -33,7 +33,7 @@ function carriedOf(over: Partial<Carried> = {}): Carried {
   return {
     seed: 99, money: 777, xp: 340, ranks: { driving: 2, social: 1 }, xpBySource: { ram: 12 }, perks: [], discovered: [],
     knockouts: 2, autoFire: true, autoRepair: false, fuel: 5, supplies: 3, costBasis: { scrap: 8 },
-    truck: { chassisId: 'scout', items: kitItems() }, storage: [], ...over,
+    truck: { chassisId: 'scout', items: kitItems() }, storage: [], setup: undefined, ...over,
   };
 }
 
@@ -53,12 +53,12 @@ describe('carriedWorld', () => {
     expect(world.player.xpBySource.ram).toBe(12);
     const mg = truck.items.find((it) => it.kind === 'part' && it.part.defId === 'mg');
     expect(mg?.kind === 'part' && [mg.part.wear, mg.part.hp]).toEqual([2, 5]);
-    expect(defIds(truck.items)).toEqual(expect.arrayContaining(['panniers', 'mg', 'stockEngine', 'cage']));
+    expect(defIds(truck.items)).toEqual(expect.arrayContaining(KIT.parts));
     expect(world.player.storage.map((p) => [p.defId, p.wear])).toEqual([['plates', 1]]);
     expect(truck.items.filter((it) => it.kind === 'good').length).toBe(4);
     expect(world.player.costBasis).toEqual({ scrap: 8 });
     expect(getLayoutError(truck, truck.items)).toBeNull();
-    expect(report).toEqual({ toGarage: [], sold: [], lost: [] });
+    expect(report).toEqual({ toGarage: [], sold: [], lost: [], settingsReset: [] });
   });
 
   it('sends a part with an invalid spot to the garage', () => {

@@ -33,10 +33,24 @@ it('explains author waits, failed work, approval waits and the daily cap', () =>
 it('reports the same candidate gate used by selection', () => {
   expect(scheduling).toHaveProperty('readReleaseGate');
   const state = createState();
-  state.release = { issue: 10, branch: 'release/2026-10-04', day: '2026-10-04', postId: null, removed: [] };
+  state.release = { issue: 10, branch: 'release/2026-10-04', day: '2026-10-04', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
   const cards = [createCard(10, 'Approval', ['release']), createCard(11, 'Testing', ['release-task'])];
   expect(scheduling.readReleaseGate(state, cards)).toEqual({ reason: 'release-tasks', issues: [11] });
   cards[1].column = 'Done';
-  expect(scheduling.readReleaseGate(state, cards)).toEqual({ reason: 'candidate', issues: [] });
-  expect(scheduling.chooseJobs(state, cards, now, config)).toEqual([{ stage: 'candidate', issue: 10 }]);
+  expect(scheduling.readReleaseGate(state, cards, 'rel0001')).toEqual({ reason: 'playtest', issues: [] });
+  expect(scheduling.chooseJobs(state, cards, now, config, { dev: null, release: 'rel0001' })).toEqual([{ stage: 'playtest', issue: 10 }]);
+  state.release.playtest.passed = 'rel0001';
+  expect(scheduling.readReleaseGate(state, cards, 'rel0001')).toEqual({ reason: 'candidate', issues: [] });
+  expect(scheduling.chooseJobs(state, cards, now, config, { dev: null, release: 'rel0001' })).toEqual([{ stage: 'candidate', issue: 10 }]);
+});
+it('holds the playtest for a recorded release task the board does not list yet, until the board shows it in Done', () => {
+  const state = createState();
+  state.release = { issue: 10, branch: 'release/2026-10-04', day: '2026-10-04', postId: null, removed: [], tasks: [12], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
+  const cards = [createCard(10, 'Approval', ['release'])];
+  expect(scheduling.readReleaseGate(state, cards, 'rel0001')).toEqual({ reason: 'release-tasks', issues: [12] });
+  expect(scheduling.chooseJobs(state, cards, now, config, { dev: null, release: 'rel0001' })).toEqual([]);
+  cards.push(createCard(12, 'Design'));
+  expect(scheduling.readReleaseGate(state, cards, 'rel0001')).toEqual({ reason: 'release-tasks', issues: [12] });
+  cards[1].column = 'Done';
+  expect(scheduling.readReleaseGate(state, cards, 'rel0001')).toEqual({ reason: 'playtest', issues: [] });
 });
