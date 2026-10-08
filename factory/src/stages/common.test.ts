@@ -229,7 +229,7 @@ describe('runAgent reference images', () => {
 });
 
 describe('stage prompts for reference images', () => {
-  const vars = { issue: '7', taskFile: 'f', branch: 'b', task: 'Play it.', playtest: 'npm run playtest' };
+  const vars = { issue: '7', taskFile: 'f', branch: 'b', base: 'dev', task: 'Play it.', playtest: 'npm run playtest' };
 
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test']) {
@@ -279,7 +279,7 @@ describe('stage prompts for reference images', () => {
 
 describe('fillPrompt', () => {
   it('fills every variable', () => {
-    const text = fillPrompt('design', { issue: '7', taskFile: 'docs/tasks/issue-7.md', branch: 'factory/issue-7' });
+    const text = fillPrompt('design', { issue: '7', taskFile: 'docs/tasks/issue-7.md', branch: 'factory/issue-7', base: 'dev' });
     expect(text).toContain('docs/tasks/issue-7.md');
     expect(text).not.toContain('{{');
   });
