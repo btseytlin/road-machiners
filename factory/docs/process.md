@@ -104,7 +104,7 @@ Members, other jobs and releases push all the time, so any branch may move while
 
 - An agent stage merges the new commits of its issue branch into the work before each push. When GitHub rejects the push because the branch moved again, it merges again and pushes again.
 - A conflict with those commits goes to an agent in the same job. The agent keeps both sides, and the stage goes on. An unfinished merge fails the stage.
-- Testing and Hardening also merge those commits and the base before their agent starts, so the session works on them.
+- Testing and Hardening also merge those commits and the base before their agent starts, so the session works on them. They take the base the way Design does, except that their own agent resolves a conflict. A retry gives an unfinished merge of the base or of the issue branch back to the agent.
 - Design does the same on the host before its agent starts, since the agent cannot fetch. A clean clone takes the base: a fast-forward, or a merge that keeps its own commits and its task files. It needs no issue branch on GitHub. A clone with uncommitted changes stays as it is, and the agent is told it may lack recent base work. A conflict goes to an agent in the same job, never to the author, and a retry gives that unfinished merge to an agent again. Any other unfinished merge fails the stage for `factory repair-clone`.
 - The merge queue moves `dev` or the release only with a result its checks passed. A base that moved meanwhile is merged in and checked again.
 - A merge into `main` or the release that GitHub rejects because a target moved runs again on the new tips.

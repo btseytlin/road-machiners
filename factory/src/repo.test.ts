@@ -476,7 +476,7 @@ describe('work clones', () => {
   it('merges a moved dev into the branch, and GitHub sees it as merged after the push', async () => {
     const { repo, work, head } = await behindDev('g.txt');
     expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
-    expect(await repo.mergeBaseIntoWork(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: [] });
+    expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: [], kept: null });
     expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe('dev moved\n');
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('five\n');
     await repo.push(await repo.fetchFromWork(work, 'factory/issue-5'), 'factory/issue-5');
@@ -485,7 +485,7 @@ describe('work clones', () => {
 
   it('still sees the merged commit inside the branch after dev moves on', async () => {
     const { repo, work, commit } = await behindDev('g.txt');
-    const merged = (await repo.mergeBaseIntoWork(work, 'dev')).commit;
+    const merged = (await repo.catchUpBase(work, 'dev')).commit as string;
     await repo.push(await repo.fetchFromWork(work, 'factory/issue-5'), 'factory/issue-5');
     await commit('dev', 'g.txt', 'another approval\n');
     await repo.fetch();
@@ -495,7 +495,7 @@ describe('work clones', () => {
 
   it('names the conflicted files and leaves the merge open for the agent', async () => {
     const { repo, work } = await behindDev('f.txt');
-    expect((await repo.mergeBaseIntoWork(work, 'dev')).conflicts).toEqual(['f.txt']);
+    expect((await repo.catchUpBase(work, 'dev')).conflicts).toEqual(['f.txt']);
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toContain('<<<<<<<');
   });
 
@@ -535,6 +535,24 @@ describe('work clones', () => {
     const { repo, work } = await branchMoved('g.txt', 'g.txt');
     expect((await repo.mergeBranchIntoWork(work, 'factory/issue-12')).conflicts).toEqual(['g.txt']);
     expect(readFileSync(join(work, 'g.txt'), 'utf8')).toContain('<<<<<<<');
+  });
+
+  it('hands its own unfinished merge of the branch back for another round instead of failing', async () => {
+    const { repo, work, head } = await branchMoved('g.txt', 'g.txt');
+    const branch = 'factory/issue-12';
+    await repo.mergeBranchIntoWork(work, branch);
+    const before = readFileSync(join(work, 'g.txt'), 'utf8');
+    expect(await repo.mergeBranchIntoWork(work, branch)).toEqual({ commit: await head(branch), conflicts: ['g.txt'] });
+    expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe(before);
+  });
+
+  it('still fails on an unfinished merge of other work', async () => {
+    const { repo, work, commit } = await branchMoved('g.txt', 'f.txt');
+    await commit('factory/issue-999', 'g.txt', 'other\n');
+    await repo.fetch();
+    await git(work, 'fetch', '--quiet', 'origin');
+    expect((await realRun('git', [...ID, 'merge', 'origin/factory/issue-999'], { cwd: work })).code).not.toBe(0);
+    await expect(repo.mergeBranchIntoWork(work, 'factory/issue-12')).rejects.toThrow(/unfinished merge or conflicts/);
   });
 });
 

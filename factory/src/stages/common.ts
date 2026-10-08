@@ -217,16 +217,21 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   return true;
 }
 
-export async function catchUpBase(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<string> {
+async function catchUpBaseNote(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<{ commit: string | null; conflicts: string[]; note: string }> {
   await catchUpBranch(ctx, issue, stage);
   const { commit, conflicts, kept } = await ctx.repo.catchUpBase(workDir(ctx, issue), base);
   if (kept !== null) {
     ctx.log(stage, issue, `kept the work clone off the latest ${base}: ${kept}`);
-    return `The factory could not merge the latest ${base} into this clone, because of ${kept}. The clone may lack work merged into ${base} lately.`;
+    return { commit: null, conflicts: [], note: `The factory could not merge the latest ${base} into this clone, because of ${kept}. The clone may lack work merged into ${base} lately.` };
   }
   if (commit !== null) ctx.log(stage, issue, `merged ${base} at ${commit.slice(0, 7)} into the work clone${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
+  return { commit, conflicts, note: `The factory merged the latest ${base} into this clone before you started, so it holds every change merged into ${base} so far.` };
+}
+
+export async function catchUpBase(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<string> {
+  const { commit, conflicts, note } = await catchUpBaseNote(ctx, issue, base, stage);
   if (commit !== null && conflicts.length > 0) await resolveBaseMerge(ctx, issue, base, stage, { commit, conflicts });
-  return `The factory merged the latest ${base} into this clone before you started, so it holds every change merged into ${base} so far.`;
+  return note;
 }
 
 async function resolveBaseMerge(ctx: Ctx, issue: number, base: string, stage: CardStage, merge: { commit: string; conflicts: string[] }): Promise<void> {
@@ -237,13 +242,13 @@ async function resolveBaseMerge(ctx: Ctx, issue: number, base: string, stage: Ca
   if (!(await ctx.repo.isMerged(merge.commit, head))) throw new Error(`The agent left the merge of ${base} at ${merge.commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
 
-export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
-  await catchUpBranch(ctx, issue, stage);
-  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<{ commit: string | null; note: string }> {
+  const { commit, conflicts, note } = await catchUpBaseNote(ctx, issue, base, stage);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
-  return commit;
+  return { commit, note };
 }
 
-export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string | null): Promise<void> {
+  if (commit === null) return;
   if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
