@@ -64,7 +64,7 @@ function validateFunnelCount(column: string, count: number): void {
 function validateDecision(decision: ScheduleReport['decisions'][number]): void {
   if (!Object.hasOwn(QUEUE_OF, decision.stage)) throw new Error('Invalid scheduler stage');
   validateIssue(decision.issue);
-  const reasons = ['queue-full', 'issue-running', 'daily-cap', 'card-budget', 'needs-info', 'failed', 'approval', 'held'];
+  const reasons = ['queue-full', 'issue-running','card-budget', 'needs-info', 'failed', 'approval', 'held'];
   if (!decision.reasons.every((reason) => reasons.includes(reason))) throw new Error('Invalid scheduler reason');
 }
 function validateIssue(issue: number | null): void {
@@ -72,7 +72,6 @@ function validateIssue(issue: number | null): void {
   if (!Number.isSafeInteger(issue) || issue <= 0) throw new Error('Invalid observation issue');
 }
 function validateReleaseReport(report: ScheduleReport): void {
-  if (report.nextCapAt !== null && !Number.isFinite(Date.parse(report.nextCapAt))) throw new Error('Invalid cap time');
   if (!['uncut', 'tracking-missing', 'failed', 'release-tasks', 'playtest', 'playtest-blocked', 'candidate', 'ship-approval'].includes(report.release.reason)) throw new Error('Invalid release gate');
   for (const issue of report.release.issues) validateIssue(issue);
 }

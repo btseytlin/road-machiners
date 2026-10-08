@@ -16,7 +16,7 @@ const ROOT = resolve('tmp/factory-hold-test');
 const statePath = join(ROOT, 'state.json');
 const NOW = new Date('2026-10-07T10:00:00Z');
 const STARTED = '2026-10-07T09:00:00.000Z';
-const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 10, maxJobsPerCard: 1, triageWorkers: 1, designWorkers: 1, implementWorkers: 1, verifyWorkers: 1, testWorkers: 1 };
+const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerCard: 1, triageWorkers: 1, designWorkers: 1, implementWorkers: 1, verifyWorkers: 1, testWorkers: 1 };
 const JOB: Job = { id: 'implement-4-x', stage: 'implement', issue: 4, pid: 77, startedAt: STARTED, log: 'l' };
 
 let cards: Card[] = [];
@@ -42,7 +42,7 @@ const controlLines = () => readLedger(ROOT, new Date(0)).filter((line) => line.k
 
 function runningCard(): void {
   cards = [card(4, 'Implementation'), card(6, 'Implementation', ['release-task'])];
-  seed({ jobs: [JOB, { ...JOB, id: 'verify-5-x', stage: 'verify', issue: 5, pid: 78 }], jobStarts: [STARTED], cardStarts: { 4: [STARTED] } });
+  seed({ jobs: [JOB, { ...JOB, id: 'verify-5-x', stage: 'verify', issue: 5, pid: 78 }], cardStarts: { 4: [STARTED] } });
   mkdirSync(join(sessionsDir(ROOT, 4), 'work'), { recursive: true });
   writeFileSync(join(sessionsDir(ROOT, 4), 'implement.id'), 'sess-1');
 }
@@ -74,11 +74,10 @@ describe('pause-card on a running card', () => {
     expect(text).toContain('implement job stopped');
   });
 
-  it('frees the cap slot and writes a held job line and the order line with its reason', async () => {
+  it('frees the card slot and writes a held job line and the order line with its reason', async () => {
     runningCard();
     await order('hold');
     const state = readState(statePath);
-    expect(state.jobStarts).toEqual([]);
     expect(state.cardStarts[4]).toEqual([]);
     expect(jobLines()).toMatchObject([{ id: 'implement-4-x', stage: 'implement', issue: 4, outcome: 'held' }]);
     expect(controlLines()).toMatchObject([{ action: 'hold', issue: 4, by: 'Ann', reason: 'release tasks first' }]);

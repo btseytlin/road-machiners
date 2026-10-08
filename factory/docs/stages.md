@@ -98,7 +98,7 @@ The release cut opens two cleanup issues, for optimization and code janitor work
 
 ## Release playtest
 
-The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It finds what the release broke, fixes it and confirms the fix in one job. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue, counts against the daily cap and has its own time limit, `FACTORY_PLAYTEST_TIMEOUT_MINUTES`.
+The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It finds what the release broke, fixes it and confirms the fix in one job. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue, counts toward the card job limit and has its own time limit, `FACTORY_PLAYTEST_TIMEOUT_MINUTES`.
 
 - The job never merges `main` into the release. The release meets `main` once, at Ship.
 - The factory clones the release head and runs the full game suite with no cache, so the checks' test cache cannot hide a broken release. A failing suite fails the job before the first play, so it spends no play.
@@ -127,7 +127,7 @@ Ship runs on the current candidate post only, with no release task open and the 
 
 ## Hotfix
 
-A hotfix fixes a bug in the shipped game. Its jobs run before other cards and at the daily cap. Its branch starts from `main`, and testing merges `main` into it. The post opens with a hotfix warning, and its button reads "Approve and ship to players". Approve merges and ships it like a release. The public channel and a GitHub release tagged `hotfix-<day>-issue-<N>` get a one-line changelog. The fix goes to `main` and `dev`. The open release stays as it is and meets the fix at its Ship.
+A hotfix fixes a bug in the shipped game. Its jobs run before other cards and past the card job limit. Its branch starts from `main`, and testing merges `main` into it. The post opens with a hotfix warning, and its button reads "Approve and ship to players". Approve merges and ships it like a release. The public channel and a GitHub release tagged `hotfix-<day>-issue-<N>` get a one-line changelog. The fix goes to `main` and `dev`. The open release stays as it is and meets the fix at its Ship.
 
 ## Incident
 

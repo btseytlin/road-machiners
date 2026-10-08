@@ -40,7 +40,7 @@ it('crosses measured model tokens with the stage that ran them without inventing
 });
 it('measures observed waits once per issue, not once per blocking reason', async () => {
   const home = createHome();
-  const report = { picks: [], decisions: [{ stage: 'design' as const, issue: 1, reasons: ['queue-full' as const, 'daily-cap' as const] }], nextCapAt: null, release: { reason: 'uncut' as const, issues: [] } };
+  const report = { picks: [], decisions: [{ stage: 'design' as const, issue: 1, reasons: ['queue-full' as const, 'card-budget' as const] }], release: { reason: 'uncut' as const, issues: [] } };
   recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report, counts: { Design: 1 } }, new Date('2026-10-04T10:00:00Z'));
   recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report: { ...report, decisions: [] }, counts: {} }, new Date('2026-10-04T10:01:00Z'));
   const history = new DashboardHistory(home, 60000);
@@ -53,7 +53,7 @@ it('measures observed waits once per issue, not once per blocking reason', async
 it('sums waiting card-time per card and measures the clock time once', async () => {
   const home = createHome();
   const decisions = [{ stage: 'verify' as const, issue: 1, reasons: ['queue-full' as const] }, { stage: 'verify' as const, issue: 2, reasons: ['queue-full' as const] }, { stage: 'verify' as const, issue: 3, reasons: ['issue-running' as const] }];
-  const report = { picks: [], decisions, nextCapAt: null, release: { reason: 'uncut' as const, issues: [] } };
+  const report = { picks: [], decisions, release: { reason: 'uncut' as const, issues: [] } };
   recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report, counts: {} }, new Date('2026-10-04T10:00:00Z'));
   recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report: { ...report, decisions: [] }, counts: {} }, new Date('2026-10-04T10:01:00Z'));
   const history = new DashboardHistory(home, 60000);

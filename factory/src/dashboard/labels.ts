@@ -19,7 +19,7 @@ const activities: Record<Activity, string> = {
   lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished',
 };
 const reasons: Record<WaitReason, string> = {
-  'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit',
+  'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'card-budget': 'Card job limit',
   'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval', held: 'Held until resumed',
 };
 const dwell: Record<DeliveryStage, string> = {

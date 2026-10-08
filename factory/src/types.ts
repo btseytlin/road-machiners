@@ -58,7 +58,6 @@ export type FactoryConfig = {
   wasteReviewDays: number;
   itchTarget: string | null;
   butlerKey: string | null;
-  maxJobsPerDay: number;
   maxJobsPerCard: number;
   triageWorkers: number;
   designWorkers: number;
@@ -168,7 +167,6 @@ export type FactoryState = {
   failures: Failure[];
   adhocReplies: Record<string, { chat: string; messageId: number | null }>;
   builds: Record<string, string>;
-  jobStarts: string[];
   cardStarts: Record<string, string[]>;
   postCaptions: Record<string, string>;
   devBuild: string | null;

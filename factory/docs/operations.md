@@ -30,17 +30,17 @@ Memory, not CPU, limits how many jobs fit on the host. Each container prints its
 
 `FACTORY_GPU=on` gives every container the host's NVIDIA GPU, and the playtest checks the frame rate. `off` runs the playtest with `--cpu`, with fewer turns and no frame rate check.
 
-## Daily cap
+## Card job limit
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, verify, harden, the release cut, the release playtest and the candidate. Checks, approve, merge, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
+The factory has no limit on the jobs it starts per day. The Claude usage-limit pause guards the shared limit.
 
-One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 hours. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window, and other cards keep the daily cap. Hotfix jobs count but run at the limit.
+One card may start at most `FACTORY_MAX_JOBS_PER_CARD` jobs in any 24 hours. The jobs that count are triage, design, implementation, verify, harden, the release cut, the release playtest and the candidate. Checks, approve, merge, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window. Hotfix jobs count but run at the limit.
 
 ## Resume
 
-A job whose process dies within its time limit resumes once. This covers a crash, a memory kill or a reboot. Each issue keeps its agents' Claude Code sessions in `$FACTORY_HOME/sessions/issue-N`. The tick removes the dead job's containers, puts the issue in `interrupted` and frees its cap slot. The next tick starts the same stage, and each agent round continues its session with `--resume`. Merges, checks and publishing run again. A second death or a timeout fails the job. A dead branch job always fails, since a restart could repeat a half-done branch move. A job's end clears the sessions and the mark.
+A job whose process dies within its time limit resumes once. This covers a crash, a memory kill or a reboot. Each issue keeps its agents' Claude Code sessions in `$FACTORY_HOME/sessions/issue-N`. The tick removes the dead job's containers, puts the issue in `interrupted` and frees its card job limit slot. The next tick starts the same stage, and each agent round continues its session with `--resume`. Merges, checks and publishing run again. A second death or a timeout fails the job. A dead branch job always fails, since a restart could repeat a half-done branch move. A job's end clears the sessions and the mark.
 
-`factory pause-card N` uses the same path. It kills the card's job, puts the issue in `interrupted` and frees its cap slot, and the card waits until `resume-card N`. The continued job counts as resumed once, so its death fails it.
+`factory pause-card N` uses the same path. It kills the card's job, puts the issue in `interrupted` and frees its card job limit slot, and the card waits until `resume-card N`. The continued job counts as resumed once, so its death fails it.
 
 ## Cleanup and health
 

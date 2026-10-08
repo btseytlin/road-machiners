@@ -3,7 +3,7 @@ import { readObservation, type Observation, type ActivityData } from '../observa
 import { QUEUE_OF, type FactoryState, type Job, type JobStage } from '../types';
 import type { ScheduleReport, WaitReason } from '../tick';
 
-const WAIT_REASONS: WaitReason[] = ['queue-full', 'issue-running', 'daily-cap', 'card-budget', 'needs-info', 'failed', 'approval', 'held'];
+const WAIT_REASONS: WaitReason[] = ['queue-full', 'issue-running','card-budget', 'needs-info', 'failed', 'approval', 'held'];
 export function createWorkerKey(id: string): string { return createHash('sha256').update(id).digest('hex'); }
 function isPrivateStage(stage: JobStage): boolean { return ['change', 'adhoc'].includes(stage); }
 function readPublicIssue(stage: JobStage, issue: number | null): number | null { return isPrivateStage(stage) ? null : issue; }
@@ -32,9 +32,9 @@ function readScheduler(home: string, now: Date, heartbeatMs: number) {
     ...projectSchedule(data.report), counts: data.counts };
 }
 function projectSchedule(report: ScheduleReport | null) {
-  if (report === null) return { decisions: [], nextCapAt: null, release: null };
+  if (report === null) return { decisions: [], release: null };
   return { decisions: report.decisions.map((item) => ({ stage: item.stage, queue: QUEUE_OF[item.stage], issue: readPublicIssue(item.stage, item.issue), reasons: item.reasons.filter((reason) => WAIT_REASONS.includes(reason)) })),
-    nextCapAt: report.nextCapAt, release: report.release };
+    release: report.release };
 }
 function readManager(home: string, now: Date, heartbeatMs: number) {
   const record = readObservation(home, 'manager');
