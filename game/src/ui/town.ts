@@ -50,7 +50,7 @@ import { el, panel } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, moneyAmount, moneyText } from "./units";
+import { fuelLiters, moneyText } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
@@ -319,7 +319,7 @@ export class TownScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`),
+      el("span", { class: "dim" }, fuel ? `${moneyText(price)} per ${amount(1)}` : `${moneyText(price)} each`),
       this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), afford < 1),
       this.button(`Fill ${amount(afford)}`, (x) => buySupply(x, k, afford), afford < 1),
     );
@@ -459,7 +459,7 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
 };
 
 function priceEl(price: number): HTMLElement {
-  return el("span", { class: "price" }, createIcon("money"), moneyAmount(price));
+  return el("span", { class: "price" }, createIcon("money"), moneyText(price));
 }
 
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
@@ -513,7 +513,7 @@ function contractRow(w: World, c: Contract, action: HTMLElement, posted = false)
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price" }, createIcon("money"), moneyAmount(c.reward)),
+    el("span", { class: "price" }, createIcon("money"), moneyText(c.reward)),
     clock,
     action,
   );
@@ -738,7 +738,7 @@ export class TruckTradeScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, `${fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`}, ${amount(offer)} on offer`),
+      el("span", { class: "dim" }, `${fuel ? `${moneyText(price)} per ${amount(1)}` : `${moneyText(price)} each`}, ${amount(offer)} on offer`),
       this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), most < SUPPLY_STEP),
       this.button(`Fill ${amount(most)}`, (x) => buyTruckSupply(x, npc.id, k, most), most < 1),
     );

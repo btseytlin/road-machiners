@@ -20,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyAmount } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -232,8 +232,8 @@ function weatherLabel(w: World, pos: Vec): string {
 
 export function moneyLabel(money: number): string {
   return money < 0
-    ? `Debt ${moneyAmount(-money)}`
-    : moneyAmount(money);
+    ? `Debt ${moneyText(-money)}`
+    : moneyText(money);
 }
 
 export type RescueReadout =

@@ -273,7 +273,7 @@ describe("critical vehicle readout", () => {
       getHudReadout(w)
         .resources.slice(0, 3)
         .map((r) => r.value),
-    ).toEqual(["1,235", "93 / 200 L", "7.3"]);
+    ).toEqual(["1,235 M", "93 / 200 L", "7.3"]);
   });
   it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
@@ -344,7 +344,7 @@ describe("rescue readout", () => {
     const w = emptyWorld();
     w.player.money = -120050;
     expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "Debt 1,201",
+      value: "Debt 1,201 M",
       warning: true,
     });
   });

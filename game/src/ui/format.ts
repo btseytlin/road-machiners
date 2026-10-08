@@ -86,7 +86,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
+import { damage, fuelLiters, hp, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -726,8 +726,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return `+${moneyAmount(e.perUnit)}`;
-    case "loss": return `\u2212${moneyAmount(e.perUnit)}`;
+    case "gain": return `+${moneyText(e.perUnit)}`;
+    case "loss": return `\u2212${moneyText(e.perUnit)}`;
   }
 }
 
@@ -735,10 +735,10 @@ export function estimateTitle(e: SaleEstimate): string {
   switch (e.kind) {
     case "none": return "";
     case "unrecorded": return "No cost on record";
-    default: return `Avg cost ${moneyAmount(e.avgCost)}`;
+    default: return `Avg cost ${moneyText(e.avgCost)}`;
   }
 }
 
 export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
-  return direction === "buy" ? `Buy ${count} for ${moneyAmount(total)} total` : `Sell all ${count} for ${moneyAmount(total)} total`;
+  return direction === "buy" ? `Buy ${count} for ${moneyText(total)} total` : `Sell all ${count} for ${moneyText(total)} total`;
 }

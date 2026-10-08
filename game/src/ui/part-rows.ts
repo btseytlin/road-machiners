@@ -6,7 +6,7 @@ import type { PartInstance, World } from "../sim/types";
 import { conditionTag, createIcon, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
 import { conditionStatus, conditionTier } from "./format";
-import { moneyAmount } from "./units";
+import { moneyText } from "./units";
 
 export type PartRow = {
   world: World;
@@ -68,7 +68,7 @@ export class PartRows {
       this.nameCell(r.part),
       statChip(headlineStat(r.world, r.part, r.base)),
       footprint(partDef(r.part.defId).w, partDef(r.part.defId).h),
-      el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, createIcon("money"), moneyAmount(r.price)),
+      el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, createIcon("money"), moneyText(r.price)),
       el("span", { class: "chevron" }),
     );
     head.addEventListener("click", () => {
