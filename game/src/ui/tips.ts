@@ -267,6 +267,8 @@ export class Tips {
     this.seen = readSeen(storage);
     this.off = tipsOff(storage);
     this.box.style.display = "none";
+    // The tip stands above the hover panel, which the HUD made first.
+    rightTop().prepend(this.box);
   }
 
   update(world: World, auto: boolean): void {

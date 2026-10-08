@@ -1065,13 +1065,13 @@ body {
 #ui .right-top {
   position: absolute;
   right: 14px;
-  top: 64px;
+  top: 80px;
   z-index: 30;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-height: calc(100dvh - 64px - 242px);
+  max-height: calc(100dvh - 80px - 242px);
   pointer-events: none;
 }
 #ui .right-top > .panel {
@@ -1803,11 +1803,15 @@ body {
     height: calc(100dvh - 176px - 72px);
   }
   #ui .right-top {
-    max-height: calc(100dvh - 64px - 264px);
+    max-height: calc(100dvh - 80px - 264px);
   }
+  /* The instruments fill the width here, so the opening tip takes the free band under them, over the end turn button. */
   #ui:has(.modal:not([style*="display: none"])) > .right-top > .opening-tip {
-    right: 14px;
-    bottom: 176px;
+    left: 14px;
+    right: auto;
+    bottom: 8px;
+    width: calc(100vw - 28px);
+    font-size: 13px;
   }
   #ui .modal {
     padding: 20px 16px;
