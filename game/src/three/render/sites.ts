@@ -2,24 +2,24 @@
 // so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
 
 import * as THREE from 'three';
-import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { TERRAIN } from '../../data/terrain';
+import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
-import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
+import { deckById, type Deck } from '../../sim/bridge';
+import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-type Site = TownDef | LocationDef;
-const HULL_RADIUS = 20;
+type Site = TownDef | SiteLocationDef;
 const NOSE_SCALE = 4;
 const BRIDGE_RISE = 1.5;
 const BRIDGE_DECK_TOP = 0.8;
+const WING_DECK_LENGTH = 156;
+const WING_DECK_WIDTH = 24;
 
 class SiteBuilder {
   readonly root = new THREE.Group();
@@ -96,16 +96,6 @@ class SiteBuilder {
       throw new Error(`Site prop at ${x},${z} of ${this.site.id} stands on a road`);
     }
   }
-  addDeadTree(x: number, z: number, index: number): void {
-    const lean = (hash2(index, 19) - 0.5) * 0.35;
-    const trunk = this.addBox(x, z, 0.16, 1.5, 0.18, PAL.trunk);
-    trunk.rotation.z = lean;
-    for (const sign of [-1, 1]) {
-      const branch = this.addBox(x + sign * 0.24, z, 0.1, 0.95, 0.12, PAL.trunk, 0.85);
-      branch.rotation.z = sign * 0.75;
-    }
-    this.addBox(x + 0.35, z, 0.7, 0.13, 0.18, PAL.trunk, 0.03, lean);
-  }
   addRuin(x: number, z: number, width: number, depth: number): void {
     this.addBox(x, z, width, 0.12, depth, PAL.wall.dark);
     this.addBox(x - width / 2, z, 0.2, 1.2, depth, PAL.wall.side);
@@ -135,24 +125,6 @@ class SiteBuilder {
       this.addBox(x + i * length * 0.3, z - width * 0.6, length * 0.12, 0.12, width * 0.3, PAL.metalLight, 0.15, yaw + i * 0.4);
     }
   }
-}
-
-function buildOrchard(b: SiteBuilder): void {
-  const { orchardRows: rows, orchardSpacing: spacing } = REGION.settlement;
-  const half = (rows - 1) / 2;
-  const living: { x: number; z: number; yaw: number }[] = [];
-  for (let row = 0; row < rows; row++) {
-    const x = (row - half) * spacing;
-    b.addBox(x - 0.65, 0, 0.18, 0.06, rows * spacing, PAL.wall.dark);
-    for (let col = 0; col < rows; col++) {
-      const index = row * rows + col;
-      const z = (col - half) * spacing;
-      if (index % 4 === 0) b.addDeadTree(x, z, index);
-      else living.push({ x, z, yaw: hash2(index, 29) * Math.PI * 2 });
-    }
-  }
-  b.addInstances('orchard_tree', living);
-  b.addRuin(0, 12.5, 6, 4);
 }
 
 function buildSettlement(b: SiteBuilder, site: Site): void {
@@ -196,24 +168,23 @@ type WallStyle = {
   height: number;
   thickness: number;
   segment: number;
-  towerEvery: number | null;
   ragged: boolean;
   fence: boolean;
   colors: number[];
   postColor: number;
   doorColor: number;
-  guarded: boolean;
+  bannered: boolean;
 };
 
 const SET = REGION.settlement;
-const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, guarded: false };
+const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, bannered: false };
 const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
-  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
+  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, bannered: true },
   palisade: PALISADE,
-  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, guarded: true },
-  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, guarded: false },
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, towerEvery: null, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, guarded: false },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
+  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, bannered: true },
+  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, bannered: false },
+  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, bannered: false },
+  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, bannered: false },
 };
 const SINK = 0.3;
 const DOOR_THICKNESS = 0.4;
@@ -247,6 +218,7 @@ function addWall(b: SiteBuilder, site: Site, style: WallStyle): void {
   b.root.userData.gates = runs.length;
   b.root.userData.doors = 2 * runs.length;
   b.root.userData.edgeReach = [ring.mid - style.thickness / 2, ring.radius];
+  b.root.userData.wallThickness = style.thickness;
 }
 
 function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number): number {
@@ -259,7 +231,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
     const p = { x: Math.cos(a) * ring.mid, z: Math.sin(a) * ring.mid };
     if (style.fence) addFenceSection(b, ring, style, p, a, i);
     else b.addBox(p.x, p.z, style.thickness, height + SINK, ring.length, color, -SINK, -a);
-    if (hasTower(ring, style, i)) addPost(b, ring, i * ring.step, style.thickness * 2, style.height * 1.4, style.postColor);
     sections++;
   }
   return sections;
@@ -268,10 +239,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
 function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
   for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
   addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
-}
-
-function hasTower(ring: Ring, style: WallStyle, i: number): boolean {
-  return style.towerEvery !== null && i % style.towerEvery === 0 && !ring.open[(i + ring.count - 1) % ring.count];
 }
 
 function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: number, color: number): void {
@@ -292,11 +259,9 @@ function gateRuns(open: boolean[]): [number, number][] {
 }
 
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) {
-    if (style.guarded) addGuardTower(b, ring, style, a);
-    else addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
-  }
-  if (style.guarded) addBanner(b, ring, from);
+  const postHeight = style.height + Math.min(style.height * 0.4, SET.gatePostRise);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, postHeight, style.postColor);
+  if (style.bannered) addBanner(b, ring, from - ring.step / 2);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
@@ -313,28 +278,16 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
 }
 
 function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
+  const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
-  if (!style.guarded) b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
+  b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
   b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
   b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
 }
 
-
-function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const t = style.thickness;
-  addPost(b, ring, a, t * 2.4, tower, style.postColor);
-  const q = onEdge(ring, a, t * 2.4);
-  b.addBox(q.x, q.z, t * 3.2, 0.12, t * 3.2, PAL.wall.dark, tower, -a);
-  const gun = onEdge(ring, a, -t * 1.4);
-  b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
-}
-
 function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
-  const tower = SET.guardTowerHeight;
   const q = onEdge(ring, a, 1);
-  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight - tower, 0.12, PAL.trunk, tower);
+  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight + SINK, 0.12, PAL.trunk, -SINK);
   const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
   b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1, -a);
 }
@@ -359,15 +312,26 @@ function buildLock(b: SiteBuilder): void {
 }
 
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {
-  const { from, width } = TERRAIN.features.bridge;
-  const [h0, h1] = deckEnds(terrain);
-  const pitch = Math.atan2((h1 - h0) * S, BRIDGE_LENGTH * S);
-  const mid = { x: from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2, y: from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2 };
-  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((BRIDGE_LENGTH * S) / 32, BRIDGE_RISE, (width * S) / 7));
+  const deck = deckById('canyon-bridge');
+  const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
   bridge.userData.outsideEdge = true;
-  bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
-  bridge.rotation.set(0, -Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x), pitch, 'YXZ');
+  poseOnDeck(bridge, deck, soleSegment(terrain, deck), BRIDGE_DECK_TOP * BRIDGE_RISE);
   b.addRuin(0, 0, 3, 2);
+}
+
+function buildWingDeck(t: Terrain): THREE.Group {
+  const deck = deckById('broken-wing');
+  const root = new THREE.Group();
+  root.name = 'landmark-wing-deck';
+  const obj = model('wing_deck');
+  obj.scale.set((deck.length * S) / WING_DECK_LENGTH, 1, (deck.width * S) / WING_DECK_WIDTH);
+  poseOnDeck(obj, deck, soleSegment(t, deck), 0);
+  root.add(obj);
+  root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  return root;
 }
 
 function buildOasis(b: SiteBuilder, well: boolean): void {
@@ -415,6 +379,15 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
+function buildWingSalvage(b: SiteBuilder): void {
+  b.addTank(2.5, 2.8, 0.6, 1.4, PAL.rust.top);
+  b.addTank(3.8, 2.2, 0.45, 1.1, PAL.rust.dark);
+  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, -0.3);
+  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, 0.2);
+  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, 0.6);
+  b.addModel('crates', -3.8, 2.6, 0.5);
+}
+
 function buildCamp(b: SiteBuilder, id: string): void {
   const turn = id === 'kiln' ? 1.3 : 0;
   for (let i = 0; i < 3; i++) {
@@ -430,27 +403,36 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
+type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
+
+const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
+const camp: SiteDecor = (b, site) => buildCamp(b, site.id);
+const settlement: SiteDecor = (b, site) => buildSettlement(b, site);
+
+const SITE_DECOR: Record<string, SiteDecor> = {
+  granary: (b) => buildGranary(b),
+  'pump-station': (b) => buildPump(b),
+  'south-lock': (b) => buildLock(b),
+  'canyon-bridge': (b, _site, t) => buildBridge(b, t),
+  dustwell: (b) => buildOasis(b, true),
+  'green-pit': (b) => buildOasis(b, false),
+  'broken-wing': (b) => buildWingSalvage(b),
+  'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
+  nose: settlement,
+  bowl: settlement,
+  'burnt-convoy': wrecks,
+  podfield: wrecks,
+  'ridge-wrecks': wrecks,
+  'salvage-yard': wrecks,
+  scrapjaw: camp,
+  kiln: camp,
+};
+
 function buildSite(t: Terrain, site: Site): THREE.Group {
   const b = new SiteBuilder(t, site);
-  switch (site.id) {
-    case 'orchard': buildOrchard(b); break;
-    case 'granary': buildGranary(b); break;
-    case 'pump-station': buildPump(b); break;
-    case 'south-lock': buildLock(b); break;
-    case 'canyon-bridge': buildBridge(b, t); break;
-    case 'dustwell': buildOasis(b, true); break;
-    case 'green-pit': buildOasis(b, false); break;
-    case 'fallen-sun':
-      b.addModel('ship_hull', 0, 0, -0.2, (site.radius * S) / HULL_RADIUS);
-      b.addBox(-10, 16, 25, 0.3, 15, PAL.metalLight, 0.6, 0.3);
-      for (const z of [-8, 8]) b.addTank(-33, z, 3, 5, PAL.rust.dark);
-      break;
-    case 'glass-flats': b.addModel('glass_flats', 0, 0); break;
-    case 'nose': case 'bowl': buildSettlement(b, site); break;
-    case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
-    case 'scrapjaw': case 'kiln': buildCamp(b, site.id); break;
-    default: throw new Error(`Missing landmark model for ${site.id}`);
-  }
+  const decor = SITE_DECOR[site.id];
+  if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
+  decor(b, site, t);
   addWall(b, site, edgeStyle(site));
   b.root.traverse((o) => {
     o.updateMatrix();
@@ -460,13 +442,31 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
-  for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
+  for (const site of SITES) group.add(buildSite(t, site));
+  group.add(buildWingDeck(t));
   return group;
 }
 
 export function addSites(t: Terrain, scope: RenderScope): void {
-  for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
+  for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
+  const deck = deckById('broken-wing');
+  scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+}
+
+export function poseOnDeck(obj: THREE.Object3D, deck: Deck, seg: DeckSegment, top: number): void {
+  const { axis } = deck;
+  const { from, length, h0, h1 } = seg;
+  const pitch = Math.atan2((h1 - h0) * S, length * S);
+  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
+  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
+}
+
+export function soleSegment(t: Terrain, deck: Deck): DeckSegment {
+  const segments = deckSegments(t, deck);
+  if (segments.length !== 1) throw new Error(`Deck ${deck.id} has ${segments.length} pieces, not one`);
+  return segments[0];
 }

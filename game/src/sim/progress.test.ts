@@ -1,28 +1,110 @@
 import { describe, expect, it } from 'vitest';
 import { TIME } from '../data/time';
-import { MAX_SKILL_LEVEL, type PerkId, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
-import { choosePerk, hasPerk, pendingPerkPairs, practice, skillEffect, skillLevel, vehicleHasPerk, xpFor, xpTodayOf } from './progress';
+import { MAX_RANK, type PerkId, RANK_COSTS, XP_RULES, XP_SOURCES } from '../data/skills';
+import {
+  affordableRanks, buyCheapestRanks, buyRank, canBuyRank, choosePerk, cumulativeCost, hasPerk, pendingPerkPairs, practice, rankCost, ranksCoveredBy, skillEffect,
+  skillLevel, vehicleHasPerk, xpFor, xpTodayOf,
+} from './progress';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 
-describe('skill levels', () => {
-  it('follow the XP table', () => {
-    const w = emptyWorld();
-    w.player.skills.social = XP_TO_REACH[2] - 1;
-    expect(skillLevel(w, 'social')).toBe(1);
-    w.player.skills.social = XP_TO_REACH[2];
-    expect(skillLevel(w, 'social')).toBe(2);
+describe('rank costs', () => {
+  it('price each rank from the table', () => {
+    expect(rankCost(1)).toBe(RANK_COSTS[0]);
+    expect(rankCost(MAX_RANK)).toBe(RANK_COSTS[MAX_RANK - 1]);
+    expect(() => rankCost(0)).toThrow();
+    expect(() => rankCost(MAX_RANK + 1)).toThrow();
   });
 
-  it('stop at the top level', () => {
+  it('add up to the cumulative cost of a rank', () => {
+    expect(cumulativeCost(0)).toBe(0);
+    expect(cumulativeCost(2)).toBe(RANK_COSTS[0] + RANK_COSTS[1]);
+  });
+
+  it('cover the ranks an XP total pays for, up to the top rank', () => {
+    expect(ranksCoveredBy(cumulativeCost(2) - 1)).toBe(1);
+    expect(ranksCoveredBy(cumulativeCost(2))).toBe(2);
+    expect(ranksCoveredBy(cumulativeCost(MAX_RANK) * 10)).toBe(MAX_RANK);
+  });
+});
+
+describe('skill levels', () => {
+  it('are the bought ranks', () => {
     const w = emptyWorld();
-    w.player.skills.social = XP_TO_REACH[MAX_SKILL_LEVEL] * 10;
-    expect(skillLevel(w, 'social')).toBe(MAX_SKILL_LEVEL);
+    w.player.ranks.social = 2;
+    expect(skillLevel(w, 'social')).toBe(2);
+  });
+});
+
+describe('buying a rank', () => {
+  it('spends the next rank cost from the pool and announces the rank', () => {
+    const w = emptyWorld();
+    w.player.xp = RANK_COSTS[0] + 5;
+    const next = buyRank(w, 'driving');
+    expect(next.player.ranks.driving).toBe(1);
+    expect(next.player.xp).toBe(5);
+    expect(next.events).toContainEqual({ t: 'skillUp', skill: 'driving', level: 1 });
+    expect(w.player.ranks.driving).toBe(0);
+  });
+
+  it('buys ranks in order, each at its own cost', () => {
+    const w = emptyWorld();
+    w.player.xp = cumulativeCost(2);
+    const next = buyRank(buyRank(w, 'machining'), 'machining');
+    expect(next.player.ranks.machining).toBe(2);
+    expect(next.player.xp).toBe(0);
+  });
+
+  it('refuses a rank the pool cannot pay, and leaves the world as it was', () => {
+    const w = emptyWorld();
+    w.player.xp = RANK_COSTS[0] - 1;
+    expect(canBuyRank(w, 'driving')).toMatch(/XP/);
+    expect(() => buyRank(w, 'driving')).toThrow();
+    expect(w.player.xp).toBe(RANK_COSTS[0] - 1);
+    expect(w.player.ranks.driving).toBe(0);
+  });
+
+  it('refuses a rank past the top', () => {
+    const w = emptyWorld();
+    w.player.ranks.social = MAX_RANK;
+    w.player.xp = 1e6;
+    expect(canBuyRank(w, 'social')).not.toBeNull();
+    expect(() => buyRank(w, 'social')).toThrow();
+  });
+
+  it('refuses a rank while the player is knocked out', () => {
+    const w = emptyWorld();
+    w.player.xp = 1e6;
+    w.player.state = 'knockedOut';
+    expect(canBuyRank(w, 'social')).not.toBeNull();
+    expect(() => buyRank(w, 'social')).toThrow();
+  });
+
+  it('lists the skills whose next rank the pool pays for', () => {
+    const w = emptyWorld();
+    w.player.xp = RANK_COSTS[1];
+    w.player.ranks.driving = 1;
+    w.player.ranks.social = 2;
+    expect(affordableRanks(w)).toEqual(['driving', 'perception', 'machining', 'toughness']);
+    w.player.xp = RANK_COSTS[0] - 1;
+    expect(affordableRanks(w)).toEqual([]);
+  });
+
+  it('spends the pool on the cheapest ranks first, ties in skill order, until none is affordable', () => {
+    const w = emptyWorld();
+    w.player.ranks.driving = 1;
+    w.player.xp = 4 * RANK_COSTS[0] + 3;
+
+    const next = buyCheapestRanks(w);
+
+    expect(next.player.ranks).toEqual({ ...w.player.ranks, perception: 1, social: 1, machining: 1, toughness: 1 });
+    expect(next.player.xp).toBe(3);
+    expect(buyCheapestRanks(next)).toBe(next);
   });
 });
 
 describe('xpFor', () => {
-  const fresh = { skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 }, xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 }, xpDay: 1, repeats: {} };
+  const fresh = { xp: 0, xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 }, xpDay: 1, repeats: {} };
 
   it('pays an unscaled source its weight per unit', () => {
     expect(xpFor(fresh, 'profit', 100, null, 'bowl:salt', 1)).toBeCloseTo(XP_SOURCES.profit.weight * 100);
@@ -90,7 +172,7 @@ describe('repeats on one target', () => {
   it('spamming a decaying target pays a bounded total', () => {
     const w = emptyWorld();
     for (let i = 0; i < 500; i++) practice(w, 'profit', 10, null, 'bowl:salt');
-    expect(w.player.skills.social).toBeLessThan((XP_SOURCES.profit.weight * 10) / (1 - XP_SOURCES.profit.repeat) + 1e-6);
+    expect(w.player.xp).toBeLessThan((XP_SOURCES.profit.weight * 10) / (1 - XP_SOURCES.profit.repeat) + 1e-6);
   });
 
   it('a once-only target never pays again, even days later', () => {
@@ -98,7 +180,7 @@ describe('repeats on one target', () => {
     practice(w, 'call', 1, null, 'v2:directions');
     w.turn += 30 * TIME.turnsPerDay;
     practice(w, 'call', 1, null, 'v2:directions');
-    expect(w.player.skills.social).toBeCloseTo(XP_SOURCES.call.weight);
+    expect(w.player.xp).toBeCloseTo(XP_SOURCES.call.weight);
   });
 
   it('a new day forgets faded decaying targets but keeps once-only ones', () => {
@@ -116,19 +198,30 @@ describe('repeats on one target', () => {
 });
 
 describe('practice', () => {
-  it('adds XP to the source skill and logs it', () => {
+  it('adds XP to the pool and the family day and logs it', () => {
     const w = emptyWorld();
     practice(w, 'discover', 1, null, 'bowl');
-    expect(w.player.skills.perception).toBeCloseTo(XP_SOURCES.discover.weight);
+    expect(w.player.xp).toBeCloseTo(XP_SOURCES.discover.weight);
+    expect(w.player.xpToday.perception).toBeCloseTo(XP_SOURCES.discover.weight);
     expect(w.player.xpBySource.discover).toBeCloseTo(XP_SOURCES.discover.weight);
     expect(w.events).toContainEqual({ t: 'practice', source: 'discover', amount: 1, difficulty: null, target: 'bowl', xp: XP_SOURCES.discover.weight });
   });
 
-  it('announces each level reached', () => {
+  it('never raises a rank', () => {
     const w = emptyWorld();
-    w.player.skills.machining = XP_TO_REACH[1] - 1;
+    w.player.xp = RANK_COSTS[0] - 1;
     practice(w, 'search', 1, null, 'stock');
-    expect(w.events).toContainEqual({ t: 'skillUp', skill: 'machining', level: 1 });
+    expect(w.player.ranks.machining).toBe(0);
+    expect(w.events.some((e) => e.t === 'skillUp')).toBe(false);
+  });
+
+  it('keeps the daily cap per activity family', () => {
+    const w = emptyWorld();
+    w.player.xpToday.social = XP_RULES.dailyCap;
+    practice(w, 'discover', 1, null, 'bowl');
+    expect(w.player.xp).toBeCloseTo(XP_SOURCES.discover.weight);
+    practice(w, 'call', 1, null, 'v2:directions');
+    expect(w.player.xp).toBeCloseTo(XP_SOURCES.discover.weight + XP_SOURCES.call.weight * XP_RULES.overCap);
   });
 
   it('resets the daily count on a new day', () => {
@@ -141,15 +234,15 @@ describe('practice', () => {
 });
 
 describe('skillEffect', () => {
-  it('scales with level for the player truck', () => {
+  it('scales with rank for the player truck', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[3];
+    w.player.ranks.driving = 3;
     expect(skillEffect(w, w.vehicles[0], 'driving', 'turnRate')).toBeCloseTo(0.3);
   });
 
   it('is zero for other trucks', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[3];
+    w.player.ranks.driving = 3;
     const npc = addVehicle(w, 'traders', 'hauler', [], { x: 40, y: 40 });
     expect(skillEffect(w, npc, 'driving', 'turnRate')).toBe(0);
   });
@@ -160,29 +253,29 @@ describe('skill effects on the truck', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const before = vehicleStats(w, me).turnSlow;
-    w.player.skills.driving = XP_TO_REACH[2];
+    w.player.ranks.driving = 2;
     expect(vehicleStats(w, me).turnSlow).toBeGreaterThan(before);
   });
 });
 
 describe('choosing a perk', () => {
-  it('adds a perk once the skill reaches its level', () => {
+  it('adds a perk once the skill reaches its rank', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[2];
+    w.player.ranks.driving = 2;
     const next = choosePerk(w, 'rammer');
     expect(hasPerk(next, 'rammer')).toBe(true);
     expect(hasPerk(w, 'rammer')).toBe(false);
   });
 
-  it('refuses a perk above the skill level', () => {
+  it('refuses a perk above the skill rank', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[3];
-    expect(() => choosePerk(w, 'steadyAim')).toThrow(/level 4/);
+    w.player.ranks.driving = 3;
+    expect(() => choosePerk(w, 'steadyAim')).toThrow(/rank 4/);
   });
 
   it('refuses a second perk from the same pair', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[2];
+    w.player.ranks.driving = 2;
     const next = choosePerk(w, 'rammer');
     expect(() => choosePerk(next, 'coldRunning')).toThrow(/Rammer/);
     expect(() => choosePerk(next, 'rammer')).toThrow(/Rammer/);
@@ -195,20 +288,20 @@ describe('choosing a perk', () => {
 
   it('refuses a pick while the player is knocked out', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[2];
+    w.player.ranks.driving = 2;
     w.player.state = 'knockedOut';
     expect(() => choosePerk(w, 'rammer')).toThrow();
   });
 });
 
 describe('open perk pairs', () => {
-  it('lists no pair below level 2', () => {
+  it('lists no pair below rank 2', () => {
     expect(pendingPerkPairs(emptyWorld())).toEqual([]);
   });
 
   it('lists each reached pair until it has a pick', () => {
     const w = emptyWorld();
-    w.player.skills.social = XP_TO_REACH[4];
+    w.player.ranks.social = 4;
     expect(pendingPerkPairs(w)).toEqual([
       { skill: 'social', level: 2, perks: ['marketEars', 'rumorMill'] },
       { skill: 'social', level: 4, perks: ['paidTruce', 'bountyTalk'] },

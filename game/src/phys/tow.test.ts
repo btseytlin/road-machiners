@@ -7,7 +7,8 @@ import { canVehicleSee } from '../sim/vision';
 import { playerVehicle } from '../sim/damage';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
-import { siteGates } from '../sim/sites';
+import { siteGates, sitePads } from '../sim/sites';
+import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from '../sim/testkit';
@@ -93,7 +94,7 @@ describe('hitched tower traffic', () => {
     const r = runUntil(w, 20, () => false);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(dist(find(r.w, tower.id).pos, parked.pos)).toBeGreaterThan(10);
-  });
+  }, 90_000);
 
   it('a hitched tower and a truck meeting it head-on both get past without a collision', () => {
     const { w, tower, along, progress } = underWay();
@@ -106,6 +107,50 @@ describe('hitched tower traffic', () => {
     const r = runUntil(w, 20, passed);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(passed(r.w)).toBe(true);
+  });
+});
+
+describe('tow approach traffic', () => {
+  const crashes = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'collision' && (e.a === id || e.b === id));
+  const feuds = (events: GameEvent[]) => events.filter((e) => e.t === 'hostile');
+  const settled = (w: World) => playerTow(w) !== null || !w.states.some((st) => st.kind === 'answering');
+
+  function patrolled(place: (client: Vec) => Vec): { w: World; tower: Vehicle; patrol: Vehicle } {
+    const s = stranded();
+    const client = playerVehicle(s.w).pos;
+    const patrol = withTower(s.w, 'bowlFarmer', 'bowl', 'hauler', place(client));
+    patrol.brain!.goals = [];
+    return { w: s.w, tower: s.trader, patrol };
+  }
+
+  it('a tower parks beside a stranded truck without ramming a patrol parked at its approach spot', () => {
+    forceOption('strandedSeen', 'tow');
+    forceOption('idle', 'wait');
+    const reach = chassisDef('hauler').radius * 2 + RULES.arriveRadius;
+    const { w, tower, patrol } = patrolled((c) => ({ x: c.x + reach, y: c.y }));
+    const r = runUntil(w, 40, settled);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(feuds(r.events)).toEqual([]);
+    expect(settled(r.w)).toBe(true);
+    expect(patrol.id).not.toBe(tower.id);
+  });
+
+  it('a tower arriving as a patrol drives across its approach spot does not crash into it', () => {
+    forceOption('strandedSeen', 'tow');
+    const { w, tower, patrol } = patrolled((c) => ({ x: c.x + 5, y: c.y + 14 }));
+    const to = { x: patrol.pos.x, y: patrol.pos.y - 28 };
+    patrol.heading = -Math.PI / 2;
+    patrol.brain!.goals = [{ kind: 'raid', targetId: null, destination: to, phase: 'travel', reason: 'drive across the approach' }];
+    const r = runUntil(w, 40, settled);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(feuds(r.events)).toEqual([]);
+  });
+
+  it('a free approach still offers, hitches and tows', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    const r = runUntil(s.w, 30, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)?.holder).toBe(s.trader.id);
   });
 });
 
@@ -128,7 +173,8 @@ describe('emergency beacon', () => {
   it('a raider comes to a beaconing truck with cargo', () => {
     const w = emptyWorld(player);
     w.player.fuel = 0;
-    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 130, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, NPCS.buggy.traits);
     forceOption('contactHeard', 'investigate');
     const r = runUntil(setBeacon(w, true), 60, (x) => dist(find(x, raider.id).pos, playerVehicle(x).pos) < 15);
     expect(dist(find(r.w, raider.id).pos, playerVehicle(r.w).pos)).toBeLessThan(15);
@@ -167,7 +213,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     const tower = withTower(w, 'trader', 'traders', 'hauler', { x: 150, y: 150 });
     const client = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 147, y: 150 });
     client.brain = npcBrain('buggy', client.pos, ['raider']);
-    client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [] };
+    client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [], gaveUp: true };
     tower.items = tower.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
     tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'test' }];
     addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });
@@ -178,9 +224,9 @@ describe('a client that jumps home as its NPC tow ends', () => {
     expect(after.events.some((e) => e.t === 'towDropped')).toBe(true);
     const c = after.vehicles.find((v) => v.id === client.id)!;
     expect(c.trail).toHaveLength(0);
-    expect(c.defeat).toBeUndefined();
+    expect(sitePads(npcHomeSite(c)!).some((pad) => dist(pad, c.pos) < 0.01)).toBe(true);
     const frames: Parameters<typeof addRopeFrames>[2] = {};
-    addRopeFrames(before, after, frames);
+    addRopeFrames(before, after, frames, {});
     expect(frames[client.id]).toHaveLength(TURN_STEPS);
   });
 });

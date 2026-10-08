@@ -1,20 +1,41 @@
 // A uniform grid over blockers by their circles, so a line check reads only the blockers near its segment.
 
 import { boxSegmentDistance, type PosedBox } from '../mapgen';
+import type { Obstacle } from '../types';
 import { segmentDist, type Vec } from '../vec';
+
+export type ObstacleMark = { id: string; x: number; y: number; r: number; shape: string };
+
+function shapeOf(o: Obstacle): string {
+  return o.kind === 'landmark' ? `${o.look}:${o.yaw}` : o.kind;
+}
+
+export function marksOf(obstacles: readonly Obstacle[]): ObstacleMark[] {
+  return obstacles.map((o) => ({ id: o.id, x: o.pos.x, y: o.pos.y, r: o.r, shape: shapeOf(o) }));
+}
+
+export function sameMarks(marks: readonly ObstacleMark[], obstacles: readonly Obstacle[]): boolean {
+  if (marks.length !== obstacles.length) return false;
+  for (let i = 0; i < marks.length; i++) if (!marksObstacle(marks[i], obstacles[i])) return false;
+  return true;
+}
+
+function marksObstacle(m: ObstacleMark, o: Obstacle): boolean {
+  return m.id === o.id && m.x === o.pos.x && m.y === o.pos.y && m.r === o.r && m.shape === shapeOf(o);
+}
 
 export type Blocker = { pos: Vec; r: number; prop?: { key: string; boxes: readonly PosedBox[] } };
 
 const BUCKET = 8;
 const HALF_DIAG = (BUCKET * Math.SQRT2) / 2;
 
-export class ObstacleBuckets {
+export class ObstacleBuckets<B extends Blocker = Blocker> {
   private readonly cols: number;
-  private readonly cells: Blocker[][];
-  private readonly outside: Blocker[] = [];
+  private readonly cells: B[][];
+  private readonly outside: B[] = [];
   private readonly maxR: number;
 
-  constructor(blockers: Blocker[], size: number) {
+  constructor(blockers: readonly B[], size: number) {
     this.cols = Math.ceil(size / BUCKET);
     this.cells = Array.from({ length: this.cols * this.cols }, () => []);
     let maxR = 0;
@@ -28,7 +49,7 @@ export class ObstacleBuckets {
     this.maxR = maxR;
   }
 
-  alongSegment(a: Vec, b: Vec, reach: number): Blocker[] {
+  alongSegment(a: Vec, b: Vec, reach: number): B[] {
     const out = this.outside.slice();
     const pad = reach + this.maxR;
     const lim = pad + HALF_DIAG;

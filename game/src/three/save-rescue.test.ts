@@ -3,11 +3,13 @@ import { startKit } from '../data/start';
 import { playerVehicle } from '../sim/damage';
 import { TEST_MAP } from '../test/map';
 import { townAt } from '../sim/sites';
-import { newWorld } from '../sim/world';
+import { carriedWorld, newWorld } from '../sim/world';
 import { loadWorld, saveOf } from './save';
 import { readCarried, rescueSave } from './save-rescue';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
+import { MIGRATIONS } from './save-migrations';
 
 const KIT = startKit('standard');
 const fresh = () => 5;
@@ -29,7 +31,8 @@ type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number 
 function currentSave(): { format: unknown; world: SavedWorld } {
   const world = newWorld(1337, KIT, TEST_MAP);
   world.player.money = 4321;
-  world.player.skills.driving = 800;
+  world.player.xp = 150;
+  world.player.ranks.driving = 2;
   return JSON.parse(JSON.stringify(saveOf(world)));
 }
 
@@ -39,9 +42,25 @@ describe('readCarried', () => {
     save.world.mapHash = 'other';
     const carried = readCarried(save);
     expect(carried.money).toBe(4321);
-    expect(carried.skills.driving).toBe(800);
+    expect(carried.xp).toBe(150);
+    expect(carried.ranks.driving).toBe(2);
     expect(carried.truck?.chassisId).toBe(KIT.chassis);
     expect(carried.truck?.items.some((it) => it.kind === 'part' && it.part.defId === 'mg')).toBe(true);
+  });
+
+  it('reads skill XP from before format 2.10 as the 9 to 10 step does', () => {
+    const old = readCarried({ format: { major: 2, minor: 9 }, world: FORMAT_2_9 });
+    const migrated = readCarried({ format: { major: 2, minor: 10 }, world: MIGRATIONS[9](FORMAT_2_9) });
+    expect(old.ranks).toEqual({ driving: 0, perception: 1, machining: 2, toughness: 5, social: 3 });
+    expect(old.xp).toBe(1549);
+    expect({ xp: old.xp, ranks: old.ranks }).toEqual({ xp: migrated.xp, ranks: migrated.ranks });
+  });
+
+  it('keeps old perks whose rank holds and drops the rest', () => {
+    const world = { ...FORMAT_2_9, player: { ...FORMAT_2_9.player, perks: ['welder', 'desertRat', 'steadyAim'] } };
+    const { world: rescued } = carriedWorld(readCarried({ world }), KIT, TEST_MAP, fresh);
+    expect(rescued.player.perks).toEqual(['welder', 'desertRat']);
+    expect(rescued.player.ranks.toughness).toBe(5);
   });
 
   it('reads old formats and a fake major format', () => {
@@ -82,7 +101,8 @@ describe('rescueSave', () => {
     expect(townAt(rescued.world)).not.toBeNull();
     expect(rescued.world.player.money).toBe(4321);
     const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
-    expect(loaded.player.skills.driving).toBe(800);
+    expect(loaded.player.xp).toBe(150);
+    expect(loaded.player.ranks.driving).toBe(2);
     expect(playerVehicle(loaded).chassisId).toBe(KIT.chassis);
   });
 

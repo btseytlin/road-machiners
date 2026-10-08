@@ -2,7 +2,7 @@
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
 // hovered truck and H honks.
 
-import { DEAL_LINES } from '../data/dialogue';
+import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
@@ -12,7 +12,7 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
-import { el, panel } from './dom';
+import { el, isBrowserChord, panel } from './dom';
 import { fuelLiters, meters } from './units';
 import { npcName } from '../sim/spawn';
 
@@ -60,6 +60,13 @@ function aidText(v: Extract<CallVar, { kind: 'aid' }>): string {
   return parts.join(' and ');
 }
 
+export function tipText(v: Extract<CallVar, { kind: 'tip' }>): string {
+  if (!v.tip) return TIP_LINES.none;
+  const line = v.tip.dear ? TIP_LINES.dear : TIP_LINES.cheap;
+  const good = GOODS[v.tip.good];
+  return line.replace('{site}', siteName(v.tip.shop)).replace('{good}', good.name.toLowerCase()).replace('{was}', good.plural ? 'were' : 'was');
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
 
 const VAR_TEXT: VarText = {
@@ -72,6 +79,7 @@ const VAR_TEXT: VarText = {
   deal: dealText,
   prices: pricesText,
   aid: aidText,
+  tip: tipText,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
@@ -167,7 +175,7 @@ export class DialoguePanel {
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (isTyping()) return;
+    if (isBrowserChord(e) || isTyping()) return;
     if (this.host.busy()) return this.onBusyKey(e);
     const handled = this.host.world().player.call ? this.onCallKey(e.code) : this.onFreeKey(e.code);
     if (handled) e.stopImmediatePropagation();

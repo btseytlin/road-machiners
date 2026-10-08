@@ -4,96 +4,162 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
-import { PARTS, partDef } from '../../data/parts';
+import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, TRAITS } from '../../data/npcs';
+import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
-import { CONDITION, ENGINE_HEAT } from '../../data/wear';
-import { maxHp } from '../wear';
-import { inCombat } from '../combat';
-import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
+import { TERRAIN } from '../../data/terrain';
+import { ENGINE_HEAT } from '../../data/wear';
+import { TOPICS, type TopicId } from '../../data/dialogue';
+import { maxHp, partValue } from '../wear';
+import { inCombat, isHostile } from '../combat';
+import { startStrip, stripYield } from '../jobs';
+import { aimGuns, isSoftTarget } from './aim';
+import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
-import { chooseOption, currentOptions } from '../dialogue';
-import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
-import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
-import { moveItem, storePart, takeFromStorage } from '../inventory';
-import { shopAt, shopState } from '../market';
-import { canLoot, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
-import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
+import { isDefeated, isKnockedOut } from '../defeat';
+import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
+import { offeredSurrenderBy, type ThreatAnswer } from '../parley';
+import { hashRandom } from '../rng';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, driveRepairCost, partTradePrice, getLotTradePrice, getTradePrice, repairAll, repairBasics, repairCost, repairDrive, sellGood, sellPart, supplyRoom } from '../economy';
+import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
+import { cargoMassRoom, cargoRoom, getLayoutError, stowSpot, storePart } from '../inventory';
+import { itemMass } from '../mass';
+import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
+import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
+import { heatAt } from '../sun';
+import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { topGoal } from '../npc-activities';
+import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
+import { fightOdds } from '../fight-odds';
+import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
-import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
-import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
-import { clockOf } from '../sun';
-import { inTowReach, setBeacon } from '../tow';
-import type { GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
-import { dist, type Vec } from '../vec';
-import { playerExplored, playerSees } from '../vision';
+import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
+import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
+import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
+import { towData } from '../states';
+import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import { dist, pointsAway, type Vec } from '../vec';
+import { canVehicleSee, playerExplored, playerSees } from '../vision';
+import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
-export type Archetype = 'trader' | 'scavenger' | 'fighter' | 'mixed';
-export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter', 'mixed'];
-type Goal = Exclude<Archetype, 'mixed'>;
-const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
-export type BotTurn = { world: World; events: GameEvent[] };
+export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
+export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
+export type Policy = Archetype | 'robber' | 'convoyRobber';
+export const POLICIES: readonly Policy[] = [...ARCHETYPES, 'robber', 'convoyRobber'];
+type Goal = Exclude<Policy, 'markov' | 'climber'>;
 
-class Orders {
-  readonly events: GameEvent[] = [];
-  constructor(public world: World) {}
+const CLIMB_GUNS = 3;
+const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
-  run(command: (w: World) => World): void {
-    this.world = command(this.world);
-    this.events.push(...this.world.events);
-  }
+const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
+const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
+  trader: CARGO_GEAR,
+  scavenger: CARGO_GEAR,
+  hunter: { skip: [], chassis: 'keep', keepRoom: false },
+  fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
+  hauler: CARGO_GEAR,
+  robber: CARGO_GEAR,
+  convoyRobber: CARGO_GEAR,
+};
 
-  get me(): Vehicle {
-    return playerVehicle(this.world);
-  }
+function gearStyle(o: Orders, goal: Goal): UpgradeStyle {
+  if (goal !== 'hunter') return GEAR_STYLES[goal];
+  return { ...GEAR_STYLES.hunter, lootRoom: BIGGEST_PART_CELLS, minSpeed: huntedSpeed(o.world) };
+}
+
+function huntedSpeed(world: World): number | undefined {
+  const foes = world.vehicles.filter((v) => v.faction === 'raiders' && v.brain !== null && !isKnockedOut(v) && huntable(world, v));
+  return foes.length === 0 ? undefined : Math.max(...foes.map((v) => vehicleStats(world, v).maxSpeed));
+}
+
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean };
+
+const MARKOV_SALT = 0x6d61726b;
+
+export function isPolicy(value: string): value is Policy {
+  return (POLICIES as readonly string[]).includes(value);
 }
 
 export function isArchetype(value: string): value is Archetype {
   return (ARCHETYPES as readonly string[]).includes(value);
 }
 
-export function botOrders(world: World, archetype: Archetype): BotTurn {
+export function botOrders(world: World, archetype: Policy, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
-  answerCall(o);
+  const goal = goalOf(world, archetype, options);
+  o.fieldRepair = goal === 'hunter';
+  o.buysGear = options.noGear !== true;
+  const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
+  answerCall(o, takesTowOffer(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
-    const goal = goalOf(o.world, archetype);
     keepSwitches(o);
-    if (!holds(o) && !serviceTrip(o)) GOALS[goal](o);
+    act(o, goal);
   }
-  return { world: o.world, events: o.events };
+  return { world: o.world, events: o.events, ledger: o.ledger, notes: o.notes };
+}
+
+function act(o: Orders, goal: Goal): void {
+  if (holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
+  GOALS[goal](o);
 }
 
 export function parkedOnPurpose(world: World): boolean {
   if (world.player.state === 'knockedOut') return true;
-  return playerVehicle(world).job !== null || patchDeal(world) !== null || townAt(world) !== null;
+  return playerVehicle(world).job !== null || patchDeal(world) !== null || shopAt(world) !== null;
 }
 
-function goalOf(world: World, archetype: Archetype): Goal {
-  if (archetype !== 'mixed') return archetype;
-  return MIXED_ROTATION[(clockOf(world.turn).day - 1) % MIXED_ROTATION.length];
+function climberGoal(world: World): Goal {
+  return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'hauler';
 }
 
-function answerCall(o: Orders): void {
+function goalOf(world: World, archetype: Policy, options: BotOptions): Goal {
+  if (archetype === 'climber') return climberGoal(world);
+  if (archetype !== 'markov') return archetype;
+  const { markovTurns } = options;
+  if (markovTurns === undefined || !Number.isInteger(markovTurns) || markovTurns <= 0) throw new Error(`The markov bot needs markovTurns as a positive whole number, got ${markovTurns}`);
+  const stretch = Math.floor((world.turn - 1) / markovTurns);
+  return GOALS_PLAYED[Math.floor(hashRandom(world.seed ^ MARKOV_SALT, stretch) * GOALS_PLAYED.length)];
+}
+
+const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.', surrender: 'Come and get it.' };
+const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
+const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
+const YIELD_CARGO = 'Fine. Take it.';
+
+function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
     const at = `${call.with}:${call.topic}:${call.node}`;
     if (seen.has(at)) throw new Error(`Bot call loops back to ${at}`);
     seen.add(at);
-    const pick = call.topic ? 0 : currentOptions(o.world).length - 1;
+    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.text === replyTo(o.world, call, replies))) : currentOptions(o.world).length - 1;
     o.run((w) => chooseOption(w, pick));
   }
 }
 
+function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
+  if ((call.topic === 'demand' || call.topic === 'surrender') && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
+  return call.topic ? replies[call.topic] : undefined;
+}
+
 function keepSwitches(o: Orders): void {
   if (!o.world.player.autoRepair) o.run((w) => setAutoRepair(w, true));
-  if (!o.world.player.autoFire) o.run((w) => setAutoFire(w, true));
+  setFire(o, underFire(o.world, o.me));
+}
+
+function underFire(world: World, me: Vehicle): boolean {
+  return inCombat(world, me);
+}
+
+function setFire(o: Orders, on: boolean): void {
+  if (o.world.player.autoFire !== on) o.run((w) => setAutoFire(w, on));
+  if (!on) for (const id of Object.keys(o.me.weaponOrders)) o.run((w) => setWeaponOrder(w, id, null));
 }
 
 function holds(o: Orders): boolean {
   if (o.me.job) return true;
-  if (o.world.player.engineHeat >= ENGINE_HEAT.warnAt) {
+  if (coolsEngine(o)) {
     if (o.me.order) o.run((w) => setMoveOrder(w, null));
     return true;
   }
@@ -101,6 +167,14 @@ function holds(o: Orders): boolean {
   if (!deal) return false;
   workPatch(o, deal);
   return true;
+}
+
+const HEAT_RESUME = ENGINE_HEAT.warnAt / 2;
+
+function coolsEngine(o: Orders): boolean {
+  if (inCombat(o.world, o.me) || seenHostiles(o.world).length > 0) return false;
+  const heat = o.world.player.engineHeat;
+  return heat >= ENGINE_HEAT.warnAt || (heat >= HEAT_RESUME && o.me.order === null);
 }
 
 function patchDeal(world: World): NpcState | null {
@@ -114,66 +188,160 @@ function workPatch(o: Orders, deal: NpcState): void {
   else if (o.me.order) o.run((w) => setMoveOrder(w, null));
 }
 
-function serviceTrip(o: Orders): boolean {
-  if (isStranded(o.world, o.me) && !o.world.player.beacon) o.run((w) => setBeacon(w, true));
-  if (townAt(o.world)) {
-    serviceInTown(o);
-    return false;
-  }
-  if (!paidFixNeeded(o.world)) return false;
-  driveToSite(o, nearestTown(o.world));
+function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
+  const beacon = callsForTow(o);
+  if (beacon !== o.world.player.beacon) o.run((w) => setBeacon(w, beacon));
+  const shop = shopAt(o.world);
+  if (shop) serviceInTown(o, style, shop);
+  const target = serviceStop(o);
+  if (!target || target.id === shop) return false;
+  driveToSite(o, target);
   return true;
 }
 
-function serviceInTown(o: Orders): void {
+function callsForTow(o: Orders): boolean {
+  return isStranded(o.world, o.me) && wantsTow(o.world) && !inCombat(o.world, o.me);
+}
+
+function wantsTow(world: World): boolean {
+  return SHOP_SITES.some((s) => towFixes(world, s.id));
+}
+
+function takesTowOffer(world: World): boolean {
+  const offer = playerTow(world);
+  return offer === null || towFixes(world, towData(offer).site);
+}
+
+function towFixes(world: World, siteId: string): boolean {
+  if (!(siteId in SHOPS) || shopAt(world) === siteId) return false;
+  const budget = saleBudget(world);
+  if (mountedParts(playerVehicle(world), 'engine').length === 0) return stockEngine(world, siteId, budget) !== null;
+  return repairFits(world, siteId, budget);
+}
+
+function repairFits(world: World, siteId: string, budget: number): boolean {
+  const me = playerVehicle(world);
+  const broken = !hasWorkingEngine(me) || !isWorking(corePart(me, 'transmission'));
+  if (!broken) return budget >= ECONOMY.supplyPrice.fuel;
+  const fix = hasWorkingEngine(me) ? basicsRepairCost(world) : repairCost(world);
+  return shopDef(siteId).kind === 'garage' && fix <= budget;
+}
+
+function serviceStop(o: Orders): Site | null {
+  if (mountedParts(o.me, 'engine').length === 0) {
+    const engineShop = nearestEngineShop(o.world);
+    if (engineShop) return engineShop;
+  }
+  return !shopAt(o.world) && needsService(o) ? nearestShop(o.world) : null;
+}
+
+function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
+  if (o.world.player.money < 0) {
+    sellCargo(o);
+    sellGearFor(o, shop, 0);
+  }
+  restoreEngine(o, shop);
+  restoreBasics(o, shop);
   serviceHere(o);
-  restoreEngine(o);
-  if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
+  if (needsService(o)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
+  stockRepairParts(o, shop);
+  if (mountedParts(o.me, 'engine').length === 0) return;
+  rearm(o);
+  upgradeGear(o, style);
 }
 
-function paidFixNeeded(world: World): boolean {
-  return needsService(world) || canRestoreEngine(world);
+function needsOf(world: World): string {
+  const p = world.player;
+  const me = playerVehicle(world);
+  return `shop ${shopAt(world)}, fuel ${p.fuel}/${fuelCap(me)} for way ${fuelForWayToShop(world).toFixed(1)}, supplies ${p.supplies}/${suppliesCap(me)}, repair ${repairCost(world)}, badly damaged ${mountedParts(me).filter(isBadlyDamaged).map((part) => part.defId).join(' ')}, combat ${inCombat(world, me)}, exposed ${underFire(world, me)}, engine ${mountedParts(me, 'engine').length}`;
 }
 
-function canRestoreEngine(world: World): boolean {
-  if (mountedParts(playerVehicle(world), 'engine').length > 0) return false;
-  return shopAt(world) ? stockEngine(world) !== null : world.player.money >= cheapestEngineValue();
+function nearestEngineShop(world: World): Site | null {
+  const pos = playerVehicle(world).pos;
+  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, saleBudget(world)) !== null);
+  return stocked.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
 }
 
-function cheapestEngineValue(): number {
-  return Math.min(...Object.values(PARTS).filter((d) => d.kind === 'engine').map((d) => d.value * CONDITION.valueFactor[CONDITION.maxWear]));
-}
-
-function stockEngine(world: World): PartInstance | null {
-  const shopId = shopAt(world);
-  if (!shopId) return null;
+function stockEngine(world: World, shopId: string, budget: number): { part: PartInstance; price: number } | null {
   const me = playerVehicle(world);
   const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine')
     .map((part) => ({ part, price: partTradePrice(world, me, part, 'buy') }))
-    .filter((e) => e.price <= world.player.money)
+    .filter((e) => e.price <= budget)
     .sort((a, b) => a.price - b.price);
-  return engines[0]?.part ?? null;
+  return engines[0] ?? null;
 }
 
-function restoreEngine(o: Orders): void {
-  const engine = canRestoreEngine(o.world) ? stockEngine(o.world) : null;
+function saleBudget(world: World): number {
+  return world.player.money + gearForSale(world).reduce((sum, g) => sum + g.price, 0);
+}
+
+type GearSale = { part: PartInstance; mountedItem: string | null; price: number };
+
+function gearForSale(world: World): GearSale[] {
+  const me = playerVehicle(world);
+  const sale = (part: PartInstance, mountedItem: string | null) => ({ part, mountedItem, price: partTradePrice(world, me, part, 'sell') });
+  const byPrice = (a: GearSale, b: GearSale) => a.price - b.price;
+  const spares = spareItems(me).map((s) => sale(partOf(me, s.partId), null)).sort(byPrice);
+  const stored = world.player.storage.map((part) => sale(part, null)).sort(byPrice);
+  const mounted = mountedItems(me).filter((it) => !['core', 'engine'].includes(partDef(it.part.defId).kind) && removable(me, it)).map((it) => sale(it.part, it.id)).sort(byPrice);
+  return [...spares, ...stored, ...mounted];
+}
+
+function removable(v: Vehicle, item: GridItem): boolean {
+  return getLayoutError(v, v.items.filter((it) => it.id !== item.id)) === null;
+}
+
+function partOf(v: Vehicle, partId: string): PartInstance {
+  const item = v.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item || item.kind !== 'part') throw new Error(`Part ${partId} is not on ${v.id}`);
+  return item.part;
+}
+
+function restoreEngine(o: Orders, shopId: string): void {
+  if (mountedParts(o.me, 'engine').length > 0) return;
+  const engine = stockEngine(o.world, shopId, saleBudget(o.world));
   if (!engine) return;
-  if (!engineSpot(o.me, engine.defId) && hasCargo(o.me)) sellCargo(o);
-  const spot = engineSpot(o.me, engine.defId);
-  if (!spot) throw new Error('No free engine mount for a new engine');
-  o.run((w) => buyStockPart(w, engine.id));
-  mountBought(o, engine.id, spot);
+  if (o.world.player.money < engine.price || !engineSpot(o.me, engine.part.defId)) sellCargo(o);
+  sellGearFor(o, shopId, engine.price);
+  const spot = engineSpot(o.me, engine.part.defId);
+  if (!spot) throw new Error(`No free engine mount for a new engine. On the engine cells: ${onEngineCells(o.me)}`);
+  o.run((w) => buyStockPart(w, engine.part.id), 'gear');
+  mountBought(o, engine.part.id, spot);
 }
 
-function mountBought(o: Orders, partId: string, spot: Spot): void {
-  if (o.world.player.storage.some((p) => p.id === partId)) o.run((w) => takeFromStorage(w, partId, spot));
-  else o.run((w) => moveItem(w, itemOf(w, partId), spot));
+function restoreBasics(o: Orders, shopId: string): void {
+  if (underFire(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
+  const cost = basicsRepairCost(o.world);
+  if (o.world.player.money < cost) sellCargo(o);
+  if (saleBudget(o.world) >= cost) payRepair(o, shopId, cost, repairBasics);
+  else if (isStranded(o.world, o.me)) restoreDrive(o, shopId);
 }
 
-function itemOf(world: World, partId: string): string {
-  const item = playerVehicle(world).items.find((it) => it.kind === 'part' && it.part.id === partId);
-  if (!item) throw new Error(`Bought part ${partId} is not on the truck`);
-  return item.id;
+function restoreDrive(o: Orders, shopId: string): void {
+  const cost = driveRepairCost(o.world);
+  if (saleBudget(o.world) >= cost) payRepair(o, shopId, cost, repairDrive);
+}
+
+function payRepair(o: Orders, shopId: string, cost: number, repair: (w: World) => World): void {
+  sellGearFor(o, shopId, cost);
+  o.run(repair, 'repairs');
+}
+
+function sellGearFor(o: Orders, shopId: string, price: number): void {
+  while (o.world.player.money < price) {
+    const g = gearForSale(o.world)[0];
+    if (!g) return;
+    const mounted = g.mountedItem;
+    if (mounted) o.run((w) => storePart(w, mounted));
+    o.run((w) => sellPart(w, g.part.id), 'gear');
+  }
+}
+
+function onEngineCells(v: Vehicle): string {
+  const g = gridOf(v);
+  const onEngine = (it: GridItem) => itemCells(it).some((c) => MOUNT_CELLS.engine.includes(g.cells[c.y]?.[c.x] ?? '.'));
+  const names = v.items.filter(onEngine).map((it) => (it.kind === 'part' ? `${it.part.defId} hp ${it.part.hp}${isMounted(v.chassisId, it) ? ' mounted' : ''}` : `good ${it.good}`));
+  return names.length > 0 ? names.join(', ') : 'nothing';
 }
 
 function engineSpot(v: Vehicle, defId: string): Spot | null {
@@ -181,13 +349,52 @@ function engineSpot(v: Vehicle, defId: string): Spot | null {
   return findSpot(gridOf(v), v.items, probe, MOUNT_CELLS.engine, null);
 }
 
-function needsService(world: World): boolean {
-  const p = world.player;
+const SHOP_SITES: readonly Site[] = Object.keys(SHOPS).map(siteOf);
+
+function nearestShop(world: World): Site {
+  const pos = playerVehicle(world).pos;
+  return [...SHOP_SITES].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos))[0];
+}
+
+function fuelForWayToShop(world: World): number {
+  return fuelForWay(world, dist(playerVehicle(world).pos, nearestShop(world).pos));
+}
+
+function fuelForWay(world: World, tiles: number): number {
   const me = playerVehicle(world);
-  const lowFuel = p.fuel <= fuelCap(me) * RULES.lowFuelThreshold && p.money >= ECONOMY.supplyPrice.fuel;
+  return tiles * vehicleStats(world, me).fuelPerTile * heatAt(world, me.pos) * NPC_UPKEEP.fuelReserve;
+}
+
+export function fuelReaches(world: World, site: Site, from?: { pos: Vec; fuel: number }): boolean {
+  const full = fuelCap(playerVehicle(world));
+  let at = from ?? { pos: playerVehicle(world).pos, fuel: world.player.fuel };
+  for (let step = 0; step <= SHOP_SITES.length; step++) {
+    if (fuelForWay(world, dist(at.pos, site.pos)) <= at.fuel) return true;
+    const stops = SHOP_SITES.filter((s) => fuelForWay(world, dist(at.pos, s.pos)) <= at.fuel && dist(s.pos, site.pos) < dist(at.pos, site.pos));
+    const next = stops.reduce<Site | null>((best, s) => (!best || dist(s.pos, site.pos) < dist(best.pos, site.pos) ? s : best), null);
+    if (!next) return false;
+    at = { pos: next.pos, fuel: full };
+  }
+  return false;
+}
+
+function reachable<T extends Site>(world: World, sites: readonly T[]): T[] {
+  return sites.filter((s) => fuelReaches(world, s));
+}
+
+function needsService(o: Orders): boolean {
+  const world = o.world;
+  const p = world.player;
+  const me = o.me;
+  const lowFuel = p.fuel <= Math.max(fuelCap(me) * RULES.lowFuelThreshold, fuelForWayToShop(world)) && p.money >= ECONOMY.supplyPrice.fuel;
   const lowSupplies = p.supplies <= suppliesCap(me) * NPC_UPKEEP.lowSupplies && p.money >= ECONOMY.supplyPrice.supplies;
-  const damaged = mountedParts(me).some(isBadlyDamaged) && repairCost(world) <= p.money;
-  return lowFuel || lowSupplies || damaged;
+  return lowFuel || lowSupplies || needsRepair(o);
+}
+
+function needsRepair(o: Orders): boolean {
+  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
+  const parts = o.fieldRepair ? mountedParts(o.me, 'core') : mountedParts(o.me);
+  return parts.some(isBadlyDamaged) && cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me);
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
@@ -197,42 +404,107 @@ function isBadlyDamaged(part: PartInstance): boolean {
 function serviceHere(o: Orders): void {
   for (const kind of ['fuel', 'supplies'] as const) {
     const n = Math.min(supplyRoom(o.world, kind), Math.floor(o.world.player.money / ECONOMY.supplyPrice[kind]));
-    if (n > 0) o.run((w) => buySupply(w, kind, n));
+    if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
-  const cost = repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money) o.run(repairAll);
+  repairAtGarage(o);
 }
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, fighter: fight };
+function stockRepairParts(o: Orders, shop: string): void {
+  if (!shopDef(shop).goods.includes('parts')) return;
+  const want = Math.min(REPAIR_PARTS - (goodsCount(o.me).parts ?? 0), cargoRoom(o.me, 'parts'));
+  if (want <= 0) return;
+  const n = affordableBuyCount(o.world, o.me, shop, 'parts', want, o.world.player.money);
+  if (n > 0) o.run((w) => buyGood(w, 'parts', n), 'repairs');
+}
+
+function repairAtGarage(o: Orders): void {
+  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
+  if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(o.fieldRepair ? repairBasics : repairAll, 'repairs');
+}
+
+const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal, hauler: haulerGoal, robber: (o) => robberGoal(o, false), convoyRobber: (o) => robberGoal(o, true) };
 
 function traderGoal(o: Orders): void {
-  if (!trade(o) && !scavenge(o)) driveToSite(o, nearestTown(o.world));
+  const held = heldHaul(o.world);
+  if (held) return carryHaul(o, held);
+  if (!trade(o) && !takeHaul(o) && !scavenge(o, false)) checkNextBoard(o);
+}
+
+function haulerGoal(o: Orders): void {
+  const held = heldHaul(o.world);
+  if (held) return carryHaul(o, held);
+  if (!takeHaul(o) && !trade(o) && !scavenge(o, false)) checkNextBoard(o);
+}
+
+type Haul = Extract<Contract, { kind: 'haul' }>;
+
+function heldHaul(world: World): Haul | null {
+  const goods = goodsCount(playerVehicle(world));
+  return world.player.contracts.find((c): c is Haul => c.kind === 'haul' && (goods[c.good] ?? 0) >= c.units) ?? null;
+}
+
+function carryHaul(o: Orders, haul: Haul): void {
+  if (shopAt(o.world) === haul.to) o.run((w) => deliverContract(w, haul.id), 'contracts');
+  else driveToSite(o, siteOf(haul.to));
+}
+
+function takeHaul(o: Orders): boolean {
+  const shop = shopAt(o.world);
+  if (!shop || o.world.player.money < 0) return false;
+  const here = siteOf(shop).pos;
+  const pay = (c: Haul) => c.reward / estimateTurns(here, siteOf(c.to).pos);
+  const offers = shopState(o.world, shop).contracts.filter((c): c is Haul => c.kind === 'haul' && c.deadline > o.world.turn && c.units <= freeCells(o.me) && fuelReaches(o.world, siteOf(c.to)));
+  const best = offers.reduce<Haul | null>((top, c) => (!top || pay(c) > pay(top) ? c : top), null);
+  if (best) o.run((w) => acceptContract(w, best.id));
+  return best !== null;
+}
+
+function checkNextBoard(o: Orders): void {
+  const here = shopAt(o.world);
+  const others = reachable(o.world, SHOP_SITES.filter((s) => s.id !== here));
+  const pos = o.me.pos;
+  const next = others.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
+  if (next) driveToSite(o, next);
 }
 
 function scavengerGoal(o: Orders): void {
-  if (!scavenge(o) && !trade(o)) driveToSite(o, nearestTown(o.world));
+  const held = heldHaul(o.world);
+  if (held) return carryHaul(o, held);
+  if (!scavenge(o, false) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
 }
 
-type Purchase = { town: TownDef; good: string; count: number; profit: number };
+type Purchase = { town: TownDef; good: string; count: number; profit: number; perTurn: number };
 
 function trade(o: Orders): boolean {
-  if (hasCargo(o.me) && !sellAtMarket(o)) return true;
+  const selling = sellCargoFirst(o);
+  if (selling !== null) return selling;
   const buy = bestPurchase(o.world);
   if (buy) return buyThere(o, buy);
-  const town = nearestUndiscovered(o.world, REGION.towns);
+  const town = nearestUndiscovered(o.world, reachable(o.world, REGION.towns));
   if (!town) return false;
   driveToSite(o, town);
   return true;
 }
 
+function sellCargoFirst(o: Orders): boolean | null {
+  if (!hasCargo(o.world, o.me)) return null;
+  if (!marketFor(o.world)) return false;
+  return sellAtMarket(o) ? null : true;
+}
+
 function buyThere(o: Orders, buy: Purchase): true {
   if (townAt(o.world)?.id !== buy.town.id) driveToSite(o, buy.town);
-  else o.run((w) => buyGood(w, buy.good, buy.count));
+  else o.run((w) => buyGood(w, buy.good, buy.count), 'goodsBought');
   return true;
 }
 
+function marketFor(world: World): TownDef | null {
+  return knownTowns(world).length > 0 ? bestMarket(world) : nearestUndiscovered(world, reachable(world, REGION.towns));
+}
+
 function sellAtMarket(o: Orders): boolean {
-  const market = knownTowns(o.world).length > 0 ? bestMarket(o.world) : nearestUndiscovered(o.world, REGION.towns)!;
+  const market = marketFor(o.world);
+  if (!market) return false;
   if (townAt(o.world)?.id !== market.id) {
     driveToSite(o, market);
     return false;
@@ -241,38 +513,63 @@ function sellAtMarket(o: Orders): boolean {
   return true;
 }
 
-function bestMarket(world: World): TownDef {
-  const cargo = Object.entries(cargoForSale(playerVehicle(world)));
+function bestMarket(world: World): TownDef | null {
+  const cargo = Object.entries(cargoForSale(world, playerVehicle(world)));
   const profit = (town: TownDef) => cargo.reduce((sum, [good, n]) => sum + n * (sellAt(world, town, good) - (world.player.costBasis[good] ?? 0)), 0);
-  return byDistance(world, knownTowns(world)).reduce((best, town) => (profit(town) > profit(best) ? town : best));
+  return byDistance(world, reachable(world, knownTowns(world))).reduce<TownDef | null>((best, town) => (!best || profit(town) > profit(best) ? town : best), null);
 }
 
 function bestPurchase(world: World): Purchase | null {
-  const spend = world.player.money - getUpkeepReserve(playerVehicle(world));
+  const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
-  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend }))));
-  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
+  const full = fuelCap(playerVehicle(world));
+  const room = freeCells(playerVehicle(world));
+  const options = reachable(world, towns).flatMap((source) => towns.filter((t) => t.id !== source.id && fuelReaches(world, t, { pos: source.pos, fuel: full })).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
+  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.perTurn > (best?.perTurn ?? 0) ? p : best), null);
 }
 
-function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
+export function haulMarginAt(world: World, spend: number, room: number): number {
   const me = playerVehicle(world);
-  const buy = getTradePrice(world, me, source.id, good, 'buy');
-  const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
-  return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
+  const pairs = REGION.towns.flatMap((source) => REGION.towns.filter((t) => t.id !== source.id).map((market) => ({ source, market })));
+  return Math.max(...pairs.flatMap(({ source, market }) => {
+    const fuel = tripFuelCost(world, me, dist(source.pos, market.pos));
+    return GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }).profit - fuel);
+  }));
+}
+
+function purchase(world: World, { source, market, good, spend, room }: { source: TownDef; market: TownDef; good: string; spend: number; room: number }): Purchase {
+  const me = playerVehicle(world);
+  const none = { town: source, good, count: 0, profit: 0, perTurn: 0 };
+  if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
+  const lotProfit = (count: number) => (count === 0 ? 0 : getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy'));
+  let low = 0;
+  let high = affordableBuyCount(world, me, source.id, good, room, spend);
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (lotProfit(mid) > lotProfit(mid - 1)) low = mid;
+    else high = mid - 1;
+  }
+  if (low === 0 || lotProfit(low) <= 0) return none;
+  const trip = estimateTurns(me.pos, source.pos) + estimateTurns(source.pos, market.pos);
+  return { ...none, count: low, profit: lotProfit(low), perTurn: lotProfit(low) / trip };
 }
 
 function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-function scavenge(o: Orders): boolean {
-  if (townAt(o.world) && hasCargo(o.me)) sellCargo(o);
+function scavenge(o: Orders, stripping: boolean): boolean {
+  if (sellInTown(o, stripping)) return true;
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
-  else if (hasCargo(o.me)) driveToSite(o, nearestTown(o.world));
+  else if (cargoToTown(o, stripping)) driveToSite(o, nearestTown(o.world));
   else return findSalvageSite(o);
   return true;
+}
+
+function cargoToTown(o: Orders, stripping: boolean): boolean {
+  return sellsCargo(o, stripping) && !townAt(o.world);
 }
 
 function findSalvageSite(o: Orders): boolean {
@@ -282,45 +579,278 @@ function findSalvageSite(o: Orders): boolean {
   return true;
 }
 
-function fight(o: Orders): void {
-  if (townAt(o.world) && hasCargo(o.me)) sellCargo(o);
-  const foe = nearestFoe(o.world);
-  if (foe) return driveTo(o, foe);
+function hunterGoal(o: Orders): void {
+  if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
+  if (sellInTown(o, true)) return;
+  takeBounties(o);
+  if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
+  scavengeOrHunt(o);
+}
+
+function scavengeOrHunt(o: Orders): void {
+  if (huntedSpeed(o.world) === undefined && scavenge(o, true)) return;
   collectOrHunt(o);
 }
 
+function takeBounties(o: Orders): void {
+  const shop = shopAt(o.world);
+  if (!shop) return;
+  for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function wantsBounty(world: World, c: Contract): boolean {
+  const held = world.player.contracts;
+  if (c.kind !== 'bounty' || c.deadline <= world.turn || held.length >= CONTRACTS.maxActive) return false;
+  if (held.some((h) => h.kind === 'bounty' && h.template === c.template)) return false;
+  return world.vehicles.some((v) => v.brain?.templateId === c.template && !isKnockedOut(v) && huntable(world, v));
+}
+
+function engageFoe(o: Orders): boolean {
+  const seen = weakestFoe(o.world);
+  if (seen) return engageSeen(o, seen);
+  const heard = heardFoe(o.world, (v) => huntable(o.world, v));
+  if (heard) driveTo(o, heard);
+  return heard !== null;
+}
+
+const HUNT_MARGIN = 4;
+
+function huntable(world: World, foe: Vehicle): boolean {
+  const group = world.vehicles.filter((v) => v.id === foe.id || (v.faction === foe.faction && !isKnockedOut(v) && dist(v.pos, foe.pos) <= SPAWN.neighborHelp));
+  const danger = strengthRatio(fightOdds(world, [playerVehicle(world)], group)) * (1 + NPC_BEHAVIOR.dangerSpread);
+  return danger * HUNT_MARGIN <= 1;
+}
+
+function engageSeen(o: Orders, foe: Vehicle): boolean {
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > 1 || !isSoftTarget(o.world, foe)) return false;
+  setFire(o, true);
+  aimGuns(o, foe);
+  if (!demandYield(o, foe)) driveTo(o, foe.pos);
+  return true;
+}
+
+function nextLoot(me: Vehicle, target: Vehicle): { item: GridItem; spot: Spot } | null {
+  const worth = (it: GridItem) => (it.kind === 'part' ? partValue(it.part) : 0);
+  for (const item of [...target.items].sort((a, b) => worth(b) - worth(a))) {
+    const spot = takeError(target, item) === null ? stowSpot(me, item) : null;
+    if (spot) return { item, spot };
+  }
+  return null;
+}
+
+function canStripNow(o: Orders, target: Vehicle): boolean {
+  return !inCombat(o.world, o.me) && !lootBlocker(o.world, o.me, target.id);
+}
+
+function stripDowned(o: Orders): boolean {
+  const here = downedHere(o.world);
+  const pick = here && canStripNow(o, here) ? nextLoot(o.me, here) : null;
+  if (here && pick) {
+    o.run((w) => takeFromTruck(w, here.id, pick.item.id, pick.spot));
+    return true;
+  }
+  const seen = o.world.vehicles.filter((v) => v.id !== o.me.id && isKnockedOut(v) && playerSees(o.world, v.pos) && nextLoot(o.me, v) !== null);
+  const target = nearestVehicle(o.me.pos, seen);
+  if (target) driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  return target !== null;
+}
+
+function weakestFoe(world: World): Vehicle | null {
+  const seen = seenHostiles(world);
+  const danger = new Map(seen.map((v) => [v.id, dangerOf(world, v)]));
+  return seen.reduce<Vehicle | null>((best, v) => (!best || (danger.get(v.id) ?? 0) < (danger.get(best.id) ?? 0) ? v : best), null);
+}
+
+function seenHostiles(world: World): Vehicle[] {
+  const me = playerVehicle(world);
+  return world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && !isKnockedOut(v) && playerSees(world, v.pos));
+}
+
+function dangerOf(world: World, foe: Vehicle): number {
+  const spread = NPC_BEHAVIOR.dangerSpread;
+  const roll = hashRandom(world.seed ^ JUDGE_SALT, ...[...foe.id].map((c) => c.charCodeAt(0)));
+  return judgeDanger(world, playerVehicle(world), foe) * (1 - spread + 2 * spread * roll);
+}
+
+const JUDGE_SALT = 0x6a756467;
+
+function defend(o: Orders, goal: Goal): boolean {
+  if (!inCombat(o.world, o.me)) return avoid(o, goal);
+  const foe = weakestFoe(o.world);
+  if (!foe) {
+    if (!(goal === 'hunter' && engageFoe(o))) flee(o);
+    return true;
+  }
+  if (fights(o, foe, goal)) charge(o, foe, goal);
+  else flee(o);
+  return true;
+}
+
+function avoid(o: Orders, goal: Goal): boolean {
+  if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me) || !runsFrom(o, goal)) return false;
+  flee(o);
+  return true;
+}
+
+function runsFrom(o: Orders, goal: Goal): boolean {
+  const foe = weakestFoe(o.world);
+  if (foe) return !beats(o, foe, goal);
+  return heardHostiles(o.world).some((v) => !beats(o, v, goal));
+}
+
+function heardHostiles(world: World): Vehicle[] {
+  const heard = new Set(world.player.contacts.map((c) => c.vehicleId));
+  return world.vehicles.filter((v) => heard.has(v.id) && hostileToPlayer(world, v) && !isKnockedOut(v));
+}
+
+function flee(o: Orders): void {
+  const seen = seenHostiles(o.world).map((v) => v.pos);
+  if (keepsCourse(o.me, seen)) return;
+  const threats = seen.length > 0 ? seen : heardThreat(o.world);
+  if (threats.length === 0) return driveToSite(o, nearestTown(o.world));
+  const safe = REGION.towns.filter((town) => threats.every((foe) => pointsAway(o.me.pos, town.pos, foe))).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
+  if (safe[0]) return driveToSite(o, safe[0]);
+  driveTo(o, awayFrom(o.me.pos, threats, o.world.size));
+}
+
+function keepsCourse(me: Vehicle, seen: Vec[]): boolean {
+  const order = me.order;
+  return order !== null && order.kind !== 'brake' && !seen.some((foe) => closesOn(me.pos, order.dest, foe));
+}
+
+function heardThreat(world: World): Vec[] {
+  const heard = heardFoe(world);
+  return heard ? [heard] : [];
+}
+
+function closesOn(from: Vec, to: Vec, foe: Vec): boolean {
+  return (to.x - from.x) * (foe.x - from.x) + (to.y - from.y) * (foe.y - from.y) > 0;
+}
+
+function awayFrom(pos: Vec, threats: Vec[], size: number): Vec {
+  const unit = (foe: Vec) => ({ x: (pos.x - foe.x) / Math.max(dist(pos, foe), 1e-6), y: (pos.y - foe.y) / Math.max(dist(pos, foe), 1e-6) });
+  const sum = threats.map(unit).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }));
+  const near = nearest(pos, threats)!;
+  const len = Math.hypot(sum.x, sum.y);
+  const way = len > 1e-6 ? { x: sum.x / len, y: sum.y / len } : { x: -unit(near).y, y: unit(near).x };
+  return edgeAlong(pos, way, size);
+}
+
+function edgeAlong(pos: Vec, way: Vec, size: number): Vec {
+  const reach = (p: number, d: number) => (d > 1e-6 ? (size - 1 - p) / d : d < -1e-6 ? (1 - p) / d : Infinity);
+  const t = Math.max(0, Math.min(reach(pos.x, way.x), reach(pos.y, way.y)));
+  return { x: pos.x + way.x * t, y: pos.y + way.y * t };
+}
+
+function charge(o: Orders, foe: Vehicle, goal: Goal): void {
+  if (goal === 'hunter') aimGuns(o, foe);
+  driveTo(o, foe.pos);
+}
+
+function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  return beats(o, foe, goal) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+}
+
+function beats(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
+  return dangerOf(o.world, foe) * margin <= 1;
+}
+
+function outmatchedBy(world: World, foe: Vehicle): boolean {
+  return dangerOf(world, foe) > 1 && !outruns(world, playerVehicle(world), foe);
+}
+
+function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {
+  return currentTopSpeed(world, me) > currentTopSpeed(world, foe);
+}
+
+function currentTopSpeed(world: World, v: Vehicle): number {
+  const stats = vehicleStats(world, v);
+  return isStranded(world, v) ? Math.min(stats.maxSpeed, stats.limpSpeed) : stats.maxSpeed;
+}
+
+function demandYield(o: Orders, foe: Vehicle): boolean {
+  const asks = foe.brain !== null && isHostile(o.world, foe, o.me) && isWeak(o.world, foe) && !offeredSurrenderBy(o.world, foe, o.me);
+  if (!asks) return false;
+  o.run((w) => callVehicle(w, foe.id));
+  const ask = currentOptions(o.world).findIndex((option) => option.text === TOPICS.yieldDemand.ask?.text);
+  if (ask >= 0) o.run((w) => chooseOption(w, ask));
+  answerCall(o, HUNTER_REPLIES);
+  return true;
+}
+
+function heardFoe(world: World, wanted: (v: Vehicle) => boolean = () => true): Vec | null {
+  const me = playerVehicle(world);
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && wanted(v));
+  return nearest(me.pos, world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center));
+}
+
+function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null {
+  return vehicles.reduce<Vehicle | null>((best, v) => (!best || dist(from, v.pos) < dist(from, best.pos) ? v : best), null);
+}
+
 function collectOrHunt(o: Orders): void {
-  if (freeCells(o.me) === 0) return driveToSite(o, nearestTown(o.world));
+  if (freeCells(o.me) === 0) {
+    if (townAt(o.world) || !sellsCargo(o, true)) return hunt(o);
+    return driveToSite(o, nearestTown(o.world));
+  }
   const wreck = nearestStock(o.world, knownStocks(o.world).filter((s) => s.id.startsWith('wreck-') && playerSees(o.world, s.pos)));
   if (wreck) return visitStock(o, wreck);
   hunt(o);
 }
 
-export function raiderHuntGrounds(): Vec[] {
-  return REGION.locations.filter((site) => site.kind === 'camp').flatMap((camp) => raiderGrounds(camp));
+type Post = { pos: Vec; shop: Site | null };
+
+const CAMP_STANDOFF = 18;
+
+function campPosts(): { post: Post; near: Site }[] {
+  return REGION.locations.filter((l) => l.kind === 'camp').flatMap((camp) => siteGates(camp).map((gate) => {
+    const near = SHOP_SITES.reduce((best, s) => (dist(gate, s.pos) < dist(gate, best.pos) ? s : best));
+    const gap = dist(gate, near.pos);
+    const at = { x: gate.x + ((near.pos.x - gate.x) / gap) * CAMP_STANDOFF, y: gate.y + ((near.pos.y - gate.y) / gap) * CAMP_STANDOFF };
+    return { post: { pos: at, shop: null }, near };
+  }));
+}
+
+const PATROL: readonly Post[] = SHOP_SITES.flatMap((s) => [{ pos: s.pos, shop: s }, ...campPosts().filter((c) => c.near === s).map((c) => c.post)]);
+
+function postDests(post: Post): Vec[] {
+  return post.shop ? sitePads(post.shop) : [post.pos];
 }
 
 function hunt(o: Orders): void {
   const order = o.me.order;
-  const grounds = raiderHuntGrounds();
-  if (grounds.length === 0) throw new Error('no raider hunting ground to hunt on');
-  if (order?.kind === 'stopAt' && grounds.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
-  const here = grounds.indexOf(nearest(o.me.pos, grounds) ?? grounds[0]);
-  driveTo(o, grounds[(here + 1) % grounds.length]);
+  if (order?.kind === 'stopAt' && PATROL.some((p) => postDests(p).some((d) => d.x === order.dest.x && d.y === order.dest.y))) return;
+  const next = nextPost(o.me);
+  driveTo(o, next.shop ? nearestPad(next.shop, o.me.pos) : next.pos);
 }
 
-function nearestFoe(world: World): Vec | null {
-  const me = playerVehicle(world);
-  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v));
-  const seen = hostile.filter((v) => playerSees(world, v.pos)).map((v) => v.pos);
-  const heard = world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center);
-  return nearest(me.pos, seen) ?? nearest(me.pos, heard);
+function nextPost(me: Vehicle): Post {
+  return (atPost(me.pos) ? null : postAhead(me)) ?? postAfterNearest(me.pos);
 }
+
+function atPost(pos: Vec): boolean {
+  return PATROL.some((p) => (p.shop ? canUseSite(pos, p.shop) : dist(pos, p.pos) <= RULES.arriveRadius));
+}
+
+function postAhead(me: Vehicle): Post | null {
+  const ahead = PATROL.filter((p) => (p.pos.x - me.pos.x) * Math.cos(me.heading) + (p.pos.y - me.pos.y) * Math.sin(me.heading) > 0);
+  return ahead.reduce<Post | null>((best, p) => (!best || dist(me.pos, p.pos) < dist(me.pos, best.pos) ? p : best), null);
+}
+
+function postAfterNearest(pos: Vec): Post {
+  const here = PATROL.reduce((best, p, i) => (dist(pos, p.pos) < dist(pos, PATROL[best].pos) ? i : best), 0);
+  return PATROL[(here + 1) % PATROL.length];
+}
+
+const CAMP_WATCH = TERRAIN.vision.radius;
+const CAMP_GATES: readonly Vec[] = REGION.locations.filter((l) => l.kind === 'camp').flatMap((camp) => siteGates(camp));
 
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
     if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (CAMP_GATES.some((gate) => dist(gate, stock.pos) <= CAMP_WATCH)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -332,11 +862,10 @@ function nearestStock(world: World, stocks: SalvageStock[]): SalvageStock | null
 }
 
 function lootHere(o: Orders): void {
-  if (!canLoot(o.world) || freeCells(o.me) === 0) return;
   const stock = salvageHere(o.world);
-  if (!stock) throw new Error('A lootable stock is in reach but salvageHere found none');
+  if (!stock || !canLoot(o.world, stock.id) || freeCells(o.me) === 0) return;
   if (lootBlocker(o.world, o.me, stock.id)) return;
-  o.run((w) => takeAllLoot(w, stock.id));
+  o.loot(stock.id, (w) => takeAllLoot(w, stock.id));
 }
 
 function visitStock(o: Orders, stock: SalvageStock): void {
@@ -348,8 +877,140 @@ function visitStock(o: Orders, stock: SalvageStock): void {
   driveTo(o, site ? nearestPad(site, o.me.pos) : besideStop(o.world, stock.pos, stock.radius));
 }
 
-function cargoForSale(v: Vehicle): Record<string, number> {
-  const goods = goodsCount(v);
+export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'sell carried cargo', 'buy profitable cargo', 'load cargo at its source'];
+const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
+function robPatrol(guarded: boolean): readonly string[] {
+  return guarded ? [...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns] : ['bowl', 'nose'];
+}
+
+function robberGoal(o: Orders, guarded: boolean): void {
+  if (freeCells(o.me) === 0 && hasCargo(o.world, o.me)) {
+    sellAtMarket(o);
+    return;
+  }
+  sellInTown(o, false);
+  lootHere(o);
+  const foe = engagedFoe(o.world);
+  if (foe) return driveTo(o, foe);
+  demandInSight(o, guarded);
+  if (freeCells(o.me) > 0) collectOrPatrol(o, guarded);
+}
+
+function demandInSight(o: Orders, guarded: boolean): void {
+  const target = inCombat(o.world, o.me) ? null : robTarget(o.world, guarded);
+  if (target) demand(o, target);
+  if (o.world.player.call) throw new Error(`The robber left a call with ${o.world.player.call.with} open`);
+}
+
+function collectOrPatrol(o: Orders, guarded: boolean): void {
+  const downed = downedTarget(o.world);
+  if (downed) return takeFromTarget(o, downed);
+  const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => !isSiteStock(s) && playerSees(o.world, s.pos)));
+  if (stock) return visitStock(o, stock);
+  patrol(o, robPatrol(guarded));
+}
+
+function engagedFoe(world: World): Vec | null {
+  const me = playerVehicle(world);
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && !isDefeated(v) && hostileToPlayer(world, v));
+  const seen = hostile.filter((v) => playerSees(world, v.pos)).map((v) => v.pos);
+  const fighting = new Set(world.states.filter((s) => s.kind === 'combat' && (s.holder === me.id || s.other === me.id)).map((s) => (s.holder === me.id ? s.other : s.holder)));
+  const heard = world.player.contacts.filter((c) => fighting.has(c.vehicleId) && hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center);
+  return nearest(me.pos, seen) ?? nearest(me.pos, heard);
+}
+
+export function robTarget(world: World, guarded: boolean): Vehicle | null {
+  const me = playerVehicle(world);
+  const targets = world.vehicles.filter((v) => isRobberyPrey(world, v) && (guarded || !guardedInSight(world, v)));
+  return targets.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+function isRobberyPrey(world: World, v: Vehicle): boolean {
+  return inRadioSight(world, v) && wouldRob(world, v);
+}
+
+export function wouldRob(world: World, v: Vehicle): boolean {
+  if (!isAwakeDriverOf(world, v, ROB_FACTIONS) || hostileToPlayer(world, v) || world.player.talked[v.id]?.rob !== undefined) return false;
+  return saysCarriesCargo(v) && mountedParts(v, 'weapon').length <= mountedParts(playerVehicle(world), 'weapon').length;
+}
+
+function isAwakeDriverOf(world: World, v: Vehicle, factions: readonly Faction[]): boolean {
+  return v.id !== world.player.vehicleId && v.brain !== null && !isDefeated(v) && factions.includes(v.faction);
+}
+
+function inRadioSight(world: World, v: Vehicle): boolean {
+  return playerSees(world, v.pos) && canVehicleSee(world, playerVehicle(world), v.pos);
+}
+
+function saysCarriesCargo(v: Vehicle): boolean {
+  const reason = topGoal(v)?.reason;
+  return reason !== undefined && CARGO_REASONS.includes(reason);
+}
+
+function guardedInSight(world: World, v: Vehicle): boolean {
+  return escortsOf(world, v.id).some((e) => !isDefeated(e) && playerSees(world, e.pos));
+}
+
+function demand(o: Orders, target: Vehicle): void {
+  o.run((w) => callVehicle(w, target.id));
+  const rob = currentOptions(o.world).findIndex((opt) => opt.topic === 'rob' && opt.option === null);
+  if (rob < 0) {
+    o.run(hangUp);
+    return;
+  }
+  o.run((w) => chooseOption(w, rob));
+  const replies = currentOptions(o.world).filter((opt) => opt.option !== null);
+  if (replies.length !== 1) throw new Error(`A demand on ${target.id} offers ${replies.length} replies, not one`);
+  o.run((w) => chooseOption(w, 0));
+  const call = o.world.player.call;
+  if (call?.topic !== 'rob') throw new Error(`A demand on ${target.id} left the rob topic`);
+  const answer = threatAnswerOf(call.node);
+  o.notes.push({ kind: 'demand', target: target.id, answer, guarded: guardedInSight(o.world, target) });
+  answerCall(o);
+}
+
+function threatAnswerOf(node: string): ThreatAnswer {
+  if (node === 'comply' || node === 'fightBack' || node === 'flee') return node;
+  throw new Error(`Unknown rob call node ${node}`);
+}
+
+function downedTarget(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  const downed = world.vehicles.filter((v) => ROB_FACTIONS.includes(v.faction) && isKnockedOut(v) && playerSees(world, v.pos) && hasLooseItems(v) && !lootBlocker(world, me, v.id));
+  return downed.reduce<Vehicle | null>((best, v) => (!best || dist(me.pos, v.pos) < dist(me.pos, best.pos) ? v : best), null);
+}
+
+function hasLooseItems(v: Vehicle): boolean {
+  return v.items.some((it) => !isMounted(v.chassisId, it));
+}
+
+function takeFromTarget(o: Orders, target: Vehicle): void {
+  if (!canLootTruck(o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
+    const spot = looseSpot(o.me, item);
+    if (spot) o.loot(target.id, (w) => takeFromTruck(w, target.id, item.id, spot));
+  }
+}
+
+function looseSpot(me: Vehicle, item: GridItem): Spot | null {
+  if (itemMass(item) > cargoMassRoom(me)) return null;
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(me), me.items, { ...item, id: 'loot-probe' }, null, avoid);
+}
+
+function patrol(o: Orders, ids: readonly string[]): void {
+  const sites = ids.map(getKnownSite);
+  const order = o.me.order;
+  if (order?.kind === 'stopAt' && sites.some((t) => canUseSite(order.dest, t))) return;
+  const at = sites.findIndex((t) => canUseSite(o.me.pos, t));
+  driveToSite(o, at >= 0 ? sites[(at + 1) % sites.length] : byDistance(o.world, sites)[0]);
+}
+
+export const CONVOY_ROB_PATROL: readonly string[] = robPatrol(true);
+
+function cargoForSale(world: World, v: Vehicle): Record<string, number> {
+  const goods = { ...goodsCount(v) };
+  for (const c of world.player.contracts) if (c.kind === 'haul') goods[c.good] = (goods[c.good] ?? 0) - c.units;
   const parts = Math.max(0, (goods.parts ?? 0) - NPC_UPKEEP.repairParts);
   const forSale = { ...goods, parts };
   return Object.fromEntries(Object.entries(forSale).filter(([, n]) => n > 0));
@@ -359,16 +1020,43 @@ function spareItems(v: Vehicle): { itemId: string; partId: string }[] {
   return v.items.flatMap((it) => (it.kind === 'part' && !isMounted(v.chassisId, it) ? [{ itemId: it.id, partId: it.part.id }] : []));
 }
 
-function hasCargo(v: Vehicle): boolean {
-  return Object.keys(cargoForSale(v)).length > 0 || spareItems(v).length > 0;
+function hasCargo(world: World, v: Vehicle): boolean {
+  return Object.keys(cargoForSale(world, v)).length > 0 || spareItems(v).length > 0;
 }
 
-function sellCargo(o: Orders): void {
-  for (const [good, n] of Object.entries(cargoForSale(o.me))) o.run((w) => sellGood(w, good, n));
-  for (const { itemId, partId } of spareItems(o.me)) {
-    o.run((w) => storePart(w, itemId));
-    o.run((w) => sellPart(w, partId));
-  }
+function sellCargo(o: Orders, stripping = false): void {
+  for (const [good, n] of goodsToSell(o, stripping)) o.run((w) => sellGood(w, good, n), 'goodsSold');
+  sellSpares(o, stripping && o.fieldRepair);
+}
+
+function sellInTown(o: Orders, stripping: boolean): boolean {
+  if (townAt(o.world) && sellsCargo(o, stripping)) sellCargo(o, stripping);
+  return o.me.job !== null;
+}
+
+function goodsToSell(o: Orders, stripping: boolean): [string, number][] {
+  const keep = stripping && o.fieldRepair;
+  return Object.entries(cargoForSale(o.world, o.me)).filter(([good]) => !keep || good !== 'parts');
+}
+
+function sellsCargo(o: Orders, stripping: boolean): boolean {
+  return goodsToSell(o, stripping).length > 0 || spareItems(o.me).length > 0;
+}
+
+function sellSpares(o: Orders, keep: boolean): void {
+  for (const { partId } of spareItems(o.me)) if (!(keep && stripForRepair(o, partId))) o.run((w) => sellPart(w, partId), 'lootSales');
+}
+
+function stripForRepair(o: Orders, partId: string): boolean {
+  if (o.me.job) return true;
+  if (!canStrip(o, partId)) return false;
+  o.run((w) => startStrip(w, partId));
+  return true;
+}
+
+function canStrip(o: Orders, partId: string): boolean {
+  const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
 }
 
 function knownTowns(world: World): TownDef[] {

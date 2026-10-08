@@ -60,10 +60,15 @@ const DEFS = {
 
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
-  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop."], seconds: 90 },
+  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop.", "Slow hypnotic Saharan desert blues, 80 bpm, instrumental. Tuareg-style looping electric guitar riff with pentatonic bends, tende drum, calabash and frame drums, a droning imzad fiddle and a low drone. A baritone sax and muted trumpet play a dark minor-key Ethiopian jazz melody, rare and distant, with long open space. Dry, dusty, wide open sound, warm 1970s analog live recording, no claps, no synths, seamless loop.", "Slow heavy groove, 70 bpm, instrumental. Dark, tough and determined, with swagger, not sad and not cheerful. Sludgy trucker doom metal: thick fuzzy downtuned guitar riff ringing out, heavy dragging bass, slow pounding drums with lots of space. Over it, a baritone sax and muted trumpet play a menacing, proud minor-key Ethiopian jazz melody in long slow notes. Raw 1970s band playing live in a dry garage, real acoustic drum kit, tube amps, tape. No 1980s sound, no synth pads, no arpeggiator, no electronic drums, no big reverb, no organ, no screaming, seamless loop."], seconds: 90 },
 
+  "music-town": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Lively but hard wasteland junkyard groove for a trading town, 100 bpm, instrumental. Driving junk percussion: clanking scrap metal, hammered steel pipes, anvil hits, rattling chains and oil drums, over a dry acoustic drum kit and a deep upright bass riff. Baritone sax and trumpet stay in the background with a low, dark minor-key Ethiopian jazz line. Tough and gritty, not cheerful. Raw live recording in a dry room, tape. No electric guitar, no fuzz, no synths, no organ, seamless loop."], seconds: 90 },
+  "music-outpost": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dark, menacing wasteland outpost groove with a steady pulse, 92 bpm, instrumental. Brooding minor key, like a spaghetti western standoff: baritone sax and trumpet play a grim Ethiopian jazz melody up front, over a tight dry drum kit and quiet junk percussion of clanking scrap metal and steel pipes. A deep driving bass riff, and a gritty overdriven guitar kept low in the mix, playing short muted stabs, never blasting. Hard and watchful, still moving, never happy or bright. Raw 1970s band playing live in a dry room, tape, no synths, no organ, seamless loop."], seconds: 90 },
+  "music-abandoned": { bus: "music", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow, sinister instrumental for exploring abandoned machine ruins, 60 bpm, A minor. Haunted and menacing, something is watching, not sad, not cheerful. A distant baritone sax plays a grim minor-key Ethiopian jazz phrase, then long rests of near silence. A muffled muted trumpet answers it now and then. A slow, sparse pattern of junk metal percussion: hollow knocks on steel pipes, a ringing oil drum hit, a dragged chain. A muffled, slightly detuned baritone guitar plucks a few low notes. Wind creaks through rusted metal, short bursts of radio static. The phrases grow a little louder, then fall back quiet. Raw 1970s live recording in a big empty hangar, tape. No drone, no pads, no sustained bass, no drum kit, no synths, seamless loop."], seconds: 90 },
   "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
   "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
+  "score-horns": { bus: "music", setup: "score", beat: { bpm: 100, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless dark Afro-funk war loop, 100 BPM in 4/4: brutal low baritone sax and trumpet blasts on D minor, pounding heavy drums, fuzz bass hammering every beat. Hard and menacing, not happy, no fills."] },
+  "score-trombone": { bus: "music", setup: "score", beat: { bpm: 100, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless dark Afro-funk war loop, 100 BPM in 4/4: growling low trombone riff with heavy slides on D minor, pounding heavy drums, fuzz bass hammering every beat. Hard and menacing, not happy, no fills."] },
   "accent-sighted": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["Three heavy tribal war drum hits, boom boom boom, with a low Mongolian throat singing growl rising under them."], seconds: 1.5 },
   "accent-struck": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["One distorted electric guitar power chord on D slammed with a big tribal drum hit, then a short falling throat singing groan."], seconds: 1.5 },
   "accent-miss": { bus: "music", setup: "stinger", volume: 0.75, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["A quick palm-muted distorted electric guitar chug and a tight snare flam, then silence."], seconds: 1 },
@@ -106,6 +111,9 @@ const ENGINE_FILES: Record<string, string> = {
   convertible: "engine-2.ogg",
   bus: "engine-3.ogg",
   loader: "engine-3.ogg",
+  lincoln: "engine-2.ogg",
+  niva: "engine-1.ogg",
+  bukhanka: "engine-2.ogg",
 };
 
 const HORN_SOUNDS: Record<string, { file: string; rate: number }> = {
@@ -122,6 +130,9 @@ const HORN_SOUNDS: Record<string, { file: string; rate: number }> = {
   convertible: { file: "horn-2.ogg", rate: 1.28 },
   bus: { file: "horn-2.ogg", rate: 0.72 },
   loader: { file: "horn-1.ogg", rate: 0.72 },
+  lincoln: { file: "horn-2.ogg", rate: 0.88 },
+  niva: { file: "horn-1.ogg", rate: 1.28 },
+  bukhanka: { file: "horn-1.ogg", rate: 0.88 },
 };
 
 export function hornSoundFor(chassisId: string): { file: string; rate: number } {
@@ -131,8 +142,10 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 }
 
 const SCORE_PHASES: Record<string, number> = {
-  "score-drums-1.ogg": 0.014,
-  "score-bass-1.ogg": 0.232,
+  "score-drums-1.ogg": 0.006,
+  "score-bass-1.ogg": 0.22,
+  "score-horns-1.ogg": 0.176,
+  "score-trombone-1.ogg": 0.172,
 };
 
 export function scorePhaseOf(file: string): number {
@@ -163,8 +176,8 @@ export const MIX = {
     { at: 1.2, rate: 1, gain: 0.6 },
     { at: 1.5, rate: 0.9, gain: 0 },
   ],
-  wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
-  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
+  wind: { baseGain: 0.4, stormGain: 1, fadeSeconds: 1 },
+  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6, musicReachTiles: 12 },
   score: {
     subdivision: 2,
     humanizeMs: 10,

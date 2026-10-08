@@ -1,7 +1,8 @@
 {
- "format": "2.6",
+ "format": "2.25",
  "shape": {
   "broken": [],
+  "craters": [],
   "dustClouds": [],
   "events": [],
   "mapHash": "string",
@@ -40,6 +41,7 @@
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
+   "headlights": "boolean",
    "health": "number",
    "hostilesSeen": [],
    "knockoutTurns": "number",
@@ -48,16 +50,16 @@
    "money": "number",
    "overdrive": "boolean",
    "perks": [],
-   "repeats": {},
-   "rumored": [],
-   "scavenged": [],
-   "skills": {
+   "ranks": {
     "driving": "number",
     "machining": "number",
     "perception": "number",
     "social": "number",
     "toughness": "number"
    },
+   "repeats": {},
+   "rumored": [],
+   "scavenged": [],
    "state": "string",
    "storage": [],
    "supplies": "number",
@@ -67,6 +69,7 @@
    "visible": [
     "number"
    ],
+   "xp": "number",
    "xpBySource": {
     "aid": "number",
     "call": "number",
@@ -103,6 +106,76 @@
    {
     "fuel": "number",
     "goods": {
+     "grain": "number",
+     "parts": "number",
+     "scrap": "number",
+     "textiles": "number"
+    },
+    "id": "string",
+    "parts": [],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
+     "grain": "number",
+     "parts": "number",
+     "scrap": "number",
+     "textiles": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
+     "grain": "number",
+     "parts": "number",
+     "scrap": "number",
+     "textiles": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
      "meds": "number",
      "parts": "number",
      "salt": "number",
@@ -217,11 +290,61 @@
    {
     "fuel": "number",
     "goods": {
+     "meds": "number",
+     "parts": "number",
+     "scrap": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
      "parts": "number",
      "scrap": "number"
     },
     "id": "string",
     "parts": [],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
+     "parts": "number",
+     "scrap": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
     "pos": {
      "x": "number",
      "y": "number"
@@ -663,6 +786,7 @@
     },
     "resources": "null",
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    },
@@ -677,9 +801,11 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -745,6 +871,84 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
+    "trail": [],
+    "weaponOrders": {}
+   },
+   {
+    "brain": {
+     "attackers": {},
+     "driver": "string",
+     "goal": "null",
+     "goals": [],
+     "home": {
+      "x": "number",
+      "y": "number"
+     },
+     "hurt": "number",
+     "memories": [],
+     "noticed": {},
+     "stepIndex": "number",
+     "templateId": "string",
+     "tracks": {},
+     "traits": [
+      "string"
+     ]
+    },
+    "chassisId": "string",
+    "direct": "boolean",
+    "faction": "string",
+    "heading": "number",
+    "id": "string",
+    "items": [
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      },
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      },
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     }
+    ],
+    "job": "null",
+    "lastHitBy": "null",
+    "name": "string",
+    "order": "null",
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "resources": {
+     "fuel": "number",
+     "health": "number",
+     "money": "number",
+     "supplies": "number"
+    },
+    "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    },
@@ -770,9 +974,11 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
+     "tracks": {},
      "traits": [
       "string"
      ]
@@ -838,6 +1044,7 @@
      "supplies": "number"
     },
     "speed": "number",
+    "stormExposure": {},
     "trail": [],
     "weaponOrders": {}
    }

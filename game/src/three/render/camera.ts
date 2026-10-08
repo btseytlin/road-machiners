@@ -127,9 +127,10 @@ export class CameraRig {
     this.ray.setFromCamera(ndc, this.camera);
   }
 
-  hitsObject(clientX: number, clientY: number, object: THREE.Object3D): boolean {
+  hitDistance(clientX: number, clientY: number, object: THREE.Object3D | null): number | null {
+    if (!object) return null;
     this.aimRay(clientX, clientY);
-    return this.ray.intersectObject(object, true).length > 0;
+    return this.ray.intersectObject(object, true)[0]?.distance ?? null;
   }
 
   groundUnder(clientX: number, clientY: number, ground: THREE.Object3D): Vec | null {
@@ -230,9 +231,9 @@ export class KeyPan {
   private held = new Set<string>();
   private speed = 1;
 
-  constructor(typing: () => boolean) {
+  constructor(ignore: (e: KeyboardEvent) => boolean) {
     window.addEventListener("keydown", (e) => {
-      if (e.code in KEY_PAN_DIRECTIONS && !typing()) this.held.add(e.code);
+      if (e.code in KEY_PAN_DIRECTIONS && !ignore(e)) this.held.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.held.delete(e.code));
     window.addEventListener("blur", () => this.held.clear());

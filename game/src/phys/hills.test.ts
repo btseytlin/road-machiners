@@ -3,7 +3,7 @@ import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
 import { randRange } from '../sim/rng';
-import { deckAlong } from '../sim/bridge';
+import { deckAt } from '../sim/bridge';
 import { heightAt } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
@@ -11,6 +11,7 @@ import { buildDrive, freeDrive, initPhysics, type Drive, type TurnResult } from 
 import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -33,7 +34,7 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
       const q = frame.rot;
       maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, 1 - 2 * (q.x * q.x + q.z * q.z))));
       const p = toMap(frame.pos);
-      if (deckAlong(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
+      if (deckAt(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
     }
     freeDrive(drive);
     drive = result!.next;
@@ -51,21 +52,21 @@ it('a truck stays under 20 degrees of tilt at both canyon road crossings', () =>
     expect(result.remaining).toBeLessThan(3);
     expect(result.maxTilt).toBeLessThan(20);
   }
-}, 60_000);
+}, budget(60_000));
 
 it('a truck crosses Canyon Bridge on the deck, above the canyon', () => {
   const result = driveRoute({ x: 486, y: 379 }, { x: 509, y: 356 });
   expect(result.remaining).toBeLessThan(3);
   expect(result.minDeckRise).toBeGreaterThan(0);
   expect(result.minDeckRise).toBeLessThan(2);
-}, 60_000);
+}, budget(60_000));
 
 it('the Bowl crater exit leans the truck without rolling it onto its side', () => {
   const start = newWorld(1337, START_KITS.standard, TEST_MAP).vehicles[0].pos;
   const result = driveRoute(start, { x: 101, y: 432 });
   expect(result.remaining).toBeLessThan(3);
   expect(result.maxTilt).toBeLessThan(45);
-}, 60_000);
+}, budget(60_000));
 
 it('the terrain collider is a heightfield whose surface matches the corner grid', () => {
   const S = PHYSICS.metersPerTile;

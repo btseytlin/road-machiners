@@ -4,26 +4,33 @@
 
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
-import { bridgeCut, deckAlong } from '../sim/bridge';
+import { bridgeCut, deckAt } from '../sim/bridge';
 import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
-import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { groundAt, heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
+import { clearOfSites, onDeck } from '../sim/mapgen';
+import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
-import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
+import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer, tilesWithin } from './oldworld';
+import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
+  let d = groundForTerritories(seed);
+  d = timed('territories', () => territoryLayer(seed, d));
+  d = timed('ground', () => groundLayer(seed, d));
+  return timed('rocks', () => rockLayer(seed, d));
+}
+
+export function groundForTerritories(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
   d = timed('geology', () => geologyLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
-  d = timed('new world', () => newWorldLayer(seed, d));
-  d = timed('ground', () => groundLayer(seed, d));
-  return timed('rocks', () => rockLayer(seed, d));
+  return timed('new world', () => newWorldLayer(seed, d));
 }
 
 function timed(layer: string, run: () => MapDraft): MapDraft {
@@ -76,6 +83,13 @@ export function tileSteepness(heights: ArrayLike<number>, size: number, tile: nu
   return Math.hypot((b - a + d - c) / 2, (c - a + d - b) / 2);
 }
 
+export function footprintRelief(heights: ArrayLike<number>, size: number, p: BakedProp, segment: boolean): number {
+  const t = { size, heights };
+  const seat = groundAt(t, p.pos.x, p.pos.y);
+  const angles = segment ? [p.yaw, p.yaw + Math.PI] : Array.from({ length: 8 }, (_, k) => (k * Math.PI) / 4);
+  return Math.max(...angles.map((a) => Math.abs(groundAt(t, p.pos.x + Math.cos(a) * p.r, p.pos.y + Math.sin(a) * p.r) - seat)));
+}
+
 export function baseLayer(seed: number, size: number): MapDraft {
   const d = newDraft(size);
   for (let j = 0; j <= size; j++) for (let i = 0; i <= size; i++) d.heights[j * (size + 1) + i] = heightFromElevation(reliefAt(seed, i, j) + broadAt(seed, i, j));
@@ -94,7 +108,7 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-const SITES = [...REGION.towns, ...REGION.locations];
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const T = TERRAIN.types;
 const G = GEOLOGY.ground;
 
@@ -114,6 +128,9 @@ const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_SCRUB]: 'scrub',
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
+  [BUILT_TRACK]: 'track',
+  [BUILT_CANAL]: 'canal',
+  [BUILT_PAD]: 'concrete',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
@@ -133,7 +150,7 @@ function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
 
 function drainChannels(pond: Float32Array, size: number): Float32Array {
   const n = size + 1;
-  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver];
+  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench];
   for (let k = 0; k < pond.length; k++) {
     if (pond[k] === 0) continue;
     const p = { x: k % n, y: Math.floor(k / n) };
@@ -143,16 +160,9 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
 }
 
 function builtType(c: Vec): TerrainTypeId | null {
-  if (deckAlong(c.x, c.y) !== null) return 'road';
+  if (deckAt(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
-  return SITES.some((s) => nearSite(s.pos, s.radius, c)) ? 'hardpan' : null;
-}
-
-function nearSite(pos: Vec, radius: number, c: Vec): boolean {
-  const dx = pos.x - c.x;
-  const dy = pos.y - c.y;
-  if (dx * dx + dy * dy > (radius + T.siteMargin + 1) ** 2) return false;
-  return Math.hypot(dx, dy) < radius + T.siteMargin;
+  return SITES.some((s) => siteGap(s, c) < T.siteMargin) ? 'hardpan' : null;
 }
 
 function screeType(g: GroundInput, tile: number, k: number): TerrainTypeId | null {
@@ -175,7 +185,16 @@ function sandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | nul
   return cornerMean(g.d.sand, g.d.size, k) >= G.looseSand ? 'sand' : null;
 }
 
-const GEOLOGY_RULES: GroundRule[] = [screeType, pondType, washType, sandType];
+function wingSandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | null {
+  const n = g.d.size + 1;
+  const p = { x: (k % n) + 0.5, y: Math.floor(k / n) + 0.5 };
+  const F = TERRAIN.features;
+  if (F.mounds.some((m) => dist(p, m.center) <= m.radius + m.bank * 0.7)) return 'sand';
+  if (dist(p, F.wing.pos) <= F.wing.r) return 'sand';
+  return polylineDist(p, F.trench.path) <= F.trench.width ? 'sand' : null;
+}
+
+const GEOLOGY_RULES: GroundRule[] = [screeType, wingSandType, pondType, washType, sandType];
 
 function cornerMax(a: ArrayLike<number>, size: number, k: number): number {
   const w = size + 1;
@@ -235,14 +254,18 @@ function placeBoulder(d: MapDraft, rng: Rng, i: number, j: number, kind: 'rock' 
   const [low, high] = kind === 'crag' ? B.crag.radius : B.radius;
   const r = randRange(rng, low, high);
   const yaw = kind === 'crag' ? randRange(rng, 0, Math.PI * 2) : 0;
-  if (fitsOffRoad(d.size, d.heights, d.props, pos, r)) d.props.push({ kind, pos, r, yaw, group: 0, step: 0 });
+  if (fitsOffRoad(d.size, d.heights, d.built, d.props, pos, r)) d.props.push({ kind, pos, r, yaw, group: 0, step: 0 });
 }
 
-function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: BakedProp[], pos: Vec, r: number): boolean {
+function fitsOffRoad(size: number, heights: ArrayLike<number>, built: Uint8Array, placed: BakedProp[], pos: Vec, r: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin) return false;
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
+  return fitsGround(size, heights, built, pos, r) && !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+}
+
+function fitsGround(size: number, heights: ArrayLike<number>, built: Uint8Array, pos: Vec, r: number): boolean {
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
-  if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
-  return !onBridge(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+  if ([tile, ...tilesWithin(size, pos, r)].some((k) => built[k] === BUILT_TRACK)) return false;
+  return tileSteepness(heights, size, tile) <= BOULDER_SLOPE_LIMIT;
 }

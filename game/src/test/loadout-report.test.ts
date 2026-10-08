@@ -11,6 +11,6 @@ describe('NPC loadout bands', () => {
     expect(s.guns, 'guns').toBeGreaterThanOrEqual(guns[0]);
     expect(s.guns, 'guns').toBeLessThanOrEqual(guns[1]);
     expect(s.armor, 'armor').toBeGreaterThanOrEqual(armor[0]);
-    expect(s.armor, 'armor').toBeLessThanOrEqual(armor[1]);
+    expect(s.armor, 'armor').toBeLessThanOrEqual(armor[1] + 1e-9);
   });
 });

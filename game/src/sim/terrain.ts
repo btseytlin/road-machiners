@@ -3,7 +3,7 @@
 // drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong, spanAlong } from './bridge';
+import { besideDeck, deckAt, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
 
 export type Terrain = {
@@ -29,21 +29,21 @@ export function tileAt(t: Terrain, p: Vec): number {
 }
 
 export function heightAt(t: Terrain, x: number, y: number): number {
-  const a = deckAlong(x, y);
-  return a === null ? groundAt(t, x, y) : deckHeight(t, a);
+  const on = deckAt(x, y);
+  return on === null ? groundAt(t, x, y) : deckHeight(t, on.deck, on.along);
 }
 
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
-  const a = spanAlong(x, y);
-  if (a === null) return h;
-  const deck = deckHeight(t, a);
+  const span = spanAt(x, y, T.vision.radius);
+  if (span === null || !besideDeck(span.deck, origin, T.vision.radius)) return h;
+  const deck = deckHeight(t, span.deck, span.along);
   if (h >= deck) return h;
   const from = heightAt(t, origin.x, origin.y);
   return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
 }
 
-export function groundAt(t: Terrain, x: number, y: number): number {
+export function groundAt(t: { size: number; heights: ArrayLike<number> }, x: number, y: number): number {
   const cx = x < 0 ? 0 : x > t.size ? t.size : x;
   const cy = y < 0 ? 0 : y > t.size ? t.size : y;
   const i = Math.min(Math.floor(cx), t.size - 1);
@@ -59,23 +59,48 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-export function deckHeight(t: Terrain, along: number): number {
-  const [from, to] = deckEnds(t);
-  return from + (to - from) * (along / BRIDGE_LENGTH);
+const ALONG_SLACK = 1e-6;
+
+export function deckHeight(t: Terrain, deck: Deck, along: number): number {
+  if (along < -ALONG_SLACK || along > deck.length + ALONG_SLACK) throw new Error(`Deck ${deck.id} has no point ${along} tiles along it`);
+  const k = pieceAt(deck, along);
+  const a = deck.stations[k];
+  const b = deck.stations[k + 1];
+  const h0 = stationHeight(t, a);
+  const h1 = stationHeight(t, b);
+  return h0 + (h1 - h0) * ((along - a.along) / (b.along - a.along));
 }
 
-export function deckEnds(t: Terrain): [number, number] {
-  const { from, to } = T.features.bridge;
-  return [groundAt(t, from.x, from.y), groundAt(t, to.x, to.y)];
+function pieceAt(deck: Deck, along: number): number {
+  const { stations } = deck;
+  let k = 0;
+  while (k < stations.length - 2 && along > stations[k + 1].along) k++;
+  return k;
+}
+
+export type DeckSegment = { from: Vec; to: Vec; along: number; length: number; h0: number; h1: number };
+
+export function deckSegments(t: Terrain, deck: Deck): DeckSegment[] {
+  return deck.stations.slice(1).map((b, k) => {
+    const a = deck.stations[k];
+    return { from: a.at, to: b.at, along: a.along, length: b.along - a.along, h0: stationHeight(t, a), h1: stationHeight(t, b) };
+  });
+}
+
+function stationHeight(t: Terrain, s: { at: Vec; rise: number }): number {
+  return groundAt(t, s.at.x, s.at.y) + s.rise;
 }
 
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
-  if (deckAlong(i + 0.5, j + 0.5) === null) return groundSlope(t, tile);
-  const [from, to] = deckEnds(t);
-  const grade = (to - from) / BRIDGE_LENGTH;
-  return { x: grade * BRIDGE_AXIS.x, y: grade * BRIDGE_AXIS.y };
+  const on = deckAt(i + 0.5, j + 0.5);
+  if (on === null) return groundSlope(t, tile);
+  const k = pieceAt(on.deck, on.along);
+  const a = on.deck.stations[k];
+  const b = on.deck.stations[k + 1];
+  const grade = (stationHeight(t, b) - stationHeight(t, a)) / (b.along - a.along);
+  return { x: grade * on.deck.axis.x, y: grade * on.deck.axis.y };
 }
 
 export function groundSlope(t: Terrain, tile: number): Vec {
@@ -93,7 +118,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
   return Math.hypot(s.x, s.y) > T.drive.maxSlope;
 }
 
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck'] as const;
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
 export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: BakedProp[] };
@@ -102,7 +127,7 @@ export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; 
 export const TYPE_IDS = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
 
 const MAGIC = 'KMAP';
-const VERSION = 2;
+const VERSION = 3;
 const HEADER = 20;
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 const INT16_MAX = 32767;

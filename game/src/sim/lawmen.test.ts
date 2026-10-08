@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { fireWeapons, isHostile, noteAttack } from './combat';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
 import { optionWeights } from './npc-decisions';
 import { REGION } from '../data/region';
-import { RULES } from '../data/rules';
 import { siteGates } from './sites';
 import { stateOf } from './states';
 import { vehicleStats } from './stats';
@@ -122,8 +122,8 @@ describe('lawmen', () => {
 
   it('a lawman picks a fight at a town gate as freely as away from towns', () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    const atGate = addLawman(w, outFromGate(RULES.guards.range / 2));
-    const raider = addNpc(w, 'raiders', ['raider'], outFromGate(RULES.guards.range / 2 + 3));
+    const atGate = addLawman(w, outFromGate(NPC_BEHAVIOR.lawGateReach / 2));
+    const raider = addNpc(w, 'raiders', ['raider'], outFromGate(NPC_BEHAVIOR.lawGateReach / 2 + 3));
     const far = emptyWorld({ x: 200, y: 200 });
     const away = addLawman(far, { x: 10, y: 10 });
     const farRaider = addNpc(far, 'raiders', ['raider'], { x: 13, y: 10 });

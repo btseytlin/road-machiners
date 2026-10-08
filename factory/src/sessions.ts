@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { archiveTranscripts } from './transcript-archive';
 import type { AgentSession, JobStage } from './types';
 
 const STAGE_FILE = 'resumes';
@@ -47,5 +48,6 @@ export function resumedStage(home: string, issue: number): string | null {
 }
 
 export function clearSessions(home: string, issue: number): void {
+  archiveTranscripts(home, sessionsDir(home, issue));
   rmSync(sessionsDir(home, issue), { recursive: true, force: true });
 }

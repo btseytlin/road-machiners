@@ -1,56 +1,60 @@
 // What flies from a muzzle to where each round lands: tracers, shells and missiles, with their look and speed per
-// weapon. Rounds fly straight from the barrel tip. Hits end on the target truck, and misses fly past it into the
-// ground, so the sim's spread shows. Render-only: randomness here never changes rules.
+// weapon. Rounds fly straight from the barrel tip. Hits end on the truck they struck, and misses end on the ground
+// at the point the sim put them, so the sim's spread shows. Render-only: randomness here never changes rules.
 
 import * as THREE from 'three';
 import { PARTS } from '../../data/parts';
-import { computeRoundPoint, type V3 } from '../../phys/frames';
+import { TIME } from '../../data/time';
+import { computeRoundPoint, groundPoint, toMap, type V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
+import type { Terrain } from '../../sim/terrain';
 import type { ShotRound } from '../../sim/types';
 
 export type Muzzle = { pos: V3; dir: V3 };
 
-export function towardFrom(from: V3, target: V3): Muzzle {
-  return { pos: from, dir: { x: target.x - from.x, y: target.y - from.y, z: target.z - from.z } };
-}
+export type ShotCues = { fired: (m: Muzzle) => void; landed: () => void };
 
 type Look = 'tracer' | 'shell' | 'missile' | 'grenade';
 
 export type ProjectileSpec = {
   look: Look;
   speed: number;
-  stagger: number;
+  gapMs: number;
   length: number;
   width: number;
   color: number;
   flash: number;
   wobble: number;
+  casing: CasingSize | null;
+  pellets?: true;
 };
 
+export function roundSpec(spec: ProjectileSpec, k: number): ProjectileSpec {
+  return spec.pellets && k > 0 ? { ...spec, casing: null } : spec;
+}
+
 export const PROJECTILES: Record<string, ProjectileSpec> = {
-  mg: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
-  guard: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
-  shotgun: { look: 'tracer', speed: 160, stagger: 0.1, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0 },
-  autocannon: { look: 'tracer', speed: 140, stagger: 0.45, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0 },
-  cannon: { look: 'shell', speed: 60, stagger: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0 },
-  tankGun: { look: 'shell', speed: 60, stagger: 0, length: 0.75, width: 0.28, color: 0xffad50, flash: 1.6, wobble: 0 },
-  sniperCannon: { look: 'shell', speed: 110, stagger: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0 },
-  heavyMg: { look: 'tracer', speed: 200, stagger: 0.5, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0 },
-  gatling: { look: 'tracer', speed: 220, stagger: 0.6, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0 },
-  longRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0 },
-  amRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0 },
-  battleRifle: { look: 'tracer', speed: 240, stagger: 0.35, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0 },
-  flechette: { look: 'tracer', speed: 280, stagger: 0.3, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0 },
-  flamer: { look: 'tracer', speed: 30, stagger: 0.4, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3 },
-  pneumobolter: { look: 'shell', speed: 90, stagger: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0 },
-  slugCannon: { look: 'shell', speed: 100, stagger: 0.3, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
-  recoilless: { look: 'shell', speed: 60, stagger: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0 },
-  grenadeLauncher: { look: 'grenade', speed: 45, stagger: 0.5, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0 },
-  rocketRack: { look: 'missile', speed: 40, stagger: 0.5, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
+  mg: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0, casing: 'small' },
+  shotgun: { look: 'tracer', speed: 160, gapMs: 8, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0, casing: 'small', pellets: true },
+  autocannon: { look: 'tracer', speed: 140, gapMs: 140, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0, casing: 'small' },
+  cannon: { look: 'shell', speed: 60, gapMs: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0, casing: 'large' },
+  tankGun: { look: 'shell', speed: 60, gapMs: 0, length: 0.75, width: 0.28, color: 0xffad50, flash: 1.6, wobble: 0, casing: 'large' },
+  sniperCannon: { look: 'shell', speed: 110, gapMs: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0, casing: 'large' },
+  heavyMg: { look: 'tracer', speed: 200, gapMs: 90, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0, casing: 'small' },
+  gatling: { look: 'tracer', speed: 220, gapMs: 38, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0, casing: 'small' },
+  longRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0, casing: 'small' },
+  amRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0, casing: 'small' },
+  battleRifle: { look: 'tracer', speed: 240, gapMs: 110, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0, casing: 'small' },
+  flechette: { look: 'tracer', speed: 280, gapMs: 70, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0, casing: null },
+  flamer: { look: 'tracer', speed: 30, gapMs: 50, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3, casing: null },
+  pneumobolter: { look: 'shell', speed: 90, gapMs: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0, casing: null },
+  slugCannon: { look: 'shell', speed: 100, gapMs: 150, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0, casing: 'large' },
+  recoilless: { look: 'shell', speed: 60, gapMs: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0, casing: null },
+  grenadeLauncher: { look: 'grenade', speed: 45, gapMs: 160, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0, casing: null },
+  rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5, casing: null },
 };
 
 export function blastRadiusOf(key: string): number {
-  if (key === 'guard') return 0;
   const def = PARTS[key];
   if (def?.kind !== 'weapon') throw new Error(`${key} is not a weapon`);
   return def.round.splashRadius;
@@ -63,7 +67,7 @@ export function projectileOf(key: string): ProjectileSpec {
 }
 
 const HIT = { drop: 0.8, band: 0.7 };
-const MISS = { minPast: 3, maxPast: 9 };
+const MISS_DEPTH = 1;
 const GRENADE_ARC = 3;
 const SHELL_TAIL = 3;
 const MISSILE = {
@@ -73,24 +77,30 @@ const MISSILE = {
   flame: 0xffc060,
 };
 
-export type RoundPlan = { land: V3; struck: boolean; delayMs: number; flightMs: number };
-export type RoundAim = { b: V3; struck: boolean; offset: number };
+export type Impact = 'truck' | 'ground' | 'none';
+export type RoundPlan = { land: V3; impact: Impact; delayMs: number; flightMs: number };
+export type RoundAim = { impact: 'truck'; b: V3; offset: number } | { impact: 'ground' | 'none'; land: V3 };
 
-export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null): RoundAim[] {
-  return rounds.map((r) => {
-    if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset };
+export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null, missAt: (offset: number) => V3): RoundAim[] {
+  return rounds.map((r): RoundAim => {
+    if (r.struck === null) return { impact: 'ground', land: missAt(r.offset) };
+    if (r.struck === targetId) return { impact: 'truck', b, offset: r.offset };
     const p = pointOf(r.struck);
-    return p ? { b: p, struck: true, offset: 0 } : { b, struck: false, offset: r.offset };
+    return p ? { impact: 'truck', b: p, offset: 0 } : { impact: 'none', land: missAt(r.offset) };
   });
 }
 
-export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], windowMs: number, groundY: (p: V3) => number): RoundPlan[] {
+export type VolleyTiming = { startMs: number; windowMs: number; burstMaxMs: number };
+
+export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number, blastRadius: number): RoundPlan[] {
+  const { startMs, windowMs, burstMaxMs } = timing;
+  const gap = rounds.length > 1 ? Math.min(spec.gapMs, burstMaxMs / (rounds.length - 1)) : 0;
+  if (startMs + Math.max(0, rounds.length - 1) * gap >= windowMs) throw new Error(`A volley starting at ${startMs} ms leaves no time to fire ${rounds.length} rounds in ${windowMs} ms`);
   return rounds.map((r, k) => {
-    const struck = r.struck;
-    const land = struck ? hitPoint(a, r.b, r.offset) : missPoint(a, r.b, r.offset, groundY);
-    const delayMs = rounds.length > 1 ? (k / (rounds.length - 1)) * spec.stagger * windowMs : 0;
+    const land = r.impact === 'truck' ? hitPoint(a, r.b, r.offset) : r.impact === 'ground' && blastRadius === 0 ? groundMiss(a, r.land, groundY) : r.land;
+    const delayMs = startMs + k * gap;
     const meters = Math.hypot(land.x - a.x, land.y - a.y, land.z - a.z);
-    return { land, struck, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };
+    return { land, impact: r.impact, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };
   });
 }
 
@@ -99,13 +109,12 @@ function hitPoint(a: V3, b: V3, offset: number): V3 {
   return { x: p.x, y: b.y - HIT.drop + (Math.random() - 0.5) * HIT.band, z: p.z };
 }
 
-function missPoint(a: V3, b: V3, offset: number, groundY: (p: V3) => number): V3 {
-  const p = computeRoundPoint(a, b, offset);
-  const dx = p.x - a.x;
-  const dz = p.z - a.z;
+function groundMiss(a: V3, land: V3, groundY: (p: V3) => number): V3 {
+  const dx = land.x - a.x;
+  const dz = land.z - a.z;
   const len = Math.hypot(dx, dz);
-  const past = MISS.minPast + Math.random() * (MISS.maxPast - MISS.minPast);
-  const end = { x: p.x + (dx / len) * past, y: 0, z: p.z + (dz / len) * past };
+  const shift = (Math.random() * 2 - 1) * MISS_DEPTH;
+  const end = { x: land.x + (dx / len) * shift, y: 0, z: land.z + (dz / len) * shift };
   return { ...end, y: groundY(end) };
 }
 
@@ -302,4 +311,128 @@ export class Projectiles {
       this.smoke({ x: back.x, y: back.y, z: back.z });
     }
   }
+}
+
+export type CasingSize = 'small' | 'large';
+
+export const CASING = {
+  max: 400,
+  lifeTurns: TIME.turnsPerDay,
+  fadeShare: 0.1,
+  small: { length: 0.14, radius: 0.03 },
+  large: { length: 0.28, radius: 0.06 },
+  glint: 0x4a3810,
+  back: 0.6,
+  eject: { side: 2.4, up: 2.2, spread: 0.8, spin: 18 },
+  gravity: 9.8,
+  bounce: 0.35,
+  slide: 0.4,
+} as const;
+
+type Casing = {
+  size: CasingSize;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  yaw: number;
+  roll: number;
+  spin: number;
+  bounced: boolean;
+  resting: boolean;
+  turn: number;
+};
+
+const SIZES: CasingSize[] = ['small', 'large'];
+const UP = new THREE.Vector3(0, 1, 0);
+const AXIS = new THREE.Vector3(1, 0, 0);
+
+export class Casings {
+  readonly meshes: Record<CasingSize, THREE.InstancedMesh>;
+  private casings: Casing[] = [];
+  private matrix = new THREE.Matrix4();
+  private quat = new THREE.Quaternion();
+  private tumble = new THREE.Quaternion();
+  private scale = new THREE.Vector3();
+  private material = new THREE.MeshLambertMaterial({ color: PAL.brass, emissive: CASING.glint, flatShading: true });
+
+  constructor(private scene: THREE.Scene) {
+    this.meshes = { small: casingMesh(CASING.small, this.material), large: casingMesh(CASING.large, this.material) };
+    scene.add(this.meshes.small, this.meshes.large);
+  }
+
+  eject(muzzle: Muzzle, size: CasingSize | null, turn: number): void {
+    if (size === null) return;
+    const dir = new THREE.Vector3(muzzle.dir.x, muzzle.dir.y, muzzle.dir.z).normalize();
+    const flat = Math.hypot(dir.x, dir.z);
+    if (!(flat > 0)) throw new Error('A casing needs a muzzle pointing off the vertical, to know its right side');
+    const right = new THREE.Vector3(-dir.z / flat, 0, dir.x / flat);
+    const pos = new THREE.Vector3(muzzle.pos.x, muzzle.pos.y, muzzle.pos.z).addScaledVector(dir, -CASING.back);
+    const e = CASING.eject;
+    const vel = right.multiplyScalar(e.side + spread()).addScaledVector(UP, e.up + spread()).addScaledVector(dir, spread());
+    if (this.casings.length >= CASING.max) this.casings.shift();
+    const yaw = -Math.atan2(dir.z, dir.x);
+    this.casings.push({ size, pos, vel, yaw, roll: 0, spin: e.spin * (Math.random() + 0.5), bounced: false, resting: false, turn });
+  }
+
+  tick(dt: number, terrain: Terrain, turn: number): void {
+    this.casings = this.casings.filter((c) => turn - c.turn < CASING.lifeTurns);
+    for (const c of this.casings) if (!c.resting) this.fly(c, dt, terrain);
+    this.draw(turn);
+  }
+
+  dispose(): void {
+    this.scene.remove(this.meshes.small, this.meshes.large);
+    for (const size of SIZES) this.meshes[size].geometry.dispose();
+    this.material.dispose();
+  }
+
+  private fly(c: Casing, dt: number, terrain: Terrain): void {
+    c.vel.y -= CASING.gravity * dt;
+    c.pos.addScaledVector(c.vel, dt);
+    c.roll += c.spin * dt;
+    const rest = groundPoint(terrain, toMap(c.pos)).y + CASING[c.size].radius;
+    if (c.pos.y > rest) return;
+    c.pos.y = rest;
+    if (c.bounced) return this.lay(c);
+    c.bounced = true;
+    c.vel.set(c.vel.x * CASING.slide, -c.vel.y * CASING.bounce, c.vel.z * CASING.slide);
+  }
+
+  private lay(c: Casing): void {
+    c.resting = true;
+    c.vel.set(0, 0, 0);
+    c.yaw = Math.random() * Math.PI * 2;
+    c.roll = 0;
+  }
+
+  private draw(turn: number): void {
+    const counts: Record<CasingSize, number> = { small: 0, large: 0 };
+    for (const c of this.casings) {
+      this.quat.setFromAxisAngle(UP, c.yaw).multiply(this.tumble.setFromAxisAngle(AXIS, c.roll));
+      this.scale.setScalar(fadeOf(turn - c.turn));
+      this.matrix.compose(c.pos, this.quat, this.scale);
+      this.meshes[c.size].setMatrixAt(counts[c.size]++, this.matrix);
+    }
+    for (const size of SIZES) {
+      this.meshes[size].count = counts[size];
+      this.meshes[size].instanceMatrix.needsUpdate = true;
+    }
+  }
+}
+
+function fadeOf(age: number): number {
+  const fade = CASING.lifeTurns * CASING.fadeShare;
+  return Math.min(1, (CASING.lifeTurns - age) / fade);
+}
+
+function spread(): number {
+  return (Math.random() * 2 - 1) * CASING.eject.spread;
+}
+
+function casingMesh(size: { length: number; radius: number }, material: THREE.Material): THREE.InstancedMesh {
+  const geo = new THREE.CylinderGeometry(size.radius, size.radius, size.length, 6).rotateZ(Math.PI / 2);
+  const mesh = new THREE.InstancedMesh(geo, material, CASING.max);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+  return mesh;
 }

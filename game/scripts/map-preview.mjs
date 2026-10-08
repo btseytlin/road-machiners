@@ -24,6 +24,33 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  shipWing: { color: 0xd0d0d0, shape: 'box' },
+  hullChunk: { color: 0x909090, shape: 'long' },
+  shipCache: { color: 0x40d040, shape: 'disc' },
+  reactor: { color: 0xff40ff, shape: 'disc' },
+  hullCache: { color: 0xf0f040, shape: 'disc' },
+  shipBow: { color: 0xd6cfbf, shape: 'long' },
+  shipCage: { color: 0xd6cfbf, shape: 'long' },
+  shipHub: { color: 0xd6cfbf, shape: 'disc' },
+  hullShell: { color: 0xd6cfbf, shape: 'long' },
+  hullDrum: { color: 0x9c978c, shape: 'long' },
+  hullShard: { color: 0x6e6a62, shape: 'disc' },
+  hullTower: { color: 0x6e6a62, shape: 'box' },
+  hullGantry: { color: 0x8a4a2a, shape: 'long' },
+  rimRock: { color: 0x6a5a48, shape: 'disc' },
+  deadTree: { color: 0x4a3420, shape: 'disc' },
+  farmhouse: { color: 0xb04a30, shape: 'box' },
+  barn: { color: 0x902418, shape: 'box' },
+  armyCache: { color: 0x80c040, shape: 'disc' },
+  bunker: { color: 0xa0a090, shape: 'box' },
+  armyTruck: { color: 0x4e6a2a, shape: 'long' },
+  sandbags: { color: 0xc0b070, shape: 'rail' },
+  quonset: { color: 0xb87838, shape: 'long' },
+  guardPost: { color: 0xd8d8c8, shape: 'box' },
+  barrier: { color: 0x8aa0b0, shape: 'rail' },
+  drums: { color: 0xc04820, shape: 'disc' },
+  woodpile: { color: 0xa07040, shape: 'box' },
+  tankTrap: { color: 0x5e3420, shape: 'disc' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
@@ -36,7 +63,10 @@ export function paintMap(d, area, pxPerTile) {
     const y = area.y + (py + 0.5) / pxPerTile;
     put(pic, px, py, groundColor(d, x, y));
   }
-  for (const site of [...REGION.towns, ...REGION.locations]) paintDisc(pic, area, pxPerTile, site.pos, site.radius, SITE_EDGE, site.radius - 1 / pxPerTile);
+  for (const site of [...REGION.towns, ...REGION.locations]) {
+    if (site.outline) paintOutline(pic, area, pxPerTile, site.outline.map((p) => ({ x: site.pos.x + p.x, y: site.pos.y + p.y })), SITE_EDGE);
+    else paintDisc(pic, area, pxPerTile, site.pos, site.radius, SITE_EDGE, site.radius - 1 / pxPerTile);
+  }
   const props = [...d.props].sort((a, b) => DRAW_ORDER.indexOf(a.kind) - DRAW_ORDER.indexOf(b.kind));
   for (const prop of props) paintProp(pic, area, pxPerTile, prop);
   return pic;
@@ -84,6 +114,18 @@ function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
     const r = Math.hypot(area.x + (px + 0.5) / pxPerTile - center.x, area.y + (py + 0.5) / pxPerTile - center.y);
     if (r <= radius && r >= inner) put(pic, px, py, color);
   }
+}
+
+function paintOutline(pic, area, pxPerTile, poly, color) {
+  poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length];
+    const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * pxPerTile * 2);
+    for (let k = 0; k <= steps; k++) {
+      const px = Math.floor((a.x + ((b.x - a.x) * k) / steps - area.x) * pxPerTile);
+      const py = Math.floor((a.y + ((b.y - a.y) * k) / steps - area.y) * pxPerTile);
+      if (px >= 0 && py >= 0 && px < pic.width && py < pic.height) put(pic, px, py, color);
+    }
+  });
 }
 
 function paintBox(pic, area, pxPerTile, center, yaw, halfAlong, halfAcross, color) {

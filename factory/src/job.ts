@@ -139,5 +139,12 @@ function clearQueued(state: FactoryState, stage: JobStage, issue: number | null)
   const pendingShip = stage === 'ship' ? null : state.pendingShip;
   const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
   const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
-  return { ...state, pendingApprovals, pendingChanges, pendingIncidents, pendingShip, pendingRemovals };
+  return {
+    ...state,
+    pendingApprovals,
+    pendingChanges,
+    pendingIncidents,
+    pendingShip,
+    pendingRemovals,
+  };
 }

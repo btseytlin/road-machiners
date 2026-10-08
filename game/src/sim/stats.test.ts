@@ -1,15 +1,18 @@
 import { chassisDef } from '../data/chassis';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
-import { corePart, mountedParts } from './grid';
-import { fuelCap, groundSpeed, gunDrag, isStranded, suppliesCap, vehicleStats } from './stats';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
+import { corePart, coreParts, mountedParts } from './grid';
+import type { Vehicle, World } from './types';
+import { addState } from './states';
+import { fuelCap, groundSpeed, gunDraw, gunDrag, isStranded, maxSpeedSteps, workingEngineCapacity, suppliesCap, vehicleStats } from './stats';
 import { endTurn } from './world';
 import { CHASSIS } from '../data/chassis';
 import { PARTS, type EngineDef, type StoreDef } from '../data/parts';
 import { makePart } from './factory';
 import { mountPart, stowPart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
+import { wornDef } from './wear';
 
 describe('worn parts in vehicle stats', () => {
   it('a worn engine gives a lower top speed and acceleration', () => {
@@ -32,59 +35,59 @@ describe('worn parts in vehicle stats', () => {
 });
 
 describe('driving on rough ground', () => {
-  it('keeps the full ground penalty at level 0', () => {
+  it('keeps the full ground penalty at rank 0', () => {
     const w = emptyWorld();
     expect(groundSpeed(vehicleStats(w, w.vehicles[0]), 0.5)).toBeCloseTo(0.5);
   });
 
-  it('cuts the ground penalty for the player at level 5', () => {
+  it('cuts the ground penalty for the player at rank 5', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     const cut = 5 * SKILL_EFFECTS.driving.roughSpeed;
     expect(groundSpeed(vehicleStats(w, w.vehicles[0]), 0.5)).toBeCloseTo(1 - 0.5 * (1 - cut));
   });
 
   it('leaves road speed at full', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     expect(groundSpeed(vehicleStats(w, w.vehicles[0]), 1)).toBe(1);
   });
 
   it('leaves an NPC truck with the full penalty', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     expect(groundSpeed(vehicleStats(w, npc), 0.5)).toBeCloseTo(0.5);
   });
 });
 
 describe('crawling when stranded', () => {
-  it('crawls at limp speed at level 0', () => {
+  it('crawls at limp speed at rank 0', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     mountedParts(me, 'engine')[0].hp = 0;
     expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(RULES.limpSpeed);
   });
 
-  it('crawls faster without an engine at level 5', () => {
+  it('crawls faster without an engine at rank 5', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     mountedParts(me, 'engine')[0].hp = 0;
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(RULES.limpSpeed * (1 + 5 * SKILL_EFFECTS.driving.crawl));
   });
 
-  it('crawls faster with a broken transmission at level 5', () => {
+  it('crawls faster with a broken transmission at rank 5', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     corePart(me, 'transmission').hp = 0;
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(RULES.limpSpeed * (1 + 5 * SKILL_EFFECTS.driving.crawl));
   });
 
   it('leaves a stranded NPC truck at limp speed', () => {
     const w = emptyWorld();
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     mountedParts(npc, 'engine')[0].hp = 0;
     expect(vehicleStats(w, npc).maxSpeed).toBeCloseTo(RULES.limpSpeed);
@@ -218,5 +221,172 @@ describe('gun power draw', () => {
     expect(armed.accel).toBeLessThan(bare.accel);
     const share = (engine: string) => speedWith('hauler', [engine, 'cannon']) / speedWith('hauler', [engine]);
     expect(share('heavyDiesel')).toBeGreaterThan(share('stockEngine'));
+  });
+});
+
+describe('max speed steps', () => {
+  type Scenario = { build: () => { w: World; v: Vehicle }; kinds: string[] };
+  const base = (parts: string[], chassis = 'scout') => {
+    const w = emptyWorld();
+    return { w, v: addVehicle(w, 'raiders', chassis, parts, { x: 40, y: 40 }) };
+  };
+  const SCENARIOS: Record<string, Scenario> = {
+    bare: { build: () => base([]), kinds: ['limp'] },
+    stock: { build: () => base(['stockEngine']), kinds: ['chassis', 'engine', 'load', 'guns'] },
+    manyGuns: { build: () => base(['stockEngine', 'mg', 'mg', 'mg'], 'hauler'), kinds: ['chassis', 'engine', 'load', 'guns'] },
+    brokenGun: {
+      build: () => {
+        const s = base(['stockEngine', 'mg', 'mg']);
+        mountedParts(s.v, 'weapon')[0].hp = 0;
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns'],
+    },
+    overload: {
+      build: () => {
+        const s = base(['stockEngine'], 'hauler');
+        for (let i = 0; i < 16; i++) mountPart(s.w, s.v, makePart(s.w, 'mg', 0));
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns'],
+    },
+    heavy: {
+      build: () => {
+        const s = base(['stockEngine']);
+        for (let i = 0; i < 400; i++) s.v.items.push({ id: `g${i}`, x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' });
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns', 'floor'],
+    },
+    worn: {
+      build: () => {
+        const s = base(['stockEngine']);
+        mountedParts(s.v, 'engine')[0].wear = 2;
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns'],
+    },
+    wheels: {
+      build: () => {
+        const s = base(['stockEngine']);
+        coreParts(s.v, 'wheel').slice(0, 2).forEach((p) => (p.hp = 0));
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'wheels', 'guns'],
+    },
+    overdrive: {
+      build: () => {
+        const s = base(['stockEngine']);
+        s.w.player.vehicleId = s.v.id;
+        s.w.player.overdrive = true;
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns', 'overdrive'],
+    },
+    transmission: {
+      build: () => {
+        const s = base(['stockEngine']);
+        corePart(s.v, 'transmission').hp = 0;
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns', 'transmission'],
+    },
+    brokenEngine: {
+      build: () => {
+        const s = base(['stockEngine']);
+        mountedParts(s.v, 'engine')[0].hp = 0;
+        return s;
+      },
+      kinds: ['limp'],
+    },
+    stalled: {
+      build: () => {
+        const s = base(['stockEngine']);
+        s.v.stalledUntil = s.w.turn + 3;
+        return s;
+      },
+      kinds: ['limp'],
+    },
+    storm: {
+      build: () => {
+        const s = base(['stockEngine']);
+        s.w.weather = [{ id: 'w1', kind: 'storm', pos: { ...s.v.pos }, radius: 20, vel: { x: 0, y: 0 }, turnsLeft: 10, born: s.w.turn }];
+        s.v.stormExposure = { w1: 1 };
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns', 'weather'],
+    },
+    towing: {
+      build: () => {
+        const s = base(['stockEngine']);
+        const other = addVehicle(s.w, 'raiders', 'scout', ['stockEngine'], { x: 44, y: 40 });
+        addState(s.w, 'tow', s.v.id, other.id, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: true });
+        return s;
+      },
+      kinds: ['chassis', 'engine', 'load', 'guns', 'towing'],
+    },
+  };
+
+  const FROZEN: Record<string, number> = {
+    bare: 1.04, stock: 9.875716226804332, manyGuns: 5.641376805946041, brokenGun: 8.901316579936632, overload: 2.877966295841562,
+    heavy: 1, worn: 9.217335145017376, wheels: 7.135204973866129, overdrive: 13.134702581649762, transmission: 1.04,
+    brokenEngine: 1.04, stalled: 1.04, storm: 5.925429736082600, towing: 5.9254297360826,
+  };
+
+  it('keeps every max speed bit for bit and ends the steps on it', () => {
+    for (const [name, sc] of Object.entries(SCENARIOS)) {
+      const { w, v } = sc.build();
+      const steps = maxSpeedSteps(w, v);
+      expect(vehicleStats(w, v).maxSpeed, name).toBeCloseTo(FROZEN[name], 10);
+      expect(steps[steps.length - 1].speed, name).toBe(vehicleStats(w, v).maxSpeed);
+    }
+  });
+
+  it('lists the expected step kinds in order', () => {
+    for (const [name, sc] of Object.entries(SCENARIOS)) {
+      const { w, v } = sc.build();
+      const kinds = maxSpeedSteps(w, v).map((s) => s.kind);
+      expect(kinds, name).toEqual(sc.kinds);
+    }
+  });
+
+  it('each step follows from the one before', () => {
+    for (const [name, sc] of Object.entries(SCENARIOS)) {
+      const { w, v } = sc.build();
+      const steps = maxSpeedSteps(w, v);
+      steps.forEach((s, i) => {
+        const before = i === 0 ? 0 : steps[i - 1].speed;
+        if (s.kind === 'load' || s.kind === 'guns' || s.kind === 'wheels' || s.kind === 'overdrive' || s.kind === 'weather' || s.kind === 'towing') {
+          expect(s.speed, `${name} ${s.kind}`).toBeCloseTo(before * s.factor, 10);
+        }
+        if (s.kind === 'engine') expect(s.speed, name).toBeCloseTo(steps[0].speed + wornDef<EngineDef>(mountedParts(v, 'engine')[0]).speedBonus, 10);
+        if (s.kind === 'floor') expect(s.speed, name).toBe(RULES.minSpeedCap);
+        if (s.kind === 'transmission') expect(s.speed, name).toBeLessThan(before);
+      });
+    }
+  });
+
+  it('starts with the chassis, or limp with the cause', () => {
+    const cause = (name: string) => {
+      const { w, v } = SCENARIOS[name].build();
+      const first = maxSpeedSteps(w, v)[0];
+      return first.kind === 'limp' ? first.cause : first.kind;
+    };
+    expect(cause('stock')).toBe('chassis');
+    expect(cause('bare')).toBe('noEngine');
+    expect(cause('brokenEngine')).toBe('brokenEngine');
+    expect(cause('stalled')).toBe('stalled');
+  });
+
+  it('gun draw ignores broken guns, and a broken or missing engine gives no capacity', () => {
+    const { v } = SCENARIOS.brokenGun.build();
+    const one = SCENARIOS.stock.build().v;
+    expect(gunDraw(v)).toBeGreaterThan(0);
+    const both = base(['stockEngine', 'mg', 'mg']).v;
+    expect(gunDraw(v)).toBeCloseTo(gunDraw(both) / 2);
+    expect(gunDraw(one)).toBe(0);
+    expect(workingEngineCapacity(v)).toBe((PARTS.stockEngine as EngineDef).capacity);
+    expect(workingEngineCapacity(SCENARIOS.bare.build().v)).toBeNull();
+    expect(workingEngineCapacity(SCENARIOS.brokenEngine.build().v)).toBeNull();
   });
 });

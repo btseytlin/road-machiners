@@ -3,10 +3,12 @@
 // client. Once hitched, the client leaves physics and trails the tower along its path. Arrival fulfils the state,
 
 import { chassisDef } from '../data/chassis';
+import { PHYSICS } from '../data/physics';
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { BEACON, TOW } from '../data/tow';
 import { inCombat, inCombatWithOther, isHostile } from './combat';
+import { bodyOf } from './body';
 import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
@@ -14,7 +16,7 @@ import { route, routeLength } from './path';
 import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
-import { canUseSite, nearestPad, type Site } from './sites';
+import { canUseSite, nearestPad, reachedSite, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import { getResources } from './resources';
@@ -60,6 +62,10 @@ function hitchedTows(world: World): NpcState[] {
 
 export function isOnRope(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.other === id);
+}
+
+export function ropeClientOf(world: World, towerId: string): string | null {
+  return hitchedTows(world).find((s) => s.holder === towerId)?.other ?? null;
 }
 
 export function isTowing(world: World, id: string): boolean {
@@ -156,12 +162,18 @@ export function hitchNpc(world: World, npc: Vehicle, free: boolean): void {
   addState(world, 'tow', world.player.vehicleId, npc.id, { kind: 'tow', site: site.id, ...terms, hitched: true });
   npc.order = null;
   npc.speed = 0;
+  delete npc.brain!.farRoute;
 }
 
 export function releaseNpc(world: World, npc: Vehicle): void {
   const tow = playerTowing(world);
   if (tow?.other !== npc.id) throw new Error(`The player does not tow ${npc.id}`);
   endState(world, tow, 'broken');
+}
+
+export function checkTowPromise(world: World, s: NpcState): StateEnding | null {
+  const client = world.vehicles.find((v) => v.id === s.other);
+  return client && !isStranded(world, client) ? 'broken' : null;
 }
 
 export function checkPlayerTow(world: World, s: NpcState): StateEnding | null {
@@ -186,6 +198,11 @@ export function strandedAt(world: World, vehicle: Vehicle, client: Vehicle): Vec
   if ((!isPlayer(world, client) && inCombatWithOther(world, client, vehicle.id)) || !canTow(world, vehicle, client)) return null;
   if (canVehicleSee(world, vehicle, client.pos)) return client.pos;
   return isPlayer(world, client) ? beaconCenter(world, vehicle, client) : null;
+}
+
+export function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
+  if (at) goal.destination = { ...at };
 }
 
 export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
@@ -219,7 +236,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     return 'the player drove away from the tow offer';
   }
   if (held) {
-    if (!canUseSite(vehicle.pos, getKnownSite(towData(held).site))) return null;
+    if (!canUseSite(vehicleById(world, held.other).pos, getKnownSite(towData(held).site))) return null;
     activity.phase = 'act';
     endState(world, held, 'fulfilled');
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
@@ -229,6 +246,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
 
 function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
   if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
+  if (!stateOf(world, 'answering', tower.id, client.id)) return 'could not get through to the truck';
   if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, tower, client);
@@ -247,8 +265,13 @@ function towerTerms(world: World, tower: Vehicle, client: Vehicle): { site: stri
   return { site: site.id, fee: towFee(world, tower, client, site) };
 }
 
+function leftForDanger(world: World, tower: Vehicle, client: Vehicle): boolean {
+  const promise = stateOf(world, 'towPromise', tower.id, client.id);
+  return promise !== null && world.turn - promise.born < TOW.dangerWait;
+}
+
 function readyToTow(world: World, tower: Vehicle, client: Vehicle): boolean {
-  if (towOf(world, client.id) || !inTowReach(tower, client)) return false;
+  if (towOf(world, client.id) || !inTowReach(tower, client) || leftForDanger(world, tower, client)) return false;
   return !isPlayer(world, client) || !inCombat(world, client);
 }
 
@@ -259,7 +282,9 @@ function endClaim(world: World, tower: Vehicle, client: Vehicle): void {
 }
 
 function offer(world: World, tower: Vehicle, me: Vehicle): void {
-  const { site, fee } = towerTerms(world, tower, me);
+  const terms = towerTerms(world, tower, me);
+  const { site } = terms;
+  const fee = getResources(world, me).money <= 0 ? 0 : terms.fee;
   endClaim(world, tower, me);
   addState(world, 'tow', tower.id, me.id, { kind: 'tow', site, fee, waived: 0, hitched: false });
   world.events.push({ t: 'towOffer', by: tower.id, town: site, fee });
@@ -272,6 +297,7 @@ function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   addState(world, 'tow', tower.id, client.id, { kind: 'tow', site, fee: paid, waived: 0, hitched: true });
   client.order = null;
   client.speed = 0;
+  delete client.brain!.farRoute;
   world.events.push({ t: 'towHitched', by: tower.id, client: client.id, site });
 }
 
@@ -280,12 +306,16 @@ function towFee(world: World, tower: Vehicle, client: Vehicle, site: Site): numb
   const length = routeLength(client.pos, route(world, client.pos, pad, vehicleStats(world, tower).radius, [], tower));
   const involved = isPlayer(world, tower) || isPlayer(world, client);
   const cut = involved ? 1 - skillEffect(world, playerVehicle(world), 'social', 'towFee') : 1;
-  return Math.round((TOW.base + TOW.perTile * length) * cut);
+  return Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length) * cut);
 }
 
 function refuse(world: World, tow: NpcState): void {
   addState(world, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
   dropTow(world, tow, 'refused');
+}
+
+export function lapseClaim(world: World, claim: NpcState): void {
+  world.events.push({ t: 'towDropped', by: claim.holder, client: claim.other, reason: 'blocked' });
 }
 
 export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
@@ -310,29 +340,49 @@ export function followTower(world: World): void {
 
 function follow(tower: Vehicle, towed: Vehicle): void {
   if (tower.trail.length === 0) throw new Error(`Tower ${tower.id} has no trail to follow`);
-  const path: Pose[] = [{ x: towed.pos.x, y: towed.pos.y, heading: towed.heading }, ...tower.trail];
-  towed.trail = tower.trail.map((_, i) => poseBehind(path, i + 1, TOW.gap));
-  const end = towed.trail[towed.trail.length - 1];
+  const towerAxle = axleTiles(tower.chassisId);
+  const towedAxle = axleTiles(towed.chassisId);
+  const bar = TOW.gap - towerAxle - towedAxle;
+  if (bar <= 0) throw new Error(`Tow bar of ${tower.chassisId} and ${towed.chassisId} is ${bar} tiles, not above 0`);
+  const start: Pose = { x: towed.pos.x, y: towed.pos.y, heading: towed.heading };
+  let front = axlePoint(start, towedAxle);
+  let rear = axlePoint(start, -towedAxle);
+  let prevHitch = axlePoint(tower.trail[0], -towerAxle);
+  const trail: Pose[] = [start];
+  for (let i = 1; i < tower.trail.length; i++) {
+    const hitch = axlePoint(tower.trail[i], -towerAxle);
+    ({ front, rear } = trailerStep(front, rear, hitch, bar, TOW.takeUp * dist(hitch, prevHitch), towedAxle));
+    prevHitch = hitch;
+    trail.push({ x: (front.x + rear.x) / 2, y: (front.y + rear.y) / 2, heading: bearing(rear, front) });
+  }
+  towed.trail = trail;
+  const end = trail[trail.length - 1];
   towed.pos = { x: end.x, y: end.y };
   towed.heading = end.heading;
   towed.speed = tower.speed;
 }
 
-function poseBehind(path: Pose[], k: number, gap: number): Pose {
-  let left = gap;
-  for (let j = k; j > 0; j--) {
-    const a = path[j - 1];
-    const b = path[j];
-    const len = dist(a, b);
-    if (len === 0) continue;
-    if (len >= left) {
-      const t = left / len;
-      return { x: b.x + (a.x - b.x) * t, y: b.y + (a.y - b.y) * t, heading: bearing(a, b) };
-    }
-    left -= len;
+function axleTiles(chassisId: string): number {
+  return bodyOf(chassisId).wheelX / PHYSICS.metersPerTile;
+}
+
+function axlePoint(p: Pose, offset: number): Vec {
+  return { x: p.x + Math.cos(p.heading) * offset, y: p.y + Math.sin(p.heading) * offset };
+}
+
+function trailerStep(front: Vec, rear: Vec, hitch: Vec, bar: number, maxMove: number, towedAxle: number): { front: Vec; rear: Vec } {
+  const away = dist(hitch, front);
+  let nextFront = front;
+  if (away > 0) {
+    const target = { x: hitch.x + ((front.x - hitch.x) / away) * bar, y: hitch.y + ((front.y - hitch.y) / away) * bar };
+    const want = dist(front, target);
+    const t = want === 0 ? 0 : Math.min(1, maxMove / want);
+    nextFront = { x: front.x + (target.x - front.x) * t, y: front.y + (target.y - front.y) * t };
   }
-  const first = path[0];
-  return { x: first.x - Math.cos(first.heading) * left, y: first.y - Math.sin(first.heading) * left, heading: first.heading };
+  const span = dist(rear, nextFront);
+  const wheelbase = 2 * towedAxle;
+  if (span === 0) return { front: nextFront, rear };
+  return { front: nextFront, rear: { x: nextFront.x + ((rear.x - nextFront.x) / span) * wheelbase, y: nextFront.y + ((rear.y - nextFront.y) / span) * wheelbase } };
 }
 
 export function acceptOffer(world: World): void {
@@ -428,7 +478,7 @@ export function checkEscort(w: World, s: NpcState): StateEnding | null {
   if (!escort || !leader) return null;
   if (escortBroken(w, escort, leader)) return 'broken';
   const site = escortData(s).site;
-  return site !== null && canUseSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
+  return site !== null && reachedSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
 }
 
 function escortBroken(w: World, escort: Vehicle, leader: Vehicle): boolean {

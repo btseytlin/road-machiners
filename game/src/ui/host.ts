@@ -5,6 +5,7 @@ import type { World } from "../sim/types";
 export type UiHost = {
   world(): World;
   apply(next: World): void;
+  announce(next: World): void;
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
   pressTurn(): void;

@@ -1,14 +1,17 @@
 import { moveCard } from '../card-events';
-import { rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { ARTIFACT_DIR, collectArtifacts, holdArtifacts, releaseArtifacts } from '../adhoc-artifacts';
 import { roundSession } from '../sessions';
 import { readState, updateState } from '../state';
+import { transcriptsDir } from '../transcript-archive';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { RESUME_NOTE, agentHome, fillPrompt, isResuming, playtestCommand, prepareOutputs, readOutput, useOpenNetwork } from './common';
 
 export const FACTORY_STATE_MOUNT = '/factory/state';
 export const FACTORY_LOGS_MOUNT = '/factory/logs';
+export const FACTORY_LEDGER_MOUNT = '/factory/ledger.jsonl';
+export const FACTORY_TRANSCRIPTS_MOUNT = '/factory/transcripts';
 
 export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   const reply = readState(ctx.statePath).adhocReplies[String(issue)];
@@ -54,11 +57,18 @@ async function prepareClone(ctx: Ctx, issue: number, dir: string): Promise<void>
 async function runAdhocAgent(ctx: Ctx, issue: number, dir: string): Promise<void> {
   const log = `${ctx.cfg.home}/logs/issue-${issue}-adhoc.log`;
   const openNetwork = await useOpenNetwork(ctx, 'adhoc', issue);
-  const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT };
+  const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, ...analyticsMounts(ctx.cfg.home) };
   const session = roundSession(ctx.cfg.home, issue, 'adhoc', isResuming(ctx, issue));
   if (session.resume) ctx.log('adhoc', issue, `resuming round adhoc, session ${session.id}`);
-  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, files: `${OUT_DIR}/${ARTIFACT_DIR}`, playtest: playtestCommand(ctx.cfg, false) });
+  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, ledger: FACTORY_LEDGER_MOUNT, transcripts: FACTORY_TRANSCRIPTS_MOUNT, transcriptDays: String(ctx.cfg.transcriptDays), files: `${OUT_DIR}/${ARTIFACT_DIR}`, playtest: playtestCommand(ctx.cfg, false) });
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly, session });
+}
+
+function analyticsMounts(home: string): Record<string, string> {
+  const ledger = join(home, 'ledger.jsonl');
+  appendFileSync(ledger, '');
+  mkdirSync(transcriptsDir(home), { recursive: true });
+  return { [ledger]: FACTORY_LEDGER_MOUNT, [transcriptsDir(home)]: FACTORY_TRANSCRIPTS_MOUNT };
 }
 
 type Reply = { chat: string; messageId: number | null };

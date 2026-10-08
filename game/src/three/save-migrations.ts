@@ -145,6 +145,206 @@ function packExplored_3_4(list: unknown[]): string {
 }
 
 const HANDOVER_TURNS_5_6 = 1;
+const CAB_IDS_6_7 = ['cab', 'cabPickup', 'cabHardtop'];
+
+function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
+  const defeat = vehicle.defeat as SavedJson | undefined;
+  if (!defeat) return vehicle;
+  const cab = (vehicle.items as Item[]).find((item) => CAB_IDS_6_7.includes(item.part?.defId ?? ''));
+  return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
+}
+
+const RETIRED_STOCK_7_8 = 'fallen-sun';
+
+function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_7_8 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_7_8),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_7_8) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+const RETIRED_STOCK_8_9 = 'orchard';
+
+function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_8_9 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_8_9),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_8_9) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
+
+export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+  let xp = 0;
+  const ranks: Record<string, number> = {};
+  for (const [skill, total] of Object.entries(skills)) {
+    let level = 0;
+    while (level < XP_TO_REACH_9_10.length - 1 && total >= XP_TO_REACH_9_10[level + 1]) level++;
+    ranks[skill] = level;
+    xp += total - XP_TO_REACH_9_10[level];
+  }
+  return { xp, ranks };
+}
+
+const STORM_FADE_TURNS_16_17 = 30;
+
+function withStormBorn_16_17(world: SavedJson): SavedJson {
+  const born = (world.turn as number) - STORM_FADE_TURNS_16_17;
+  const dated = (e: SavedJson): SavedJson => (e.kind === 'storm' ? { ...e, born } : e);
+  return { ...world, weather: (world.weather as SavedJson[]).map(dated) };
+}
+
+const STORM_EDGE_17_18 = 25;
+const STORM_FADE_TURNS_17_18 = 30;
+
+function settledShare_17_18(turn: number, storm: SavedJson, pos: { x: number; y: number }): number {
+  const centre = storm.pos as { x: number; y: number };
+  const edge = Math.min(1, ((storm.radius as number) - Math.hypot(pos.x - centre.x, pos.y - centre.y)) / STORM_EDGE_17_18);
+  if (edge <= 0) return 0;
+  const strength = Math.min(1, (turn - (storm.born as number) + 1) / STORM_FADE_TURNS_17_18, (storm.turnsLeft as number) / STORM_FADE_TURNS_17_18);
+  return edge * strength;
+}
+
+function withStormExposure_17_18(world: SavedJson): SavedJson {
+  const storms = (world.weather as SavedJson[]).filter((e) => e.kind === 'storm');
+  const exposed = (v: SavedJson): SavedJson => {
+    const stormExposure: Record<string, number> = {};
+    for (const s of storms) {
+      const share = settledShare_17_18(world.turn as number, s, v.pos as { x: number; y: number });
+      if (share > 0) stormExposure[s.id as string] = share;
+    }
+    return { ...v, stormExposure };
+  };
+  const clear = (v: SavedJson): SavedJson => ({ ...v, stormExposure: {} });
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(exposed), removed: (world.removed as SavedJson[]).map(clear) };
+}
+
+function withMemories_11_12(world: SavedJson): SavedJson {
+  const shops = world.shops as Record<string, SavedJson>;
+  const turn = world.turn as number;
+  const remembering = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { lastTown, ...brain } = v.brain as SavedJson;
+    const shop = typeof lastTown === 'string' ? shops[lastTown] : undefined;
+    const memories = shop ? [{ turn, fact: { kind: 'prices', shop: lastTown, pressure: { ...(shop.pressure as SavedJson) } } }] : [];
+    return { ...v, brain: { ...brain, memories } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
+}
+
+function withPatchParts_13_14(world: SavedJson): SavedJson {
+  const vehicles = world.vehicles as SavedJson[];
+  const brokenIds = (id: string): string[] => {
+    const client = vehicles.find((v) => v.id === id);
+    const items = client ? (client.items as SavedJson[]) : [];
+    return items.flatMap((item) => (item.kind === 'part' && (item.part as SavedJson).hp === 0 ? [(item.part as SavedJson).id as string] : []));
+  };
+  const recording = (s: SavedJson): SavedJson => {
+    const data = s.data as SavedJson;
+    return data.kind === 'patch' ? { ...s, data: { ...data, partIds: brokenIds(s.other as string) } } : s;
+  };
+  return { ...world, states: (world.states as SavedJson[]).map(recording) };
+}
+
+const SHOT_EVENTS_15_16 = ['shot', 'guardShot'];
+
+function withBurst_15_16(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_15_16.includes(event.t as string)) return event;
+  return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
+}
+
+function withRouteStyle_18_19(world: SavedJson): SavedJson {
+  const styled = (v: SavedJson): SavedJson => {
+    const brain = v.brain as SavedJson | null;
+    if (!brain?.farRoute) return v;
+    return { ...v, brain: { ...brain, farRoute: { ...(brain.farRoute as SavedJson), offRoad: false } } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(styled), removed: (world.removed as SavedJson[]).map(styled) };
+}
+
+function withoutGuards_19_20(world: SavedJson): SavedJson {
+  const uncredited = (v: SavedJson): SavedJson => (typeof v.lastHitBy === 'string' && v.lastHitBy.startsWith('guard-') ? { ...v, lastHitBy: null } : v);
+  const unnoted = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { gunnedBy: _, ...brain } = v.brain as SavedJson;
+    return { ...v, brain };
+  };
+  return {
+    ...world,
+    events: (world.events as SavedJson[]).filter((e) => e.t !== 'guardShot'),
+    vehicles: (world.vehicles as SavedJson[]).map((v) => unnoted(uncredited(v))),
+    removed: (world.removed as SavedJson[]).map(uncredited),
+  };
+}
+
+function withFleePerceived_20_21(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+function withFightWorn_21_22(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const goal = (g: SavedJson): SavedJson => (g.kind === 'fight' ? { ...g, worn: { turn, condition: 1 } } : g);
+  const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+function withTracks_22_23(world: SavedJson): SavedJson {
+  const turn = world.turn as number;
+  const places = new Map((world.vehicles as SavedJson[]).map((v) => [v.id as string, v.pos as SavedJson]));
+  const fromNoticed = (noticed: Record<string, number>): Record<string, SavedJson> => {
+    const tracks: Record<string, SavedJson> = {};
+    for (const decision of ['contactHeard', 'hostileSeen']) {
+      for (const [key, last] of Object.entries(noticed)) {
+        const [kind, id] = key.split(':');
+        const at = places.get(id);
+        const seen = decision === 'hostileSeen';
+        if (kind === decision && at) tracks[id] = { at: { ...at }, turn: last, sighted: seen, choice: 'keep', chosenInSight: seen };
+      }
+    }
+    return tracks;
+  };
+  const fromGoal = (tracks: Record<string, SavedJson>, g: SavedJson): void => {
+    const at = places.get(g.targetId as string);
+    if ((g.kind === 'fight' || g.kind === 'flee') && at) tracks[g.targetId as string] = { at: { ...at }, turn: (g.perceived as number | undefined) ?? turn, sighted: true, choice: g.kind, chosenInSight: true };
+  };
+  const untimed = (g: SavedJson): SavedJson => {
+    if (g.kind !== 'fight') return g;
+    const { perceived: _, ...rest } = g;
+    return rest;
+  };
+  const tracked = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const noticed = brain.noticed as Record<string, number>;
+    const goals = brain.goals as SavedJson[];
+    const tracks = fromNoticed(noticed);
+    for (const g of goals) fromGoal(tracks, g);
+    const kept = Object.fromEntries(Object.entries(noticed).filter(([key]) => !key.startsWith('hostileSeen:') && !key.startsWith('contactHeard:')));
+    return { ...v, brain: { ...brain, noticed: kept, goals: goals.map(untimed), tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(tracked), removed: (world.removed as SavedJson[]).map(tracked) };
+}
+
+function withSeenSince_23_24(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const brain = v.brain as SavedJson;
+    const tracks = Object.fromEntries(Object.entries(brain.tracks as Record<string, SavedJson>).map(([id, t]) => [id, { ...t, seenSince: null }]));
+    return { ...v, brain: { ...brain, tracks } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
 
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
@@ -181,6 +381,32 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     };
     return { ...world, states: (world.states as SavedJson[]).map(handover) };
   },
+  (world) => ({
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
+    removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
+  }),
+  withoutRetiredStock_7_8,
+  withoutRetiredStock_8_9,
+  (world) => {
+    const { skills, ...player } = world.player as SavedJson;
+    return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
+  },
+  (world) => world,
+  withMemories_11_12,
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  withPatchParts_13_14,
+  (world) => world,
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_15_16) }),
+  withStormBorn_16_17,
+  withStormExposure_17_18,
+  withRouteStyle_18_19,
+  withoutGuards_19_20,
+  withFleePerceived_20_21,
+  withFightWorn_21_22,
+  withTracks_22_23,
+  withSeenSince_23_24,
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

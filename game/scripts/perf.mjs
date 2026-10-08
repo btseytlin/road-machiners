@@ -113,28 +113,39 @@ const towns = await page.evaluate(async () => {
   const { sitePads } = await import('/src/sim/sites.ts');
   return REGION.towns.map((t) => ({ name: t.name, x: t.pos.x, y: t.pos.y, pad: sitePads(t)[0] }));
 });
-const frameP95 = [];
-for (const t of towns) {
-  frameP95.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample }) => {
-    const g = window.__ROAM__;
-    const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
-    g.apply(w);
-    g.debugView(x, y, zoom);
-    await new Promise((r) => setTimeout(r, settle));
-    const ts = await new Promise((done) => {
-      const out = [];
-      const f = (t) => {
-        out.push(t);
-        if (t - out[0] < sample) requestAnimationFrame(f);
-        else done(out);
-      };
-      requestAnimationFrame(f);
-    });
-    const d = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b);
-    return d[Math.floor(d.length * 0.95)];
-  }, { x: t.x, y: t.y, pad: t.pad, zoom: VIEW_ZOOM, settle: SETTLE_MS, sample: SAMPLE_MS }));
+async function townFrameP95(night) {
+  const out = [];
+  for (const t of towns) {
+    out.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample, night }) => {
+      const g = window.__ROAM__;
+      let w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
+      if (night) w = (await import('/src/sim/cheats.ts')).skipToHour(w, 23);
+      g.apply(w);
+      g.debugView(x, y, zoom);
+      await new Promise((r) => setTimeout(r, settle));
+      if (night) {
+        let shadowed = 0;
+        g.scene.traverse((o) => { if (o.isSpotLight && o.castShadow && o.intensity > 0) shadowed++; });
+        if (!shadowed) throw new Error('No shadowed headlight beam at night, so frame time does not measure beam shadows');
+      }
+      const ts = await new Promise((done) => {
+        const out = [];
+        const f = (t) => {
+          out.push(t);
+          if (t - out[0] < sample) requestAnimationFrame(f);
+          else done(out);
+        };
+        requestAnimationFrame(f);
+      });
+      const d = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b);
+      return d[Math.floor(d.length * 0.95)];
+    }, { x: t.x, y: t.y, pad: t.pad, zoom: VIEW_ZOOM, settle: SETTLE_MS, sample: SAMPLE_MS, night }));
+  }
+  return out;
 }
-results.frameP95Ms = Math.max(...frameP95);
+const frameP95 = await townFrameP95(false);
+const nightP95 = await townFrameP95(true);
+results.frameP95Ms = Math.max(...frameP95, ...nightP95);
 
 const crashed = await page.evaluate(() => document.body.innerText.includes('The game crashed'));
 await browser.close();
@@ -142,6 +153,7 @@ await browser.close();
 console.log(`turn ms per call: ${turnMs.map((x) => x.toFixed(1)).join(', ')}`);
 console.log(`preview ms per order: ${previewMs.map((x) => x.toFixed(1)).join(', ')}`);
 console.log(`frame p95 ms per town: ${towns.map((t, i) => `${t.name} ${frameP95[i].toFixed(1)}`).join(', ')}`);
+console.log(`night frame p95 ms per town: ${towns.map((t, i) => `${t.name} ${nightP95[i].toFixed(1)}`).join(', ')}`);
 console.log(`travel frame gap ms: longest ${sortedGaps[sortedGaps.length - 1].toFixed(1)}, p99 ${sortedGaps[Math.floor(sortedGaps.length * 0.99)].toFixed(1)}`);
 console.log('');
 console.log(`${'metric'.padEnd(12)}${'value'.padStart(10)}${'budget'.padStart(10)}  ok`);

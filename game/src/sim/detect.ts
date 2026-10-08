@@ -13,18 +13,19 @@ import { hasPerk, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
-import { hasWorkingEngine, isStalled, vehicleStats } from './stats';
+import { hasWorkingEngine, isStalled, isStranded, vehicleStats } from './stats';
 import { sunAt } from './sun';
 import type { Contact, DustCloud, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
+import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
 export function soundRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v)) return 0;
+  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v) || isStranded(world, v)) return 0;
   const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
   return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
 }
@@ -44,10 +45,10 @@ function runsCold(world: World, v: Vehicle): boolean {
 }
 
 export function dustRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.limpSpeed) return 0;
+  if (v.speed <= RULES.limpSpeed || isStranded(world, v)) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-  const weather = weatherAt(world, v.pos);
+  const weather = weatherOn(world, v);
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
 
@@ -76,27 +77,45 @@ function idKey(id: string): number {
 }
 
 export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
-  const out: Contact[] = [];
-  const scanned = scannerRange(observer);
+  return sensesOf(world, observer, within).contacts;
+}
+
+export function sensesOf(world: World, observer: Vehicle, within: number): { seen: Vehicle[]; contacts: Contact[] } {
+  const seen: Vehicle[] = [];
+  const contacts: Contact[] = [];
   const sight = sightRadius(world, observer);
-  const clouds = cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within);
+  const listener = { scanned: scannerRange(observer), clouds: cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within) };
   for (const v of world.vehicles) {
-    if (v.id === observer.id) continue;
     const d = dist(observer.pos, v.pos);
-    if (d > within) continue;
-    if (d <= sight && canVehicleSee(world, observer, v.pos)) continue;
-    const moving = v.speed > RULES.parkedSpeed;
-    const sources: Contact['sources'] = [];
-    const heard = Math.max(0, hearingRange(world, observer, v));
-    if (moving && heard > 0 && d <= heard) sources.push('sound');
-    const dust = newestCloud(clouds, v.id);
-    if (dust) sources.push('dust');
-    if (moving && scanned > 0 && d <= scanned) sources.push('radio');
-    sources.push(...trackingSources(world, observer, v));
-    if (sources.length === 0) continue;
-    out.push({ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
+    if (v.id === observer.id || d > within) continue;
+    if (d <= sight && canVehicleSee(world, observer, v.pos)) seen.push(v);
+    else contacts.push(...contactWith(world, observer, listener, v, d));
   }
-  return out;
+  return { seen, contacts };
+}
+
+function contactWith(world: World, observer: Vehicle, listener: { scanned: number; clouds: DustCloud[] }, v: Vehicle, d: number): Contact[] {
+  const dust = newestCloud(listener.clouds, v.id);
+  const sources = sourcesOf(world, observer, listener.scanned, v, d, dust !== null);
+  if (sources.length === 0) return [];
+  const loudness = sources.includes('sound') ? soundRange(world, v) : null;
+  return [{ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness }];
+}
+
+function sourcesOf(world: World, observer: Vehicle, scanned: number, v: Vehicle, d: number, dusty: boolean): Contact['sources'] {
+  const moving = v.speed > RULES.parkedSpeed;
+  const sound = moving && hears(world, observer, v, d);
+  const radio = moving && inScanner(scanned, d);
+  return [...(sound ? ['sound' as const] : []), ...(dusty ? ['dust' as const] : []), ...(radio ? ['radio' as const] : []), ...trackingSources(world, observer, v)];
+}
+
+function inScanner(scanned: number, d: number): boolean {
+  return scanned > 0 && d <= scanned;
+}
+
+function hears(world: World, observer: Vehicle, v: Vehicle, d: number): boolean {
+  const heard = Math.max(0, hearingRange(world, observer, v));
+  return heard > 0 && d <= heard;
 }
 
 function trackingSources(world: World, observer: Vehicle, v: Vehicle): Contact['sources'] {
@@ -202,8 +221,13 @@ export function cloudsSeenBy(world: World, observer: Vehicle): DustCloud[] {
     if (c.source === observer.id) return false;
     const d = dist(observer.pos, c.pos);
     if (d <= sight && canVehicleSee(world, observer, c.pos)) return true;
-    return c.age >= DETECT.dust.riseTurns && d <= c.range && dustVisible(world, observer.pos, c.pos, c.age);
+    return seesRisenCloud(world, observer, c, d);
   });
+}
+
+function seesRisenCloud(world: World, observer: Vehicle, c: DustCloud, d: number): boolean {
+  if (c.age < DETECT.dust.riseTurns || d > c.range || isCheapMeeting(world, observer.pos, c.pos)) return false;
+  return dustVisible(world, observer.pos, c.pos, c.age);
 }
 
 function newestCloud(clouds: DustCloud[], vehicleId: string): DustCloud | null {

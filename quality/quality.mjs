@@ -1,8 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SEPARATOR, checkComments, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
@@ -28,12 +28,29 @@ function readHeadFiles() {
   return [];
 }
 
+function readMergeHeads() {
+  const file = path.resolve(root, runGit('rev-parse', '--git-path', 'MERGE_HEAD').trim());
+  if (!existsSync(file)) return [];
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean);
+}
+
+function readParents() {
+  const head = { ref: 'HEAD', files: readHeadFiles() };
+  const merged = readMergeHeads().map(ref => ({ ref, files: splitPaths(runGit('ls-tree', '-rz', '--name-only', ref)) }));
+  return [head, ...merged];
+}
+
 function selectSources(files) {
   return [...new Set(files)].filter(file => sourcePattern.test(file) && !ignoredPattern.test(file));
 }
 
 function readSources(directory, files) {
   return new Map(files.map(file => [file, readFileSync(path.join(directory, file), 'utf8')]));
+}
+
+function readGuidance(directory, files) {
+  const docs = files.filter(file => isGuidance(file) && !ignoredPattern.test(file));
+  return readSources(directory, docs.filter(file => !lstatSync(path.join(directory, file)).isSymbolicLink()));
 }
 
 function readSeparatorFiles(directory, staged) {
@@ -105,21 +122,34 @@ function findRegressions(current, previous) {
   });
 }
 
-function checkQuality(directory, baseline, files, headFiles, staged) {
-  const current = readSources(directory, selectSources(files));
-  const previous = new Map(selectSources(headFiles).map(file => [file, runGit('show', `HEAD:${file}`)]));
+function readParentSources(parent, baseline, config, maxDocstringLines) {
+  const sources = new Map(selectSources(parent.files).map(file => [file, runGit('show', `${parent.ref}:${file}`)]));
   mkdirSync(baseline, { recursive: true });
-  writeSources(baseline, previous);
-  const config = path.join(directory, '.oxlintrc.json');
+  writeSources(baseline, sources);
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  const { maxFilesPerKloc, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
-  const findings = findRegressions(collectFindings(directory, current, config, maxDocstringLines), collectFindings(baseline, previous, baselineConfig, maxDocstringLines));
-  const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
+  return { sources, findings: collectFindings(baseline, sources, baselineConfig, maxDocstringLines) };
+}
+
+function checkQuality(directory, baseline, files, parents, staged) {
+  const current = readSources(directory, selectSources(files));
+  const config = path.join(directory, '.oxlintrc.json');
+  const { maxFilesPerKloc, maxGuidanceWords, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config, maxDocstringLines));
+  const currentFindings = collectFindings(directory, current, config, maxDocstringLines);
+  const regressions = previous.map(parent => new Set(findRegressions(currentFindings, parent.findings)));
+  const findings = currentFindings.filter(finding => regressions.every(set => set.has(finding)));
+  const fragmented = previous.map(parent => checkFragmentation(current, collectComponents(parent.sources), maxFilesPerKloc));
+  const failures = fragmented[0].filter(failure => fragmented.every(list => list.some(other => componentOf(other) === componentOf(failure))));
+  failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
   failures.push(...checkSeparators(readSeparatorFiles(directory, staged)));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);
   for (const failure of failures) console.error(failure);
   if (findings.length + failures.length) throw new Error('Quality regressed against HEAD. Fix the code. Do not weaken the checks.');
+}
+
+function componentOf(failure) {
+  return failure.slice(0, failure.indexOf(':'));
 }
 
 function linkModules(directory, project) {
@@ -201,7 +231,7 @@ function checkSnapshot(staged, temporary) {
   const tracked = splitPaths(runGit('ls-files', '--cached', '-z'));
   const others = staged ? [] : splitPaths(runGit('ls-files', '--others', '--exclude-standard', '-z'));
   const files = [...tracked, ...others].filter(file => existsSync(path.join(directory, file)));
-  checkQuality(directory, path.join(temporary, 'head'), files, readHeadFiles(), staged);
+  checkQuality(directory, path.join(temporary, 'parents'), files, readParents(), staged);
   checkTypes(directory);
   if (staged) checkDashboardBrowser(directory);
 }

@@ -7,38 +7,32 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
-import { boxDistance, propBoxes, propReach, segmentCrossesBox } from './mapgen';
+import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './mapgen';
+import { isCheapMeeting, isHeadless } from './fidelity';
+import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
-const EYE = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile;
-
-function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind);
-}
-
 function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
-  const d = dist(a, b);
-  return world.obstacles.filter((o) => blocksSight(o) && dist(a, o.pos) < d + propReach(o));
+  return propsAlong(world, 'sight', a, b, 0);
 }
 
 type Screen = { pos: Vec; r: number };
 
-export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
+export function sightRadius(world: World, viewer: Vehicle): number {
   const night = sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
-  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherAt(world, at).sight;
+  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherOn(world, viewer).sight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
   return TERRAIN.vision.radius * weather * night * skill;
 }
 
-export function grayRadius(world: World, at: Vec): number {
-  return sightRadius(world, playerVehicle(world), at) * TERRAIN.vision.grayFactor;
+export function grayRadius(world: World): number {
+  return sightRadius(world, playerVehicle(world)) * TERRAIN.vision.grayFactor;
 }
 
 export function visibleTiles(world: World, from: Vec): Set<number> {
@@ -54,8 +48,8 @@ export function exploreFrom(world: World, from: Vec): void {
 
 function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
-  const r = sightRadius(world, playerVehicle(world), from);
-  const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + propReach(o));
+  const r = sightRadius(world, playerVehicle(world));
+  const inView = plainViewFrom(world, from, r);
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
   for (let x = lo.x; x <= hi.x; x++) {
@@ -63,16 +57,22 @@ function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, s
       const idx = y * size + x;
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (!test(idx) || dist(from, tile) > r) continue;
-      if (inPlainView(world, from, tile, props, [])) seen(idx);
+      if (inView(tile)) seen(idx);
     }
   }
+}
+
+function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boolean {
+  if (isHeadless()) return () => true;
+  const props = propsAround(world, 'sight', from, r);
+  return (tile) => inPlainView(world, from, tile, props, []);
 }
 
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
+  if (dist(observer.pos, target) > sightRadius(world, observer)) return false;
+  return isCheapMeeting(world, observer.pos, target) || inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }
 
 function dustScreens(world: World): Screen[] {
@@ -80,32 +80,58 @@ function dustScreens(world: World): Screen[] {
 }
 
 function inPlainView(world: World, a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
-  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, props, screens) && clearOverTerrain(world.terrain, a, b));
+  if (dist(a, b) <= TERRAIN.vision.closeRadius) return true;
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, props, screens) && clearOverTerrain(world.terrain, line);
 }
 
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(a, b, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, a, b);
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, line);
 }
 
-function hasLineOfSight(a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+  const { a, b } = line;
   const targetDist = dist(a, b);
-  return props.every((o) => !propHides(o, a, b)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
+  return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
 }
 
-function propHides(o: Obstacle, a: Vec, b: Vec): boolean {
-  if (segmentDist(o.pos, a, b) >= propReach(o)) return false;
-  return propBoxes(o).some((box) => box.z0 <= EYE && box.z1 >= EYE && segmentCrossesBox(box, a, b) && boxDistance(box, b) > 0);
+type SightLine = { a: Vec; b: Vec; from: number; to: number };
+
+function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
+  const eye = TERRAIN.vision.eyeHeight;
+  return { a, b, from: heightAt(terrain, a.x, a.y) + eye, to: heightAt(terrain, b.x, b.y) + eye };
 }
 
-function clearOverTerrain(terrain: Terrain, a: Vec, b: Vec): boolean {
-  const V = TERRAIN.vision;
-  const eyeA = heightAt(terrain, a.x, a.y) + V.eyeHeight;
-  const eyeB = heightAt(terrain, b.x, b.y) + V.eyeHeight;
-  const n = Math.ceil(dist(a, b) * V.samplesPerTile);
+function propHides(terrain: Terrain, o: Obstacle, line: SightLine): boolean {
+  if (segmentDist(o.pos, line.a, line.b) >= propReach(o)) return false;
+  const { base, boxes } = reachableBoxes(o, terrain);
+  return boxes.some((box) => {
+    const lo = base + box.z0 / PHYSICS.metersPerTile;
+    const hi = base + box.z1 / PHYSICS.metersPerTile;
+    return stretchCrossesBox(box, line.a, line.b, enterHeights(line, lo, hi), leaveHeights(line, lo, hi)) && boxDistance(box, line.b) > 0;
+  });
+}
+
+function enterHeights(line: SightLine, lo: number, hi: number): number {
+  const rise = line.to - line.from;
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 0 : 1;
+  return Math.max(0, Math.min((lo - line.from) / rise, (hi - line.from) / rise));
+}
+
+function leaveHeights(line: SightLine, lo: number, hi: number): number {
+  const rise = line.to - line.from;
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 1 : 0;
+  return Math.min(1, Math.max((lo - line.from) / rise, (hi - line.from) / rise));
+}
+
+function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+  const { a, b, from, to } = line;
+  const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {
     const t = i / n;
     const ground = heightAt(terrain, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-    if (ground > eyeA + (eyeB - eyeA) * t) return false;
+    if (ground > from + (to - from) * t) return false;
   }
   return true;
 }

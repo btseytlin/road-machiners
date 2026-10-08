@@ -102,7 +102,7 @@ The playtest checks that the merged features hold up together over a long run be
 - The job merges `main` into the release when the release lacks it, with an agent for a conflict. So the release plays all of `main` that exists when the playtest runs.
 - A release head can skip the plays. It carries the pass of the last commit this release passed when all hold: that commit is an ancestor of the head, no file under `game/` changed between them, and the head did not move during the compare. The game builds, tests and plays only from `game/`, so the head plays the same game. The job sets the pass, comments it on the tracking issue and plays nothing. Any game change, including one `main` brought in, plays in full. A blocked release stays blocked.
 - The factory clones the release head and runs the full game suite with no cache, so the checks' test cache cannot hide a broken release. A failing suite fails the job before the first play, so it spends no play.
-- Then it runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the mixed bot plays its trader, scavenger and fighter days among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
+- Then it runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the markov bot plays several of the other bot archetypes among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
 - The first play also runs the seed on the baseline, side by side: the last commit this release passed, or `main` before any pass. So a replay after a pass judges only what changed since that pass.
 - Every truck travels in far mode and a scripted bot drives, so physics, close driving and choices the bot never makes do not happen. The log header, the prompt and the report say so.
 - The factory reads the facts from each log: its seed, turns and commit, how it ended, and which kinds of activity never happened. A log of another run fails the job.
@@ -139,7 +139,7 @@ A committee message starting with `/change` or Hermes's `factory_queue_change` t
 
 ## Ad hoc
 
-A member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". Hermes opens an `adhoc` issue in Implementation. The job runs Sonnet in a fresh clone of `dev` with the state and logs mounted read only. It may run any repo harness and pushes nothing. It answers the member's message with `.factory/report.md` and any files, as [evidence.md](evidence.md#ad-hoc-files) says.
+A member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". Hermes opens an `adhoc` issue in Implementation. The job runs Sonnet in a fresh clone of `dev` with the state, the job logs, the ledger and the archived agent transcripts mounted read only. A member can ask it what agents did on an issue, where they got stuck or what cost the most. It may run any repo harness and pushes nothing. It answers the member's message with `.factory/report.md` and any files, as [evidence.md](evidence.md#ad-hoc-files) says.
 
 ## Model routing
 

@@ -6,6 +6,7 @@ import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
+import type { ShapeBox } from './mapgen';
 
 export type BodyBox = { at: { x: number; y: number; z: number }; half: { x: number; y: number; z: number } };
 
@@ -21,7 +22,6 @@ export type Body = {
 
 export type CellRect = { x0: number; x1: number; z0: number; z1: number };
 
-type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 type HeightMap = { cell: number; i0: number; j0: number; top: (number | null)[][] };
 type TruckShape = { boxes: ShapeBox[]; heights: HeightMap };
 
@@ -66,6 +66,21 @@ function collisionBoxes(chassisId: string, halfHeight: number, top: number): Bod
       half: { x: (b.x1 - b.x0) / 2, y: (y1 - y0) / 2, z: (b.y1 - b.y0) / 2 },
     };
   });
+}
+
+const hulks = new Map<string, readonly ShapeBox[]>();
+
+export function hulkBoxes(chassisId: string): readonly ShapeBox[] {
+  const cached = hulks.get(chassisId);
+  if (cached) return cached;
+  const bottom = -bodyOf(chassisId).half.y;
+  const boxes = truckShape(chassisId).boxes.map((b) => {
+    const z0 = Math.max(b.z0, bottom);
+    if (!(b.z1 > z0)) throw new Error(`A ${chassisId} hulk box has no height above the chassis bottom`);
+    return { ...b, z0: z0 - bottom, z1: b.z1 - bottom };
+  });
+  hulks.set(chassisId, boxes);
+  return boxes;
 }
 
 export function cellRect(chassisId: string, cells: readonly { x: number; y: number }[]): CellRect {
@@ -136,7 +151,25 @@ export function highestUnder(chassisId: string, rect: CellRect): number {
   return topOver(map, xa, xb, ya, yb);
 }
 
-const CLIP_TOLERANCE = 0.05;
+export function surfaceSamples(chassisId: string, center: { x: number; z: number }, radius: number): { x: number; z: number; y: number; half: number }[] {
+  const map = truckShape(chassisId).heights;
+  const out: { x: number; z: number; y: number; half: number }[] = [];
+  const reach = Math.ceil(radius / map.cell) + 1;
+  const i0 = Math.floor(center.x / map.cell);
+  const j0 = Math.floor(-center.z / map.cell);
+  for (let i = i0 - reach; i <= i0 + reach; i++) {
+    for (let j = j0 - reach; j <= j0 + reach; j++) {
+      const top = map.top[i - map.i0]?.[j - map.j0];
+      if (typeof top !== 'number') continue;
+      const x = (i + 0.5) * map.cell;
+      const z = -(j + 0.5) * map.cell;
+      if (Math.hypot(x - center.x, z - center.z) <= radius) out.push({ x, z, y: top / 100, half: map.cell / 2 });
+    }
+  }
+  return out;
+}
+
+export const CLIP_TOLERANCE = 0.05;
 const MIN_KEEP = 0.3;
 const MIN_SUPPORT = 0.9;
 

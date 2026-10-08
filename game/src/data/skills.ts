@@ -1,5 +1,5 @@
-// Character skills. Each skill grows from its own XP sources, and each level adds `perLevel` of every
-// effect in SKILL_EFFECTS. XP numbers are starting values for the progression simulator to tune.
+// Character skills. Activity earns XP into one shared pool, and the player spends it on ranks of any skill. Each rank
+// adds `perLevel` of every effect in SKILL_EFFECTS. XP numbers are starting values for the progression simulator to tune.
 
 import type { Archetype } from '../sim/progression/bot';
 import type { SkillId, XpSource } from '../sim/types';
@@ -52,8 +52,8 @@ const EFFECTS = {
 export type SkillEffect<S extends SkillId> = keyof (typeof EFFECTS)[S] & string;
 export const SKILL_EFFECTS: { [S in SkillId]: Record<SkillEffect<S>, number> } = EFFECTS;
 
-export const XP_TO_REACH: readonly number[] = [0, 200, 600, 1200, 2000, 3000];
-export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
+export const RANK_COSTS: readonly number[] = [200, 400, 600, 800, 1000];
+export const MAX_RANK = RANK_COSTS.length;
 
 export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean; repeat: number };
 
@@ -116,9 +116,9 @@ export const PERKS: Record<PerkId, PerkDef> = {
   roadMechanic: { skill: 'machining', level: 4, name: 'Road mechanic', rule: 'Drivers pay double for the patches you do.' },
   desertRat: { skill: 'toughness', level: 2, name: 'Desert rat', rule: 'Noon sun heats your engine like morning sun.' },
   stormRider: { skill: 'toughness', level: 2, name: 'Storm rider', rule: 'Dust storms do not cut your sight or aim.' },
-  fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab does not knock you out while health is above half.' },
+  fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab, or a hit on a cab below half, does not knock you out while health is above half.' },
   longHaul: { skill: 'toughness', level: 4, name: 'Long haul', rule: 'You heal while driving, not only while parked.' },
-  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left.' },
+  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left, as they were then.' },
   rumorMill: { skill: 'social', level: 2, name: 'Rumor mill', rule: 'A driver you call marks a wreck or site it passed.' },
   paidTruce: { skill: 'social', level: 4, name: 'Paid truce', rule: 'You can pay a hostile driver to end its feud with you.' },
   bountyTalk: { skill: 'social', level: 4, name: 'Bounty talk', rule: 'A raider that gives up to you counts for bounty contracts.' },
@@ -150,8 +150,11 @@ export const PERK_NUMBERS = {
 export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
   trader: 'social',
   scavenger: 'machining',
-  fighter: 'perception',
-  mixed: null,
+  hunter: 'perception',
+  fastTrader: 'driving',
+  hauler: 'social',
+  climber: 'social',
+  markov: null,
 };
 
 export const TARGET_DAYS = {

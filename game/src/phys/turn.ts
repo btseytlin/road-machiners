@@ -15,9 +15,9 @@ import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
 import { setDownSpot } from '../sim/steering';
 import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
-import { dist } from '../sim/vec';
+import { angleDiff, dist, lerp } from '../sim/vec';
 import { exploreFrom } from '../sim/vision';
-import { bodyState, GROUND, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
+import { bodyState, GROUND, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, restWheels, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -89,7 +89,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
     applyTurn(w, r);
     for (const v of far) {
       advanceFar(w, v);
-      r.frames[v.id] = trailFrames(w, v);
+      r.frames[v.id] = trailFrames(w, v, restWheels(v.chassisId));
     }
     exploreAlong(w);
     done(r);
@@ -170,14 +170,26 @@ function exploreAlong(w: World): void {
   }
 }
 
-function trailOf(start: Pose, frames: TurnResult['frames'][string]): Pose[] {
+export function trailOf(start: Pose, frames: TurnResult['frames'][string]): Pose[] {
   const trail: Pose[] = [start];
-  for (let i = 1; i <= RULES.substeps; i++) {
-    const f = frames[Math.round((i * TURN_STEPS) / RULES.substeps) - 1];
-    const p = toMap(f.pos);
-    trail.push({ x: p.x, y: p.y, heading: headingOf(f.rot) });
-  }
+  for (let i = 1; i <= RULES.substeps; i++) trail.push(poseAt(start, frames, (i * TURN_STEPS) / RULES.substeps));
   return trail;
+}
+
+function poseAt(start: Pose, frames: TurnResult['frames'][string], step: number): Pose {
+  const poseOfFrame = (k: number): Pose => {
+    if (k === 0) return start;
+    const f = frames[k - 1];
+    const p = toMap(f.pos);
+    return { x: p.x, y: p.y, heading: headingOf(f.rot) };
+  };
+  const lo = Math.min(Math.floor(step), TURN_STEPS);
+  const hi = Math.min(lo + 1, TURN_STEPS);
+  const t = step - lo;
+  const a = poseOfFrame(lo);
+  if (t === 0 || hi === lo) return a;
+  const b = poseOfFrame(hi);
+  return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), heading: a.heading + angleDiff(a.heading, b.heading) * t };
 }
 
 function pathLength(trail: Pose[]): number {

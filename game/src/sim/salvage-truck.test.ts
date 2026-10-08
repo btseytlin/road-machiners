@@ -120,7 +120,7 @@ describe('the player and another looter at one knocked-out truck', () => {
     const items = buggy.items.length;
     expect(() => takeFromTruck(w, buggy.id, gun.id, spareSpot(me, gun))).toThrow(`${looter.name} is looting this truck`);
     expect(buggy.items).toHaveLength(items);
-    expect(lootBlockerHere(w)).toBe(looter);
+    expect(lootBlockerHere(w, buggy.id)).toBe(looter);
   });
 
   it('takes from the truck once the other driver is gone', () => {

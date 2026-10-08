@@ -3,12 +3,13 @@
 // the player and every NPC at a fixed interval, how the run ended and a summary of counts.
 
 import { SKILL_IDS } from '../../data/skills';
+import { TIME } from '../../data/time';
 import { playerVehicle } from '../damage';
-import { levelOf } from '../progress';
+import { skillLevel } from '../progress';
 import type { DriverResources, GameEvent, NpcActivity, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import type { Archetype } from './bot';
-import { stepsFrom, type RecordStep, type TurnEvent } from './record';
+import { playTurns, type PlayedTurn } from './record';
 
 export const ACTIVITY_LIMITS = [
   'every truck travels in far mode, so no physics, close driving or crash contact runs',
@@ -40,13 +41,15 @@ export type ActivityOptions = { seed: number; archetype: Archetype; turns: numbe
 
 const round = (n: number): number => Math.round(n * 10) / 10;
 
+const BOT_OPTIONS = { markovTurns: TIME.turnsPerDay };
+
 export function* activityFrom(start: World, options: ActivityOptions): Generator<ActivityLine> {
   if (!Number.isInteger(options.every) || options.every <= 0) throw new Error(`The snapshot interval must be a positive whole number, got ${options.every}`);
   const play = new Play(start, options.every);
   yield { k: 'run', ...options, limits: ACTIVITY_LIMITS };
   yield snapshot(start);
   try {
-    yield* play.turns(stepsFrom(start, `seed ${options.seed} ${options.archetype}`, options.archetype, options.turns));
+    yield* play.turns(playTurns(start, `seed ${options.seed} ${options.archetype}`, options.archetype, options.turns, BOT_OPTIONS));
   } catch (error) {
     play.fail(error);
   }
@@ -65,21 +68,23 @@ class Play {
     this.tally = new Tally(start);
   }
 
-  *turns(steps: Iterable<RecordStep>): Generator<ActivityLine> {
-    for (const step of steps) {
-      yield* this.step(step);
+  *turns(played: Iterable<PlayedTurn>): Generator<ActivityLine> {
+    for (const turn of played) {
+      yield* this.step(turn);
       if (this.end) return;
     }
   }
 
-  private *step(step: RecordStep): Generator<ActivityLine> {
-    for (const line of eventLines(step.events)) {
+  private *step(played: PlayedTurn): Generator<ActivityLine> {
+    const { orders, next } = played;
+    const events = [...eventLines(orders.events, orders.world.turn), ...eventLines(next.events, next.turn)];
+    for (const line of events) {
       this.tally.note(line.e);
       yield line;
     }
-    this.tally.move(step.world);
-    this.world = step.world;
-    if (step.death) this.end = { k: 'end', turn: step.death.turn, reason: 'death', message: null };
+    this.tally.move(next);
+    this.world = next;
+    if (next.player.state === 'dead') this.end = { k: 'end', turn: next.turn, reason: 'death', message: null };
     else if ((this.world.turn - this.start.turn) % this.every === 0) yield this.snap();
   }
 
@@ -99,8 +104,8 @@ class Play {
   }
 }
 
-function eventLines(events: TurnEvent[]): EventLine[] {
-  return events.filter(({ event }) => !(event.t === 'info' && event.debug)).map(({ turn, event }) => ({ k: 'event', turn, e: event }));
+function eventLines(events: GameEvent[], turn: number): EventLine[] {
+  return events.filter((event) => !(event.t === 'info' && event.debug)).map((event) => ({ k: 'event', turn, e: event }));
 }
 
 export function snapshot(world: World): SnapshotLine {
@@ -108,7 +113,7 @@ export function snapshot(world: World): SnapshotLine {
   const me = playerVehicle(world);
   const player: PlayerSnapshot = {
     pos: at(me.pos), state: p.state, money: p.money, fuel: round(p.fuel), supplies: round(p.supplies), health: round(p.health),
-    xp: { ...p.skills }, levels: levels(world), contracts: p.contracts.length, discovered: p.discovered.length,
+    xp: { ...p.xpBySource }, levels: levels(world), contracts: p.contracts.length, discovered: p.discovered.length,
   };
   return { k: 'snapshot', turn: world.turn, player, npcs: world.vehicles.filter((v) => v.id !== p.vehicleId).map(npcSnapshot) };
 }
@@ -116,7 +121,7 @@ export function snapshot(world: World): SnapshotLine {
 const at = (pos: Vec): [number, number] => [round(pos.x), round(pos.y)];
 
 function levels(world: World): Record<string, number> {
-  return Object.fromEntries(SKILL_IDS.map((skill) => [skill, levelOf(world.player.skills[skill])]));
+  return Object.fromEntries(SKILL_IDS.map((skill) => [skill, skillLevel(world, skill)]));
 }
 
 function npcSnapshot(v: Vehicle): NpcSnapshot {
@@ -193,7 +198,7 @@ class Tally {
       k: 'summary', turns, events: this.events, npcGoals: this.npcGoals, npcsSeen: this.seen.size - 1,
       shots: this.shots, hits: this.hits, destroyed: n('destroyed'), knockouts: n('npcKnockout') + n('knockout'),
       deaths: n('death'), stalls: n('stall'), moneyIn: this.moneyIn, moneyOut: this.moneyOut,
-      xp: SKILL_IDS.reduce((sum, skill) => sum + world.player.skills[skill], 0), levels: levels(world), playerTiles: Math.round(this.tiles),
+      xp: Object.values(world.player.xpBySource).reduce((sum, xp) => sum + xp, 0), levels: levels(world), playerTiles: Math.round(this.tiles),
     };
   }
 }

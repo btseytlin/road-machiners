@@ -15,10 +15,10 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, townAt } from './sites';
+import { locationAt, siteGap, type Site } from './sites';
+import { shopAt } from './market';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
-import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
@@ -26,7 +26,7 @@ export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
       world.player.discovered.includes(s.id) ||
-      !seesArea(world, s.pos, s.radius)
+      !seesArea(world, s)
     )
       continue;
     discoverSite(world, s);
@@ -38,12 +38,6 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
   practice(world, 'discover', 1, null, s.id);
-}
-
-export function applySiteAction(world: World): World | null {
-  if (canUseOasis(world)) return useOasis(world);
-  if (canScavenge(world)) return scavenge(world);
-  return null;
 }
 
 export function canUseOasis(world: World): boolean {
@@ -60,10 +54,8 @@ export function useOasis(world: World): World {
   });
 }
 
-function seesArea(world: World, center: Vec, radius: number): boolean {
-  return world.player.visible.some(
-    (idx) => dist(tileCenter(world, idx), center) <= radius,
-  );
+function seesArea(world: World, site: Site): boolean {
+  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= 0);
 }
 
 export function salvageHere(world: World): SalvageStock | null {
@@ -72,13 +64,21 @@ export function salvageHere(world: World): SalvageStock | null {
 }
 
 export function salvageNear(world: World): SalvageStock | null {
+  return salvageListNear(world)[0] ?? null;
+}
+
+export function salvageListNear(world: World): SalvageStock[] {
   const me = playerVehicle(world);
-  return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
+  return world.salvage.filter((stock) => hasSalvage(stock) && salvageInRange(me, stock));
 }
 
 export function downedNear(world: World): Vehicle | null {
+  return downedListNear(world)[0] ?? null;
+}
+
+export function downedListNear(world: World): Vehicle[] {
   const me = playerVehicle(world);
-  return world.vehicles.find((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v)) ?? null;
+  return world.vehicles.filter((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v));
 }
 
 export function downedHere(world: World): Vehicle | null {
@@ -91,28 +91,30 @@ export function emptySalvageNear(world: World): SalvageStock | null {
   return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
-export function lootBlockerHere(world: World): Vehicle | null {
-  const target = salvageHere(world) ?? downedHere(world);
-  return target && lootBlocker(world, playerVehicle(world), target.id);
+export function lootBlockerHere(world: World, targetId: string): Vehicle | null {
+  return lootBlocker(world, playerVehicle(world), targetId);
 }
 
-export function canScavenge(world: World): boolean {
+function reachableStock(world: World, stockId: string): SalvageStock | null {
   const me = playerVehicle(world);
-  const stock = salvageHere(world);
-  return stock !== null && !world.player.scavenged.includes(stock.id) && !inCombat(world, me) && !lootBlocker(world, me, stock.id);
+  const stock = world.salvage.find((s) => s.id === stockId);
+  return stock && hasSalvage(stock) && canReachSalvage(me, stock) ? stock : null;
 }
 
-export function canLoot(world: World): boolean {
-  const stock = salvageHere(world);
-  return stock !== null && world.player.scavenged.includes(stock.id);
+export function canScavenge(world: World, stockId: string): boolean {
+  const me = playerVehicle(world);
+  return reachableStock(world, stockId) !== null && !world.player.scavenged.includes(stockId) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
 }
 
-export function scavenge(world: World): World {
+export function canLoot(world: World, stockId: string): boolean {
+  return reachableStock(world, stockId) !== null && world.player.scavenged.includes(stockId);
+}
+
+export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
-    const stock = salvageHere(w);
-    if (stock) requireLootFree(w, playerVehicle(w), stock.id);
-    if (!stock || !canScavenge(w)) throw new Error('Nothing unsearched in reach');
-    beginSearch(w, playerVehicle(w), stock.id);
+    if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
+    if (!canScavenge(w, stockId)) throw new Error('Nothing unsearched in reach');
+    beginSearch(w, playerVehicle(w), stockId);
   });
 }
 
@@ -135,7 +137,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
-  if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
+  if (item.kind === 'part' && isMounted(me.chassisId, item) && !shopAt(world)) {
     const work = lootRefitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],

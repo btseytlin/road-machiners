@@ -1,7 +1,9 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import { MAP_SCALE, REGION, scalePoint } from "./region";
+import { PHYSICS } from "./physics";
+import { BROKEN_WING, BROKEN_WING_POINT, FALLEN_SUN_POS, MAP_SCALE, REGION, scalePoint } from "./region";
+import { FALLEN_SUN_DECKS } from "./territory";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -17,7 +19,10 @@ export type TerrainTypeId =
   | "ash"
   | "field"
   | "dirtyWater"
-  | "toxic";
+  | "toxic"
+  | "track"
+  | "canal"
+  | "concrete";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -26,23 +31,116 @@ export type TerrainType = {
   wear: number;
   dust: number;
   color: number;
+  craters: boolean;
+  rut: number;
 };
 
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
-  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
-  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c },
-  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66 },
-  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78 },
-  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044 },
-  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489 },
-  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba },
-  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
-  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
-  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
-  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
-  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
+  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a, craters: true, rut: 0 },
+  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676, craters: true, rut: 0.5 },
+  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c, craters: true, rut: 0.8 },
+  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66, craters: true, rut: 0.6 },
+  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78, craters: true, rut: 0.2 },
+  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044, craters: true, rut: 1 },
+  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489, craters: true, rut: 0.3 },
+  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba, craters: true, rut: 0.5 },
+  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b, craters: true, rut: 0 },
+  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a, craters: true, rut: 0.8 },
+  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a, craters: true, rut: 0.8 },
+  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a, craters: false, rut: 0 },
+  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c, craters: false, rut: 0 },
+  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458, craters: true, rut: 0 },
+  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a, craters: false, rut: 0 },
+  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94, craters: true, rut: 0 },
 };
+
+export type DeckStation = { at: Vec; rise: number };
+
+export type DeckSpec = {
+  id: string;
+  line: DeckStation[];
+  width: number;
+  cut: { abutment: number; ramp: number } | null;
+  skirt: boolean;
+};
+
+const CANYON_BRIDGE: DeckSpec = {
+  id: "canyon-bridge",
+  line: [
+    { at: scalePoint({ x: 97.9, y: 75.1 }), rise: 0 },
+    { at: scalePoint({ x: 101.5, y: 71.5 }), rise: 0 },
+  ],
+  width: 8,
+  cut: { abutment: 1, ramp: 1.5 },
+  skirt: false,
+};
+
+const WING_DECK: DeckSpec = {
+  id: "broken-wing",
+  line: [
+    { at: BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0), rise: 0 },
+    { at: BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0), rise: 0 },
+  ],
+  width: REGION.roadWidth,
+  cut: null,
+  skirt: true,
+};
+
+export type Mound = { center: Vec; radius: number; bank: number; height: number };
+
+const WING_MOUNDS: Mound[] = [-1, 1].map((end) => ({
+  center: BROKEN_WING_POINT(end * (BROKEN_WING.deckHalf + BROKEN_WING.mound.gap), 0),
+  radius: BROKEN_WING.mound.flat,
+  bank: BROKEN_WING.mound.bank,
+  height: BROKEN_WING.mound.height,
+}));
+
+const TRENCH = BROKEN_WING.trench;
+
+export type Basin = {
+  center: Vec;
+  floor: Vec[];
+  bank: number[];
+  rim: number[];
+  depth: number;
+  floorRelief: { frequency: number; amplitude: number };
+};
+
+const FALLEN_SUN_BASIN: Basin = {
+  center: FALLEN_SUN_POS,
+  floor: [
+    { x: -45.0, y: 0.0 },
+    { x: -41.3, y: -15.0 },
+    { x: -32.2, y: -27.0 },
+    { x: -21.7, y: -34.8 },
+    { x: -11.9, y: -41.3 },
+    { x: -6.3, y: -44.6 },
+    { x: 1.6, y: -45.0 },
+    { x: 7.5, y: -42.3 },
+    { x: 15.8, y: -48.5 },
+    { x: 28.6, y: -45.8 },
+    { x: 38.9, y: -38.9 },
+    { x: 45.9, y: -26.5 },
+    { x: 50.2, y: -8.9 },
+    { x: 50.2, y: 8.9 },
+    { x: 45.3, y: 21.1 },
+    { x: 39.8, y: 33.4 },
+    { x: 25.5, y: 44.2 },
+    { x: 8.2, y: 46.3 },
+    { x: -8.3, y: 47.3 },
+    { x: -23.5, y: 40.7 },
+    { x: -37.7, y: 26.4 },
+    { x: -43.5, y: 11.6 },
+  ],
+  bank: [12, 10, 4, 3.5, 3.5, 30, 30, 3.5, 3.5, 4, 4, 52, 16, 16, 30, 40, 36, 28, 26, 26, 22, 30],
+  rim: [1.0, 1.5, 5.0, 5.5, 5.5, 0, 0, 5.5, 5.5, 5.0, 4.5, 0, 2.0, 2.0, 0.5, 0, 0, 0, 0, 0, 0.5, 0],
+  depth: -1.06,
+  floorRelief: { frequency: 1 / 16, amplitude: 0.45 },
+};
+
+function fromFallenSun(p: Vec): Vec {
+  return { x: FALLEN_SUN_POS.x + p.x, y: FALLEN_SUN_POS.y + p.y };
+}
 
 export const TERRAIN = {
   octaves: [
@@ -54,6 +152,8 @@ export const TERRAIN = {
   flattenMargin: 15,
   roadGrade: 0.12,
   bankGrade: 0.3,
+  farmGradeMargin: 4,
+  levelMargin: 4,
   height: { hill: 2.1, mountainFrom: 0.32, mountain: 11 },
   relief: { broadFrequency: 1 / 65, broadAmplitude: 2.4, ridgeFrequency: 1 / 18, ridgeAmplitude: 1.2 },
   features: {
@@ -69,12 +169,23 @@ export const TERRAIN = {
       bank: 18,
       depth: 2.9,
     },
-    bridge: {
-      from: scalePoint({ x: 97.9, y: 75.1 }),
-      to: scalePoint({ x: 101.5, y: 71.5 }),
-      width: 8,
-      abutment: 1,
-      ramp: 1.5,
+    trench: {
+      path: [BROKEN_WING_POINT(-TRENCH.half, TRENCH.side), BROKEN_WING_POINT(TRENCH.half, TRENCH.side)] as Vec[],
+      width: TRENCH.width,
+      bank: TRENCH.bank,
+      depth: TRENCH.depth,
+    },
+    furrow: {
+      path: [{ x: -15.0, y: 56.0 }, { x: -20.7, y: 77.3 }, { x: -26.4, y: 98.5 }].map(fromFallenSun),
+      width: 12,
+      bank: 12,
+      depth: 0.5,
+    },
+    decks: [CANYON_BRIDGE, WING_DECK, ...FALLEN_SUN_DECKS] as readonly DeckSpec[],
+    wing: {
+      pos: BROKEN_WING_POINT(BROKEN_WING.hoopAt, 0),
+      r: 26.5 / PHYSICS.metersPerTile,
+      yaw: BROKEN_WING.yaw,
     },
     dryRiver: {
       path: [
@@ -96,13 +207,9 @@ export const TERRAIN = {
         bank: 24,
         depth: 1.4,
       },
-      {
-        center: scalePoint({ x: 64, y: 54 }),
-        radius: 50,
-        bank: 20,
-        depth: 1.8,
-      },
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
+    basins: [FALLEN_SUN_BASIN] as Basin[],
+    mounds: WING_MOUNDS,
   },
   reliefPx: 45,
   types: {
@@ -517,7 +624,8 @@ export const MAPGEN = {
   closeUpPxPerTile: 8,
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
-    { name: 'bridge', center: { x: (TERRAIN.features.bridge.from.x + TERRAIN.features.bridge.to.x) / 2, y: (TERRAIN.features.bridge.from.y + TERRAIN.features.bridge.to.y) / 2 }, side: 60 },
+    { name: 'bridge', center: { x: (CANYON_BRIDGE.line[0].at.x + CANYON_BRIDGE.line[1].at.x) / 2, y: (CANYON_BRIDGE.line[0].at.y + CANYON_BRIDGE.line[1].at.y) / 2 }, side: 60 },
+    { name: 'wing', center: BROKEN_WING_POINT(0, -2), side: 120 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
     { name: 'canyon', center: { x: 470, y: 240 }, side: 100 },
     { name: 'sand', center: { x: 390, y: 350 }, side: 100 },

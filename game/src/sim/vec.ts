@@ -17,6 +17,10 @@ export function angleDiff(a: number, b: number): number {
   return d;
 }
 
+export function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
+  return (to.x - from.x) * (threat.x - from.x) + (to.y - from.y) * (threat.y - from.y) < 0;
+}
+
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
@@ -36,5 +40,20 @@ export function segmentDist(p: Vec, a: Vec, b: Vec): number {
 export function polylineDist(p: Vec, line: Vec[]): number {
   let best = Infinity;
   for (let i = 0; i + 1 < line.length; i++) best = Math.min(best, segmentDist(p, line[i], line[i + 1]));
+  return best;
+}
+
+export function pointInPolygon(p: Vec, poly: readonly Vec[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [a, b] = [poly[i], poly[j]];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+export function polygonEdgeDist(p: Vec, poly: readonly Vec[]): number {
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) best = Math.min(best, segmentDist(p, poly[j], poly[i]));
   return best;
 }

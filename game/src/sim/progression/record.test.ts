@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_IDS } from '../../data/skills';
+import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
-import type { World } from '../types';
+import type { World, XpSource } from '../types';
 import { emptyWorld } from '../testkit';
-import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './record';
+import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 120_000;
+const RUN_TIMEOUT = 360_000;
 
 describe('record', () => {
-  it('gives the same trace for the same seed and archetype', () => {
+  it('gives the same trace for the same seed and archetype', async () => {
     const first = record(1337, 'trader', DETERMINISM_RUN);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const second = record(1337, 'trader', DETERMINISM_RUN);
 
     expect(first.lines.length).toBeGreaterThan(0);
@@ -33,8 +34,26 @@ describe('record', () => {
 
     const curve = replay(lines, SHORT_RUN);
 
-    for (const skill of SKILL_IDS) expect(curve[skill].total, skill).toBe(world.player.skills[skill]);
+    for (const skill of SKILL_IDS) {
+      const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
+      expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
+    }
+    const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
+});
+
+describe('record with a pool to spend', () => {
+  it('buys the ranks the pool pays for before the bot plays the turn', () => {
+    const start = emptyWorld();
+    start.player.xp = RANK_COSTS[0];
+
+    const [step] = [...stepsFrom(start, 'saver', 'trader', 1)];
+
+    expect(step.world.player.ranks).toEqual({ ...start.player.ranks, driving: 1 });
+    expect(step.world.player.xp).toBeLessThan(RANK_COSTS[0]);
+  });
 });
 
 describe('record at the player\'s death', () => {

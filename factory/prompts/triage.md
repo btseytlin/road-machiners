@@ -13,7 +13,7 @@ Read each available image with the Read tool and let it count in the rubric.
 An image marked NOT AVAILABLE was not seen.
 When the request depends on it, the verdict is `unclear`, and one question asks the author to upload it again.
 
-Read CLAUDE.md and DESIGN.md first.
+Read CLAUDE.md and docs/DESIGN.md first.
 You may read code to understand the request.
 Never edit code.
 Never commit.

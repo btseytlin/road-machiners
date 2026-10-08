@@ -26,7 +26,7 @@ export type ChassisDef = {
   value: number;
   showsCores: boolean;
   tier: Tier;
-  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader';
+  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader' | 'niva' | 'bukhanka' | 'lincoln';
 };
 
 export const CHASSIS_PRICE_MODIFIERS = { perDeckCell: 60, perArmorCell: 30, perTopSpeed: 80 };
@@ -300,13 +300,58 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 130, fuelPerTile: 0.65, base: 2460, showsCores: false, tier: 3, look: 'loader',
   },
+  niva: {
+    id: 'niva', name: 'Niva', maxSpeed: 7.6, accel: 2.2, brake: 3, turnSlow: 115, turnFast: 40, reverseTurn: 80,
+    mass: 520, handlingMass: 1700, radius: 0.55,
+    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LDXDDR', 'LXXXXR', 'LXXXXR', ' BBBB '],
+    core: [
+      { defId: 'cab', x: 2, y: 3 },
+      { defId: 'transmissionMid', x: 2, y: 7 },
+      { defId: 'tank', x: 2, y: 5 },
+      { defId: 'wheelMid', x: 1, y: 1 },
+      { defId: 'wheelMid', x: 4, y: 1 },
+      { defId: 'wheelMid', x: 1, y: 7 },
+      { defId: 'wheelMid', x: 4, y: 7 },
+    ],
+    fuelCap: 42, fuelPerTile: 0.21, base: 1100, showsCores: false, tier: 2, look: 'niva',
+  },
+  bukhanka: {
+    id: 'bukhanka', name: 'Bukhanka', maxSpeed: 6.0, accel: 1.4, brake: 2.5, turnSlow: 95, turnFast: 30, reverseTurn: 60,
+    mass: 1250, handlingMass: 3300, radius: 0.65,
+    layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDEEDDR', 'LDEEDDR', 'LDDDDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],
+    core: [
+      { defId: 'cabPickup', x: 2, y: 1 },
+      { defId: 'transmissionMid', x: 2, y: 6 },
+      { defId: 'tankMid', x: 4, y: 6 },
+      { defId: 'wheelMid', x: 1, y: 1 },
+      { defId: 'wheelMid', x: 5, y: 1 },
+      { defId: 'wheelMid', x: 1, y: 7 },
+      { defId: 'wheelMid', x: 5, y: 7 },
+    ],
+    fuelCap: 78, fuelPerTile: 0.30, base: 1230, showsCores: false, tier: 2, look: 'bukhanka',
+  },
+  lincoln: {
+    id: 'lincoln', name: 'Lincoln', maxSpeed: 8.6, accel: 2.0, brake: 2.2, turnSlow: 80, turnFast: 26, reverseTurn: 45,
+    mass: 900, handlingMass: 2400, radius: 0.85,
+    layout: [' FFFFF ', 'LXDDDXR', 'LXEEDXR', 'LDEEDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LDXXXDR', 'LXXXXXR', 'LXDDDXR', ' BBBBB '],
+    core: [
+      { defId: 'cabHardtop', x: 2, y: 4, rot: 1 },
+      { defId: 'transmission', x: 2, y: 7 },
+      { defId: 'tankLong', x: 4, y: 7 },
+      { defId: 'wheel', x: 1, y: 1 },
+      { defId: 'wheel', x: 5, y: 1 },
+      { defId: 'wheel', x: 1, y: 8 },
+      { defId: 'wheel', x: 5, y: 8 },
+    ],
+    fuelCap: 85, fuelPerTile: 0.36, base: 1500, showsCores: false, tier: 3, look: 'lincoln',
+  },
 };
 
 export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
   Object.entries(CHASSIS_INPUTS).map(([id, def]) => [id, finishChassis(def)]),
 );
 
-export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'buggy', 'wagon'];
+export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'niva', 'bukhanka', 'lincoln', 'buggy', 'wagon'];
 
 export function chassisDef(id: string): ChassisDef {
   const def = CHASSIS[id];

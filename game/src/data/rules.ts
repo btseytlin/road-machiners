@@ -6,12 +6,13 @@ export const RULES = {
   crawlSpeed: 1,
   lowFuelThreshold: 0.2,
   lowFuelSpeedFactor: 0.5,
-  fuelUseFactor: 0.075,
+  fuelUseFactor: 0.045,
   npcStuckTurns: 2,
   npcRecoveryTurns: 2,
   unstick: { turns: 20, reach: 6, driveTurns: 3 },
   stranded: { turns: 3, step: 0.25 },
   reverse: { cone: 20, distance: 1 },
+  meetStep: 0.3,
   arriveRadius: 0.5,
   throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
   reclickRadius: 0.75,
@@ -44,14 +45,6 @@ export const RULES = {
     feudDamage: 40,
   },
 
-  guards: {
-    range: 12,
-    rounds: 4,
-    hitChance: 0.5,
-    missOffset: 1.5,
-    round: { damage: 6, pen: 8, blast: false, armorShare: 1 },
-  },
-
   accelScale: 0.67,
   overdriveBoost: 1.33,
   overloadExponent: 4,
@@ -72,7 +65,7 @@ export const RULES = {
   wreckRadiusScale: 1,
   maxKillWrecks: 12,
 
-  suppliesPerTurn: 0.015,
+  suppliesPerTurn: 0.009,
   baseSupplies: 20,
   suppliesLow: 4,
   starveDamage: 5,
@@ -88,6 +81,11 @@ export const RULES = {
   knockoutMaxTurns: 30,
   surrenderParts: 2,
   npcDeathChance: 0.05,
+  cabKnock: {
+    below: 0.5,
+    hazard: 0.75,
+    playerHealth: 75,
+  },
   retreatTeleportTurns: 50,
 };
 
@@ -99,10 +97,18 @@ export const CHEATS = {
 };
 
 export const BREAKABLE = {
-  kinds: ['fence', 'junk'] as readonly LandmarkLook[],
+  kinds: ['fence', 'junk', 'deadTree'] as readonly LandmarkLook[],
   breakSpeed: 3,
   slowdown: 0.3,
   damage: 2,
   regrowDays: 3,
   routeCost: 8,
+};
+
+export const CRATER = {
+  days: 2,
+  rimRatio: 0.15,
+  rimWidthRatio: 0.3,
+  rimSegments: 10,
+  rimJitter: 0.25,
 };

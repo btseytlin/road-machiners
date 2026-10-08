@@ -4,7 +4,7 @@ const SUMMARY = { k: 'summary', turns: 100, shots: 4, destroyed: 0, knockouts: 1
 
 export function logText(over: { header?: object; end?: object; summary?: object } = {}, want = WANT): string {
   const lines = [
-    { k: 'run', seed: want.seed, turns: want.turns, sha: want.sha, archetype: 'mixed', every: 50, limits: [], ...over.header },
+    { k: 'run', seed: want.seed, turns: want.turns, sha: want.sha, archetype: 'markov', every: 50, limits: [], ...over.header },
     { k: 'event', turn: 2, e: { t: 'spawn', vehicle: 'v1' } },
     { k: 'snapshot', turn: 51, player: {}, npcs: [] },
     { k: 'end', turn: 101, reason: 'complete', message: null, ...over.end },

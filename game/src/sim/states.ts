@@ -6,12 +6,12 @@ import { STATE_TURNS } from '../data/npcs';
 import { aidWork, checkAid, refreshAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
-import { lootRobbed } from './npc-activities';
+import { lootRobbed } from './defeat';
 import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
-import { checkEscort, checkPlayerTow, payEscort } from './tow';
+import { checkEscort, checkPlayerTow, checkTowPromise, lapseClaim, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
-import { isHostile } from './combat';
+import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
@@ -45,7 +45,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: (w, s) => (w.events.some((e) => (e.t === 'destroyed' || e.t === 'npcKnockout') && e.vehicle === s.other) ? 'fulfilled' : null),
     hooks: {
       expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
-      fulfilled: (w, s) => { if (feudData(s).robbery) lootRobbed(w, s.holder, s.other); },
+      fulfilled: (w, s) => { if (isRobberyFeud(s)) lootRobbed(w, s.holder, s.other); },
     },
     work: noWork,
     binds: false,
@@ -59,8 +59,14 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     binds: true,
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
-  towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
-  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {}, work: noWork, binds: true },
+  towPromise: { refresh: never, check: checkTowPromise, hooks: {}, work: noWork, binds: false },
+  answering: {
+    refresh: answerWaits,
+    check: (w, s) => (answerDropped(w, s) ? 'broken' : null),
+    hooks: { expired: lapseClaim },
+    work: noWork,
+    binds: true,
+  },
   truce: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   grievance: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   plea: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
@@ -84,6 +90,12 @@ function checkCombat(w: World, s: NpcState): StateEnding | null {
   const other = w.vehicles.find((v) => v.id === s.other);
   if (!holder || !other) return null;
   return isHostile(w, holder, other) || isHostile(w, other, holder) ? null : 'broken';
+}
+
+function answerWaits(w: World, s: NpcState): boolean {
+  const holder = vehicleById(w, s.holder);
+  const other = vehicleById(w, s.other);
+  return !canVehicleSee(w, holder, other.pos) || inCombat(w, other);
 }
 
 function answerDropped(w: World, s: NpcState): boolean {
@@ -178,6 +190,15 @@ function partyMissing(w: World, s: NpcState): boolean {
 export function feudData(s: NpcState): Extract<StateData, { kind: 'feud' }> {
   if (s.data.kind !== 'feud') throw new Error(`State ${s.id} holds no feud`);
   return s.data;
+}
+
+export function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && feudData(s).robbery;
+}
+
+export function robbing(w: World, robberId: string, targetId: string): boolean {
+  const feud = stateOf(w, 'feud', robberId, targetId);
+  return feud !== null && isRobberyFeud(feud);
 }
 
 export function pleaData(s: NpcState): Extract<StateData, { kind: 'plea' }> {

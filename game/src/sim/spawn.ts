@@ -6,13 +6,13 @@ import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
-import { isDriveObstacle, obstacleReach } from "./mapgen";
+import { blockingBoxes, boxDistance, isDriveObstacle, obstacleReach } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates, type Site } from "./sites";
 import { startEscort } from "./tow";
-import type { Vehicle, World } from "./types";
+import type { Obstacle, Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
 export function spawnNpcs(world: World): void {
@@ -135,13 +135,17 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       traits: rollTraits(world, tpl),
       goals: [],
       noticed: {},
+      tracks: {},
       hurt: 0,
       attackers: {},
       goal: null,
       home: { ...pos },
       stepIndex: 0,
+      memories: [],
     },
   });
+  if (!v.resources) throw new Error(`${tpl.id} spawned without resources`);
+  v.resources.money = tpl.money;
   world.vehicles.push(v);
   world.events.push({ t: "spawn", vehicle: v.id });
   return v;
@@ -166,7 +170,7 @@ export function npcName(v: Vehicle): string {
   return `${template.profession} ${v.brain.driver}`;
 }
 
-const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
+const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp" && l.kind !== "territory")];
 
 function siteFor(world: World, tpl: NpcTemplate): Site {
   const sites = sitesFor(tpl);
@@ -199,6 +203,11 @@ function gateSpot(world: World, site: Site, given: Vec | null, radius: number): 
   return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
 }
 
+function hitsObstacle(world: World, o: Obstacle, pos: Vec, radius: number): boolean {
+  if (o.kind === "site" || o.kind === "water") return true;
+  return blockingBoxes(o, world.terrain).some((b) => boxDistance(b, pos) < radius);
+}
+
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
   if (
     pos.x < radius ||
@@ -211,7 +220,7 @@ export function isFree(world: World, pos: Vec, radius: number, ignoreId: string 
   if (
     world.obstacles
       .filter(isDriveObstacle)
-      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin)
+      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin && hitsObstacle(world, o, pos, radius + margin))
   )
     return false;
   return world.vehicles.every(

@@ -2,8 +2,10 @@
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES, type Basin, type TerrainTypeId } from "../data/terrain";
+import { TERRITORIES } from "../data/territory";
 import { groundSlope, type Terrain } from "../sim/terrain";
+import { basinUnder, isTerritory } from "../sim/territory";
 import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
@@ -11,6 +13,80 @@ import { PAL, mix, shade } from "./palette";
 export const TERRAIN_MARGIN = 10;
 const TYPE_JITTER = 0.6;
 const JITTER_GRID = 6;
+const PATCH_TILES = 24;
+const PATCH_MIX = 0.15;
+const SAND_WARM = 0.85;
+const DESERT_CALM = 0.85;
+const PATCH_OFFSET = 41.5;
+
+const DESERT_WEIGHT: Record<LookType, number> = {
+  hardpan: 1,
+  sand: 0.6,
+  scrub: 0.5,
+  gravel: 0.4,
+  scree: 0.3,
+  field: 0,
+  asphalt: 0,
+  ash: 0,
+  saltCrust: 0,
+  mud: 0,
+  dirtyWater: 0,
+  toxic: 0,
+  track: 0,
+  canal: 0,
+  concrete: 0,
+};
+
+export const ROAD_PLAIN = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
+export const ROAD_SAND = mix(ROAD_PLAIN, PAL.desertSand, SAND_WARM);
+
+export type LookType = Exclude<TerrainTypeId, "road">;
+
+export function desertWeight(type: LookType): number {
+  return DESERT_WEIGHT[type];
+}
+
+const lookCache = new WeakMap<Terrain, readonly LookType[]>();
+
+export function lookTypes(t: Terrain): readonly LookType[] {
+  const cached = lookCache.get(t);
+  if (cached) return cached;
+  const look = new Array<LookType | undefined>(t.size * t.size);
+  const queue = new Int32Array(look.length);
+  flood(look, queue, seedOffRoad(t, look, queue), t.size);
+  const result = Array.from(look, (type) => type ?? "hardpan");
+  lookCache.set(t, result);
+  return result;
+}
+
+function seedOffRoad(t: Terrain, look: (LookType | undefined)[], queue: Int32Array): number {
+  let tail = 0;
+  for (let i = 0; i < look.length; i++) {
+    const type = t.types[i];
+    if (type === "road") continue;
+    look[i] = type;
+    queue[tail++] = i;
+  }
+  return tail;
+}
+
+function flood(look: (LookType | undefined)[], queue: Int32Array, tail: number, size: number): void {
+  for (let head = 0; head < tail; head++) {
+    const i = queue[head];
+    const x = i % size;
+    if (x > 0) tail = spread(look, queue, tail, i, i - 1);
+    if (x < size - 1) tail = spread(look, queue, tail, i, i + 1);
+    if (i >= size) tail = spread(look, queue, tail, i, i - size);
+    if (i < size * (size - 1)) tail = spread(look, queue, tail, i, i + size);
+  }
+}
+
+function spread(look: (LookType | undefined)[], queue: Int32Array, tail: number, i: number, n: number): number {
+  if (look[n] !== undefined) return tail;
+  look[n] = look[i];
+  queue[tail] = n;
+  return tail + 1;
+}
 
 export type PaintCanvas = {
   ctx: CanvasRenderingContext2D;
@@ -26,27 +102,26 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
+export function groundDiscs(): { id: string; pos: Vec; radius: number; style: string }[] {
+  return REGION.locations
+    .filter((l) => !("outline" in l && l.outline))
+    .flatMap((l) => {
+      const farm = l.id === "granary";
+      const wear = css(l.kind === "oasis" || farm ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45);
+      return [
+        ...(farm ? [{ id: l.id, pos: l.pos, radius: l.radius + 3, style: css(PAL.scrub[0], 0.2) }] : []),
+        { id: l.id, pos: l.pos, radius: l.radius + 0.5, style: wear },
+      ];
+    });
+}
+
 export function paintGroundCanvas(
   c: PaintCanvas,
   t: Terrain,
   opts: PaintOptions = DEFAULT_OPTIONS,
 ): void {
   paintGround(c, t, opts.hillshade);
-  for (const l of REGION.locations) {
-    const farm = l.id === "orchard" || l.id === "granary";
-    if (farm) disc(c, l.pos, l.radius + 3, css(PAL.scrub[0], 0.2));
-    disc(
-      c,
-      l.pos,
-      l.radius + 0.5,
-      css(
-        l.kind === "oasis" || farm
-          ? shade(PAL.scrub[0], 1.1)
-          : shade(PAL.rust.dark, 1.6),
-        0.45,
-      ),
-    );
-  }
+  for (const d of groundDiscs()) disc(c, d.pos, d.radius, d.style);
   const { canyon, dryRiver } = TERRAIN.features;
   stroke(
     c,
@@ -64,28 +139,83 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
+  paintCraters(c);
+  paintScree(c);
+}
+
+function paintCraters(c: PaintCanvas): void {
   for (const crater of TERRAIN.features.craters) {
-    disc(
-      c,
-      crater.center,
-      crater.radius + crater.bank,
-      css(PAL.rust.side, 0.18),
-    );
+    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
     disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
 }
 
-type TileLook = { t: Terrain; color: Int32Array; shade: Float64Array; broad: CellNoise; fine: CellNoise };
+const SCREE_BANDS = 4;
+const SCREE_BAND_ALPHA = 0.3;
+const SCREE_REACH = 8;
+
+function paintScree(c: PaintCanvas): void {
+  for (const t of REGION.locations.filter(isTerritory)) {
+    const scree = TERRITORIES[t.id].wreck?.scree;
+    if (scree) paintScreeArc(c, basinUnder(t), scree);
+  }
+}
+
+function paintScreeArc(c: PaintCanvas, b: Basin, scree: { from: number; to: number }): void {
+  const n = b.floor.length;
+  if (!isVertex(scree.from, n) || !isVertex(scree.to, n)) throw new Error(`Scree arc ${scree.from}..${scree.to} is not on a basin of ${n} floor points`);
+  const arc = Array.from({ length: ((scree.to - scree.from + n) % n) + 1 }, (_, i) => (scree.from + i) % n);
+  const foot = arc.map((k) => ({ x: b.center.x + b.floor[k].x, y: b.center.y + b.floor[k].y }));
+  const out = arc.map((k) => outward(b.floor, k));
+  for (let band = 1; band <= SCREE_BANDS; band++) {
+    const top = arc.map((k, i) => {
+      const end = i === 0 || i === arc.length - 1;
+      const reach = end ? 0 : (Math.min(b.bank[k], SCREE_REACH) * band) / SCREE_BANDS;
+      return { x: foot[i].x + out[i].x * reach, y: foot[i].y + out[i].y * reach };
+    });
+    polygon(c, [...foot, ...top.reverse()], css(PAL.scree, SCREE_BAND_ALPHA));
+  }
+}
+
+function isVertex(k: number, n: number): boolean {
+  return Number.isInteger(k) && k >= 0 && k < n;
+}
+
+function outward(poly: readonly Vec[], k: number): Vec {
+  const n = poly.length;
+  const [a, p, b] = [poly[(k + n - 1) % n], poly[k], poly[(k + 1) % n]];
+  const normal = (from: Vec, to: Vec) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    return { x: (to.y - from.y) / length, y: -(to.x - from.x) / length };
+  };
+  const [u, v] = [normal(a, p), normal(p, b)];
+  const length = Math.hypot(u.x + v.x, u.y + v.y);
+  return { x: (u.x + v.x) / length, y: (u.y + v.y) / length };
+}
+
+type TileLook = {
+  t: Terrain;
+  color: Int32Array;
+  desert: Float32Array;
+  shade: Float64Array;
+  broad: CellNoise;
+  fine: CellNoise;
+  patch: CellNoise;
+  cell: Cell;
+};
 
 function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const count = t.size * t.size;
   const color = new Int32Array(count);
+  const desert = new Float32Array(count);
   const shadeBy = new Float64Array(count);
+  const look = lookTypes(t);
   for (let i = 0; i < count; i++) {
     color[i] = paintColor(t.types[i]);
+    desert[i] = desertWeight(look[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
-  return { t, color, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise() };
+  return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
 }
 
 class CellNoise {
@@ -134,7 +264,27 @@ function tileIndex(size: number, x: number, y: number): number {
   return j * size + i;
 }
 
-function typeColor(look: TileLook, x: number, y: number): number {
+function typeColor(look: TileLook, cell: Cell): number {
+  const a = look.color[cell.a];
+  const b = look.color[cell.b];
+  const c = look.color[cell.c];
+  const d = look.color[cell.d];
+  if (a === b && a === c && a === d) return a;
+  return mix(mix(a, b, cell.fx), mix(c, d, cell.fx), cell.fy);
+}
+
+function desertAt(look: TileLook, cell: Cell): number {
+  const a = look.desert[cell.a];
+  const b = look.desert[cell.b];
+  const c = look.desert[cell.c];
+  const d = look.desert[cell.d];
+  const top = a + (b - a) * cell.fx;
+  return top + (c + (d - c) * cell.fx - top) * cell.fy;
+}
+
+type Cell = { a: number; b: number; c: number; d: number; fx: number; fy: number };
+
+function jittered(look: TileLook, x: number, y: number): Cell {
   const jx =
     x +
     (hash2(Math.floor(x * JITTER_GRID), Math.floor(y * JITTER_GRID) + 7) -
@@ -150,14 +300,33 @@ function typeColor(look: TileLook, x: number, y: number): number {
   const i = Math.floor(jx);
   const j = Math.floor(jy);
   const size = look.t.size;
-  const a = look.color[tileIndex(size, i + 0.5, j + 0.5)];
-  const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
-  const c = look.color[tileIndex(size, i + 0.5, j + 1.5)];
-  const d = look.color[tileIndex(size, i + 1.5, j + 1.5)];
-  if (a === b && a === c && a === d) return a;
-  const fx = jx - i;
-  const fy = jy - j;
-  return mix(mix(a, b, fx), mix(c, d, fx), fy);
+  const cell = look.cell;
+  cell.a = tileIndex(size, i + 0.5, j + 0.5);
+  cell.b = tileIndex(size, i + 1.5, j + 0.5);
+  cell.c = tileIndex(size, i + 0.5, j + 1.5);
+  cell.d = tileIndex(size, i + 1.5, j + 1.5);
+  cell.fx = jx - i;
+  cell.fy = jy - j;
+  return cell;
+}
+
+function desertSand(look: TileLook, color: number, weight: number, x: number, y: number): number {
+  if (weight === 0) return color;
+  const warm = weight * SAND_WARM;
+  const n = look.patch.at(x / PATCH_TILES + PATCH_OFFSET, y / PATCH_TILES + PATCH_OFFSET);
+  const patch = n < 0.5 ? PAL.sandShade : PAL.sandLight;
+  const k = Math.abs(n - 0.5) * 2 * PATCH_MIX * weight;
+  return (
+    (sandChannel(color >> 16, PAL.desertSand >> 16, patch >> 16, warm, k) << 16) |
+    (sandChannel(color >> 8, PAL.desertSand >> 8, patch >> 8, warm, k) << 8) |
+    sandChannel(color, PAL.desertSand, patch, warm, k)
+  );
+}
+
+function sandChannel(color: number, sand: number, patch: number, warm: number, k: number): number {
+  const c = color & 0xff;
+  const warmed = c + ((sand & 0xff) - c) * warm;
+  return (warmed + ((patch & 0xff) - warmed) * k + 0.5) | 0;
 }
 
 function paintColor(type: TerrainTypeId): number {
@@ -166,13 +335,14 @@ function paintColor(type: TerrainTypeId): number {
 
 function groundColor(look: TileLook, x: number, y: number): number {
   const t = look.t;
-  const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3;
-  let color = mix(typeColor(look, x, y), PAL.sand[3], n * 0.2);
-  color = shade(
-    color,
-    (0.97 + hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05) *
-      look.shade[tileIndex(t.size, x, y)],
-  );
+  const cell = jittered(look, x, y);
+  const weight = desertAt(look, cell);
+  const calm = 1 - weight * DESERT_CALM;
+  const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3 * calm;
+  let color = mix(typeColor(look, cell), PAL.sand[3], n * 0.2);
+  color = desertSand(look, color, weight, x, y);
+  const speckle = 1 + (hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05 - 0.03) * calm;
+  color = shade(color, speckle * look.shade[tileIndex(t.size, x, y)]);
   const out = Math.max(-x, -y, x - t.size, y - t.size, 0);
   if (out > 0)
     color = mix(color, PAL.sandFar, Math.min(1, 0.35 + out / TERRAIN_MARGIN));
@@ -234,12 +404,16 @@ function stroke(
 }
 
 function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
-  blob(c, p, r, style);
-}
-
-function blob(c: PaintCanvas, p: Vec, r: number, style: string): void {
   c.ctx.fillStyle = style;
   c.ctx.beginPath();
   c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);
+  c.ctx.fill();
+}
+
+function polygon(c: PaintCanvas, points: readonly Vec[], style: string): void {
+  c.ctx.fillStyle = style;
+  c.ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  c.ctx.closePath();
   c.ctx.fill();
 }

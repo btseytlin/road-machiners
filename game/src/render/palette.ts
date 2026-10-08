@@ -1,18 +1,30 @@
 // All colors in one place. Warm dust palette.
 
 import type { Faction } from '../sim/types';
+import type { ItemTone } from './partLooks';
 
 export const PAL = {
   bg: 0x1a1410,
   sand: [0xc9a878, 0xc2a070, 0xbb9868, 0xd0b080],
   sandFar: 0x8a7050,
-  road: 0xa8865a,
-  roadRut: 0x937450,
-  roadCrack: 0x86684a,
+  desertSand: 0xffaf6f,
+  sandLight: 0xffbf86,
+  sandShade: 0xe8955c,
+  road: 0xb6835e,
+  roadCrack: 0x9c6c4c,
+  roadRim: 0xf8a667,
+  stoneGrey: 0x8a847d,
   padMark: 0xd86a2a,
   pebble: 0x9c7c54,
+  scorch: 0x2a2218,
+  craterRim: 0x7a6242,
+  desertStone: 0xb8ab9c,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
+  brush: [0x7c7a4c, 0x8c8a58, 0xa49c68],
+  cactus: { body: 0x70764a, shade: 0x585e3a },
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
+  stone: { top: 0xc98e68, side: 0xb47f5d, dark: 0x8a5e44 },
+  rimRock: { top: 0xbab3a6, side: 0x948e84, dark: 0x6e6960 },
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],
@@ -21,6 +33,7 @@ export const PAL = {
   palm: 0x4a6a2a,
   trunk: 0x6a4a2a,
   shadow: 0x2a1a10,
+  shadeTint: 0x3c3046,
   outline: 0x1a1410,
   wheel: 0x2a2420,
   metal: 0x5a5a58,
@@ -34,9 +47,17 @@ export const PAL = {
   contact: 0xf4f1ea,
   dustTrail: 0xe0c49a,
   radio: 0x8fe0c8,
+  beacon: 0xff4030,
   flash: 0xfff0a0,
+  brass: 0xc8a048,
   lamp: { on: 0xfff2c8, off: 0x8a8470 },
+  radioLight: { on: 0xff3020, off: 0x4a1a14 },
   truckGlow: 0xffffff,
+  reactorLight: 0x38d6e8,
+  reactorGlow: 0x5cf0b4,
+  hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 },
+  scree: 0x8e5e44,
+  dirtRoad: 0x8e7d69,
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a',
@@ -55,6 +76,8 @@ export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: n
   convoys: { top: 0xb8b8b0, side: 0x86867e, cab: 0x9a5a34, cabSide: 0x6e3e24 },
   mercs: { top: 0x2a2a2c, side: 0x1a1a1c, cab: 0x5a6068, cabSide: 0x3e4248 },
 };
+
+export const ITEM_TONES = { weapon: 0x8c3a30, armor: 0x4f5458, cargo: 0x6e5236, other: 0x35587a } satisfies Record<ItemTone, number>;
 
 export function shade(color: number, k: number): number {
   const r = Math.min(255, Math.round(((color >> 16) & 0xff) * k));

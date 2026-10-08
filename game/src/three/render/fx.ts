@@ -7,7 +7,7 @@ import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
-import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
+import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
@@ -16,7 +16,8 @@ import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
-import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan } from './projectiles';
+import { tirePoints, Ruts } from './ruts';
+import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 const MAX_PUFFS = 2048;
 const MAX_GLOWS = 256;
@@ -233,6 +234,7 @@ class MuzzleFlashes {
   }
 }
 
+const AMMO_BLAST_RADIUS = 0.8;
 const DUST = { perMeter: 2.5, life: 1.1, color: 0xd8c098 };
 
 export class Fx3D {
@@ -242,10 +244,14 @@ export class Fx3D {
   private projectiles: Projectiles;
   private pending: Pending[] = [];
   private flashes: MuzzleFlashes;
+  private casings: Casings;
+  readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
     this.flashes = new MuzzleFlashes(scene);
+    this.casings = new Casings(scene);
+    this.ruts = new Ruts(scene);
     this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
@@ -272,17 +278,27 @@ export class Fx3D {
     }
   }
 
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number): void {
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues, turn: number): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
+      this.casings.eject(m, spec.casing, turn);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
+      cues.fired(m);
     };
-    const onLand = () => (blastRadius > 0 ? this.blast(plan.land, blastRadius) : this.impact(plan, spec.look === 'shell'));
+    const onLand = () => {
+      if (plan.impact !== 'none') this.landing(plan, blastRadius, spec.look === 'shell');
+      cues.landed();
+    };
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
+  private landing(plan: RoundPlan, blastRadius: number, big: boolean): void {
+    if (blastRadius > 0) this.blast(plan.land, blastRadius);
+    else this.impact(plan, big);
+  }
+
   private impact(plan: RoundPlan, big: boolean): void {
-    if (plan.struck) this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+    if (plan.impact === 'truck') this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
     else this.puff(plan.land, DUST.color, big ? 10 : 4, { speed: big ? 3 : 1.5, life: 0.9, scale: big ? 0.8 : 0.5, grow: 1.4 });
   }
 
@@ -291,6 +307,31 @@ export class Fx3D {
     this.puff(p, 0xffa040, Math.round(14 + 8 * radius), { speed: 2 + 2 * radius, life: 0.55, scale: 0.4 + 0.15 * radius, grow: 0.5, additive: true });
     this.puff(p, DUST.color, Math.round(8 + 6 * radius), { speed: 3 + 1.2 * radius, life: 1.2, scale: 0.5 + 0.15 * radius, grow: 2 });
     this.puff(p, 0x3a3028, Math.round(6 + 4 * radius), { speed: 0.8 + 0.5 * radius, life: 2 + 0.3 * radius, scale: 0.7 + 0.3 * radius, grow: 2.6 });
+  }
+
+  ammoBlast(p: V3): void {
+    this.blast(p, AMMO_BLAST_RADIUS);
+  }
+
+  airBurst(p: V3): void {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 4 + Math.random() * 3;
+      const vel = { x: Math.cos(a) * s, y: 0.2 + Math.random() * 0.6, z: Math.sin(a) * s };
+      this.puffs.spawn(p, { vel, life: 0.5 + Math.random() * 0.2, fromScale: 0.2, toScale: 0.9 + Math.random() * 0.4, color: 0xe4e6e8, opacity: 0.6, drag: 3, gravity: 0 });
+    }
+  }
+
+  fireBurst(p: V3): void {
+    const side = () => (Math.random() - 0.5) * 1.6;
+    for (let i = 0; i < 10; i++) {
+      const vel = { x: side(), y: 2.5 + Math.random() * 1.5, z: side() };
+      this.glows.spawn(p, { vel, life: 0.8 + Math.random() * 0.3, fromScale: 0.5, toScale: 1.1, color: i % 3 === 0 ? 0xffc060 : 0xff8a30, opacity: 1, drag: 1.2, gravity: -0.5 });
+    }
+    for (let i = 0; i < 5; i++) {
+      const vel = { x: side() * 0.6, y: 1.5 + Math.random() * 1.0, z: side() * 0.6 };
+      this.puffs.spawn(p, { vel, life: 1.6 + Math.random() * 0.6, fromScale: 0.5, toScale: 1.8, color: 0x2a2622, opacity: 0.7, drag: 0.8, gravity: -0.3 });
+    }
   }
 
   private missileSmoke(p: V3): void {
@@ -361,11 +402,13 @@ export class Fx3D {
     slot.el.style.opacity = '1';
   }
 
-  tick(dtMs: number): void {
+  tick(dtMs: number, world: World): void {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.flashes.tick(dt);
+    this.casings.tick(dt, world.terrain, world.turn);
+    this.ruts.tick(world.turn);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;
@@ -416,10 +459,10 @@ export class TruckFx {
 
   constructor(private fx: Fx3D) {}
 
-  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number): void {
+  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number, seen: boolean): void {
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
-    if (moving) this.driving(world, v, pose, traits, dt);
+    if (moving) this.driving(world, v, pose, traits, seen, dt);
     if (v.id === world.player.vehicleId) {
       this.overdriveExhaust(world, v, traits, pose, dt);
       this.steam(world.player.engineHeat, pose, dt);
@@ -429,9 +472,9 @@ export class TruckFx {
     else if (traits.hurt) this.puffs(DAMAGE_RATE, dt, () => this.fx.smoke(f.pos));
   }
 
-  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, dt: number): void {
+  private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, seen: boolean, dt: number): void {
     const back = { x: -Math.cos(pose.h), y: 0, z: -Math.sin(pose.h) };
-    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, dt);
+    this.wheels(world, v, pose, back, seen, dt);
     if (traits.stranded) return;
     const along = -(pose.f.acc.x * back.x + pose.f.acc.z * back.z);
     const cruise = v.speed > traits.maxSpeed * CRUISE_SHARE ? CRUISE_RATE : 0;
@@ -461,14 +504,19 @@ export class TruckFx {
     this.puffs(DOUSE_RATE, dt, () => this.fx.douseSteam(onBody(pose, 0.3 + Math.random() * 0.8, 0.8, Math.random() * 2.4 - 1.2)));
   }
 
-  private dust(world: World, v: Vehicle, pose: Pose, back: V3, dt: number): void {
+  private wheels(world: World, v: Vehicle, pose: Pose, back: V3, seen: boolean, dt: number): void {
+    if (!seen && v.speed <= MIN_DUST_SPEED) return;
+    const tires = tirePoints(world.terrain, v.chassisId, pose.f);
+    if (seen) this.fx.ruts.layTracks(world, v, pose.f, tires);
+    if (v.speed > MIN_DUST_SPEED) this.dust(world, v, pose, back, tires, dt);
+  }
+
+  private dust(world: World, v: Vehicle, pose: Pose, back: V3, tires: V3[], dt: number): void {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
     const rate = DUST.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
-    const at = toMap(pose.f.pos);
-    for (const [i, m] of wheelMounts(bodyOf(v.chassisId)).entries()) {
-      const off = rotate(m.x, m.z, pose.h);
-      const tire = groundPoint(world.terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
-      const side = Math.sign(m.z);
+    const mounts = wheelMounts(bodyOf(v.chassisId));
+    for (const [i, tire] of tires.entries()) {
+      const side = Math.sign(mounts[i].z);
       const out = { x: -Math.sin(pose.h) * side, y: 0, z: Math.cos(pose.h) * side };
       this.puffs(rate * (i < 2 ? FRONT_DUST : 1), dt, () => this.fx.wheelDust(tire, back, out));
     }

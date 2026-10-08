@@ -215,6 +215,12 @@ test('handles deleted source files', () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
+test('rejects an oversized agent guidance file in any folder', () => {
+  writeSource('word '.repeat(2500), 'factory/AGENTS.md');
+  runGit('add', 'factory');
+  assertRejected(runCheck(), /factory\/AGENTS\.md: 2500 words/);
+});
+
 test('rejects a staged middle dot in any text file but skips vendored skills and an unstaged copy', () => {
   const dot = String.fromCharCode(0xb7);
   writeSource(`Speed ${dot} 40%\n`, 'game/notes.md');
@@ -229,6 +235,40 @@ test('rejects a staged middle dot in any text file but skips vendored skills and
   assert.equal(runCheck().status, 0);
   writeSource(`Speed ${dot} 40%\n`, 'game/notes.md');
   assertRejected(runCheck('--working'), /game\/notes\.md:1/);
+});
+
+function startMergeOf(debt) {
+  const main = runGit('rev-parse', '--abbrev-ref', 'HEAD').trim();
+  runGit('checkout', '-qb', 'side');
+  debt();
+  runGit('add', 'game');
+  runGit('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'side debt');
+  runGit('checkout', '-q', main);
+  writeSource('export const value = 2;\n');
+  runGit('add', 'game');
+  runGit('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'main change');
+  runGit('merge', '-q', '--no-ff', '--no-commit', 'side');
+}
+
+test('accepts lint debt a merge brings in and rejects lint debt the merge adds', () => {
+  startMergeOf(() => writeSource('export const other: any = 1;\n', 'game/src/other.ts'));
+  const result = runCheck();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  writeSource('export const third: any = 1;\n', 'game/src/third.ts');
+  runGit('add', 'game');
+  assertRejected(runCheck(), /third\.ts: .*no-explicit-any/);
+});
+
+test('accepts fragmentation a merge brings in', () => {
+  startMergeOf(() => {
+    mkdirSync(path.join(directory, 'game/src/sim'));
+    for (let index = 0; index < 6; index++) writeSource(`export const part${index} = ${index};\nexport const half${index} = ${index};\n`,`game/src/sim/part${index}.ts`);
+  });
+  const result = runCheck();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  writeSource('export const extra = 1;\n', 'game/src/sim/extra.ts');
+  runGit('add', 'game');
+  assertRejected(runCheck(), /game\/src\/sim: fragmentation/);
 });
 
 test('rejects staged type errors in the factory project', () => {

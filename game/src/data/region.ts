@@ -3,7 +3,7 @@
 import type { Vec } from "../sim/vec";
 
 export type TownDef = { id: string; name: string; pos: Vec; radius: number };
-export type LocationDef = {
+export type SiteLocationDef = {
   id: string;
   name: string;
   kind: "oasis" | "convoy" | "landmark" | "camp";
@@ -11,6 +11,8 @@ export type LocationDef = {
   radius: number;
   edge: SiteEdge;
 };
+export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
+export type LocationDef = SiteLocationDef | TerritoryDef;
 export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
 export const MAP_SCALE = 5;
 
@@ -49,8 +51,120 @@ function bend(a: Vec, b: Vec): Vec[] {
   return points;
 }
 
-const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
-const FALLEN_SUN_RADIUS = 44;
+export const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
+const FALLEN_SUN_OUTLINE: Vec[] = [
+  { x: -45.0, y: 0.0 },
+  { x: -41.3, y: -15.0 },
+  { x: -31.0, y: -26.0 },
+  { x: -20.9, y: -33.5 },
+  { x: -11.4, y: -39.9 },
+  { x: -6.3, y: -44.6 },
+  { x: 1.6, y: -45.0 },
+  { x: 7.2, y: -40.9 },
+  { x: 15.3, y: -47.1 },
+  { x: 27.8, y: -44.5 },
+  { x: 37.8, y: -37.8 },
+  { x: 45.9, y: -26.5 },
+  { x: 50.2, y: -8.9 },
+  { x: 50.2, y: 8.9 },
+  { x: 45.3, y: 21.1 },
+  { x: 39.8, y: 33.4 },
+  { x: 25.5, y: 44.2 },
+  { x: 8.2, y: 46.3 },
+  { x: -2.4, y: 55.3 },
+  { x: -8.6, y: 78.4 },
+  { x: -13.6, y: 101.9 },
+  { x: -22.6, y: 115.1 },
+  { x: -30.8, y: 114.9 },
+  { x: -38.8, y: 110.9 },
+  { x: -38.8, y: 95.4 },
+  { x: -31.8, y: 72.2 },
+  { x: -25.6, y: 49.1 },
+  { x: -23.5, y: 40.7 },
+  { x: -37.7, y: 26.4 },
+  { x: -43.5, y: 11.6 },
+];
+const ORCHARD_POS = { x: 114, y: 284 };
+const ORCHARD_SCREEN_ANGLE = (25 * Math.PI) / 180;
+const ORCHARD_SIN_ELEVATION = 0.5;
+export const ORCHARD_HEADING = Math.atan2(
+  -Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+  Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+);
+
+export function onOrchardRoad(s: number, c: number): Vec {
+  const [cos, sin] = [Math.cos(ORCHARD_HEADING), Math.sin(ORCHARD_HEADING)];
+  return { x: s * cos + c * sin, y: s * sin - c * cos };
+}
+
+const ORCHARD_OUTLINE: Vec[] = [
+  [-35, 22],
+  [-36, 2],
+  [-28, -3],
+  [-28, -14],
+  [-26, -24],
+  [-20, -28],
+  [0, -31],
+  [20, -35.5],
+  [40, -39],
+  [50, -42],
+  [56, -40],
+  [58, -12],
+  [59, 3],
+  [72, 6],
+  [72, 42],
+  [54, 40],
+  [46, 37],
+  [40, 34],
+  [-30, 34],
+].map(([s, c]) => onOrchardRoad(s, c));
+
+function boundingRadius(outline: readonly Vec[]): number {
+  return Math.max(...outline.map((p) => Math.hypot(p.x, p.y)));
+}
+
+const ORCHARD_SOUTH = onOrchardRoad(-32, 0);
+
+const RIM_REACH = 0.05;
+function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Vec {
+  const poly = outline.map((p) => ({ x: centre.x + p.x, y: centre.y + p.y }));
+  const d = { x: to.x - from.x, y: to.y - from.y };
+  const length = Math.hypot(d.x, d.y);
+  const ts = poly.flatMap((a, i) => {
+    const b = poly[(i + 1) % poly.length];
+    const e = { x: b.x - a.x, y: b.y - a.y };
+    const den = d.x * e.y - d.y * e.x;
+    if (den === 0) return [];
+    const t = ((a.x - from.x) * e.y - (a.y - from.y) * e.x) / den;
+    const u = ((a.x - from.x) * d.y - (a.y - from.y) * d.x) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [t] : [];
+  });
+  if (ts.length === 0) throw new Error("The spur road never reaches the outline");
+  const t = Math.min(...ts) + RIM_REACH / length;
+  return { x: from.x + d.x * t, y: from.y + d.y * t };
+}
+
+function fromFallenSun(x: number, y: number): Vec {
+  return { x: FALLEN_SUN_POS.x + x, y: FALLEN_SUN_POS.y + y };
+}
+
+export const BROKEN_WING = {
+  road: scalePoint({ x: 70, y: 33 }),
+  yaw: 0,
+  deckHalf: 19.5,
+  mound: { gap: 4.5, flat: 2, bank: 14, height: 1.8 },
+  hoopAt: -44,
+  siteAt: 44,
+  siteSide: 14,
+  trench: { side: -22, half: 30, width: 3, bank: 6, depth: 2 },
+};
+
+export function BROKEN_WING_POINT(along: number, across: number): Vec {
+  const c = Math.cos(BROKEN_WING.yaw);
+  const s = Math.sin(BROKEN_WING.yaw);
+  return { x: BROKEN_WING.road.x + c * along - s * across, y: BROKEN_WING.road.y + s * along + c * across };
+}
+export const BROKEN_WING_SITE: Vec = BROKEN_WING_POINT(BROKEN_WING.siteAt, BROKEN_WING.siteSide);
 
 export const REGION = {
   name: "Icarus",
@@ -63,20 +177,14 @@ export const REGION = {
     lookahead: 48,
     slopeCost: 1,
     straighten: 0.05,
+    roadShyCost: 6,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
     { id: "nose", name: "Nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
   ] as TownDef[],
   locations: [
-    {
-      id: "orchard",
-      edge: "fence",
-      name: "Old Orchard",
-      kind: "landmark",
-      pos: scalePoint({ x: 23.2, y: 62 }),
-      radius: 16,
-    },
+    { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
       edge: "stone",
@@ -159,11 +267,11 @@ export const REGION = {
     },
     {
       id: "fallen-sun",
-      edge: "fence",
       name: "Fallen Sun",
-      kind: "landmark",
+      kind: "territory",
       pos: FALLEN_SUN_POS,
-      radius: FALLEN_SUN_RADIUS,
+      radius: boundingRadius(FALLEN_SUN_OUTLINE),
+      outline: FALLEN_SUN_OUTLINE,
     },
     {
       id: "salvage-yard",
@@ -171,6 +279,14 @@ export const REGION = {
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
+      radius: 6,
+    },
+    {
+      id: "broken-wing",
+      edge: "wrecks",
+      name: "Broken Wing",
+      kind: "landmark",
+      pos: BROKEN_WING_SITE,
       radius: 6,
     },
     {
@@ -229,11 +345,17 @@ export const REGION = {
       { x: 43, y: 54 },
       { x: 50, y: 49 },
       { x: 51, y: 38 },
-      { x: 62, y: 34 },
-      { x: 72, y: 38 },
-      { x: 82, y: 49 },
-      { x: 78, y: 36 },
+      { x: 60, y: 33 },
+      { x: 70, y: 33 },
+      { x: 82, y: 33 },
+    ], [5, 6]),
+    scaleRoad([
+      { x: 82, y: 33 },
       { x: 77, y: 24 },
+    ]),
+    scaleRoad([
+      { x: 82, y: 33 },
+      { x: 82, y: 49 },
     ]),
     scaleRoad([
       { x: 50, y: 36 },
@@ -253,7 +375,8 @@ export const REGION = {
       { x: 93, y: 70 },
       { x: 88, y: 84 },
     ]),
-    scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
+    [scalePoint({ x: 28, y: 64 }), edgePoint(scalePoint({ x: 28, y: 64 }), { x: ORCHARD_POS.x + ORCHARD_SOUTH.x, y: ORCHARD_POS.y + ORCHARD_SOUTH.y }, ORCHARD_POS, ORCHARD_OUTLINE)],
+    [BROKEN_WING_POINT(BROKEN_WING.siteAt, 0), BROKEN_WING_SITE],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
@@ -281,15 +404,21 @@ export const REGION = {
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      { x: FALLEN_SUN_POS.x - FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(-39.71, 9.9),
+    ],
+    [
+      scalePoint({ x: 82, y: 49 }),
+      fromFallenSun(95, -36),
+      fromFallenSun(75, -37),
+      fromFallenSun(58, -34),
+      fromFallenSun(43.01, -21.92),
     ],
     [
       ...scaleRoad([
-        { x: 82, y: 49 },
-        { x: 75, y: 50 },
-        { x: 74, y: 56 },
+        { x: 66, y: 76 },
+        { x: 73, y: 64 },
       ]),
-      { x: FALLEN_SUN_POS.x + FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(37.75, 28.44),
     ],
   ] as Vec[][],
   roadWidth: 6,
@@ -326,7 +455,6 @@ export const REGION = {
     wallHeight: 1.6,
     wallThickness: 1.2,
     wallSegment: 3,
-    wallTowerEvery: 5,
     gateWidth: 5,
     palisadeHeight: 1,
     palisadeThickness: 0.6,
@@ -340,11 +468,9 @@ export const REGION = {
     wreckHeight: 0.9,
     wreckThickness: 1,
     wreckSegment: 1.1,
-    guardTowerHeight: 2.6,
+    gatePostRise: 0.4,
     gatePoleHeight: 5.5,
     lampHeight: 1.6,
-    orchardRows: 11,
-    orchardSpacing: 2,
   },
   playerStart: { road: 0, distance: 125, offset: 45 },
 };

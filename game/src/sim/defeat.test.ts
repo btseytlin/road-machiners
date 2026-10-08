@@ -5,16 +5,18 @@ import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
-import { advanceKnockout, checkDeath, checkKnockout, isKnockedOut } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, standDown } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, isLoot } from './grid';
 import { addGoods, dumpItem, moveItem } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, testDrive } from './testkit';
+import { maxHp } from './wear';
 import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
+import { territoryOfStock } from './territory';
 import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
@@ -256,6 +258,7 @@ describe('waking', () => {
 
   it('wakes at the turn limit with the raider that fought it idling in sight', () => {
     let { w } = knockedOutByRaider();
+    w.salvage = emptyWorld().salvage.filter((stock) => territoryOfStock(stock) !== null);
     let turns = 0;
     while (w.player.state === 'knockedOut') {
       w = endTurn(w, testDrive);
@@ -305,6 +308,25 @@ describe('the loot rule', () => {
     expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
   });
 
+  it('a knockout ends combat with the player, so the robbers keep their loot goal into the next turn', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    addState(w, 'combat', raider.id, me.id, { kind: 'none' });
+    me.lastHitBy = raider.id;
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(w.states.filter((s) => s.kind === 'combat')).toEqual([]);
+    expect(w.events.some((e) => e.t === 'stateEnded' && e.state.kind === 'combat' && e.ending === 'broken')).toBe(true);
+    expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+    const next = endTurn(w, testDrive);
+    const actor = next.vehicles.find((v) => v.id === raider.id)!;
+    expect(actor.brain!.goals.some((g) => g.kind === 'loot' && g.targetId === me.id)).toBe(true);
+  });
+
   it('a raider that knocked the player out loots goods straight off the truck', () => {
     const { w: w0, me, raider } = knockedOutByRaider(['mg', 'stockEngine']);
     const before = inventory(w0, me);
@@ -341,7 +363,7 @@ describe('commands while knocked out', () => {
       () => moveItem(w, me.items[0].id, { x: 0, y: 0, rot: 0 }),
       () => dumpItem(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
-      () => scavenge(w),
+      () => scavenge(w, 'bowl'),
     ];
     for (const command of commands) expect(command).toThrow('Player is knockedOut');
   });
@@ -395,3 +417,55 @@ describe('knockout practice', () => {
   });
 });
 
+
+describe('cab knock of the player', () => {
+  function hurtCab(health: number, perks: World['player']['perks']): World {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.perks = perks;
+    w.player.health = health;
+    const me = w.vehicles[0];
+    const cab = corePart(me, 'cab');
+    cab.hp = maxHp(cab) * 0.05;
+    const round = { struck: me.id, hits: [{ part: cab.id, damage: maxHp(cab) * 0.45 }], blast: [] };
+    w.events.push({ t: 'shot', shooter: 'x', weapon: 'w', target: me.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round] } as never);
+    w.rngState = rngStateWhere((roll) => roll < 0.01);
+    return w;
+  }
+
+  it('spares the player at 75 health or more and draws no RNG', () => {
+    const w = hurtCab(80, []);
+    const state = w.rngState;
+    checkKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(w.rngState).toBe(state);
+  });
+
+  it('knocks the player out below 75 health, and the knockout is not a give-up', () => {
+    const w = hurtCab(60, []);
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
+    expect(w.vehicles[0].defeat?.gaveUp).toBe(false);
+    expect(w.events).toContainEqual({ t: 'knockout' });
+  });
+
+  it('spares a player who fights through', () => {
+    const w = hurtCab(maxHealthOf(emptyWorld()) * (PERK_NUMBERS.fightThrough.health + 0.1), ['fightThrough']);
+    w.player.health = Math.min(w.player.health, 70);
+    const state = w.rngState;
+    checkKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(w.rngState).toBe(state);
+  });
+});
+
+describe('gave up', () => {
+  it('is true after standDown and false after a knockout', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    standDown(w, npc, w.player.vehicleId);
+    expect(gaveUp(npc)).toBe(true);
+    npc.defeat!.gaveUp = false;
+    expect(gaveUp(npc)).toBe(false);
+  });
+});

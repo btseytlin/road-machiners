@@ -34,7 +34,7 @@ ROAM is built in public by a software factory of AI coding agents.
 
 ## Layout
 
-- `game/` holds the game. Start with `game/CLAUDE.md` and `game/DESIGN.md`.
+- `game/` holds the game. Start with `game/CLAUDE.md` and `game/docs/DESIGN.md`.
 - `factory/` holds the factory. Start with `factory/README.md`.
 - `quality/` holds the pre-commit quality gate. See `quality/README.md`.
 

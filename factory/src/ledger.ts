@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { join } from 'node:path';
 import { withLockSync } from './lock';
 import { transcriptUsage } from './transcript';
+import { archiveTranscripts } from './transcript-archive';
 import type { CardFlow, CardStep } from './card-events';
 import type { Column, JobStage, Route, TokenPrice } from './types';
 import { reportAttempt, type Observation } from './observability';
@@ -99,6 +100,7 @@ export function closeRunFromTranscript(home: string, jobId: string, prices: Reco
 
 function forgetRun(home: string, jobId: string): void {
   rmSync(openRunPath(home, jobId), { force: true });
+  archiveTranscripts(home, runProjectsDir(home, jobId));
   rmSync(runProjectsDir(home, jobId), { recursive: true, force: true });
 }
 

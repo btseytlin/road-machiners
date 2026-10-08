@@ -4,6 +4,7 @@ import { PARTS } from '../data/parts';
 import { startKit } from '../data/start';
 import { makePart } from '../sim/factory';
 import type { Contract } from '../sim/market';
+import type { SalvageStock } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { saveOf } from '../three/save';
 import { shapeOf, type Shape } from '../three/save-shape';
@@ -25,5 +26,9 @@ export function newGameShape(): Shape {
     shop.contracts = CONTRACT_KINDS;
     shop.stock = [makePart(world, WEAPON_ID, 0), makePart(world, PLAIN_ID, 0)];
   }
+  const mixes = new Map<string, SalvageStock>(world.salvage.map((stock) => [Object.keys(stock.goods).sort().join(), stock]));
+  world.salvage = [...mixes.values()].flatMap((stock) =>
+    [[], [makePart(world, WEAPON_ID, 0)], [makePart(world, PLAIN_ID, 0)]].map((parts) => ({ ...stock, parts })),
+  );
   return shapeOf(JSON.parse(JSON.stringify(saveOf(world).world)));
 }

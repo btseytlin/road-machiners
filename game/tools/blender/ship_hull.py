@@ -16,6 +16,7 @@ import bmesh
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
+from shapes import mound  # noqa: E402
 
 # Colors from src/render/palette.ts. soot is darker than any palette color.
 COLORS = {
@@ -136,15 +137,6 @@ def sand(kit: Kit) -> None:
     """Sand drifts piled against both flanks and over the buried end."""
     for i, (x, y, r, h) in enumerate(((-9, 4.8, 3.4, 1.8), (-2, 5.2, 2.6, 1.0), (6, 5.0, 2.2, 0.7), (-9, -5.0, 3.4, 1.9), (-3, -5.2, 2.6, 1.2), (3, -5.3, 2.2, 0.8), (-14, 0, 5.6, 3.6))):
         mound(kit, f"drift{i}", r, h, (x, y))
-
-
-def mound(kit: Kit, name: str, radius: float, height: float, at: tuple[float, float]) -> None:
-    """A low faceted sand heap: a short cylinder with its top ring pulled in."""
-    heap = kit.cylinder(name, radius, height, (at[0], at[1], height / 2 - 0.1), "sand", vertices=7, dent_by=0.15)
-    for v in heap.data.vertices:
-        if v.co.z > 0:
-            v.co.x *= 0.45
-            v.co.y *= 0.45
 
 
 def debris(kit: Kit) -> None:

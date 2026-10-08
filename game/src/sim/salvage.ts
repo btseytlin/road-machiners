@@ -3,6 +3,7 @@ import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
 import { BREAKABLE, RULES } from '../data/rules';
+import { WRECK_LOOKS } from '../data/territory';
 import { TIME } from '../data/time';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
@@ -11,7 +12,7 @@ import { findRoadWreckSpot, isBreakable, propReach } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { findSpot, goodsCount, gridOf, isMounted, mountedParts, MOUNT_CELLS, type Spot } from './grid';
 import { addGoods, cargoMassRoom, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
@@ -23,7 +24,9 @@ import { cancelJob, startJob } from './jobs';
 import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { canUseSite, townAt } from './sites';
+import { canUseSite } from './sites';
+import { shopAt } from './market';
+import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
@@ -34,12 +37,13 @@ export function initializeSalvage(world: World): void {
     const table = siteLootTable(site);
     return table ? [rollStock(world, table, site.id, site.pos, site.radius)] : [];
   });
+  const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
   const wrecks = world.obstacles.filter(isRoadWreck).map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
-  world.salvage = [...sites, ...wrecks];
+  world.salvage = [...sites, ...spots, ...wrecks];
 }
 
 export function siteLootTable(site: LocationDef): LootTable | null {
-  if (site.id in SHOPS) return null;
+  if (site.kind === 'territory' || site.id in SHOPS) return null;
   if (site.kind === 'convoy') return SALVAGE.convoy;
   return site.kind === 'landmark' ? SALVAGE.landmark : null;
 }
@@ -50,6 +54,20 @@ export function isSiteStock(stock: SalvageStock): boolean {
 
 export function isRoadWreck(o: { id: string }): boolean {
   return /^wreck\d+$/.test(o.id);
+}
+
+export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
+
+export function salvagePlace(stock: SalvageStock): SalvagePlace {
+  if (stock.pile) return 'pile';
+  if (isSiteStock(stock)) return 'site';
+  return isRoadWreck(stock) || isTruckWreck(stock) ? 'wreck' : spotPlace(stock);
+}
+
+function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {
+  const look = territoryOfStock(stock) ? spotLookOf(stock) : null;
+  if (!look) throw new Error(`Stock ${stock.id} is no pile, site, wreck or loot spot`);
+  return WRECK_LOOKS.includes(look) ? 'wreck' : 'spot';
 }
 
 function fieldSpare(world: World, table: LootTable): PartInstance {
@@ -72,7 +90,7 @@ export function hasSalvage(stock: SalvageStock): boolean {
 
 export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
-  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= Math.min(stock[kind] ?? 0, 1))) return true;
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= 1)) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);
@@ -149,7 +167,7 @@ export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock):
   const resources = getResources(world, vehicle);
   const room = storesRoom(world, vehicle);
   for (const kind of ['fuel', 'supplies'] as const) {
-    const took = Math.min(stock[kind] ?? 0, room[kind]);
+    const took = Math.min(stock[kind] ?? 0, Math.floor(room[kind]));
     if (took <= 0) continue;
     resources[kind] += took;
     stock[kind] = (stock[kind] ?? 0) - took;
@@ -164,8 +182,20 @@ function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: n
   };
 }
 
+const TRUCK_WRECK = 'wreck-';
+
 export function wreckStockId(vehicleId: string): string {
-  return `wreck-${vehicleId}`;
+  return `${TRUCK_WRECK}${vehicleId}`;
+}
+
+function isTruckWreck(stock: SalvageStock): boolean {
+  return stock.id.startsWith(TRUCK_WRECK);
+}
+
+export function carriedPart(world: World, vehicleId: string, partId: string): PartInstance | undefined {
+  const v = world.vehicles.find((x) => x.id === vehicleId) ?? world.removed.find((x) => x.id === vehicleId);
+  const wreck = world.salvage.find((s) => s.id === wreckStockId(vehicleId));
+  return (v && mountedParts(v).find((x) => x.id === partId)) ?? wreck?.parts.find((x) => x.id === partId);
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -196,6 +226,10 @@ export function createCargoSalvage(world: World, vehicle: Vehicle, goodsShare: n
 
 export function dumpOnPile(world: World, vehicle: Vehicle, item: GridItem): SalvageStock {
   return dropOnPile(world, vehicle, [item], `dump-${vehicle.id}-${world.turn}`);
+}
+
+export function spillOnPile(world: World, vehicle: Vehicle, items: GridItem[]): SalvageStock {
+  return dropOnPile(world, vehicle, items, `spill-${vehicle.id}-${world.turn}`);
 }
 
 function cargoItems(vehicle: Vehicle, goodsShare: number): GridItem[] {
@@ -257,7 +291,11 @@ export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle, 
 function claimHolds(world: World, stock: SalvageStock, claimant: Vehicle | undefined): claimant is Vehicle {
   const claim = stock.pile?.claim;
   if (!claim || !claimant || world.turn >= claim.until) return false;
-  return !isKnockedOut(claimant) && wantsLoot(claimant, stock.id);
+  return !isKnockedOut(claimant) && goesFor(world, claimant, stock);
+}
+
+function goesFor(world: World, claimant: Vehicle, stock: SalvageStock): boolean {
+  return wantsLoot(claimant, stock.id) || inCombat(world, claimant);
 }
 
 function wantsLoot(vehicle: Vehicle, stockId: string): boolean {
@@ -295,6 +333,7 @@ export function renewSalvage(world: World): void {
     const table = siteLootTable(site);
     if (table) restockSite(world, siteStock(world, site.id), table);
   }
+  for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, siteStock(world, o.id), spotTable(o));
   turnOverRoadWrecks(world);
   regrowBroken(world);
 }
@@ -361,12 +400,15 @@ function regrowBroken(world: World): void {
 }
 
 function canRegrow(world: World, o: Obstacle): boolean {
-  const reach = propReach(o);
-  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world, o.pos) + reach && clearOfVehicles(world, o.pos, reach);
+  return canVanish(world, o.pos, propReach(o));
+}
+
+export function canVanish(world: World, pos: Vec, reach: number): boolean {
+  return dist(playerVehicle(world).pos, pos) > grayRadius(world) + reach && clearOfVehicles(world, pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
@@ -387,7 +429,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
-  const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
+  const garage = looter.id === world.player.vehicleId && shopAt(world) !== null;
   return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 
@@ -463,7 +505,8 @@ export function requireLootFree(world: World, looter: Vehicle, targetId: string)
 }
 
 export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
-  if (world.salvage.some((s) => s.id === targetId)) return `${blocker.name} is looting this wreck`;
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return `${blocker.name} is looting ${salvagePlace(stock) === 'spot' ? 'here' : 'this wreck'}`;
   if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
   throw new Error(`No loot target ${targetId}`);
 }
@@ -502,12 +545,16 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
   return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
 }
 
+export const CANNOT_HOLD = 'cargo cannot hold the loot';
+
+export const STRIPPED = 'salvage exhausted';
+
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
   if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
-  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? CANNOT_HOLD : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);
   return null;
 }

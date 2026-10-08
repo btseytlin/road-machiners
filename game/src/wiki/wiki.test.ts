@@ -25,7 +25,8 @@ describe('wiki pages', () => {
   });
 
   it('lists every page in docs/wiki', () => {
-    expect(readdirSync('docs/wiki').sort()).toEqual([...PAGES].sort());
+    const files = readdirSync('docs/wiki', { recursive: true, encoding: 'utf8' }).filter((name) => name.endsWith('.md'));
+    expect(files.sort()).toEqual([...PAGES].sort());
   });
 });
 

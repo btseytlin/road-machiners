@@ -16,6 +16,7 @@ import { makePart } from '../sim/factory';
 import { mountPart } from '../sim/inventory';
 import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
+import { maxHp } from '../sim/wear';
 import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
 import { spawnAt } from '../sim/spawn';
 import { vehicleStats } from '../sim/stats';
@@ -45,7 +46,7 @@ export type Outfit = { gun: string; armor: string | null; ram?: string };
 
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
 export type Outcome = 'won' | 'lost' | 'fled' | 'timeout';
-export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; me: Side; them: Side };
+export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; me: Side; them: Side; theirHpLeft: number | null };
 
 const CENTER: Vec = { x: TEST_MAP.terrain.size / 2, y: TEST_MAP.terrain.size / 2 };
 const FLED_RANGE = 40;
@@ -248,7 +249,12 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
     outcome = outcomeOf(w, c);
   }
   freeDrive(d);
-  return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, me: c.me, them: c.them };
+  return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, me: c.me, them: c.them, theirHpLeft: outcome === 'won' ? hpLeft(w, c) : null };
+}
+
+function hpLeft(w: World, c: Count): number {
+  const parts = [...w.vehicles, ...w.removed].filter((v) => c.enemyIds.has(v.id)).flatMap((v) => mountedParts(v));
+  return parts.reduce((a, p) => a + p.hp, 0) / parts.reduce((a, p) => a + maxHp(p), 0);
 }
 
 export type Group = { gun: string; enemies: string; level: string; policy: Policy; reports: FightReport[] };
@@ -276,10 +282,10 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `# Combat harness`,
     '',
     `Kit ${kit}. ${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
-    'Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP lost per turn. Crashes are per fight.',
+    'Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP lost per turn. Crashes are per fight. Their hp left is the mean share of max part HP the enemy trucks keep in won fights.',
     '',
-    '| gun | enemies | level | policy | won | lost | fled | timeout | turns | crashes | my speed | my hit | my odds | my dmg/turn | their speed | their hit | their odds | their dmg/turn |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| gun | enemies | level | policy | won | lost | fled | timeout | turns | crashes | my speed | my hit | my odds | my dmg/turn | their speed | their hit | their odds | their dmg/turn | their hp left |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';
@@ -294,6 +300,11 @@ function groupRow(g: Group): string {
     const rounds = sum((r) => pick(r).rounds);
     return [(sum((r) => pick(r).speed) / turns).toFixed(1), pct(sum((r) => pick(r).hits), rounds), pct(sum((r) => pick(r).odds), rounds), (sum((r) => pick(r).damage) / turns).toFixed(1)];
   };
-  const cells = [g.gun, g.enemies, g.level, g.policy, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.me), ...sideCells((r) => r.them)];
+  const cells = [g.gun, g.enemies, g.level, g.policy, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.me), ...sideCells((r) => r.them), hpLeftCell(rs)];
   return `| ${cells.join(' | ')} |`;
+}
+
+function hpLeftCell(rs: FightReport[]): string {
+  const shares = rs.flatMap((r) => (r.theirHpLeft === null ? [] : [r.theirHpLeft]));
+  return shares.length > 0 ? pct(shares.reduce((a, b) => a + b, 0), shares.length) : '-';
 }

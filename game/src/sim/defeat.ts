@@ -7,7 +7,8 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
-import { isHostile } from "./combat";
+import { beatenBy, isHostile } from "./combat";
+import { rollCabKnock } from "./cab-knock";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { practice, vehicleHasPerk } from "./progress";
@@ -21,9 +22,11 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { lootRobbed } from "./npc-activities";
-import { wantsLoot } from "./npc-decisions";
-import type { Vehicle, World } from "./types";
+import { pushGoal } from "./npc-activities";
+import { liesUp } from "./npc-service";
+import { isWeak, wantsLoot } from "./npc-decisions";
+import type { SalvageStock, Vehicle, World } from "./types";
+import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
 
@@ -37,10 +40,10 @@ export function checkDeath(world: World): void {
 export function checkKnockout(world: World): void {
   const p = world.player;
   const me = playerVehicle(world);
-  if (p.state !== "active" || corePart(me, "cab").hp > 0 || fightsThrough(world, me)) return;
+  if (p.state !== "active" || !knockedNow(world, me)) return;
   const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
   if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
-  me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)) };
+  me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)), gaveUp: false };
   p.state = "knockedOut";
   p.knockoutTurns = 0;
   p.knockouts++;
@@ -49,9 +52,17 @@ export function checkKnockout(world: World): void {
   const robbers = robbersOf(world, me);
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  for (const s of world.states.filter((x) => x.kind === "combat" && (x.holder === me.id || x.other === me.id)))
+    endState(world, s, "broken");
   sendToLoot(world, me, robbers);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });
+}
+
+function knockedNow(world: World, me: Vehicle): boolean {
+  if (fightsThrough(world, me)) return false;
+  if (corePart(me, "cab").hp <= 0) return true;
+  return world.player.health < RULES.cabKnock.playerHealth && rollCabKnock(world, me);
 }
 
 function fightsThrough(world: World, me: Vehicle): boolean {
@@ -87,23 +98,29 @@ export function isKnockedOut(v: Vehicle): boolean {
 }
 
 export function gaveUp(v: Vehicle): boolean {
-  return isKnockedOut(v) && corePart(v, "cab").hp > 0;
+  return isKnockedOut(v) && v.defeat!.gaveUp;
 }
 
-function layDown(world: World, v: Vehicle, foes: string[]): void {
-  v.defeat = { phase: "out", turns: 0, unseen: 0, foes };
+function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): void {
+  v.defeat = { phase: "out", turns: 0, unseen: 0, foes, gaveUp };
   stopKnockedOut(world, v);
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
-  layDown(world, v, [...new Set([...foesOf(world, v), winnerId])]);
+  layDown(world, v, [...new Set([...foesOf(world, v), winnerId])], true);
 }
 
 export function knockOutNpc(world: World, v: Vehicle): void {
-  layDown(world, v, foesOf(world, v));
-  world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
-  if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
+  layDown(world, v, foesOf(world, v), false);
+  const by = beatenBy(world, v);
+  world.events.push({ t: "npcKnockout", vehicle: v.id, by });
+  if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
+  sendToLoot(world, v, strippers(world, v));
+}
+
+function strippers(world: World, victim: Vehicle): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain && victim.defeat!.foes.includes(v.id) && !isKnockedOut(v) && !isWeak(world, v) && (v.faction === "raiders" || wantsLoot(world, v, victim)));
 }
 
 function stopKnockedOut(world: World, v: Vehicle): void {
@@ -170,9 +187,13 @@ function attackerWatches(world: World, v: Vehicle, foes: string[]): boolean {
 function advanceRetreat(world: World, v: Vehicle): void {
   const defeat = v.defeat!;
   defeat.unseen = inPlayerView(world, v.pos) ? 0 : defeat.unseen + 1;
-  if (defeat.unseen < RULES.retreatTeleportTurns || towOf(world, v.id) || answered(world, v)) return;
+  if (defeat.unseen < RULES.retreatTeleportTurns || staysPut(world, v)) return;
   const spot = hiddenHomeSpot(world, v);
   if (spot) teleportHome(world, v, spot);
+}
+
+function staysPut(world: World, v: Vehicle): boolean {
+  return liesUp(v) || towOf(world, v.id) !== null || answered(world, v);
 }
 
 function answered(world: World, v: Vehicle): boolean {
@@ -180,7 +201,7 @@ function answered(world: World, v: Vehicle): boolean {
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {
-  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world);
 }
 
 function hiddenHomeSpot(world: World, v: Vehicle): Vec | null {
@@ -202,7 +223,6 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
   v.order = null;
   v.trail = [];
   delete v.brain!.farRoute;
-  refitAtHome(world, v);
 }
 
 export function refitAtHome(world: World, v: Vehicle): void {
@@ -213,4 +233,18 @@ export function refitAtHome(world: World, v: Vehicle): void {
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
   delete v.defeat;
+}
+
+function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  if (victim && isKnockedOut(victim)) return victim;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId));
+}
+
+export function lootRobbed(w: World, robberId: string, victimId: string): void {
+  const robber = w.vehicles.find((v) => v.id === robberId);
+  if (!robber) return;
+  const stock = robbedLoot(w, victimId);
+  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

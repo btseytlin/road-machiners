@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, TERRAIN, type TerrainTypeId } from '../data/terrain';
+import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { TYPE_IDS } from '../sim/terrain';
 import { groundLayer, newDraft, type MapDraft } from './bake';
@@ -111,13 +112,27 @@ describe('ground types from geology marks', () => {
     expect(['mud', 'saltCrust']).not.toContain(typeAt(d, at.x, at.y));
   });
 
-  it('lays only hardpan and built ground on flat ground with no marks', () => {
+  it('lays only hardpan and built ground on flat ground with no marks, bar the wing sand', () => {
     const d = newDraft(REGION.size);
 
     groundLayer(SEED, d);
 
     const kinds = new Set(Array.from(d.types, (code) => TYPE_IDS[code]));
-    expect([...kinds].sort()).toEqual(['hardpan', 'road']);
+    expect([...kinds].sort()).toEqual(['hardpan', 'road', 'sand']);
+  });
+
+  it('drifts sand over the Broken Wing ramps, the hoop feet and the trench floor, and drains the trench', () => {
+    const d = newDraft(REGION.size);
+    const n = REGION.size + 1;
+    const F = TERRAIN.features;
+    const mid = F.trench.path[0];
+    for (let j = mid.y - 2; j <= mid.y + 2; j++) for (let i = mid.x - 2; i <= mid.x + 2; i++) d.heights[j * n + i] = -G.mudDepth * 2;
+
+    groundLayer(SEED, d);
+
+    expect(typeAt(d, Math.floor(F.mounds[0].center.x), Math.floor(F.mounds[0].center.y + F.mounds[0].radius + 1))).toBe('sand');
+    expect(typeAt(d, Math.floor(F.wing.pos.x), Math.floor(F.wing.pos.y + 3))).toBe('sand');
+    expect(typeAt(d, Math.floor(mid.x), Math.floor(mid.y))).toBe('sand');
   });
 });
 
@@ -139,7 +154,7 @@ describe('built ground', () => {
   });
 
   it('keeps the Canyon Bridge deck road under every geology mark', () => {
-    const bridge = TERRAIN.features.bridge;
+    const bridge = deckById('canyon-bridge');
     const mid = { x: Math.floor((bridge.from.x + bridge.to.x) / 2), y: Math.floor((bridge.from.y + bridge.to.y) / 2) };
     const d = groundLayer(SEED, marked());
 

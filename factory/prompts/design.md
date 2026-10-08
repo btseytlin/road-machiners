@@ -40,7 +40,7 @@ Never make it a pass or fail gate for a perspective concept, since the skill its
 Judge the compare sheet by looking at it, and write each mismatch as a measurement or a plain description.
 
 
-Read CLAUDE.md and DESIGN.md first.
+Read CLAUDE.md and docs/DESIGN.md first.
 Follow them.
 
 Read docs/architecture/principles.md.

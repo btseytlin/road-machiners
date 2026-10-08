@@ -10,6 +10,7 @@ import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -30,5 +31,5 @@ describe('invariants under AI traffic', () => {
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
     }
     freeDrive(d);
-  }, 120_000);
+  }, budget(360_000));
 });

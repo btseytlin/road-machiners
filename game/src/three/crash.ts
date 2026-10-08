@@ -6,6 +6,7 @@ let shown = false;
 let report: ((text: string) => void) | null = null;
 const reported = new Set<string>();
 const listeners: (() => void)[] = [];
+const sinks: ((err: unknown) => void)[] = [];
 
 export function installCrashScreen(): void {
   window.addEventListener('error', (e) => onError(e.error ?? e.message));
@@ -20,11 +21,16 @@ export function onEveryError(listener: () => void): void {
   listeners.push(listener);
 }
 
+export function onReport(sink: (err: unknown) => void): void {
+  sinks.push(sink);
+}
+
 export function reportError(err: unknown): void {
   onError(err);
 }
 
 function onError(err: unknown): void {
+  for (const sink of sinks) sink(err);
   for (const listener of listeners) listener();
   if (!report) return showCrash(err);
   const text = err instanceof Error ? err.message : String(err);

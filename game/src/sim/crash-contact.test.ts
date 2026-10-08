@@ -137,7 +137,7 @@ describe('the rammer perk', () => {
     const world = emptyWorld();
     const me = world.vehicles[0];
     const foe = addVehicle(world, 'raiders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
-    foe.brain = npcBrain('hauler', foe.pos, ['raider']);
+    foe.brain = npcBrain('buggy', foe.pos, ['raider']);
     addState(world, 'feud', foe.id, me.id, { kind: 'feud', robbery: false });
     expect(isHostile(world, me, foe)).toBe(true);
     return { world, me, foe };
@@ -169,7 +169,7 @@ describe('the rammer perk', () => {
     world.player.perks.push('rammer');
     const me = world.vehicles[0];
     const trader = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
-    trader.brain = npcBrain('hauler', trader.pos, ['trader']);
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
     applyContactCrash(world, me, trader, trader.id, 6, geometry);
     expect(trader.stalledUntil).toBeUndefined();
   });

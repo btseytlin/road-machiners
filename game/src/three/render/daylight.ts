@@ -1,4 +1,4 @@
-// Light from the clock, and the lights that switch on at night. The sun moves continuously: white at noon, gold in the late afternoon,
+// Light from the clock, and the lights that switch on at night. The sun moves continuously: warm white at noon, gold in the late afternoon,
 // red at the horizon with long shadows, then a short twilight hands over to blue moonlight.
 
 import * as THREE from "three";
@@ -9,6 +9,7 @@ import { hashStr } from "../../render/noise";
 import type { V3, VehicleFrame } from "../../phys/frames";
 import { PAL } from "../../render/palette";
 import { bodyOf } from "../../sim/body";
+import type { Vehicle, World } from "../../sim/types";
 import { DEG, type Vec } from "../../sim/vec";
 
 const MIN_LIGHT_ELEVATION = 6;
@@ -17,6 +18,7 @@ const MOON_ELEVATION = 25;
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9;
+const SHADOW_SOFTNESS = 3;
 
 type Key = {
   h: number;
@@ -27,27 +29,30 @@ type Key = {
   skyI: number;
   glassI: number;
   glassWhite: number;
+  beamI: number;
 };
 const KEYS: Key[] = [
   {
     h: 45,
-    sun: 0xffecd0,
-    sunI: 2.0,
-    sky: 0xaebbd7,
-    ground: 0xba8a56,
-    skyI: 1.0,
+    sun: 0xfff0d8,
+    sunI: 2.3,
+    sky: 0x9cbff0,
+    ground: 0xc08a52,
+    skyI: 0.9,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.3,
   },
   {
     h: 20,
-    sun: 0xffdcaa,
-    sunI: 2.15,
-    sky: 0xb5b7cf,
-    ground: 0xba8a56,
-    skyI: 0.95,
+    sun: 0xffe4c0,
+    sunI: 2.35,
+    sky: 0xa4b8e8,
+    ground: 0xc08a52,
+    skyI: 0.88,
     glassI: 0,
     glassWhite: 0,
+    beamI: 0.45,
   },
   {
     h: 8,
@@ -58,6 +63,7 @@ const KEYS: Key[] = [
     skyI: 0.85,
     glassI: 0.1,
     glassWhite: 0,
+    beamI: 0.75,
   },
   {
     h: 1,
@@ -68,6 +74,7 @@ const KEYS: Key[] = [
     skyI: 0.7,
     glassI: 0.4,
     glassWhite: 0,
+    beamI: 1,
   },
   {
     h: -4,
@@ -78,6 +85,7 @@ const KEYS: Key[] = [
     skyI: 0.75,
     glassI: 0.35,
     glassWhite: 0.5,
+    beamI: 1,
   },
   {
     h: -TWILIGHT,
@@ -88,6 +96,7 @@ const KEYS: Key[] = [
     skyI: 0.78,
     glassI: 0.2,
     glassWhite: 0.8,
+    beamI: 1,
   },
 ];
 
@@ -100,6 +109,7 @@ export type Daylight = {
   ground: THREE.Color;
   skyIntensity: number;
   glass: THREE.Color;
+  beam: number;
 };
 
 function sunHeight(hour: number): { h: number; dir: Vec } {
@@ -134,6 +144,7 @@ function colorsAt(h: number): Omit<Daylight, "dir" | "elevation"> {
     sky: mix(a.sky, b.sky),
     ground: mix(a.ground, b.ground),
     skyIntensity: a.skyI + (b.skyI - a.skyI) * s,
+    beam: a.beamI + (b.beamI - a.beamI) * s,
     glass: desaturate(mix(a.sun, b.sun).lerp(WHITE, a.glassWhite + (b.glassWhite - a.glassWhite) * s))
       .multiplyScalar(a.glassI + (b.glassI - a.glassI) * s),
   };
@@ -184,6 +195,7 @@ export function sunLight(): THREE.DirectionalLight {
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.normalBias = 0.3;
+  sun.shadow.radius = SHADOW_SOFTNESS;
   Object.assign(sun.shadow.camera, {
     left: -80,
     right: 80,
@@ -202,6 +214,9 @@ const BEAM_RANGE = 70;
 const BEAM_ANGLE = 42 * DEG;
 const BEAM_PENUMBRA = 0.6;
 const BEAM_HEIGHT = 4;
+const SHADOW_BEAMS = 4;
+const BEAM_SHADOW_MAP = 1024;
+const BEAM_SHADOW_BIAS = 0.3;
 const BEAM_AIM = { ahead: 30, down: 6 };
 
 const GLOW_INTENSITY = 0.5;
@@ -209,25 +224,61 @@ const GLOW_RANGE = 4.5;
 const GLOW_DECAY = 1;
 const GLOW_HEIGHT = 3;
 
+export function vehicleLampsOn(world: World, v: Vehicle, lightTurn: number): boolean {
+  return v.id === world.player.vehicleId ? world.player.headlights : lampsOn(v.id, lightTurn);
+}
+
 export function lampsOn(id: string, lightTurn: number): boolean {
   const delay = 1 - hashStr(id);
   return !sunAt(Math.floor(lightTurn + 1 - delay));
 }
 
-export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean };
+export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean; player: boolean };
 
-export class NightLights {
-  private readonly beams: THREE.SpotLight[] = [];
+export function nightLightsWanted(turn: number, lit: Pick<LitVehicle, "on" | "player">[]): boolean {
+  return !sunAt(turn) || lit.some((v) => !v.player && v.on);
+}
+
+const scratchRot = new THREE.Quaternion();
+const scratchAt = new THREE.Vector3();
+
+export function beamOrder(lit: LitVehicle[], truck: V3): LitVehicle[] {
+  const dist = (v: LitVehicle) => Math.hypot(v.frame.pos.x - truck.x, v.frame.pos.y - truck.y, v.frame.pos.z - truck.z);
+  return lit
+    .flatMap((v, i) => (v.on ? [{ v, i, d: dist(v) }] : []))
+    .sort((x, y) => x.d - y.d || (x.v.chassisId < y.v.chassisId ? -1 : x.v.chassisId > y.v.chassisId ? 1 : 0) || x.i - y.i)
+    .map((e) => e.v);
+}
+
+export class VehicleLights {
+  private readonly shadowed: THREE.SpotLight[] = [];
+  private readonly plain: THREE.SpotLight[] = [];
   private glow: THREE.PointLight | null = null;
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  update(night: boolean, truck: V3, lit: LitVehicle[]): void {
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
+    const lit = world.vehicles
+      .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
+      .map((v) => ({
+        chassisId: v.chassisId,
+        frame: frames[v.id],
+        on: vehicleLampsOn(world, v, lightTurn),
+        player: v.id === world.player.vehicleId,
+      }));
+    this.update(nightLightsWanted(world.turn, lit), daylightAt(lightTurn).beam, truck, lit);
+  }
+
+  update(night: boolean, beam: number, truck: V3, lit: LitVehicle[]): void {
+    const order = beamOrder(lit, truck);
     if (!night) {
-      this.clear();
-      return;
+      this.removeGlow();
+      this.trim(this.shadowed, Math.min(order.length, SHADOW_BEAMS));
+      this.trim(this.plain, Math.max(0, order.length - SHADOW_BEAMS));
     }
-    this.aimBeams(lit);
+    this.aim(this.shadowed, order.slice(0, SHADOW_BEAMS), true, beam);
+    this.aim(this.plain, order.slice(SHADOW_BEAMS), false, beam);
+    if (!night) return;
     if (!this.glow) {
       this.glow = new THREE.PointLight(PAL.truckGlow, GLOW_INTENSITY, GLOW_RANGE, GLOW_DECAY);
       this.scene.add(this.glow);
@@ -235,33 +286,47 @@ export class NightLights {
     this.glow.position.set(truck.x, truck.y + GLOW_HEIGHT, truck.z);
   }
 
-  private clear(): void {
-    for (const beam of this.beams.splice(0)) {
+  private trim(pool: THREE.SpotLight[], n: number): void {
+    for (const beam of pool.splice(n)) {
       this.scene.remove(beam, beam.target);
       beam.dispose();
     }
+  }
+
+  private removeGlow(): void {
     if (!this.glow) return;
     this.scene.remove(this.glow);
     this.glow.dispose();
     this.glow = null;
   }
 
-  private aimBeams(lit: LitVehicle[]): void {
-    while (this.beams.length < lit.length) {
-      const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
-      this.beams.push(beam);
-      this.scene.add(beam, beam.target);
+  private newBeam(shadows: boolean): THREE.SpotLight {
+    const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
+    if (shadows) {
+      beam.castShadow = true;
+      beam.shadow.mapSize.set(BEAM_SHADOW_MAP, BEAM_SHADOW_MAP);
+      beam.shadow.normalBias = BEAM_SHADOW_BIAS;
     }
-    this.beams.forEach((beam, i) => {
-      const v = lit[i];
-      beam.intensity = v?.on ? BEAM_INTENSITY : 0;
-      if (!v?.on) return;
-      const f = v.frame;
-      const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-      const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
-      const nose = bodyOf(v.chassisId).half.x;
-      beam.position.copy(new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at));
-      beam.target.position.copy(new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at));
+    this.scene.add(beam, beam.target);
+    return beam;
+  }
+
+  private aim(pool: THREE.SpotLight[], vehicles: LitVehicle[], shadows: boolean, share: number): void {
+    while (pool.length < vehicles.length) pool.push(this.newBeam(shadows));
+    pool.forEach((beam, i) => {
+      const v = vehicles[i];
+      beam.intensity = v ? BEAM_INTENSITY * share : 0;
+      if (shadows) beam.shadow.autoUpdate = v !== undefined;
+      if (v) this.aimAt(beam, v);
     });
+  }
+
+  private aimAt(beam: THREE.SpotLight, v: LitVehicle): void {
+    const f = v.frame;
+    const rot = scratchRot.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
+    const at = scratchAt.set(f.pos.x, f.pos.y, f.pos.z);
+    const nose = bodyOf(v.chassisId).half.x;
+    beam.position.set(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at);
+    beam.target.position.set(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at);
   }
 }

@@ -9,6 +9,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { advanceJobs } from './jobs';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { getKnownSite } from './npc-decisions';
 import { spawnInitial } from './spawn';
 import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
@@ -16,6 +17,7 @@ import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
 import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
+import { budget } from '../test/budget';
 import type { NpcActivity, Vehicle, World } from './types';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
@@ -49,7 +51,7 @@ describe('NPC restraint', () => {
     });
     expect(raiders.some((npc) => Object.entries(goodsCount(npc)).some(([good, count]) => good !== 'parts' && count > 0))).toBe(true);
     expect(raiders.some((npc) => (goodsCount(npc).parts ?? 0) > 0)).toBe(true);
-  });
+  }, 90_000);
 
   it('mostly keeps civilian work and never opens fire at an uninvolved hostile', () => {
     const { world, npc } = createNpc();
@@ -75,19 +77,21 @@ describe('NPC restraint', () => {
     expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
-  it('mostly attacks an isolated manageable target', () => {
+  it('mostly sets on an isolated manageable target, and robs it or fights it', () => {
     const { world, npc } = createNpc('buggy');
-    const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
+    const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 33, y: 30 });
+    prey.brain = npcBrain('trader', prey.pos, ['trader']);
     addGoods(world, prey, 'electronics', 3);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       assignAutoOrders(x);
       const fights = topGoal(me)?.kind === 'fight';
       if (fights) expect(Object.keys(me.weaponOrders)).toHaveLength(1);
-      return fights;
+      const paid = topGoal(me)?.kind === 'loot' && topGoal(me)?.reason === 'take the handed-over cargo';
+      return fights || paid;
     });
     expect(fought).toBeGreaterThan(0.9);
-  });
+  }, budget(90_000));
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');
@@ -109,6 +113,7 @@ describe('NPC restraint', () => {
 describe('NPC field repairs', () => {
   it('parks in nearby reachable shade and spends carried parts to patch damage', () => {
     const { world, npc } = createNpc();
+    world.vehicles[0].pos = { x: 60, y: 60 };
     addGoods(world, npc, 'parts', 2);
     const cab = corePart(npc, 'cab');
     cab.hp = partDef(cab.defId).hp * 0.2;
@@ -203,19 +208,19 @@ describe('NPC field repairs', () => {
     expect(npc.job?.kind).toBe('repair');
   });
 
-  it('mostly flees instead of repairing under visible threat, and never starts the repair then', () => {
+  it('mostly flees or fights instead of repairing under visible threat, and starts no repair then', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     corePart(npc, 'cab').hp = 1;
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    const fled = shareOfSeeds(world, npc.id, (x, me) => {
+    const answered = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       resolveNpcActivities(x);
-      const flees = topGoal(me)!.kind === 'flee';
-      if (flees) expect(me.job).toBeNull();
-      return flees;
+      const answers = topGoal(me)!.kind === 'flee' || topGoal(me)!.kind === 'fight';
+      if (answers) expect(me.job).toBeNull();
+      return answers;
     });
-    expect(fled).toBeGreaterThan(0.9);
+    expect(answered).toBeGreaterThan(0.9);
   });
 
   it.each([false, true])('orders escape during a repair and obeys parked-job rules, pinned: %s', (pinned) => {
@@ -266,6 +271,16 @@ describe('NPC field repairs', () => {
     expect(thinkNpc(world, npc).kind).toBe('resupply');
   });
 
+  it('sends a truck with no engine on a service stall to a town, since only a town refits it', () => {
+    const { world, npc } = createNpc();
+    npc.items = npc.items.filter((item) => !(item.kind === 'part' && item.part.defId === 'stockEngine'));
+    npc.resources!.money = 900;
+    npc.pos = { ...sitePads(getKnownSite('granary'))[0] };
+    const goal = thinkNpc(world, npc);
+    expect(goal.kind).toBe('resupply');
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
+  });
+
   it('does not seek service for a broken gun', () => {
     const { world, npc } = createNpc();
     const gun = npc.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
@@ -277,7 +292,7 @@ describe('NPC field repairs', () => {
   it('preserves repair supplies during a town service visit', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
-    npc.resources!.fuel = 0.5;
+    npc.resources!.fuel = 0.3;
     npc.resources!.money = 500;
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);

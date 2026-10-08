@@ -30,6 +30,15 @@ export function topLeft(): HTMLElement {
   return row;
 }
 
+export function bottomLeft(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .bottom-left');
+  if (found) return found;
+  const row = el('div', { class: 'bottom-left' });
+  root.append(row);
+  return row;
+}
+
 export function topRight(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .top-right');
@@ -39,10 +48,32 @@ export function topRight(): HTMLElement {
   return row;
 }
 
+export function rightDock(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .right-dock');
+  if (found) return found;
+  const dock = el('div', { class: 'right-dock' });
+  root.append(dock);
+  return dock;
+}
+
+export type Box = { left: number; top: number; right: number; bottom: number };
+
+const isEmpty = (b: Box): boolean => b.right <= b.left || b.bottom <= b.top;
+
+export function overlaps(a: Box, b: Box): boolean {
+  if (isEmpty(a) || isEmpty(b)) return false;
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
   p.addEventListener('pointerdown', (e) => e.stopPropagation());
   p.addEventListener('wheel', (e) => e.stopPropagation());
   parent.append(p);
   return p;
+}
+
+export function isBrowserChord(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey;
 }

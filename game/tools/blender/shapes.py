@@ -73,7 +73,7 @@ def ladder(kit: Kit, name: str, base: Vec3, top_z: float, width: float, facing: 
         kit.box(f"{name}_rung{i}", (0.05, width, 0.05), (bx, by, bz + i * height / (rungs + 1)), mat, rot=(0, 0, facing))
 
 
-def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> None:
+def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> bpy.types.Object:
     """Extrudes a closed XZ profile from Blender Y y0 to y1 as one mesh. lean shifts each vertex by -lean * z in Y."""
     mesh = bpy.data.meshes.new(name)
     bm = bmesh.new()
@@ -85,6 +85,35 @@ def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1
     for i in range(n):
         j = (i + 1) % n
         bm.faces.new((near[i], near[j], far[j], far[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return kit._add(obj, name, mat, 0.0)
+
+
+def mound(kit: Kit, name: str, radius: float, height: float, at: tuple[float, float]) -> None:
+    """A low faceted sand heap: a short cylinder with its top ring pulled in."""
+    heap = kit.cylinder(name, radius, height, (at[0], at[1], height / 2 - 0.1), "sand", vertices=7, dent_by=0.15)
+    for v in heap.data.vertices:
+        if v.co.z > 0:
+            v.co.x *= 0.45
+            v.co.y *= 0.45
+
+
+def loft(kit: Kit, name: str, sections: list[list[Vec3]], mat: str) -> None:
+    """Joins equal-length rings of points, one per station, into one closed mesh with flat end caps."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    rings = [[bm.verts.new(p) for p in ring] for ring in sections]
+    n = len(rings[0])
+    bm.faces.new(rings[0])
+    bm.faces.new(list(reversed(rings[-1])))
+    for a, b in zip(rings, rings[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((a[i], a[j], b[j], b[i]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(mesh)
     bm.free()

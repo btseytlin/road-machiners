@@ -6,7 +6,7 @@ import { agentHome } from './common';
 import { MergeConflictError, RevertConflictError, type AgentRun, type Card, type Ctx, type FactoryConfig, type InlineButton, type MergeStep, type Resolution } from '../types';
 
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
-export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', publicUrl: 'https://play.test/play', errorMapDays: 14 } as FactoryConfig;
+export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', publicUrl: 'https://play.test/play', errorMapDays: 14, transcriptDays: 10 } as FactoryConfig;
 export const CLONE_SHA = 'abc1234'.padEnd(40, '0');
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };

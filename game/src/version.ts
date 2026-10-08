@@ -20,7 +20,10 @@ function formatCommit(gameDir: string, format: string): string {
   if (git(gameDir, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error('Cannot work out the game version in a shallow clone. Fetch the full git history.');
   }
-  const found = git(gameDir, ['log', '-1', '--format=%H', `-S"format": "${format}"`, '--', SHAPE_FILE]);
+  const search = [`-S"format": "${format}"`, '--', SHAPE_FILE];
+  const found =
+    git(gameDir, ['log', '-1', '--format=%H', ...search]) ||
+    git(gameDir, ['log', '-1', '--format=%H', '--diff-merges=first-parent', '--no-patch', ...search]);
   if (!found) {
     throw new Error(`No commit brings format ${format} into ${SHAPE_FILE}. Commit the output of npm run save:shape, with full git history.`);
   }

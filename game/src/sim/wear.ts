@@ -14,7 +14,7 @@ import { tileAt } from './terrain';
 import { isTowed } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 
 export function applyWear(world: World): void {
   for (const v of world.vehicles) wearVehicle(world, v);
@@ -25,7 +25,7 @@ function wearVehicle(world: World, v: Vehicle): void {
   const { distance, terrainWear } = trailWear(world, v);
   if (distance <= 0) return;
   const speedFactor = 1 + WEAR.speedWeight * v.speed;
-  const weatherWear = weatherAt(world, v.pos).wear;
+  const weatherWear = weatherOn(world, v).wear;
   const oddsScale = distance * terrainWear * speedFactor * weatherWear;
   const cab = corePart(v, 'cab').id;
   const floor = (id: string): number => (id === cab ? 1 : 0);

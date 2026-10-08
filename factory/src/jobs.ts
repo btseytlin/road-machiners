@@ -44,7 +44,10 @@ export function isAlive(pid: number): boolean {
 
 async function jobContainers(run: Run, id: string): Promise<string[]> {
   const listed = must(await run('docker', ['ps', '-q', '--filter', `label=${jobLabel(id)}`]), 'docker ps');
-  return listed.split('\n').map((line) => line.trim()).filter(Boolean);
+  return listed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export async function killJob(run: Run, pid: number, id: string): Promise<void> {

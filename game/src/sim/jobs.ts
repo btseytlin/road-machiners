@@ -99,7 +99,12 @@ function patchRank(v: Vehicle, part: PartInstance): number {
 }
 
 function freeParts(world: World, v: Vehicle): number {
-  return (goodsCount(v).parts ?? 0) - promisedParts(world, v);
+  return (goodsCount(v).parts ?? 0) - promisedParts(world, v) - hauledParts(world, v);
+}
+
+function hauledParts(world: World, v: Vehicle): number {
+  if (v.id !== world.player.vehicleId) return 0;
+  return world.player.contracts.reduce((sum, c) => sum + (c.kind === "haul" && c.good === "parts" ? c.units : 0), 0);
 }
 
 function canAutoPatch(world: World, v: Vehicle): boolean {

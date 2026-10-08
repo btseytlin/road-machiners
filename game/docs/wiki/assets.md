@@ -1,6 +1,6 @@
 # Assets
 
-Models and sound cues. The map from chassis and part ids to models is `src/render/partLooks.ts`, and the cue list is `src/data/sounds.ts`. Adding a model is described in [CLAUDE.md](../../CLAUDE.md), and sound in `docs/sound.md`.
+Models and sound cues. The map from chassis and part ids to models is `src/render/partLooks.ts`, and the cue list is `src/data/sounds.ts`. Adding a model is described in [Art pipeline](../art.md), and sound in `docs/sound.md`.
 
 ## Models
 
@@ -22,6 +22,9 @@ Each chassis has one base model. Parts and goods have their own. A part with no 
 | chassis | convertible | base_convertible |
 | chassis | bus | base_bus |
 | chassis | loader | base_loader |
+| chassis | niva | base_niva |
+| chassis | bukhanka | base_bukhanka |
+| chassis | lincoln | base_lincoln |
 | part | transmission | transmission |
 | part | transmissionMid | transmission |
 | part | transmissionHeavy | transmission |
@@ -127,9 +130,14 @@ A weapon is assembled from a mount, a receiver, a barrel and an optional extra. 
 | crash | sfx | false | 0.9 | 2 | 2 |
 | engine | sfx | true | 0.6 | 1 | 3 |
 | wind | ambient | true | 1 | 1 | 3 |
-| music-calm | music | true | 1 | 1 | 3 |
+| music-calm | music | true | 1 | 1 | 5 |
+| music-town | music | true | 1 | 1 | 1 |
+| music-outpost | music | true | 1 | 1 | 1 |
+| music-abandoned | music | true | 0.7 | 1 | 1 |
 | score-drums | music | true | 0.9 | 1 | 1 |
 | score-bass | music | true | 0.8 | 1 | 1 |
+| score-horns | music | true | 0.8 | 1 | 1 |
+| score-trombone | music | true | 0.8 | 1 | 1 |
 | accent-sighted | music | false | 0.85 | 3 | 2 |
 | accent-struck | music | false | 0.85 | 3 | 2 |
 | accent-miss | music | false | 0.75 | 3 | 2 |

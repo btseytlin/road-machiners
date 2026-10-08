@@ -1,6 +1,6 @@
 # Game wiki
 
-Reference for the numbers and content of Road Machiners, for people and agents who would otherwise search the code. Design intent lives in [DESIGN.md](../../DESIGN.md). Each page below mixes prose with tables generated from `src/data/`.
+Reference for the numbers and content of Road Machiners, for people and agents who would otherwise search the code. Design intent lives in [DESIGN.md](../DESIGN.md). Each page below mixes prose with tables generated from `src/data/`.
 
 Pages:
 
@@ -10,6 +10,19 @@ Pages:
 - [npcs.md](npcs.md): NPC templates, traits, decisions and states.
 - [skills.md](skills.md): skills, XP and perks.
 - [assets.md](assets.md): models and sound cues.
+
+Mechanics pages hold the detailed rules of each system in prose, one page per section of DESIGN.md:
+
+- [character.md](mechanics/character.md): skills, XP and perks.
+- [truck.md](mechanics/truck.md): the grid, refits, mass, gun power draw, wear and field repair.
+- [turns.md](mechanics/turns.md): turns, orders, routes, crashes, guns and armor.
+- [defeat.md](mechanics/defeat.md): knockouts, looting, stranding, tows, healing, death and saves.
+- [detection.md](mechanics/detection.md): sight, sound, dust and scanners.
+- [world.md](mechanics/world.md): the map, sites, time of day, weather and engine heat.
+- [npcs.md](mechanics/npcs.md): NPC activities, traits, states and escorts.
+- [social.md](mechanics/social.md): radio topics and the horn.
+- [economy.md](mechanics/economy.md): prices, shops, contracts, fuel and supplies.
+- [content.md](mechanics/content.md): what the prototype contains.
 
 ## Generated blocks
 

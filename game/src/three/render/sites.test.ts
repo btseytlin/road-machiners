@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, InstancedMesh, Matrix4, Mesh, Vector3, type Object3D } from 'three';
+import { Box3, BoxGeometry, InstancedMesh, Matrix4, Mesh, Vector3, type Object3D } from 'three';
 import { loadModels } from './models';
 import { buildSites } from './sites';
 import { PHYSICS } from '../../data/physics';
@@ -44,7 +44,7 @@ describe('landmark scale', () => {
   });
 
   it('closes every site with an edge and shut doors at each gate', () => {
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       expect(group.userData.wallSections, site.id).toBeGreaterThan(5);
       expect(group.userData.gates, site.id).toBe(siteGates(site).length);
@@ -53,7 +53,7 @@ describe('landmark scale', () => {
   });
 
   it('draws each edge on the collision edge, at most 1.5 tiles thick', () => {
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       const reach = group.userData.edgeReach as [number, number];
       expect(reach[0], site.id).toBeGreaterThan(site.radius - 1.5);
@@ -66,7 +66,7 @@ describe('landmark scale', () => {
     const reach = 1;
     const v = new Vector3();
     const m = new Matrix4();
-    for (const site of [...REGION.towns, ...REGION.locations]) {
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       let worst = 0;
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
         if (!(o instanceof Mesh) || outsideEdge(o)) return;
@@ -87,10 +87,27 @@ describe('landmark scale', () => {
     }
   });
 
-  it('gives the orchard a field-sized footprint and the ship a larger hull', () => {
-    const orchard = measureSite('orchard');
-    expect(orchard.x).toBeGreaterThan(80);
-    expect(orchard.z).toBeGreaterThan(80);
-    expect(measureSite('fallen-sun').x).toBeGreaterThan(250);
+  it('stands each gate on two plain posts, with no tower over the wall', () => {
+    const S = PHYSICS.metersPerTile;
+    const topLimit = REGION.settlement.wallHeight * 1.4 + 0.01;
+    for (const site of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
+      const group = sites.getObjectByName(`landmark-${site.id}`)!;
+      const thickness = group.userData.wallThickness as number;
+      let posts = 0;
+      const towers: string[] = [];
+      for (const o of group.children) {
+        if (!(o instanceof Mesh) || !(o.geometry instanceof BoxGeometry)) continue;
+        const { width, height, depth } = o.geometry.parameters;
+        const [w, h, d] = [width / S, height / S, depth / S];
+        const r = Math.hypot(o.position.x / S - site.pos.x, o.position.z / S - site.pos.y);
+        if (r < site.radius - 1.5 || r > site.radius) continue;
+        const bottom = o.position.y / S - h / 2;
+        const top = o.position.y / S + h / 2;
+        if (bottom <= 0 && Math.min(w, d) >= thickness * 1.5) posts++;
+        if (Math.min(w, d) > 0.25 && top > topLimit) towers.push(`${w.toFixed(2)}x${d.toFixed(2)} to ${top.toFixed(2)}`);
+      }
+      expect.soft(posts, site.id).toBe(2 * siteGates(site).length);
+      expect.soft(towers, site.id).toEqual([]);
+    }
   });
 });

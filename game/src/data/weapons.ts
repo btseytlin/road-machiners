@@ -35,6 +35,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 2.6,
+      craterRadius: 0,
     },
   },
   shotgun: {
@@ -71,6 +72,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.1,
+      craterRadius: 0,
     },
   },
   longRifle: {
@@ -107,6 +109,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.2,
+      craterRadius: 0,
     },
   },
   flamer: {
@@ -143,6 +146,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 1.5,
       splashPen: 2,
       armorShare: 0.55,
+      craterRadius: 0,
     },
   },
   pneumobolter: {
@@ -179,6 +183,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.15,
+      craterRadius: 0,
     },
   },
   slugCannon: {
@@ -215,6 +220,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 1.1,
+      craterRadius: 0,
     },
   },
   heavyMg: {
@@ -251,6 +257,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 2.6,
+      craterRadius: 0,
     },
   },
   cannon: {
@@ -287,6 +294,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 12,
       splashPen: 5,
       armorShare: 0.1,
+      craterRadius: 1.2,
     },
   },
   amRifle: {
@@ -323,6 +331,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.2,
+      craterRadius: 0,
     },
   },
   autocannon: {
@@ -359,6 +368,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.7,
+      craterRadius: 0,
     },
   },
   recoilless: {
@@ -395,6 +405,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 8,
       splashPen: 4,
       armorShare: 0.15,
+      craterRadius: 1.0,
     },
   },
   battleRifle: {
@@ -431,6 +442,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.9,
+      craterRadius: 0,
     },
   },
   gatling: {
@@ -467,6 +479,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 2.6,
+      craterRadius: 0,
     },
   },
   rocketRack: {
@@ -503,6 +516,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 8,
       splashPen: 4,
       armorShare: 0.1,
+      craterRadius: 1.2,
     },
   },
   sniperCannon: {
@@ -539,6 +553,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.2,
+      craterRadius: 0,
     },
   },
   grenadeLauncher: {
@@ -575,6 +590,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 6,
       splashPen: 4,
       armorShare: 0.8,
+      craterRadius: 0.9,
     },
   },
   tankGun: {
@@ -611,6 +627,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 10,
       splashPen: 5,
       armorShare: 0.15,
+      craterRadius: 1.5,
     },
   },
   flechette: {
@@ -647,6 +664,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       splashDamage: 0,
       splashPen: 0,
       armorShare: 0.75,
+      craterRadius: 0,
     },
   },
 };

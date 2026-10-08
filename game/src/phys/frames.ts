@@ -7,7 +7,7 @@ import type { Vec } from "../sim/vec";
 
 export type V3 = { x: number; y: number; z: number };
 export type Quat = { x: number; y: number; z: number; w: number };
-export type WheelFrame = { steer: number; spin: number; suspension: number };
+export type WheelFrame = { steer: number; spin: number; suspension: number; ground: boolean };
 export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] };
 export type TurnFrames = Record<string, VehicleFrame[]>;
 

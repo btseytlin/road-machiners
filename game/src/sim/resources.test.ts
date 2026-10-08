@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { TIME } from '../data/time';
-import { consumeVehicleSupplies } from './resources';
+import { burnFuel, consumeVehicleSupplies, getResources } from './resources';
 import { addVehicle, emptyWorld } from './testkit';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { CHASSIS } from '../data/chassis';
@@ -62,13 +62,13 @@ describe('NPC upkeep', () => {
 describe('toughness on heat drain', () => {
   const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
 
-  it('cuts only the heat-driven extra of player supply use at level 5', () => {
+  it('cuts only the heat-driven extra of player supply use at rank 5', () => {
     const w = emptyWorld();
     w.turn = NOON;
     const me = w.vehicles[0];
     const heat = heatAt(w, me.pos);
     expect(heat).toBeGreaterThan(1);
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     const before = w.player.supplies;
     consumeVehicleSupplies(w, me);
     const use = 1 - 5 * SKILL_EFFECTS.toughness.supplies;
@@ -80,7 +80,7 @@ describe('toughness on heat drain', () => {
     const w = emptyWorld();
     w.turn = NOON;
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     const before = npc.resources!.supplies;
     consumeVehicleSupplies(w, npc);
     expect(before - npc.resources!.supplies).toBeCloseTo(RULES.suppliesPerTurn * heatAt(w, npc.pos), 9);
@@ -100,5 +100,35 @@ describe('store overflow', () => {
     expect(npc.resources!.fuel).toBe(CHASSIS.scout.fuelCap);
     expect(w.player.fuel).toBe(playerFuel);
     expect(w.events.some((e) => e.t === 'supply')).toBe(false);
+  });
+});
+
+describe('base drain rates', () => {
+  // Old drains at heat 1, before the 40% cut: 1.875 fuel per 100 tiles and 0.015 supplies per turn.
+  function trucks() {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    const player = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
+    return { w, trucks: [player, npc] };
+  }
+
+  it('burns 60% of the old fuel over the same distance, for the player and an NPC', () => {
+    const { w, trucks: list } = trucks();
+    for (const v of list) {
+      const resources = getResources(w, v);
+      const before = resources.fuel;
+      burnFuel(w, v, 100);
+      expect(before - resources.fuel).toBeCloseTo(0.6 * 1.875 * heatAt(w, v.pos), 9);
+    }
+  });
+
+  it('uses 60% of the old supplies over the same turns, for the player and an NPC', () => {
+    const { w, trucks: list } = trucks();
+    for (const v of list) {
+      const resources = getResources(w, v);
+      const before = resources.supplies;
+      for (let i = 0; i < 10; i++) consumeVehicleSupplies(w, v);
+      expect(before - resources.supplies).toBeCloseTo(0.6 * 10 * 0.015 * heatAt(w, v.pos), 9);
+    }
   });
 });

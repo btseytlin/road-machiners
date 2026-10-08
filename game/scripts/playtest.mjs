@@ -13,18 +13,71 @@ const cpu = process.argv.includes('--cpu');
 const turns = Number(arg('turns', cpu ? '4' : '12'));
 const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
 const MIN_FPS = 50;
-const TURN_LIMIT_MS = cpu ? 60000 : 10000;
+const timeoutsOff = process.env.TEST_TIMEOUTS === 'off';
+const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
+const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
+
+const GPU_ARGS = {
+  darwin: ['--use-angle=metal'],
+  linux: ['--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface'],
+};
+const SOFTWARE_RENDERERS = /SwiftShader|llvmpipe/;
+
+function launchArgs() {
+  if (cpu) return [];
+  const angle = GPU_ARGS[process.platform];
+  if (!angle) throw new Error(`No GPU flags for ${process.platform}. Run with --cpu.`);
+  return [...angle, '--enable-gpu', '--ignore-gpu-blocklist'];
+}
 
 mkdirSync('.playtest', { recursive: true });
-const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: launchArgs() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+if (timeoutsOff) page.setDefaultTimeout(0);
+const renderer = await page.evaluate(() => {
+  const gl = document.createElement('canvas').getContext('webgl2');
+  return gl ? gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : 'no WebGL2';
+});
+console.log(`renderer ${renderer}`);
+if (!cpu && SOFTWARE_RENDERERS.test(renderer)) {
+  await browser.close();
+  console.error(`FAIL\nThe GPU playtest got the software renderer ${renderer}. Run with --cpu on a machine without a GPU.`);
+  process.exit(1);
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
-await page.waitForFunction(() => window.__ROAM__, null, { timeout: 30000 });
+await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: '.playtest/start.png' });
+
+const hitProblems = [];
+const findDeadCorners = () => {
+  const isOneControl = (panel, controls) => controls.length === 1 && controls[0].innerText.trim() === panel.innerText.trim();
+  const isShown = (panel, r) => r.width > 0 && r.height > 0 && panel.checkVisibility();
+  const cornerFailures = (panel, control) => {
+    const r = panel.getBoundingClientRect();
+    const corners = [[r.left + 1, r.top + 1], [r.right - 2, r.top + 1], [r.left + 1, r.bottom - 2], [r.right - 2, r.bottom - 2]];
+    return corners.flatMap(([x, y]) => {
+      const el = document.elementFromPoint(x, y);
+      if (el && control.contains(el)) return [];
+      return [`${panel.className} corner (${x},${y}) hits ${el ? `${el.tagName.toLowerCase()}.${el.className}` : 'nothing'}`];
+    });
+  };
+  const panels = [...document.querySelectorAll('#ui .panel')].filter((p) => isShown(p, p.getBoundingClientRect()));
+  const single = panels.map((p) => [p, [...p.querySelectorAll('button, summary, a[href], input, select')].filter((c) => c.checkVisibility())]).filter(([p, c]) => isOneControl(p, c));
+  return { failures: single.flatMap(([p, c]) => cornerFailures(p, c[0])), found: single.length };
+};
+const hit = await page.evaluate(findDeadCorners);
+hitProblems.push(...hit.failures);
+if (hit.found < 4) hitProblems.push(`found ${hit.found} one-control panels, expected at least 4`);
+const helpOpen = () => page.locator('.help details[open]').count();
+const helpBox = await page.locator('#ui .help').boundingBox();
+await page.mouse.click(helpBox.x + 2, helpBox.y + 2);
+if (!(await helpOpen())) hitProblems.push('help did not open from a click in its corner');
+await page.keyboard.press('Escape');
+if (await helpOpen()) hitProblems.push('help did not close on Escape');
 
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {
@@ -56,7 +109,7 @@ const blank = await page.evaluate(() => {
 });
 await browser.close();
 
-const problems = [...errors];
+const problems = [...errors, ...hitProblems];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');

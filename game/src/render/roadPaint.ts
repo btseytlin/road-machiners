@@ -2,8 +2,11 @@
 // tiling image of packed dirt with gravel, cracked patches and potholes, drawn in pixels a third the size
 // of the ground paint pixels. The tone is slow noise that varies the road and wanders its edge, with a
 
-import { REGION } from "../data/region";
-import { bridgeCut, deckAlong } from "../sim/bridge";
+import { REGION, type TerritoryDef } from "../data/region";
+import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
+import { bridgeCut, deckAt } from "../sim/bridge";
+import { isTerritory, siteGap } from "../sim/sites";
+import { territoryRoads } from "../sim/territory";
 import { dist, type Vec } from "../sim/vec";
 import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
@@ -13,47 +16,99 @@ export const ROAD_DETAIL_SIDE = 256;
 export const ROAD_TONE_SIDE = 64;
 export const ROAD_TONE_PIXELS = 12;
 const SITES = [...REGION.towns, ...REGION.locations];
+const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
+  const wreck = TERRITORIES[territory.id].wreck;
+  return wreck === null ? [] : [{ territory, wreck }];
+});
 const WIDTH = REGION.roadWidth * 0.9;
 const BLUR = 2.4;
+const DIRT_BLUR = 0.8;
 const STEP = 0.5;
+const CRACK_MIX = 0.3;
 const CRACK_CELL = 16;
 const POTHOLES = 4;
 const STONE_SHARE = 0.012;
 
 export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
+export const REGION_ROAD_STYLE = "#f00";
+export const DIRT_ROAD_STYLE = "#0f0";
+
 export function paintRoadMask(c: PaintCanvas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = WIDTH * c.res;
-  ctx.lineCap = "butt";
   ctx.lineJoin = "round";
-  ctx.beginPath();
-  for (const road of REGION.roads)
-    for (const run of drawnRuns(evenPoints(road)))
-      run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
-  ctx.stroke();
+  ctx.strokeStyle = REGION_ROAD_STYLE;
+  strokeRuns(c, REGION.roads.flatMap((road) => runsWhere(evenPoints(road), drawn)), WIDTH);
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
+  ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = DIRT_ROAD_STYLE;
+  for (const { territory, wreck } of WRECKS) {
+    const { roads, spurs } = territoryRoads(territory);
+    const fade = wreck.spurFade;
+    for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9);
+    for (const spur of spurs) strokeSpur(c, spur, fade);
+  }
   ctx.filter = "none";
   ctx.globalCompositeOperation = "source-over";
 }
 
-function drawnRuns(points: Vec[]): Vec[][] {
+function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
+  const ctx = c.ctx;
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = width * c.res;
+  ctx.lineCap = "butt";
+  ctx.beginPath();
+  for (const run of runs) run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  ctx.stroke();
+}
+
+function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
+  const points = evenPoints(spur.points);
+  const left = tilesToEnd(points);
+  const width = spur.width * 0.9;
+  strokeRuns(c, runsWhere(points.filter((_, i) => left[i] >= fade), offDeck), width);
+  const ctx = c.ctx;
+  ctx.lineCap = "round";
+  for (let i = 1; i < points.length; i++) {
+    const k = left[i] / fade;
+    if (k >= 1 || k <= 0 || !offDeck(points[i - 1]) || !offDeck(points[i])) continue;
+    ctx.globalAlpha = k;
+    ctx.lineWidth = width * k * c.res;
+    ctx.beginPath();
+    ctx.moveTo(c.toPx(points[i - 1].x), c.toPx(points[i - 1].y));
+    ctx.lineTo(c.toPx(points[i].x), c.toPx(points[i].y));
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function tilesToEnd(points: readonly Vec[]): number[] {
+  const out = new Array<number>(points.length).fill(0);
+  for (let i = points.length - 2; i >= 0; i--) out[i] = out[i + 1] + dist(points[i], points[i + 1]);
+  return out;
+}
+
+function runsWhere(points: Vec[], keep: (p: Vec) => boolean): Vec[][] {
   const runs: Vec[][] = [[]];
   for (const p of points) {
-    if (drawn(p)) runs[runs.length - 1].push(p);
+    if (keep(p)) runs[runs.length - 1].push(p);
     else runs.push([]);
   }
   return runs.filter((run) => run.length > 1);
 }
 
+function offDeck(p: Vec): boolean {
+  return deckAt(p.x, p.y) === null;
+}
+
 function drawn(p: Vec): boolean {
-  if (deckAlong(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => dist(site.pos, p) < site.radius);
+  if (!offDeck(p) || bridgeCut(p.x, p.y) > 0) return false;
+  return !SITES.some((site) => siteGap(site, p) < 0);
 }
 
 function evenPoints(road: readonly Vec[]): Vec[] {
@@ -93,7 +148,7 @@ function detailColor(x: number, y: number, cracks: Vec[], holes: Pothole[]): num
   const mottle = 0.94 + 0.08 * loopNoise(x / 16, y / 16, ROAD_DETAIL_SIDE / 16) + 0.04 * loopNoise(x / 8, y / 8, ROAD_DETAIL_SIDE / 8);
   let color = shade(PAL.road, mottle * (0.975 + 0.05 * hash2(x, y)));
   if (loopNoise(x / 32, y / 32, ROAD_DETAIL_SIDE / 32) > 0.64) color = mix(color, PAL.sand[3], 0.15);
-  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, 0.55);
+  if (cracked(x, y, cracks)) color = mix(color, PAL.roadCrack, CRACK_MIX);
   color = potholeColor(x, y, holes) ?? color;
   return stoneColor(x, y) ?? color;
 }

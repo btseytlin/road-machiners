@@ -19,6 +19,11 @@ import { mountPart } from "../sim/inventory";
 import { emptyWorld } from "../sim/testkit";
 import type { World } from "../sim/types";
 import { sitePads } from "../sim/sites";
+import { TRAITS } from "./npcs";
+import { START_KITS } from "./start";
+import { getUpkeepReserve } from "../sim/npc-decisions";
+import { newWorld } from "../sim/world";
+import { TEST_MAP } from "../test/map";
 
 let world: World;
 beforeAll(() => {
@@ -47,8 +52,8 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
-const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
-const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
+const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader", "niva", "bukhanka", "lincoln"];
+const rearEngineChassis = ["jeep", "convertible", "bus", "loader", "bukhanka"];
 
 describe("equipment variety", () => {
   it("gives every weapon a magazine and a reload time", () => {
@@ -126,8 +131,8 @@ describe("equipment variety", () => {
   );
 
   it("adds buyable chassis with valid built-in parts and physics bodies", () => {
-    expect(Object.keys(CHASSIS)).toHaveLength(13);
-    expect(PLAYER_CHASSIS).toHaveLength(13);
+    expect(Object.keys(CHASSIS)).toHaveLength(16);
+    expect(PLAYER_CHASSIS).toHaveLength(16);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);
@@ -303,4 +308,17 @@ describe("chassis drive parts", () => {
       expect(hpOf("wagon", role)).toBeGreaterThan(hpOf("hauler", role));
     }
   });
+});
+
+describe("NPC wallets and trade stakes", () => {
+  it("gives every trait a trade stake", () => {
+    for (const [id, trait] of Object.entries(TRAITS)) expect(trait.tradeStake, id).toBeGreaterThan(0);
+  });
+
+  it("starts every spawned driver with at least its upkeep reserve", () => {
+    for (const seed of [1, 2, 3]) {
+      const w = newWorld(seed, START_KITS.standard, TEST_MAP);
+      for (const v of w.vehicles.filter((x) => x.brain)) expect(v.resources!.money, v.brain!.templateId).toBeGreaterThanOrEqual(getUpkeepReserve(v));
+    }
+  }, 30_000);
 });

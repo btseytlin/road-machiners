@@ -7,9 +7,9 @@ import { carriedWorld, newWorld, type Carried, type CarriedItem } from './world'
 import { playerVehicle } from './damage';
 import { getLayoutError } from './inventory';
 import { discoverSite } from './locations';
-import { levelOf, perkPair } from './progress';
+import { perkPair } from './progress';
 import { townAt } from './sites';
-import { PERKS } from '../data/skills';
+import { MAX_RANK, PERKS } from '../data/skills';
 import { CONDITION } from '../data/wear';
 
 
@@ -30,7 +30,7 @@ function kitItems(): CarriedItem[] {
 
 function carriedOf(over: Partial<Carried> = {}): Carried {
   return {
-    seed: 99, money: 777, skills: { driving: 700, social: 250 }, xpBySource: { ram: 12 }, perks: [], discovered: [],
+    seed: 99, money: 777, xp: 340, ranks: { driving: 2, social: 1 }, xpBySource: { ram: 12 }, perks: [], discovered: [],
     knockouts: 2, autoFire: true, autoRepair: false, fuel: 5, supplies: 3, costBasis: { scrap: 8 },
     truck: { chassisId: 'scout', name: 'Rusty', items: kitItems() }, storage: [], ...over,
   };
@@ -47,7 +47,8 @@ describe('carriedWorld', () => {
     expect(world.seed).toBe(99);
     expect(world.turn).toBe(1);
     expect(world.player).toMatchObject({ money: 777, knockouts: 2, autoFire: true, autoRepair: false });
-    expect(world.player.skills.driving).toBe(700);
+    expect(world.player.xp).toBe(340);
+    expect(world.player.ranks).toEqual({ driving: 2, perception: 0, machining: 0, toughness: 0, social: 1 });
     expect(world.player.xpBySource.ram).toBe(12);
     expect(truck.name).toBe('Rusty');
     const mg = truck.items.find((it) => it.kind === 'part' && it.part.defId === 'mg');
@@ -90,16 +91,21 @@ describe('carriedWorld', () => {
     expect(other.world.player.money).toBe(777 + other.report.sold.reduce((n, s) => n + s.money, 0));
   });
 
-  it('drops perks above the carried level and a second perk of one pair', () => {
+  it('drops perks above the carried rank and a second perk of one pair', () => {
     const perks = ['rebuild', 'nope'];
-    const { world } = carriedWorld(carriedOf({ skills: { machining: 0 }, perks }), KIT, TEST_MAP, fresh);
+    const { world } = carriedWorld(carriedOf({ ranks: { machining: PERKS.rebuild.level - 1 }, perks }), KIT, TEST_MAP, fresh);
     expect(world.player.perks).toEqual([]);
-    const high = carriedWorld(carriedOf({ skills: { driving: 5000, perception: 5000, machining: 5000, toughness: 5000, social: 5000 }, perks: ['rebuild'] }), KIT, TEST_MAP, fresh);
-    expect(levelOf(high.world.player.skills.machining)).toBeGreaterThan(1);
-    expect(high.world.player.perks).toEqual(['rebuild']);
+    const at = carriedWorld(carriedOf({ ranks: { machining: PERKS.rebuild.level }, perks: ['rebuild'] }), KIT, TEST_MAP, fresh);
+    expect(at.world.player.perks).toEqual(['rebuild']);
     const partner = perkPair(PERKS.rebuild.skill, PERKS.rebuild.level).perks.filter((id) => id !== 'rebuild');
-    const both = carriedWorld(carriedOf({ skills: { machining: 5000 }, perks: ['rebuild', ...partner] }), KIT, TEST_MAP, fresh);
+    const both = carriedWorld(carriedOf({ ranks: { machining: MAX_RANK }, perks: ['rebuild', ...partner] }), KIT, TEST_MAP, fresh);
     expect(both.world.player.perks).toEqual(['rebuild']);
+  });
+
+  it('clamps ranks to whole numbers from 0 to the top rank, and the pool to 0 or more', () => {
+    const { world } = carriedWorld(carriedOf({ xp: -5, ranks: { driving: 99, social: -2, machining: 2.7 } }), KIT, TEST_MAP, fresh);
+    expect(world.player.ranks).toMatchObject({ driving: MAX_RANK, social: 0, machining: 2 });
+    expect(world.player.xp).toBe(0);
   });
 
   it('clamps fuel to the truck capacity', () => {

@@ -1,0 +1,106 @@
+{
+  "turn": 1000,
+  "vehicles": [
+    {
+      "id": "gaveup",
+      "chassisId": "buggy",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pgaveup",
+            "defId": "cab",
+            "hp": 40,
+            "wear": 0
+          }
+        }
+      ],
+      "defeat": {
+        "phase": "out",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ]
+      }
+    },
+    {
+      "id": "knocked",
+      "chassisId": "buggy",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pknocked",
+            "defId": "cab",
+            "hp": 0,
+            "wear": 0
+          }
+        }
+      ],
+      "defeat": {
+        "phase": "out",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ]
+      }
+    },
+    {
+      "id": "retreating",
+      "chassisId": "buggy",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pretreating",
+            "defId": "cab",
+            "hp": 30,
+            "wear": 0
+          }
+        }
+      ],
+      "defeat": {
+        "phase": "retreat",
+        "turns": 3,
+        "unseen": 0,
+        "foes": [
+          "player"
+        ]
+      }
+    },
+    {
+      "id": "free",
+      "chassisId": "buggy",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pfree",
+            "defId": "cab",
+            "hp": 120,
+            "wear": 0
+          }
+        }
+      ]
+    }
+  ],
+  "removed": []
+}

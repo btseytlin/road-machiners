@@ -66,3 +66,17 @@ describe('combat harness', () => {
     expect(() => setNumber('RULES.leadError=abc')).toThrow('path=number');
   });
 });
+
+describe('foe hp left', () => {
+  it('reports a share between 0 and 1 for a won fight', () => {
+    // Fixed outfits keep this fight off NPC gear rolls: the combat kit against a bare hauler with one mg.
+    const r = runFight({ ...FIGHT, kit: 'combat', foe: { gun: 'mg', armor: null }, policy: 'charge', seed: 1, maxTurns: 60 });
+    expect(r.outcome).toBe('won');
+    expect(r.theirHpLeft).toBeGreaterThan(0);
+    expect(r.theirHpLeft).toBeLessThan(1);
+  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+
+  it('is null for a fight that is not won', () => {
+    expect(runFight({ ...FIGHT, maxTurns: 1 }).theirHpLeft).toBeNull();
+  });
+});

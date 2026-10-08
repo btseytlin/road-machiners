@@ -68,6 +68,7 @@ export type FactoryConfig = {
   minFreeGb: number;
   minAvailableGb: number;
   logDays: number;
+  transcriptDays: number;
   testCacheDays: number;
   cpuLight: number;
   cpuImplement: number;

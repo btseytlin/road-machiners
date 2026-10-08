@@ -1,5 +1,5 @@
-// Paid services. Goods and part trade happen at any shop (src/sim/market.ts owns shop state). Supplies,
-// repairs, mounting and chassis need a town. Raider camps service raiders.
+// Paid services. Goods and part trade happen at any shop (src/sim/market.ts owns shop state). Supplies, repairs,
+// mounting and garage storage are offered at any shop. Rebuilds and chassis need a town. Raider camps service raiders.
 // Invalid requests throw: the UI only offers valid ones.
 
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
@@ -19,12 +19,13 @@ import { addState, endState, stateOf } from "./states";
 import { inTowReach } from "./tow";
 import { addCoreParts } from "./factory";
 import { practice, skillEffect, vehicleHasPerk } from "./progress";
-import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
-import { canUseSite, requireTown, townNear } from "./sites";
+import { addStockPart, goodPrice, lotPrice, recordTrade, requireShop, shopAt, shopState, siteOf, takeStockPart } from "./market";
+import { canUseSite, requireTown, townAt, townNear } from "./sites";
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
+import { tankLeaks } from "./supplies";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
@@ -226,12 +227,13 @@ export function serviceAtStall(
   retainedParts: number,
 ): void {
   if (shopDef(shopId).kind !== "stall") throw new Error(`${shopId} is no stall`);
+  if (vehicle.faction === "raiders") throw new Error("Only non-raiders use stall services");
   sellVehicleCargo(world, vehicle, shopId, retainedParts);
-  topUp(world, vehicle, shopDef(shopId).supplies);
+  refuelAndRepair(world, vehicle);
 }
 
 function refuelAndRepair(world: World, vehicle: Vehicle): void {
-  topUp(world, vehicle, ["fuel", "supplies"]);
+  topUp(world, vehicle, ['fuel', 'supplies']);
   const resources = getResources(world, vehicle);
   if (resources.money < 0) return;
   const multiplier =
@@ -247,12 +249,16 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
 }
 
+export function buyFuel(world: World, vehicle: Vehicle): void {
+  topUp(world, vehicle, ['fuel']);
+}
+
 function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
   const resources = getResources(world, vehicle);
   if (resources.money < 0) return;
   for (const kind of kinds) {
     const cap =
-      kind === "fuel"
+      kind === 'fuel'
         ? fuelCap(vehicle)
         : suppliesCap(vehicle);
     const count = Math.max(
@@ -268,14 +274,26 @@ function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
 }
 
 export function scrapPatch(world: World): void {
-  const town = strandedInTown(world);
+  const town = needsPatchInTown(world);
   if (!town) return;
   const me = playerVehicle(world);
   if (canPayFix(world, me, town.id)) return;
-  const fuel = patchFuel(world, me);
-  world.player.fuel += fuel;
-  for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
+  if (isStranded(world, me)) for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
+  const fuel = scrapFuel(world, me);
   world.events.push({ t: 'scrapPatch', fuel });
+}
+
+export function scrapFuelNeed(world: World, v: Vehicle): number {
+  const cap = fuelCap(v);
+  const fuel = getResources(world, v).fuel;
+  return fuel <= cap * RULES.lowFuelThreshold ? Math.max(0, cap * RULES.scrapPatch - fuel) : 0;
+}
+
+export function scrapFuel(world: World, v: Vehicle): number {
+  const fuel = scrapFuelNeed(world, v);
+  if (fuel > 0 && tankLeaks(v)) scrapPatchPart(corePart(v, 'tank'), RULES.scrapPatch);
+  getResources(world, v).fuel += fuel;
+  return fuel;
 }
 
 export function enterTown(world: World): World {
@@ -293,9 +311,10 @@ function criticalParts(v: Vehicle): PartInstance[] {
   return [...driveParts(v), corePart(v, 'cab')];
 }
 
-function strandedInTown(world: World): TownDef | null {
+function needsPatchInTown(world: World): TownDef | null {
   const me = playerVehicle(world);
-  if (world.player.state !== 'active' || !isStranded(world, me) || mountedParts(me, 'engine').length === 0) return null;
+  if (world.player.state !== 'active' || mountedParts(me, 'engine').length === 0) return null;
+  if (!isStranded(world, me) && scrapFuelNeed(world, me) === 0) return null;
   return townNear(world);
 }
 
@@ -303,12 +322,8 @@ function canPayFix(world: World, v: Vehicle, shopId: string): boolean {
   const broken = driveParts(v).filter((p) => !isWorking(p));
   if (broken.some((p) => isJunk(p) && !canRebuild(world, p))) return false;
   const repairs = broken.reduce((sum, p) => sum + partRepairCost(world, p), 0);
-  const cost = repairs + Math.ceil(patchFuel(world, v)) * ECONOMY.supplyPrice.fuel;
+  const cost = repairs + Math.ceil(scrapFuelNeed(world, v)) * ECONOMY.supplyPrice.fuel;
   return world.player.money + saleValue(world, v, shopId) >= cost;
-}
-
-function patchFuel(world: World, v: Vehicle): number {
-  return world.player.fuel > 0 ? 0 : fuelCap(v) * RULES.scrapPatch;
 }
 
 function driveParts(v: Vehicle): PartInstance[] {
@@ -323,8 +338,7 @@ function saleValue(world: World, v: Vehicle, shopId: string): number {
     .reduce((sum, [good, count]) => sum + getLotTradePrice(world, v, shopId, good, count, 'sell'), 0);
   const engine = mountedParts(v, 'engine')[0];
   const mounted = mountedParts(v).filter((p) => p !== engine && partDef(p.defId).kind !== 'core');
-  const storage = shop.kind === 'garage' ? world.player.storage : [];
-  const parts = [...mounted, ...spareParts(v), ...storage];
+  const parts = [...mounted, ...spareParts(v), ...world.player.storage];
   return goods + parts.reduce((sum, p) => sum + partTradePrice(world, v, p, 'sell'), 0);
 }
 
@@ -341,12 +355,6 @@ export function buyPrice(world: World, shopId: string, good: string): number {
 
 export function sellPrice(world: World, shopId: string, good: string): number {
   return getTradePrice(world, playerVehicle(world), shopId, good, "sell");
-}
-
-export function requireShop(world: World): string {
-  const shopId = shopAt(world);
-  if (!shopId) throw new Error("Not parked at a shop");
-  return shopId;
 }
 
 function repairMult(world: World): number {
@@ -377,7 +385,7 @@ export function sellGood(world: World, good: string, n: number): World {
 export function supplyRoom(world: World, kind: Supply): number {
   const p = world.player;
   const cap =
-    kind === "fuel"
+    kind === 'fuel'
       ? fuelCap(playerVehicle(world))
       : suppliesCap(playerVehicle(world));
   return Math.max(0, Math.floor(cap - p[kind]));
@@ -409,7 +417,7 @@ export function partRepairCost(world: World, part: PartInstance): number {
 
 export function repairPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
     pay(w, partRepairCost(w, part), "repairs");
@@ -418,7 +426,7 @@ export function repairPart(world: World, partId: string): World {
 }
 
 export function canRebuild(world: World, part: PartInstance): boolean {
-  return isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
+  return townAt(world) !== null && isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
 }
 
 function garageRepair(part: PartInstance): void {
@@ -428,7 +436,7 @@ function garageRepair(part: PartInstance): void {
 
 function repairParts(world: World, pick: (w: World, v: Vehicle) => PartInstance[]): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const parts = pick(w, playerVehicle(w));
     pay(w, costOf(w, parts), "repairs");
     for (const p of parts) garageRepair(p);
@@ -441,6 +449,10 @@ export function repairAll(world: World): World {
 
 export function repairBasics(world: World): World {
   return repairParts(world, basicParts);
+}
+
+export function repairDrive(world: World): World {
+  return repairParts(world, brokenDriveParts);
 }
 
 export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
@@ -471,22 +483,20 @@ export function buyStockPart(world: World, partId: string): World {
     const shopId = requireShop(w);
     const part = takeStockPart(shopState(w, shopId), partId);
     pay(w, partTradePrice(w, playerVehicle(w), part, "buy"), partDef(part.defId).name);
-    if (stowPart(w, playerVehicle(w), part)) return;
-    if (shopDef(shopId).kind !== "garage") throw new Error("No room in the truck for this part");
-    w.player.storage.push(part);
+    if (!stowPart(w, playerVehicle(w), part)) w.player.storage.push(part);
   });
 }
 
 export function sellPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
     const shopId = requireShop(w);
-    const part = takeSellablePart(w, shopId, partId);
+    const part = takeSellablePart(w, partId);
     w.player.money += partTradePrice(w, playerVehicle(w), part, "sell");
     addStockPart(shopState(w, shopId), part);
   });
 }
 
-function takeSellablePart(world: World, shopId: string, partId: string): PartInstance {
+function takeSellablePart(world: World, partId: string): PartInstance {
   const me = playerVehicle(world);
   const spare = spareParts(me).find((p) => p.id === partId);
   if (spare) {
@@ -494,7 +504,7 @@ function takeSellablePart(world: World, shopId: string, partId: string): PartIns
     return spare;
   }
   const i = world.player.storage.findIndex((p) => p.id === partId);
-  if (i < 0 || shopDef(shopId).kind !== "garage") throw new Error(`No sellable part ${partId} here`);
+  if (i < 0) throw new Error(`No sellable part ${partId} here`);
   return world.player.storage.splice(i, 1)[0];
 }
 
@@ -538,6 +548,14 @@ function garageParts(world: World, v: Vehicle): PartInstance[] {
 
 function basicParts(world: World, v: Vehicle): PartInstance[] {
   return garageParts(world, v).filter((p) => partDef(p.defId).kind === "core");
+}
+
+function brokenDriveParts(world: World, v: Vehicle): PartInstance[] {
+  return driveParts(v).filter((p) => !isWorking(p) && (!isJunk(p) || canRebuild(world, p)));
+}
+
+export function driveRepairCost(world: World): number {
+  return costOf(world, brokenDriveParts(world, playerVehicle(world)));
 }
 
 function payChassisCost(world: World, chassisId: string): void {
@@ -655,7 +673,7 @@ export function truckSupplyPrice(world: World, kind: Supply): number {
 }
 
 export function truckSupplyForSale(npc: Vehicle, kind: Supply): number {
-  const cap = kind === "fuel" ? fuelCap(npc) : suppliesCap(npc);
+  const cap = kind === 'fuel' ? fuelCap(npc) : suppliesCap(npc);
   const held = npc.resources![kind];
   return Math.max(0, Math.floor(held - cap * NPC_UPKEEP.tradeReserve));
 }

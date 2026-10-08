@@ -99,9 +99,13 @@ function jobChip(job: JobMark): HTMLElement {
   );
 }
 
+function weaponsRow(weapons: WeaponMark[]): HTMLElement | null {
+  return weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...weapons.map(weaponChip)) : null;
+}
+
 function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
-    mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
+    weaponsRow(mark.weapons),
     mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
     mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? 'Gave up' : 'Knocked out') : null,
     mark.job ? jobChip(mark.job) : null,

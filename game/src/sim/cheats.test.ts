@@ -6,24 +6,25 @@ import { generateNpcLoadout } from './npc-loadout';
 import type { WeaponDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
+import { WEATHER } from '../data/weather';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
-  addSkillXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
-import { XP_TO_REACH } from '../data/skills';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
-import { canUseSite } from './sites';
+import { stormStrength } from './weather';
+import { canUseSite, siteGap } from './sites';
 import { endTurn, hostileToPlayer, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
@@ -42,7 +43,7 @@ describe('resource cheats', () => {
     const w = emptyWorld();
     expect(() => setMoney(w, -1)).toThrow(CheatError);
     expect(() => setMoney(w, 1.5)).toThrow(CheatError);
-    expect(() => addSkillXp(w, 'driving', Number.NaN)).toThrow(CheatError);
+    expect(() => addXp(w, Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
   });
@@ -70,15 +71,14 @@ describe('resource cheats', () => {
     expect(next).not.toBe(w);
   });
 
-  it('adds skill xp through levels', () => {
-    const w = addSkillXp(emptyWorld(), 'social', 10_000);
-    expect(w.player.skills.social).toBe(10_000);
-    expect(w.events.some((e) => e.t === 'skillUp' && e.skill === 'social')).toBe(true);
-    expect(() => addSkillXp(emptyWorld(), 'social', 0)).toThrow(CheatError);
-    expect(() => addSkillXp(emptyWorld(), 'trade', 10)).toThrow(CheatError);
+  it('adds xp to the pool without buying ranks', () => {
+    const w = addXp(emptyWorld(), 10_000);
+    expect(w.player.xp).toBe(10_000);
+    expect(w.player.ranks.social).toBe(0);
+    expect(() => addXp(emptyWorld(), 0)).toThrow(CheatError);
   });
 
-  it('grants a perk below its skill level', () => {
+  it('grants a perk below its skill rank', () => {
     const w = grantPerk(emptyWorld(), 'bountyTalk');
     expect(w.player.perks).toEqual(['bountyTalk']);
   });
@@ -102,6 +102,14 @@ describe('part cheats', () => {
   it('damages the first mounted part with a def', () => {
     const w = damagePartTo(emptyWorld(), 'mg', 3);
     expect(mountedParts(playerVehicle(w)).find((p) => p.defId === 'mg')!.hp).toBe(3);
+  });
+
+  it('spills the cargo off a cargo part it breaks', () => {
+    const w = damagePartTo(emptyWorld(), 'panniers', 0);
+    const me = playerVehicle(w);
+    const g = gridOf(me);
+    expect(me.items.filter((it) => it.y >= g.deadFrom)).toEqual([]);
+    expect(w.events.filter((e) => e.t === 'cargoSpilled')).toHaveLength(1);
   });
 
   it('rejects an unmounted def and hit points out of range', () => {
@@ -245,11 +253,17 @@ describe('teleport', () => {
 describe('places and time', () => {
   it('teleports to a spot where every town and location can be used', () => {
     const w = newWorld(1, START_KITS.standard, TEST_MAP);
-    for (const place of [...REGION.towns, ...REGION.locations]) {
+    for (const place of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const next = teleport(w, placeSpot(w, place.id));
       expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);
     }
     expect(() => placeSpot(w, 'atlantis')).toThrow(new RegExp(REGION.towns[0].id));
+  });
+
+  it('sends a teleport to a territory to where its road ends', () => {
+    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    expect(Math.abs(siteGap(sun, placeSpot(w, sun.id)))).toBeLessThan(1e-6);
   });
 
   it('skips to the first later turn at the hour', () => {
@@ -263,15 +277,34 @@ describe('places and time', () => {
   });
 
   it('starts one storm at the truck', () => {
-    const w = startWeather(startWeather(emptyWorld(), 'storm'), 'storm');
+    const w = startWeather(startWeather(emptyWorld(), 'storm', null, 0), 'storm', null, 0);
     const storms = w.weather.filter((e) => e.kind === 'storm');
     expect(storms).toHaveLength(1);
     expect(storms[0]).toMatchObject({ pos: playerVehicle(w).pos });
-    expect(() => startWeather(w, 'snow')).toThrow(CheatError);
+    expect(() => startWeather(w, 'snow', null, 0)).toThrow(CheatError);
   });
 
   it('starts regional weather', () => {
-    expect(startWeather(emptyWorld(), 'heatwave').weather.map((e) => e.kind)).toContain('heatwave');
+    expect(startWeather(emptyWorld(), 'heatwave', null, 0).weather.map((e) => e.kind)).toContain('heatwave');
+  });
+
+  it('starts a storm for a set number of turns, born this turn', () => {
+    const w = startWeather(emptyWorld(), 'storm', 70, 0);
+    expect(w.weather.find((e) => e.kind === 'storm')).toMatchObject({ turnsLeft: 70, born: w.turn });
+    expect(() => startWeather(w, 'storm', 0, 0)).toThrow(CheatError);
+    expect(() => startWeather(w, 'storm', 2.5, 0)).toThrow(CheatError);
+  });
+
+  it('starts a still storm at full strength the given tiles east of the truck', () => {
+    const w = emptyWorld({ x: 100, y: 100 });
+    w.turn = 50;
+    const next = startWeather(w, 'storm', 400, 80);
+    const storm = next.weather.find((e) => e.kind === 'storm')!;
+    expect(storm).toMatchObject({ pos: { x: 180, y: 100 }, vel: { x: 0, y: 0 }, turnsLeft: 400, born: 50 - WEATHER.sim.stormFadeTurns });
+    if (storm.kind === 'storm') expect(stormStrength(next, storm)).toBe(1);
+    const far = startWeather(w, 'storm', 400, 10 * w.size);
+    expect(far.weather.find((e) => e.kind === 'storm')).toMatchObject({ pos: { x: w.size, y: 100 } });
+    expect(() => startWeather(w, 'storm', 400, -1)).toThrow(CheatError);
   });
 
   it('reveals the whole map', () => {
@@ -337,7 +370,8 @@ describe('vehicle cheats', () => {
     expect(next.vehicles.some((v) => v.id === id)).toBe(false);
     expect(next.obstacles.some((o) => o.id === `wreck-${id}`)).toBe(true);
     expect(next.player.money).toBe(w.player.money);
-    expect(next.player.skills).toEqual(w.player.skills);
+    expect(next.player.xp).toBe(w.player.xp);
+    expect(next.player.ranks).toEqual(w.player.ranks);
   });
 
   it('kills hostiles or all other vehicles', () => {
@@ -373,7 +407,7 @@ describe('vehicle cheats', () => {
     hunter.brain = npcBrain('scavenger', hunter.pos, ['scavenger']);
     const prey = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 45, y: 30 });
     addState(w, 'feud', hunter.id, prey.id, { kind: 'feud', robbery: false });
-    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test' });
+    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
     const next = killVehicles(w, prey.id);
     expect(next.states).toEqual([]);
     const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;
@@ -393,16 +427,16 @@ describe('vehicle cheats', () => {
 });
 
 describe('cheats and toughness', () => {
-  it('lets health reach the raised max health at toughness level 5', () => {
+  it('lets health reach the raised max health at toughness rank 5', () => {
     const w = emptyWorld();
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     expect(setHealth(w, maxHealthOf(w)).player.health).toBe(maxHealthOf(w));
     expect(() => setHealth(w, maxHealthOf(w) + 1)).toThrow(new RegExp(`${maxHealthOf(w)}`));
   });
 
   it('god mode fills health to the raised max health', () => {
     const w = toggleGod(emptyWorld());
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     w.player.health = 1;
     applyGodMode(w);
     expect(w.player.health).toBe(maxHealthOf(w));

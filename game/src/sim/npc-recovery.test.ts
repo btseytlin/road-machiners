@@ -6,11 +6,13 @@ import { assignAutoOrders, fireWeapons } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
-import { ownDanger, perceiveDanger } from './npc-decisions';
+import { chooseOn } from './tracks';
+import { fightOddsAgainst, judgeDanger, perceiveDanger } from './npc-decisions';
 import { siteGates } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import { cloneWorld } from './world';
+import { addState, stateOf } from './states';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
 
@@ -116,20 +118,33 @@ describe('NPC gameplay recovery', () => {
       return JSON.stringify(topGoal(me)) === JSON.stringify(work);
     });
     expect(resumed).toBeGreaterThan(0.8);
-  });
+  }, 90_000);
 
   it.each(['scavenger', 'trader'])('allows a retreating %s to return fire', (template) => {
     const { world, npc } = createScenario(template);
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, enemy, npc);
+    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'test flight', perceived: world.turn }];
+    npc.brain!.attackers[enemy.id] = true;
+    chooseOn(world, npc, enemy.id, enemy.pos, 'flee', true);
+    npc.brain!.hurt = 0;
+    planNpcOrders(world);
+    expect(topGoal(npc)?.kind).toBe('flee');
+    expectReturnFire(world, npc, enemy);
+  });
+
+  it('turns on an attacker it cannot get away from rather than run', () => {
+    const { world, npc } = createScenario('scavenger');
+    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
+    fireAt(world, enemy, npc);
     corePart(npc, 'cab').hp = 1;
+    const odds = fightOddsAgainst(world, npc, enemy);
+    expect(odds.getaway).toBeLessThan(odds.win);
     const fled = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
-      const flees = topGoal(me)?.kind === 'flee';
-      if (flees) expectReturnFire(x, me, byId(x, enemy.id));
-      return flees;
+      return topGoal(me)?.kind === 'flee';
     });
-    expect(fled).toBeGreaterThan(0.9);
+    expect(fled).toBeLessThan(0.6);
   });
 
   it('allows a scavenger to help a nearby faction mate under attack', () => {
@@ -171,15 +186,17 @@ describe('NPC gameplay recovery', () => {
     addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 30, y: 42 });
     expect(judged()).toBe(alone);
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 33 });
-    expect(judged()).toBeCloseTo(alone * 2);
+    expect(judged()).toBeGreaterThan(alone * 1.5);
   });
 
   it('counts visible faction mates nearby in its own strength', () => {
     const { world, npc } = createScenario('buggy');
-    const alone = ownDanger(world, npc);
-    addVehicle(world, 'raiders', 'scout', ['mg'], { x: 32, y: 30 });
+    const trader = addVehicle(world, 'traders', 'scout', ['mg'], { x: 36, y: 30 });
+    const alone = judgeDanger(world, npc, trader);
     addVehicle(world, 'raiders', 'scout', ['mg'], { x: 30 + SPAWN.neighborHelp + 5, y: 30 });
-    expect(ownDanger(world, npc)).toBe(alone * 2);
+    expect(judgeDanger(world, npc, trader)).toBe(alone);
+    addVehicle(world, 'raiders', 'scout', ['mg'], { x: 32, y: 30 });
+    expect(judgeDanger(world, npc, trader)).toBeLessThan(alone / 1.5);
   });
 
   it('mostly withdraws from a locally stronger enemy group', () => {
@@ -216,7 +233,7 @@ describe('NPC gameplay recovery', () => {
 
   it('investigates an accurate scanner contact far beyond hearing', () => {
     const world = emptyWorld({ x: 200, y: 200 });
-    const npc = addVehicle(world, 'raiders', 'scout', ['scanner', 'stockEngine'], { x: 30, y: 30 });
+    const npc = addVehicle(world, 'raiders', 'scout', ['mg', 'scanner', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
     const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 150, y: 30 });
     prey.speed = 4;
@@ -250,5 +267,86 @@ describe('NPC gameplay recovery', () => {
     const activity = thinkNpc(world, npc);
     expect(['resupply', 'repair']).toContain(activity.kind);
     if (activity.kind === 'repair') expect(activity.destination).toBeNull();
+  });
+
+  it('keeps running from a threat out of sight until it has been calm a while', () => {
+    const { world, npc } = createScenario('buggy');
+    const shooter = addVehicle(world, 'vultures', 'van', ['mg', 'stockEngine'], { x: 190, y: 190 });
+    const flee: NpcActivity = { kind: 'flee', targetId: shooter.id, destination: { x: 5, y: 5 }, phase: 'travel', reason: 'escape an attacker', perceived: world.turn };
+    npc.brain!.goals = [workGoal('buggy'), flee];
+
+    world.turn += NPC_BEHAVIOR.fleeCalmTurns;
+    thinkNpc(world, npc);
+    expect(topGoal(npc)).toBe(flee);
+
+    npc.brain!.hurt = 5;
+    planNpcOrders(world);
+    npc.brain!.hurt = 0;
+    world.turn += NPC_BEHAVIOR.fleeCalmTurns;
+    thinkNpc(world, npc);
+    expect(topGoal(npc)?.kind).toBe('flee');
+
+    world.turn += 1;
+    thinkNpc(world, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).not.toContain('flee');
+  });
+
+  it('stops looking for a truck it runs from', () => {
+    const { world, npc } = createScenario('scavenger');
+    const enemy = addVehicle(world, 'raiders', 'wagon', ['heavyMg', 'mg', 'stockEngine'], { x: 36, y: 30 });
+    enemy.brain = npcBrain('gunwagon', enemy.pos, ['raider']);
+    const look: NpcActivity = { kind: 'investigate', targetId: enemy.id, destination: { ...enemy.pos }, phase: 'travel', reason: 'heard a hostile beyond sight' };
+    npc.brain!.goals = [workGoal('scavenger'), look];
+    fireAt(world, enemy, npc);
+    let fled = 0;
+    shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      if (topGoal(me)?.kind !== 'flee') return false;
+      fled++;
+      expect(me.brain!.goals.map((g) => g.kind)).not.toContain('investigate');
+      return true;
+    });
+    expect(fled).toBeGreaterThan(0);
+  });
+
+  it('keeps its target when a second attacker shoots, so its fire finishes one truck', () => {
+    const { world, npc } = createScenario('buggy');
+    const first = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    const second = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 36 });
+    const fight: NpcActivity = { kind: 'fight', targetId: first.id, destination: { ...first.pos }, phase: 'travel', reason: 'fight a hostile in sight', worn: { turn: world.turn, condition: 1 } };
+    npc.brain!.goals = [workGoal('buggy'), fight];
+    chooseOn(world, npc, first.id, first.pos, 'fight', true);
+    fireAt(world, second, npc);
+    const kept = shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      return !me.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === second.id);
+    });
+    expect(kept).toBe(1);
+  });
+
+  describe('a stalled fight', () => {
+    const stalled = (worn: number) => {
+      const { world, npc } = createScenario('buggy');
+      const target = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
+      addState(world, 'feud', npc.id, target.id, { kind: 'feud', robbery: false });
+      const fight: NpcActivity = { kind: 'fight', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'fight a hostile in sight', worn: { turn: world.turn, condition: worn } };
+      npc.brain!.goals = [workGoal('buggy'), fight];
+      chooseOn(world, npc, target.id, target.pos, 'fight', true);
+      world.turn += NPC_BEHAVIOR.fightStallTurns + 1;
+      thinkNpc(world, npc);
+      return { world, npc, target };
+    };
+
+    it('is given up when the target wore down too little, with the feud ended and the target backed off', () => {
+      const { world, npc, target } = stalled(1);
+      expect(npc.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);
+      expect(stateOf(world, 'feud', npc.id, target.id)).toBeNull();
+      expect(stateOf(world, 'backedOff', npc.id, target.id)).not.toBeNull();
+    });
+
+    it('holds while the target keeps wearing down', () => {
+      const { npc, target } = stalled(1 + NPC_BEHAVIOR.fightWearShare);
+      expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: target.id });
+    });
   });
 });

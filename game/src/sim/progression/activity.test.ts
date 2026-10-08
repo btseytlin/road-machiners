@@ -7,13 +7,13 @@ const SHORT_RUN = 12;
 const RUN_TIMEOUT = 120_000;
 
 const run = (start = startWorld(1337), turns = SHORT_RUN, every = 5): ActivityLine[] =>
-  [...activityFrom(start, { seed: 1337, archetype: 'mixed', turns, every, sha: 'abc1234' })];
+  [...activityFrom(start, { seed: 1337, archetype: 'markov', turns, every, sha: 'abc1234' })];
 
 describe('activityFrom', () => {
   it('logs the run header, events in turn order, snapshots, the end and a summary', () => {
     const lines = run();
 
-    expect(lines[0]).toMatchObject({ k: 'run', seed: 1337, archetype: 'mixed', turns: SHORT_RUN, every: 5, sha: 'abc1234' });
+    expect(lines[0]).toMatchObject({ k: 'run', seed: 1337, archetype: 'markov', turns: SHORT_RUN, every: 5, sha: 'abc1234' });
     expect((lines[0] as { limits: string[] }).limits.join(' ')).toMatch(/far mode/);
     const turns = lines.filter((line) => line.k === 'event').map((line) => line.turn);
     expect(turns.length).toBeGreaterThan(0);

@@ -4,7 +4,10 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { el, panel, topLeft, topRight } from "./dom";
+import type { SpeedRow } from "./hud-readout";
+import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { LogPanel } from "./log";
+import { ERROR_REPORT_URL } from "../config";
 import {
   contractDue,
   contractSummary,
@@ -25,12 +28,31 @@ import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
-import { pendingPerkPairs } from "../sim/progress";
+import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
+import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
-export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: number };
+export type ContextTarget =
+  | { kind: 'aid' }
+  | { kind: 'trade' }
+  | { kind: 'shop' }
+  | { kind: 'downed'; id: string }
+  | { kind: 'oasis' }
+  | { kind: 'stock'; id: string }
+  | { kind: 'empty' };
+export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
+
+export function contextKey(target: ContextTarget): string {
+  return 'id' in target ? `${target.kind}:${target.id}` : target.kind;
+}
+
+function actionTitle(action: ContextAction): string {
+  if (action.hint) return action.hint;
+  if (action.combat !== undefined) return combatBlocked(action.combat);
+  return action.ready ? "" : "Stop to use";
+}
 
 export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
 
@@ -40,6 +62,8 @@ type HudActions = {
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
+  toggleHeadlights: () => void;
+  headlightsOn: () => boolean;
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -51,31 +75,47 @@ type HudActions = {
 };
 export type CameraMode = "centered" | "auto";
 
-const LOG_LINES = 14;
 const TOAST_MS = 3500;
 
-const WEATHER_NAMES: Record<World["weather"][number]["kind"], string> = {
-  storm: "Storm",
-  heatwave: "Heat wave",
-  overcast: "Overcast",
-};
+export class MaxSpeedView {
+  private readonly text = el('span', { class: 'speed-max-text' });
+  private readonly rows = el('div', { class: 'speed-rows' });
+  private readonly notes = el('div', { class: 'speed-notes' });
+  readonly root = el(
+    'span',
+    { class: 'speed-max', tabindex: 0, 'aria-describedby': 'speed-breakdown' },
+    this.text,
+    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.rows, this.notes),
+  );
 
-function weatherLabel(w: World): string {
-  if (w.weather.length === 0) return "Clear";
-  return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
-}
+  private shown = '';
 
-function turnStamped(turn: number, line: LogLine): LogLine {
-  const stamp = `T${turn} `;
-  return { ...line, text: stamp + line.text, spans: line.spans && [{ text: stamp, cls: "" }, ...line.spans] };
+  render(maxSpeed: string, rows: SpeedRow[], notes: string[]): void {
+    this.text.textContent = `max ${maxSpeed}`;
+    const key = JSON.stringify([rows, notes]);
+    if (key === this.shown) return;
+    this.shown = key;
+    this.rows.replaceChildren(
+      ...rows.map((row) =>
+        el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, String(row.kph))),
+      ),
+    );
+    this.notes.replaceChildren(...notes.map((note) => el('p', {}, note)));
+  }
 }
 
 export class Hud {
-  private top = panel("instruments");
+  private top = panel("instruments", bottomLeft());
+  private clockSlot = el("div", { class: "instrument-clock", role: "timer", title: "Day and time" });
+  private dialSlot = el("div", { class: "speed-dial-slot" });
+  private maxSpeed = new MaxSpeedView();
+  private speedSlot = el("div", { class: "speedometer" }, this.dialSlot, this.maxSpeed.root);
+  private readoutSlot = el("div", { class: "readouts" });
+  private actionSlot = el("div", { class: "instrument-actions" });
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
-  private contracts = panel("contracts");
-  private log = panel("log");
+  private contracts = panel("contracts", rightDock());
+  private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
   private help = panel("help", topLeft());
@@ -84,20 +124,30 @@ export class Hud {
   private toastBox = panel("toast");
   private rescue = panel("rescue");
   private stranded = panel("stranded", this.condition.root);
-  private recenter = panel("recenter");
+  private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
-  private lines: LogLine[] = [];
 
   private readonly dialogue: DialoguePanel;
 
-  constructor(private actions: HudActions) {
+  private keepRadioClear = (): void => {
+    const shown = this.info.style.display !== "none";
+    const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
+    this.radio.root.classList.toggle("away", away);
+  };
+
+  constructor(private actions: HudActions, private radio: RadioPanel) {
+    bottomLeft().append(this.condition.root);
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
+    const observer = new ResizeObserver(this.keepRadioClear);
+    observer.observe(this.info);
+    observer.observe(rightDock());
+    window.addEventListener("resize", this.keepRadioClear);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.stranded.style.display = "none";
@@ -105,12 +155,8 @@ export class Hud {
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyV" && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
+      if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    this.log.replaceChildren(
-      el("h3", {}, "Log"),
-    );
-    this.log.setAttribute("aria-label", "Event log");
     const guide = el(
       "details",
       {},
@@ -155,6 +201,7 @@ export class Hud {
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
     );
+    if (ERROR_REPORT_URL) guide.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
   }
 
   private toggleCameraMode(): void {
@@ -195,14 +242,17 @@ export class Hud {
 
   renderAction(
     action: ContextAction | null,
+    count: number,
+    index: number,
     world: World,
     onUse: () => void,
+    onCycle: (step: 1 | -1) => void,
   ): void {
     const me = playerVehicle(world);
     const shown = shownWork(action, workOf(world, me));
     this.action.style.display = action || shown ? "" : "none";
     if (shown) this.renderWork(shown, workLabel(world, me, shown));
-    else if (action) this.renderActionButton(action, onUse);
+    else if (action) this.renderActionButton(action, count, index, onUse, onCycle);
   }
 
   private renderWork(work: Work, label: string): void {
@@ -228,18 +278,23 @@ export class Hud {
     );
   }
 
-  private renderActionButton(action: ContextAction, onUse: () => void): void {
+  private renderActionButton(action: ContextAction, count: number, index: number, onUse: () => void, onCycle: (step: 1 | -1) => void): void {
+    const use = el(
+      "button",
+      {
+        onclick: onUse,
+        disabled: !action.ready,
+        class: action.combat !== undefined ? "combat" : "",
+        title: actionTitle(action),
+      },
+      action.hint ? action.label : `[E] ${action.label}`,
+    );
+    const cycle = (step: 1 | -1, glyph: string, key: string) =>
+      el("button", { class: "cycle", title: `[${key}]`, onclick: () => onCycle(step) }, glyph);
     this.action.replaceChildren(
-      el(
-        "button",
-        {
-          onclick: onUse,
-          disabled: !action.ready,
-          class: action.combat !== undefined ? "combat" : "",
-          title: action.hint ?? (action.combat !== undefined ? combatBlocked(action.combat) : action.ready ? "" : "Stop to use"),
-        },
-        action.hint ? action.label : `[E] ${action.label}`,
-      ),
+      ...(count > 1
+        ? [cycle(-1, "‹", "←"), use, el("span", { class: "count" }, `${index + 1}/${count}`), cycle(1, "›", "→")]
+        : [use]),
     );
   }
 
@@ -306,6 +361,14 @@ export class Hud {
   }
 
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const headlights = createSwitch({
+      on: "Lights on",
+      off: "Lights off",
+      checked: this.actions.headlightsOn(),
+      key: "L",
+      title: "Headlights [L]",
+      onclick: () => this.actions.toggleHeadlights(),
+    });
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
@@ -318,26 +381,28 @@ export class Hud {
     const douse = el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy || !canDouse(w),
         onclick: () => this.actions.douseEngine(),
         title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
       },
       "Cool engine [G]",
     );
-    return [overdrive, douse];
+    return [headlights, overdrive, douse];
   }
 
   private characterButton(w: World, busy: boolean): HTMLElement {
-    const perkOpen = pendingPerkPairs(w).length > 0;
+    const marked = pendingPerkPairs(w).length > 0 || affordableRanks(w).length > 0;
     return el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
-        title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
+        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
       },
       createIcon("driver"),
-      perkOpen ? "! [C]" : "[C]",
+      marked ? "! [C]" : "[C]",
     );
   }
 
@@ -347,95 +412,100 @@ export class Hud {
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
     this.tips.update(w, this.actions.autoTravel());
-    this.top.replaceChildren(
-      this.condition.root,
-      el(
-        "button",
-        {
-          class: "truck-instrument",
-          title: "Truck inventory [I]",
-          "aria-label": "Open truck inventory",
-          disabled: busy,
-          onclick: () => this.actions.openInventory(),
-        },
-        createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
-        el("span", { class: "speed-value" }, readout.speed),
-        el("span", { class: "speed-unit" }, `km/h, max ${readout.maxSpeed}`),
-        createIcon("truck"),
-      ),
-      el(
-        "div",
-        { class: "readouts" },
-        ...readout.resources.map((resource) =>
-          el(
-            "span",
-            {
-              class: `resource ${resource.warning ? "bad" : ""}`,
-              title: resource.label,
-              "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
-              "data-resource": resource.label,
-            },
-            el("small", {}, resource.label),
-            el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
-          ),
-        ),
-        ...readout.survival.map((entry) =>
-          el(
-            "span",
-            {
-              class: `resource ${entry.warning ? "bad" : ""}`,
-              title: entry.label,
-              "data-resource": entry.label,
-            },
-            el("small", {}, entry.label),
-            el("strong", {}, entry.value),
-            "progress" in entry && entry.progress !== undefined
-              ? el(
-                  "span",
-                  {
-                    class: "job-bar",
-                    role: "progressbar",
-                    "aria-valuenow": String(Math.round(entry.progress * 100)),
-                  },
-                  el("span", { style: `width:${Math.round(entry.progress * 100)}%` }),
-                )
-              : null,
-          ),
+    if (!this.top.firstChild) this.top.append(this.clockSlot, this.speedSlot, this.readoutSlot, this.actionSlot);
+    this.renderClock(readout.clock);
+    this.renderSpeedometer(readout, busy);
+    this.renderReadouts(readout);
+    this.renderActions(w, readout.manual, busy);
+  }
+
+  private renderClock(clock: string): void {
+    const timeStart = clock.lastIndexOf(" ");
+    this.clockSlot.setAttribute("aria-label", `Time: ${clock}`);
+    this.clockSlot.replaceChildren(el("span", { class: "clock-day" }, clock.slice(0, timeStart)), el("span", { class: "clock-time" }, clock.slice(timeStart + 1)));
+  }
+
+  private renderSpeedometer(readout: ReturnType<typeof getHudReadout>, busy: boolean): void {
+    const dial = el(
+      "button",
+      {
+        class: "truck-instrument",
+        title: "Truck inventory [I]",
+        "aria-label": "Open truck inventory",
+        disabled: busy,
+        onclick: () => this.actions.openInventory(),
+      },
+      createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
+      el("span", { class: "speed-value" }, readout.speed),
+      createIcon("truck"),
+    );
+    this.dialSlot.replaceChildren(dial);
+    this.maxSpeed.render(readout.maxSpeed, readout.maxSpeedRows, readout.maxSpeedNotes);
+  }
+
+  private renderReadouts(readout: ReturnType<typeof getHudReadout>): void {
+    this.readoutSlot.replaceChildren(
+      ...readout.resources.map((resource) =>
+        el(
+          "span",
+          {
+            class: `resource ${resource.warning ? "bad" : ""}`,
+            title: resource.label,
+            "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
+            "data-resource": resource.label,
+          },
+          el("small", {}, resource.label),
+          el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
         ),
       ),
-      el(
-        "div",
-        { class: "instrument-actions" },
-        createSwitch({
-          on: "Manual",
-          off: "Route",
-          checked: readout.manual,
-          key: "R",
-          disabled: busy,
-          title: "Manual driving: straight at the point, or follow the roads [R]",
-          onclick: () => this.actions.toggleManual(),
-        }),
-        createSwitch({
-          on: "Auto patch",
-          off: "No patch",
-          checked: w.player.autoRepair,
-          key: "P",
-          disabled: busy,
-          title: "Patch damaged parts while parked [P]",
-          onclick: () => this.actions.toggleAutoRepair(),
-        }),
-        ...this.engineButtons(w, busy),
-        this.characterButton(w, busy),
-        ...(readout.broken
-          ? [
-              el(
+      ...readout.survival.map((entry) =>
+        el(
+          "span",
+          {
+            class: `resource ${entry.warning ? "bad" : ""}`,
+            title: entry.label,
+            "data-resource": entry.label,
+          },
+          el("small", {}, entry.label),
+          el("strong", {}, entry.value),
+          "progress" in entry && entry.progress !== undefined
+            ? el(
                 "span",
-                { class: "bad", role: "status" },
-                `! ${readout.broken} broken`,
-              ),
-            ]
-          : []),
+                {
+                  class: "job-bar",
+                  role: "progressbar",
+                  "aria-valuenow": String(Math.round(entry.progress * 100)),
+                },
+                el("span", { style: `width:${Math.round(entry.progress * 100)}%` }),
+              )
+            : null,
+        ),
       ),
+    );
+  }
+
+  private renderActions(w: World, manual: boolean, busy: boolean): void {
+    this.actionSlot.replaceChildren(
+      createSwitch({
+        on: "Manual",
+        off: "Route",
+        checked: manual,
+        key: "R",
+        disabled: busy,
+        title: "Manual driving: straight at the point, or follow the roads [R]",
+        onclick: () => this.actions.toggleManual(),
+      }),
+      createSwitch({
+        on: "Auto patch",
+        off: "No patch",
+        checked: w.player.autoRepair,
+        key: "P",
+        disabled: busy,
+        title: "Patch damaged parts while parked [P]",
+        onclick: () => this.actions.toggleAutoRepair(),
+      }),
+      ...this.engineButtons(w, busy),
+      this.characterButton(w, busy),
     );
   }
 
@@ -444,35 +514,23 @@ export class Hud {
   }
 
   pushEvents(w: World): void {
+    const lines: LogLine[] = [];
     for (const e of w.events) {
       const line = eventText(w, e);
-      if (line)
-        this.lines.unshift(turnStamped(w.turn, line));
-      if (
-        line &&
-        (e.t === "knockout" || e.t === "skillUp" || e.t === "discover")
-      )
-        this.toast(line.text);
+      if (!line) continue;
+      lines.push(line);
+      if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
-    this.renderLog();
+    this.log.add(w.turn, lines);
+    this.radio.hear(w);
+  }
+
+  logTexts(): string[] {
+    return this.log.texts;
   }
 
   note(w: World, text: string, cls: string): void {
-    this.lines.unshift({ text: `T${w.turn} ${text}`, cls });
-    this.renderLog();
-  }
-
-  private renderLog(): void {
-    this.lines = this.lines.slice(0, LOG_LINES);
-    if (this.lines.length === 0) return;
-    this.log.replaceChildren(
-      el("h3", {}, "Log"),
-      el(
-        "div",
-        { class: "log-lines", tabindex: 0 },
-        ...this.lines.map((l) => el("div", { class: l.cls }, ...(l.spans ? l.spans.map((sp) => el("span", { class: sp.cls }, sp.text)) : [l.text]))),
-      ),
-    );
+    this.log.add(w.turn, [{ text, cls }]);
   }
 
   private aimOf(w: World, v: Vehicle): ConditionAim | undefined {

@@ -4,10 +4,9 @@ import { readLedger } from '../ledger';
 import { readState, updateState } from '../state';
 import { FACTORY_DIR, OUT_DIR, WASTE_LABEL, type Ctx } from '../types';
 import { formatNumbers, wasteNumbers } from '../waste';
-import { FACTORY_LOGS_MOUNT, FACTORY_STATE_MOUNT } from './adhoc';
+import { FACTORY_LEDGER_MOUNT, FACTORY_LOGS_MOUNT, FACTORY_STATE_MOUNT } from './adhoc';
 import { agentHome, fillPrompt, issueText, readOutput, resetOutputs } from './common';
 
-const LEDGER_MOUNT = '/factory/ledger.jsonl';
 const DAY_MS = 24 * 3_600_000;
 const BOTTLENECK = 'BOTTLENECK: ';
 const CHANGE = 'CHANGE:';
@@ -63,8 +62,8 @@ function periodStart(ctx: Ctx, to: Date): Date {
 async function runReviewAgent(ctx: Ctx, dir: string): Promise<void> {
   const ledger = join(ctx.cfg.home, 'ledger.jsonl');
   if (!existsSync(ledger)) throw new Error(`The factory has no ledger at ${ledger} yet`);
-  const readOnly = { [ledger]: LEDGER_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT };
-  const prompt = fillPrompt('waste', { days: String(ctx.cfg.wasteReviewDays), ledger: LEDGER_MOUNT, logs: FACTORY_LOGS_MOUNT, state: FACTORY_STATE_MOUNT });
+  const readOnly = { [ledger]: FACTORY_LEDGER_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT };
+  const prompt = fillPrompt('waste', { days: String(ctx.cfg.wasteReviewDays), ledger: FACTORY_LEDGER_MOUNT, logs: FACTORY_LOGS_MOUNT, state: FACTORY_STATE_MOUNT });
   await ctx.container.agent({ clone: dir, dir: FACTORY_DIR, model: ctx.cfg.buildModel, prompt, log: `${ctx.cfg.home}/logs/waste-review.log`, readOnly });
 }
 

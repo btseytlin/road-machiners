@@ -2,6 +2,10 @@
 
 import { RULES } from './rules';
 import { TERRAIN } from './terrain';
+import { TIME } from './time';
+import type { MemoryFact } from '../sim/types';
+
+const LAW_GATE_REACH = 12;
 
 export const NPC_BEHAVIOR = {
   stallTurns: 100,
@@ -9,23 +13,30 @@ export const NPC_BEHAVIOR = {
   escortFeePerTile: 0.15,
   weakDecline: 20,
   escortWaitGap: 12,
-  patrolRadius: RULES.guards.range + TERRAIN.vision.radius * 4,
+  escortCatchUpGap: 40,
+  lawGateReach: LAW_GATE_REACH,
+  patrolRadius: LAW_GATE_REACH + TERRAIN.vision.radius * 4,
   patrolSpacing: 4,
   followGap: RULES.yieldDistance + 1,
   fleeCondition: 0.3,
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
+  fight: { angles: 16, rings: [0.25, 0.5, 0.75, 1], arcWeight: 2, threatWeight: 2, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
   revengeChance: 0.33,
   recoverCondition: 0.5,
   threatRatio: 1,
   dangerSpread: 0.25,
   threatFlee: 20,
   weakFlee: 20,
+  trappedFlee: 0.2,
   hurtFullFlee: 0.1,
   missFlee: 0.5,
   manageableFight: 5,
   keepWork: 400,
   noticeMemory: 3,
+  fleeMemory: 30,
   fightSearchTurns: 6,
+  fleeCalmTurns: 6,
+  fightStallTurns: 20,
+  fightWearShare: 0.05,
   crippledInvestigate: 0.01,
   ram: {
     partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
@@ -50,6 +61,7 @@ export const NPC_BEHAVIOR = {
   robberRefuse: 20,
   winningTruce: 0.01,
   threatComply: 20,
+  guardedComply: 0.1,
 };
 
 export const NPC_UPKEEP = {
@@ -75,6 +87,12 @@ export const HUNT = {
   siteDistance: 40,
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
 };
+
+export const MEMORY = {
+  turns: { prices: TIME.turnsPerDay, stripped: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
+};
+
+export const TRADE_TIP = { share: 0.2 };
 
 export const FIRST_NAMES: readonly string[] = [
   'Abe', 'Ada', 'Anya', 'Arlo', 'Bea', 'Bo', 'Boris', 'Cal', 'Cass', 'Clem', 'Dace', 'Dmitri', 'Dora', 'Earl',

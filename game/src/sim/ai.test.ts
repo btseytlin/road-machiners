@@ -128,6 +128,18 @@ describe('NPC traffic', () => {
     expect(trafficStops(w, npc, DEST)).toBe(false);
   });
 
+  it('routes around the stretch a truck ahead still covers when the driver gets there', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const driver = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 100, y: 100 }, (-53 * Math.PI) / 180);
+    driver.brain = npcBrain('scavenger', driver.pos, ['scavenger']);
+    driver.speed = 5.73;
+    const ahead = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 100.35, y: 96.19 }, (-9 * Math.PI) / 180);
+    ahead.brain = npcBrain('roamer', ahead.pos, ['roamer']);
+    ahead.speed = 4.19;
+    const merge = { x: ahead.pos.x + Math.cos(ahead.heading) * 2.3, y: ahead.pos.y + Math.sin(ahead.heading) * 2.3 };
+    expect(routeBlockers(w, driver).some((b) => dist(b.pos, merge) <= b.r)).toBe(true);
+  });
+
   it('a far driver does not stop for a moving truck, since far travel stops short of any truck in its way', () => {
     const oncoming = (playerAt: { x: number; y: number }) => {
       const { w, npc } = scene(playerAt.x, playerAt.y, 0, 0);
@@ -173,6 +185,29 @@ describe('oncoming NPCs', () => {
     planNpcOrders(w);
     expect(first.order?.kind).toBe('brake');
     expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it('a lower id at rest waits for the higher id closing on it, which goes around', () => {
+    const w = emptyWorld({ x: 270, y: 190 });
+    const first = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 268.77, y: 160.4 }, (-40.78 * Math.PI) / 180);
+    first.brain = npcBrain('scavenger', first.pos, ['scavenger']);
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip northeast' });
+    const second = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 270.6, y: 156.71 }, (141.44 * Math.PI) / 180);
+    second.brain = npcBrain('roamer', second.pos, ['roamer']);
+    second.speed = 3.22;
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'test trip southwest' });
+    expect(first.id < second.id).toBe(true);
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it('a lower id at rest sets off when the higher id passes in the next lane', () => {
+    const { w, first, second } = headOn();
+    first.speed = 0;
+    second.pos = { x: 107, y: 104 };
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('stopAt');
   });
 
   it.each(['first', 'second'] as const)('a fleeing truck is not yielded to and does not yield: %s flees', (who) => {

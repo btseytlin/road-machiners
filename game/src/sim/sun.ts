@@ -1,8 +1,11 @@
 // Time of day and the sun. Pure functions of the turn number.
 
 import { TIME } from "../data/time";
+import { isCheapMeeting } from "./fidelity";
+import { shadeCastersAround } from "./prop-index";
 import { weatherAt } from "./weather";
 import type { Obstacle, World } from "./types";
+import { propBase } from "./bridge";
 import { heightAt } from "./terrain";
 import { clamp, dist, type Vec } from "./vec";
 
@@ -26,7 +29,7 @@ export function sunAt(turn: number): Sun | null {
 }
 
 export function shadeCasters(world: World, center: Vec, radius: number): Obstacle[] {
-  return world.obstacles.filter((o) => TIME.obstacleShade[o.kind] !== undefined && dist(center, o.pos) <= radius + TIME.shadeReach + o.r);
+  return shadeCastersAround(world, center, radius);
 }
 
 export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = shadeCasters(world, pos, 0)): boolean {
@@ -43,16 +46,20 @@ export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = sha
 }
 
 function obstacleBlocks(world: World, o: Obstacle, p: Vec, rayHeight: number): boolean {
-  return dist(p, o.pos) <= o.r && heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight;
+  return dist(p, o.pos) <= o.r && propBase(world.terrain, o) + TIME.obstacleShade[o.kind] > rayHeight;
 }
 
 export function heatAt(world: World, pos: Vec): number {
   return cappedHeatAt(world, pos, 1);
 }
 
+export function shadeMatters(world: World, pos: Vec): boolean {
+  return !isCheapMeeting(world, pos, pos);
+}
+
 export function cappedHeatAt(world: World, pos: Vec, cap: number): number {
   const sun = sunAt(world.turn);
-  if (!sun || inShade(world, pos, sun)) return 1;
+  if (!sun || (shadeMatters(world, pos) && inShade(world, pos, sun))) return 1;
   return heatOfShare(world, pos, Math.min(cap, sunShare(sun)));
 }
 

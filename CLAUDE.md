@@ -1,17 +1,18 @@
 # ROAM
 
-This repo holds ROAM, a turn-based wasteland truck RPG, and the factory that builds it.
+This repo holds ROAM, a turn-based wasteland truck RPG, and the AI coding agent-based software factory that builds it.
 
 ## Layout
 
 - `game/` is the game. It is one npm package with its own `node_modules` and `.env`.
-- `factory/` is the factory. It turns voted GitHub issues into approved game changes. It is one npm package with its own `node_modules` and `.env`.
+- `factory/` is the factory. It turns voted GitHub issues into kanban workflows that lead to game changes and releases. It is one npm package with its own `node_modules` and `.env`.
 - `quality/` is the quality gate for both packages. The root `package.json`, `.oxlintrc.json`, `.quality.json` and `.githooks/` belong to it.
 
 ## Where to work
 
 - Work on the game from `game/`. Read `game/CLAUDE.md` first.
-- Work on the factory from `factory/`. Read `factory/README.md` first.
+- Read `game/docs/DESIGN.md` before any game change and before answering any question about the game.
+- Work on the factory from `factory/`. Read `factory/CLAUDE.md` first.
 - Game and factory never import each other.
 
 ## Quality gate

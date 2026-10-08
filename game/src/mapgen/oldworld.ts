@@ -17,11 +17,12 @@ import {
   type SettlementRules,
   type TankRules,
 } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { deckAt } from '../sim/bridge';
+import { clearOfSites, onDeck } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
 import { angleDiff, bearing, clamp, DEG, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
 
@@ -34,6 +35,7 @@ export type OldRoad = { line: RoadLine; width: number; bridges: [Vec, Vec][] };
 
 export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   const W = OLD_WORLD;
+  shipWing(d);
   const towns = settlements(seed, d, W.settlements);
   overlooks(seed, d, W.overlooks);
   bendBuildings(seed, d, W.bends);
@@ -86,6 +88,11 @@ const TURN = Math.PI * 2;
 
 type Scored = { pos: Vec; score: number };
 
+export function shipWing(d: MapDraft): void {
+  const W = TERRAIN.features.wing;
+  d.props.push(prop('shipWing', W.pos, W.r, W.yaw));
+}
+
 export function prop(kind: PropKind, pos: Vec, r: number, yaw: number, group = 0, step = 0): BakedProp {
   return { kind, pos, r, yaw, group, step };
 }
@@ -98,7 +105,7 @@ export function clearGround(size: number, pos: Vec, r: number, roadGap: number):
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
-  return clearOfSites(pos, r) && !onBridge(pos, HALF + r);
+  return clearOfSites(pos, r) && !onDeck(pos, HALF + r);
 }
 
 export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
@@ -110,7 +117,7 @@ export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
 }
 
 export function builtGround(c: Vec): boolean {
-  if (deckAlong(c.x, c.y) !== null) return true;
+  if (deckAt(c.x, c.y) !== null) return true;
   return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
 }
 
@@ -182,7 +189,7 @@ export function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
   return randRange(rng, lo, hi);
 }
 
-type Anchor = { pos: Vec; radius: number };
+type Anchor = (pos: Vec) => number;
 
 export function settlements(seed: number, d: MapDraft, rules: SettlementRules): OldSettlement[] {
   const rng = ruleRng(seed, rules.seedOffset);
@@ -204,7 +211,7 @@ function settlementSpots(seed: number, d: MapDraft, rules: SettlementRules): Sco
 
 function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anchors: Anchor[], pos: Vec): number | null {
   const [near, far] = rules.anchorGap;
-  const gap = Math.min(...anchors.map((a) => dist(pos, a.pos) - a.radius));
+  const gap = Math.min(...anchors.map((a) => a(pos)));
   if (gap < near || gap > far) return null;
   if (!clearGround(d.size, pos, rules.radius, rules.roadGap) || !flatAndDry(d, pos, rules)) return null;
   const closeness = 1 - (gap - near) / (far - near);
@@ -212,7 +219,7 @@ function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anch
 }
 
 function siteAnchors(): Anchor[] {
-  return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...roadJunctions().map((pos) => ({ pos, radius: 0 }))];
+  return [...SITES.map((s): Anchor => (pos) => siteGap(s, pos)), ...roadJunctions().map((j): Anchor => (pos) => dist(pos, j))];
 }
 
 export function roadJunctions(): Vec[] {
@@ -425,7 +432,7 @@ class RouteGrid {
       const p = this.posOf(node);
       this.heights[node] = d.heights[p.y * (d.size + 1) + p.x];
       this.cut[node] = isCutTile(d, tileOf(d.size, p)) ? 1 : 0;
-      this.closed[node] = SITES.some((s) => dist(p, s.pos) < s.radius) ? 1 : 0;
+      this.closed[node] = SITES.some((s) => siteGap(s, p) < 0) ? 1 : 0;
     }
   }
 

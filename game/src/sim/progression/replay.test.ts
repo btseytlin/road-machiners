@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
+import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
+import { cumulativeCost } from '../progress';
 import { clockOf } from '../sun';
 import type { SkillId } from '../types';
 import type { TraceLine } from './record';
@@ -33,7 +34,7 @@ describe('replay', () => {
     ];
     const totals = [100, 300, 350, 450];
     const turns = [10, 40, dayTwo, dayTwo + 10];
-    const firstTurn = (level: number) => turns[totals.findIndex((xp) => xp >= XP_TO_REACH[level])] ?? null;
+    const firstTurn = (level: number) => turns[totals.findIndex((xp) => xp >= cumulativeCost(level))] ?? null;
 
     const curve = replay(trace, 2 * TIME.turnsPerDay);
 
@@ -77,6 +78,11 @@ describe('parseRunEnd', () => {
     expect(parseRunEnd(search(10, 1))).toBeNull();
   });
 
+  it('reads an error marker with its message', () => {
+    expect(parseRunEnd({ end: 'error', turn: 57, message: 'No free engine mount' })).toEqual({ end: 'error', turn: 57, message: 'No free engine mount' });
+    expect(() => parseRunEnd({ end: 'error', turn: 57 })).toThrow(/Bad run end/);
+  });
+
   it('rejects a malformed marker', () => {
     expect(() => parseRunEnd({ end: 'stall', turn: 57 })).toThrow(/Bad run end/);
   });
@@ -101,14 +107,14 @@ describe('targetMisses', () => {
 
   it('flags a level reached too early or too late', () => {
     const early = targetMisses(curveWith('social', [1, 2, 3, day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
-    expect(early).toContain(`social level 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
+    expect(early).toContain(`social rank 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
     const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', pastWindow(TARGET_DAYS.main[4]));
-    expect(late).toContain(`social level 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
+    expect(late).toContain(`social rank 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
   });
 
   it('does not flag an unreached level whose window starts after the run', () => {
     const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', pastWindow(TARGET_DAYS.off[2]));
-    expect(misses.some((m) => m.startsWith('social level 5'))).toBe(false);
+    expect(misses.some((m) => m.startsWith('social rank 5'))).toBe(false);
     expect(offOnly(misses).length).toBeGreaterThan(0);
   });
 });

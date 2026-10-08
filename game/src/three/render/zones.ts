@@ -10,7 +10,7 @@ import { heightAt, markHeightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.16, hold: 0.28, accelerate: 0.18 };
+const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.24, hold: 0.28, accelerate: 0.28 };
 const SAMPLE_TILES = 0.5;
 const LIFT = 0.1;
 const HOVER_RADIUS_TILES = 0.6;

@@ -14,6 +14,7 @@ import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
+import { stormDepth } from './weather';
 import { cloneWorld, newWorld } from './world';
 
 export function flatTerrain(size: number): Terrain {
@@ -58,7 +59,7 @@ export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 
 }
 
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0 };
+  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
 export function forceOption<D extends DecisionId>(decision: D, option: DecisionOptions[D]): void {
@@ -97,6 +98,17 @@ export function rngStateForForcedRolls(count: number): number {
     if (ok) return state;
   }
   throw new Error(`No RNG state gives ${count} mid-range rolls`);
+}
+
+export function settleStorms(w: World): void {
+  for (const v of w.vehicles) {
+    v.stormExposure = {};
+    for (const e of w.weather) {
+      if (e.kind !== 'storm') continue;
+      const depth = stormDepth(w, e, v.pos);
+      if (depth > 0) v.stormExposure[e.id] = depth;
+    }
+  }
 }
 
 export function partHp(v: Vehicle): number {

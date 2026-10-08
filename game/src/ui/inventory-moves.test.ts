@@ -55,6 +55,12 @@ describe("hold before drag", () => {
 });
 
 describe("double click in a garage", () => {
+  it("uninstalls an installed part to storage at a stall", () => {
+    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "pump-station")!)[0]);
+    const next = doubleClickCommand(w, gridClick(partOf(w, "mg")))!(w);
+    expect(next.player.storage.map((p) => p.defId)).toEqual(["mg"]);
+  });
+
   it("uninstalls an installed part to storage", () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const cmd = doubleClickCommand(w, gridClick(partOf(w, "mg")))!;
@@ -105,6 +111,11 @@ describe("double click in a garage", () => {
 describe("double click outside a garage", () => {
   it("does nothing on the truck grid in the field", () => {
     const w = emptyWorld();
+    expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
+  });
+
+  it("does nothing on the truck grid on an oasis pad", () => {
+    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "dustwell")!)[0]);
     expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
   });
 

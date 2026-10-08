@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
-import { REGION } from '../../data/region';
+import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../../data/region';
+import { START_KITS } from '../../data/start';
 import { BREAKABLE } from '../../data/rules';
+import { deckById } from '../bridge';
 import { boxDistance, boxSegmentDistance, propBoxes } from '../mapgen';
 import { route } from '../path';
 import type { Obstacle } from '../types';
@@ -9,6 +11,9 @@ import { dist, type Vec } from '../vec';
 import { stampOverlay } from './astar';
 import { CELL, CLEARANCE, dynamicBlockers, makeTaste, navLayer, tasteAt, tasteOf } from './layer';
 import { emptyWorld, npcBrain } from '../testkit';
+import { newWorld } from '../world';
+import { TEST_MAP } from '../../test/map';
+import { budget } from '../../test/budget';
 
 const { scale, strength } = REGION.navigation.taste;
 
@@ -68,7 +73,7 @@ describe('prop footprints', () => {
     const w = emptyWorld();
     w.obstacles = [{ id: 'wreck9', pos: { x: 40.2, y: 40.3 }, r: 1.2, kind: 'wreck' }];
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, w.terrain, []), radius);
     const boxes = propBoxes(w.obstacles[0]);
     const near = (p: Vec) => boxes.some((b) => boxDistance(b, p) < radius + CLEARANCE);
 
@@ -83,6 +88,30 @@ describe('prop footprints', () => {
     expect(wrong).toEqual([]);
     expect(stamped).toBeGreaterThan(0);
   });
+
+  it('leaves the Broken Wing road under the hoop and along the deck open, and blocks the hoop feet and the deck rails', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+    const hoop = w.obstacles.find((o) => o.kind === 'landmark' && o.look === 'shipWing');
+    if (hoop === undefined) throw new Error('The baked map has no hoop');
+    const roof = propBoxes(hoop).filter((b) => b.z0 >= PHYSICS.truckClearance);
+    const open = REGION.roadWidth / 2 - radius - CLEARANCE;
+    for (const along of [-1, 0, 1]) {
+      for (const across of [-open, 0, open]) {
+        const spot = center(BROKEN_WING_POINT(BROKEN_WING.hoopAt + along, across));
+        expect(roof.some((b) => boxDistance(b, spot) === 0)).toBe(true);
+        expect(layer.blocked[cellAt(layer.n, spot)]).toBe(0);
+      }
+    }
+    for (const foot of [{ x: -4, y: -19 }, { x: 4, y: 17 }]) {
+      expect(layer.blocked[cellAt(layer.n, { x: hoop.pos.x + foot.x / S, y: hoop.pos.y - foot.y / S })]).toBe(1);
+    }
+    const deck = deckById('broken-wing');
+    for (let along = -BROKEN_WING.deckHalf + 1; along <= BROKEN_WING.deckHalf - 1; along += 1) {
+      expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, 0))]).toBe(0);
+      for (const side of [-1, 1]) expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, (side * deck.width) / 2))]).toBe(1);
+    }
+  }, budget(60_000));
 
   it('leaves the ground under a canopy open', () => {
     const w = emptyWorld();

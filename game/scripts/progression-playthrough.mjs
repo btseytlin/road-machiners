@@ -7,14 +7,14 @@ import { activityFrom } from '../src/sim/progression/activity.ts';
 import { isArchetype } from '../src/sim/progression/bot.ts';
 import { startWorld } from '../src/sim/progression/record.ts';
 
-const USAGE = 'Usage: npm run progression:playthrough -- --seed <n> --turns <n> --out <file> [--archetype mixed] [--every 50] [--sha <sha>]';
+const USAGE = 'Usage: npm run progression:playthrough -- --seed <n> --turns <n> --out <file> [--archetype markov] [--every 50] [--sha <sha>]';
 
 const options = parseArgs(process.argv.slice(2).filter((a) => a !== '--'));
 write(options);
 
 function parseArgs(argv) {
   const flags = readFlags(argv);
-  const archetype = flags.archetype ?? 'mixed';
+  const archetype = flags.archetype ?? 'markov';
   if (!isArchetype(archetype)) throw new Error(`Unknown archetype ${archetype}. ${USAGE}`);
   if (!flags.out) throw new Error(`--out is required. ${USAGE}`);
   return { seed: whole(flags.seed, 'seed'), turns: positive(flags.turns, 'turns'), every: positive(flags.every ?? '50', 'every'), archetype, sha: flags.sha ?? null, out: flags.out };

@@ -6,12 +6,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { obstacleColliders } from '../../phys/drive';
-import type { Quat, V3 } from '../../phys/frames';
+import type { Quat, V3, VehicleFrame } from '../../phys/frames';
 import { hashStr } from '../../render/noise';
 import { bodyOf } from '../../sim/body';
 import { propPose } from '../../sim/mapgen';
-import { heightAt, type Terrain } from '../../sim/terrain';
-import type { Obstacle } from '../../sim/types';
+import { propBase } from '../../sim/bridge';
+import type { Terrain } from '../../sim/terrain';
+import type { Obstacle, Vehicle } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { model, type ModelName } from './models';
 
@@ -34,10 +35,24 @@ const REST_STEPS = 0.4 * PHYSICS.stepsPerSecond;
 const MAX_FLIGHT = 8 * PHYSICS.stepsPerSecond;
 const WELD = 1000;
 
-type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; center: THREE.Vector3; box: THREE.Box3 };
+export type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; center: THREE.Vector3; box: THREE.Box3 };
 type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age: number };
-type Burst = { pieces: Flying[]; fixed: RAPIER.Collider[] };
+type Burst = { group: THREE.Group; pieces: Flying[]; fixed: RAPIER.Collider[] };
 export type TruckBox = { id: string; chassisId: string; pos: V3; rot: Quat };
+
+export function disposeTree(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) m.dispose();
+    }
+  });
+}
+
+export function truckBoxes(vehicles: readonly Pick<Vehicle, 'id' | 'chassisId'>[], frames: Record<string, VehicleFrame>): TruckBox[] {
+  return vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] }));
+}
 
 const sources = new Map<ModelName, PieceSource[]>();
 
@@ -52,25 +67,40 @@ export class DebrisSim {
   }
 
   burst(o: Obstacle, push: V3 | null, near: readonly Obstacle[]): THREE.Group {
-    const group = new THREE.Group();
     const pose = propPose(o);
-    const origin = new THREE.Vector3(pose.pos.x * S, heightAt(this.terrain, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
+    if (pose.model === 'hulk') throw new Error(`Hulk ${o.id} is not breakable`);
+    const origin = new THREE.Vector3(pose.pos.x * S, propBase(this.terrain, o) * S, pose.pos.y * S);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pose.yaw);
     const scale = new THREE.Vector3(pose.scale.x, pose.scale.z, pose.scale.y);
-    const kick = push ?? topple(o.id);
-    const pieces = piecesOf(pose.model).map((src, i) => {
+    const others = near.filter((n) => n.id !== o.id && dist(n.pos, o.pos) * S <= FLY_REACH + 2 * S);
+    return this.fling(piecesOf(pose.model), { origin, turn, scale }, push ?? topple(o.id), o.id, o.pos, others);
+  }
+
+  fling(srcs: PieceSource[], pose: { origin: THREE.Vector3; turn: THREE.Quaternion; scale: THREE.Vector3 }, kick: V3, key: string, ground: { x: number; y: number }, near: readonly Obstacle[]): THREE.Group {
+    const { origin, turn, scale } = pose;
+    const group = new THREE.Group();
+    const pieces = srcs.map((src, i) => {
       const mesh = pieceMesh(src, scale);
       group.add(mesh);
       const at = src.center.clone().multiply(scale).applyQuaternion(turn).add(origin);
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, at.y, at.z).setRotation(turn).setCcdEnabled(true));
       this.world.createCollider(hull(src, scale), body);
-      launch(body, kick, `${o.id}:${i}`);
+      launch(body, kick, `${key}:${i}`);
       place(mesh, body);
       return { body, mesh, still: 0, age: 0 };
     });
-    const fixed = [groundPatch(this.terrain, o.pos), ...near.filter((n) => n.id !== o.id && dist(n.pos, o.pos) * S <= FLY_REACH + 2 * S).flatMap((n) => obstacleColliders(this.terrain, n))];
-    this.bursts.push({ pieces, fixed: fixed.map((desc) => this.world.createCollider(desc)) });
+    const fixed = [groundPatch(this.terrain, ground), ...near.flatMap((n) => obstacleColliders(this.terrain, n))];
+    this.bursts.push({ group, pieces, fixed: fixed.map((desc) => this.world.createCollider(desc)) });
     return group;
+  }
+
+  drop(group: THREE.Group): void {
+    const burst = this.bursts.find((b) => b.group === group);
+    if (!burst) return;
+    for (const p of burst.pieces) this.world.removeRigidBody(p.body);
+    for (const c of burst.fixed) this.world.removeCollider(c, false);
+    this.bursts.splice(this.bursts.indexOf(burst), 1);
+    this.clearTrucks();
   }
 
   moveTrucks(trucks: readonly TruckBox[]): void {
@@ -113,6 +143,10 @@ export class DebrisSim {
       for (const c of burst.fixed) this.world.removeCollider(c, false);
     }
     this.bursts.splice(0, this.bursts.length, ...this.bursts.filter((b) => b.pieces.length > 0));
+    this.clearTrucks();
+  }
+
+  private clearTrucks(): void {
     if (this.bursts.length > 0) return;
     for (const body of this.trucks.values()) this.world.removeRigidBody(body);
     this.trucks.clear();
@@ -196,7 +230,7 @@ function groundPatch(t: Terrain, at: { x: number; y: number }): RAPIER.ColliderD
   return RAPIER.ColliderDesc.heightfield(k, k, heights, { x: k * S, y: S, z: k * S }).setTranslation((x0 + k / 2) * S, 0, (y0 + k / 2) * S).setFriction(FRICTION);
 }
 
-function piecesOf(name: ModelName): PieceSource[] {
+export function piecesOf(name: ModelName): PieceSource[] {
   const cached = sources.get(name);
   if (cached) return cached;
   const root = model(name);

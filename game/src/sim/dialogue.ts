@@ -7,7 +7,7 @@ import { inCombat, inCombatWithOther, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
-import type { Call, CallVars, Vehicle, World } from './types';
+import type { Call, CallVars, GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
@@ -175,6 +175,30 @@ export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
   if (!call) return false;
   const pair = [a.id, b.id];
   return pair.includes(call.with) && pair.includes(world.player.vehicleId);
+}
+
+export function onAir(world: World): string[] {
+  const ids = new Set<string>();
+  const call = world.player.call;
+  if (call) ids.add(world.player.vehicleId).add(call.with);
+  if (world.player.beacon) ids.add(world.player.vehicleId);
+  return [...ids];
+}
+
+type Talk = { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>, playerId: string) => string[] };
+const pair = (e: { by: string; client: string }): string[] => [e.by, e.client];
+const RADIO_TALK: Talk = {
+  say: (e) => [e.speaker],
+  call: (e, playerId) => [e.with, playerId],
+  plea: (e) => (e.accepted === null ? [e.from] : [e.from, e.to]),
+  escortHired: pair,
+  escortRefused: pair,
+  towHitched: pair,
+  towOffer: (e) => [e.by],
+};
+
+export function radioSpeakers(events: readonly GameEvent[], playerId: string): string[] {
+  return [...new Set(events.flatMap((e) => (RADIO_TALK[e.t] as ((e: GameEvent, id: string) => string[]) | undefined)?.(e, playerId) ?? []))];
 }
 
 function hangUpCall(world: World, npc: Vehicle, call: Call): void {

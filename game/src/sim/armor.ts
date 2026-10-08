@@ -5,7 +5,7 @@ import { bodyOf } from './body';
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
 import { damagePart } from './damage';
-import { cellKey, gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
+import { cellKey, gridOf, itemCells, isMounted, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -35,13 +35,28 @@ export function ramMult(v: Vehicle, side: Side): number {
 }
 
 export function cabShield(v: Vehicle): number {
+  return cabShieldWith(v)(null);
+}
+
+export function cabShieldWith(v: Vehicle): (extra: GridItem | null) => number {
   const g = gridOf(v);
   const cab = mountedItems(v, 'core').filter((it) => isCab(partDef(it.part.defId))).flatMap(itemCells);
   const cabLanes = new Set(cab.flatMap((c) => [`F${c.x}`, `B${c.x}`, `L${c.y}`, `R${c.y}`]));
-  const shielded = new Set(mountedItems(v, 'armor').flatMap(itemCells).map((c) => laneKey(g, c)).filter((key) => cabLanes.has(key)));
-  const perSide = new Map<string, number>();
-  for (const key of shielded) perSide.set(key[0], (perSide.get(key[0]) ?? 0) + 1);
-  return [...perSide.values()].reduce((sum, n) => sum + Math.sqrt(n), 0);
+  const armor = mountedItems(v, 'armor');
+  return (extra) => {
+    const items = extra ? withExtra(v, armor, extra) : armor;
+    const shielded = new Set(items.flatMap(itemCells).map((c) => laneKey(g, c)).filter((key) => cabLanes.has(key)));
+    const perSide = new Map<string, number>();
+    for (const key of shielded) perSide.set(key[0], (perSide.get(key[0]) ?? 0) + 1);
+    return [...perSide.values()].reduce((sum, n) => sum + Math.sqrt(n), 0);
+  };
+}
+
+function withExtra(v: Vehicle, armor: GridItem[], extra: GridItem): GridItem[] {
+  if (extra.kind !== 'part' || partDef(extra.part.defId).kind !== 'armor') throw new Error('cabShieldWith takes an armor item as its extra');
+  if (!isMounted(v.chassisId, extra)) return armor;
+  const at = armor.findIndex((it) => it.y > extra.y || (it.y === extra.y && it.x > extra.x));
+  return at < 0 ? [...armor, extra] : [...armor.slice(0, at), extra, ...armor.slice(at)];
 }
 
 function laneKey(g: Grid, c: { x: number; y: number }): string {
@@ -108,17 +123,32 @@ export function partLane(v: Vehicle, partId: string, side: Side): number {
   return side === 'front' || side === 'rear' ? item.x + Math.floor(size.w / 2) : item.y + Math.floor(size.h / 2);
 }
 
-function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[] {
-  const across = side === 'front' || side === 'rear' ? g.w : g.h;
+const laneCache = new WeakMap<Grid, Map<string, readonly { x: number; y: number }[]>>();
+
+function laneCells(g: Grid, side: Side, lane: number): readonly { x: number; y: number }[] {
+  let lanes = laneCache.get(g);
+  if (!lanes) laneCache.set(g, (lanes = new Map()));
+  const key = `${side}${lane}`;
+  let cells = lanes.get(key);
+  if (!cells) lanes.set(key, (cells = buildLaneCells(g, side, lane)));
+  return cells;
+}
+
+function buildLaneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[] {
+  const lengthwise = side === 'front' || side === 'rear';
+  checkLane(lane, lengthwise ? g.w : g.h, side);
+  return Array.from({ length: lengthwise ? g.h : g.w }, (_, i) => LANE_STEP[side](g, lane, i));
+}
+
+const LANE_STEP: Record<Side, (g: Grid, lane: number, i: number) => { x: number; y: number }> = {
+  front: (_g, lane, i) => ({ x: lane, y: i }),
+  rear: (g, lane, i) => ({ x: lane, y: g.h - 1 - i }),
+  left: (_g, lane, i) => ({ x: i, y: lane }),
+  right: (g, lane, i) => ({ x: g.w - 1 - i, y: lane }),
+};
+
+function checkLane(lane: number, across: number, side: Side): void {
   if (!Number.isInteger(lane) || lane < 0 || lane >= across) throw new Error(`Lane ${lane} is outside the ${side} side (${across} lanes)`);
-  const depth = side === 'front' || side === 'rear' ? g.h : g.w;
-  const steps = Array.from({ length: depth }, (_, i) => i);
-  switch (side) {
-    case 'front': return steps.map((y) => ({ x: lane, y }));
-    case 'rear': return steps.map((i) => ({ x: lane, y: g.h - 1 - i }));
-    case 'left': return steps.map((x) => ({ x, y: lane }));
-    case 'right': return steps.map((i) => ({ x: g.w - 1 - i, y: lane }));
-  }
 }
 
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
@@ -126,17 +156,36 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
 }
 
 export function planLane(v: Vehicle, side: Side, lane: number, round: Round): { part: PartInstance; amount: number }[] {
-  checkRound(round);
+  return walkCells(laneOwners(gridOf(v), cellOwners(v), side, lane), round);
+}
+
+export function sidePlanner(v: Vehicle): (side: Side, round: Round) => { part: PartInstance; amount: number }[][] {
   const g = gridOf(v);
   const owner = cellOwners(v);
+  const sides = new Map<Side, LaneCell[][]>();
+  return (side, round) => {
+    let lanes = sides.get(side);
+    if (!lanes) sides.set(side, (lanes = Array.from({ length: laneCount(v, side) }, (_, lane) => laneOwners(g, owner, side, lane))));
+    return lanes.map((cells) => walkCells(cells, round));
+  };
+}
+
+type LaneCell = { part: PartInstance | undefined } | null;
+
+function laneOwners(g: Grid, owner: Map<number, PartInstance>, side: Side, lane: number): LaneCell[] {
+  return laneCells(g, side, lane).map((c) => (g.cells[c.y][c.x] === null && c.y < g.deadFrom ? null : { part: owner.get(cellKey(c.x, c.y)) }));
+}
+
+function walkCells(cells: LaneCell[], round: Round): { part: PartInstance; amount: number }[] {
+  checkRound(round);
   const hits: { part: PartInstance; amount: number }[] = [];
   const struck = new Set<string>();
   const left = { pen: round.pen, damage: round.damage };
-  for (const c of laneCells(g, side, lane)) {
+  for (const cell of cells) {
     if (left.pen <= 0) break;
-    if (g.cells[c.y][c.x] === null) continue;
+    if (cell === null) continue;
     left.pen -= RULES.cellPen;
-    const part = owner.get(cellKey(c.x, c.y));
+    const part = cell.part;
     if (!takesHit(part, left.pen, struck)) continue;
     struck.add(part.id);
     hits.push(hitPart(part, left, round));
@@ -303,6 +352,23 @@ export function fireSpans(arc: number, sides: readonly Side[]): FireSpan[] {
     else merged.push({ ...p });
   }
   return joinAcrossBack(merged);
+}
+
+export function aimWithin(spans: readonly FireSpan[], rel: number): number {
+  if (spans.length === 0) throw new Error('aimWithin needs at least one span');
+  if (spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360))) return rel;
+  const edges = spans.flatMap((span) => [span.from, span.to]);
+  const apart = (edge: number) => Math.abs(((edge - rel + 540) % 360) - 180);
+  const nearest = edges.reduce((best, edge) => (apart(edge) < apart(best) ? edge : best));
+  return wrapDegrees(nearest);
+}
+
+function spanHolds(span: FireSpan, angle: number): boolean {
+  return angle >= span.from && angle <= span.to;
+}
+
+function wrapDegrees(angle: number): number {
+  return angle > 180 ? angle - 360 : angle <= -180 ? angle + 360 : angle;
 }
 
 function splitAtBack(from: number, to: number): FireSpan[] {

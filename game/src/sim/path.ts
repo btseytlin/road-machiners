@@ -7,7 +7,8 @@ import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { canStepOut, findCellsToward, nearestFreeCell, stampOverlay, startComponent, type Overlay } from './nav/astar';
 import type { Blocker } from './nav/buckets';
-import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
+import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, offRoadTaste, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
+import { keepsOffRoads } from './off-road';
 import type { Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -16,15 +17,15 @@ export type { Blocker };
 const ROUTE_CACHE_MAX = 64;
 const routeCache = new Map<string, { goal: number; cells: Int32Array }>();
 
-export function route(world: World, from: Vec, dest: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
+export function route(world: World, from: Vec, dest: Vec, radius: number, extra: Blocker[], driver?: Vehicle): Vec[] {
   return timed('route', () => {
     const to = insideMap(world, dest, radius);
-    const taste = tasteOf(world, driver);
     const nav = terrainNav(world.terrain);
-    const statics = staticSet(world.obstacles, world.terrain.size);
-    const dynamic = dynamicBlockers(world.obstacles, extra);
+    const taste = routeTaste(world, nav, driver);
+    const statics = staticSet(world.obstacles, world.terrain);
+    const dynamic = dynamicBlockers(world.obstacles, world.terrain, extra);
     const reach = radius + CLEARANCE;
-    if (lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
+    if (!taste?.roads && lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
     const layer = navLayer(world.terrain, world.obstacles, radius);
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
@@ -35,6 +36,11 @@ export function route(world: World, from: Vec, dest: Vec, radius: number, extra:
     points.push(end);
     return shortcut(nav, statics, dynamic, from, points, reach, taste);
   });
+}
+
+function routeTaste(world: World, nav: TerrainNav, driver: Vehicle | undefined): Taste | null {
+  const taste = tasteOf(world, driver);
+  return taste && driver && keepsOffRoads(world, driver) ? offRoadTaste(taste, nav) : taste;
 }
 
 function insideMap(world: World, p: Vec, radius: number): Vec {
@@ -79,35 +85,40 @@ function exitCell(layer: NavLayer, overlay: Overlay, start: number, target: numb
 }
 
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
-  const statics = staticSet(world.obstacles, world.terrain.size);
+  const statics = staticSet(world.obstacles, world.terrain);
   const nav = terrainNav(world.terrain);
-  return lineCost(nav, statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
+  return lineCost(nav, statics, dynamicBlockers(world.obstacles, world.terrain, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
 }
 
-export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[] };
+export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[]; offRoad: boolean };
 
-export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[]): KeptRoute {
-  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, extra).map((o) => blockerKey([o])) };
+export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[], driver?: Vehicle): KeptRoute {
+  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, world.terrain, extra).map((o) => blockerKey([o])), offRoad: plansOffRoad(world, driver) };
 }
 
-export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
+function plansOffRoad(world: World, driver: Vehicle | undefined): boolean {
+  return driver !== undefined && keepsOffRoads(world, driver);
+}
+
+export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Vehicle): Vec[] | null {
   return timed('route-continue', () => continueKept(world, from, kept, to, radius, extra, driver));
 }
 
-function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Pick<Vehicle, "id" | "brain"> | undefined): Vec[] | null {
+function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Vehicle | undefined): Vec[] | null {
+  if (kept.offRoad !== plansOffRoad(world, driver)) return null;
   const c = legCheck(world, kept, radius, extra);
   const { rest, moved } = remainingPoints(from, kept, to);
   if (lastBrokenLeg(c, from, rest, moved) >= 0) return null;
-  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, tasteOf(world, driver));
+  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, routeTaste(world, c.nav, driver));
 }
 
 type LegCheck = { nav: TerrainNav; statics: StaticSet; dynamic: Blocker[]; fresh: Blocker[]; radius: number; reach: number };
 
 function legCheck(world: World, kept: KeptRoute, radius: number, extra: Blocker[]): LegCheck {
-  const dynamic = dynamicBlockers(world.obstacles, extra);
+  const dynamic = dynamicBlockers(world.obstacles, world.terrain, extra);
   const known = new Set(kept.blockers);
   const fresh = dynamic.filter((o) => !known.has(blockerKey([o])));
-  return { nav: terrainNav(world.terrain), statics: staticSet(world.obstacles, world.terrain.size), dynamic, fresh, radius, reach: radius + CLEARANCE };
+  return { nav: terrainNav(world.terrain), statics: staticSet(world.obstacles, world.terrain), dynamic, fresh, radius, reach: radius + CLEARANCE };
 }
 
 function remainingPoints(from: Vec, kept: KeptRoute, to: Vec): { rest: Vec[]; moved: boolean } {

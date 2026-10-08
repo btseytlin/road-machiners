@@ -13,6 +13,7 @@ import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
 import { readState, updateState } from './state';
+import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, PlaytestState, Queue, Run } from './types';
@@ -51,7 +52,12 @@ function openCards(state: FactoryState, cards: Card[]): Card[] {
 }
 
 function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
-  return CARD_ORDER.flatMap((column) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: cardStage(state, card), issue: card.issue })));
+  return CARD_ORDER.flatMap((column) =>
+    cards
+      .filter((card) => card.column === column)
+      .sort((a, b) => a.issue - b.issue)
+      .map((card) => ({ stage: cardStage(state, card), issue: card.issue })),
+  );
 }
 
 const COLUMN_STAGE: Partial<Record<Card['column'], (state: FactoryState, issue: number) => JobStage>> = {
@@ -69,14 +75,23 @@ function mergeJob(state: FactoryState, cards: Card[]): JobPick | null {
   return openCards(state, cards).some((card) => card.column === 'Merging') ? { stage: 'merge', issue: null } : null;
 }
 
-const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
-const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(label);
+const has =
+  (label: string) =>
+  (card: Card): boolean =>
+    card.labels.includes(label);
+const lacks =
+  (label: string) =>
+  (card: Card): boolean =>
+    !card.labels.includes(label);
 
 function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   const open = openCards(state, cards).filter(lacks(RELEASE_LABEL));
   const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
-  const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
+  const adhoc = rest
+    .filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card))
+    .sort((a, b) => a.issue - b.issue)
+    .map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
   const work = rest.filter(lacks(ADHOC_LABEL));
   const normal = [...adhoc, ...changeJobs(state), ...byProgress(state, work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(state, work.filter(lacks(RELEASE_TASK_LABEL)))];
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
@@ -135,12 +150,24 @@ export function recentCardStarts(state: FactoryState, now: Date, issue: number):
   return (state.cardStarts[issue] ?? []).filter((start) => now.getTime() - new Date(start).getTime() < DAY_MS);
 }
 
+function recentCardStartsAll(state: FactoryState, now: Date): Record<string, string[]> {
+  const entries = Object.keys(state.cardStarts).map((issue) => [issue, recentCardStarts(state, now, Number(issue))] as const);
+  return Object.fromEntries(entries.filter(([, starts]) => starts.length > 0));
+}
+
 export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, 'maxJobsPerDay'>): boolean {
   return recentStarts(state, now).length >= cfg.maxJobsPerDay;
 }
 
 function limits(cfg: Due): Record<Queue, number> {
-  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, verify: cfg.verifyWorkers, test: cfg.testWorkers };
+  return {
+    branch: 1,
+    triage: cfg.triageWorkers,
+    design: cfg.designWorkers,
+    implement: cfg.implementWorkers,
+    verify: cfg.verifyWorkers,
+    test: cfg.testWorkers,
+  };
 }
 
 export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'card-budget' | 'needs-info' | 'failed' | 'approval' | 'held';
@@ -215,10 +242,19 @@ export type TickDeps = {
   spawn: (args: string[], cwd: string, log: string, id: string, cpus: string, testWorkers: number | null) => number;
   cores: () => number;
 };
-export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, removeContainers: removeJobContainers, spawn: spawnJob, cores: availableParallelism };
+export const REAL_DEPS: TickDeps = {
+  isAlive,
+  kill: killJob,
+  removeContainers: removeJobContainers,
+  spawn: spawnJob,
+  cores: availableParallelism,
+};
 
 function dropJob(ctx: Ctx, id: string): void {
-  updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
+  updateState(ctx.statePath, (state) => ({
+    ...state,
+    jobs: state.jobs.filter((job) => job.id !== id),
+  }));
 }
 
 function minutesSince(ctx: Ctx, iso: string): number {
@@ -248,8 +284,12 @@ export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
   if (stage === 'merge') return cfg.mergeTimeoutMinutes;
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
-    triage: cfg.triageTimeoutMinutes, design: cfg.designTimeoutMinutes, implement: cfg.implementTimeoutMinutes,
-    verify: cfg.verifyTimeoutMinutes, test: cfg.testTimeoutMinutes, branch: cfg.branchTimeoutMinutes,
+    triage: cfg.triageTimeoutMinutes,
+    design: cfg.designTimeoutMinutes,
+    implement: cfg.implementTimeoutMinutes,
+    verify: cfg.verifyTimeoutMinutes,
+    test: cfg.testTimeoutMinutes,
+    branch: cfg.branchTimeoutMinutes,
   };
   return minutes[queue];
 }
@@ -264,7 +304,10 @@ function canResume(ctx: Ctx, job: Job): job is Job & { issue: number } {
 
 function forgetResume(ctx: Ctx, job: Job): void {
   if (!resumable(job)) return;
-  updateState(ctx.statePath, (state) => ({ ...state, interrupted: state.interrupted.filter((issue) => issue !== job.issue) }));
+  updateState(ctx.statePath, (state) => ({
+    ...state,
+    interrupted: state.interrupted.filter((issue) => issue !== job.issue),
+  }));
   clearSessions(ctx.cfg.home, job.issue);
 }
 
@@ -295,7 +338,8 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
   updateState(ctx.statePath, (state) => {
     if (!countsAgainstCap(pick.stage)) return { ...state, jobs: [...state.jobs, job] };
-    const cardStarts = pick.issue === null ? state.cardStarts : { ...state.cardStarts, [pick.issue]: [...recentCardStarts(state, ctx.now(), pick.issue), job.startedAt] };
+    const recent = recentCardStartsAll(state, ctx.now());
+    const cardStarts = pick.issue === null ? recent : { ...recent, [pick.issue]: [...(recent[pick.issue] ?? []), job.startedAt] };
     return { ...state, jobs: [...state.jobs, job], jobStarts: [...recentStarts(state, ctx.now()), job.startedAt], cardStarts };
   });
   reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
@@ -340,6 +384,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+  const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
+  if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
   const cached = sweepTestCache(join(ctx.cfg.home, 'test-cache'), ctx.now(), ctx.cfg.testCacheDays);
   if (cached > 0) ctx.log('tick', null, `removed ${cached} test cache files older than ${ctx.cfg.testCacheDays} days`);
 }
@@ -355,7 +401,11 @@ async function expireReplies(ctx: Ctx): Promise<void> {
 
 async function settleRouting(ctx: Ctx): Promise<void> {
   await expireReplies(ctx);
-  if (readState(ctx.statePath).lastWasteReview === null) updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: ctx.now().toISOString() }));
+  if (readState(ctx.statePath).lastWasteReview === null)
+    updateState(ctx.statePath, (state) => ({
+      ...state,
+      lastWasteReview: ctx.now().toISOString(),
+    }));
 }
 
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {

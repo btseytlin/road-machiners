@@ -9,6 +9,15 @@ export function pickVariant(n: number, last: number | null, roll: number): numbe
   return i >= last ? i + 1 : i;
 }
 
+export function shuffled<T>(items: readonly T[], roll: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(roll() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 export function spatial(screenX: number, width: number, distance: number, halfGainMeters: number, panWidth: number): { pan: number; gain: number } {
   const side = Math.min(1, Math.max(-1, (screenX / width) * 2 - 1));
   return { pan: side * panWidth, gain: 1 / (1 + distance / halfGainMeters) };

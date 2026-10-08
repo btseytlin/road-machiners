@@ -33,7 +33,14 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
     },
     async sendButtons(chat, text, buttons) {
       if (text.length > MESSAGE_LIMIT) throw new Error(`Telegram message with buttons is ${text.length} chars, the limit is ${MESSAGE_LIMIT}.`);
-      return callForId('sendMessage', JSON.stringify({ chat_id: chat, text, reply_markup: JSON.parse(keyboard(buttons)) }));
+      return callForId(
+        'sendMessage',
+        JSON.stringify({
+          chat_id: chat,
+          text,
+          reply_markup: JSON.parse(keyboard(buttons)),
+        }),
+      );
     },
     async sendPhoto(chat, pngPath, caption, buttons) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
@@ -89,7 +96,16 @@ function albumRequest(chat: string, photos: AlbumPhoto[], replyTo: number | unde
     form.set('photo', new Blob([files[0]!.bytes], { type: files[0]!.mime }), files[0]!.name);
     return { method: 'sendPhoto', form };
   }
-  form.set('media', JSON.stringify(photos.map((photo, i) => ({ type: 'photo', media: `attach://photo${i}`, caption: photo.caption }))));
+  form.set(
+    'media',
+    JSON.stringify(
+      photos.map((photo, i) => ({
+        type: 'photo',
+        media: `attach://photo${i}`,
+        caption: photo.caption,
+      })),
+    ),
+  );
   files.forEach((file, i) => form.set(`photo${i}`, new Blob([file.bytes], { type: file.mime }), file.name));
   return { method: 'sendMediaGroup', form };
 }
@@ -110,7 +126,9 @@ function keyboard(buttons: InlineButton[][]): string {
     const size = Buffer.byteLength(data);
     if (size > CALLBACK_DATA_LIMIT) throw new Error(`Telegram callback data is ${size} bytes, the limit is ${CALLBACK_DATA_LIMIT}.`);
   }
-  return JSON.stringify({ inline_keyboard: buttons.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))) });
+  return JSON.stringify({
+    inline_keyboard: buttons.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))),
+  });
 }
 
 function splitText(text: string): string[] {

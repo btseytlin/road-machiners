@@ -6,7 +6,7 @@ import { isMounted } from "../sim/grid";
 import { installSpot, moveItem, storePart, stowSpot, takeFromStorage } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
-import { townAt } from "../sim/sites";
+import { shopAt } from "../sim/market";
 import type { GridItem, World } from "../sim/types";
 
 export const HOLD_TO_DRAG_MS = 300;
@@ -38,7 +38,7 @@ export function needsHold(chassisId: string, item: GridItem): boolean {
 }
 
 export function doubleClickCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
-  if (c.source === "grid") return townAt(w) ? gridCommand(w, c) : null;
+  if (c.source === "grid") return shopAt(w) ? gridCommand(w, c) : null;
   if (c.source === "storage") return storageCommand(w, c);
   return takeCommand(w, c);
 }

@@ -1,4 +1,5 @@
 {
   "maxFilesPerKloc": 5,
+  "maxGuidanceWords": 2500,
   "maxDocstringLines": 3
 }

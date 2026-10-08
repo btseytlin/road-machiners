@@ -85,11 +85,10 @@ export const CONTRACTS = {
 
   bounty: {
     durationTurns: [400, 1000] as [number, number],
-    valueShare: 0.2,
+    rewardTurns: { buggy: 900, gunwagon: 1350 } as Record<string, number>,
     xpPerEffort: 0.25,
   },
 };
-
 
 export type ShopKind = 'garage' | 'stall';
 
@@ -190,7 +189,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   granary: {
     id: 'granary',
@@ -208,7 +207,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   'pump-station': {
     id: 'pump-station',
@@ -226,7 +225,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: ['fuel'],
+    supplies: ['fuel', 'supplies'],
   },
 };
 
@@ -235,21 +234,6 @@ export function shopDef(id: string): ShopDef {
   if (!def) throw new Error(`Unknown shop ${id}`);
   return def;
 }
-
-export const HARNESS = {
-  cruiseShare: 0.55,
-
-  encounterRate: 0.0005,
-
-  fightWinOdds: 0.6,
-  fightWinOddsUnarmed: 0.15,
-
-  fightDamageShare: 0.3,
-  fightTurns: 20,
-
-  searchRate: 2,
-};
-
 
 export const TOWN_MARKETS = Object.keys(SHOPS);
 export const STALL_MARKETS = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);

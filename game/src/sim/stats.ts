@@ -3,7 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
-import { MIN_NPC_SPEED_SHARE } from '../data/npcs';
+import { MIN_NPC_SPEED, NPCS, PRIORITY_TOP, SPEED_SHARE, type LoadoutPriorities } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
@@ -15,7 +15,7 @@ import { getResources } from './resources';
 import { isTowing } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
-import { weatherAt } from './weather';
+import { weatherOn } from './weather';
 
 export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
 
@@ -59,34 +59,114 @@ export function isStranded(world: World, v: Vehicle): boolean {
   return !hasWorkingEngine(v) || !isWorking(corePart(v, 'transmission')) || getResources(world, v).fuel <= 0;
 }
 
+export type SpeedStep =
+  | { kind: 'chassis'; base: number; speed: number }
+  | { kind: 'engine'; worn: boolean; speed: number }
+  | { kind: 'load'; factor: number; mass: number; rated: number; speed: number }
+  | { kind: 'guns'; draw: number; capacity: number; factor: number; speed: number }
+  | { kind: 'wheels'; broken: number; factor: number; speed: number }
+  | { kind: 'floor'; speed: number }
+  | { kind: 'overdrive'; factor: number; speed: number }
+  | { kind: 'transmission'; speed: number }
+  | { kind: 'limp'; cause: 'noEngine' | 'brokenEngine' | 'stalled'; speed: number }
+  | { kind: 'weather'; factor: number; speed: number }
+  | { kind: 'towing'; factor: number; speed: number };
+
+export function maxSpeedSteps(world: World, v: Vehicle): SpeedStep[] {
+  const steps: SpeedStep[] = [];
+  walkSpeed(world, v, limpSpeedOf(world, v), loadFactor(v), brokenWheelCount(v), steps);
+  return steps;
+}
+
+function brokenWheelCount(v: Vehicle): number {
+  return coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+}
+
+function walkSpeed(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number, steps: SpeedStep[] | null): number {
+  const driving = hasWorkingEngine(v) && !isStalled(world, v);
+  const speed = driving ? drivingSpeed(world, v, limpSpeed, load, broken, steps) : limpSpeedStep(v, limpSpeed, steps);
+  return conditionSpeed(world, v, speed, steps);
+}
+
+function limpSpeedStep(v: Vehicle, limpSpeed: number, steps: SpeedStep[] | null): number {
+  const cause = mountedParts(v, 'engine').length === 0 ? 'noEngine' : !hasWorkingEngine(v) ? 'brokenEngine' : 'stalled';
+  steps?.push({ kind: 'limp', cause, speed: limpSpeed });
+  return limpSpeed;
+}
+
+function drivingSpeed(world: World, v: Vehicle, limpSpeed: number, load: number, broken: number, steps: SpeedStep[] | null): number {
+  const ch = chassisDef(v.chassisId);
+  const engine = mountedParts(v, 'engine')[0];
+  const e = wornDef<EngineDef>(engine);
+  let speed = ch.maxSpeed + e.speedBonus;
+  steps?.push({ kind: 'chassis', base: ch.maxSpeed, speed: ch.maxSpeed }, { kind: 'engine', worn: engine.wear > 0, speed });
+  speed *= load;
+  steps?.push({ kind: 'load', factor: load, mass: vehicleMass(v), rated: ch.ratedMass, speed });
+  const wheels = (1 - RULES.wheelLoss) ** broken;
+  speed *= wheels;
+  if (broken > 0) steps?.push({ kind: 'wheels', broken, factor: wheels, speed });
+  const draw = gunDraw(v);
+  const drag = gunDragOf(draw, e.capacity);
+  speed *= drag;
+  steps?.push({ kind: 'guns', draw, capacity: e.capacity, factor: drag, speed });
+  return limitedSpeed(world, v, speed, limpSpeed, steps);
+}
+
+function limitedSpeed(world: World, v: Vehicle, from: number, limpSpeed: number, steps: SpeedStep[] | null): number {
+  let speed = from;
+  if (speed < RULES.minSpeedCap) {
+    speed = RULES.minSpeedCap;
+    steps?.push({ kind: 'floor', speed });
+  }
+  if (inOverdrive(world, v)) {
+    speed *= RULES.overdriveBoost;
+    steps?.push({ kind: 'overdrive', factor: RULES.overdriveBoost, speed });
+  }
+  return transmissionSpeed(v, speed, limpSpeed, steps);
+}
+
+function transmissionSpeed(v: Vehicle, from: number, limpSpeed: number, steps: SpeedStep[] | null): number {
+  if (isWorking(corePart(v, 'transmission')) || from <= limpSpeed) return from;
+  steps?.push({ kind: 'transmission', speed: limpSpeed });
+  return limpSpeed;
+}
+
+function conditionSpeed(world: World, v: Vehicle, from: number, steps: SpeedStep[] | null): number {
+  let speed = from;
+  const weather = weatherOn(world, v).speed;
+  if (weather !== 1) {
+    speed *= weather;
+    steps?.push({ kind: 'weather', factor: weather, speed });
+  }
+  if (isTowing(world, v.id)) {
+    speed *= TOW.speedShare;
+    steps?.push({ kind: 'towing', factor: TOW.speedShare, speed });
+  }
+  return speed;
+}
+
 export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const ch = chassisDef(v.chassisId);
   const engines = mountedParts(v, 'engine');
   const mass = vehicleMass(v);
   const load = loadFactor(v);
   const force = ch.handlingMass / mass;
-  const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
+  const brokenWheels = brokenWheelCount(v);
+  const wheels = (1 - RULES.wheelLoss) ** brokenWheels;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
   const limpSpeed = limpSpeedOf(world, v);
   const limpAccel = limpSpeed * ch.accel;
 
-  let maxSpeed = limpSpeed;
+  const maxSpeed = walkSpeed(world, v, limpSpeed, load, brokenWheels, null);
   let accel = limpAccel;
   let fuelMult = 0;
   if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
-    const drag = gunDrag(v, e.capacity);
-    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels * drag);
+    const drag = gunDragOf(gunDraw(v), e.capacity);
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
-    if (inOverdrive(world, v)) {
-      maxSpeed *= RULES.overdriveBoost;
-      accel *= RULES.overdriveBoost;
-    }
-    if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
+    if (inOverdrive(world, v)) accel *= RULES.overdriveBoost;
   }
-  maxSpeed *= weatherAt(world, v.pos).speed;
-  if (isTowing(world, v.id)) maxSpeed *= TOW.speedShare;
 
   return {
     maxSpeed,
@@ -105,13 +185,26 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   };
 }
 
+export function gunDraw(v: Vehicle): number {
+  let draw = 0;
+  for (const item of mountedItems(v, 'weapon')) if (isWorking(item.part)) draw += wornDef<WeaponDef>(item.part).draw;
+  return draw;
+}
+
+export function workingEngineCapacity(v: Vehicle): number | null {
+  return hasWorkingEngine(v) ? wornDef<EngineDef>(mountedParts(v, 'engine')[0]).capacity : null;
+}
+
 export function gunDrag(v: Vehicle, capacity: number): number {
-  const draw = mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
+  return gunDragOf(gunDraw(v), capacity);
+}
+
+function gunDragOf(draw: number, capacity: number): number {
   return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
 }
 
-export function npcMassRoom(v: Vehicle): number {
-  const needed = neededLoadFactor(v);
+export function npcMassRoom(v: Vehicle, share = templateSpeedShare(v)): number {
+  const needed = neededLoadFactor(v, share);
   if (loadFactor(v) < needed) return 0;
   let low = 0;
   let high = chassisDef(v.chassisId).ratedMass;
@@ -124,13 +217,27 @@ export function npcMassRoom(v: Vehicle): number {
   return low;
 }
 
-export function meetsSpeedFloor(v: Vehicle): boolean {
-  return loadFactor(v) >= neededLoadFactor(v);
+export function meetsSpeedFloor(v: Vehicle, share: number): boolean {
+  return loadFactor(v) >= neededLoadFactor(v, share);
 }
 
-function neededLoadFactor(v: Vehicle): number {
+function neededLoadFactor(v: Vehicle, share: number): number {
   const engine = mountedParts(v, 'engine')[0];
-  return MIN_NPC_SPEED_SHARE / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
+  if (!engine) return share;
+  const e = wornDef<EngineDef>(engine);
+  const unloaded = chassisDef(v.chassisId).maxSpeed + e.speedBonus;
+  const floor = unloaded > 0 ? MIN_NPC_SPEED / unloaded : Infinity;
+  return Math.max(share, floor) / gunDrag(v, e.capacity);
+}
+
+export function speedShare(priorities: LoadoutPriorities): number {
+  return SPEED_SHARE.low + ((SPEED_SHARE.high - SPEED_SHARE.low) * priorities.speed) / PRIORITY_TOP;
+}
+
+function templateSpeedShare(v: Vehicle): number {
+  const template = v.brain && NPCS[v.brain.templateId];
+  if (!template) throw new Error(`${v.id} has no NPC template to read its speed share from`);
+  return speedShare(template.loadout.priorities);
 }
 
 export function inOverdrive(world: World, v: Vehicle): boolean {

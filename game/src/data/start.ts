@@ -38,6 +38,28 @@ export const START_KITS: Record<string, StartKit> = {
     cargo: { scrap: 2 },
     costBasis: { scrap: 10 },
   },
+  midgame: {
+    name: 'Your truck',
+    chassis: 'hauler',
+    parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
+    storage: [],
+    money: 3000,
+    fuel: CHASSIS.hauler.fuelCap,
+    supplies: RULES.baseSupplies,
+    cargo: { parts: 2 },
+    costBasis: {},
+  },
+  snowball: {
+    name: 'Your truck',
+    chassis: 'convertible',
+    parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
+    storage: [],
+    money: 2500,
+    fuel: CHASSIS.convertible.fuelCap,
+    supplies: RULES.baseSupplies,
+    cargo: {},
+    costBasis: {},
+  },
 };
 
 export function startKit(id: string): StartKit {

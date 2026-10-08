@@ -15,6 +15,7 @@ import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -78,7 +79,7 @@ describe('NPC driving', () => {
     }
     freeDrive(d);
     expect(arrived).toBe(true);
-  }, 120_000);
+  }, budget(120_000));
 
   it('passes the oncoming player without stopping or touching it', () => {
     let w = newWorld(1337, START_KITS.standard, TEST_MAP);
@@ -113,7 +114,7 @@ describe('NPC driving', () => {
     freeDrive(d);
     expect(slowest).toBeGreaterThan(RULES.parkedSpeed);
     expect(closest).toBeGreaterThan(gap);
-  }, 60_000);
+  }, budget(60_000));
 
   it.each([-3, -1.5].flatMap((dx) => [-3, -1.5, 0, 1.5, 3].map((dy) => [dx, dy])))(
     'two NPCs closing head-on never touch: second goal offset %s,%s',

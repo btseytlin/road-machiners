@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { XP_TO_REACH } from '../data/skills';
 import { hitOdds } from '../sim/combat';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
@@ -81,7 +80,7 @@ describe('hover card rows', () => {
 
   it('shows a knocked-out driver firing nothing at me', () => {
     const { world, them } = createDuel();
-    them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     expect(hitCardRows(world, them.id)!.theirs[0]).toMatchObject({ odds: null, text: 'driver knocked out' });
   });
 
@@ -93,7 +92,7 @@ describe('hover card rows', () => {
 
   it('shows perception as a negative scatter cause', () => {
     const { world, me, them, mine } = createDuel();
-    world.player.skills.perception = XP_TO_REACH[3];
+    world.player.ranks.perception = 3;
     const o = hitOdds(world, me, mine, them, 'body');
     expect(o.causes.skill).toBeLessThan(0);
     expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);

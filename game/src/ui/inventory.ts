@@ -1,5 +1,5 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
-// In a town the garage storage shows beside the grid.
+// At a shop the garage storage shows beside the grid.
 
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
@@ -28,9 +28,9 @@ import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, strip
 import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
-import { townAt } from "../sim/sites";
-import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
-import { hasStores, takeFromTruck } from "../sim/salvage";
+import { shopAt } from "../sim/market";
+import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
@@ -40,22 +40,20 @@ import type {
   Vehicle,
   World,
 } from "../sim/types";
-import { el, panel } from "./dom";
+import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid, toneStyle } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
   clearFan,
   fanSvg,
   weaponDefOf,
-  getItemIcon,
   gridEl,
   itemBox,
   itemLabel,
   itemName,
   itemState,
-  KIND_CLASS,
   lootGoodItem,
   lootPartItem,
   partTitle,
@@ -65,7 +63,8 @@ import {
   footprint,
 } from "./inventory-draw";
 import { fuelLiters, kg } from "./units";
-import { moneyLabel } from "./hud-readout";
+import { maxSpeedSteps } from "../sim/stats";
+import { moneyLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -119,7 +118,7 @@ export class InventoryView {
       this.select(null);
     });
     window.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() !== "r" || e.repeat) return;
+      if (e.key.toLowerCase() !== "r" || e.repeat || isBrowserChord(e)) return;
       if (this.drag) this.rotate();
       else this.rotateSelected();
     });
@@ -157,11 +156,11 @@ export class InventoryView {
     const me = playerVehicle(w);
     const g = gridOf(me);
     this.showSelection(w);
-    const grid = gridEl(g, this.cell);
+    const grid = gridEl(g, me.chassisId, this.cell);
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     this.showFan(me, this.selectedGun(me));
-    const inTown = townAt(w) !== null;
+    const atShop = shopAt(w) !== null;
     this.root.replaceChildren(
       el(
         "div",
@@ -169,12 +168,7 @@ export class InventoryView {
         el(
           "div",
           { class: "inv-truck" },
-          el(
-            "div",
-            { class: "truck-shell" },
-            el("div", { class: "truck-nose", "aria-hidden": "true" }),
-            grid,
-          ),
+          el("div", { class: "truck-shell" }, grid),
           this.legend(),
         ),
         el(
@@ -183,12 +177,12 @@ export class InventoryView {
           ...this.refitBanner(me),
           this.loot
             ? this.lootEl(w, this.loot)
-            : inTown
+            : atShop
               ? this.storageEl(w)
               : el(
                   "div",
                   { class: "dim" },
-                  "Park to install or remove parts.",
+                  "Park at a shop to use garage storage. Drag onto a mount to start a refit.",
                 ),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           this.inspection,
@@ -208,12 +202,12 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Top view, nose up. D: deck mounts for weapons, scanners and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
+        "Top view, nose up. Brown cells are deck mounts for weapons, scanners and cargo frames. Blue-grey cells are the engine mount. The cells around the truck are armor mounts. Hover a cell to see what it mounts.",
       ),
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. The marks on a gun show its blocked sides.",
+        "A part works only when it lies fully on one kind of mount. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
@@ -227,15 +221,13 @@ export class InventoryView {
     const me = playerVehicle(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
-    const inspect = () => this.showItem(w, it, mounted);
     const click = () => this.clickItem(this.clicked("grid", it.id, it));
     node.addEventListener("click", (e) => {
       if (core || e.detail === 0) click();
     });
-    node.addEventListener("focus", inspect);
     node.addEventListener("keydown", (e) => {
       if (e.key === "Enter") click();
     });
@@ -374,9 +366,9 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
+      ...(item.kind === "part" && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -391,7 +383,7 @@ export class InventoryView {
     if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
-      townAt(w) ? this.repairButton(w, item.part) : null,
+      shopAt(w) ? this.repairButton(w, item.part) : null,
       !mounted && partDef(item.part.defId).kind !== "core"
         ? this.stripButton(w, playerVehicle(w), item.part)
         : null,
@@ -405,7 +397,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
-    if (!fieldPatchable(part)) return townOnlyPatch(part);
+    if (!fieldPatchable(part)) return shopOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(w, me, plan);
@@ -502,9 +494,10 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -531,9 +524,10 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -554,8 +548,8 @@ export class InventoryView {
       const item = lootGoodItem(good);
       const chip = el(
         "div",
-        { class: "inv-chip k-good" },
-        createIcon(getItemIcon(item)),
+        { class: "inv-chip", style: toneStyle(good) },
+        itemIconEl(item),
         `${GOODS[good].name} x${count}`,
       );
       this.markSelected(chip, item);
@@ -617,26 +611,29 @@ export class InventoryView {
     const target = w.vehicles.find((v) => v.id === truckId);
     if (!target || !isKnockedOut(target))
       return el("div", { class: "inv-truck inv-target" }, el("h3", {}, "The truck got away"));
-    const grid = gridEl(gridOf(target), this.cell);
+    const grid = gridEl(gridOf(target), target.chassisId, this.cell);
     const removing = removalIds(w, target);
     grid.append(...target.items.map((it) => this.truckItemEl(w, target, it, grid, removing.has(it.id))));
     return el(
       "div",
       { class: "inv-truck inv-target" },
       el("h3", {}, `${npcName(target)}, ${gaveUp(target) ? "gave up" : "knocked out"}`),
-      el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
+      el("div", { class: "truck-shell" }, grid),
       el("div", { class: "dim" }, "Drag items onto your grid."),
     );
   }
 
   private truckItemEl(w: World, target: Vehicle, it: GridItem, grid: HTMLElement, removing: boolean): HTMLElement {
     const mounted = it.kind === "part" && isMounted(target.chassisId, it);
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
-    node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
+    const select = () => this.clickItem(this.clicked("truck", it.id, it));
+    node.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") select();
+    });
     if (it.kind === "part" && partDef(it.part.defId).kind === "core") {
-      node.addEventListener("click", () => this.clickItem(this.clicked("truck", it.id, it)));
+      node.addEventListener("click", select);
       return node;
     }
     node.addEventListener("pointerdown", (e) => {
@@ -649,7 +646,7 @@ export class InventoryView {
 
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
     );
   }
@@ -886,9 +883,9 @@ export class InventoryScreen {
     this.render();
   }
 
-  openDowned(world: World): boolean {
-    const downed = downedHere(world);
-    if (!downed) return false;
+  openDowned(world: World, vehicleId: string): boolean {
+    const downed = world.vehicles.find((v) => v.id === vehicleId);
+    if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
     this.view.setTruck(downed.id);
     this.root.style.display = "";
     this.render();
@@ -913,7 +910,7 @@ export class InventoryScreen {
   }
 }
 
-export function truckChips(w: World): HTMLElement {
+export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells: true }): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
   const rated = chassisDef(me.chassisId).ratedMass;
@@ -922,14 +919,20 @@ export function truckChips(w: World): HTMLElement {
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
     el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
-    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
+    opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",
       { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
+    powerChipNode(w, me),
   );
+}
+
+function powerChipNode(w: World, me: Vehicle): HTMLElement {
+  const chip = powerChip(maxSpeedSteps(w, me), me);
+  return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
 function patchBlocker(w: World, me: Vehicle, plan: RepairPlan): string | null {
@@ -955,16 +958,18 @@ function fieldPatchable(part: PartInstance): boolean {
   return def.kind !== "armor" || def.fieldRepair !== "none";
 }
 
-function townOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+function shopOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
 }
 
 function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
+  const row = conditionRow(part);
   return [
+    ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }

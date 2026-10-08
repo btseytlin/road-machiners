@@ -1,19 +1,31 @@
 // NPC field repairs: which part to patch, where to park for it, and the repair jobs. Shared jobs complete repairs
 // and spend parts. src/sim/npc-activities.ts decides when a repair goal goes on the stack.
 
-import { NPC_UPKEEP } from '../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
 import { inCombat } from './combat';
+import { bodyCondition } from './npc-decisions';
 import { startJob } from './jobs';
 import { withinReach } from './npc-activities';
 import { straightClear } from './path';
 import { repairPlan } from './repair';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { inShade, sunAt } from './sun';
+import { inShade, shadeCasters, shadeMatters, sunAt } from './sun';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+
+export function isStrandedForGood(vehicle: Vehicle): boolean {
+  const engine = mountedParts(vehicle, 'engine')[0];
+  return !engine || isJunk(engine);
+}
+
+export function isDamaged(vehicle: Vehicle): boolean {
+  const drivingPartWorn = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'engine')]
+    .some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
+  return isStrandedForGood(vehicle) || drivingPartWorn || bodyCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition;
+}
 
 function chooseRepairPart(world: World, vehicle: Vehicle) {
   return mountedParts(vehicle)
@@ -23,7 +35,7 @@ function chooseRepairPart(world: World, vehicle: Vehicle) {
 
 function canSearchForShade(world: World, vehicle: Vehicle): boolean {
   const sun = sunAt(world.turn);
-  if (!sun) return false;
+  if (!sun || !shadeMatters(world, vehicle.pos)) return false;
   if (getResources(world, vehicle).fuel === 0) return false;
   return !inShade(world, vehicle.pos, sun);
 }
@@ -54,8 +66,9 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
   const blockers = world.vehicles
     .filter((other) => other.id !== vehicle.id)
     .map((other) => ({ pos: other.pos, r: vehicleStats(world, other).radius }));
+  const casters = shadeCasters(world, vehicle.pos, NPC_UPKEEP.shadeSearchRadius);
   const shaded = getRepairCandidates(world, vehicle)
-    .find((point) => inShade(world, point, sun) && straightClear(world, vehicle.pos, point, radius, blockers));
+    .find((point) => inShade(world, point, sun, casters) && straightClear(world, vehicle.pos, point, radius, blockers));
   return shaded ?? null;
 }
 

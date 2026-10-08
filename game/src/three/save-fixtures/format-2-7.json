@@ -1,0 +1,21 @@
+{
+  "turn": 40,
+  "player": {
+    "vehicleId": "player",
+    "scavenged": ["fallen-sun", "wreck3"]
+  },
+  "vehicles": [
+    {
+      "id": "player",
+      "job": { "kind": "search", "stockId": "fallen-sun", "turnsLeft": 2 }
+    },
+    {
+      "id": "npc1",
+      "job": { "kind": "search", "stockId": "wreck3", "turnsLeft": 1 }
+    }
+  ],
+  "salvage": [
+    { "id": "fallen-sun", "pos": { "x": 320, "y": 270 }, "radius": 44, "goods": { "scrap": 1 }, "parts": [] },
+    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
+  ]
+}

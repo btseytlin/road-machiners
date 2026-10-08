@@ -8,7 +8,9 @@ import { getLotTradePrice, partRepairCost, enterTown, scrapPatch } from './econo
 import { corePart, coreParts, mountedParts } from './grid';
 import { makePart } from './factory';
 import { addGoods, stowPart } from './inventory';
+import { acceptContract, shopState, type Contract } from './market';
 import { sitePads } from './sites';
+import { leakFuel, tankLeaks } from './supplies';
 import { fuelCap, isStranded } from './stats';
 import { emptyWorld } from './testkit';
 import { maxHp } from './wear';
@@ -161,6 +163,90 @@ describe('scrap patch', () => {
     scrapPatch(w);
 
     expect(corePart(w.vehicles[0], 'transmission').hp).toBe(0);
+  });
+});
+
+describe('scrap fuel for a low tank', () => {
+  function lowFuel(share: number, pos = sitePads(bowl)[0]): World {
+    const w = strandedBroke(pos);
+    const me = w.vehicles[0];
+    corePart(me, 'transmission').hp = maxHp(corePart(me, 'transmission'));
+    w.player.fuel = fuelCap(me) * share;
+    return w;
+  }
+
+  it('tops a broke player with a sliver of fuel to the patch share and leaves the parts alone', () => {
+    const w = lowFuel(0.1);
+    const me = w.vehicles[0];
+    const engineHp = engineOf(me).hp;
+
+    scrapPatch(w);
+
+    expect(w.player.fuel).toBeCloseTo(fuelCap(me) * RULES.scrapPatch);
+    expect(engineOf(me).hp).toBe(engineHp);
+  });
+
+  it('patches a holed tank with the fuel, so the fuel stays', () => {
+    const w = lowFuel(0.1);
+    const me = w.vehicles[0];
+    const tank = corePart(me, 'tank');
+    tank.hp = 0;
+    const engineHp = engineOf(me).hp;
+
+    scrapPatch(w);
+    expect(tank.hp).toBeGreaterThanOrEqual(Math.ceil(maxHp(tank) * RULES.scrapPatch));
+    expect(tankLeaks(me)).toBe(false);
+    leakFuel(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(me) * RULES.scrapPatch);
+    expect(engineOf(me).hp).toBe(engineHp);
+  });
+
+  it('gives a holed tank nothing above the low fuel threshold', () => {
+    const w = lowFuel(0.3);
+    const tank = corePart(w.vehicles[0], 'tank');
+    tank.hp = 0;
+    scrapPatch(w);
+    expect(tank.hp).toBe(0);
+  });
+
+  it('gives nothing above the low fuel threshold, and nothing a second time', () => {
+    const w = lowFuel(0.3);
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.3);
+
+    const low = lowFuel(0.1);
+    scrapPatch(low);
+    low.events = [];
+    scrapPatch(low);
+    expect(low.events).toHaveLength(0);
+  });
+
+  it('gives nothing to a player who can pay for the fuel', () => {
+    const w = lowFuel(0.1);
+    w.player.money = 100000;
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.1);
+  });
+
+  it('gives nothing on a stall pad', () => {
+    const stall = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const w = lowFuel(0.1, sitePads(stall)[0]);
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.1);
+  });
+
+  it('leaves a player with no money, no fuel and a broken engine able to drive and take a haul', () => {
+    const w = strandedBroke();
+    w.player.fuel = 0;
+    engineOf(w.vehicles[0]).hp = 0;
+
+    const next = endTurn(w, () => undefined);
+
+    expect(isStranded(next, next.vehicles[0])).toBe(false);
+    expect(next.player.fuel).toBeGreaterThan(0);
+    const haul: Contract = { id: 'haul-test', shop: 'bowl', kind: 'haul', good: 'scrap', units: 1, to: 'nose', reward: 100, deadline: next.turn + 50, window: 50, rush: false, tier: 1 };
+    shopState(next, 'bowl').contracts.push(haul);
+    expect(acceptContract(next, haul.id).player.contracts.map((c) => c.id)).toContain(haul.id);
   });
 });
 

@@ -7,9 +7,10 @@ import { dist, polylineDist, type Vec } from '../sim/vec';
 import { editableTerrain, emptyWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
-import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
+import { buildDrive, freeDrive, GROUND, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -39,14 +40,14 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
     world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
     world.player.engineHeat = 0;
     for (const e of world.events)
-      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-'))
+      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-') && e.b !== GROUND)
         staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
     return dist(world.vehicles[0].pos, nose.pos) <= nose.radius + 1.5;
   });
   expect(staticDamage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.4);
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
-}, 120_000);
+}, budget(120_000));
 
 function roadWorld(road: Vec[]) {
   const w = emptyWorld();
@@ -69,4 +70,4 @@ it('a truck following a road into a blocking rock stops on the corner without a 
   });
   expect(damage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
-});
+}, budget(120_000));

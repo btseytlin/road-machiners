@@ -1,9 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, NEW_WORLD, TERRAIN } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
+import { deckAt, deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import type { BakedProp } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
+import { padReach } from '../test/sites';
 import { dist, segmentDist, type Vec } from '../sim/vec';
 import { baseLayer, finishLayer, newDraft, tileSteepness, type MapDraft } from './bake';
 import { dunes, rain, slump, wind } from './geology';
@@ -20,6 +22,7 @@ import {
   scrubGrowth,
   type Camp,
 } from './newworld';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const HALF = REGION.roadWidth / 2;
@@ -30,15 +33,15 @@ const FENCE = NEW_WORLD.fenceLength;
 const SEED = 1337;
 
 function expectOffBuilt(p: BakedProp): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
-  for (const site of SITES) expect(dist(p.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + p.r);
+  for (const site of SITES) expect(siteGap(site, p.pos)).toBeGreaterThan(O.siteClearance + p.r);
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
 }
 
 function onBuilt(c: Vec): boolean {
-  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAlong(c.x, c.y) !== null) return true;
-  return SITES.some((site) => dist(c, site.pos) <= Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
+  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAt(c.x, c.y) !== null) return true;
+  return SITES.some((site) => siteGap(site, c) <= padReach(site));
 }
 
 function setCorners(d: MapDraft, what: 'heights' | 'flow' | 'sand', value: (i: number, j: number) => number): void {
@@ -382,7 +385,7 @@ describe('new-world layer on a baked draft', () => {
     wind(base, GEOLOGY.wind, { rngState: SEED });
     dunes(base, GEOLOGY.dunes, GEOLOGY.wind.direction, SEED);
     d = oldWorldLayer(SEED, finishLayer(SEED, base));
-  }, 120_000);
+  }, budget(120_000));
 
   function clone(from: MapDraft): MapDraft {
     return { ...from, heights: from.heights.slice(), types: from.types.slice(), props: from.props.map((p) => ({ ...p, pos: { ...p.pos } })), sand: from.sand.slice(), flow: from.flow.slice(), slumped: from.slumped.slice(), built: from.built.slice() };

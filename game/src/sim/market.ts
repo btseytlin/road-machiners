@@ -17,8 +17,9 @@ import { addGoods, removeGoods, spareParts } from './inventory';
 import { practice } from './progress';
 import { chance, randInt, type Rng } from './rng';
 import { canUseSite, type Site } from './sites';
+import { isDefeated } from './defeat';
 import { playerCommand } from './world';
-import type { PartInstance, Vehicle, World } from './types';
+import type { GameEvent, PartInstance, Vehicle, World } from './types';
 import { isJunk, partValue } from './wear';
 import { dist, type Vec } from './vec';
 
@@ -84,9 +85,13 @@ export function goodBasePrice(shopId: string, good: string): number {
   return goodValue(good) * priceFactorFor(def, good);
 }
 
-function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
+export function standingPrice(shopId: string, good: string, pressure: number): number {
+  return goodBasePrice(shopId, good) * (1 + pressure);
+}
+
+export function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
   if (!(spread >= 0)) throw new Error(`Bad spread ${spread}`);
-  const pressured = goodBasePrice(shopId, good) * (1 + pressure);
+  const pressured = standingPrice(shopId, good, pressure);
   const buy = Math.max(1, Math.ceil(pressured * (1 + spread)));
   const sell = Math.min(buy - 1, Math.floor(pressured * (1 - spread)));
   return direction === 'buy' ? buy : Math.max(0, sell);
@@ -157,8 +162,10 @@ export function cargoValue(v: Vehicle): number {
   return goods + spareParts(v).reduce((a, p) => a + partValue(p), 0);
 }
 
-export function bountyReward(target: Vehicle): number {
-  return Math.round(vehicleValue(target) * CONTRACTS.bounty.valueShare);
+export function bountyReward(templateId: string): number {
+  const turns = CONTRACTS.bounty.rewardTurns[templateId];
+  if (turns === undefined) throw new Error(`No bounty reward for template ${templateId}`);
+  return Math.round(turns * EFFORT.wage[1]);
 }
 
 export function partPristineBuyPrice(defId: string): number {
@@ -219,7 +226,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
-  const reward = bountyReward(target);
+  const reward = bountyReward(target.brain.templateId);
   return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier };
 }
 
@@ -244,10 +251,30 @@ export function isExpired(world: World, c: Contract): boolean {
   return world.turn > c.deadline;
 }
 
-export function bountyFulfilled(world: World, c: Contract): boolean {
-  if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
-  const beaten = world.events.flatMap((e) => ((e.t === 'destroyed' || e.t === 'npcKnockout') && e.by === world.player.vehicleId ? [e.vehicle] : []));
-  return [...world.removed, ...world.vehicles].some((v) => v.brain?.templateId === c.template && beaten.includes(v.id));
+export function playerDefeats(world: World): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const e of world.events) {
+    const template = playerDefeatOf(world, e);
+    if (template) out.set(template, (out.get(template) ?? 0) + 1);
+  }
+  return out;
+}
+
+function playerDefeatOf(world: World, e: GameEvent): string | null {
+  if (!isPlayerBlow(world, e)) return null;
+  const v = beatenTruck(world, e.vehicle);
+  if (e.t === 'destroyed' && isDefeated(v)) return null;
+  return v.brain?.templateId ?? null;
+}
+
+function isPlayerBlow(world: World, e: GameEvent): e is Extract<GameEvent, { t: 'destroyed' | 'npcKnockout' }> {
+  return (e.t === 'destroyed' || e.t === 'npcKnockout') && e.by === world.player.vehicleId;
+}
+
+function beatenTruck(world: World, id: string): Vehicle {
+  const v = world.removed.find((x) => x.id === id) ?? world.vehicles.find((x) => x.id === id);
+  if (!v) throw new Error(`No truck ${id} for a defeat this turn`);
+  return v;
 }
 
 export function creditBounty(world: World, npc: Vehicle): void {
@@ -274,6 +301,11 @@ export function shopState(world: World, shopId: string): ShopState {
   const state = world.shops[shopId];
   if (!state) throw new Error(`Unknown shop ${shopId}`);
   return state;
+}
+
+export function standingPressures(world: World, shopId: string): Record<string, number> {
+  const live = shopState(world, shopId).pressure;
+  return Object.fromEntries(shopDef(shopId).goods.map((good) => [good, live[good] ?? 0]));
 }
 
 function fillBoard(world: World, shopId: string, state: ShopState): void {
@@ -335,7 +367,13 @@ export function siteOf(siteId: string): Site {
   return site;
 }
 
-function requireShop(world: World, shopId: string): void {
+export function requireShop(world: World): string {
+  const shopId = shopAt(world);
+  if (!shopId) throw new Error('Not parked at a shop');
+  return shopId;
+}
+
+function requireParkedAt(world: World, shopId: string): void {
   if (shopAt(world) !== shopId) throw new Error(`Not parked at ${shopId}`);
 }
 
@@ -370,7 +408,7 @@ export function deliverContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const contract = w.player.contracts.find((c) => c.id === contractId);
     if (!contract) throw new Error(`No active contract ${contractId}`);
-    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or destroy the target');
+    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or wreck the target');
     if (contract.kind === 'haul') handInHaul(w, contract);
     else handInFetch(w, contract);
     finishContract(w, contract, 'done');
@@ -378,7 +416,7 @@ export function deliverContract(world: World, contractId: string): World {
 }
 
 function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
-  requireShop(world, c.to);
+  requireParkedAt(world, c.to);
   const v = playerVehicle(world);
   if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${GOODS[c.good].name}`);
   removeGoods(v, c.good, c.units);
@@ -389,7 +427,7 @@ export function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstan
 }
 
 function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): void {
-  requireShop(world, c.shop);
+  requireParkedAt(world, c.shop);
   const v = playerVehicle(world);
   const spare = spareParts(v).find((p) => fitsFetch(c, p));
   if (spare) {
@@ -422,23 +460,24 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
 }
 
 export function advanceContracts(world: World): void {
-  const paidTemplates = new Set<string>();
+  const defeats = playerDefeats(world);
   for (const c of [...world.player.contracts]) {
-    const outcome = contractOutcome(world, c, paidTemplates);
+    const outcome = contractOutcome(world, c, defeats);
     if (outcome) finishContract(world, c, outcome);
     else if (c.deadline - world.turn === CONTRACTS.warnTurns) world.events.push({ t: 'contract', contract: { ...c }, outcome: 'expiring' });
   }
 }
 
-function bountyOutcome(world: World, c: Extract<Contract, { kind: 'bounty' }>, paidTemplates: Set<string>): 'done' | 'lapsed' | null {
-  if (bountyFulfilled(world, c) && !paidTemplates.has(c.template)) {
-    paidTemplates.add(c.template);
+function bountyOutcome(world: World, c: Extract<Contract, { kind: 'bounty' }>, defeats: Map<string, number>): 'done' | 'lapsed' | null {
+  const left = defeats.get(c.template) ?? 0;
+  if (left > 0) {
+    defeats.set(c.template, left - 1);
     return 'done';
   }
   return bountyLapsed(world, c) ? 'lapsed' : null;
 }
 
-function contractOutcome(world: World, c: Contract, paidTemplates: Set<string>): 'done' | 'failed' | 'lapsed' | null {
-  if (c.kind === 'bounty') return bountyOutcome(world, c, paidTemplates) ?? (isExpired(world, c) ? 'failed' : null);
+function contractOutcome(world: World, c: Contract, defeats: Map<string, number>): 'done' | 'failed' | 'lapsed' | null {
+  if (c.kind === 'bounty') return bountyOutcome(world, c, defeats) ?? (isExpired(world, c) ? 'failed' : null);
   return isExpired(world, c) ? 'failed' : null;
 }

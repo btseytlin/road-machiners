@@ -43,6 +43,9 @@ import {
 export const BUILT_SCRUB = 3;
 export const BUILT_DIRTY_WATER = 4;
 export const BUILT_TOXIC = 5;
+export const BUILT_TRACK = 6;
+export const BUILT_CANAL = 7;
+export const BUILT_PAD = 8;
 
 export type Camp = { pos: Vec; radius: number };
 

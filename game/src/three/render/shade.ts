@@ -51,7 +51,7 @@ export class ShadeView {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SIDE * SIDE * 3), 3));
     geo.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array(SIDE * SIDE), 1));
     geo.setIndex(patchIndices());
-    const c = new THREE.Color(PAL.shadow);
+    const c = new THREE.Color(PAL.shadeTint);
     const mat = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Vector3(c.r, c.g, c.b) } },
       vertexShader: `
