@@ -760,9 +760,24 @@ export class InventoryView {
     );
     if (!item || item.kind !== "part") return;
     const id = item.id;
-    this.run((w) =>
-      this.moveGridItem(w, id, { x: item.x, y: item.y, rot: nextRot(item) }),
-    );
+    // A turn that does not fit is skipped, so a gun hemmed in on one side still reaches the facings that fit.
+    let turned = item;
+    for (let i = 0; i < 3; i++) {
+      turned = { ...turned, rot: nextRot(turned) };
+      const to = { x: item.x, y: item.y, rot: turned.rot };
+      const last = i === 2;
+      let fits = true;
+      this.run((w) => {
+        try {
+          return this.moveGridItem(w, id, to);
+        } catch (err) {
+          fits = false;
+          if (last) throw err;
+          return w;
+        }
+      }, !last);
+      if (fits) return;
+    }
   }
 
   private onMove(e: PointerEvent): void {
