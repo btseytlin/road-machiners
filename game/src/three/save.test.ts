@@ -101,13 +101,12 @@ describe('local game save', () => {
     const after = update(loaded, (d) => advanceContracts(d));
     expect(after.player.contracts).toEqual([haul]);
   });
-
-  it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
+  it('keeps a held bounty across a reload, and a knockout after it fulfils the bounty once', () => {
     const storage = makeStorage();
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
     world.player.contracts = [bounty];
     writeSave(storage, 'auto', world, 1000);
     const loaded = loadWorld(storage, 'auto', TEST_MAP);
@@ -117,10 +116,10 @@ describe('local game save', () => {
       d.events = [{ t: 'npcKnockout', vehicle: raider.id, by: d.player.vehicleId }];
       advanceContracts(d);
     });
-    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: bounty, outcome: 'done' }]);
-    expect(after.player.money).toBe(loaded.player.money + 100);
+    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: { ...bounty, fulfilled: true }, outcome: 'fulfilled' }]);
+    expect(after.player.money).toBe(loaded.player.money);
     writeSave(storage, 'auto', after, 1000);
-    expect(loadWorld(storage, 'auto', TEST_MAP)?.player.contracts).toEqual([]);
+    expect(loadWorld(storage, 'auto', TEST_MAP)?.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
   });
 
   it('resumes a pending refit after loading without losing progress', () => {

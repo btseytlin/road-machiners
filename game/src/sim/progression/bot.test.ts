@@ -25,6 +25,7 @@ import { cloneWorld, endTurn, hostileToPlayer } from '../world';
 import { basicsRepairCost, driveRepairCost, getTradePrice, partTradePrice, repairCost } from '../economy';
 import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
+import { emptyHidden } from '../salvage';
 import { botOrders, CONVOY_ROB_PATROL, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
@@ -180,12 +181,24 @@ describe('botOrders', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.speed = 0;
-    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }), me);
 
     const turn = botOrders(w, 'scavenger');
 
     expect(playerVehicle(turn.world).job).toBeNull();
+  });
+
+  it('has a scavenger search a searched wreck again while units stay hidden there', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: {}, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 4 } } });
+    w.player.scavenged.push('wreck-beside');
+
+    const turn = botOrders(w, 'scavenger');
+
+    expect(playerVehicle(turn.world).job).toMatchObject({ kind: 'search', stockId: 'wreck-beside' });
   });
 
   it('has a stranded truck crawl to the nearest town', () => {
@@ -757,7 +770,7 @@ describe('the hunter', () => {
       const w = parkedAt('bowl');
       const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 300, y: 300 });
       target.brain = npcBrain('buggy', target.pos, ['raider']);
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
       return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
     };
 
@@ -770,7 +783,7 @@ describe('the hunter', () => {
       const w = parkedAt('bowl');
       const target = addVehicle(w, 'raiders', chassis, parts, { x: 300, y: 300 });
       target.brain = npcBrain(template, target.pos, ['raider']);
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template, targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template, targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
       return botOrders(w, 'hunter').world.player.contracts.length;
     };
 
@@ -780,7 +793,7 @@ describe('the hunter', () => {
 
   it('has a hunter take no bounty when no truck of the type is left', () => {
     const w = parkedAt('bowl');
-    w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+    w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
 
     expect(botOrders(w, 'hunter').world.player.contracts).toEqual([]);
   });
@@ -851,7 +864,7 @@ describe('the hunter', () => {
   it('has a climber with fewer than three guns haul, and take no bounty', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [
-      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
+      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false },
       { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 

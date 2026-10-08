@@ -14,7 +14,7 @@ import { TEST_MAP } from './map';
 const CONTRACT_KINDS: Contract[] = [
   { id: 'c', shop: 's', kind: 'haul', good: 'g', units: 1, to: 't', reward: 1, deadline: 1, window: 1, rush: false, tier: 1 },
   { id: 'c', shop: 's', kind: 'fetch', defId: 'p', reward: 1, deadline: 1, window: 1, tier: 1 },
-  { id: 'c', shop: 's', kind: 'bounty', template: 't', targetName: 'n', reward: 1, deadline: 1, window: 1, tier: 1 },
+  { id: 'c', shop: 's', kind: 'bounty', template: 't', targetName: 'n', reward: 1, deadline: 1, window: 1, tier: 1, fulfilled: false },
 ];
 
 // One part with gun state and one without, so the shape does not depend on which parts the shops rolled.
@@ -29,10 +29,19 @@ export function newGameShape(): Shape {
     shop.stock = [makePart(world, WEAPON_ID, 0), makePart(world, PLAIN_ID, 0)];
   }
   // A loot table fixes which goods a stock holds, but its spare part is rolled. Each goods mix gets one stock with no
-  // spare part, one with a gun and one with a plain part, so the shape does not depend on which spares rolled.
-  const mixes = new Map<string, SalvageStock>(world.salvage.map((stock) => [Object.keys(stock.goods).sort().join(), stock]));
+  // spare part, one with a gun and one with a plain part, so the shape does not depend on which spares rolled. A rolled
+  // stock starts hidden, so each sample holds its mix both hidden and revealed, as a stock does mid-search.
+  const mixes = new Map<string, SalvageStock>(world.salvage.map((stock) => [Object.keys(lootGoods(stock)).sort().join(), stock]));
   world.salvage = [...mixes.values()].flatMap((stock) =>
-    [[], [makePart(world, WEAPON_ID, 0)], [makePart(world, PLAIN_ID, 0)]].map((parts) => ({ ...stock, parts })),
+    [[], [makePart(world, WEAPON_ID, 0)], [makePart(world, PLAIN_ID, 0)]].map((parts) => {
+      const goods = lootGoods(stock);
+      return { ...stock, goods, parts, hidden: { ...stock.hidden, goods: { ...goods }, parts } };
+    }),
   );
   return shapeOf(JSON.parse(JSON.stringify(saveOf(world).world)));
+}
+
+// The goods a stock holds, hidden or revealed.
+function lootGoods(stock: SalvageStock): Record<string, number> {
+  return { ...stock.hidden.goods, ...stock.goods };
 }
