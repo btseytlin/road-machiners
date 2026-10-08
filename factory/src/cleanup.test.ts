@@ -77,6 +77,15 @@ describe('sweepWork', () => {
     expect(swept.removed).toEqual(['issue-4']);
     expect(has(root, 'issue-3/node_modules')).toBe(true);
   });
+
+  it('skips a shared folder that any job locks, like a merge building dev', () => {
+    const root = work('dev-build', 'release-main');
+    mkdirSync(join(`${root}-locks`, 'dev-build'), { recursive: true });
+    writeFileSync(join(`${root}-locks`, 'dev-build', 'owner'), String(process.pid));
+    const swept = sweepWork(root, `${root}-locks`, state(), []);
+    expect(swept.removed).toEqual(['release-main']);
+    expect(has(root, 'dev-build/node_modules')).toBe(true);
+  });
 });
 
 describe('sweepLogs', () => {

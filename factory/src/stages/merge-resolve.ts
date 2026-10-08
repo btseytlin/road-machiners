@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { changesSaveMajor } from '../save-guard';
 import { GAME_DIR, MergeConflictError, RevertConflictError, type Ctx, type MergeStep, type Resolution, type Stage } from '../types';
+import { withWorkFolder } from '../work-lock';
 import { factoryPaths } from '../diff-guard';
 import { agentHome, fillPrompt, resetOutputs } from './common';
 import { releaseLog } from './release-common';
@@ -33,7 +34,11 @@ export async function revertResolving(ctx: Ctx, stage: Stage, issue: number, bra
   }
 }
 
-async function resolve(ctx: Ctx, stage: Stage, conflict: MergeConflictError | RevertConflictError): Promise<Resolution> {
+function resolve(ctx: Ctx, stage: Stage, conflict: MergeConflictError | RevertConflictError): Promise<Resolution> {
+  return withWorkFolder(ctx, `merge-${conflict.into.replaceAll('/', '-')}`, () => resolveIn(ctx, stage, conflict));
+}
+
+async function resolveIn(ctx: Ctx, stage: Stage, conflict: MergeConflictError | RevertConflictError): Promise<Resolution> {
   const slug = conflict.into.replaceAll('/', '-');
   const dir = join(ctx.cfg.home, 'work', `merge-${slug}`);
   ctx.log(stage, null, `${conflict.message} An agent resolves it.`);

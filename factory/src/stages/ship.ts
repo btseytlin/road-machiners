@@ -8,6 +8,7 @@ import { releasePostDir } from '../release-post';
 import { reportEnv, takeMaps } from '../sourcemaps';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type ReleasePost, type ReleaseState } from '../types';
+import { withWorkFolder } from '../work-lock';
 import { closeBundle } from './bundle';
 import { agentLog, fillPrompt, resetOutputs } from './common';
 import { checkAndPush, landingAgent, mergeIn, type Landing } from './merge';
@@ -38,7 +39,11 @@ async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
   if (release.candidateSha !== head) throw new Error(`The release moved to ${head} after the candidate of ${release.candidateSha ?? 'an unknown commit'} was posted, so the committee has not played it. A new candidate follows.`);
 }
 
-async function landRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
+function landRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
+  return withWorkFolder(ctx, 'ship-main', () => mergeRelease(ctx, release));
+}
+
+async function mergeRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'ship-main');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('main', 'main', dir);
@@ -48,7 +53,11 @@ async function landRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
   await checkAndPush(ctx, land, spent, (failure) => fillPrompt('ship-fix', { release: release.branch, failure }));
 }
 
-export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
+export function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
+  return withWorkFolder(ctx, 'release-main', () => buildAndPush(ctx, keys, logName));
+}
+
+async function buildAndPush(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release-main');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('main', 'main', dir);

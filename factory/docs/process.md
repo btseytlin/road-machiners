@@ -143,7 +143,7 @@ A timer runs one tick at a time. A tick never waits for a job. Each job runs as 
 
 Jobs pick in this order. A job starts when its queue has a free worker and no other job works on its issue.
 
-1. Branch jobs: queued approve, remove, ship, incident, then the merge queue, a stale `/dev/`, the release cut, and the release playtest or the candidate. The playtest runs in the verify queue.
+1. Branch jobs: every queued approve, remove, ship and incident, then the merge queue, a stale `/dev/`, the release cut, and the release playtest or the candidate. The playtest runs in the verify queue.
 2. The waste review, when due.
 3. Card jobs: hotfixes, ad hoc tasks, factory changes, release tasks, then other cards. Within each, the card furthest along goes first.
 
@@ -156,4 +156,4 @@ Queues:
 - implement: implementation, ad hoc and change.
 - verify: testing, hardening and the release playtest.
 - test: the post with no checks.
-- branch: approve, merge, remove, ship, incident, release cut, candidate and dev, one at a time.
+- branch: approve, merge, remove, ship, incident, release cut, candidate and dev, side by side. A job never runs twice at once, and Ship and Remove never run together, since both change the release.

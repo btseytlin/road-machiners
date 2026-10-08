@@ -57,10 +57,10 @@ describe('chooseJobs daily cap', () => {
     expect(chooseJobs(capped, [card(6, 'Implementation', ['adhoc'])], NOW, CFG)).toEqual([{ stage: 'adhoc', issue: 6 }]);
   });
 
-  it('runs a queued incident job at the cap, after the other branch jobs', () => {
+  it('runs every queued incident job at the cap, beside a queued ship', () => {
     const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
-    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
-    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }]);
+    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }, { stage: 'incident', issue: 8 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }, { stage: 'incident', issue: 7 }, { stage: 'incident', issue: 8 }]);
   });
 
   it('runs factory changes in the implement queue after ad hoc tasks and before cards', () => {
@@ -149,9 +149,14 @@ describe('chooseJobs during a release', () => {
     expect(chooseJobs({ ...queuedState, pendingRemovals: [] }, adhoc, NOW, CFG)).toEqual([{ stage: 'ship', issue: 20 }, { stage: 'adhoc', issue: 6 }]);
   });
 
-  it('runs an approval before a removal', () => {
+  it('runs an approval beside a removal', () => {
     const s = { ...open, pendingApprovals: { '4': 'u' }, pendingRemovals: [{ issue: 8, by: 'Ann', text: 't' }] };
-    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }]);
+    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }, { stage: 'remove', issue: 8 }]);
+  });
+
+  it('never runs a removal beside a ship, since both change the release', () => {
+    const s = { ...open, jobs: [running('ship', open.release!.issue)], pendingRemovals: [{ issue: 8, by: 'Ann', text: 't' }] };
+    expect(chooseJobs(s, [], NOW, CFG)).toEqual([]);
   });
 
   it('ignores a queued ship when no release is open', () => {
@@ -206,7 +211,7 @@ describe('chooseJobs', () => {
   it('fills each queue up to its limit beside running jobs, never twice on one issue', () => {
     const s = state({ jobs: [running('design', 1), running('verify', 7), running('approve', 9)], pendingIncidents: [3] });
     const cards = [card(1, 'Design'), card(2, 'Design'), card(8, 'Testing'), card(4, 'Triage'), card(5, 'Triage')];
-    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
+    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'incident', issue: 3 }, { stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
     const idle = state({ jobs: [running('design', 1)] });
     expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2, designWorkers: 1 })).toEqual([{ stage: 'verify', issue: 8 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
   });
@@ -216,9 +221,9 @@ describe('chooseJobs', () => {
     expect(chooseJobs(state({ jobStarts: starts(2) }), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 1 }, { stage: 'design', issue: 2 }]);
   });
 
-  it('runs the lowest pending approval, and a change beside it', () => {
+  it('runs every pending approval, lowest first, and a change beside them', () => {
     const s = state({ pendingApprovals: { '9': 'u', '4': 'u' }, pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
-    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }, { stage: 'change', issue: 3 }]);
+    expect(chooseJobs(s, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }, { stage: 'approve', issue: 9 }, { stage: 'change', issue: 3 }]);
   });
 
   it('runs a pending change beside a due release cut', () => {
@@ -253,8 +258,9 @@ describe('chooseJobs', () => {
     const cards = [card(6, 'Implementation', ['adhoc']), card(4, 'Design')];
     expect(chooseJobs(state(), cards, NOW, CFG, { dev: 'dev0002', release: null })).toEqual([{ stage: 'dev', issue: null }, { stage: 'adhoc', issue: 6 }, { stage: 'design', issue: 4 }]);
     expect(chooseJobs(state({ jobStarts: starts(23, 5, 1) }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([{ stage: 'dev', issue: null }]);
-    expect(chooseJobs(state({ pendingApprovals: { '4': 'u' } }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([{ stage: 'approve', issue: 4 }]);
-    expect(chooseJobs(state({ jobs: [running('approve', 4)] }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([]);
+    expect(chooseJobs(state({ pendingApprovals: { '4': 'u' } }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([{ stage: 'approve', issue: 4 }, { stage: 'dev', issue: null }]);
+    expect(chooseJobs(state({ jobs: [running('approve', 4)] }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([{ stage: 'dev', issue: null }]);
+    expect(chooseJobs(state({ jobs: [running('dev', null)] }), [], NOW, CFG, { dev: 'dev0002', release: null })).toEqual([]);
   });
 
   it('leaves /dev/ alone when it serves dev or dev failed to build', () => {
@@ -406,11 +412,12 @@ describe('tick', () => {
     expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'harden', issue: 6 }, { stage: 'verify', issue: 1 }]);
   });
 
-  it('starts one merge job with no issue for every Merging card, uncapped, after queued approvals', () => {
+  it('starts one merge job with no issue for every Merging card, uncapped, beside queued approvals', () => {
     const cards = [card(5, 'Merging'), card(6, 'Merging'), card(7, 'Approval')];
     const full = { jobStarts: [hoursAgo(1)] };
-    expect(chooseJobs(state({ ...full, pendingApprovals: { 7: 'Ann' } }), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'approve', issue: 7 }]);
+    expect(chooseJobs(state({ ...full, pendingApprovals: { 7: 'Ann' } }), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'approve', issue: 7 }, { stage: 'merge', issue: null }]);
     expect(chooseJobs(state(full), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'merge', issue: null }]);
+    expect(chooseJobs(state({ ...full, jobs: [running('merge', null)] }), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([]);
   });
 
   it('starts no merge job while every Merging card is stuck or held', () => {

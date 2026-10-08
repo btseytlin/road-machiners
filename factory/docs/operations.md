@@ -4,7 +4,7 @@ How the factory runs on its host: jobs, limits, cleanup, failures and records.
 
 ## Jobs and queues
 
-Each job is its own process, started by the tick. [process.md](process.md#tick-and-queues) lists the queues and the order jobs start in. `FACTORY_<QUEUE>_WORKERS` sets each queue's limit, and the branch queue runs one job at a time. `FACTORY_<QUEUE>_TIMEOUT_MINUTES` sets each queue's time limit. Inside a job, an agent runs long commands with `factory-job`, and `FACTORY_JOB_MAX_MINUTES` caps the limit of each one. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job.
+Each job is its own process, started by the tick. [process.md](process.md#tick-and-queues) lists the queues and the order jobs start in. `FACTORY_<QUEUE>_WORKERS` sets each queue's limit. The branch queue has no limit. Its jobs run side by side, and each one locks the shared folders it uses under `$FACTORY_HOME/locks`: `dev-build`, `release-main`, `merge-queue`, `ship-main` and each `merge-<branch>` conflict clone. A job waits for a locked folder at most `FACTORY_BRANCH_TIMEOUT_MINUTES`, and the cleanup sweep skips it. `FACTORY_<QUEUE>_TIMEOUT_MINUTES` sets each queue's time limit. Inside a job, an agent runs long commands with `factory-job`, and `FACTORY_JOB_MAX_MINUTES` caps the limit of each one. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job.
 
 Jobs share the host clone and the state file. Each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.
 

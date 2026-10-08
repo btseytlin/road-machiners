@@ -5,6 +5,7 @@ import { summarizeError } from './fail';
 import { reportEnv, takeMaps, type ReportBuild } from './sourcemaps';
 import { readState, updateState } from './state';
 import { GAME_DIR, type Ctx } from './types';
+import { withWorkFolder } from './work-lock';
 
 const SCOPE = /^[a-z0-9-]+$/;
 
@@ -31,7 +32,11 @@ export function publishBuild(ctx: Ctx, clone: string, scope: string): string {
   return `${ctx.cfg.publicUrl}/${scope}/`;
 }
 
-export async function deployDev(ctx: Ctx, log: string): Promise<string> {
+export function deployDev(ctx: Ctx, log: string): Promise<string> {
+  return withWorkFolder(ctx, 'dev-build', () => buildDev(ctx, log));
+}
+
+async function buildDev(ctx: Ctx, log: string): Promise<string> {
   const dir = `${ctx.cfg.home}/work/dev-build`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);

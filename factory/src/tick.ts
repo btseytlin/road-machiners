@@ -33,14 +33,15 @@ function isDue(last: string | null, now: Date, everyMs: number): boolean {
 
 const isHeld = (state: FactoryState, issue: number | null): boolean => issue !== null && String(issue) in state.held;
 
-function queued(state: FactoryState): JobPick | null {
-  const approval = Object.keys(state.pendingApprovals).map(Number).filter((issue) => !isHeld(state, issue)).sort((a, b) => a - b)[0];
-  if (approval !== undefined) return { stage: 'approve', issue: approval };
-  const removal = state.pendingRemovals[0];
-  if (removal) return { stage: 'remove', issue: removal.issue };
-  if (state.pendingShip !== null && state.release) return { stage: 'ship', issue: state.release.issue };
-  const incident = state.pendingIncidents[0];
-  return incident === undefined ? null : { stage: 'incident', issue: incident };
+function queued(state: FactoryState): JobPick[] {
+  const approvals = Object.keys(state.pendingApprovals).map(Number).filter((issue) => !isHeld(state, issue)).sort((a, b) => a - b);
+  const ship: JobPick[] = state.pendingShip !== null && state.release ? [{ stage: 'ship', issue: state.release.issue }] : [];
+  return [
+    ...approvals.map((issue) => ({ stage: 'approve' as const, issue })),
+    ...state.pendingRemovals.map((removal) => ({ stage: 'remove' as const, issue: removal.issue })),
+    ...ship,
+    ...state.pendingIncidents.map((issue) => ({ stage: 'incident' as const, issue })),
+  ];
 }
 
 function changeJobs(state: FactoryState): JobPick[] {
@@ -134,7 +135,7 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
 }
 
 function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
-  const picks = [queued(state), mergeJob(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
+  const picks = [...queued(state), mergeJob(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
@@ -161,7 +162,7 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
 
 function limits(cfg: Due): Record<Queue, number> {
   return {
-    branch: 1,
+    branch: Infinity,
     triage: cfg.triageWorkers,
     design: cfg.designWorkers,
     implement: cfg.implementWorkers,
@@ -177,9 +178,11 @@ function findCapacityReasons(state: FactoryState, pick: JobPick, running: JobPic
   const queue = QUEUE_OF[pick.stage];
   const reasons: WaitReason[] = isHeld(state, pick.issue) ? ['held'] : [];
   if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
-  if (pick.issue !== null && running.some((job) => job.issue === pick.issue)) reasons.push('issue-running');
+  if (running.some((job) => job.issue === pick.issue && (pick.issue !== null || job.stage === pick.stage))) reasons.push('issue-running');
+  if (RELEASE_WRITERS.includes(pick.stage) && running.some((job) => RELEASE_WRITERS.includes(job.stage))) reasons.push('issue-running');
   return reasons;
 }
+const RELEASE_WRITERS: JobStage[] = ['ship', 'remove'];
 function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');

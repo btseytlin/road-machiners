@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, RELEASE_CANDIDATE_LABEL, STUCK_LABEL, type AgentSession, type Card, type Ctx } from '../types';
+import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
 import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
@@ -15,7 +16,7 @@ export async function merge(ctx: Ctx): Promise<void> {
   const batch = await nextBatch(ctx);
   if (batch === null) return ctx.log('merge', null, 'no card waits in Merging');
   try {
-    await mergeBatch(ctx, batch.base, batch.cards);
+    await withWorkFolder(ctx, 'merge-queue', () => mergeBatch(ctx, batch.base, batch.cards));
   } catch (error) {
     for (const card of batch.cards) await ctx.github.addLabel(card.issue, STUCK_LABEL);
     throw error;
