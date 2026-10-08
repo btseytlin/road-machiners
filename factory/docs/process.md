@@ -113,7 +113,7 @@ Members, other jobs and releases push all the time, so any branch may move while
 ![Branches](diagrams/branches.svg)
 
 - The release cut merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup tasks. `lastRelease` changes only when the cut succeeds or finds nothing new, so a failed cut runs again on the next tick.
-- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io. A game change on `main` that the release lacks is merged into the release at once instead, and Ship stops. The release moved, so a new candidate follows for the committee to play.
+- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io. A change on `main` never stops a ship. Ship takes whatever `main` holds, game changes included, since only a member puts game changes on `main` outside a release or a hotfix.
 - A hotfix merges its branch into `main`, and `main` into `dev` and the open release, in one push. Then it ships like a release.
 - Remove reverts a feature's merge in both `dev` and the release, and sends its issue back to Design.
 
