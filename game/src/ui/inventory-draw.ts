@@ -2,7 +2,7 @@
 
 import { GOODS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
-import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
+import { gunBlockers, gunSpans, type FireSpan } from "../sim/armor";
 import { maxHp } from "../sim/wear";
 import { facingOf, itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, Rot, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
@@ -194,11 +194,7 @@ export function weaponDefOf(it: GridItem): WeaponDef | null {
 
 // The ids of the tall parts that block this gun, for outlining them on the grid.
 export function blockerIds(v: Vehicle, it: GridItem): string[] {
-  const blockers = sideBlockers(v, it);
-  return reachedSides(it).flatMap((side) => {
-    const b = blockers[side];
-    return b ? [b.id] : [];
-  });
+  return gunBlockers(v, it).map((b) => b.id);
 }
 
 // The fan over the grid, nose up. radius is in pixels, cell is the grid cell size in pixels.
@@ -211,8 +207,7 @@ export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: numb
   svg.setAttribute("class", "inv-fan");
   svg.setAttribute("width", String(size.w * cell));
   svg.setAttribute("height", String(size.h * cell));
-  const open = SIDES.filter((side) => !sideBlockers(v, it)[side]);
-  for (const span of fireSpans(def.arc, open, facingOf(it))) {
+  for (const span of gunSpans(v, it)) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", spanPath(cx, cy, radius, span));
     svg.append(path);

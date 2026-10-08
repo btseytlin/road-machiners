@@ -2,9 +2,9 @@ import { RULES } from '../data/rules';
 import { PHYSICS } from '../data/physics';
 import { bodyOf } from './body';
 // Sides and lanes of a truck's grid. A round enters the grid from the struck side and walks one lane of cells inward.
-// Each working part it meets takes damage and stops some of its penetration. Fire leaves the other way: a gun fires
-// toward a side only when no tall part stands between it and that edge, in the lane through the gun's center cell.
-// So a gun behind the cab cannot fire forward, and a cargo box behind a turret blinds its rear.
+// Each working part it meets takes damage and stops some of its penetration. Fire leaves the other way: seen from the
+// gun's center, each tall cell on the truck hides a slice of angles, and the gun fires through its arc minus those
+// slices. So a gun behind the cab cannot fire forward over it, and a cargo box behind a turret blinds its rear.
 
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
@@ -291,138 +291,143 @@ function armorAgainst(def: PartDef, blast: boolean): number {
 
 export const SIDES: readonly Side[] = ['front', 'rear', 'left', 'right'];
 
-const STEP: Record<Side, { dx: number; dy: number }> = {
-  front: { dx: 0, dy: -1 },
-  rear: { dx: 0, dy: 1 },
-  left: { dx: -1, dy: 0 },
-  right: { dx: 1, dy: 0 },
-};
-
-// The sides a mounted gun can fire toward past the tall parts on its truck.
-export function openSides(v: Vehicle, item: GridItem): Side[] {
-  return openIn(gridOf(v), tallCells(v), item);
-}
-
-// The nearest tall item in the gun's lane toward each blocked side. An open side has no entry.
-export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, GridItem>> {
-  return blockersIn(gridOf(v), tallCells(v), item);
-}
-
-function openIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Side[] {
-  const blocked = blockersIn(g, tall, item);
-  return SIDES.filter((side) => !blocked[side]);
-}
-
-// Walks the gun's lanes over a prebuilt tall map. A cell the gun owns never blocks it.
-function blockersIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Partial<Record<Side, GridItem>> {
-  const out: Partial<Record<Side, GridItem>> = {};
-  if (tall.size === 0) return out;
-  const { w, h } = itemSize(item);
-  const center = { x: item.x + Math.floor(w / 2), y: item.y + Math.floor(h / 2) };
-  for (const side of SIDES) {
-    const { dx, dy } = STEP[side];
-    for (let x = center.x, y = center.y; inGrid(g, { x, y }); x += dx, y += dy) {
-      const blocker = tall.get(cellKey(x, y));
-      if (blocker && blocker.id !== item.id) {
-        out[side] = blocker;
-        break;
-      }
-    }
-  }
-  return out;
-}
-
-// The item on each cell covered by a tall part.
-function tallCells(v: Vehicle): Map<number, GridItem> {
-  const tall = new Map<number, GridItem>();
-  for (const it of v.items) if (isTall(it)) paintCells(tall, it);
-  return tall;
-}
-
-function isTall(it: GridItem): boolean {
-  return it.kind === 'part' && Boolean(partDef(it.part.defId).tall);
-}
-
-function paintCells(cells: Map<number, GridItem>, it: GridItem): void {
-  const { w, h } = itemSize(it);
-  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.set(cellKey(it.x + dx, it.y + dy), it);
-}
-
-// True when every mounted gun has at least one open side inside its own arc.
-export function everyGunFires(v: Vehicle): boolean {
-  const g = gridOf(v);
-  const tall = tallCells(v);
-  return mountedItems(v, 'weapon').every((item) => {
-    const reach = reachedSides(item);
-    return openIn(g, tall, item).some((side) => reach.includes(side));
-  });
-}
-
-// Compares gun layouts. The sides any gun covers count first, so a new gun goes where it fires toward a side no
-// other gun does. Open sides summed over every gun break ties. Only sides a gun's own arc reaches count.
-export function gunLayoutScore(v: Vehicle): number {
-  const guns = mountedItems(v, 'weapon');
-  const g = gridOf(v);
-  const tall = tallCells(v);
-  const covered = new Set<Side>();
-  let sum = 0;
-  for (const item of guns) {
-    const reach = reachedSides(item);
-    const open = openIn(g, tall, item).filter((side) => reach.includes(side));
-    for (const side of open) covered.add(side);
-    sum += open.length;
-  }
-  return covered.size * (SIDES.length * guns.length + 1) + sum;
-}
-
-// The sides a gun's arc reaches, centered on the way the gun faces. The side it faces is always reached. A side a
-// quarter turn away needs an arc over 90 degrees, and the side behind the gun needs one over 270 degrees.
-export function reachedSides(item: GridItem): Side[] {
-  if (item.kind !== 'part') throw new Error(`${item.id} is not a part`);
-  const { arc } = partDef(item.part.defId) as WeaponDef;
-  const facing = facingOf(item);
-  return SIDES.filter((side) => {
-    const off = Math.abs(((SIDE_CENTER[side] - facing + 540) % 360) - 180);
-    return off === 0 || (off === 90 ? arc > 90 : arc > 270);
-  });
-}
-
-function inGrid(g: Grid, c: { x: number; y: number }): boolean {
-  return c.x >= 0 && c.y >= 0 && c.x < g.w && c.y < g.h;
-}
-
-// Angle span in degrees off the heading. Positive angles lie to the right, as in sideToward().
+// Angle span in degrees off the heading. Positive angles lie to the right, as in sideToward(). On the grid 0 points to
+// the nose, up, and positive angles turn right. A span starts in [-180, 180) and may run past 180 through the rear.
 export type FireSpan = { from: number; to: number };
 
 const SIDE_CENTER: Record<Side, number> = { front: 0, right: 90, rear: 180, left: -90 };
 
-// Where a gun can fire: its arc, centered on `facing` degrees off the heading, cut to its open sides and merged into
-// spans. One span of 360 degrees is a full circle.
-export function fireSpans(arc: number, sides: readonly Side[], facing = 0): FireSpan[] {
-  const half = Math.min(arc, 360) / 2;
-  const pieces = sides
-    .flatMap((side) => splitAtBack(SIDE_CENTER[side] - 45, SIDE_CENTER[side] + 45))
-    .flatMap((p) => [-360, 0, 360].map((turn) => ({ from: Math.max(p.from, facing - half + turn), to: Math.min(p.to, facing + half + turn) })))
-    .filter((p) => p.to > p.from)
-    .sort((a, b) => a.from - b.from);
+// Where a mounted gun can fire: its arc, centered on the way it faces, minus the shadows of the tall parts on its truck.
+export function gunSpans(v: Vehicle, item: GridItem): FireSpan[] {
+  return spansIn(tallItems(v), item);
+}
+
+// The tall items that hide part of the gun's own arc, for outlining them on the grid.
+export function gunBlockers(v: Vehicle, item: GridItem): GridItem[] {
+  const arc = arcPieces(item);
+  const out = new Set<GridItem>();
+  for (const s of shadowsOf(tallItems(v), item)) if (overlaps(s.pieces, arc)) out.add(s.blocker);
+  return [...out];
+}
+
+// The sides whose 90 degree quarter the spans reach into.
+export function spanSides(spans: readonly FireSpan[]): Side[] {
+  const pieces = spans.flatMap((s) => splitAtBack(s.from, s.to));
+  return SIDES.filter((side) => {
+    const from = wrapFrom(SIDE_CENTER[side] - 45);
+    return overlaps(splitAtBack(from, from + 90), pieces);
+  });
+}
+
+// Pieces on the line from -180 to 180 that share more than an edge.
+function overlaps(a: readonly FireSpan[], b: readonly FireSpan[]): boolean {
+  return a.some((p) => b.some((q) => p.to > q.from && p.from < q.to));
+}
+
+// Degrees the spans cover in total.
+export function spanDegrees(spans: readonly FireSpan[]): number {
+  return spans.reduce((sum, s) => sum + s.to - s.from, 0);
+}
+
+// True when every mounted gun can fire somewhere.
+export function everyGunFires(v: Vehicle): boolean {
+  const tall = tallItems(v);
+  return mountedItems(v, 'weapon').every((item) => spansIn(tall, item).length > 0);
+}
+
+// Compares gun layouts. The sides any gun covers count first, so a new gun goes where it fires toward a side no
+// other gun does. Open degrees summed over every gun break ties.
+export function gunLayoutScore(v: Vehicle): number {
+  const guns = mountedItems(v, 'weapon');
+  const tall = tallItems(v);
+  const covered = new Set<Side>();
+  let sum = 0;
+  for (const item of guns) {
+    const spans = spansIn(tall, item);
+    for (const side of spanSides(spans)) covered.add(side);
+    sum += spanDegrees(spans);
+  }
+  return covered.size * (360 * guns.length + 1) + sum;
+}
+
+function spansIn(tall: readonly GridItem[], item: GridItem): FireSpan[] {
+  const shadows = shadowsOf(tall, item).flatMap((s) => s.pieces);
+  const open = arcPieces(item).flatMap((piece) => shadows.reduce((left, cut) => left.flatMap((p) => subtract(p, cut)), [piece]));
+  return joinAcrossBack(mergeSpans(open));
+}
+
+// The gun's own arc on the line from -180 to 180, split where it crosses the rear.
+function arcPieces(item: GridItem): FireSpan[] {
+  if (item.kind !== 'part') throw new Error(`${item.id} is not a part`);
+  const { arc } = partDef(item.part.defId) as WeaponDef;
+  if (arc >= 360) return [{ from: -180, to: 180 }];
+  const from = wrapFrom(facingOf(item) - arc / 2);
+  return splitAtBack(from, from + arc);
+}
+
+// The slice of angles each tall cell hides from the gun's center: from its leftmost to its rightmost corner. A cell
+// the gun owns never blocks it. No cell holds the gun's center, so each slice is under 180 degrees.
+function shadowsOf(tall: readonly GridItem[], item: GridItem): { blocker: GridItem; pieces: FireSpan[] }[] {
+  const { w, h } = itemSize(item);
+  const ox = item.x + w / 2;
+  const oy = item.y + h / 2;
+  return tall.filter((blocker) => blocker.id !== item.id).map((blocker) => ({
+    blocker,
+    pieces: itemCells(blocker).flatMap(({ x, y }) => {
+      const center = gridAngle(x + 0.5 - ox, y + 0.5 - oy);
+      const off = (a: number) => wrapDegrees(a - center);
+      const corners = [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]].map(([cx, cy]) => gridAngle(cx - ox, cy - oy));
+      const left = corners.reduce((best, a) => (off(a) < off(best) ? a : best));
+      const right = corners.reduce((best, a) => (off(a) > off(best) ? a : best));
+      const from = wrapFrom(left);
+      return splitAtBack(from, from + off(right) - off(left));
+    }),
+  }));
+}
+
+// Degrees off the nose of a grid offset. Up on the grid is the nose and +x is right.
+function gridAngle(dx: number, dy: number): number {
+  return (Math.atan2(dx, -dy) * 180) / Math.PI;
+}
+
+// An angle moved into [-180, 180).
+function wrapFrom(angle: number): number {
+  return angle >= 180 ? angle - 360 : angle < -180 ? angle + 360 : angle;
+}
+
+function subtract(p: FireSpan, cut: FireSpan): FireSpan[] {
+  if (cut.to <= p.from || cut.from >= p.to) return [p];
+  return [{ from: p.from, to: cut.from }, { from: cut.to, to: p.to }].filter((s) => s.to > s.from);
+}
+
+function mergeSpans(pieces: FireSpan[]): FireSpan[] {
   const merged: FireSpan[] = [];
-  for (const p of pieces) {
+  for (const p of [...pieces].sort((a, b) => a.from - b.from)) {
     const last = merged.at(-1);
     if (last && p.from <= last.to) last.to = Math.max(last.to, p.to);
     else merged.push({ ...p });
   }
-  return joinAcrossBack(merged);
+  return merged;
+}
+
+function tallItems(v: Vehicle): GridItem[] {
+  return v.items.filter((it) => it.kind === 'part' && Boolean(partDef(it.part.defId).tall));
 }
 
 // Where a gun can point to cover a bearing off the heading: the bearing itself inside the spans, else the nearest span edge.
 // Degrees in and out, in (-180, 180]. A tie goes to the edge first in span order.
 export function aimWithin(spans: readonly FireSpan[], rel: number): number {
   if (spans.length === 0) throw new Error('aimWithin needs at least one span');
-  if (spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360))) return rel;
+  if (spansHold(spans, rel)) return rel;
   const edges = spans.flatMap((span) => [span.from, span.to]);
   const apart = (edge: number) => Math.abs(((edge - rel + 540) % 360) - 180);
   const nearest = edges.reduce((best, edge) => (apart(edge) < apart(best) ? edge : best));
   return wrapDegrees(nearest);
+}
+
+// True when a bearing off the heading, in degrees, lies inside the spans.
+export function spansHold(spans: readonly FireSpan[], rel: number): boolean {
+  return spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360));
 }
 
 function spanHolds(span: FireSpan, angle: number): boolean {

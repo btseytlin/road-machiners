@@ -3,11 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { PARTS } from '../data/parts';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
-import { blastLanes, cabShield, lanePoint, openSides, walkLane } from './armor';
+import { blastLanes, cabShield, gunSpans, lanePoint, spansHold, walkLane } from './armor';
 import { makePart } from './factory';
 import { mountedItems, sideOf } from './grid';
 import { addVehicle, emptyWorld } from './testkit';
-import type { GridItem, Vehicle, World } from './types';
+import type { GridItem, Rot, Vehicle, World } from './types';
 
 // A 5 by 8 chassis. The nose is one cell wide, then steps out. The armor cells at (1,1), (3,1), (1,6) and (3,6) face
 // two ways, so they carry the letter of the front or rear. The wheels are two cells long and stand at (1,2), (3,2),
@@ -41,9 +41,9 @@ afterAll(() => { delete CHASSIS.stepped; delete SHAPES.base_stepped; delete PART
 let nextItem = 0;
 
 // A stepped truck with the given parts standing on the given cells.
-function steppedWith(w: World, parts: { defId: string; x: number; y: number }[]): Vehicle {
+function steppedWith(w: World, parts: { defId: string; x: number; y: number; rot?: Rot }[]): Vehicle {
   const v = addVehicle(w, 'player', 'stepped', [], { x: 40, y: 40 });
-  for (const p of parts) v.items.push({ id: `i-stepped-${nextItem++}`, x: p.x, y: p.y, rot: 0, kind: 'part', part: makePart(w, p.defId, 0) });
+  for (const p of parts) v.items.push({ id: `i-stepped-${nextItem++}`, x: p.x, y: p.y, rot: p.rot ?? 0, kind: 'part', part: makePart(w, p.defId, 0) });
   return v;
 }
 
@@ -88,14 +88,14 @@ describe('a stepped outline', () => {
 
   it('lets a gun inside the ring fire out past the missing cells', () => {
     const w = emptyWorld();
-    const v = steppedWith(w, [{ defId: 'mg', x: 2, y: 1 }]);
-    expect(openSides(v, plateAt(v, 2, 1))).toEqual(['front', 'left', 'right']);
+    const v = steppedWith(w, [{ defId: 'mg', x: 2, y: 4, rot: 2 }]);
+    expect(gunSpans(v, plateAt(v, 2, 4))).toEqual([{ from: 45, to: 315 }]);
   });
 
-  it('still blocks that gun toward the rear across the cab', () => {
+  it('still blocks that gun forward across the cab', () => {
     const w = emptyWorld();
-    const v = steppedWith(w, [{ defId: 'mg', x: 2, y: 1 }]);
-    expect(openSides(v, plateAt(v, 2, 1))).not.toContain('rear');
+    const v = steppedWith(w, [{ defId: 'mg', x: 2, y: 4 }]);
+    expect(spansHold(gunSpans(v, plateAt(v, 2, 4)), 0)).toBe(false);
   });
 
   it('shields the cab only by armor on a lane that crosses it', () => {

@@ -6,7 +6,7 @@ import { PARTS, partDef, type EngineDef, type UtilityDef, type WeaponDef } from 
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
-import { everyGunFires, openSides, reachedSides } from './armor';
+import { everyGunFires, gunSpans } from './armor';
 import { makeVehicle } from './factory';
 import { baseGrid, coreParts, facingOf, freeCells, goodsCount, gridOf, isMounted, itemCells, mountedItems, mountedParts, placementError } from './grid';
 import { loadFactor, vehicleMass } from './mass';
@@ -148,7 +148,7 @@ describe('NPC equipment generation', () => {
         for (const item of mountedItems(v, 'weapon')) {
           if (facingOf(item) === 0) continue;
           turned++;
-          expect(openSides(v, item).some((side) => reachedSides(item).includes(side))).toBe(true);
+          expect(gunSpans(v, item).length).toBeGreaterThan(0);
         }
       }
     }
@@ -313,7 +313,7 @@ describe('trader spare parts', () => {
     template.loadout.goods = [{ value: null, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 2, weight: 1 }] };
     // A poor truck carries the least armor, which leaves rated mass for spares.
-    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template, null, 'poor');
+    const loadout = generateNpcLoadout({ ...fixture, rngState: 5 }, template, null, 'poor');
     expect(loadout.spares.length).toBeGreaterThan(0);
     for (const spare of loadout.spares) {
       expect(spare.defId).toBe('mg');
@@ -387,8 +387,7 @@ describe('NPC gun placement', () => {
         w.rngState = seed * 7919;
         const v = spawnAt(w, NPCS[id], generateNpcLoadout(w, NPCS[id]), { x: 40, y: 30 });
         for (const item of mountedItems(v, 'weapon')) {
-          const reach = reachedSides(item);
-          expect(openSides(v, item).some((side) => reach.includes(side)), `${id} seed ${seed} ${item.part.defId}`).toBe(true);
+          expect(gunSpans(v, item).length, `${id} seed ${seed} ${item.part.defId}`).toBeGreaterThan(0);
         }
       }
     }

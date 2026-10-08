@@ -18,7 +18,7 @@ export type PartKind =
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms. For the same job a higher
 // tier weighs less: per cell for armor, weapons and engines, per extra row for cargo.
 // armor is the penetration the part stops when a round passes through it.
-// A tall part stands higher than a gun, so a mounted weapon cannot fire across it. See openSides() in src/sim/armor.ts.
+// A tall part stands higher than a gun, so a mounted weapon cannot fire across it. See gunSpans() in src/sim/armor.ts.
 type PartBase = {
   id: string;
   name: string;
@@ -511,18 +511,19 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     ramMult: 2.8,
     look: "ram",
   },
-  // A lighter ram with an explosive charge, armed by the driver. See CLAYMORE in src/data/utilities.ts.
+  // A lighter ram with an explosive charge, armed by the driver. See CLAYMORE in src/data/utilities.ts. The charge
+  // is what it is for: as armor it is thin, worse per cell than plates.
   claymoreRam: {
     id: "claymoreRam",
     kind: "armor",
     name: "Claymore ram",
-    hp: 80,
+    hp: 60,
     base: 10000,
     tier: 2,
     w: 3,
     h: 1,
     mass: 380,
-    armor: 14,
+    armor: 10,
     tall: false,
     blastArmor: 6,
     fieldRepair: "capped",

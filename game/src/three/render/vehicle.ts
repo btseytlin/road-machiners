@@ -6,10 +6,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { chassisDef } from '../../data/chassis';
-import { partDef, type PartDef, type PartKind, type WeaponDef } from '../../data/parts';
+import { partDef, type PartDef, type PartKind } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
-import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor';
+import { aimWithin, gunSpans, type FireSpan } from '../../sim/armor';
 import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, surfaceSamples, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
@@ -476,7 +476,7 @@ export class VehicleView {
     const stand = weaponStand(v, item);
     const headAt = socket(look.mount, 'head');
     const facing = signedDegrees(facingOf(item));
-    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item), facingOf(item));
+    const spans = gunSpans(v, item);
     const shape = headShape(head, socket(look.receiver, 'muzzle').x);
     // The head socket turns and stretches with the mount, so its x and z come from the mount's matrix.
     const mount = model(look.mount);

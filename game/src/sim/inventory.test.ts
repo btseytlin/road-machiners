@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
-import { openSides, reachedSides } from './armor';
+import { gunSpans, spanDegrees } from './armor';
 import { freeCells, goodsCount, gridOf, isMounted, mountedItems, mountedParts } from './grid';
 import { canStowPart, dumpItem, installSpot, mountPart, moveItem, plannedRefitTurns, removeAllGoods, spareParts, startRefit, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
@@ -167,14 +167,14 @@ describe('auto mounting on the deck', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
     expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
-    expect(openSides(v, mountedItemOf(v, 'mg'))).toHaveLength(4);
+    expect(spanDegrees(gunSpans(v, mountedItemOf(v, 'mg')))).toBe(270);
   });
 
   it('places a cargo box where it blinds no mounted gun', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'longbed', ['stockEngine', 'mg'], { x: 40, y: 40 });
-    // Only the sides the gun's arc reaches count: the box may stand in its blind spot.
-    const firing = (u: Vehicle) => openSides(u, mountedItemOf(u, 'mg')).filter((side) => reachedSides(mountedItemOf(u, 'mg')).includes(side));
+    // Only the gun's own arc counts: the box may stand in its blind spot.
+    const firing = (u: Vehicle) => gunSpans(u, mountedItemOf(u, 'mg'));
     const before = firing(v);
     expect(mountPart(w, v, makePart(w, 'trailerBox', 0))).toBe(true);
     expect(firing(v)).toEqual(before);

@@ -1,7 +1,7 @@
-import { partDef } from '../data/parts';
+import { partDef, type WeaponDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { aimWithin, everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, planLane, reachedSides, sideBlockers, sideToward, walkLane } from './armor';
+import { aimWithin, everyGunFires, gunBlockers, gunLayoutScore, gunSpans, laneCount, partLane, planLane, sideToward, spanDegrees, spanSides, spansHold, walkLane, type FireSpan } from './armor';
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
@@ -277,43 +277,70 @@ function itemOf(v: Vehicle, defId: string): GridItem {
   return mountedItems(v).find((it) => it.part.defId === defId)!;
 }
 
-describe('open sides', () => {
-  it('a gun in the bed cannot fire forward across the cab', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
+// Spans rounded to a tenth of a degree, so angles from corner geometry compare as literals.
+function rounded(spans: FireSpan[]): FireSpan[] {
+  return spans.map((s) => ({ from: Math.round(s.from * 10) / 10, to: Math.round(s.to * 10) / 10 }));
+}
+
+// Degrees off the nose of a grid offset from the gun's center to a cell corner.
+function cornerAngle(dx: number, dy: number): number {
+  return (Math.atan2(dx, -dy) * 180) / Math.PI;
+}
+
+describe('shadows of tall parts', () => {
+  it('a gun in the bed cannot fire forward across the cab, however far it stands', () => {
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
+    // The gun's center is (4.5, 9). The cab's near corners are (3, 5) and (6, 5).
+    const edge = cornerAngle(1.5, -4);
+    expect(gunSpans(v, itemOf(v, 'mg'))).toEqual([{ from: -135, to: -edge }, { from: edge, to: 135 }]);
   });
 
-  it('a gun beside the hood fires forward but not back across the cab', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 5, y: 1 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'left', 'right']);
+  it('a heavy machine gun beside the cab loses the angles over the cab and keeps the rest', () => {
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'heavyMg', x: 1, y: 4 }]);
+    // The gun's center is (1.5, 5). The cab's corner (3, 3) starts its shadow, and its bottom edge at row 5 ends it.
+    expect(gunSpans(v, itemOf(v, 'heavyMg'))).toEqual([{ from: -135, to: cornerAngle(1.5, -2) }, { from: 90, to: 135 }]);
   });
 
-  it('a gun clear of the hauler cab fires to every side', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'hauler', [{ defId: 'mg', x: 2, y: 5 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'rear', 'left', 'right']);
+  it('a gun beside the hood fires forward and loses only the angles back across the cab', () => {
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 5, y: 1 }]);
+    expect(rounded(gunSpans(v, itemOf(v, 'mg')))).toEqual([{ from: -111.8, to: 135 }]);
   });
 
-  it('a cargo box behind a gun blinds its rear, and a flat rack does not', () => {
+  it('a gun facing away from the hauler cab keeps its whole arc', () => {
+    const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'shotgun', x: 2, y: 5, rot: 2 }]);
+    expect(gunSpans(v, itemOf(v, 'shotgun'))).toEqual([{ from: 135, to: 225 }]);
+  });
+
+  it('a gun behind the hauler cab loses the slice the cab covers, off its own lane', () => {
+    const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'mg', x: 2, y: 5 }]);
+    // The gun's center is (2.5, 6). The cab fills columns 5 and 6 of rows 1 to 3.
+    expect(gunSpans(v, itemOf(v, 'mg'))).toEqual([{ from: -135, to: cornerAngle(2.5, -5) }, { from: cornerAngle(4.5, -2), to: 135 }]);
+  });
+
+  it('a cargo box behind a gun blinds it there, and a flat rack does not', () => {
     const w = emptyWorld();
     const boxed = truckWith(w, 'hauler', [{ defId: 'mg', x: 2, y: 3 }, { defId: 'trailerBox', x: 2, y: 5 }]);
     const racked = truckWith(w, 'hauler', [{ defId: 'mg', x: 2, y: 3 }, { defId: 'rack', x: 2, y: 5 }]);
-    expect(openSides(boxed, itemOf(boxed, 'mg'))).not.toContain('rear');
-    expect(openSides(racked, itemOf(racked, 'mg'))).toContain('rear');
+    expect(spansHold(gunSpans(boxed, itemOf(boxed, 'mg')), 130)).toBe(false);
+    expect(spansHold(gunSpans(racked, itemOf(racked, 'mg')), 130)).toBe(true);
   });
 
   it('a driver seat blocks a gun behind it', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'courier', [{ defId: 'mg', x: 2, y: 6 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).not.toContain('front');
+    const v = truckWith(emptyWorld(), 'courier', [{ defId: 'mg', x: 2, y: 6 }]);
+    expect(spansHold(gunSpans(v, itemOf(v, 'mg')), 0)).toBe(false);
   });
 
-  it('a gun beside the convertible hardtop cab fires to every side, since the cab lies in the next lane', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 4, y: 6 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'rear', 'left', 'right']);
+  it('a gun beside the convertible hardtop cab loses the angles toward the cab, off its own lane', () => {
+    const v = truckWith(emptyWorld(), 'convertible', [{ defId: 'mg', x: 4, y: 6 }]);
+    const spans = gunSpans(v, itemOf(v, 'mg'));
+    expect(spansHold(spans, -30)).toBe(false);
+    expect(spansHold(spans, 0)).toBe(true);
+    expect(spansHold(spans, -80)).toBe(true);
+  });
+
+  it('a tall gun never blocks itself', () => {
+    const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'cannon', x: 2, y: 5, rot: 2 }]);
+    expect(spanDegrees(gunSpans(v, itemOf(v, 'cannon')))).toBe(Math.min((partDef('cannon') as WeaponDef).arc, 360));
   });
 });
 
@@ -336,79 +363,59 @@ describe('firing past tall parts', () => {
   });
 });
 
-describe('fire spans', () => {
-  it('a turret with every side open fires all around', () => {
-    expect(fireSpans(360, ['front', 'rear', 'left', 'right'])).toEqual([{ from: -180, to: 180 }]);
-  });
-
-  it('a turret blocked in front fires from one flank around the rear to the other', () => {
-    expect(fireSpans(360, ['rear', 'left', 'right'])).toEqual([{ from: 45, to: 315 }]);
-  });
-
-  it('a turret blocked at the rear fires across the front half and the flanks', () => {
-    expect(fireSpans(360, ['front', 'left', 'right'])).toEqual([{ from: -135, to: 135 }]);
-  });
-
-  it('a forward gun keeps its own arc when the front is open', () => {
-    expect(fireSpans(60, ['front', 'rear'])).toEqual([{ from: -30, to: 30 }]);
-  });
-
-  it('a forward gun blocked in front cannot fire at all', () => {
-    expect(fireSpans(60, ['rear', 'left', 'right'])).toEqual([]);
-  });
-
-  it('a gun open only on both flanks fires in two spans', () => {
-    expect(fireSpans(360, ['left', 'right'])).toEqual([{ from: -135, to: -45 }, { from: 45, to: 135 }]);
+describe('span sides', () => {
+  it('counts a side when the spans reach into its quarter, not when they only touch its edge', () => {
+    expect(spanSides([{ from: -180, to: 180 }])).toEqual(['front', 'rear', 'left', 'right']);
+    expect(spanSides([{ from: -135, to: 135 }])).toEqual(['front', 'left', 'right']);
+    expect(spanSides([{ from: 45, to: 315 }])).toEqual(['rear', 'left', 'right']);
+    expect(spanSides([{ from: -30, to: 30 }])).toEqual(['front']);
+    expect(spanSides([{ from: 40, to: 50 }])).toEqual(['front', 'right']);
   });
 });
 
-describe('side blockers', () => {
-  it('names the cab as what blocks a bed gun in front', () => {
-    const w = emptyWorld();
-    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
-    const blockers = sideBlockers(v, itemOf(v, 'mg'));
-    expect(Object.keys(blockers)).toEqual(['front']);
-    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabPickup');
+describe('gun blockers', () => {
+  it('names the cab as what blocks a bed gun', () => {
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
+    expect(gunBlockers(v, itemOf(v, 'mg')).map((b) => b.kind === 'part' && b.part.defId)).toEqual(['cabPickup']);
+  });
+
+  it('skips a tall part that stands only in the gun\'s blind spot', () => {
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'shotgun', x: 5, y: 1 }]);
+    expect(gunBlockers(v, itemOf(v, 'shotgun'))).toEqual([]);
   });
 });
 
 describe('gun layout', () => {
-  // A machine gun's 270 degree arc reaches every side but the one behind it. Score = covered sides * (4 * guns + 1) + open reached sides summed.
-  it('scores one front-facing bed gun behind the cab by its two open flanks', () => {
-    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
-    expect(gunLayoutScore(v)).toBe(2 * 5 + 2);
+  // Score = covered sides * (360 * guns + 1) + open degrees summed.
+  it('scores a bed gun turned away from the cab above the same gun facing the cab', () => {
+    const facingCab = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
+    const facingAway = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8, rot: 2 }]);
+    expect(gunLayoutScore(facingAway)).toBe(3 * 361 + 270);
+    expect(gunLayoutScore(facingCab)).toBeLessThan(gunLayoutScore(facingAway));
   });
 
-  it('scores the same bed gun turned to face the rear by its three open sides', () => {
-    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8, rot: 2 }]);
-    expect(gunLayoutScore(v)).toBe(3 * 5 + 3);
+  it('scores a cargo box behind two guns below a flat rack there', () => {
+    const guns = [{ defId: 'mg', x: 2, y: 5 }, { defId: 'mg', x: 3, y: 5 }];
+    const boxed = truckWith(emptyWorld(), 'hauler', [...guns, { defId: 'trailerBox', x: 2, y: 7 }]);
+    const racked = truckWith(emptyWorld(), 'hauler', [...guns, { defId: 'rack', x: 2, y: 7 }]);
+    expect(gunLayoutScore(boxed)).toBeLessThan(gunLayoutScore(racked));
   });
 
-  it('scores two guns with the rear blocked by three covered sides and six open sides', () => {
-    const parts = [{ defId: 'mg', x: 2, y: 5 }, { defId: 'mg', x: 3, y: 5 }, { defId: 'trailerBox', x: 2, y: 7 }];
-    const v = truckWith(emptyWorld(), 'hauler', parts);
-    expect(gunLayoutScore(v)).toBe(3 * 9 + 6);
-  });
-
-  it('a narrow-arc gun in the bed behind a tall cab cannot fire while it faces the cab, and can once turned to a side or the rear', () => {
+  it('a narrow-arc gun boxed in by the cab and a cargo box cannot fire while it faces them, and can once turned to a side or the rear', () => {
     const w = emptyWorld();
-    expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 3, y: 8 }]))).toBe(false);
+    const box = { defId: 'trailerBox', x: 1, y: 3 };
+    expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 2, y: 5 }, box]))).toBe(false);
+    expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 2, y: 5, rot: 2 }, box]))).toBe(true);
     expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 3, y: 8, rot: 2 }]))).toBe(true);
     expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 3, y: 5, rot: 1 }]))).toBe(true);
     expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 3, y: 5, rot: 3 }]))).toBe(true);
     expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 2, y: 1 }]))).toBe(true);
   });
 
-  it('a tall part never blocks itself', () => {
-    const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'trailerBox', x: 2, y: 5 }]);
-    const box = mountedItems(v).find((it) => it.part.defId === 'trailerBox')!;
-    expect(sideBlockers(v, box)).toEqual({});
-  });
 });
 
 describe('aimWithin', () => {
-  const ALL = ['front', 'rear', 'left', 'right'] as const;
-  const forward = fireSpans(60, ALL);
+  const forward = [{ from: -30, to: 30 }];
 
   it('keeps a bearing inside the span or on its edge', () => {
     expect(aimWithin(forward, 10)).toBe(10);
@@ -423,7 +430,7 @@ describe('aimWithin', () => {
   });
 
   it('matches a span through the rear on both sides of 180', () => {
-    const rear = fireSpans(360, ['rear']);
+    const rear = [{ from: 135, to: 225 }];
     expect(aimWithin(rear, 170)).toBe(170);
     expect(aimWithin(rear, -170)).toBe(-170);
     expect(aimWithin(rear, 90)).toBe(135);
@@ -431,7 +438,7 @@ describe('aimWithin', () => {
   });
 
   it('picks the nearer of two spans', () => {
-    const flanks = fireSpans(360, ['left', 'right']);
+    const flanks = [{ from: -135, to: -45 }, { from: 45, to: 135 }];
     expect(aimWithin(flanks, 60)).toBe(60);
     expect(aimWithin(flanks, -60)).toBe(-60);
     expect(aimWithin(flanks, 20)).toBe(45);
@@ -439,7 +446,7 @@ describe('aimWithin', () => {
   });
 
   it('turns all the way round in a full circle', () => {
-    const full = fireSpans(360, ALL);
+    const full = [{ from: -180, to: 180 }];
     for (const rel of [-180, -90, 0, 45, 135, 180]) expect(aimWithin(full, rel)).toBe(rel);
   });
 
@@ -468,23 +475,15 @@ describe('gun facing', () => {
     expect(([0, 1, 2, 3] as const).map((rot) => facingOf(gunAt('mg', rot).item))).toEqual([0, 90, 180, 270]);
   });
 
-  it('centers the arc on the facing before cutting it to the open sides', () => {
-    const all = ['front', 'rear', 'left', 'right'] as const;
-    expect(fireSpans(90, all, 180)).toEqual([{ from: 135, to: 225 }]);
-    expect(fireSpans(90, all, 90)).toEqual([{ from: 45, to: 135 }]);
-    expect(fireSpans(90, ['front', 'left', 'right'], 180)).toEqual([]);
-    expect(fireSpans(270, all, 180)).toEqual([{ from: 45, to: 315 }]);
-    expect(fireSpans(270, ['rear', 'left'], 270)).toEqual([{ from: 135, to: 315 }]);
-  });
-
-  it('reaches the sides of an arc rotated by the facing', () => {
-    expect(reachedSides(gunAt('mg', 0).item)).toEqual(['front', 'left', 'right']);
-    expect(reachedSides(gunAt('mg', 2).item)).toEqual(['rear', 'left', 'right']);
-    expect(reachedSides(gunAt('mg', 1).item)).toEqual(['front', 'rear', 'right']);
+  it('centers the arc on the facing', () => {
+    const bare = { ...truckWith(emptyWorld(), 'hauler', []), items: [] };
     const loose = (defId: string, rot: Rot): GridItem => ({ id: 'loose', x: 0, y: 0, rot, kind: 'part', part: makePart(emptyWorld(), defId, 0) });
-    expect(reachedSides(loose('shotgun', 2))).toEqual(['rear']);
-    expect(reachedSides(loose('shotgun', 3))).toEqual(['left']);
-    expect(reachedSides(loose('heavyMg', 3))).toEqual(['front', 'rear', 'left']);
+    expect(gunSpans(bare, loose('shotgun', 2))).toEqual([{ from: 135, to: 225 }]);
+    expect(gunSpans(bare, loose('shotgun', 1))).toEqual([{ from: 45, to: 135 }]);
+    expect(gunSpans(bare, loose('mg', 2))).toEqual([{ from: 45, to: 315 }]);
+    expect(spanSides(gunSpans(bare, loose('mg', 1)))).toEqual(['front', 'rear', 'right']);
+    expect(spanSides(gunSpans(bare, loose('shotgun', 3)))).toEqual(['left']);
+    expect(spanSides(gunSpans(bare, loose('heavyMg', 3)))).toEqual(['front', 'rear', 'left']);
   });
 
   it('hits a target behind with a rear-facing gun and misses one in front', () => {

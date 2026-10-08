@@ -1,5 +1,5 @@
 import { PARTS, type WeaponDef } from '../data/parts';
-import { openSides, reachedSides, sidePlanner, SIDES, type Round, type Side } from './armor';
+import { gunSpans, sidePlanner, spanSides, SIDES, type Round, type Side } from './armor';
 import { corePart, mountedItems, mountedParts, sideOf } from './grid';
 import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
@@ -114,7 +114,7 @@ export function gunsBySide(v: Vehicle): Record<Side, WeaponDef[]> {
   for (const item of mountedItems(v, 'weapon')) {
     if (item.part.hp <= 0) continue;
     const def = wornDef<WeaponDef>(item.part);
-    for (const side of openSides(v, item)) if (reachedSides(item).includes(side)) out[side].push(def);
+    for (const side of spanSides(gunSpans(v, item))) out[side].push(def);
   }
   return out;
 }

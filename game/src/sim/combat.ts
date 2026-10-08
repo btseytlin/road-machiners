@@ -8,7 +8,7 @@ import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
-import { blastLanes, heldPart, laneCount, lanePoint, partLane, planLane, sideToward, walkLane, type PartHit, type Round, type Side } from './armor';
+import { blastLanes, heldPart, laneCount, lanePoint, partLane, planLane, sideToward, spansHold, walkLane, type FireSpan, type PartHit, type Round, type Side } from './armor';
 import { wholeDamage } from './damage';
 import { bodyOf } from './body';
 import { rollCabKnock } from "./cab-knock";
@@ -100,13 +100,13 @@ function isLawman(v: Vehicle): boolean {
 
 // What a shot is fired from. Only its def counts.
 export type ShotSource = { def: WeaponDef };
-// A mounted shot source and the sides of the truck it can fire toward, past the tall parts around it.
-export type AimedSource = ShotSource & { sides: Side[]; facing: number };
+// A mounted shot source and where it can fire, its arc minus the shadows of the tall parts around it.
+export type AimedSource = ShotSource & { spans: FireSpan[]; facing: number };
 
 
-// The target lies in the gun's own arc and on a side that no tall part blocks.
+// The target lies in the gun's own arc and outside the shadows of the tall parts on the truck.
 export function inArc(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
-  return inGunArc(shooter, mw, target) && sideOpen(shooter, mw, target);
+  return inGunArc(shooter, mw, target) && clearOfTall(shooter, mw, target);
 }
 
 // The arc is centered on the way the gun faces, which turns with the truck.
@@ -116,8 +116,8 @@ function inGunArc(shooter: Vehicle, src: AimedSource, target: Vehicle): boolean 
   return Math.abs(angleDiff(shooter.heading + src.facing * DEG, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
 }
 
-function sideOpen(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
-  return mw.sides.includes(sideToward(shooter, target.pos));
+function clearOfTall(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
+  return spansHold(mw.spans, angleDiff(shooter.heading, bearing(shooter.pos, target.pos)) / DEG);
 }
 
 // Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver and a truck an emitter
@@ -196,7 +196,7 @@ export function targetBlock(world: World, shooter: Vehicle, mw: AimedSource, tar
 
 function arcBlock(shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock | null {
   if (!inGunArc(shooter, mw, target)) return "arc";
-  return sideOpen(shooter, mw, target) ? null : "blocked";
+  return clearOfTall(shooter, mw, target) ? null : "blocked";
 }
 
 export type HitOdds = {

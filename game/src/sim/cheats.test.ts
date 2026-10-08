@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
-import { openSides, reachedSides } from './armor';
+import { gunSpans } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
 import { partDef } from '../data/parts';
@@ -557,10 +557,7 @@ describe('randomkit', () => {
       expect(PLAYER_CHASSIS).toContain(me.chassisId);
       const guns = mountedItems(me, 'weapon');
       expect(guns.length).toBeGreaterThan(0);
-      for (const item of guns) {
-        const reach = reachedSides(item);
-        expect(openSides(me, item).some((side) => reach.includes(side))).toBe(true);
-      }
+      for (const item of guns) expect(gunSpans(me, item).length).toBeGreaterThan(0);
     }
     expect(chassis.size).toBeGreaterThan(2);
   });

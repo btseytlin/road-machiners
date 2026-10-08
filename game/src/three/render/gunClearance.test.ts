@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { CHASSIS } from '../../data/chassis';
 import { NPCS } from '../../data/npcs';
-import { partDef, type WeaponDef } from '../../data/parts';
+import { partDef } from '../../data/parts';
 import { BODY_PARTS, partModel, weaponLook } from '../../render/partLooks';
-import { aimWithin, fireSpans, openSides } from '../../sim/armor';
+import { aimWithin, gunSpans } from '../../sim/armor';
 import { cellRect, highestUnder, restOn, surfaceSamples } from '../../sim/body';
 import { makeVehicle, newId } from '../../sim/factory';
 import { baseGrid, isMounted, itemCells, mountSpots, MOUNT_CELLS } from '../../sim/grid';
@@ -78,7 +78,7 @@ function clips(world: World, v: Vehicle): string[] {
     if (itemCells(gun).some((c) => c.y >= baseGrid(v.chassisId).h)) continue; // a cargo row gun is not drawn
     const pivot = view.partPoint(gun.part.id);
     const pts = headVertices(gun);
-    const spans = isMounted(v.chassisId, gun) ? fireSpans((partDef(gun.part.defId) as WeaponDef).arc, openSides(v, gun)) : [];
+    const spans = isMounted(v.chassisId, gun) ? gunSpans(v, gun) : [];
     const boxes = obstacles(v, gun);
     const own = cellRect(v.chassisId, itemCells(gun));
     const yaws = Array.from({ length: 360 }, (_, i) => i - 180).filter((a) => spans.length > 0 && aimWithin(spans, a) === a);
