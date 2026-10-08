@@ -17,6 +17,7 @@ import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { stormDepth } from './weather';
 import { cloneWorld, newWorld } from './world';
+import { defaultSetup } from './settings';
 
 // Flat road-speed terrain, for tests that need predictable driving.
 export function flatTerrain(size: number): Terrain {
@@ -34,7 +35,7 @@ let emptyTemplate: World | undefined;
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
   if (!emptyTemplate) {
-    emptyTemplate = newWorld(1, START_KITS.standard, TEST_MAP);
+    emptyTemplate = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     emptyTemplate.obstacles = [];
     emptyTemplate.terrain = flatTerrain(emptyTemplate.size);
     Object.freeze(emptyTemplate.terrain.heights);

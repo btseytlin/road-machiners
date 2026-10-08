@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS } from "./goods";
@@ -391,7 +392,7 @@ describe("NPC wallets and trade stakes", () => {
 
   it("starts every spawned driver with at least its upkeep reserve", () => {
     for (const seed of [1, 2, 3]) {
-      const w = newWorld(seed, START_KITS.standard, TEST_MAP);
+      const w = newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       for (const v of w.vehicles.filter((x) => x.brain)) expect(v.resources!.money, v.brain!.templateId).toBeGreaterThanOrEqual(getUpkeepReserve(v));
     }
   }, 30_000);

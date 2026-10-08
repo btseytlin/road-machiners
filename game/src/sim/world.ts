@@ -40,7 +40,8 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
+import { defaultSetup, parseSetup, repairSetup } from './settings';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -64,8 +65,9 @@ export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'ma
 }
 
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
-// `populate` false leaves the map with no NPCs and no spawn draws, for tools that place their own trucks.
-export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
+// `setup` is the mode and world settings picked at New game. `populate` false leaves the map with no NPCs and no spawn
+// draws, for tools that place their own trucks.
+export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
@@ -81,6 +83,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     shops: {},
     terrain: map.terrain,
     mapHash: map.hash,
+    setup: parseSetup(setup),
     player: {
       vehicleId: "",
       money: kit.money,
@@ -461,6 +464,7 @@ export type Carried = {
   costBasis: Record<string, number>;
   truck: { chassisId: string; name: string | null; items: CarriedItem[] } | null;
   storage: CarriedPart[];
+  setup: unknown; // the saved world setup as stored, undefined in a save from before world settings
 };
 
 // Part and good ids. The UI names them.
@@ -468,14 +472,16 @@ export type CarryReport = {
   toGarage: string[]; // known parts that lost their spot and went to garage storage
   sold: { good: string; units: number; money: number }[]; // goods with no room, sold at base value
   lost: string[]; // ids the current data does not know
+  settingsReset: (keyof WorldSettings)[]; // world settings that were bad and went back to their defaults
 };
 
 const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
 
 export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
-  const report: CarryReport = { toGarage: [], sold: [], lost: [] };
+  const { setup, reset } = carriedSetup(carried.setup);
+  const report: CarryReport = { toGarage: [], sold: [], lost: [], settingsReset: reset };
   const truckKit = carriedKit(carried, kit, report);
-  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, true, townStart());
+  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, setup, true, townStart());
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);
@@ -483,6 +489,11 @@ export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, fre
   refreshVision(world);
   world.events = [];
   return { world, report };
+}
+
+// The saved setup with its bad settings reset. A save from before world settings played the default Roaming setup.
+function carriedSetup(setup: unknown): ReturnType<typeof repairSetup> {
+  return setup === undefined ? { setup: defaultSetup('roaming'), reset: [] } : repairSetup(setup);
 }
 
 // The start kit, with the carried chassis and no parts when the chassis is known. An unknown one keeps the kit.

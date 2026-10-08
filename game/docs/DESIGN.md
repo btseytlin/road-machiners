@@ -84,7 +84,7 @@ Details: [sight and detection](wiki/mechanics/detection.md).
 
 Icarus is one fixed region where danger is set by place, not by the player's level. The land tells the story of the Old World under the New World: farm fields, ruins and old highways around crash wreckage and truck roads. Towns and sites are fixed places that trucks use from pads outside their gates. Lawmen patrol the roads around their towns, so few drivers start trouble at a town gate, and raiders patrol around their camps. Time of day, sun, shade and weather change what a route costs in fuel, supplies, sight and engine heat.
 
-Details: [world](wiki/mechanics/world.md), [lore](lore.md), [visual design](VISUAL_DESIGN.md).
+Details: [world](wiki/mechanics/world.md), [world settings](wiki/mechanics/world-settings.md), [lore](lore.md), [visual design](VISUAL_DESIGN.md).
 
 ## NPCs
 

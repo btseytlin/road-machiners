@@ -17,6 +17,7 @@ import { isShutDown } from './utility';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherOn } from './weather';
+import { fuelUseScale } from './settings';
 
 // sides: the sides of the truck the weapon can fire toward, past the tall parts around it.
 export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
@@ -186,7 +187,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     turnSlow: ch.turnSlow * DEG * turnMult,
     turnFast: ch.turnFast * DEG * turnMult,
     reverseTurn: ch.reverseTurn * DEG * turnMult,
-    fuelPerTile: ch.fuelPerTile * fuelMult * RULES.fuelUseFactor,
+    fuelPerTile: ch.fuelPerTile * fuelMult * RULES.fuelUseFactor * fuelUseScale(world),
     limpSpeed,
     limpAccel,
     roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),

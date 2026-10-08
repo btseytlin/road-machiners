@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
 import { REGION } from '../data/region';
@@ -51,7 +52,7 @@ describe('lookTypes', () => {
   });
 
   it('gives road tiles beside ground without a desert look no desert look', () => {
-    const t = newWorld(1337, START_KITS.standard, TEST_MAP).terrain;
+    const t = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).terrain;
     const look = lookTypes(t);
     let checked = 0;
     for (let y = 1; y < t.size - 1; y++) for (let x = 1; x < t.size - 1; x++) {

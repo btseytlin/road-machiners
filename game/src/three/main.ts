@@ -15,11 +15,12 @@ import { playerVehicle } from '../sim/damage';
 import { warmRoutes } from '../sim/path';
 import { vehicleStats } from '../sim/stats';
 import { decodeMap, type BakedMap } from '../sim/terrain';
-import type { World } from '../sim/types';
+import type { World, WorldSetup } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
 import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
+import { browserNewGame } from '../ui/new-game';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
@@ -27,10 +28,11 @@ import { installCrashScreen, keepRunningOnErrors, onEveryError, onReport } from 
 import { ErrorReporter } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, tryWriteSave } from './save';
-import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
+import { newestSlot, requestBoot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
+import { defaultSetup } from '../sim/settings';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -49,14 +51,14 @@ async function fetchMap(): Promise<BakedMap> {
 // migrate it or start over.
 async function bootWorld(): Promise<World> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
-  if (request === 'new') return freshRun();
+  if (typeof request === 'object' && request !== null) return freshRun(request.new);
   const slot = request ?? newestSlot(window.localStorage, SAVE_KEY, CONFIG.saveSlots);
-  return slot === null ? newGameSaved() : bootSlot(slot);
+  return slot === null ? newGameSaved(defaultSetup('roaming')) : bootSlot(slot);
 }
 
 async function bootSlot(slot: SlotId): Promise<World> {
   try {
-    return loadWorld(window.localStorage, slot, map) ?? newGameSaved();
+    return loadWorld(window.localStorage, slot, map) ?? newGameSaved(defaultSetup('roaming'));
   } catch (err) {
     if (!(err instanceof SaveError)) throw err;
     return rescuedOrNew(err, slot);
@@ -65,30 +67,31 @@ async function bootSlot(slot: SlotId): Promise<World> {
 
 // A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
 // autosave does not load an older run's save.
-function freshRun(): World {
+function freshRun(setup: WorldSetup): World {
   clearGame(window.localStorage);
-  return newGameSaved();
+  return newGameSaved(setup);
 }
 
-function newGameSaved(): World {
-  const world = newGame();
+function newGameSaved(setup: WorldSetup): World {
+  const world = newGame(setup);
   // Full storage does not stop the new game. The first autosave that fails tells the player.
   tryWriteSave(window.localStorage, 'auto', world, Date.now());
   return world;
 }
 
+// Migrate carries the save over. New game opens the New game screen, whose Start reloads into the new game.
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
   const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  await chooseSaveFate(error.message, canMigrate, browserNewGame((request) => requestBoot(window.sessionStorage, SAVE_KEY, request)));
   const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);
   return rescued.world;
 }
 
-function newGame(): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+function newGame(setup: WorldSetup): World {
+  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map, setup);
 }
 
 installCrashScreen();
