@@ -176,7 +176,7 @@ describe('playtest', () => {
     expect(run.f.created).toEqual([]);
     expect(release(run.f).playtest).toMatchObject({ runs: 3, passed: null, blocked: { sha: 'fix0002' } });
     expect(comments(run.f)[0]).toContain('Release playtest: blocked after 3 plays');
-    expect(comments(run.f)[0]).toContain('A member decides with factory retry on this issue.');
+    expect(comments(run.f)[0]).toContain('Hermes decides with factory retry on this issue.');
   });
 
   it('opens a bug issue for each important old finding no open issue names, and still passes the release', async () => {

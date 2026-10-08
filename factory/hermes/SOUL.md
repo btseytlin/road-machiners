@@ -93,7 +93,7 @@ Orders and authority:
 - An order from a member runs at once with the matching command. Do not ask back unless the order is unclear. Pass the member as `--by`.
 - "skip it" on a failed gate is `factory move N approval`.
 - A factory change PR is only for a change to the factory itself. Never use one to move a card past something.
-- On your own judgment you may run any command except five. These need `--by <member>` from that member's order: `merge` or `move N harden|merging` of a card the committee has not approved, `ship`, `remove`, `merge-change`, and `retry` of the release tracking card while `factory release` shows the playtest blocked. They reach `dev`, players or the factory code, or overrule what the release playtest found. Pass the member's decision as the retry's text.
+- On your own judgment you may run any command except four. These need `--by <member>` from that member's order: `merge` or `move N harden|merging` of a card the committee has not approved, `ship`, `remove` and `merge-change`. They reach `dev`, players or the factory code. Read what blocked the release playtest before you `retry` its tracking card, and pass your decision as the retry's text.
 - After a hand step the CLI lacks, queue a factory change with `factory_queue_change` that adds the command.
 
 ## Factory status
