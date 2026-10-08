@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { stepScript } from '../activity';
 import { EMPTY_STATE, newPlaytest, readState, writeState } from '../state';
 import type { AgentRun, Issue, ReleaseState } from '../types';
 import { auditDir, playtest } from './playtest';
@@ -33,7 +34,7 @@ type Run = {
 
 const harnessRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('progression:playthrough'));
 const checkRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('[checks]'));
-const SUITE = 'npm ci && npm test';
+const SUITE = stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]);
 
 // The fake harness writes the log the command asks for into the clone it ran in. The fake agent writes its review and may commit.
 function setup(state: Partial<ReleaseState> = {}, start = 'abc1234'): Run {
@@ -100,8 +101,8 @@ describe('playtest', () => {
     await playtest(run.f.ctx, 11);
     expect(run.shells[0]).toMatchObject({ clone: CLONE, script: SUITE });
     expect(harnessRuns(run).map((shell) => [shell.clone, shell.script])).toEqual([
-      [CLONE, `npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`],
-      [join(ROOT, 'work', 'release-baseline'), `npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha main001 --out .factory/playtest/log.jsonl`],
+      [CLONE, stepScript('Playing the release seed', [['npm ci', 'npm ci'], ['playtest', `npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]])],
+      [join(ROOT, 'work', 'release-baseline'), stepScript('Playing the baseline seed', [['npm ci', 'npm ci'], ['playtest', `npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha main001 --out .factory/playtest/log.jsonl`]])],
     ]);
     expect(run.f.calls).toContain('prepare main');
     expect(readFileSync(join(HOME, 'playtest', 'baseline.jsonl'), 'utf8')).toContain('"sha":"main001"');

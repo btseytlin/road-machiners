@@ -1,3 +1,4 @@
+import { STEP_FUNCTION, phaseLine } from '../activity';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAndDeploy, recordBuild } from '../deploy';
@@ -15,9 +16,14 @@ export const CANDIDATE_SCOPE = 'rc';
 const SERVER_TRIES = 60;
 
 // Starts the dev server with a bounded wait, plays the game, keeps the newest screenshot, then stops the server.
+// It stops the server after a failed play, so it is no `set -e` script and prints its steps by hand.
 const playtestScript = (playtest: string) => `set -u
+${STEP_FUNCTION}
+${phaseLine('Playing the candidate')}
 mkdir -p ${OUT_DIR}
+step "npm ci"
 npm ci
+step "dev server"
 npm run dev > ${OUT_DIR}/dev-server.log 2>&1 &
 server=$!
 ready=0
@@ -28,6 +34,7 @@ done
 status=1
 if [ "$ready" = 1 ]; then
   status=0
+  step "playtest"
   ${playtest} || status=$?
 else
   echo "dev server did not start in ${SERVER_TRIES} seconds"
@@ -36,6 +43,7 @@ kill "$server" || true
 [ "$status" = 0 ] || exit "$status"
 shot=$(ls -t .playtest/*.png | head -n 1)
 cp "$shot" ${OUT_DIR}/screenshot.png
+step "done"
 `;
 
 // Posts the release branch as a playable candidate. Ship acts on this post alone. It builds only the commit the release

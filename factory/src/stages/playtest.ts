@@ -1,5 +1,6 @@
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { phaseLine, stepScript } from '../activity';
 import { checkScope } from '../deploy';
 import { must } from '../exec';
 import { roundSession } from '../sessions';
@@ -63,7 +64,7 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
 // The full game suite runs with no cache, since the cache could hide an input its fingerprint misses.
 // It runs before the first play, so a failing suite fails the job for Hermes and spends no play.
 async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
-  await ctx.container.shell(dir, 'npm ci && npm test', releaseLog(ctx, 'playtest'));
+  await ctx.container.shell(dir, stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]), releaseLog(ctx, 'playtest'));
 }
 
 // The release holds all of main before it plays, so a later Ship never brings unplayed game changes in.
@@ -163,7 +164,7 @@ async function firstPlay(ctx: Ctx, session: Session): Promise<LogFacts> {
 }
 
 async function playRelease(ctx: Ctx, session: Session, sha: string): Promise<LogFacts> {
-  await harness(ctx, session, session.dir, sha);
+  await harness(ctx, session, session.dir, sha, 'Playing the release seed');
   const facts = readFacts(ctx, session.release, join(session.home, LOG), sha);
   writeFileSync(join(session.home, OUT_DIR, 'playtest-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
   return facts;
@@ -175,7 +176,7 @@ async function playBaseline(ctx: Ctx, session: Session): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(baseline.branch, baseline.branch, dir);
   must(await ctx.run('git', ['-C', dir, 'checkout', '--quiet', '--detach', baseline.sha]), 'git checkout of the playtest baseline');
-  await harness(ctx, session, dir, baseline.sha);
+  await harness(ctx, session, dir, baseline.sha, 'Playing the baseline seed');
   const log = join(agentHome(dir, GAME_DIR), LOG);
   const facts = readFacts(ctx, session.release, log, baseline.sha);
   mkdirSync(dirname(join(home, BASELINE_LOG)), { recursive: true });
@@ -183,9 +184,10 @@ async function playBaseline(ctx: Ctx, session: Session): Promise<void> {
   writeFileSync(join(home, OUT_DIR, 'playtest-baseline-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
 }
 
-async function harness(ctx: Ctx, session: Session, dir: string, sha: string): Promise<void> {
+async function harness(ctx: Ctx, session: Session, dir: string, sha: string, phase: string): Promise<void> {
   const { seed } = session.release.playtest;
-  await ctx.container.shell(dir, `npm ci && npm run progression:playthrough -- --seed ${seed} --turns ${ctx.cfg.playtestTurns} --sha ${sha} --out ${LOG}`, session.log);
+  const play = `npm run progression:playthrough -- --seed ${seed} --turns ${ctx.cfg.playtestTurns} --sha ${sha} --out ${LOG}`;
+  await ctx.container.shell(dir, stepScript(phase, [['npm ci', 'npm ci'], ['playtest', play]]), session.log);
 }
 
 function readFacts(ctx: Ctx, release: ReleaseState, path: string, sha: string): LogFacts {
@@ -209,7 +211,7 @@ async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<stri
   const log = releaseLog(ctx, 'playtest-checks');
   const check = async (): Promise<string | null> => {
     try {
-      await ctx.container.shell(session.dir, checkScript(playtestCommand(ctx.cfg, false)), log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
+      await ctx.container.shell(session.dir, `${phaseLine('Checking the playtest fixes')}\n${checkScript(playtestCommand(ctx.cfg, false))}`, log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
       return null;
     } catch (error) {
       return checkFailure(log, error);

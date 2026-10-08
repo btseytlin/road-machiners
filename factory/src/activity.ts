@@ -1,10 +1,21 @@
-import { parseAgentStatus, reportObservation, type Activity, type ActivityData, type Milestone } from './observability';
+import { MILESTONE_PATTERN, parseAgentStatus, reportObservation, type Activity, type ActivityData, type Milestone } from './observability';
 import type { Run } from './types';
 
 type StreamBlock = { type?: string; name?: string; input?: { command?: string }; content?: unknown };
 type StreamEvent = { type?: string; message?: { content?: StreamBlock[] } };
-type ActivityUpdate = ({ activity: Activity } | { milestone: Milestone }) & { source: ActivityData['source'] };
-const CHECK_STEPS: Record<string, Activity> = { 'npm ci': 'install', 'tests and typecheck': 'tests', 'tests done': 'typecheck', 'dev server': 'starting', playtest: 'playtest', build: 'build', done: 'finished' };
+// A runner step starts a substep of a factory script, so it counts as progress. A runner milestone is the phase of the script that printed it.
+type ActivityUpdate = ({ activity: Activity; step?: true } | { milestone: Milestone }) & { source: ActivityData['source'] };
+const STEPS = { 'npm ci': 'install', 'tests and typecheck': 'tests', 'tests done': 'typecheck', tests: 'tests', 'dev server': 'starting', playtest: 'playtest', build: 'build', done: 'finished' } as const satisfies Record<string, Activity>;
+export type StepName = keyof typeof STEPS;
+function readStep(name: string): Activity | null { return Object.hasOwn(STEPS, name) ? STEPS[name as StepName] : null; }
+// One `set -e` script for a factory shell. It prints its phase once and each step as it starts, so the worker shows the substep that runs,
+// never `npm ci` for the whole script. Step names come from STEPS. The phase shows on the public dashboard, so it follows the milestone rules.
+export function stepScript(phase: Milestone, steps: [StepName, string][]): string {
+  if (!MILESTONE_PATTERN.test(phase)) throw new Error(`Invalid script phase: ${phase}`);
+  return ['set -e', STEP_FUNCTION, phaseLine(phase), ...steps.flatMap(([name, command]) => [`step "${name}"`, command]), 'step "done"', ''].join('\n');
+}
+export const STEP_FUNCTION = 'step() { echo "[step] $(date -u +%T) $1"; }';
+export function phaseLine(phase: Milestone): string { return `echo "[phase] ${phase}"`; }
 const TOOL_ACTIVITIES: Record<string, Activity> = { Read: 'reading', Glob: 'reading', Grep: 'reading', Edit: 'editing', Write: 'editing', Agent: 'model', Task: 'model' };
 function classifyCommand(command: string): Activity {
   if (/\bnpm (?:run )?(?:test|test:)/.test(command)) return 'tests';
@@ -39,11 +50,20 @@ function readStreamActivity(event: StreamEvent): ActivityUpdate | null {
   return blocks.map(readToolActivity).find((value) => value !== null) ?? null;
 }
 export function readActivityLine(line: string): ActivityUpdate | null {
-  const step = /^\[checks\] \S+ (.+)$/.exec(line);
-  if (step) return CHECK_STEPS[step[1]] ? { activity: CHECK_STEPS[step[1]], source: 'runner' } : null;
+  if (/^\[(?:checks|step|phase)\] /.test(line)) return readScriptLine(line);
   const reported = parseAgentStatus(line);
   if (reported) return { ...reported, source: 'agent' };
   try { return readStreamActivity(JSON.parse(line) as StreamEvent); } catch { return null; }
+}
+// A factory script's step or phase. An unknown step or a phase the dashboard may not show is dropped.
+function readScriptLine(line: string): ActivityUpdate | null {
+  const phase = /^\[phase\] (.+)$/.exec(line);
+  return phase ? readPhase(phase[1]) : readStepLine(line);
+}
+function readPhase(phase: string): ActivityUpdate | null { return MILESTONE_PATTERN.test(phase) ? { milestone: phase, source: 'runner' } : null; }
+function readStepLine(line: string): ActivityUpdate | null {
+  const activity = readStep(/^\[\w+\] \S+ (.+)$/.exec(line)?.[1] ?? '');
+  return activity ? { activity, step: true, source: 'runner' } : null;
 }
 function identifyOperation(command: string, args: string[]): Activity {
   if (args.includes('factory-agent')) return 'model';
@@ -51,42 +71,48 @@ function identifyOperation(command: string, args: string[]): Activity {
   return classifyCommand([command, ...args].join(' '));
 }
 
+type Operation = { activity: Activity; source: ActivityData['source']; phase: Milestone | null };
+// The agent's milestone holds for the job. A runner phase holds only while its operation runs and outranks it, so a finished
+// factory script never leaves its phase behind, and an old agent milestone never names a later factory script.
 export class ActivityReporter {
-  private active = new Map<symbol, { activity: Activity; source: ActivityData['source'] }>();
+  private active = new Map<symbol, Operation>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private progressAt: string | null = null;
   private milestone: Milestone | null = null;
   constructor(private readonly home: string, private readonly producer: string, private readonly heartbeatMs: number) {
     if (!Number.isFinite(heartbeatMs) || heartbeatMs <= 0) throw new Error('Invalid observation heartbeat interval');
   }
-  private publish(activity: Activity, phase: ActivityData['phase'], source: ActivityData['source']): void {
-    reportObservation(this.home, this.producer, { type: 'activity', activity, phase, source, progressAt: this.progressAt, ...(this.milestone === null ? {} : { milestone: this.milestone }) });
+  private publish(activity: Activity, phase: ActivityData['phase'], source: ActivityData['source'], milestone: Milestone | null): void {
+    reportObservation(this.home, this.producer, { type: 'activity', activity, phase, source, progressAt: this.progressAt, ...(milestone === null ? {} : { milestone }) });
   }
   private heartbeat(): void {
     const current = [...this.active.values()].at(-1);
-    if (current) this.publish(current.activity, 'running', current.source);
+    if (current) this.publish(current.activity, 'running', current.source, current.phase ?? this.milestone);
   }
   start(activity: Activity): symbol {
     const key = Symbol('operation');
-    this.active.set(key, { activity, source: 'runner' });
+    this.active.set(key, { activity, source: 'runner', phase: null });
     this.heartbeat();
     this.timer ??= setInterval(() => this.heartbeat(), this.heartbeatMs);
     this.timer.unref();
     return key;
   }
   update(key: symbol, update: ActivityUpdate): void {
-    if ('milestone' in update) this.milestone = update.milestone;
-    else {
-      if (['finished', 'model'].includes(update.activity) && update.source === 'runner') this.progressAt = new Date().toISOString();
-      this.active.set(key, { activity: update.activity, source: update.source });
-    }
+    const current = this.active.get(key)!;
+    if (!('milestone' in update)) this.moveOperation(key, current, update);
+    else if (update.source === 'runner') this.active.set(key, { ...current, phase: update.milestone });
+    else this.milestone = update.milestone;
     this.heartbeat();
+  }
+  private moveOperation(key: symbol, current: Operation, update: { activity: Activity; step?: true; source: ActivityData['source'] }): void {
+    if (update.source === 'runner' && (update.step || ['finished', 'model'].includes(update.activity))) this.progressAt = new Date().toISOString();
+    this.active.set(key, { ...current, activity: update.activity, source: update.source });
   }
   finish(key: symbol, failed: boolean): void {
     const current = this.active.get(key)!;
     this.active.delete(key);
     if (!failed) this.progressAt = new Date().toISOString();
-    this.publish(current.activity, failed ? 'failed' : 'completed', 'runner');
+    this.publish(current.activity, failed ? 'failed' : 'completed', 'runner', this.milestone);
     if (this.active.size) return this.heartbeat();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;

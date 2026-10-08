@@ -17,6 +17,7 @@ From `factory/`:
 - The 24-hour, 7-day and 30-day ranges are rolling UTC windows. Hermes chat, agent runs outside the factory and hosting costs are not counted.
 - Cards waiting is the average number of cards held back at once over the measured clock time. A card that waits behind its own running job does not count. Its tooltip and the stage bars show summed card-time, so 20 cards waiting for one hour count as 20 hours. Worker time sums the same way across parallel jobs. Gaps longer than three ticks are left out of both and counted.
 - Runner heartbeats show a job is alive. Agent activity reports are labelled apart and never prove a check passed. Scheduler explanations come from job selection.
+- A factory script, like the release playtest's suite and plays or a build, prints each step as it starts and its phase. So a worker shows the substep that runs, never `npm ci` for a whole script, and a phase shows only while its script runs. Each step counts as progress.
 - CPU, container CPU, memory, GPU and disk readings are whole-host percentages. A reading that fails or is not supported shows as unavailable.
 - A pause shows as an amber banner from the pause file. Raw pause notes never leave the server.
 - While `DASHBOARD_HIDE_TELEGRAM=1`, the API returns no channel link or posts.
