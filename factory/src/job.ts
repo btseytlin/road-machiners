@@ -1,5 +1,9 @@
 import { rebuildDev } from './deploy';
-import { failureIssue, reportFailure } from './fail';
+import { failureIssue, reportFailure, summarizeError } from './fail';
+import { UsageLimitError } from './pause';
+import { CARD_JOBS } from './position';
+import { BudgetError } from './stages/checkpoint';
+import { CommitteeDecisionError } from './stages/common';
 import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
 import { change } from './stages/change';
@@ -18,7 +22,7 @@ import { runStage as harden } from './stages/harden';
 import { runStage as waste } from './stages/waste';
 import { runStage as triage } from './stages/triage';
 import { recordJob, type JobOutcome } from './ledger';
-import { clearSessions, resumedStage } from './sessions';
+import { clearSessions, markResumed, resumedStage } from './sessions';
 import { readState, updateState } from './state';
 import { QUEUE_OF, type Ctx, type FactoryState, type Job, type JobStage } from './types';
 
@@ -34,16 +38,33 @@ const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste' | 'merge'>,
 // Card stages leave a progress comment on their issue, so the issue shows where its work stands.
 const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', harden: 'Hardening', checks: 'Post' };
 
-export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: 'finished' | 'failed'): string {
+type Ending = 'finished' | 'failed' | 'stopped';
+const NEXT: Record<Ending, string> = { finished: '', failed: ' Hermes is looking into it.', stopped: ' It resumes in its own session on the next tick, with the error.' };
+
+export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: Ending): string {
   const minutes = startedAt ? Math.round((ctx.now().getTime() - new Date(startedAt).getTime()) / 60_000) : null;
   const took = minutes === null ? '' : ` after ${minutes} min`;
-  const next = outcome === 'failed' ? ' Hermes is looking into it.' : '';
-  return `${CARD_STAGE_NAMES[stage]} ${outcome}${took}.${next}`;
+  return `${CARD_STAGE_NAMES[stage]} ${outcome}${took}.${NEXT[outcome]}`;
 }
 
-async function noteProgress(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null, outcome: 'finished' | 'failed'): Promise<void> {
+async function noteProgress(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null, outcome: Ending): Promise<void> {
   if (issue === null || !(stage in CARD_STAGE_NAMES)) return;
   await ctx.github.comment(issue, progressNote(ctx, stage, job?.startedAt ?? null, outcome));
+}
+
+// A card stage that failed resumes once in its own sessions, with the error, before Hermes hears of it.
+// An empty budget, the usage limit and a question for the committee are no errors a retry gets past, so they go to Hermes at once, and so does a second failure.
+function retriesItself(ctx: Ctx, stage: JobStage, issue: number | null, error: unknown): issue is number {
+  if (issue === null || !CARD_JOBS.includes(stage)) return false;
+  if (error instanceof BudgetError || error instanceof UsageLimitError || error instanceof CommitteeDecisionError) return false;
+  return !readState(ctx.statePath).interrupted.includes(issue);
+}
+
+function resumeOnce(ctx: Ctx, stage: JobStage, issue: number, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  markResumed(ctx.cfg.home, issue, stage, summarizeError(message));
+  updateState(ctx.statePath, (state) => ({ ...state, interrupted: [...state.interrupted, issue] }));
+  ctx.log(stage, issue, `stopped on an error, it resumes once: ${message}`);
 }
 
 // The tick records a job before it starts it. A job run by hand has no record.
@@ -51,12 +72,14 @@ function ownJob(ctx: Ctx, stage: JobStage, issue: number | null): Job | null {
   return readState(ctx.statePath).jobs.find((job) => job.stage === stage && job.issue === issue) ?? null;
 }
 
-// Runs one job to its end. Success or failure, the job's record, its queued command, its issue's interrupted mark and its sessions are cleared, so nothing retries.
+// Runs one job to its end. The job's record and its queued command are cleared. A card stage that failed the first time keeps its
+// interrupted mark and its sessions, so the next tick resumes it. Any other end clears them, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   const job = ownJob(ctx, stage, issue);
   const entry = ledgerEntry(ctx, job, stage, issue);
   let outcome: JobOutcome = 'failed';
-  // Only the stage that died resumes. Any other job starts new, so sessions left by an earlier job never resume.
+  let retry = false;
+  // Only the stage that stopped resumes. Any other job starts new, so sessions left by an earlier job never resume.
   if (!resuming(ctx, stage, issue)) clearSessionsOf(ctx, stage, issue);
   try {
     await dispatch(ctx, stage, issue, job);
@@ -64,13 +87,21 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
     ctx.log(stage, issue, 'done');
     await noteProgress(ctx, stage, issue, job, 'finished');
   } catch (error) {
-    await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
-    await noteProgress(ctx, stage, issue, job, 'failed');
+    retry = await failed(ctx, stage, issue, job, error);
   } finally {
     recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), entry, outcome);
-    clearJob(ctx, stage, issue);
-    clearSessionsOf(ctx, stage, issue);
+    clearJob(ctx, stage, issue, retry);
+    if (!retry) clearSessionsOf(ctx, stage, issue);
   }
+}
+
+// Returns whether the stage resumes by itself.
+async function failed(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null, error: unknown): Promise<boolean> {
+  const retry = retriesItself(ctx, stage, issue, error);
+  if (retry) resumeOnce(ctx, stage, issue, error);
+  else await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
+  await noteProgress(ctx, stage, issue, job, retry ? 'stopped' : 'failed');
+  return retry;
 }
 
 // A job run by hand has no record, so it has no id, its agents record no usage, and it starts now.
@@ -105,11 +136,11 @@ async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Jo
   return HANDLERS[stage](ctx, issue);
 }
 
-function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
+function clearJob(ctx: Ctx, stage: JobStage, issue: number | null, resumes: boolean): void {
   updateState(ctx.statePath, (state) => {
     const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
     // Only agent and test jobs resume.
-    const interrupted = QUEUE_OF[stage] === 'branch' ? state.interrupted : state.interrupted.filter((item) => item !== issue);
+    const interrupted = QUEUE_OF[stage] === 'branch' || resumes ? state.interrupted : state.interrupted.filter((item) => item !== issue);
     return { ...clearQueued(state, stage, issue), jobs, interrupted };
   });
 }

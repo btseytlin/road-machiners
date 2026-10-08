@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
-import { resumedStage, roundSession } from '../sessions';
+import { resumeError, resumedStage, roundSession } from '../sessions';
 import { readCommitteeMedia } from '../reply-media';
 import { issueReports } from '../error-reports/service';
 import { readState } from '../state';
@@ -137,6 +137,15 @@ export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): P
 // A resumed round continues its own conversation, so it needs no prompt but this note. A round that had finished ends at once.
 export const RESUME_NOTE = 'A stop cut this job off. The work clone keeps your commits and changed files. Read them with git log and git status, then continue from there. If your task is already done, say so and stop.';
 
+// A job that failed on an error resumes with it, so the agent fixes what stopped the stage.
+function resumeNote(ctx: Ctx, issue: number): string {
+  const error = resumeError(ctx.cfg.home, issue);
+  return error === null ? RESUME_NOTE : `${RESUME_NOTE}\n\nThe job stopped on this error. Fix its cause if it is in your work:\n\n${error}`;
+}
+
+// The agent asked the committee for a decision. A retry cannot get past it, so the stage goes to Hermes at once.
+export class CommitteeDecisionError extends Error {}
+
 // The job on this issue lost its process once, so its agents continue their sessions.
 // runJob keeps the sessions only for a job of the stage that died, so their stage mark means this job resumes.
 export function isResuming(ctx: Ctx, issue: number): boolean {
@@ -171,7 +180,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
   const reports = issueReports(ctx.cfg.home, issue);
-  const full = session.resume ? (extras.continue === true ? prompt : RESUME_NOTE) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
+  const full = session.resume ? (extras.continue === true ? prompt : resumeNote(ctx, issue)) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
   return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
@@ -203,7 +212,7 @@ export async function askAuthor(ctx: Ctx, issue: number, questions: string[], st
 // The agent may stop early and ask the committee for a decision.
 export function throwIfNeedsCommittee(home: string): void {
   const text = readOutput(home, 'needs-committee.md');
-  if (text !== null) throw new Error(`The agent needs a committee decision: ${text.trim()}`);
+  if (text !== null) throw new CommitteeDecisionError(`The agent needs a committee decision: ${text.trim()}`);
 }
 
 // Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
@@ -244,7 +253,7 @@ export function guardDiff(diff: string): void {
   const leaked = factoryPaths(diff);
   if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
   if (changesSaveMajor(diff)) {
-    throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
+    throw new CommitteeDecisionError('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
 }
 
