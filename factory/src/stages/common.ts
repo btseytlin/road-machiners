@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection } from '../media';
 import { CommitteeDecisionError, guardDiff } from '../diff-guard';
-import { isAnswered } from '../questions';
+import { isAnswered, operationsQuestions } from '../questions';
 import { resumeError, resumedStage, roundSession } from '../sessions';
 import { readCommitteeMedia } from '../reply-media';
 import { issueReports } from '../error-reports/service';
@@ -165,6 +165,7 @@ export function fitComment(text: string, fullAt: string): string {
 }
 
 export async function askAuthor(ctx: Ctx, issue: number, questions: string[], stage: 'triage' | 'design'): Promise<void> {
+  requireProductQuestions(questions, stage);
   const [{ author }, earlier] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const stillOpen = earlier.some((comment) => comment.body.includes(FACTORY_MARK) && comment.body.startsWith(QUESTIONS_HEADING)) && !isAnswered(earlier);
   const numbered = questions.map((question, index) => `${index + 1}. ${question}`);
@@ -174,6 +175,19 @@ export async function askAuthor(ctx: Ctx, issue: number, questions: string[], st
   if (stillOpen) return;
   const text = `❓ ${stage === 'triage' ? 'Triage' : 'Design'} needs answers on #${issue}. The questions are on the GitHub issue: https://github.com/${ctx.cfg.repo}/issues/${issue}\nAnswer there. Replies in this chat do not reach the stage.`;
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, text).catch((error: unknown) => ctx.log(stage, issue, `could not notify the committee of the questions: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+function requireProductQuestions(questions: string[], stage: 'triage' | 'design'): void {
+  const operations = operationsQuestions(questions);
+  if (operations.length === 0) return;
+  const redo = stage === 'triage'
+    ? 'Rewrite .factory/triage.json without them. Pick ready on the most sensible reading and name it in the reason.'
+    : 'Delete .factory/questions.md, or keep in it only questions about what the game should do. Handle the factory work in this stage, take the most sensible reading as an assumption in the task file, or write a factory blocker you cannot fix to .factory/blocked.md.';
+  throw new Error([
+    `The ${stage} agent asked the issue author about factory work, not about the game, so nothing was posted and no ${NEEDS_INFO_LABEL} label was added:`,
+    ...operations.map((question) => `- ${question}`),
+    `Branches, merges, clones, builds, tests, prerequisite issues and the order of work are the factory's job, never the author's. ${redo}`,
+  ].join('\n'));
 }
 
 export function throwIfNeedsCommittee(home: string): void {

@@ -142,6 +142,12 @@ describe('triage stage', () => {
     expect(calls.filter((call) => call.startsWith('move'))).toEqual([]);
   });
 
+  it('fails without asking the author when a question is about merges or prerequisites', async () => {
+    const question = 'Should this wait until #242 is merged into the dev branch?';
+    await expect(runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Blocked', questions: ['Which horn?', question] })), 7)).rejects.toThrow(`- ${question}\n`);
+    expect(calls.filter((call) => /^(comment|addLabel|message|move) /.test(call))).toEqual([]);
+  });
+
   it('notifies the committee once, with stage, issue link and reply place, and no question text', async () => {
     await runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Vague', questions: ['Which horn?'] })), 7);
     const messages = calls.filter((call) => call.startsWith('message'));

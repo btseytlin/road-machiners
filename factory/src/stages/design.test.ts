@@ -141,6 +141,22 @@ describe('design stage', () => {
     expect(calls.at(-1)).toBe('move 7 Triage');
   });
 
+  const STALE_BRANCH = 'Should the factory update the stale work clone and branch to dev so it can see the prerequisites #242 and #243?';
+
+  it('fails without asking the author when the question is about a stale branch and prerequisites', async () => {
+    const ctx = fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, `Which horn?\n${STALE_BRANCH}\n`));
+    await expect(runStage(ctx, 7)).rejects.toThrow(`asked the issue author about factory work, not about the game, so nothing was posted and no needs-info label was added:\n- ${STALE_BRANCH}`);
+    expect(calls.filter((call) => /^(comment|addLabel|removeLabel|message|move) /.test(call))).toEqual([]);
+  });
+
+  it('asks the author a missing factual requirement and sends the card to Triage', async () => {
+    const question = 'Should the horn play when the truck brakes, or only when the player presses H?';
+    await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, `${question}\n`)), 7);
+    expect(calls.find((call) => call.startsWith('comment 7 ## Questions from the factory'))).toContain(`1. ${question}`);
+    expect(calls).toContain('addLabel 7 needs-info');
+    expect(calls.at(-1)).toBe('move 7 Triage');
+  });
+
   it('throws on an empty questions file', async () => {
     await expect(runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, '\n')), 7)).rejects.toThrow('empty questions.md');
   });

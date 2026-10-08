@@ -18,3 +18,17 @@ export function isAnswered(comments: IssueComment[]): boolean {
   if (asked < 0) return false;
   return comments.slice(asked + 1).some((comment) => !isFactory(comment));
 }
+
+const SEQUENCE = String.raw`prerequisites?|depends? on|dependency|dependencies|blocked by|wait(?:s|ing)? (?:for|until)|until|merged|lands?|landed|ships?|shipped`;
+const OPERATIONS = [
+  /\bgit\b|\brebas(?:e|ed|ing)\b|\bcherry-?pick|\bcheck(?:ed)?-?out\b|\bworktrees?\b|\b(?:work|git|local|stale|fresh|host) clones?\b|\bre-?clon(?:e|ed|ing)\b/i,
+  /\borigin\/|\bfactory\/issue-|`(?:dev|main)`|\b(?:dev|main|release|feature|issue|base|work|stale|git) branch(?:es)?\b|\bbranch(?:es)? (?:dev|main)\b/i,
+  /\bpull requests?\b|\bPRs?\b|\bmerge conflicts?\b|\bmerg(?:e|ed|es|ing)\b[^.?!]{0,40}\b(?:branch|pull request|PR)\b/i,
+  /\b(?:npm|vitest|typecheck|tsc|lint|CI)\b|\btest suite\b|\bunit tests?\b|\bfailing tests?\b|\bthe build (?:fails|failed|is broken|breaks)\b/i,
+  /\bthe factory\b/i,
+  new RegExp(String.raw`\b(?:${SEQUENCE})\b[^.?!]{0,40}#\d+|#\d+[^.?!]{0,40}\b(?:${SEQUENCE}|first)\b`, 'i'),
+];
+
+export function operationsQuestions(questions: string[]): string[] {
+  return questions.filter((question) => OPERATIONS.some((pattern) => pattern.test(question)));
+}
