@@ -13,7 +13,7 @@ import { chassisDef } from '../data/chassis';
 import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
 import {
-  breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
+  breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, dropHaul, looseCargo, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
   isSiteStock, lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvagePlace, salvageUnits, siteLootTable,
   emptyHidden,
 } from './salvage';
@@ -51,7 +51,7 @@ describe('player piles', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'scout', [], { x: 31, y: 30 });
     addGoods(w, npc, 'scrap', 2);
-    const pile = createCargoSalvage(w, npc, 1);
+    const pile = dropHaul(w, npc, looseCargo(npc));
     const held = goodsCount(w.vehicles[0]).scrap ?? 0;
     w.player.costBasis.scrap = 400;
     collectSalvage(w, w.vehicles[0], pile.id, 100);
@@ -92,7 +92,7 @@ describe('player piles', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'scout', [], { x: 30.5, y: 30 });
     addGoods(w, npc, 'scrap', 2);
-    const theirs = createCargoSalvage(w, npc, 1);
+    const theirs = dropHaul(w, npc, looseCargo(npc));
     expect(salvageInRange(w.vehicles[0], theirs)).toBe(true);
     const good = w.vehicles[0].items.find((it) => it.kind === 'good')!;
     const next = dumpItem(w, good.id);
@@ -201,7 +201,7 @@ describe('finite salvage', () => {
     addGoods(w, victim, 'scrap', 2);
     const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
     claimant.brain = npcBrain('buggy', claimant.pos, []);
-    const pile = createCargoSalvage(w, victim, 1);
+    const pile = dropHaul(w, victim, looseCargo(victim));
     claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
     claimPile(w, pile, claimant);
     return { w, pile, claimant };
@@ -871,7 +871,7 @@ describe('salvage place', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     addGoods(w, npc, 'scrap', 3);
-    expect(salvagePlace(createCargoSalvage(w, npc, 1))).toBe('pile');
+    expect(salvagePlace(dropHaul(w, npc, looseCargo(npc)))).toBe('pile');
   });
 
   it('calls a site stock a site', () => {

@@ -4,6 +4,7 @@
 
 import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
+import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
 import { playerVehicle, vehicleById } from '../sim/damage';
@@ -67,6 +68,15 @@ export function tipText(v: Extract<CallVar, { kind: 'tip' }>): string {
   return line.replace('{site}', siteName(v.tip.shop)).replace('{good}', good.name.toLowerCase()).replace('{was}', good.plural ? 'were' : 'was');
 }
 
+export function haulText(v: Extract<CallVar, { kind: 'haul' }>): string {
+  const names = [
+    ...Object.entries(v.goods).map(([good, n]) => `${n} ${GOODS[good].name.toLowerCase()}`),
+    ...v.parts.map((id) => partDef(id).name.toLowerCase()),
+  ];
+  if (names.length === 0) throw new Error('An empty haul is never named in a line');
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
 
 const VAR_TEXT: VarText = {
@@ -79,6 +89,7 @@ const VAR_TEXT: VarText = {
   deal: dealText,
   prices: pricesText,
   aid: aidText,
+  haul: haulText,
   tip: tipText,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };

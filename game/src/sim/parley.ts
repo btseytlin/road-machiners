@@ -7,7 +7,6 @@ import { isHostile } from './combat';
 import { isKnockedOut, standDown } from './defeat';
 import { RULES } from '../data/rules';
 import { playerVehicle, vehicleById } from './damage';
-import { partSellPrice } from './economy';
 import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
@@ -15,7 +14,8 @@ import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-ac
 import { decide, firepower, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
+import { cargoHaul, removableParts, surrenderHaul } from './haul';
+import { backedOff, canReachSalvage, claimantOf, claimPile, dropHaul, lootClaimedBy, looseCargo, salvageInRange } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import { inTowReach } from './tow';
@@ -55,8 +55,12 @@ function holdFire(v: Vehicle, target: Vehicle): void {
   if (v.brain) delete v.brain.attackers[target.id];
 }
 
-export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
-  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
+export function handedOver(world: World, loser: Vehicle, winner: Vehicle): GridItem[] {
+  return winner.brain ? cargoHaul(world, winner, loser) : looseCargo(loser);
+}
+
+export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, haul: GridItem[] = handedOver(world, loser, winner)): void {
+  const stock = haul.length > 0 ? dropHaul(world, loser, haul) : null;
   cede(world, loser, winner, stock, 'take the handed-over cargo');
   creditYield(world, loser, winner);
 }
@@ -79,7 +83,10 @@ function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[
 }
 
 export function surrenderTo(world: World, loser: Vehicle, robber: Vehicle): void {
-  yieldTo(world, loser, robber, dumpWantedParts(world, loser));
+  const haul = robber.brain ? surrenderHaul(world, robber, loser) : [...looseCargo(loser), ...removableParts(loser).slice(0, RULES.surrenderParts)];
+  const mounted = haul.some((item) => item.kind === 'part' && isMounted(loser.chassisId, item));
+  yieldTo(world, loser, robber, haul);
+  if (mounted) applyRefitLayout(world, loser, loser.items);
 }
 
 export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
@@ -311,7 +318,7 @@ function isBeaten(world: World, npc: Vehicle, prey: Vehicle): boolean {
 }
 
 function strips(world: World, npc: Vehicle, prey: Vehicle): boolean {
-  return wantsLoot(world, npc, prey) && hasStrippable(prey);
+  return wantsLoot(world, npc, prey) && hasStrippable(world, npc, prey);
 }
 
 export function offersGiveUp(world: World, npc: Vehicle): boolean {
@@ -351,25 +358,8 @@ export function judgedWorthOffer(world: World, npc: Vehicle): boolean {
   return `strandedFoe:${world.player.vehicleId}` in npc.brain!.noticed;
 }
 
-function removableParts(victim: Vehicle): PartItem[] {
-  return victim.items
-    .filter((item): item is PartItem => item.kind === 'part' && isMounted(victim.chassisId, item) && takeError(victim, item) === null)
-    .sort((a, b) => partSellPrice(b.part) - partSellPrice(a.part));
-}
-
-export function hasStrippable(victim: Vehicle): boolean {
-  return hasCargo(victim) || removableParts(victim).length > 0;
-}
-
-function dumpWantedParts(world: World, victim: Vehicle): SalvageStock | null {
-  let pile: SalvageStock | null = null;
-  for (let taken = 0; taken < RULES.surrenderParts; taken++) {
-    const best = removableParts(victim)[0];
-    if (!best) break;
-    pile = dumpOnPile(world, victim, best);
-  }
-  if (pile) applyRefitLayout(world, victim, victim.items);
-  return pile;
+export function hasStrippable(world: World, robber: Vehicle, victim: Vehicle): boolean {
+  return surrenderHaul(world, robber, victim).length > 0;
 }
 
 function refusedOffer(world: World, shooter: Vehicle, prey: Vehicle): boolean {

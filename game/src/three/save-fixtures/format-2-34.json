@@ -1,0 +1,45 @@
+{
+  "turn": 900,
+  "vehicles": [
+    {
+      "id": "player",
+      "pos": {
+        "x": 30,
+        "y": 30
+      },
+      "brain": null
+    }
+  ],
+  "player": {
+    "call": {
+      "with": "npc-2",
+      "topic": "demand",
+      "node": "demand",
+      "vars": {
+        "haul": {
+          "kind": "haul",
+          "goods": {
+            "scrap": 2
+          },
+          "parts": [
+            "mg"
+          ]
+        }
+      },
+      "line": {
+        "text": "Dump {haul} and roll on.",
+        "vars": {
+          "haul": {
+            "kind": "haul",
+            "goods": {
+              "scrap": 2
+            },
+            "parts": [
+              "mg"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

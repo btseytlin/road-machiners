@@ -76,7 +76,7 @@ export function hasCargoRoom(v: Vehicle): boolean {
   return Object.keys(GOODS).some((good) => cargoRoom(v, good) > 0);
 }
 
-function stowPlace(v: Vehicle, item: GridItem): Spot | null {
+export function stowPlace(v: Vehicle, item: GridItem): Spot | null {
   return itemMass(item) > cargoMassRoom(v) ? null : stowSpot(v, item);
 }
 

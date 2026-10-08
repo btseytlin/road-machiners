@@ -13,12 +13,12 @@ export type ConditionId =
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'demandsToll' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
-  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield' | 'claimsSpill';
+  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield' | 'claimsSpill' | 'hasHaul' | 'noHaul';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp' | 'backOffClaim' | 'defyClaim'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'payToll' | 'refuseToll' | 'withdrawPlea' | 'settleThreat' | 'settleWarning' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
   | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea' | 'abandonSpill';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer' | 'demandHaul' | 'surrenderHaul';
 
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
 export type DialogueNode = { line: string; options: DialogueOption[] };
@@ -169,12 +169,12 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsCargo'], priority: 3, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'demandHaul',
     hangUp: ['settleRefused'],
     start: 'demand',
     nodes: {
       demand: {
-        line: 'Dump your cargo and roll on. Or we take it off your wreck.',
+        line: 'Dump {haul} and roll on. Or we take it off your wreck.',
         options: [
           { text: 'Fine. Take it.', when: [], effects: ['handOver'], go: END },
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
@@ -205,12 +205,12 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsSurrender'], priority: 5, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'surrenderHaul',
     hangUp: ['settleRefused'],
     start: 'offer',
     nodes: {
       offer: {
-        line: 'Your truck is dead. Hand over the cargo and your best parts, and you keep the truck. Refuse, and I take it off your wreck.',
+        line: 'Your truck is dead. Hand over {haul}, and you keep the truck. Refuse, and I take it off your wreck.',
         options: [
           { text: 'Fine. Take it.', when: [], effects: ['surrender'], go: END },
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
@@ -223,7 +223,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsGiveUp'], priority: 5, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'surrenderHaul',
     hangUp: ['settleRefused'],
     start: 'offer',
     nodes: {
@@ -290,7 +290,7 @@ export const TOPICS: Record<TopicId, Topic> = {
         ],
       },
       demanded: {
-        line: 'No free ride. Dump your cargo and roll on, and we call it square.',
+        line: 'No free ride. Dump {haul} and roll on, and we call it square.',
         options: [
           { text: 'Fine. Take it.', when: [], effects: ['payToll'], go: END },
           { text: 'Come and get it.', when: [], effects: ['refuseToll'], go: END },
@@ -312,11 +312,13 @@ export const TOPICS: Record<TopicId, Topic> = {
       listen: {
         line: 'Talk fast.',
         options: [
-          { text: 'Take what I carry. Just let me drive away.', when: ['accepts'], effects: ['settlePlea'], go: 'spared' },
+          { text: 'Take what I carry. Just let me drive away.', when: ['accepts', 'hasHaul'], effects: ['settlePlea'], go: 'spared' },
+          { text: 'Take what I carry. Just let me drive away.', when: ['accepts', 'noHaul'], effects: ['settlePlea'], go: 'sparedFree' },
           { text: 'Take what I carry. Just let me drive away.', when: ['refuses'], effects: ['settlePlea'], go: 'refused' },
         ],
       },
-      spared: { line: 'Leave it on the ground and go.', options: [{ text: 'Going.', when: [], effects: [], go: END }] },
+      spared: { line: 'Leave {haul} on the ground and go.', options: [{ text: 'Going.', when: [], effects: [], go: END }] },
+      sparedFree: { line: 'Nothing here I can carry off. Just go.', options: [{ text: 'Going.', when: [], effects: [], go: END }] },
       refused: { line: 'No deals.', options: [{ text: 'Then come and get me.', when: [], effects: [], go: END }] },
     },
   },
