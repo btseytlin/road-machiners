@@ -46,6 +46,7 @@ function knockedOut(): { w: World; me: Vehicle } {
 function knockedOutByRaider(parts: string[] = []): { w: World; me: Vehicle; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   w.salvage = [];
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // no new drivers, whose goals need a stock
   const me = w.vehicles[0];
   const raider = addVehicle(w, 'raiders', 'buggy', parts, { x: 36, y: 30 });
   me.lastHitBy = raider.id;
@@ -310,6 +311,25 @@ describe('the loot rule', () => {
     corePart(me, 'cab').hp = 0;
     checkKnockout(w);
     expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+  });
+
+  it('a knockout ends combat with the player, so the robbers keep their loot goal into the next turn', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    addState(w, 'combat', raider.id, me.id, { kind: 'none' });
+    me.lastHitBy = raider.id;
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(w.states.filter((s) => s.kind === 'combat')).toEqual([]);
+    expect(w.events.some((e) => e.t === 'stateEnded' && e.state.kind === 'combat' && e.ending === 'broken')).toBe(true);
+    expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+    const next = endTurn(w, testDrive);
+    const actor = next.vehicles.find((v) => v.id === raider.id)!;
+    expect(actor.brain!.goals.some((g) => g.kind === 'loot' && g.targetId === me.id)).toBe(true);
   });
 
   it('a raider that knocked the player out loots goods straight off the truck', () => {

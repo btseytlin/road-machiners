@@ -2,17 +2,18 @@
 // screens: a part or truck with icon stats and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
-import { RULES } from "../data/rules";
+import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
+import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
-import type { GridItem, PartInstance, Vehicle } from "../sim/types";
+import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
 import { GOODS } from "../data/goods";
 import { itemTone } from "../render/partLooks";
 import { hashStr } from "../render/noise";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
+import { roundDamage } from "../sim/combat";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -45,6 +46,7 @@ const ART = {
   parts:
     '<circle cx="20" cy="20" r="8"/><circle cx="20" cy="20" r="3"/><path d="M20 4v6M20 30v6M4 20h6M30 20h6M9 9l4 4M27 27l4 4M31 9l-4 4M9 31l4-4"/>',
   scanner: '<path d="M8 30q-4-16 12-22l6 12zM17 19l9-9M26 10l4-4M20 30v6M12 36h16"/>',
+  utility: '<path d="M6 14h28v20H6zM10 14V8h20v6M20 18v12M14 24h12M30 8l5-4"/>',
   damage: '<path d="M20 3l4 10 11-3-7 9 8 8-11-1-1 11-5-9-7 8v-11l-10-3 10-5-4-10 10 5z"/>',
   pen: '<path d="M22 5v30M4 20h28M26 14l7 6-7 6"/>',
   range: '<path d="M4 20h32M4 13v14M36 13v14M12 17v6M20 16v8M28 17v6"/>',
@@ -94,6 +96,7 @@ const ICON_NAMES: Record<IconName, string> = {
   tools: "Machine tools",
   parts: "Parts",
   scanner: "Radio scanner",
+  utility: "Utility",
   damage: "Damage",
   pen: "Penetration",
   range: "Range",
@@ -131,9 +134,16 @@ export function createIcon(name: IconName): HTMLElement {
   return icon;
 }
 
+// The needle's share of the dial. A truck with no top speed, as one shut down by an emitter pulse, shows full while
+// it rolls and empty at rest.
+export function dialShare(speed: number, maxSpeed: number): number {
+  if (maxSpeed <= 0) return speed === 0 ? 0 : 1;
+  return Math.min(Math.abs(speed) / maxSpeed, 1);
+}
+
 export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   const dial = el("span", { class: "speed-dial", "aria-hidden": "true" });
-  const angle = -120 + Math.min(Math.abs(speed) / maxSpeed, 1) * 240;
+  const angle = -120 + dialShare(speed, maxSpeed) * 240;
   dial.innerHTML = `<svg viewBox="0 0 100 100"><circle class="dial-rim" cx="50" cy="50" r="47"/><circle class="dial-face" cx="50" cy="50" r="41"/><path class="dial-ticks" d="M17 68A38 38 0 1 1 83 68"/><path class="dial-needle" d="M50 50V17" transform="rotate(${angle} 50 50)"/><circle class="dial-pin" cx="50" cy="50" r="4"/></svg>`;
   return dial;
 }
@@ -303,8 +313,8 @@ export function conditionRow(part: PartInstance): HTMLElement | null {
 }
 
 // The stat that best tells parts of one kind apart: the first of partStats(), with its change against the base.
-export function headlineStat(part: PartInstance, base: PartInstance | null): StatDiff {
-  const first = diffStats(partStats(part), base ? partStats(base) : null)[0];
+export function headlineStat(world: World, part: PartInstance, base: PartInstance | null): StatDiff {
+  const first = diffStats(partStats(world, part), base ? partStats(world, base) : null)[0];
   if (!first) throw new Error(`${part.defId} has no stats to headline`);
   return first;
 }
@@ -320,9 +330,44 @@ export function statChip(d: StatDiff): HTMLElement {
   );
 }
 
+export type PartCardOptions = {
+  world: World;
+  part: PartInstance;
+  base: PartInstance | null; // the part it is weighed against, or null for plain stats
+  action: HTMLElement | null;
+  onHover?: (on: boolean) => void;
+};
+
+export function partCard(o: PartCardOptions): HTMLElement {
+  const def = partDef(o.part.defId);
+  const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
+  const card = el(
+    "div",
+    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
+    el(
+      "div",
+      { class: "card-head" },
+      partIconEl(o.part),
+      el("div", { class: "card-name" }, el("b", {}, def.name)),
+      footprint(def.w, def.h),
+    ),
+    conditionRow(o.part),
+    ...(o.base ? [compareLine(o.base)] : []),
+    conditionMeter(o.part),
+    statGrid(diffs),
+    el("div", { class: "card-foot" }, el("span"), o.action),
+  );
+  if (o.onHover) {
+    const hover = o.onHover;
+    card.addEventListener("mouseenter", () => hover(true));
+    card.addEventListener("mouseleave", () => hover(false));
+  }
+  return card;
+}
+
 // What a shop part shows beyond its compact row: wear, comparison, condition meter, every stat and the action.
-export function partDetail(part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
-  const diffs = diffStats(partStats(part), base ? partStats(base) : null);
+export function partDetail(world: World, part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
+  const diffs = diffStats(partStats(world, part), base ? partStats(world, base) : null);
   return [
     conditionRow(part),
     ...(base ? [compareLine(base)] : []),
@@ -388,7 +433,8 @@ export type StatIcon =
   | "blast"
   | "heat"
   | "patch"
-  | "tall";
+  | "tall"
+  | "clock";
 
 // better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
@@ -419,20 +465,37 @@ function signed(value: number, decimals: number): string {
 
 // The few stats that decide a part's job and weakness, most important first, with its wear applied.
 // The condition meter already shows HP.
-export function partStats(part: PartInstance): Stat[] {
+export function partStats(world: World, part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](world, part), stat("mass", "Mass", def.mass, "kg", "less")];
 }
 
-const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
+const KIND_STATS: Record<PartKind, (world: World, part: PartInstance) => Stat[]> = {
   weapon: weaponStats,
-  engine: engineStats,
-  armor: armorStats,
-  cargo: cargoStats,
-  scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
-  store: storeStats,
+  engine: (_, part) => engineStats(part),
+  armor: (_, part) => armorStats(part),
+  cargo: (_, part) => cargoStats(part),
+  scanner: (_, part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  store: (_, part) => storeStats(part),
   core: () => [],
+  utility: (_, part) => utilityStats(part),
 };
+
+// A passive utility shows only its mass.
+function utilityStats(part: PartInstance): Stat[] {
+  const d = wornDef<UtilityDef>(part);
+  const reload = d.reload === null ? [] : [stat("reload", "Turns to recharge", d.reload, "t", "less")];
+  const lasts = "turns" in d.effect ? [stat("clock", "Turns it lasts", d.effect.turns, "t", "more")] : [];
+  return [...reload, ...utilityReach(d), ...lasts];
+}
+
+// How far a utility sends its effect, the length of its oil slick, or the radius it covers around the truck.
+function utilityReach(d: UtilityDef): Stat[] {
+  const e = d.effect;
+  if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
+  if (e.type === "oil") return [stat("range", "Slick length", meters(oilSlickLength()), "m", "more")];
+  return "radius" in e ? [stat("range", "Radius", meters(e.radius), "m", "more")] : [];
+}
 
 function storeStats(part: PartInstance): Stat[] {
   const d = partDefOf<StoreDef>(part);
@@ -459,9 +522,9 @@ function partDefOf<T>(part: PartInstance): T {
   return partDef(part.defId) as T;
 }
 
-function weaponStats(part: PartInstance): Stat[] {
+function weaponStats(world: World, part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const round = d.round.damage * RULES.weaponDamage;
+  const round = roundDamage(world, d);
   const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
   if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [
@@ -474,6 +537,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
     stat("power", "Power draw", d.draw, "", "less", 1),
+    ...(d.line ? [stat("clock", "Turns the line holds", d.line.turns, "t", "more")] : []),
   ];
 }
 

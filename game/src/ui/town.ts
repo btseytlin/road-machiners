@@ -30,7 +30,7 @@ import {
   sellTruckGood,
   sellTruckPart,
   supplyRoom,
-  tradeReady,
+  canTradeWith,
   truckGoodPrice,
   truckPartPrice,
   truckGoodsForSale,
@@ -40,17 +40,17 @@ import {
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { moneyLabel } from "./hud-readout";
-import { spareParts } from "../sim/inventory";
+import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
 import { PartRows, type PartRow } from "./part-rows";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
+import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters } from "./units";
+import { fuelLiters, moneyAmount, moneyText } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
@@ -58,9 +58,9 @@ import { vehicleHasPerk } from "../sim/progress";
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
-type StockFilter = "all" | Exclude<PartKind, "core">;
+export type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
+export const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -159,7 +159,7 @@ export class TownScreen {
     const body: Record<Tab, () => HTMLElement> = {
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
-      sellParts: () => this.sellParts(w, def),
+      sellParts: () => this.sellParts(w),
       trucks: () => this.trucks(w),
       contracts: () => this.contracts(w, shopId),
     };
@@ -253,7 +253,7 @@ export class TownScreen {
     const payable = (price: number) => w.player.money >= price;
     const rows = shown.map((p) => {
       const price = partTradePrice(w, me, p, "buy");
-      return this.partRow(p, price, payable(price), "Not enough money", "Buy", (x) => buyStockPart(x, p.id));
+      return this.partRow(w, p, price, payable(price), "Not enough money", "Buy", (x) => buyStockPart(x, p.id), !canStowPart(me, p));
     });
     return el(
       "div",
@@ -265,14 +265,17 @@ export class TownScreen {
     );
   }
 
-  private partRow(p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World): PartRow {
+  // A stock part that will not fit the grid goes to garage storage, and its Buy button says so.
+  private partRow(w: World, p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World, stored = false): PartRow {
+    const button = this.button(`${verb} ${moneyText(price)}`, cmd, !payable);
     return {
+      world: w,
       part: p,
       base: compareBase(this.inventory.selectedPart(), p),
       price,
       payable,
       unpaidTitle,
-      action: this.button(`${verb} ${price}`, cmd, !payable),
+      action: stored ? el("div", { class: "buy-stored" }, button, el("div", { class: "dim" }, "No room: goes to storage")) : button,
       onHover: this.hintMounts(partDef(p.defId).kind),
     };
   }
@@ -298,21 +301,20 @@ export class TownScreen {
     });
   }
 
-  // Spares sell at any shop, stored parts only at a garage, as sellPart() accepts.
-  private sellParts(w: World, def: ShopDef): HTMLElement {
+  // Spare and stored parts sell at any shop, as sellPart() accepts.
+  private sellParts(w: World): HTMLElement {
     const me = playerVehicle(w);
-    const garage = def.kind === "garage";
-    const sellable: PartInstance[] = [...(garage ? w.player.storage : []), ...spareParts(me)];
+    const sellable: PartInstance[] = [...w.player.storage, ...spareParts(me)];
     const rows = sellable.map((p) =>
-      this.partRow(p, partTradePrice(w, me, p, "sell"), true, "", "Sell", (x) => sellPart(x, p.id)),
+      this.partRow(w, p, partTradePrice(w, me, p, "sell"), true, "", "Sell", (x) => sellPart(x, p.id)),
     );
     return el(
       "div",
       {},
-      el("h3", {}, garage ? "Sell spare and stored parts" : "Sell spare parts"),
+      el("h3", {}, "Sell spare and stored parts"),
       rows.length
         ? this.rows.list(rows)
-        : el("div", { class: "dim" }, garage ? "No spare or stored parts." : "No spare parts."),
+        : el("div", { class: "dim" }, "No spare or stored parts."),
     );
   }
 
@@ -329,7 +331,7 @@ export class TownScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, fuel ? `${price} per ${amount(1)}` : `${price} each`),
+      el("span", { class: "dim" }, fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`),
       this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), afford < 1),
       this.button(`Fill ${amount(afford)}`, (x) => buySupply(x, k, afford), afford < 1),
     );
@@ -345,8 +347,8 @@ export class TownScreen {
       { class: "town-repair" },
       createIcon("tools"),
       broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
-      this.button(basics === 0 ? "Basics fine" : `Repair basics ${basics}`, repairBasics, basics === 0),
-      this.button(all === 0 ? "No repairs" : `Repair all ${all}`, repairAll, all === 0),
+      this.button(basics === 0 ? "Basics fine" : `Repair basics ${moneyText(basics)}`, repairBasics, basics === 0),
+      this.button(all === 0 ? "No repairs" : `Repair all ${moneyText(all)}`, repairAll, all === 0),
     );
   }
 
@@ -370,7 +372,7 @@ export class TownScreen {
             "div",
             { class: "card-foot" },
             el("span", { class: "dim" }, own ? "Your truck" : `vs ${chassisDef(me.chassisId).name}`),
-            own ? null : this.button(cost >= 0 ? `Swap ${cost}` : `Swap, get ${-cost} back`, (x) => buyChassis(x, id), w.player.money < cost),
+            own ? null : this.button(cost >= 0 ? `Swap ${moneyText(cost)}` : `Swap, get ${moneyText(-cost)} back`, (x) => buyChassis(x, id), w.player.money < cost),
           ),
         ),
       );
@@ -382,7 +384,7 @@ export class TownScreen {
         "div",
         { class: "note" },
         createIcon("money"),
-        `Your truck trades in for ${tradeIn}.`,
+        `Your truck trades in for ${moneyText(tradeIn)}.`,
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
@@ -408,20 +410,20 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, bountyPays(w));
     const destination = c.kind === "haul" ? c.to : c.shop;
-    if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
-    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
-    return this.button("Deliver", (x) => deliverContract(x, c.id));
+    const verb = c.kind === "bounty" ? "Claim" : "Deliver";
+    if (destination !== shopId) return el("span", { class: "dim" }, `${verb} at ${siteName(destination)}`);
+    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "bounty" ? bountyPays(w) : NOT_READY[c.kind]);
+    return this.button(verb, (x) => deliverContract(x, c.id));
   }
 }
 
-// What a held bounty pays for. A raider that gives up counts only with Bounty talk.
+// What an unmet bounty needs. A raider that gives up counts only with Bounty talk.
 function bountyPays(w: World): string {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
-const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+export const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   all: "All",
   weapon: "Weapons",
   engine: "Engines",
@@ -429,15 +431,17 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   cargo: "Cargo",
   scanner: "Scanners",
   store: "Stores",
+  utility: "Utilities",
 };
 
-const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
+export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
   store: "supplies",
+  utility: "utility",
 };
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -456,6 +460,12 @@ const TAB_ICON: Record<Tab, IconName> = {
   contracts: "clock",
 };
 
+const NOT_READY: Record<Contract["kind"], string> = {
+  haul: "Not enough cargo yet",
+  fetch: "Needs the part",
+  bounty: "Not met yet",
+};
+
 const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   haul: "cargo",
   fetch: "parts",
@@ -463,7 +473,7 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
 };
 
 function priceEl(price: number): HTMLElement {
-  return el("span", { class: "price" }, createIcon("money"), `${price}`);
+  return el("span", { class: "price" }, createIcon("money"), moneyAmount(price));
 }
 
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
@@ -509,17 +519,19 @@ function bar(share: number): HTMLElement {
   return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
 }
 
-// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due.
+// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due,
+// and a met bounty shows that it is ready to claim.
 function contractRow(w: World, c: Contract, action: HTMLElement, posted = false): HTMLElement {
+  const met = c.kind === "bounty" && c.fulfilled;
   const clock = posted
     ? el("span", { class: "price", title: `${c.window} turns from acceptance` }, createIcon("clock"), contractWindow(c))
-    : el("span", { class: "price", title: `${c.deadline - w.turn} turns left` }, createIcon("clock"), contractDue(c));
+    : el("span", { class: "price", ...(met ? {} : { title: `${c.deadline - w.turn} turns left` }) }, createIcon("clock"), heldContractDue(c));
   return el(
     "div",
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price" }, createIcon("money"), `${c.reward}`),
+    el("span", { class: "price" }, createIcon("money"), moneyAmount(c.reward)),
     clock,
     action,
   );
@@ -537,13 +549,13 @@ function pressureHint(def: ShopDef, state: ShopState, good: string): { text: str
 }
 
 
-// True when the player already holds what a haul or fetch contract needs to hand in.
+// True when the player already holds what a haul or fetch contract needs to hand in, or a bounty is met.
 function canDeliver(w: World, c: Contract): boolean {
   const me = playerVehicle(w);
   if (c.kind === "haul") return (goodsCount(me)[c.good] ?? 0) >= c.units;
   if (c.kind === "fetch")
     return spareParts(me).some((p) => fitsFetch(c, p)) || w.player.storage.some((p) => fitsFetch(c, p));
-  return false;
+  return c.fulfilled;
 }
 
 function siteName(id: string): string {
@@ -582,11 +594,10 @@ export class TruckTradeScreen {
     return this.npcId !== null;
   }
 
-  // Opens on the driver the player can trade with now. False when there is none.
-  openIfReady(): boolean {
-    const npc = tradeReady(this.host.world());
-    if (!npc) return false;
-    this.npcId = npc.id;
+  // Opens on this driver when the player can trade with them now. False otherwise.
+  openWith(npcId: string): boolean {
+    if (!canTradeWith(this.host.world(), npcId)) return false;
+    this.npcId = npcId;
     this.root.style.display = "";
     this.error = "";
     this.rows.collapse();
@@ -717,9 +728,10 @@ export class TruckTradeScreen {
       part: p,
       base: compareBase(this.inventory.selectedPart(), p),
       price,
+      world: w,
       payable,
       unpaidTitle,
-      action: this.button(`${verb} ${price}`, cmd, !payable),
+      action: this.button(`${verb} ${moneyText(price)}`, cmd, !payable),
       onHover: this.hintMounts(partDef(p.defId).kind),
     });
     const theirs = spareParts(npc).map((p) => {
@@ -753,7 +765,7 @@ export class TruckTradeScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, `${fuel ? `${price} per ${amount(1)}` : `${price} each`}, ${amount(offer)} on offer`),
+      el("span", { class: "dim" }, `${fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`}, ${amount(offer)} on offer`),
       this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), most < SUPPLY_STEP),
       this.button(`Fill ${amount(most)}`, (x) => buyTruckSupply(x, npc.id, k, most), most < 1),
     );

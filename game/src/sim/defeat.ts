@@ -23,10 +23,11 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { lootRobbed } from "./npc-activities";
+import { pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
-import type { Vehicle, World } from "./types";
+import type { SalvageStock, Vehicle, World } from "./types";
+import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
 
@@ -54,6 +55,9 @@ export function checkKnockout(world: World): void {
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  // Combat with the knocked-out truck ends now, as an NPC knockout's does in the same turn, so robbers keep their loot goal.
+  for (const s of world.states.filter((x) => x.kind === "combat" && (x.holder === me.id || x.other === me.id)))
+    endState(world, s, "broken");
   sendToLoot(world, me, robbers);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });
@@ -261,4 +265,21 @@ export function refitAtHome(world: World, v: Vehicle): void {
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
   delete v.defeat;
+}
+
+// The victim's truck while it lies knocked out, else its wreck.
+function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  if (victim && isKnockedOut(victim)) return victim;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId));
+}
+
+// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
+// fight loots nothing.
+export function lootRobbed(w: World, robberId: string, victimId: string): void {
+  const robber = w.vehicles.find((v) => v.id === robberId);
+  if (!robber) return;
+  const stock = robbedLoot(w, victimId);
+  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

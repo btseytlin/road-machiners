@@ -120,3 +120,51 @@ def loft(kit: Kit, name: str, sections: list[list[Vec3]], mat: str) -> None:
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
     kit._add(obj, name, mat, 0.0)
+
+
+def arc_panel(
+    kit: Kit,
+    name: str,
+    x0: float,
+    x1: float,
+    a0: float,
+    a1: float,
+    r: float,
+    cz: float,
+    mat: str,
+    thick: float = 0.6,
+    segs: int = 1,
+    r1: float | None = None,
+    tear: float = 0.0,
+    dent_by: float = 0.0,
+) -> bpy.types.Object:
+    """A solid curved panel round a horizontal axis along X at height cz, from x0 to x1, outer face at radius r.
+
+    Angles are radians from the top, positive toward -Y. r1 gives the outer radius at x1 for a flared panel, r at x0.
+    tear pulls each column's ends in along X by up to that many meters, so the ends read as torn.
+    """
+    far = r if r1 is None else r1
+    bm = bmesh.new()
+    cols = []
+    for i in range(segs + 1):
+        a = a0 + (a1 - a0) * i / segs
+        col = []
+        for x, rr in ((x0 + kit.rng.uniform(0, tear), r), (x1 - kit.rng.uniform(0, tear), far)):
+            for d in (rr, rr - thick):
+                col.append(bm.verts.new((x, -math.sin(a) * d, cz + math.cos(a) * d)))
+        cols.append(col)  # outer at x0, inner at x0, outer at x1, inner at x1
+    for i in range(segs):
+        p, q = cols[i], cols[i + 1]
+        bm.faces.new((p[0], p[2], q[2], q[0]))
+        bm.faces.new((p[1], q[1], q[3], p[3]))
+        bm.faces.new((p[0], q[0], q[1], p[1]))
+        bm.faces.new((p[2], p[3], q[3], q[2]))
+    for c in (cols[0], cols[-1]):
+        bm.faces.new((c[0], c[1], c[3], c[2]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return kit._add(obj, name, mat, dent_by)

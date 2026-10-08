@@ -14,6 +14,7 @@ import { emptyWorld, npcBrain } from '../testkit';
 import { newWorld } from '../world';
 import { TEST_MAP } from '../../test/map';
 import { budget } from '../../test/budget';
+import { defaultSetup } from '../settings';
 
 const { scale, strength } = REGION.navigation.taste;
 
@@ -94,7 +95,7 @@ describe('prop footprints', () => {
   });
 
   it('leaves the Broken Wing road under the hoop and along the deck open, and blocks the hoop feet and the deck rails', () => {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const layer = navLayer(w.terrain, w.obstacles, radius);
     const hoop = w.obstacles.find((o) => o.kind === 'landmark' && o.look === 'shipWing');
     if (hoop === undefined) throw new Error('The baked map has no hoop');

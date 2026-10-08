@@ -1,3 +1,4 @@
+import { UsageLimitError } from './pause';
 import { updateState } from './state';
 import { STUCK_LABEL, type Ctx, type FactoryState, type JobStage, type Stage } from './types';
 
@@ -29,13 +30,14 @@ export function failureIssue(stage: JobStage, issue: number | null, state: Facto
 }
 
 // A failed stage stops its card. Nothing retries until a human or Hermes removes the label.
+// A usage-limit failure already paused the factory, so its card takes no label and runs again after the pause.
 // The factory posts nothing. It records the failure first, so Hermes's incident watch sees it even when GitHub broke the stage and the label.
 export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null, error: unknown, log: string | null): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   ctx.log(stage, issue, `failed: ${message}`);
   const failure = { stage, issue, error: summarizeError(message), log, at: ctx.now().toISOString() };
   updateState(ctx.statePath, (state) => ({ ...state, failures: [...state.failures, failure] }));
-  if (issue !== null) await ctx.github.addLabel(issue, STUCK_LABEL);
+  if (issue !== null && !(error instanceof UsageLimitError)) await ctx.github.addLabel(issue, STUCK_LABEL);
 }
 
 export function pruneFailures(now: Date): (state: FactoryState) => FactoryState {

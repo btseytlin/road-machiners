@@ -4,7 +4,7 @@ import { readState, updateState } from './state';
 import type { Ctx, FactoryState } from './types';
 
 // Commands that leave the post as it is: they act on no post, or Hermes answers and the post stays open.
-const UNMARKED = ['change', 'adhoc', 'reply', 'answer', 'waste-change'] as const;
+const UNMARKED = ['change', 'adhoc', 'reply', 'answer', 'release-draft'] as const;
 type PostKind = Exclude<InboxCommand['kind'], (typeof UNMARKED)[number]>;
 
 // The line a committee action adds under the post it acted on.
@@ -16,6 +16,7 @@ const STATUS: Record<PostKind, (by: string, issue: number | null) => string> = {
   ship: (by) => `🚀 Ship by ${by}`,
   remove: (by, issue) => `➖ #${issue} removed by ${by}`,
   'release-task': (by) => `📝 Release task from ${by}`,
+  publish: (by) => `📣 Published to the channel by ${by}`,
 };
 
 function isUnmarked(kind: InboxCommand['kind']): kind is (typeof UNMARKED)[number] {
@@ -45,9 +46,9 @@ export async function markPost(ctx: Ctx, command: InboxCommand, by: string): Pro
   updateState(ctx.statePath, (state) => ({ ...state, postCaptions: { ...state.postCaptions, [key]: next } }));
 }
 
-// Keeps the captions of posts a command can still act on: open approval posts and the current candidate.
+// Keeps the captions of posts a command can still act on: open approval posts, the current candidate and the current release post draft.
 export function pruneCaptions(state: FactoryState): FactoryState {
-  const open = new Set([...Object.keys(state.approvalPosts), ...(state.release?.postId ? [String(state.release.postId)] : [])]);
+  const open = new Set([...Object.keys(state.approvalPosts), ...(state.release?.postId ? [String(state.release.postId)] : []), ...(state.releasePost?.postId ? [String(state.releasePost.postId)] : [])]);
   const postCaptions = Object.fromEntries(Object.entries(state.postCaptions).filter(([id]) => open.has(id)));
   return { ...state, postCaptions, textPosts: state.textPosts.filter((id) => open.has(id)) };
 }

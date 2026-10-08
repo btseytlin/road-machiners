@@ -15,6 +15,7 @@ export const CONDITION = {
     accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
     armor: 0.12, // share of an armor part's armor lost
     scannerRange: 0.1, // share of scanner range lost
+    reloadPercent: 10, // percent of an active utility's reload added, rounded up to whole turns
   },
 };
 
@@ -35,7 +36,7 @@ export const WEAR = {
 // A roadside patch between two trucks. See src/sim/patch.ts.
 export const PATCH = {
   share: 0.25, // share of max HP a patch gives a broken engine, transmission or tank: enough to drive, not to trust
-  laborPerTurn: 8, // money per turn of work on the paid and own-parts deals, a little under a unit of parts
+  laborPerTurn: 266.67, // cents per turn of work on the paid and own-parts deals, a little under a unit of parts
 };
 
 export const REPAIR = {

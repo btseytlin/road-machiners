@@ -67,7 +67,7 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 1.2375, // every weapon round and splash, guard guns included
+  weaponDamage: 1.2375, // every weapon round and splash
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Stray fire. A round that misses its target may hit another truck whose center lies within reach of the line
@@ -77,22 +77,15 @@ export const RULES = {
     feudDamage: 40, // about one cannon hit or ten MG rounds
   },
 
-  // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
-  // Each round hits with a flat chance and enters a random lane of the side facing the gate.
-  guards: {
-    range: 12,
-    rounds: 4,
-    hitChance: 0.5,
-    missOffset: 1.5,
-    round: { damage: 6, pen: 8, blast: false, armorShare: 1 },
-  },
-
   // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or
   // heavier at once.
   accelScale: 0.67,
   // Engine overdrive multiplies the player's top speed and acceleration by this. It heats the engine; see
   // ENGINE_HEAT.overdriveGain.
   overdriveBoost: 1.33,
+  // Overdrive needs the active engine above this share of its max HP. At or below it, overdrive cuts out and stays
+  // blocked until a repair lifts the engine above it.
+  overdriveMinEngineShare: 0.15,
   // Past the rated mass, top speed and turning also scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
   // cuts them to about 54%, and 1000 kg over to about 32%.
   overloadExponent: 4,

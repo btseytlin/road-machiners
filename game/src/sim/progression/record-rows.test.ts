@@ -8,7 +8,10 @@ import { addVehicle, emptyWorld, npcBrain } from '../testkit';
 import { maxHp } from '../wear';
 import { update } from '../world';
 import { emptyLedger } from './orders';
-import { DayTally, fightTotals, ledgerTotals, netWorth, tierDays, wageByTier, worthOf, worthTotal, type DayRow } from './record';
+import { addGoods } from '../inventory';
+import type { Contract } from '../market';
+import type { GameEvent, World } from '../types';
+import { DayTally, fightTotals, ledgerTotals, netWorth, tierDays, turnLedger, wageByTier, worthOf, worthTotal, type DayRow } from './record';
 
 const row = (day: number, netWorth: number, tier: DayRow['tier'], extra: Partial<DayRow> = {}): DayRow => ({
   day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger(),
@@ -65,6 +68,68 @@ describe('netWorth', () => {
     expect(after.chassis).toBe(before.chassis - repairCost(damaged));
     expect(after.chassis).toBeGreaterThan(before.chassis / 2);
     expect(netWorth(damaged)).toBe(worthTotal(after));
+  });
+});
+
+describe('netWorth with a haul contract', () => {
+  const haul: Contract = { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units: 3, to: 'nose', reward: 300, deadline: 500, window: 500, rush: false, tier: 1 };
+
+  it('does not count the units the contract carries, and counts the rest', () => {
+    const own = update(emptyWorld({ x: 100, y: 100 }), (w) => { addGoods(w, playerVehicle(w), 'salt', 2); });
+    const loaded = update(own, (w) => {
+      addGoods(w, playerVehicle(w), 'salt', haul.units);
+      w.player.contracts.push(haul);
+    });
+
+    expect(worthOf(loaded).cargo).toBe(worthOf(own).cargo);
+    expect(netWorth(loaded)).toBe(netWorth(own));
+  });
+});
+
+describe('turnLedger', () => {
+  const start = emptyWorld({ x: 100, y: 100 });
+  const meId = start.player.vehicleId;
+  const turnWith = (events: GameEvent[], moved: number): { orders: { world: World; events: GameEvent[]; ledger: ReturnType<typeof emptyLedger>; notes: [] }; next: World } => ({
+    orders: { world: start, events: [], ledger: emptyLedger(), notes: [] },
+    next: update(start, (w) => { w.events = events; w.player.money += moved; }),
+  });
+
+  it('books contract pay as contracts and a tow fee the player earns as fees', () => {
+    const { orders, next } = turnWith([{ t: 'money', amount: 100, reason: 'contract' }, { t: 'money', amount: 30, reason: 'towing Bob' }], 130);
+
+    const ledger = turnLedger(orders, next);
+
+    expect(ledger.contracts).toBe(100);
+    expect(ledger.fees).toBe(30);
+  });
+
+  it('books the fees the player pays for a tow, an escort and a patch', () => {
+    const { orders, next } = turnWith([
+      { t: 'towDone', by: 'npc', client: meId, fee: 20 },
+      { t: 'escortPaid', by: 'npc', client: meId, fee: 10 },
+      { t: 'patch', patcher: 'npc', client: meId, outcome: 'done', price: 5 },
+      { t: 'patch', patcher: meId, client: 'npc', outcome: 'done', price: 8 },
+    ], -20 - 10 - 5 + 8);
+
+    expect(turnLedger(orders, next).fees).toBe(-27);
+  });
+
+  it('ignores money events between other trucks', () => {
+    const { orders, next } = turnWith([{ t: 'towDone', by: 'a', client: 'b', fee: 20 }, { t: 'patch', patcher: 'a', client: 'b', outcome: 'done', price: 5 }], 0);
+
+    expect(turnLedger(orders, next)).toEqual(emptyLedger());
+  });
+
+  it('throws on money no event explains', () => {
+    const { orders, next } = turnWith([{ t: 'contract', contract: { id: 'x' } as Contract, outcome: 'accepted' }], 50);
+
+    expect(() => turnLedger(orders, next)).toThrow('50 money');
+  });
+
+  it('throws on a money event with an unknown reason', () => {
+    const { orders, next } = turnWith([{ t: 'money', amount: 5, reason: 'a gift' }], 5);
+
+    expect(() => turnLedger(orders, next)).toThrow('unknown reason');
   });
 });
 

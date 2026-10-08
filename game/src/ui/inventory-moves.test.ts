@@ -9,6 +9,7 @@ import { emptyWorld } from "../sim/testkit";
 import { update } from "../sim/world";
 import type { GridItem, World } from "../sim/types";
 import { DOUBLE_CLICK_MS, doubleClickCommand, isDoubleClick, needsHold, selectionAfterClick, type ClickedItem } from "./inventory-moves";
+import { emptyHidden } from "../sim/salvage";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const gridClick = (item: GridItem): ClickedItem => ({ source: "grid", item, id: item.id, stockId: null, truckId: null });
@@ -55,6 +56,12 @@ describe("hold before drag", () => {
 });
 
 describe("double click in a garage", () => {
+  it("uninstalls an installed part to storage at a stall", () => {
+    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "pump-station")!)[0]);
+    const next = doubleClickCommand(w, gridClick(partOf(w, "mg")))!(w);
+    expect(next.player.storage.map((p) => p.defId)).toEqual(["mg"]);
+  });
+
   it("uninstalls an installed part to storage", () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const cmd = doubleClickCommand(w, gridClick(partOf(w, "mg")))!;
@@ -108,10 +115,15 @@ describe("double click outside a garage", () => {
     expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
   });
 
+  it("does nothing on the truck grid on an oasis pad", () => {
+    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "dustwell")!)[0]);
+    expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
+  });
+
   it("moves a loot good into storage", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.vehicles[0].items = w.vehicles[0].items.filter((it) => it.kind === "part");
-    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() });
     w.player.scavenged.push("rich");
     const chip: ClickedItem = { source: "loot", id: "scrap", item: { id: "loot-scrap", x: 0, y: 0, rot: 0, kind: "good", good: "scrap" }, stockId: "rich", truckId: null };
     const next = doubleClickCommand(w, chip)!(w);
@@ -123,7 +135,7 @@ describe("double click outside a garage", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     removeAllGoods(w.vehicles[0]);
     const part = makePart(w, "cage", 0);
-    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [part] });
+    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [part], hidden: emptyHidden() });
     w.player.scavenged.push("rich");
     const chip: ClickedItem = { source: "loot", id: part.id, item: { id: `loot-${part.id}`, x: 0, y: 0, rot: 0, kind: "part", part }, stockId: "rich", truckId: null };
     const next = doubleClickCommand(w, chip)!(w);
@@ -135,7 +147,7 @@ describe("double click outside a garage", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     while (stowPart(w, w.vehicles[0], makePart(w, "cage", 0)));
     const part = makePart(w, "cage", 0);
-    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [part] });
+    w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [part], hidden: emptyHidden() });
     w.player.scavenged.push("rich");
     const chip: ClickedItem = { source: "loot", id: part.id, item: { id: `loot-${part.id}`, x: 0, y: 0, rot: 0, kind: "part", part }, stockId: "rich", truckId: null };
     expect(doubleClickCommand(w, chip)).toBeNull();

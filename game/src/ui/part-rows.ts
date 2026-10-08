@@ -2,12 +2,13 @@
 // reader's scroll and keyboard place across the screens' full redraws.
 
 import { partDef } from "../data/parts";
-import type { PartInstance } from "../sim/types";
+import type { PartInstance, World } from "../sim/types";
 import { conditionTag, createIcon, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
 import { conditionStatus, conditionTier } from "./format";
 
 export type PartRow = {
+  world: World;
   part: PartInstance;
   base: PartInstance | null; // the part it is weighed against, or null for plain stats
   price: number;
@@ -66,7 +67,7 @@ export class PartRows {
       { type: "button", class: "part-sum", "aria-expanded": String(isOpen), "aria-controls": detailId },
       partIconEl(r.part),
       this.nameCell(r.part),
-      statChip(headlineStat(r.part, r.base)),
+      statChip(headlineStat(r.world, r.part, r.base)),
       footprint(partDef(r.part.defId).w, partDef(r.part.defId).h),
       el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, createIcon("money"), `${r.price}`),
       el("span", { class: "chevron" }),
@@ -80,7 +81,7 @@ export class PartRows {
       "li",
       { class: `part-row toned k-${partDef(r.part.defId).kind}`, style: toneStyle(r.part.defId), "data-part-row": id },
       head,
-      isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.part, r.base, r.action)) : null,
+      isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.world, r.part, r.base, r.action)) : null,
     );
     li.addEventListener("mouseenter", () => r.onHover(true));
     li.addEventListener("mouseleave", () => r.onHover(false));
