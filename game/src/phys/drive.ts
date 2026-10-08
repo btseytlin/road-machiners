@@ -665,6 +665,12 @@ function captureImpactMotion(body: RAPIER.RigidBody): ImpactMotion {
   return { velocity: body.linvel(), spin: body.angvel(), heading: headingOf(body.rotation()) };
 }
 
+// Side friction stiffness of wheel `i` (rear wheels are 2 and 3 in wheelMounts order). The rear tires keep only
+// rearSideGrip of the front's hold, so a truck that yaws fast swings its tail, while a straight line never slides.
+function sideStiffness(i: number, sideGrip: number, share: number): number {
+  return T.sideFrictionStiffness * sideGrip * share * (i >= 2 ? T.rearSideGrip : 1);
+}
+
 function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: number): RAPIER.DynamicRayCastVehicleController {
   const car = world.createVehicleController(body);
   for (const m of wheelMounts(b)) {
@@ -676,7 +682,7 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: num
     car.setWheelSuspensionRelaxation(i, T.suspensionRelaxation);
     car.setWheelMaxSuspensionForce(i, T.maxSuspensionForce * (mass / 1000));
     car.setWheelFrictionSlip(i, T.frictionSlip);
-    car.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness);
+    car.setWheelSideFrictionStiffness(i, sideStiffness(i, 1, 1));
   }
   return car;
 }
@@ -745,7 +751,7 @@ function idleTarget(speed: number): number {
 // Drivers plan their braking with the same grip, so they still stop on a point. They corner as on any ground, so
 // the truck skids through its turns.
 // An oiled wheel, as `slick` says in wheelMounts order, keeps OIL.grip of its friction slip and side friction
-// stiffness on top of that. Overlapping patches count once.
+// stiffness on top of that. Overlapping patches count once. Rear tires keep a share of the side hold on any ground.
 function applyTerrainGrip(c: Car, terrain: Terrain, slick: readonly boolean[]): void {
   const p = c.body.translation();
   const ground = TERRAIN_TYPES[terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })]];
@@ -754,7 +760,7 @@ function applyTerrainGrip(c: Car, terrain: Terrain, slick: readonly boolean[]): 
   for (let i = 0; i < 4; i++) {
     const share = slick[i] ? OIL.grip : 1;
     c.ctl.setWheelFrictionSlip(i, grip * share);
-    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * ground.sideGrip * share);
+    c.ctl.setWheelSideFrictionStiffness(i, sideStiffness(i, ground.sideGrip, share));
   }
 }
 

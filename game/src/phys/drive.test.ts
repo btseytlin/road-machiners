@@ -355,9 +355,9 @@ describe('physics turns', () => {
       return after;
     }
 
-    it('only glass has less than full grip', () => {
+    it('only glass and the mud grounds have less than full grip', () => {
       const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1 || t.sideGrip !== 1).map((t) => t.id);
-      expect(slippery).toEqual(['glass']);
+      expect(slippery).toEqual(['mud', 'dirtyWater', 'toxic', 'glass']);
     });
 
     // The mean angle in degrees between where the truck moves and where its nose points, over the moving steps of
