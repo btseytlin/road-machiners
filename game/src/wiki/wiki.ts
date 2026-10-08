@@ -20,6 +20,7 @@ import { SOUNDS } from '../data/sounds';
 import { TIME } from '../data/time';
 import { TOW } from '../data/tow';
 import { UNITS } from '../data/units';
+import { oilSlickLength } from '../data/utilities';
 import { CONDITION, PATCH, REPAIR, WEAR } from '../data/wear';
 import { baseModel, PART_MODELS, WEAPON_POOLS } from '../render/partLooks';
 import { STATE_KINDS } from '../sim/states';
@@ -149,17 +150,22 @@ const TABLES: WikiTable[] = [
       c.core.map((k) => k.defId),
     ]),
   },
-  partTable('weapons', 'weapon', ['range (tiles)', 'cooldown (turns)', 'magazine (shots)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake'], (p) => [p.range, p.cooldown, p.magazine, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake]),
+  partTable('weapons', 'weapon', ['range (tiles)', 'cooldown (turns)', 'magazine (shots)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake', 'line (turns)'], (p) => [p.range, p.cooldown, p.magazine, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake, p.line?.turns ?? null]),
   {
     id: 'weapon-rounds',
     headers: ['id', 'damage', 'pen', 'blast', 'speed (m/s)', 'splash radius (m)', 'splash damage', 'splash pen'],
     rows: () => partsOf('weapon').map((p) => [p.id, p.round.damage, p.round.pen, p.round.blast, p.round.speed, p.round.splashRadius, p.round.splashDamage, p.round.splashPen]),
   },
   partTable('engines', 'engine', ['speed bonus', 'accel bonus', 'fuel mult', 'noise', 'heat'], (p) => [p.speedBonus, p.accelBonus, p.fuelMult, p.noise, p.heat]),
-  partTable('armor', 'armor', ['blast armor', 'field repair', 'ram mult'], (p) => [p.blastArmor, p.fieldRepair, p.ramMult]),
+  partTable('armor', 'armor', ['blast armor', 'field repair', 'ram mult', 'claymore'], (p) => [p.blastArmor, p.fieldRepair, p.ramMult, p.claymore ?? null]),
   partTable('cargo', 'cargo', ['extra rows'], (p) => [p.extraRows]),
   partTable('scanners', 'scanner', ['range (tiles)'], (p) => [p.range]),
   partTable('stores', 'store', ['holds', 'amount (units)'], (p) => [p.holds, p.amount]),
+  partTable('utilities', 'utility', ['effect', 'reload (turns)', 'effect numbers'], (p) => {
+    const { type, ...numbers } = p.effect;
+    const shown = type === 'oil' ? { slick: oilSlickLength(), ...numbers } : numbers;
+    return [type, p.reload, shown];
+  }),
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {
     id: 'goods',
@@ -173,8 +179,8 @@ const TABLES: WikiTable[] = [
   },
   {
     id: 'npc-templates',
-    headers: ['id', 'name', 'profession', 'faction', 'traits', 'extra traits (chance)', 'fight style', 'aggro range (tiles)', 'preferred range (tiles)', 'cap', 'spawn interval (turns)', 'spawn place'],
-    rows: () => Object.values(NPCS).map((n) => [n.id, n.name, n.profession, n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.preferredRange, n.cap, n.interval, n.spawn]),
+    headers: ['id', 'name', 'profession', 'faction', 'traits', 'extra traits (chance)', 'fight style', 'aggro range (tiles)', 'cap', 'spawn interval (turns)', 'spawn place'],
+    rows: () => Object.values(NPCS).map((n) => [n.id, n.name, n.profession, n.faction, n.traits, n.extraTraits.map((e) => `${e.trait} (${e.chance})`), n.fightStyle, n.aggroRange, n.cap, n.interval, n.spawn]),
   },
   {
     id: 'traits',
@@ -189,8 +195,13 @@ const TABLES: WikiTable[] = [
   { id: 'state-kinds', headers: ['kind', 'turns', 'binds a deal'], rows: stateKindRows },
   {
     id: 'gear-levels',
-    headers: ['level', 'gun fill chance', 'armor share', 'budget mult', 'wear shift', 'cargo mult'],
-    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.fill, g.armor, g.budget, g.wearShift, g.cargo]),
+    headers: ['level', 'budget mult', 'wear shift', 'cargo mult'],
+    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.budget, g.wearShift, g.cargo]),
+  },
+  {
+    id: 'loadout-priorities',
+    headers: ['template', 'speed', 'firepower', 'armor', 'cargo'],
+    rows: () => entries(NPCS).map(([id, t]) => [id, t.loadout.priorities.speed, t.loadout.priorities.firepower, t.loadout.priorities.armor, t.loadout.priorities.cargo]),
   },
   {
     id: 'skills',

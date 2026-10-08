@@ -3,7 +3,7 @@
 import { loadBank } from '../audio/bank';
 import { Mixer } from '../audio/mixer';
 import { SoundPlayer } from '../audio/player';
-import { CONFIG } from '../config';
+import { CONFIG, ERROR_REPORT_BUILD, ERROR_REPORT_URL, GAME_VERSION } from '../config';
 import { CHASSIS } from '../data/chassis';
 import { MIX, SOUNDS } from '../data/sounds';
 import { startKit } from '../data/start';
@@ -23,7 +23,8 @@ import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
+import { installCrashScreen, keepRunningOnErrors, onEveryError, onReport } from './crash';
+import { ErrorReporter } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, tryWriteSave } from './save';
 import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
@@ -91,6 +92,8 @@ function newGame(): World {
 }
 
 installCrashScreen();
+const reporter = ERROR_REPORT_URL ? new ErrorReporter(ERROR_REPORT_URL, ERROR_REPORT_BUILD, GAME_VERSION, window.localStorage) : null;
+if (reporter) onReport((err) => void reporter.report(err));
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
@@ -109,6 +112,7 @@ const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
+reporter?.watch({ world: () => game.state, log: () => game.logTexts() });
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {

@@ -4,6 +4,7 @@ import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
+import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
@@ -36,11 +37,13 @@ export class TruckControls {
     this.host.apply(setAutoRepair(w, !w.player.autoRepair));
   }
 
-  // Overdrive changes speed, so the preview must rerun.
+  // Overdrive changes speed, so the preview must rerun. A worn engine blocks switching it on.
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
-    const on = !w.player.overdrive;
+    const me = playerVehicle(w);
+    const on = !inOverdrive(w, me);
+    if (on && !canOverdrive(me)) return;
     this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
     if (on) this.host.revved();
@@ -105,7 +108,8 @@ export class TruckContext {
       shop: () => shopAt(h.world()) && h.openTown(),
       downed: () => 'id' in target && h.openDowned(target.id),
       oasis: () => this.refill(),
-      stock: () => 'id' in target && this.useStock(target.id, action.combat),
+      stock: () => 'id' in target && this.searchStock(target.id, action.combat),
+      loot: () => 'id' in target && this.lootStock(target.id),
       empty: () => undefined,
     };
     handlers[target.kind]();
@@ -127,13 +131,18 @@ export class TruckContext {
   }
 
   // A search that combat blocks says so in the log, with the turns left.
-  private useStock(stockId: string, combat: number | undefined): void {
+  private searchStock(stockId: string, combat: number | undefined): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) this.host.note(combatBlocked(combat));
     else if (canScavenge(w, stockId)) {
       this.host.apply(scavenge(w, stockId));
       this.host.pushEvents();
-    } else if (canLoot(w, stockId)) this.host.openLoot(stockId);
+    }
+  }
+
+  private lootStock(stockId: string): void {
+    const w = this.host.world();
+    if (!isBusy(playerVehicle(w)) && canLoot(w, stockId)) this.host.openLoot(stockId);
   }
 }

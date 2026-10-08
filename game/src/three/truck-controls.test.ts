@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { playerVehicle } from '../sim/damage';
+import { mountedParts } from '../sim/grid';
 import { aidData, addState } from '../sim/states';
 import { playerAid } from '../sim/aid';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { World } from '../sim/types';
-import { TruckContext, type ContextHost } from './truck-controls';
+import { TruckContext, TruckControls, type ContextHost } from './truck-controls';
 
 function scene(aidX: number) {
   const w = emptyWorld({ x: 30, y: 30 });
@@ -54,5 +56,40 @@ describe('the E key on a deal', () => {
     const { h, calls } = host(w);
     new TruckContext(h).use();
     expect(calls.trades).toEqual([b.id]);
+  });
+});
+
+function controlsOf(world: World) {
+  const host = { world, revs: 0, applied: 0 };
+  const c = new TruckControls({
+    world: () => host.world,
+    apply: (next) => { host.world = next; host.applied++; },
+    commit: (next) => { host.world = next; },
+    refreshPlan: () => {},
+    doused: () => {},
+    revved: () => { host.revs++; },
+  });
+  return { c, host };
+}
+
+describe('the overdrive key', () => {
+  it('switches overdrive on with a rev, and off again', () => {
+    const { c, host } = controlsOf(emptyWorld());
+    c.toggleOverdrive();
+    expect(host.world.player.overdrive).toBe(true);
+    expect(host.revs).toBe(1);
+    c.toggleOverdrive();
+    expect(host.world.player.overdrive).toBe(false);
+    expect(host.revs).toBe(1);
+  });
+
+  it('does nothing while the engine is too worn', () => {
+    const w = emptyWorld();
+    mountedParts(playerVehicle(w), 'engine')[0].hp = 1;
+    const { c, host } = controlsOf(w);
+    c.toggleOverdrive();
+    expect(host.world.player.overdrive).toBe(false);
+    expect(host.applied).toBe(0);
+    expect(host.revs).toBe(0);
   });
 });

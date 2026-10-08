@@ -1,4 +1,4 @@
-// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
+// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with a deck beside it where the truck is nearer the deck than the ground and both lie within sight of its sides (markHeightAt).
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -7,7 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PHYSICS } from '../../data/physics';
 import { headingOf, toMap, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
-import { fireSpans, type FireSpan } from '../../sim/armor';
+import { fireSpans, type FireSpan, type Side } from '../../sim/armor';
 import { fireBlock } from '../../sim/combat';
 import { vehicleStats, type MountedWeapon } from '../../sim/stats';
 import { markHeightAt, type Terrain } from '../../sim/terrain';
@@ -26,6 +26,9 @@ const LINE_WIDTH_PX = 2;
 const FILL_ALPHA = 0.075;
 const LINE_ALPHA = 0.075;
 const ICON_ALPHA = 0.5;
+
+// A shooter's mount: the truck's spot and heading, and the sides its mount can fire to.
+export type MountPose = { pos: Vec; heading: number; sides: readonly Side[] };
 
 export class WeaponRangeView {
   readonly root = new THREE.Group();
@@ -46,14 +49,22 @@ export class WeaponRangeView {
 
   // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
-    this.root.visible = weapons.length > 0;
+    this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: fireSpans(w.def.arc, w.sides) })));
+  }
+
+  hide(): void {
+    this.root.visible = false;
+  }
+
+  private draw(terrain: Terrain, pos: Vec, heading: number, reaches: { range: number; spans: FireSpan[] }[]): void {
+    this.root.visible = reaches.length > 0;
     const at = (x: number, y: number) => new THREE.Vector3(x * S, markHeightAt(terrain, pos, x, y) * S + LIFT, y * S);
     const center = at(pos.x, pos.y);
     const points: THREE.Vector3[] = [center];
     const idx: number[] = [];
-    const outlines = weapons.flatMap((weapon) =>
-      fireSpans(weapon.def.arc, weapon.sides).map((span) => {
-        const rim = rimPoints(span, heading, (a) => at(pos.x + Math.cos(a) * weapon.def.range, pos.y + Math.sin(a) * weapon.def.range));
+    const outlines = reaches.flatMap(({ range, spans }) =>
+      spans.map((span) => {
+        const rim = rimPoints(span, heading, (a) => at(pos.x + Math.cos(a) * range, pos.y + Math.sin(a) * range));
         const first = points.length;
         points.push(...rim);
         for (let i = 0; i < rim.length - 1; i++) idx.push(0, first + i, first + i + 1);

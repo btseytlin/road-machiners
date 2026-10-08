@@ -1,0 +1,94 @@
+{
+ "obstacles": [
+  {
+   "id": "site-bowl",
+   "pos": {
+    "x": 100,
+    "y": 450
+   },
+   "r": 28,
+   "kind": "site"
+  },
+  {
+   "id": "bld-bowl-3",
+   "pos": {
+    "x": 96,
+    "y": 440
+   },
+   "r": 1.6,
+   "kind": "building"
+  },
+  {
+   "id": "site-nose",
+   "pos": {
+    "x": 300,
+    "y": 200
+   },
+   "r": 24,
+   "kind": "site"
+  },
+  {
+   "id": "bld-nose-0",
+   "pos": {
+    "x": 295,
+    "y": 205
+   },
+   "r": 1.5,
+   "kind": "building"
+  },
+  {
+   "id": "site-kiln",
+   "pos": {
+    "x": 60,
+    "y": 60
+   },
+   "r": 20,
+   "kind": "site"
+  },
+  {
+   "id": "site-old-mill",
+   "pos": {
+    "x": 400,
+    "y": 100
+   },
+   "r": 12,
+   "kind": "site"
+  },
+  {
+   "id": "bld-dustwell-1",
+   "pos": {
+    "x": 10,
+    "y": 10
+   },
+   "r": 1.5,
+   "kind": "building"
+  },
+  {
+   "id": "pond-dustwell",
+   "pos": {
+    "x": 10,
+    "y": 12
+   },
+   "r": 1.1,
+   "kind": "water"
+  },
+  {
+   "id": "cw-convoy-0",
+   "pos": {
+    "x": 200,
+    "y": 300
+   },
+   "r": 0.65,
+   "kind": "wreck"
+  },
+  {
+   "id": "wreck4",
+   "pos": {
+    "x": 210,
+    "y": 310
+   },
+   "r": 0.7,
+   "kind": "wreck"
+  }
+ ]
+}
