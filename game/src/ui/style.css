@@ -1060,13 +1060,28 @@ body {
   margin-top: 0;
 }
 /* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
-.info {
+/* The one owner of the column under the top-right buttons: the tip, then the hover panel. Panels in it carry no
+   position numbers of their own. It stops above the log, and the hover panel scrolls inside what the tip leaves. */
+#ui .right-top {
+  position: absolute;
   right: 14px;
   top: 64px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-height: calc(100dvh - 64px - 242px);
+  pointer-events: none;
+}
+#ui .right-top > .panel {
+  position: static;
+  pointer-events: auto;
+}
+.info {
+  flex: 0 1 auto;
   width: var(--inspection-width);
-  min-height: var(--inspection-height);
-  /* Stops above the log. */
-  max-height: calc(100dvh - 64px - 234px - 8px);
+  min-height: min(var(--inspection-height), 40dvh);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
@@ -1257,17 +1272,21 @@ body {
   scrollbar-width: thin;
 }
 #ui:has(.modal:not([style*="display: none"]))
-  > .panel:not(.modal):not(.toast):not(.instruments):not(.log):not(.opening-tip) {
+  > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
+  visibility: hidden;
+}
+#ui:has(.modal:not([style*="display: none"])) > .right-top {
   visibility: hidden;
 }
 /* An opening tip stays readable while a modal is open, since it names what to do in the inventory. It takes the hidden
    weapons panel's place, between the instruments and the log. */
-#ui:has(.modal:not([style*="display: none"])) > .opening-tip {
-  top: auto;
+#ui:has(.modal:not([style*="display: none"])) > .right-top > .opening-tip {
+  visibility: visible;
+  position: fixed;
   left: 457px;
   bottom: 14px;
-  transform: none;
-  max-width: calc(100vw - 457px - 282px - 32px);
+  top: auto;
+  right: auto;
   z-index: 21;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
@@ -1729,6 +1748,16 @@ body {
   #ui .right-dock {
     width: var(--log-width);
   }
+  /* The strip beside the instruments is too narrow here, so the opening tip takes the log's box and the log steps aside. */
+  #ui:has(.modal:not([style*="display: none"])) > .right-top > .opening-tip {
+    left: auto;
+    right: 16px;
+    bottom: 112px;
+    width: var(--log-width);
+  }
+  #ui:has(.modal:not([style*="display: none"])):has(.opening-tip:not([style*="display: none"])) > .log {
+    visibility: hidden;
+  }
 }
 @media (max-width: 720px) {
   .speed-tip {
@@ -1773,9 +1802,12 @@ body {
     width: calc(100vw - 28px);
     height: calc(100dvh - 176px - 72px);
   }
-  .info {
-    top: 190px;
-    max-height: calc(100dvh - 190px - 256px - 8px);
+  #ui .right-top {
+    max-height: calc(100dvh - 64px - 264px);
+  }
+  #ui:has(.modal:not([style*="display: none"])) > .right-top > .opening-tip {
+    right: 14px;
+    bottom: 176px;
   }
   #ui .modal {
     padding: 20px 16px;
@@ -2652,20 +2684,32 @@ canvas.view {
   gap: 4px;
 }
 #ui .tip {
-  left: 50%;
-  top: 110px;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  box-sizing: border-box;
+  width: min(var(--inspection-width), calc(100vw - 28px));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  align-items: start;
   padding: 8px 10px 8px 14px;
-  font-size: 15px;
-  z-index: 30;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  flex: 0 0 auto;
 }
 #ui .tip .tip-close {
-  padding: 0 6px;
+  min-height: 32px;
+  padding: 0 10px;
   font-size: 16px;
   line-height: 1.2;
+}
+#ui .tip .tip-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+}
+#ui .tip .tip-off {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 #ui .end-turn.auto {
   border-color: #d9a441;

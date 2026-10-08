@@ -61,6 +61,16 @@ export function rightDock(): HTMLElement {
   return dock;
 }
 
+// Panels in the column under the top-right buttons stack downward: the tip, then the hover panel. See .right-top in style.css.
+export function rightTop(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .right-top');
+  if (found) return found;
+  const column = el('div', { class: 'right-top' });
+  root.append(column);
+  return column;
+}
+
 // A screen box, as getBoundingClientRect() gives.
 export type Box = { left: number; top: number; right: number; bottom: number };
 

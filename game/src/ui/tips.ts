@@ -18,7 +18,7 @@ import { vehicleStats } from "../sim/stats";
 import { playerSees } from "../sim/vision";
 import { dist } from "../sim/vec";
 import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
-import { el, panel } from "./dom";
+import { el, panel, rightTop } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 const TIPS_OFF_KEY = "roam.tipsOff";
@@ -253,7 +253,7 @@ function readSeen(storage: Storage): Set<TipId> {
 }
 
 export class Tips {
-  private readonly box = panel("tip");
+  private readonly box = panel("tip", rightTop());
   private readonly seen: Set<TipId>;
   private shown: TipId | null = null;
   private moment: { world: World; auto: boolean } | null = null;

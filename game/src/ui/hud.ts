@@ -6,7 +6,7 @@ import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import type { SpeedRow } from "./hud-readout";
-import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, rightTop, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   heldContractDue,
@@ -125,7 +125,7 @@ export class Hud {
   private inspected = new TruckConditionView();
   private contracts = panel("contracts", rightDock());
   private log = new LogPanel();
-  private info = panel("info");
+  private info = panel("info", rightTop());
   private infoBody = el("div");
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
