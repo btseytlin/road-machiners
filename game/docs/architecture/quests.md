@@ -20,7 +20,7 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 - A checkpoint is a knot or stitch whose first tag is `# checkpoint: <knot>` or `# checkpoint: <knot.stitch>`. The tag must name its own section, or the build fails.
 - A quest starts at one of its checkpoints. While it runs, the session remembers the last checkpoint whose line played.
 - A save keeps the last checkpoint, not ink's position. Load starts the quest again there, so the player sees the lines from that checkpoint on.
-- Load restarts ink's own counts. A used-up `*` choice comes back, and `{knot}` visit counts start from zero. A fact that must last past a load or into another quest lives in a variable.
+- Load restarts ink's own counts. So a once-only `*` choice, a `{knot}` visit count, `READ_COUNT` and `TURNS_SINCE` fail the build. A fact that must last past a load or into another quest lives in a variable, and a choice offered once is a sticky `+` choice with a variable guard.
 - Every checkpoint must run on its own from a fresh story, so it may not rely on temporary variables or tunnels from before it.
 - A load plays a checkpoint's opening again, up to its first choices. So that opening may call no effect and change no variable, or each load would pay or count again. Put them after a choice. `restoreQuest()` throws on either, and `npm run quests:check` tries a load at every state it walks.
 
@@ -38,7 +38,8 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 
 - Each `EXTERNAL` in `world.ink` has one function in `src/sim/quests.ts`: a query in `QUEST_QUERIES` or an effect in `QUEST_EFFECTS`.
 - A query only reads the world. An effect changes the world of the running command, and ink never runs it ahead of a pick.
-- Money crosses in whole M: `money()` reads it and `give_money(amount)` pays it.
+- Money crosses in whole M: `money()` reads it, `give_money(amount)` pays the player and `pay(amount)` takes from the player. `pay()` throws when the player holds less, so the quest checks `money()` first.
+- `begin(quest)` opens another quest at its `start` once this one ends. It must come right before `-> END`, or the pick throws. Kovac starts the depot quest this way.
 - `note(id)` writes a journal note and `has_note(id)` reads one. `found(site)` reads whether a town or location is found, and `searched(wreck)` whether a story wreck is searched. Each throws on an id the game does not know.
 - `has_work()`, `has_offers()` and `board_full()` read the board of the town the truck is parked at, and `take_work()` takes its best offer as the Contracts tab does. They throw away from a town. The offer is the best-paying open contract the truck can take, from `townWork()` in `src/sim/dialogue-rules.ts`. `has_offers()` tells a board with open contracts the truck cannot take from an empty one.
 - Game state such as money is read through a query, never copied into an ink variable.
@@ -62,5 +63,18 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 
 - `npm run quest -- <quest>` plays a quest in the terminal on a new game, compiled fresh from the sources, so an edit plays without a build. Choices are numbered from 1. `--checkpoint <name>` starts at another checkpoint than the first. `--picks 1,2` plays those choices, and without it the player types picks. `--set name=value` sets a world or quest variable before the start. `--save <file>` writes the quest state as a save holds it. `--load <file>` checks that state against the sources. With an open session of the quest it resumes at its checkpoint, and with no open session it starts the quest with the saved variables, so one quest's outcome carries into the next.
 - `npm run quests:check` fails on compile errors and warnings, broken checkpoint tags, saved types it cannot hold, game functions missing on either side and a stale bundle. It then walks every choice from every checkpoint through the runner and fails on ink errors, on states from which no choice leads to an end, and on sections never reached. It names the picks that lead to each problem. A Vitest test runs the same check.
-- The walk merges states by ink's position, variables, which sections were seen, money, notes and held contracts. A visit count only tells seen from unseen, so a count that matters lives in a variable. The walk stops at 5,000 states per world and fails, since an unchecked quest must not pass.
+- The walk merges states by ink's position, variables, money, notes and held contracts. Visit counts play no part, since the build bans flow that reads them. The walk stops at 5,000 states per world and fails, since an unchecked quest must not pass. A pick that begins another quest ends the walk there, and the other quest is walked on its own.
 - `gameScenes()` in `src/test/quest-check.ts` gives the worlds each quest is walked in: a new game, and a veteran who holds every note, has found every place, has searched every story wreck and holds a full board. A local's quest is walked parked at their town. So a branch on a game query is walked both ways when the two worlds answer it differently.
+- Each value a quest assigns to a world variable with `~ name = value` adds one more world: the new game with that value set. So a branch on what another quest decided is walked too.
+- The check worlds hold no obstacles, which no game function reads. That keeps a step cheap to clone.
+
+## The depot leak
+
+`nose_depot_leak.ink` is the first full text quest. Kovac at Nose starts it with "Anything off the books?". Fuel walks out of the Nose depot, and the player has 5 watches to find the seller. Each lead costs a watch. Evidence, the depot's alarm and money count. Paying the trader for a lead costs 20 M.
+
+- Naming Vance with 3 or more evidence pays 150 M.
+- Naming Pell, the clerk, jails the wrong man.
+- Taking the trader's envelope pays 60 M and lets the thief go.
+- An alarm of 2, or letting it go, loses the trail.
+
+The world variable `depot_thief` keeps the outcome. Kovac greets by it and Ibo talks about it.

@@ -23,6 +23,7 @@ type Runner = { story: Story; world: World | null; restoring: string | null };
 const INK_SEED_RANGE = 2 ** 31;
 const runners = new WeakMap<CompiledQuest, Runner>();
 
+const begun = new WeakMap<World, string>();
 const SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
 
 export const QUEST_QUERIES: Record<string, QuestQuery> = {
@@ -41,8 +42,18 @@ export const QUEST_EFFECTS: Record<string, QuestEffect> = {
     if (amount < 0) throw new Error(`give_money takes no negative amount, got ${amount}`);
     world.player.money += amount * UNITS.centsPerM;
   },
+  pay: (world, args) => {
+    const amount = wholeArg('pay', args, 0);
+    if (amount < 0) throw new Error(`pay takes no negative amount, got ${amount}`);
+    if (world.player.money < amount * UNITS.centsPerM) throw new Error(`pay(${amount}) needs more money than the player holds. Check money() first`);
+    world.player.money -= amount * UNITS.centsPerM;
+  },
   note: (world, args) => learnNote(world, noteArg('note', args)),
   take_work: (world) => takeTownWork(world),
+  begin: (world, args) => {
+    if (begun.has(world)) throw new Error('begin ran twice in one pick');
+    begun.set(world, textArg('begin', args, 0));
+  },
 };
 
 function wholeArg(fn: string, args: readonly unknown[], index: number): number {
@@ -223,6 +234,15 @@ function runQuest(w: World, bundle: QuestBundle, questId: string, step: (story: 
   } finally {
     runner.world = null;
   }
+  beginNext(w, bundle, questId);
+}
+
+function beginNext(w: World, bundle: QuestBundle, questId: string): void {
+  const next = begun.get(w);
+  if (next === undefined) return;
+  begun.delete(w);
+  if (w.player.quests.session) throw new Error(`Quest ${questId} called begin("${next}") but did not end right after it`);
+  openQuest(w, bundle, next, 'start');
 }
 
 function playLines(story: Story, state: QuestState): QuestLine[] {

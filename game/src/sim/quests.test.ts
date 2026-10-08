@@ -100,6 +100,36 @@ function withoutLive(w: World): World {
   return copy;
 }
 
+describe('pay and begin', () => {
+  const GAME_WORLD = readQuestSources('src/data/quests')['world.ink'];
+  const bundleOf = (quests: Record<string, string>) => compileBundle({ 'world.ink': GAME_WORLD, ...Object.fromEntries(Object.entries(quests).map(([id, body]) => [`${id}.ink`, `INCLUDE world.ink\n${body}`])) });
+
+  it('takes money in whole M through pay, and refuses more than the player holds', () => {
+    const bundle = bundleOf({ q: '=== start ===\n# checkpoint: start\n+ [Pay.]\n  ~ pay(3)\n  -> END\n+ [Pay a fortune.]\n  ~ pay(999999)\n  -> END\n' });
+    const before = startQuest(world(), bundle, 'q', 'start');
+    expect(chooseQuestOption(before, bundle, 0).player.money).toBe(before.player.money - 3 * UNITS.centsPerM);
+    expect(() => chooseQuestOption(before, bundle, 1)).toThrow('pay(999999) needs more money than the player holds');
+  });
+
+  it('opens the next quest when one ends right after begin', () => {
+    const bundle = bundleOf({
+      a: '=== start ===\n# checkpoint: start\n+ [Go on.]\n  ~ begin("b")\n  -> END\n',
+      b: '=== start ===\n# checkpoint: start\nThe second part.\n+ [Done.] -> END\n',
+    });
+    const next = chooseQuestOption(startQuest(world(), bundle, 'a', 'start'), bundle, 0);
+    expect(next.player.quests.session).toMatchObject({ quest: 'b', checkpoint: 'start' });
+    expect(questView(next)).toMatchObject({ quest: 'b', lines: [{ text: 'The second part.', tags: [] }], choices: ['Done.'] });
+  });
+
+  it('refuses begin in a quest that goes on after it', () => {
+    const bundle = bundleOf({
+      a: '=== start ===\n# checkpoint: start\n+ [Go on.]\n  ~ begin("b")\n  -> start\n',
+      b: '=== start ===\n# checkpoint: start\n+ [Done.] -> END\n',
+    });
+    expect(() => chooseQuestOption(startQuest(world(), bundle, 'a', 'start'), bundle, 0)).toThrow('Quest a called begin("b") but did not end right after it');
+  });
+});
+
 describe('restoreQuest', () => {
   it('rebuilds a session without ink state at its last checkpoint with the variables kept', () => {
     const restored = withoutLive(play(world(), 'sample_bowl', 'start', [RUMORS]));

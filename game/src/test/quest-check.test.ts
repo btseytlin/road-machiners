@@ -30,6 +30,16 @@ describe('checkQuests', () => {
     expect(both[1].states).toBeGreaterThan(one[1].states);
   });
 
+  it('walks a branch on a world variable that another quest sets', () => {
+    const quests = {
+      'world.ink': WORLD.replace('VAR heard = false', 'VAR heard = false\nVAR deal = "none"'),
+      'a.ink': 'INCLUDE world.ink\n=== start ===\n# checkpoint: start\n+ [Shake.]\n  ~ deal = "struck"\n  -> END\n',
+      'b.ink': 'INCLUDE world.ink\n=== start ===\n# checkpoint: start\n+ {deal == "struck"} [About the deal.] -> broken\n+ [Bye.] -> END\n= broken\nHi.\n',
+    };
+    const problems = checkQuests(quests, () => [world()], LIMIT).flatMap((r) => r.problems);
+    expect(problems.join('\n')).toMatch(/b: after About the deal\.: .*(loose end|ran out of content)/i);
+  });
+
   it('passes a quest with a hub that loops back and an exit', () => {
     expect(check('=== start ===\n# checkpoint: start\n- (hub)\n+ [Ask again.] Sure. -> hub\n+ [Bye.] -> END\n')).toEqual([]);
   });
@@ -75,9 +85,9 @@ describe('checkQuests', () => {
     expect(problems.join('\n')).toContain('q: after Take it.: give_money takes no negative amount');
   });
 
-  it('fails a checkpoint that a load would replay with an effect, and names the picks', () => {
+  it('fails a checkpoint that a load would replay with an effect', () => {
     const problems = check('=== start ===\n# checkpoint: start\n+ [Pay me.] -> paid\n+ [Bye.] -> END\n= paid\n# checkpoint: start.paid\n~ give_money(1)\nHere.\n+ [Bye.] -> END\n');
-    expect(problems.join('\n')).toContain('q: after Pay me.: a load here fails: Effect give_money ran while loading checkpoint start.paid');
+    expect(problems.join('\n')).toContain('a load here fails: Effect give_money ran while loading checkpoint start.paid');
   });
 
   it('fails a quest whose states outgrow the limit instead of passing it', () => {

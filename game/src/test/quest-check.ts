@@ -2,7 +2,7 @@
 // every choice through the sim runner that finds ink errors, loops with no way out and sections never reached.
 
 import { NOTES } from '../data/locals';
-import type { QuestBundle } from '../data/quests';
+import type { QuestBundle, QuestValue } from '../data/quests';
 import { REGION } from '../data/region';
 import { STORY_WRECKS } from '../data/salvage';
 import { playerVehicle } from '../sim/damage';
@@ -31,11 +31,29 @@ export function checkQuests(sources: QuestSources, scenes: QuestScenes, limit: n
   const hooks = hookProblems(bundle);
   const shared: QuestReport = { quest: 'all', states: 0, problems: [...errors, ...warnings, ...hooks] };
   if (hooks.length > 0) return [shared];
-  return [shared, ...Object.keys(bundle.quests).map((id) => exploreQuest(scenes(id), bundle, id, sections[id] ?? [], limit))];
+  const assigned = worldAssignments(sources, bundle);
+  return [shared, ...Object.keys(bundle.quests).map((id) => exploreQuest(withWorldVars(scenes(id), assigned), bundle, id, sections[id] ?? [], limit))];
+}
+
+const ASSIGNMENT = /^\s*~\s*([a-z_][a-z0-9_]*)\s*=\s*("[^"]*"|true|false|-?\d+(?:\.\d+)?)\s*$/gim;
+
+function worldAssignments(sources: QuestSources, bundle: QuestBundle): [string, QuestValue][] {
+  const found = Object.values(sources).flatMap((source) => [...source.matchAll(ASSIGNMENT)].map((m) => [m[1], JSON.parse(m[2]) as QuestValue] as [string, QuestValue]));
+  const fresh = found.filter(([name, value]) => bundle.world[name] !== undefined && bundle.world[name].init !== value);
+  return [...new Map(fresh.map((pair) => [JSON.stringify(pair), pair])).values()];
+}
+
+function withWorldVars(scenes: World[], assigned: readonly [string, QuestValue][]): World[] {
+  const first = scenes[0];
+  return [...scenes, ...assigned.map(([name, value]) => {
+    const w = cloneWorld(first);
+    w.player.quests.world = { ...w.player.quests.world, [name]: value };
+    return w;
+  })];
 }
 
 export function gameScenes(base: World): QuestScenes {
-  const shared = { ...base, terrain: Object.freeze({ ...base.terrain }) };
+  const shared = { ...base, terrain: Object.freeze({ ...base.terrain }), obstacles: [] };
   return (questId) => {
     const local = localOfQuest(questId);
     const fresh = cloneWorld(shared);
@@ -96,9 +114,10 @@ function walkScene(start: World, bundle: QuestBundle, id: string, visited: Set<s
 
 function step(walk: Walk, bundle: QuestBundle, id: string, seen: Map<string, Seen>, visited: Set<string>, problems: string[]): Walk[] {
   const view = questView(walk.world);
-  for (const path of Object.keys(inkOf(walk.world).visitCounts)) visited.add(path);
-  const node: Seen = { picks: walk.picks, next: [], ended: view.ended };
+  const node: Seen = { picks: walk.picks, next: [], ended: view.ended || view.quest !== id };
   seen.set(walk.key, node);
+  if (view.quest !== id) return [];
+  for (const path of Object.keys(inkOf(walk.world).visitCounts)) visited.add(path);
   problems.push(...markupOf(view).map((problem) => `${id}: after ${walk.picks.join(' > ') || 'the start'}: ${problem}`));
   if (!view.ended) attempt(problems, `${id}: after ${walk.picks.join(' > ') || 'the start'}: a load here fails`, () => reloaded(walk, bundle));
   return view.choices.flatMap((text, index) => attempt(problems, `${id}: after ${[...walk.picks, text].join(' > ')}`, () => {
@@ -155,7 +174,6 @@ function inkOf(world: World): InkState {
 function stateKey(world: World): string {
   const ink = inkOf(world);
   const flow = ink.flows[ink.currentFlowName];
-  const visited = Object.keys(ink.visitCounts).sort();
   const choices = flow.currentChoices.map((c) => [c.text, c.targetPath]);
-  return JSON.stringify([flow.callstack.threads.map((t) => t.callstack), choices, ink.variablesState, visited, ink.previousRandom, world.player.quests.session, world.player.money, world.player.notes.map((n) => n.id), world.player.contracts.map((c) => c.id)]);
+  return JSON.stringify([flow.callstack.threads.map((t) => t.callstack), choices, ink.variablesState, ink.previousRandom, world.player.quests.session, world.player.money, world.player.notes.map((n) => n.id), world.player.contracts.map((c) => c.id)]);
 }

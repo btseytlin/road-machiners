@@ -50,6 +50,16 @@ describe('compileQuest', () => {
     expect(errors).toEqual(['List moods cannot be saved. Use int, float, bool or string variables.']);
   });
 
+  it('fails a once-only choice and a visit count read, which a load resets', () => {
+    const { quest, errors } = compile(sources('=== start ===\n# checkpoint: start\n* [Once.] -> start\n+ {start > 1} [Again.] -> END\n+ {TURNS_SINCE(-> start) > 0} [Later.] -> END\n'));
+    expect(quest).toBeNull();
+    expect(errors).toEqual([
+      'Line 4: a once-only * choice comes back after a load. Use a sticky + choice with a variable guard.',
+      'Line 5: start reads a visit count, which a load resets. Keep the fact in a variable.',
+      'Line 6: TURNS_SINCE reads a visit count, which a load resets. Keep the fact in a variable.',
+    ]);
+  });
+
   it('reports an ink error with its file and line', () => {
     const { quest, errors } = compile(sources('=== start ===\nHi.\n-> nowhere\n'));
     expect(quest).toBeNull();

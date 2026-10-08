@@ -10,6 +10,8 @@ import { sitePads } from './sites';
 import { compileBundle, readQuestSources } from '../test/quest-compile';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
+import { UNITS } from '../data/units';
+import { cloneWorld } from './world';
 
 const site = (id: string) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!;
 
@@ -58,7 +60,7 @@ describe('settlement locals', () => {
     w.player.scavenged.push(WAGON_SEVEN);
 
     expect(choices(w, 'nose_ibo')).toContain('What happened at Burnt Convoy?');
-    expect(choices(w, 'nose_kovac')).toEqual(['What is this place?', 'Who runs Nose?', WORK, WAGON, WAGON_FOUND, 'Goodbye.']);
+    expect(choices(w, 'nose_kovac')).toEqual(['What is this place?', 'Who runs Nose?', WORK, 'Anything off the books?', WAGON, WAGON_FOUND, 'Goodbye.']);
   });
 
   it('opens the Fallen Sun question once the crater is found', () => {
@@ -159,6 +161,69 @@ describe('work by talk', () => {
     expect(taken.shops).toEqual(board.shops);
     expect(taken.vehicles).toEqual(board.vehicles);
     expect(taken.events).toEqual(board.events);
+  });
+});
+
+describe('the depot leak at Nose', () => {
+  const OPEN = ['Anything off the books?', 'I will look into it.'];
+  const SOLID_CASE = [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', 'Talk to Pell, the fuel clerk.', 'Watch the depot all night.'];
+  const vars = (w: World) => w.player.quests.local.nose_depot_leak ?? {};
+
+  it('opens from Kovac and pays for naming the thief with proof, which changes what Nose says after', () => {
+    const w = parkedAt('nose');
+    const proof = talk(w, 'nose_kovac', SOLID_CASE);
+    expect(vars(proof)).toMatchObject({ evidence: 4, watches: 1 });
+
+    const done = talk(w, 'nose_kovac', [...SOLID_CASE, 'Go to Kovac with a name.', 'Corporal Vance.']);
+
+    expect(done.player.money - w.player.money).toBe(150 * UNITS.centsPerM);
+    expect(done.player.quests.world).toEqual({ depot_thief: 'vance' });
+    expect(done.player.quests.session).toBeNull();
+    expect(questView(startQuest(done, QUESTS, 'nose_kovac', 'start')).lines[0].text).toContain('The depot is quiet these days.');
+    expect(choices(done, 'nose_kovac')).not.toContain('Anything off the books?');
+    expect(lastLine(talk(done, 'nose_ibo', ['Heard about the depot business?']))).toContain('He sat at my table');
+  });
+
+  it('turns Kovac away from a name with no proof, and locks up the wrong man for nothing', () => {
+    const w = parkedAt('nose');
+    const early = talk(w, 'nose_kovac', [...OPEN, 'Go to Kovac with a name.', 'Corporal Vance.']);
+    expect(vars(early)).toMatchObject({ alarm: 1 });
+    expect(early.player.quests.world).toEqual({ depot_thief: 'open' });
+
+    const wrong = talk(w, 'nose_kovac', [...OPEN, 'Go to Kovac with a name.', 'Pell, the clerk.']);
+    expect(wrong.player.money).toBe(w.player.money);
+    expect(wrong.player.quests.world).toEqual({ depot_thief: 'pell' });
+  });
+
+  it('sells out for the envelope, or loses the trail to too much noise', () => {
+    const w = parkedAt('nose');
+    const two = [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', 'Talk to Pell, the fuel clerk.'];
+    const sold = talk(w, 'nose_kovac', [...two, 'Talk to the trader by the gate.', 'Let her see what you know.', 'Take the envelope.']);
+    expect(sold.player.money - w.player.money).toBe(60 * UNITS.centsPerM);
+    expect(sold.player.quests.world).toEqual({ depot_thief: 'bought' });
+
+    const loud = talk(w, 'nose_kovac', [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', "Search Vance's bunk.", 'Talk to the trader by the gate.', 'Lean on her.']);
+    expect(loud.player.quests.world).toEqual({ depot_thief: 'lost' });
+    expect(questView(loud).ended).toBe(true);
+  });
+
+  it('pays the trader for a lead only with the money in hand', () => {
+    const w = parkedAt('nose');
+    const at = talk(w, 'nose_kovac', [...OPEN, 'Talk to the trader by the gate.']);
+    expect(questView(at).choices).toContain('Pay her 20 M to talk.');
+    const paid = chooseQuestOption(at, QUESTS, pickIndex(at, 'Pay her 20 M to talk.'));
+    expect(w.player.money - paid.player.money).toBe(20 * UNITS.centsPerM);
+
+    const broke = cloneWorld(w);
+    broke.player.money = 0;
+    expect(questView(talk(broke, 'nose_kovac', [...OPEN, 'Talk to the trader by the gate.'])).choices).not.toContain('Pay her 20 M to talk.');
+  });
+
+  it('runs out of watches into a last call', () => {
+    const w = parkedAt('nose');
+    const slow = talk(w, 'nose_kovac', [...OPEN, 'Talk to Pell, the fuel clerk.', 'Read the depot ledgers.', 'Watch the depot all night.', 'Check the gate log against the ledgers.']);
+    expect(vars(slow)).toMatchObject({ watches: 1, alarm: 1 });
+    expect(questView(slow).choices).toContain('Let it go.');
   });
 });
 

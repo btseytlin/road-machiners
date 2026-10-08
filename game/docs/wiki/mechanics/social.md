@@ -27,11 +27,13 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 
 ## Settlement talk
 
-Bowl and Nose have people. Their town screen has a People tab, which a stall does not have. The tab lists three locals of the town by name and role. Picking one opens the talk window over the town screen: a greeting, then the questions that local takes up, then the answer and the questions again. Answers appear word by word, and a word may stand out in bold or color. A click, Space or Enter shows the whole answer at once. Digits pick a question. Talk takes no time, pays nothing and teaches nothing. Goodbye or Escape ends it, and a save keeps it open. Locals never drive or show in the world.
+Bowl and Nose have people. Their town screen has a People tab, which a stall does not have. The tab lists three locals of the town by name and role. Picking one opens the talk window over the town screen: a greeting, then the questions that local takes up, then the answer and the questions again. Answers appear word by word, and a word may stand out in bold or color. A click, Space or Enter shows the whole answer at once. Digits pick a question. Talk takes no time and teaches nothing. Only a job pays. Goodbye or Escape ends it, and a save keeps it open. Locals never drive or show in the world.
 
 Each local has a voice and their own questions. Bowl talks warm and slow, of crops, canals and seed. Nose talks short, like the Army post it is. Each town is biased about the other. Two locals may answer the same question their own way and contradict each other. Some questions open only after something happened: finding a place, hearing a rumor or searching a wreck.
 
 Rumors are not always true. Some are sound, some outdated, some tall tales. A rumor never marks a place. The Farmers patrol at Bowl and the dispatcher at Nose answer "Any work?" with the best-paying offer the town's own board has that the truck can take, and taking it is the same as taking it from the Contracts tab. With the board empty, with nothing on it the truck can take, or with the player holding the most contracts, they say so.
+
+Kovac at Nose has a job off the books: fuel is leaving the Nose depot, and a shipment rolls soon. The player picks leads in the talk window, such as ledgers, the gate log, the clerk, the trader at the gate, a bunk and a night watch. Each lead costs one of a few watches. Too much noise warns the thief. Naming the right man with proof pays, naming the wrong one or taking a bribe has its own end, and the outcome changes what Kovac and Ibo say after.
 
 Rumors and clues go into the journal [J], newest first, with the day, who told them and what they said. The log notes each new entry. Plain lore stays out of the journal. A journal note is information, never an order or a place on the screen.
 

@@ -2095,6 +2095,7 @@ canvas.view {
 .qt-shake,
 .qt-pop {
   display: inline-block;
+  white-space: pre;
 }
 .qt-shake {
   animation:

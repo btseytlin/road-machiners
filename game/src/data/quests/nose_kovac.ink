@@ -2,7 +2,11 @@ INCLUDE world.ink
 
 === start ===
 # checkpoint: start
-Sergeant Kovac, dispatch. <b>Be brief.</b>
+{ depot_thief:
+- "vance": Kovac. The depot is quiet these days. Good. <b>Be brief</b> anyway.
+- "pell": Kovac. Fuel still walks out of my depot. <b>Be brief.</b>
+- else: Sergeant Kovac, dispatch. <b>Be brief.</b>
+}
 -> hub
 
 = hub
@@ -32,6 +36,12 @@ Sergeant Kovac, dispatch. <b>Be brief.</b>
      -> hub
   ++ [No.]
      -> hub
++ {depot_thief == "none"} [Anything off the books?]
+  ~ begin("nose_depot_leak")
+  -> END
++ {depot_thief == "open"} [About the depot.]
+  ~ begin("nose_depot_leak")
+  -> END
 + {has_note("wagonBowl")} [About that scavenger with the Army radio.]
   Him. Sold us our own radio back, the nerve. That set came off <b>wagon Seven</b>. She went dark on the Pump Station run down to Bowl. Crew walked in with raiders on their heels, no wagon. The scavenger swore she sits a short hop off the track. Nobody went to look. Too far off our road to spare a truck.
   ~ note("wagonNose")

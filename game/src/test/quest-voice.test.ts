@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TOPICS } from '../data/dialogue';
+import { handoffQuest, TOPICS } from '../data/dialogue';
 import { LOCALS, NOTES, type NoteId } from '../data/locals';
 import { QUESTS } from '../sim/quests';
 import { readQuestSources } from './quest-compile';
@@ -40,10 +40,12 @@ describe('settlement talk content', () => {
     }
   });
 
-  it('gives every local a quest, and every quest of a town a local', () => {
-    const quests = Object.keys(QUESTS.quests);
-    for (const local of Object.values(LOCALS)) expect(quests, local.id).toContain(local.quest);
-    expect(new Set(Object.values(LOCALS).map((l) => l.quest))).toEqual(new Set(quests.filter((q) => q.startsWith('bowl_') || q.startsWith('nose_'))));
+  it('starts every quest from a local, a radio handoff or another quest', () => {
+    const fromLocals = Object.values(LOCALS).map((l) => l.quest);
+    const fromRadio = Object.values(TOPICS).flatMap((t) => Object.values(t.nodes).flatMap((n) => n.options.flatMap((o) => handoffQuest(o.go) ?? [])));
+    const fromQuests = SOURCES.flatMap(([, source]) => [...source.matchAll(/~\s*begin\("([a-z_]+)"\)/g)].map((m) => m[1]));
+    const started = new Set([...fromLocals, ...fromRadio, ...fromQuests]);
+    expect(started).toEqual(new Set(Object.keys(QUESTS.quests)));
   });
 
   it('can teach every note from some local or the radio', () => {

@@ -13,7 +13,18 @@ export type SourcesResult = { bundle: QuestBundle; errors: string[]; warnings: s
 
 type ParsedVar = { listDefinition: unknown };
 type ParsedFlow = { isFunction: boolean; subFlowsByName: Map<string, ParsedFlow> };
-type Parsed = { story: Story; vars: string[]; externals: string[]; flows: Map<string, ParsedFlow> };
+type ParsedNode = {
+  typeName: string;
+  content: ParsedNode[];
+  debugMetadata: { startLineNumber: number } | null;
+  name?: string;
+  onceOnly?: boolean;
+  runtimeVarRef?: { pathForCount: unknown } | null;
+  isReadCount?: boolean;
+  isTurnsSince?: boolean;
+};
+type ParsedRoot = ParsedNode & { variableDeclarations: Map<string, ParsedVar>; externals: Map<string, unknown>; subFlowsByName: Map<string, ParsedFlow> };
+type Parsed = { story: Story; vars: string[]; externals: string[]; flows: Map<string, ParsedFlow>; root: ParsedNode };
 
 export const WORLD_FILE = 'world.ink';
 
@@ -52,7 +63,7 @@ export function compileQuest(id: string, sources: QuestSources, countAllVisits: 
   const worldVars = new Set(world.parsed.vars);
   const local = own.parsed.vars.filter((name) => !worldVars.has(name));
   const sections = sectionsOf(own.parsed.flows);
-  const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed)];
+  const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed), ...countErrors(own.parsed)];
   if (ruleErrors.length > 0) return { quest: null, errors: ruleErrors, warnings: own.warnings, sections };
   const story = own.parsed.story.ToJson();
   if (!story) throw new Error(`Quest ${id} compiled to no story`);
@@ -69,10 +80,27 @@ function parseInk(file: string, sources: QuestSources, countAllVisits: boolean):
   const compiler = new Compiler(source, new CompilerOptions(file, [], countAllVisits, onError, fileHandler));
   const story = compileOrReport(compiler, errors);
   if (!story) return { parsed: null, errors, warnings };
-  const parsed = compiler.parsedStory as unknown as { variableDeclarations: Map<string, ParsedVar>; externals: Map<string, unknown>; subFlowsByName: Map<string, ParsedFlow> };
+  const parsed = compiler.parsedStory as unknown as ParsedRoot;
   const lists = [...parsed.variableDeclarations].filter(([, decl]) => decl.listDefinition).map(([name]) => `List ${name} cannot be saved. Use int, float, bool or string variables.`);
   if (lists.length > 0) return { parsed: null, errors: lists, warnings };
-  return { parsed: { story, vars: [...parsed.variableDeclarations.keys()], externals: [...parsed.externals.keys()], flows: parsed.subFlowsByName }, errors, warnings };
+  return { parsed: { story, vars: [...parsed.variableDeclarations.keys()], externals: [...parsed.externals.keys()], flows: parsed.subFlowsByName, root: parsed }, errors, warnings };
+}
+
+function countErrors(parsed: Parsed): string[] {
+  return nodesOf(parsed.root).flatMap((node) => {
+    const at = `Line ${node.debugMetadata?.startLineNumber ?? '?'}`;
+    if (node.typeName === 'Choice' && node.onceOnly) return [`${at}: a once-only * choice comes back after a load. Use a sticky + choice with a variable guard.`];
+    return readsCount(node) ? [`${at}: ${node.name ?? 'this'} reads a visit count, which a load resets. Keep the fact in a variable.`] : [];
+  });
+}
+
+function readsCount(node: ParsedNode): boolean {
+  if (node.typeName === 'ref') return node.runtimeVarRef?.pathForCount != null;
+  return node.typeName === 'FunctionCall' && (node.isReadCount === true || node.isTurnsSince === true);
+}
+
+function nodesOf(node: ParsedNode): ParsedNode[] {
+  return [node, ...node.content.flatMap(nodesOf)];
 }
 
 function compileOrReport(compiler: Compiler, errors: readonly string[]): Story | null {

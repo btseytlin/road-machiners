@@ -1512,11 +1512,28 @@
   "weather": []
  },
  "quests": {
-  "world": {},
+  "world": {
+   "depot_thief": "string"
+  },
   "local": {
    "bowl_dag": {},
    "bowl_hattie": {},
    "bowl_ruben": {},
+   "nose_depot_leak": {
+    "alarm": "number",
+    "bunk_searched": "boolean",
+    "envelope": "number",
+    "evidence": "number",
+    "gate_checked": "boolean",
+    "ledger_read": "boolean",
+    "misled": "boolean",
+    "pell_talked": "boolean",
+    "reward": "number",
+    "sabine_price": "number",
+    "sabine_talked": "boolean",
+    "stakeout_done": "boolean",
+    "watches": "number"
+   },
    "nose_ibo": {},
    "nose_kovac": {},
    "nose_lena": {},
@@ -1534,6 +1551,12 @@
    "bowl_ruben": [
     "start",
     "start.hub"
+   ],
+   "nose_depot_leak": [
+    "start",
+    "desk",
+    "sabine.haggle",
+    "last_call"
    ],
    "nose_ibo": [
     "start",
