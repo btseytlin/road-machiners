@@ -17,6 +17,7 @@ import { boxesOverlap } from '../test/boxes';
 import { deckHeight, groundAt, heightAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import type { PosedBox } from './mapgen';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -61,7 +62,7 @@ describe('baked map obstacles', () => {
 
   it('knows every obstacle it makes as baked, and no other', () => {
     const baked = mapObstacles(mapWith([prop('rock', 10), prop('pole', 20, { group: 4, step: 7 }), prop('tank', 30), prop('bridgeSpan', 40)]));
-    const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const others = world.obstacles.filter((o) => !mapObstacles(TEST_MAP).some((b) => b.id === o.id));
     const runtimeWrecks: Obstacle[] = [{ id: 'wreck-v12', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }, { id: 'wreck31', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }];
 
@@ -95,7 +96,7 @@ describe('breakable props', () => {
 });
 
 describe('world from the baked map', () => {
-  const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   const baked = world.obstacles.filter(isBakedObstacle);
 
   it('takes its terrain, hash and baked props from the map', () => {
@@ -106,7 +107,7 @@ describe('world from the baked map', () => {
   });
 
   it('places the same baked props for every world seed', () => {
-    const bakedOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).obstacles.filter(isBakedObstacle);
+    const bakedOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).obstacles.filter(isBakedObstacle);
     expect(bakedOf(7)).toEqual(bakedOf(1337));
   });
 
@@ -132,7 +133,7 @@ describe('world from the baked map', () => {
     const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
     const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // A wreck piece of a territory is long or hollow, so it stands on the ground only under its low boxes: trucks,
     // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
     const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
     const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
@@ -181,7 +182,7 @@ describe('world from the baked map', () => {
 
   it('rejects a map of another size than the region', () => {
     const small: BakedMap = { ...TEST_MAP, terrain: { size: 10, heights: [], types: [] } };
-    expect(() => newWorld(1337, START_KITS.standard, small)).toThrow(/size/);
+    expect(() => newWorld(1337, START_KITS.standard, small, defaultSetup('roaming'))).toThrow(/size/);
   });
 });
 
@@ -352,7 +353,8 @@ describe('prop poses', () => {
 });
 
 // The Fallen Sun's hull piece looks, which stand on their low boxes.
-const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);
+// The looks of every territory's wreck pieces: hull pieces, the engine and its watchtowers.
+const HULL_PIECES = new Set<string>(Object.values(TERRITORIES).flatMap((t) => t.wreck?.pieces.map((p) => p.look) ?? []));
 
 describe('Broken Wing on the baked map', () => {
   const M = PHYSICS.metersPerTile;
@@ -403,7 +405,7 @@ describe('Broken Wing on the baked map', () => {
   });
 
   it('keeps every other prop, road wreck and site off the road under the hoop, on the ramps and on the deck', () => {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const points = [...under, ...stretch];
     const on = w.obstacles.filter((o) => o.id !== hoop.id && o.kind !== 'water' && points.some((p) => dist(o.pos, p) <= o.r));
     expect(on.map((o) => o.id)).toEqual([]);

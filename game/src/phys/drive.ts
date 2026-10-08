@@ -296,7 +296,8 @@ function noteOwner(owner: Map<number, string>, body: RAPIER.RigidBody, vehicleId
 }
 
 // oil holds the oil patches the car can reach this turn, in physics space. kicked is true once oil kicked its tail this turn.
-type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult; oil: Circle[]; kicked: boolean };
+// grip: the ground's grip under the truck, set each step
+type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult; grip: number; oil: Circle[]; kicked: boolean };
 
 function run(d: Drive, w: World, steps: number): TurnResult {
   const world = RAPIER.World.restoreSnapshot(d.world.takeSnapshot());
@@ -310,7 +311,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planOf(w, v, s, body, mem), result: { passed: false, arrived: false }, oil: oilInReach(oil, v, s, body), kicked: false };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planOf(w, v, s, body, mem), result: { passed: false, arrived: false }, grip: 1, oil: oilInReach(oil, v, s, body), kicked: false };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
@@ -739,16 +740,21 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield. A wheel whose hub lies over any oil patch, as `slick` says in wheelMounts order, keeps OIL.grip of
-// its friction slip and side friction stiffness. Overlapping patches count once.
+// the heightfield. Slippery ground, like glass, cuts the tires' hold on top of that, for every truck and skill:
+// grip along the wheel, for speeding up and braking, and side grip across it, so a turning truck slides sideways.
+// Drivers plan their braking with the same grip, so they still stop on a point. They corner as on any ground, so
+// the truck skids through its turns.
+// An oiled wheel, as `slick` says in wheelMounts order, keeps OIL.grip of its friction slip and side friction
+// stiffness on top of that. Overlapping patches count once.
 function applyTerrainGrip(c: Car, terrain: Terrain, slick: readonly boolean[]): void {
   const p = c.body.translation();
-  const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
-  const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
+  const ground = TERRAIN_TYPES[terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })]];
+  c.grip = ground.grip;
+  const grip = T.frictionSlip * groundSpeed(c.s, ground.speed) * ground.grip;
   for (let i = 0; i < 4; i++) {
     const share = slick[i] ? OIL.grip : 1;
     c.ctl.setWheelFrictionSlip(i, grip * share);
-    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * share);
+    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * ground.sideGrip * share);
   }
 }
 
@@ -785,7 +791,9 @@ function driveStep(c: Car, terrain: Terrain): void {
   applyTerrainGrip(c, terrain, slick);
   oilKick(c, slick);
   const speed = forwardSpeed(c.body);
-  const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
+  const driving = c.plan.dest && !reached(c);
+  if (!driving) c.mem.stall = 0; // a stall count belongs to one push, not to the next order
+  const command = driving ? commandToward(c, c.plan.dest!, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
   if (!c.plan.dest) {
     c.mem.reverse = false;
@@ -854,7 +862,7 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
     const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
     return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
-  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel));
+  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel * c.grip));
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
 }
 
@@ -866,21 +874,19 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
     return c.plan.target;
   }
   if (far < RULES.arriveRadius * S) c.result.arrived = true;
-  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * c.grip * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
-// Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
-// Reason one: backsToDestination allows it. It starts below reverseBelow and holds while the rule holds.
-// Reason two: something in front stopped it. It backs RULES.reverse.distance tiles from where the back-out
-// began, then tries nose first again. Any other point behind turns the truck around nose first.
+// Whether the truck backs up this step, for one of two reasons.
+// Reason one: the aim is behind the nose and backsToDestination allows it. It starts below reverseBelow and holds
+// while the rule holds.
+// Reason two: something in front stopped it, wherever the aim lies. A truck that turns toward an aim ahead can grind
+// along a rock at a crawl, so pushing without moving counts as blocked too. A block starts with a target of at least pushSpeed, so a truck that
+// arrives or creeps from rest never backs out; once it started, it counts on until the truck moves. It backs RULES.reverse.distance tiles from
+// where the back-out began, then tries nose first again. Any other point behind turns the truck around nose first.
 // at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
 function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
-  if (Math.abs(ang) <= Math.PI / 2) {
-    c.mem.stall = 0;
-    c.mem.backFrom = null;
-    return false;
-  }
-  if (backsToPoint(c, rearAng, far, target, speed)) {
+  if (Math.abs(ang) > Math.PI / 2 && backsToPoint(c, rearAng, far, target, speed)) {
     c.mem.backFrom = null;
     return true;
   }
@@ -900,7 +906,8 @@ function backsToPoint(c: Car, rearAng: number, far: number, target: number, spee
 
 // Counts the seconds a truck pushes forward without moving, and says whether that lasted long enough to back up.
 function blockedInFront(c: Car, target: number, speed: number): boolean {
-  c.mem.stall = target > 0 && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
+  const pushing = target >= D.pushSpeed || (target > 0 && c.mem.stall > 0);
+  c.mem.stall = pushing && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
   return c.mem.stall >= D.stallSeconds;
 }
 

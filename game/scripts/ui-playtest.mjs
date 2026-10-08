@@ -167,6 +167,7 @@ async function checkDockLayout(page, [width, height]) {
       twoRows: grid.classList.contains('two-rows'),
     };
   }, [DOCK_PANELS, width <= 720]);
+  m.iconLooks = await readIconLooks(page);
   const guns = m.slots.length, at = `at ${width}x${height} with ${guns} guns`;
   console.log(at, Object.entries(m.rects).map(([n, r]) => `${n}=${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
   await page.screenshot({ path: `.playtest/dock-${guns}g-${width}x${height}.png`, timeout: 180000 });
@@ -178,6 +179,7 @@ async function checkDockLayout(page, [width, height]) {
   assertDockSize(m, stacked, at);
   assertDockLevel(m, stacked, width, at);
   assertDockText(m, at);
+  assertDockIcons(m.iconLooks, at);
   for (const c of m.controls) assert(c.ok, `Weapon control "${c.name}" must take the click at its center ${at}, hit ${c.hit}`);
 }
 
@@ -230,6 +232,20 @@ function assertDockText(m, at) {
   assert.equal(m.oldIcons, 0, `No old weapon glyphs ${at}`);
 }
 
+const readIconLooks = page => page.evaluate(() => [...document.querySelectorAll('.weapon-pick .item-icon')].map(node => {
+  const style = getComputedStyle(node);
+  return { label: node.getAttribute('aria-label'), background: style.backgroundColor, image: style.backgroundImage, padding: style.padding };
+}));
+
+// A gun shows its drawing alone: no tone tile, no image and no padding behind it.
+function assertDockIcons(looks, at) {
+  for (const icon of looks) {
+    assert.equal(icon.background, 'rgba(0, 0, 0, 0)', `Weapon icon "${icon.label}" must have no tile ${at}`);
+    assert.equal(icon.image, 'none', `Weapon icon "${icon.label}" must have no background image ${at}`);
+    assert.equal(icon.padding, '0px', `Weapon icon "${icon.label}" must have no padding ${at}`);
+  }
+}
+
 // The weapons dock with one, five and the most guns a random truck mounts, at every viewport.
 async function checkWeaponDock(page) {
   await loadHeavyHud(page);
@@ -238,8 +254,28 @@ async function checkWeaponDock(page) {
   assert(most >= 6, `A random kit must give six or more guns, got ${most}`);
   for (const guns of [most, 5, 1]) {
     if (guns !== most) await trimGuns(page, guns);
+    if (guns !== 1) await checkWeaponIcons(page, guns, guns === most);
     for (const viewport of DOCK_VIEWPORTS) await checkDockLayout(page, viewport);
   }
+}
+
+// Saves the weapon panel unselected and with a gun selected, and checks the icons carry no tile.
+async function checkWeaponIcons(page, guns, distinct) {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const shoot = suffix => page.locator('.weapons').screenshot({ path: `.playtest/weapon-icons-${guns}g${suffix}.png`, timeout: 180000 });
+  const at = `in the ${guns}-gun panel`;
+  const looks = await readIconLooks(page);
+  assertDockIcons(looks, at);
+  const labels = new Set(looks.map(icon => icon.label));
+  console.log('weapon icons', [...labels].join(', '));
+  if (distinct) assert(labels.size >= 2, `The panel must show at least two distinct guns, got ${[...labels]}`);
+  await shoot('');
+  const first = page.locator('.weapon-pick').first();
+  await first.click();
+  assert(await page.locator('.weapon-pick.on').count(), `A clicked gun must show as selected ${at}`);
+  assertDockIcons(await readIconLooks(page), `${at} with a gun selected`);
+  await shoot('-selected');
+  await first.click();
 }
 
 async function fillLog(page) {
@@ -534,6 +570,7 @@ try {
   const name = (await movable.getAttribute('title')).split('\n')[0].split(' (')[0];
   await movable.click({ force: true });
   assert((await page.locator('.inv-inspection').innerText()).includes(name), 'Clicking a movable item must inspect it before drag/drop replaces its node');
+  assert.notEqual(await page.locator('.inv-inspection .item-icon').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)', 'Item icons outside the weapon panel must keep their tone tile');
   const inventoryFrame = await page.locator('.modal:visible').boundingBox();
   await page.keyboard.press('Escape');
   await page.keyboard.press('c');
@@ -576,7 +613,7 @@ try {
   for (const viewport of [{ width: 1280, height: 720 }, { width: 700, height: 800 }]) await checkKnobs(url, viewport);
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
+  console.log('PASS: weapon icons without a tile, hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
 } finally {
   await browser.close();
 }

@@ -9,6 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
 import { gaveUp, isKnockedOut } from '../sim/defeat';
+import { OPENING_WRECK_ID } from '../sim/opening';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -91,7 +92,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp } from './units';
+import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
@@ -123,10 +124,13 @@ export function conditionStatus(part: PartInstance): { text: string; tone: 'dim'
   return { text: `${hp(part.hp)}/${hp(maxHp(part))} HP`, tone: 'dim' };
 }
 
+// Ids of obstacles a truck can hit: road, kill and opening wrecks, rocks and town buildings.
+const OBSTACLE_ID = new RegExp(`^(wreck|rock|bld|${OPENING_WRECK_ID}$)`);
+
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? npcName(v) : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
+  return v ? npcName(v) : OBSTACLE_ID.test(id) ? 'an obstacle' : 'something';
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -419,7 +423,7 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
 function aidText(world: World, e: Extract<GameEvent, { t: 'aid' }>): LogLine {
   const me = world.player.vehicleId;
   if (e.fuel === 0 && e.supplies === 0) return { text: `Nothing changed hands with ${vehicleName(world, e.giver === me ? e.receiver : e.giver)}.`, cls: 'dim' };
-  const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${e.paid}` : ''}`;
+  const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${moneyText(e.paid)}` : ''}`;
   if (e.giver === me) return { text: `You give ${vehicleName(world, e.receiver)} ${moved}.`, cls: '' };
   return { text: `${vehicleName(world, e.giver)} gives you ${moved}.`, cls: 'good' };
 }
@@ -436,7 +440,7 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
 }
 
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? e.fee : 'free'}.`, cls: '' };
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? moneyText(e.fee) : 'free'}.`, cls: '' };
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
@@ -447,17 +451,17 @@ function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): Log
   const by = vehicleName(world, e.by);
   const free = e.fee === 0;
   if (e.client === world.player.vehicleId) {
-    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${moneyText(e.fee)}.`, cls: 'bad' };
   }
-  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${e.fee}`}.`, cls: 'dim' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${moneyText(e.fee)}`}.`, cls: 'dim' };
 }
 
 function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${moneyText(e.fee)} for the escort.`, cls: 'dim' };
 }
 
 function escortHiredText(world: World, e: Extract<GameEvent, { t: 'escortHired' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${e.fee}.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${moneyText(e.fee)}.`, cls: 'dim' };
 }
 
 function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefused' }>): LogLine {
@@ -549,11 +553,12 @@ function foundText(_world: World, e: Extract<GameEvent, { t: 'found' }>): LogLin
   return { text: `Found ${items.join(', ')}.`, cls: 'good' };
 }
 
-const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], fulfilled: ['Bounty met', 'good'], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
   const [label, cls] = CONTRACT_OUTCOME[outcome];
-  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${c.reward}`;
+  if (outcome === 'fulfilled' && c.kind === 'bounty') return { text: `${label}: ${c.targetName} beaten, claim ${moneyText(c.reward)} at ${siteName(c.shop)}`, cls };
+  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${moneyText(c.reward)}`;
   return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
 
@@ -564,7 +569,8 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
-  return `Knock out or wreck any ${c.targetName}`;
+  if (c.fulfilled) return `${c.targetName} beaten, claim at ${siteName(c.shop)}`;
+  return `Knock out or wreck any ${c.targetName}, claim at ${siteName(c.shop)}`;
 }
 
 // How long a contract allows from acceptance, in whole game hours.
@@ -575,6 +581,11 @@ export function contractWindow(c: Contract): string {
 // The game time a contract is due. It fails at the end of its deadline turn.
 export function contractDue(c: Contract): string {
   return `by ${clockLabel(c.deadline + 1)}`;
+}
+
+// The due time of a held contract. A met bounty no longer runs against its deadline.
+export function heldContractDue(c: Contract): string {
+  return c.kind === 'bounty' && c.fulfilled ? 'Ready' : contractDue(c);
 }
 
 export function clockLabel(turn: number): string {
@@ -720,7 +731,7 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
     case 'skillUp':
       return { text: skillUpText(e.skill, e.level), cls: 'good' };
     case 'money':
-      return { text: `${e.amount > 0 ? '+' : ''}${e.amount} money: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
+      return { text: `${e.amount > 0 ? '+' : ''}${moneyText(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {
       const loc = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.location);
       return { text: `Discovered ${loc?.name ?? e.location}`, cls: 'good' };
@@ -784,8 +795,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return `+${e.perUnit}`;
-    case "loss": return `\u2212${e.perUnit}`;
+    case "gain": return `+${moneyAmount(e.perUnit)}`;
+    case "loss": return `\u2212${moneyAmount(e.perUnit)}`;
   }
 }
 
@@ -793,10 +804,10 @@ export function estimateTitle(e: SaleEstimate): string {
   switch (e.kind) {
     case "none": return "";
     case "unrecorded": return "No cost on record";
-    default: return `Avg cost ${e.avgCost}`;
+    default: return `Avg cost ${moneyAmount(e.avgCost)}`;
   }
 }
 
 export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
-  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
+  return direction === "buy" ? `Buy ${count} for ${moneyAmount(total)} total` : `Sell all ${count} for ${moneyAmount(total)} total`;
 }

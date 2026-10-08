@@ -14,7 +14,7 @@ import { REGION, type TerritoryDef } from '../data/region';
 import { EMPLACEMENT, type BuildingGroup, type ClutterRule, type Emplacement, type FarmRoad, type FarmRules, type GroveBlock, type GroveRule, type Pad, type Run, type TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { flattenFalloff } from '../sim/elevation';
-import { propBoxes } from '../sim/mapgen';
+import { boxDistance, propBoxes, type PosedBox } from '../sim/mapgen';
 import { gradePaths, type GradedPad } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randInt, randRange, type Rng } from '../sim/rng';
@@ -83,7 +83,7 @@ export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, fa
 }
 
 // Tiles whose square a circle at pos with radius r overlaps, and the tile under pos.
-function touchedTiles(size: number, pos: Vec, r: number): number[] {
+export function touchedTiles(size: number, pos: Vec, r: number): number[] {
   const out: number[] = [tileOf(size, pos)];
   for (let y = Math.max(0, Math.floor(pos.y - r)); y <= Math.min(size - 1, Math.floor(pos.y + r)); y++) {
     for (let x = Math.max(0, Math.floor(pos.x - r)); x <= Math.min(size - 1, Math.floor(pos.x + r)); x++) {
@@ -124,20 +124,52 @@ function markPadTile(d: MapDraft, t: TerritoryDef, tile: number, centre: Vec): v
 // One loot spot at each pose, turned from the road's heading and jittered by its group. A pose that falls outside
 // the territory, on a cliff, on a road, or on a farm road without leave to stand on its shoulder is a data error.
 function placeBuildings(d: MapDraft, t: TerritoryDef, frame: Frame, farm: FarmRules, onRoad: Touch, rng: Rng): BakedProp[] {
-  return farm.buildings.flatMap((group) => group.poses.map((pose) => building(d, t, frame, group, pose, onRoad, rng)));
+  return placeBuildingGroups(d, t, frame.yaw, farm.buildings, onRoad, [], rng);
 }
 
-function building(d: MapDraft, t: TerritoryDef, frame: Frame, group: BuildingGroup, pose: BuildingGroup['poses'][number], onRoad: Touch, rng: Rng): BakedProp {
+// One loot spot at each pose of each group, turned yaw radians plus its pose's turn and jittered by its group, in a
+// farm or a wreck. A building that touches one of a wreck's piece boxes is a data error too.
+export function placeBuildingGroups(
+  d: MapDraft,
+  t: TerritoryDef,
+  yaw: number,
+  groups: readonly BuildingGroup[],
+  onRoad: Touch,
+  pieceBoxes: readonly PosedBox[],
+  rng: Rng,
+): BakedProp[] {
+  return groups.flatMap((group) => group.poses.map((pose) => building(d, t, yaw, group, pose, onRoad, pieceBoxes, rng)));
+}
+
+function building(
+  d: MapDraft,
+  t: TerritoryDef,
+  yaw: number,
+  group: BuildingGroup,
+  pose: BuildingGroup['poses'][number],
+  onRoad: Touch,
+  pieceBoxes: readonly PosedBox[],
+  rng: Rng,
+): BakedProp {
   const turn = pose.turn + randRange(rng, -group.turnJitter, group.turnJitter);
   const at0 = shift(t, pose.at);
   const pos = { x: at0.x + randRange(rng, -group.shift, group.shift), y: at0.y + randRange(rng, -group.shift, group.shift) };
   const where = `${t.id} ${group.look} at ${at(pos)}`;
   inside(t, pos, pose.r, group.look);
-  if (touchedTiles(d.size, pos, pose.r).some((tile) => steep(d, tile))) throw new Error(`${where} stands on a cliff`);
-  if (onNewRoad(pos, pose.r)) throw new Error(`${where} stands on a road`);
-  if (!pose.shoulder && onRoad(pos, pose.r)) throw new Error(`${where} stands on a farm road`);
-  if (touchedTiles(d.size, pos, pose.r).some((tile) => d.built[tile] === BUILT_CANAL)) throw new Error(`${where} stands on a canal`);
-  return prop(group.look, pos, pose.r, frame.yaw + turn);
+  const fault = buildingFault(d, pos, pose, onRoad);
+  if (fault) throw new Error(`${where} ${fault}`);
+  if (pieceBoxes.some((b) => boxDistance(b, pos) < pose.r + REGION.obstacles.gap)) throw new Error(`${where} touches a wreck piece`);
+  return prop(group.look, pos, pose.r, yaw + turn);
+}
+
+// What keeps a building off its pose's ground: a cliff, a road, a farm road unless it may stand on the shoulder, or a
+// canal. Null when nothing does.
+function buildingFault(d: MapDraft, pos: Vec, pose: BuildingGroup['poses'][number], onRoad: Touch): string | null {
+  if (touchedTiles(d.size, pos, pose.r).some((tile) => steep(d, tile))) return 'stands on a cliff';
+  if (onNewRoad(pos, pose.r)) return 'stands on a road';
+  if (!pose.shoulder && onRoad(pos, pose.r)) return 'stands on a farm road';
+  if (touchedTiles(d.size, pos, pose.r).some((tile) => d.built[tile] === BUILT_CANAL)) return 'stands on a canal';
+  return null;
 }
 
 // Each building stands upright at the ground under its centre, so the ground under it is levelled. Every corner a point

@@ -22,6 +22,7 @@ import {
 } from "../phys/frames";
 import { type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
+import { setupLabel } from "../sim/settings";
 
 import { inOverdrive, isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder } from "../sim/steering";
@@ -77,8 +78,7 @@ import { ShadeView } from "./render/shade";
 import { BeaconPulseView } from "./render/beaconPulse";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
-import type { SlotId } from "./save-slots";
-import { SAVE_FULL_NOTE, SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
+import { GameSaves, turnFailedNote, type Run } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -180,7 +180,7 @@ export class Game {
   // A rescue button pressed while a turn plays runs once the playback ends.
   private pending: ((w: World) => World | null) | null = null;
 
-  private readonly hud: Hud;
+  readonly hud: Hud;
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
@@ -191,9 +191,11 @@ export class Game {
   private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
   private readonly death: DeathScreen;
+  private readonly saves: GameSaves;
 
   constructor(
     world: World,
+    run: Run,
     container: HTMLElement,
     overlay: HTMLElement,
     player: SoundPlayer,
@@ -201,6 +203,7 @@ export class Game {
     radio: RadioPanel,
   ) {
     this.world = world;
+    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"));
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
 
@@ -264,7 +267,7 @@ export class Game {
       apply: (next) => this.apply(next),
       pushEvents: () => this.hud.pushEvents(this.world),
       note: (text) => this.hud.note(this.world, text, "bad"),
-      openTrade: () => this.trade.openIfReady(),
+      openTrade: (id) => this.trade.openWith(id),
       openTown: () => this.town.open(),
       openDowned: (id) => this.inventory.openDowned(this.world, id),
       openLoot: (id) => this.inventory.openLoot(id),
@@ -305,15 +308,14 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots, () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
-    const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
-    this.menu = new GameMenu(guarded, () => this.anim !== null);
+    const saves = this.saves.menuActions(() => this.world);
+    this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup));
     this.death = new DeathScreen(saves);
 
     this.bindInput();
@@ -374,7 +376,7 @@ export class Game {
   // A command from a panel: apply it, and save at once on a town pad.
   private applyCommand(next: World): void {
     this.apply(next);
-    if (!this.saves.held) saveInTown(window.localStorage, next, Date.now(), () => this.hud.note(next, SAVE_FULL_NOTE, "bad"));
+    this.saves.afterCommand(next);
   }
 
   // The console's fullshop command: the full shop screen over any other screen, anywhere.
@@ -387,6 +389,7 @@ export class Game {
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
+    this.saves.logWorld(next);
     syncDrive(this.drive, this.world);
     this.refreshUi();
   }
@@ -398,7 +401,7 @@ export class Game {
 
   private modalOpen(): boolean {
     const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
-    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isPanelOpen();
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -634,8 +637,7 @@ export class Game {
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
-    if (this.live && f)
-      return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
+    if (this.live && f) return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
     return playerSees(this.world, v.pos);
   }
 
@@ -684,15 +686,8 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
-  private readonly saves = new SaveHold();
-
   holdSaves(): void {
     this.saves.noteError();
-  }
-
-  private saveNow(write: () => void): void {
-    if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
-    write();
   }
 
   // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
@@ -719,6 +714,7 @@ export class Game {
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed, this.frames);
     this.world = world;
+    this.saves.logWorld(world);
     // The score must follow this turn's combat before its crash accents arrive.
     this.updateLoops();
     this.anim = playback;
@@ -794,8 +790,7 @@ export class Game {
     this.breakCues = new BreakCues([]);
     this.phase = null;
     this.idleSince = performance.now();
-    this.saves.finishTurn();
-    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now(), () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
+    this.saves.afterTurn(this.world);
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
@@ -978,8 +973,7 @@ export class Game {
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
-    // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
-    // camera cannot pan past it.
+    // Gray vision centers on the drawn truck, so its edge moves with it during a turn. The camera cannot pan past it.
     const sightRadius = grayRadius(this.world) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
@@ -1077,7 +1071,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(vehicleLampsOn(this.world, v, this.lightTurn()));
-      view.radio(this.radioLights.lit(this.world, v.id, now));
+      view.radio(this.radioLights.lit(v.id, now));
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);

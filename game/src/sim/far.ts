@@ -15,7 +15,7 @@ import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
 import { fieldBlockers } from './hazards';
-import { isOnRope, ropeClientOf } from './tow';
+import { getHitchedTowIds, isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -103,19 +103,20 @@ export function advanceFar(w: World, v: Vehicle): void {
 // The kept route toward dest, or a new one. A new route steers around parked vehicles, like the physics driver's, and
 // around slower ones it could reach. A kept route planned on or off roads is dropped once the driver's style has changed.
 function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats): Vec[] {
+  const onRope = getHitchedTowIds(w);
   const stored = keptFarRoute(v);
   if (stored && stored.dest.x === dest.x && stored.dest.y === dest.y && keptOffRoad(stored) === offRoad) return stored.points;
   // A new route steers around parked vehicles and seen ground fields, like the physics driver's, and around slower ones it could reach.
-  return route(w, v.pos, dest, full.radius, [...farBlockers(w, v, s), ...fieldBlockers(w, v)], v);
+  return route(w, v.pos, dest, full.radius, [...farBlockers(w, v, s, onRope), ...fieldBlockers(w, v)], v);
 }
 
 // The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
 // a turn's drive of it, so it overtakes them as a driver would instead of trailing them. A ram target stays a target.
-function farBlockers(w: World, v: Vehicle, s: VehicleStats): Blocker[] {
+function farBlockers(w: World, v: Vehicle, s: VehicleStats, onRope: ReadonlySet<string>): Blocker[] {
   const target = v.brain?.ramTarget;
   const reach = s.maxSpeed + radiusOf(v);
-  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
-  return [...parkedVehicles(w, v.id), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
+  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && !onRope.has(o.id) && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
+  return [...parkedVehicles(w, v.id, onRope), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
 }
 
 function radiusOf(v: Vehicle): number {

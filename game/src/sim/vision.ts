@@ -7,7 +7,7 @@
 import { PHYSICS } from '../data/physics';
 import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
-import type { Obstacle, Vehicle, World } from './types';
+import type { Contact, Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
 import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './mapgen';
 import { isCheapMeeting, isHeadless } from './fidelity';
@@ -131,7 +131,7 @@ export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.
-function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+export function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
   const { a, b } = line;
   const targetDist = dist(a, b);
   return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
@@ -139,9 +139,9 @@ function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obsta
 
 // The line from the viewer's eye to the target's top, in height units over each end's height: a deck where the end
 // stands on one, else the ground. Props and hills both test against it.
-type SightLine = { a: Vec; b: Vec; from: number; to: number };
+export type SightLine = { a: Vec; b: Vec; from: number; to: number };
 
-function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
+export function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
   const eye = TERRAIN.vision.eyeHeight;
   return { a, b, from: heightAt(terrain, a.x, a.y) + eye, to: heightAt(terrain, b.x, b.y) + eye };
 }
@@ -173,7 +173,7 @@ function leaveHeights(line: SightLine, lo: number, hi: number): number {
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.
-function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+export function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
   const { a, b, from, to } = line;
   const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {
@@ -190,8 +190,10 @@ export function playerVisible(world: World): Set<number> {
   return v ? visibleTiles(world, v.pos) : new Set<number>();
 }
 
-// Recomputes the player's view and marks it explored. Run after anything that moves the player.
-export function refreshVision(world: World): void {
+// Recomputes the player's view and marks it explored. Run after anything that moves the player. It awards nothing,
+// so load can rebuild the view from a save. Returns the contacts that are new since the last view, which the turn
+// pays for with practiceContacts().
+export function refreshVision(world: World): Contact[] {
   const seen = playerVisible(world);
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = 1;
@@ -200,14 +202,12 @@ export function refreshVision(world: World): void {
   const known = new Set(world.player.contacts.map((c) => c.vehicleId));
   world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
   world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
-  if (me) practiceNewContacts(world, me, known);
+  return world.player.contacts.filter((c) => !known.has(c.vehicleId));
 }
 
 // The player practices perception once per vehicle that becomes a contact, harder near the edge of reach.
-function practiceNewContacts(world: World, me: Vehicle, known: Set<string>): void {
-  for (const c of world.player.contacts) {
-    if (!known.has(c.vehicleId)) practice(world, 'contact', 1, contactDifficulty(world, me, c), c.vehicleId);
-  }
+export function practiceContacts(world: World, fresh: readonly Contact[]): void {
+  for (const c of fresh) practice(world, 'contact', 1, contactDifficulty(world, playerVehicle(world), c), c.vehicleId);
 }
 
 export function tileCenter(world: World, idx: number): Vec {

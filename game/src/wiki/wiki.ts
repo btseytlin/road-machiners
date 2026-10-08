@@ -13,7 +13,7 @@ import { CHASSIS_PRICE_MODIFIERS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { PARTS, PART_PRICE_MODIFIERS } from '../data/parts';
 import type { PartDef, PartKind } from '../data/parts';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { SALVAGE, STRIP } from '../data/salvage';
 import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
 import { SOUNDS } from '../data/sounds';
@@ -24,11 +24,12 @@ import { oilSlickLength } from '../data/utilities';
 import { CONDITION, PATCH, REPAIR, WEAR } from '../data/wear';
 import { baseModel, PART_MODELS, WEAPON_POOLS } from '../render/partLooks';
 import { STATE_KINDS } from '../sim/states';
+import { moneyAmount } from '../ui/units';
 
 export type Cell = string | number | boolean | null | readonly unknown[] | object;
 export type WikiTable = { id: string; headers: string[]; rows: () => Cell[][] };
 
-const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content'];
+const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content', 'world-settings'];
 
 export const PAGES: readonly string[] = [
   'README.md', 'items.md', 'combat.md', 'economy.md', 'npcs.md', 'skills.md', 'assets.md',
@@ -122,8 +123,8 @@ const partsOf = <K extends PartKind>(kind: K): Extract<PartDef, { kind: K }>[] =
 
 const partTable = <K extends PartKind>(id: string, kind: K, headers: string[], stats: (p: Extract<PartDef, { kind: K }>) => Cell[]): WikiTable => ({
   id,
-  headers: ['id', 'name', 'tier', 'value', 'cells (w x h)', 'mass (kg)', 'hp', 'armor', 'tall', ...headers],
-  rows: () => partsOf(kind).map((p) => [p.id, p.name, p.tier, p.value, `${p.w} x ${p.h}`, p.mass, p.hp, p.armor, p.tall, ...stats(p)]),
+  headers: ['id', 'name', 'tier', 'value (M)', 'cells (w x h)', 'mass (kg)', 'hp', 'armor', 'tall', ...headers],
+  rows: () => partsOf(kind).map((p) => [p.id, p.name, p.tier, moneyAmount(p.value), `${p.w} x ${p.h}`, p.mass, p.hp, p.armor, p.tall, ...stats(p)]),
 });
 
 const change = (option: string, c: WeightChange): string => {
@@ -143,9 +144,9 @@ const stateKindRows = (): Cell[][] => entries(STATE_KINDS).map(([kind, def]) => 
 const TABLES: WikiTable[] = [
   {
     id: 'chassis',
-    headers: ['id', 'name', 'tier', 'value', 'max speed (tiles/turn)', 'accel', 'brake', 'mass (kg)', 'rated mass (kg)', 'radius (tiles)', 'fuel cap', 'fuel per tile', 'grid (w x h)', 'core parts'],
+    headers: ['id', 'name', 'tier', 'value (M)', 'max speed (tiles/turn)', 'accel', 'brake', 'mass (kg)', 'rated mass (kg)', 'radius (tiles)', 'fuel cap', 'fuel per tile', 'grid (w x h)', 'core parts'],
     rows: () => Object.values(CHASSIS).map((c) => [
-      c.id, c.name, c.tier, c.value, c.maxSpeed, c.accel, c.brake, c.mass, c.ratedMass, c.radius, c.fuelCap, c.fuelPerTile,
+      c.id, c.name, c.tier, moneyAmount(c.value), c.maxSpeed, c.accel, c.brake, c.mass, c.ratedMass, c.radius, c.fuelCap, c.fuelPerTile,
       `${Math.max(...c.layout.map((r) => r.length))} x ${c.layout.length}`,
       c.core.map((k) => k.defId),
     ]),
@@ -169,8 +170,8 @@ const TABLES: WikiTable[] = [
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {
     id: 'goods',
-    headers: ['id', 'name', 'tier', 'value', 'mass per unit (kg)'],
-    rows: () => Object.values(GOODS).map((g) => [g.id, g.name, g.tier, g.value, g.mass]),
+    headers: ['id', 'name', 'tier', 'value (M)', 'mass per unit (kg)'],
+    rows: () => Object.values(GOODS).map((g) => [g.id, g.name, g.tier, moneyAmount(g.value), g.mass]),
   },
   {
     id: 'shops',
@@ -246,5 +247,5 @@ export const WIKI_ROOTS: Record<string, unknown> = {
   RULES, ECONOMY, EFFORT, CONTRACTS, PRICE_FACTOR, DISTANCE_PREMIUM, PRESSURE_MAX,
   PART_PRICE_MODIFIERS, CHASSIS_PRICE_MODIFIERS, CONDITION, WEAR, REPAIR, PATCH, SALVAGE, STRIP,
   NPC_BEHAVIOR, NPC_UPKEEP, HUNT, SPAWN, MIN_CHANCE, DETECT, TOW, XP_RULES, PERK_NUMBERS,
-  UNITS, TIME, PHYSICS,
+  UNITS, TIME, PHYSICS, BREAKABLE,
 };

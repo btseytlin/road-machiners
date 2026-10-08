@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { SALVAGE } from '../data/salvage';
+import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
@@ -30,6 +30,7 @@ import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 describe('player piles', () => {
   it('goods the player dumps and takes back keep their cost basis', () => {
@@ -37,13 +38,13 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     addGoods(w, me, 'scrap', 2);
     const held = goodsCount(me).scrap;
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     let next = w;
     for (const item of me.items.filter((it) => it.kind === 'good' && it.good === 'scrap')) next = dumpItem(next, item.id);
     const pile = next.salvage.find((s) => s.pile)!;
     collectSalvage(next, next.vehicles[0], pile.id, 100);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(held);
-    expect(next.player.costBasis.scrap).toBe(12);
+    expect(next.player.costBasis.scrap).toBe(400);
   });
 
   it('goods from a pile another truck dropped count at their base value', () => {
@@ -52,9 +53,9 @@ describe('player piles', () => {
     addGoods(w, npc, 'scrap', 2);
     const pile = createCargoSalvage(w, npc, 1);
     const held = goodsCount(w.vehicles[0]).scrap ?? 0;
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     collectSalvage(w, w.vehicles[0], pile.id, 100);
-    expect(w.player.costBasis.scrap).toBeCloseTo((12 * held + GOODS.scrap.value * 2) / (held + 2));
+    expect(w.player.costBasis.scrap).toBeCloseTo((400 * held + GOODS.scrap.value * 2) / (held + 2));
     expect(w.player.scavenged).not.toContain(pile.id);
   });
 
@@ -63,7 +64,7 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part');
     addGoods(w, me, 'tools', 6);
-    w.player.costBasis.tools = 180;
+    w.player.costBasis.tools = 6000;
     let next = w;
     for (const item of me.items.filter((it) => it.kind === 'good')) next = dumpItem(next, item.id);
     next.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { tools: 1 }, parts: [], hidden: emptyHidden() });
@@ -72,7 +73,7 @@ describe('player piles', () => {
     expect(next.player.costBasis.tools).toBe(GOODS.tools.value);
     collectSalvage(next, next.vehicles[0], next.salvage.find((s) => s.pile?.fromPlayer)!.id, 100);
     expect(goodsCount(next.vehicles[0]).tools).toBe(7);
-    expect(next.player.costBasis.tools).toBeCloseTo((180 * 6 + GOODS.tools.value) / 7);
+    expect(next.player.costBasis.tools).toBeCloseTo((6000 * 6 + GOODS.tools.value) / 7);
   });
 
   it('one looted good taken by hand moves the basis like taking all', () => {
@@ -80,11 +81,11 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part');
     addGoods(w, me, 'scrap', 2);
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     w.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() });
     w.player.scavenged.push('free');
     const spot = findSpot(gridOf(me), me.items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
-    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBeCloseTo((12 * 2 + GOODS.scrap.value) / 3);
+    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBeCloseTo((400 * 2 + GOODS.scrap.value) / 3);
   });
 
   it('the player dumping beside another truck pile starts its own pile and leaves that one unsearched', () => {
@@ -338,7 +339,7 @@ describe('road wreck salvage', () => {
   it('gives every wreck placed on a road its own stock to search', async () => {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    const w = newWorld(1337, startKit('standard'), TEST_MAP);
+    const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const wrecks = w.obstacles.filter((o) => /^wreck\d+$/.test(o.id));
     expect(wrecks.length).toBeGreaterThan(0);
     for (const o of wrecks) {
@@ -753,7 +754,7 @@ describe('territory loot spots', () => {
   async function realWorld(): Promise<World> {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    return newWorld(1337, startKit('standard'), TEST_MAP);
+    return newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   }
   const spotsOf = (w: World) => w.obstacles.filter(isLootSpot);
 
@@ -797,10 +798,44 @@ describe('territory loot spots', () => {
     }
   }, budget(30_000));
 
+  it('gives every Glass Flats spot its own stock from the table of its look, and Glass Flats no stock of its own (IV5)', async () => {
+    const w = await realWorld();
+    const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
+    const spots = spotsOf(w).filter((o) => siteGap(flats, o.pos) < 0);
+    const tables: Record<string, LootTable> = { hullCache: SALVAGE.engineScrap, ruinCompound: SALVAGE.cityStores, deadTruck: SALVAGE.roadWreck };
+    expect(spots).toHaveLength(21);
+    for (const o of spots) {
+      const stocks = w.salvage.filter((s) => s.id === o.id);
+      expect(stocks, o.id).toHaveLength(1);
+      expect(territoryOfStock(stocks[0])?.id, o.id).toBe('glass-flats');
+      expect(o.kind === 'landmark' && spotTable(o), o.id).toBe(tables[o.kind === 'landmark' ? o.look : o.kind]);
+    }
+    expect(w.salvage.some((s) => s.id === 'glass-flats')).toBe(false);
+  }, budget(30_000));
+
+  it('keeps the stock of every other site: the landmarks and convoys without a shop (IV6)', async () => {
+    const w = await realWorld();
+    const sites = w.salvage.filter((s) => isSiteStock(s)).map((s) => s.id);
+    expect(sites.sort()).toEqual(['broken-wing', 'burnt-convoy', 'canyon-bridge', 'podfield', 'ridge-wrecks', 'south-lock']);
+  }, budget(30_000));
+
+  it('refills an emptied Glass Flats compound over days and never past its table', async () => {
+    const w = await realWorld();
+    const compounds = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'ruinCompound');
+    const stocks = compounds.map((o) => stockOf(w, o.id));
+    for (const stock of stocks) emptyStock(stock);
+    runDays(w, 365);
+    for (const [k, stock] of stocks.entries()) {
+      for (const [good, [, hi]] of Object.entries(SALVAGE.cityStores.goods)) expect((stock.goods[good] ?? 0) + (stock.hidden.goods[good] ?? 0), `${compounds[k].id} ${good}`).toBe(hi);
+      expect((stock.supplies ?? 0) + stock.hidden.supplies, compounds[k].id).toBe(SALVAGE.cityStores.supplies[1]);
+    }
+  }, budget(30_000));
+
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    // Every cache at once, since one cache may draw a lucky full day: a day refills a share, not the table highs.
-    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache');
+    // Every Fallen Sun cache at once, since one cache may draw a lucky full day: a day refills a share, not the table
+    // highs.
+    const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache' && territoryAt(spot.pos)?.id === 'fallen-sun');
     const stocks = caches.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 1);
@@ -837,7 +872,7 @@ describe('salvage place', () => {
   async function realWorld(): Promise<World> {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    return newWorld(1337, startKit('standard'), TEST_MAP);
+    return newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   }
 
   function spotStock(w: World, territory: string, look: string): SalvageStock {

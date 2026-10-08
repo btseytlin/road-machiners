@@ -36,7 +36,7 @@ export const WEAR = {
 // A roadside patch between two trucks. See src/sim/patch.ts.
 export const PATCH = {
   share: 0.25, // share of max HP a patch gives a broken engine, transmission or tank: enough to drive, not to trust
-  laborPerTurn: 8, // money per turn of work on the paid and own-parts deals, a little under a unit of parts
+  laborPerTurn: 266.67, // cents per turn of work on the paid and own-parts deals, a little under a unit of parts
 };
 
 export const REPAIR = {

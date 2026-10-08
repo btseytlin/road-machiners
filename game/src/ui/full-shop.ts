@@ -84,6 +84,7 @@ export class FullShopScreen {
     return shown.map((d) => {
       const part = sample(d.id);
       return partCard({
+        world: w,
         part,
         base: compareBase(this.inventory.selectedPart(), part),
         action: el("button", { onclick: () => this.take(w, d.id) }, "Take"),

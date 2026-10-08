@@ -9,7 +9,7 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { isFortress, siteGates } from '../../sim/sites';
-import { deckById, type Deck } from '../../sim/bridge';
+import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
@@ -344,12 +344,34 @@ function buildLock(b: SiteBuilder): void {
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
+// Gives every vertex of a posed deck model the point on its deck's centre line at the same distance along,
+// as a sightAt attribute in world XZ meters, so the sight limit greys the model by the deck tile there and
+// not by whatever lies under its rails. The margin keeps that tile's centre on the deck. obj's parents
+// must sit at the world origin.
+function sampleSightOnDeck(obj: THREE.Object3D, deck: Deck): void {
+  obj.updateMatrixWorld(true);
+  const p = new THREE.Vector3();
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || o.userData.outline) return;
+    const pos = o.geometry.getAttribute('position');
+    const at = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      const c = deckCenterAt(deck, p.x / S, p.z / S, Math.SQRT1_2);
+      at[i * 2] = c.x * S;
+      at[i * 2 + 1] = c.y * S;
+    }
+    o.geometry.setAttribute('sightAt', new THREE.BufferAttribute(at, 2));
+  });
+}
+
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {
   const deck = deckById('canyon-bridge');
   const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
   // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
   poseOnDeck(bridge, deck, soleSegment(terrain, deck), BRIDGE_DECK_TOP * BRIDGE_RISE);
+  sampleSightOnDeck(bridge, deck);
   b.addRuin(0, 0, 3, 2);
 }
 
@@ -363,6 +385,7 @@ function buildWingDeck(t: Terrain): THREE.Group {
   obj.scale.set((deck.length * S) / WING_DECK_LENGTH, 1, (deck.width * S) / WING_DECK_WIDTH);
   poseOnDeck(obj, deck, soleSegment(t, deck), 0);
   root.add(obj);
+  sampleSightOnDeck(obj, deck);
   root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
@@ -493,7 +516,6 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   dustwell: (b) => buildDustwell(b),
   'green-pit': (b) => buildOasis(b),
   'broken-wing': (b) => buildWingSalvage(b),
-  'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: (b, site) => buildNose(b, site),
   bowl: (b, site) => buildBowl(b, site),
   'burnt-convoy': wrecks,

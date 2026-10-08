@@ -204,6 +204,7 @@ export type NpcActivity = {
   worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
+  watchUntil?: number; // the turn a raid's watch at its post ends
 };
 
 export type NpcBrain = {
@@ -436,7 +437,7 @@ export type GameEvent =
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
   | { t: 'money'; amount: number; reason: string }
-  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
+  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'fulfilled' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'death' }
@@ -478,6 +479,12 @@ export type GameEvent =
   // A search turn revealed loot in a stock.
   | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };
 
+export type GameModeId = 'roaming';
+// Multipliers on base rule numbers, 1 for the standard game; src/data/modes.ts has the names and bounds.
+export type WorldSettings = { damage: number; fuelUse: number; supplyUse: number };
+// The mode and settings the player picked for this world at New game. src/sim/settings.ts owns them.
+export type WorldSetup = { mode: GameModeId; settings: WorldSettings };
+
 // A crater an exploding round dug where it burst on open ground. radius in meters. turn is when it was dug, or last
 // dug again. See src/sim/craters.ts.
 export type Crater = { id: string; pos: Vec; radius: number; turn: number };
@@ -498,6 +505,7 @@ export type World = {
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file
   mapHash: string; // hash of the map file the world was made on; a save on another map does not load
+  setup: WorldSetup; // fixed at New game
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action
   removed: Vehicle[]; // vehicles destroyed or gone this turn, kept for the render

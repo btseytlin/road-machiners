@@ -1,11 +1,19 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { BrokenProp, Obstacle, World } from '../sim/types';
+import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
+import { refreshVision } from '../sim/vision';
+import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
+import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
-import { allSlots, listSaves, manualSlots, requestBoot, slotKey, type BootRequest, type SlotId } from './save-slots';
+import { allSlots, listSaves, manualSlots, requestBoot, type BootRequest, type SlotId } from './save-slots';
+import type { SaveSlots } from './save-db';
+import { reportError } from './crash';
+import { CONFIG, GAME_VERSION } from '../config';
+import { download } from '../ui/dom';
+import type { RunLog } from './run-log';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
 declare const __SAVE_SCOPE__: string;
@@ -21,83 +29,111 @@ export const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 // A stored save the game cannot load. Boot offers to migrate it to a new world or to start over.
 export class SaveError extends Error {}
 
-// Local storage has no room for a save. The save in the slot stays as it was.
-export class SaveQuotaError extends Error {}
+// A save as a slot holds it. runId names the run, so its log follows it across loads.
+export type SaveEnvelope = { format: typeof SAVE_FORMAT; savedAt: number; runId: string; world: object };
 
-export function clearSlot(storage: Storage, slot: SlotId): void {
-  storage.removeItem(slotKey(SAVE_KEY, slot));
+export function clearSlot(slots: SaveSlots, slot: SlotId): void {
+  slots.remove(slot);
 }
 
-// Clears what the run keeps in storage: the autosaves and the seen tips. The manual slots stay, since the player chose
-// to keep them, and so do the sound settings, which are the player's, not the run's.
-export function clearGame(storage: Storage): void {
-  clearSlot(storage, 'auto');
-  clearSlot(storage, 'day');
+// Clears what the run keeps: the autosaves and the seen tips. The manual slots stay, since the player chose to keep
+// them, and so do the sound settings, which are the player's, not the run's.
+export function clearGame(slots: SaveSlots, storage: Storage): void {
+  clearSlot(slots, 'auto');
+  clearSlot(slots, 'day');
   clearTips(storage);
 }
 
-export function hasSave(storage: Storage, slots: readonly SlotId[]): boolean {
-  return slots.some((slot) => storage.getItem(slotKey(SAVE_KEY, slot)) !== null);
+export function hasSave(slots: SaveSlots, ids: readonly SlotId[]): boolean {
+  return ids.some((slot) => slots.has(slot));
 }
 
-function parsedSave(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new SaveError('Game save is unreadable');
-  }
+// The stored save as the slot holds it, or undefined when the slot is empty. For the rescue.
+export function storedSave(slots: SaveSlots, slot: SlotId): unknown {
+  return slots.get(slot) ?? undefined;
 }
 
-// The stored save as parsed JSON, or undefined when there is none or it does not parse. For the rescue.
-export function storedSave(storage: Storage, slot: SlotId): unknown {
-  const raw = storage.getItem(slotKey(SAVE_KEY, slot));
-  return raw === null ? undefined : parsedOrUndefined(raw);
+// The run a stored save belongs to. Saves from before run ids get one from their seed, the same for every load. Null
+// when the save names neither, which only a broken save does.
+export function savedRunId(envelope: unknown): string | null {
+  const save = envelope as { runId?: unknown; world?: { seed?: unknown } } | null;
+  if (typeof save?.runId === 'string') return save.runId;
+  if (typeof save?.world?.seed === 'number') return `legacy-${save.world.seed}`;
+  return null;
 }
 
-function parsedOrUndefined(raw: string): unknown {
-  try {
-    return parsedSave(raw);
-  } catch {
-    return undefined;
-  }
-}
+// Saves leave out the terrain and the baked props, which come from the map file the save names by hash.
+// Old saves migrate to the current format on load.
 
-// Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
-// about 10 MB of JSON, past the browser's local storage quota. Old saves migrate to the current format on load.
+// A broken prop as a save holds it. The map file holds the prop itself.
+type SavedBroken = { id: string; turn: number };
+
+// A world as a save holds it. Load rebuilds the rest: the terrain and baked props from the map, the player's view
+// with refreshVision(), and empty trails, events and removed vehicles, which only animate the last turn.
+type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'vehicles' | 'player'> & {
+  broken: SavedBroken[];
+  vehicles: Omit<Vehicle, 'trail'>[];
+  player: Omit<Player, ViewField>;
+};
+
+// The player's view: what refreshVision() writes from the rest of the world.
+type ViewField = 'visible' | 'contacts' | 'clouds';
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
-export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World | null {
-  const raw = storage.getItem(slotKey(SAVE_KEY, slot));
-  if (raw === null) return null;
-  const world = savedWorld(parsedSave(raw));
+export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World | null {
+  const envelope = slots.get(slot);
+  if (envelope === null) return null;
+  const world = savedWorld(envelope);
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
-  const player = { ...world.player, explored };
-  const loaded = { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
+  const baked = mapObstacles(map);
+  const broken = brokenProps(baked, world.broken);
+  const gone = new Set(world.broken.map((b) => b.id));
+  const loaded: World = {
+    ...world,
+    player: { ...world.player, explored, visible: [], contacts: [], clouds: [] },
+    vehicles: world.vehicles.map((v) => ({ ...v, trail: [] })),
+    obstacles: [...baked.filter((o) => !gone.has(o.id)), ...world.obstacles],
+    broken,
+    events: [],
+    removed: [],
+    terrain: map.terrain,
+  };
+  // Every contact is new to an empty view. Load pays nothing for them, since the save's turn already did.
+  refreshVision(loaded);
   settleAims(loaded);
   return loaded;
 }
 
-// The map's baked props but the broken ones. Every broken prop must be a breakable prop of this map.
-function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[] {
-  const baked = mapObstacles(map);
-  const ids = new Set(baked.map((o) => o.id));
-  const bad = broken.find(({ obstacle }) => !isBreakable(obstacle) || !ids.has(obstacle.id));
-  if (bad) throw new SaveError(`Game save holds broken prop ${bad.obstacle.id}, which is no breakable prop of the map`);
-  const gone = new Set(broken.map(({ obstacle }) => obstacle.id));
-  return baked.filter((o) => !gone.has(o.id));
+// The broken props of a save, taken from the map by id. Every one must be a breakable prop of this map.
+function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[]): BrokenProp[] {
+  const byId = new Map(baked.map((o) => [o.id, o]));
+  return broken.map(({ id, turn }) => {
+    const obstacle = byId.get(id);
+    if (!obstacle || !isBreakable(obstacle)) throw new SaveError(`Game save holds broken prop ${id}, which is no breakable prop of the map`);
+    return { obstacle, turn };
+  });
 }
 
-function savedWorld(save: unknown): Omit<World, 'terrain'> {
+function savedWorld(save: unknown): SavedWorld {
   const world = migratedWorld(save);
   if (!isWorld(world)) throw new SaveError('Invalid saved world');
-  return world;
+  return { ...world, setup: savedSetup(world.setup) };
+}
+
+// A save with bad world settings does not load, so a world never plays on NaN or runaway values. Rescue repairs them.
+function savedSetup(setup: unknown): WorldSetup {
+  try {
+    return parseSetup(setup);
+  } catch (err) {
+    throw new SaveError(`Invalid world settings: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // The saved world carried through every step from the save's minor format to the current one.
-function migratedWorld(save: unknown): unknown {
-  if (!isJsonObject(save)) throw new SaveError('Invalid game save');
+function migratedWorld(stored: unknown): unknown {
+  const save = envelopeOf(stored);
   const { major, minor } = formatOf(save);
   if (major !== SAVE_MAJOR) throw new SaveError(`Game save format ${major}.${minor} is from an incompatible game version. Start a new game.`);
   if (minor > MIGRATIONS.length) throw new SaveError(`Game save format ${major}.${minor} is from a newer game version`);
@@ -107,6 +143,13 @@ function migratedWorld(save: unknown): unknown {
   } catch {
     throw new SaveError(`Game save format ${major}.${minor} could not be migrated`);
   }
+}
+
+function envelopeOf(stored: unknown): SavedJson {
+  // A local storage save that did not parse moved into the database as its text.
+  if (typeof stored === 'string') throw new SaveError('Game save is unreadable');
+  if (!isJsonObject(stored)) throw new SaveError('Invalid game save');
+  return stored;
 }
 
 // Saves from before save formats carry the game version 1.0.0 and hold format 1.0.
@@ -126,11 +169,11 @@ function isCount(value: unknown): value is number {
 }
 
 // World fields a save must hold as arrays.
-const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states', 'craters'] as const;
+const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'weather', 'dustClouds', 'states', 'craters'] as const;
 
-function isWorld(value: unknown): value is Omit<World, 'terrain'> {
+function isWorld(value: unknown): value is SavedWorld {
   if (!value || typeof value !== 'object') return false;
-  const world = value as Partial<World>;
+  const world = value as Partial<SavedWorld>;
   if ('terrain' in world) return false;
   return Number.isInteger(world.turn) && world.turn! > 0 && Number.isInteger(world.seed)
     && Number.isInteger(world.rngState) && Number.isInteger(world.nextId) && world.nextId! >= 0
@@ -138,7 +181,7 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
     && WORLD_LISTS.every((key) => Array.isArray(world[key]))
     && !!world.player && typeof world.player === 'object'
-    && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
+    && typeof world.player.vehicleId === 'string';
 }
 
 // The first turn of a game day, which the Day start autosave keeps.
@@ -146,61 +189,38 @@ export function isDayStart(turn: number): boolean {
   return clockOf(turn).day !== clockOf(turn - 1).day;
 }
 
-// Writes a save for the automatic paths. Returns false when storage is full, so the caller can tell the player. The old
-// save in the slot stays, and no other key is touched.
-export function tryWriteSave(storage: Storage, slot: SlotId, world: World, savedAt: number): boolean {
-  try {
-    writeSave(storage, slot, world, savedAt);
-    return true;
-  } catch (err) {
-    if (err instanceof SaveQuotaError) return false;
-    throw err;
-  }
-}
-
-function dueSlots(turn: number, interval: number): SlotId[] {
-  const due: SlotId[] = [];
-  if ((turn - 1) % interval === 0) due.push('auto');
-  if (isDayStart(turn)) due.push('day');
-  return due;
-}
-
-// Writes the autosaves due this turn. A full storage calls onFull instead of throwing.
-export function saveWorld(storage: Storage, world: World, interval: number, savedAt: number, onFull: () => void): void {
+export function saveWorld(slots: SaveSlots, world: World, runId: string, interval: number, savedAt: number): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
   // A dead run keeps its last saves, so the player can load them.
   if (world.player.state === 'dead') return;
-  if (dueSlots(world.turn, interval).map((slot) => tryWriteSave(storage, slot, world, savedAt)).includes(false)) onFull();
+  if ((world.turn - 1) % interval === 0) writeSave(slots, 'auto', world, runId, savedAt);
+  if (isDayStart(world.turn)) writeSave(slots, 'day', world, runId, savedAt);
 }
 
 // A UI command in town, like a purchase, saves at once, so a reload does not undo it.
-export function saveInTown(storage: Storage, world: World, savedAt: number, onFull: () => void): void {
-  if (world.player.state === 'active' && townAt(world) && !tryWriteSave(storage, 'auto', world, savedAt)) onFull();
+export function saveInTown(slots: SaveSlots, world: World, runId: string, savedAt: number): void {
+  if (world.player.state === 'active' && townAt(world)) writeSave(slots, 'auto', world, runId, savedAt);
 }
 
-export function writeSave(storage: Storage, slot: SlotId, world: World, savedAt: number): void {
+export function writeSave(slots: SaveSlots, slot: SlotId, world: World, runId: string, savedAt: number): void {
   if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
-  try {
-    storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
-  } catch (err) {
-    if (err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22)) {
-      throw new SaveQuotaError('Not saved: the browser storage is full. Delete a save slot to make room.');
-    }
-    throw err;
-  }
+  const envelope: SaveEnvelope = { ...saveOf(world), savedAt, runId };
+  slots.put(slot, envelope);
 }
 
-// The save of a world as it goes into JSON.
+// The save of a world, holding only what load cannot rebuild.
 export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
-  const { terrain: _terrain, ...saved } = world;
-  // JSON writes a typed array as an object keyed by index, so explored goes out as a base64 bitset.
-  const player = { ...saved.player, explored: packExplored(saved.player.explored) };
+  const { terrain: _terrain, events: _events, removed: _removed, ...saved } = world;
+  const { visible: _visible, contacts: _contacts, clouds: _clouds, ...player } = saved.player;
+  const vehicles = saved.vehicles.map(({ trail: _trail, ...vehicle }) => vehicle);
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
-  return { format: SAVE_FORMAT, world: { ...saved, player, obstacles } };
+  const broken = saved.broken.map(({ obstacle, turn }) => ({ id: obstacle.id, turn }));
+  // explored goes out as a base64 bitset, a fraction of a list of zeros and ones.
+  return { format: SAVE_FORMAT, world: { ...saved, player: { ...player, explored: packExplored(player.explored) }, vehicles, obstacles, broken } };
 }
 
-// Explored tiles go into a save as a base64 bitset, one bit per tile and the least significant bit first. A list of zeros
-// and ones would take 2 characters per tile, past what five saves leave of the local storage quota.
+// Explored tiles go into a save as a base64 bitset, one bit per tile and the least significant bit first. It takes a
+// sixth of the space of the raw tile array.
 export function packExplored(explored: Uint8Array): string {
   const bytes = new Uint8Array(Math.ceil(explored.length / 8));
   explored.forEach((value, i) => {
@@ -226,17 +246,25 @@ export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
   return explored;
 }
 
-// What the menus do with the saves: the game's world in, the slots of local storage out. Loading and starting a new
-// game reload the page, so they leave a boot request in session storage.
-export function saveStore(storage: Storage, session: Storage, world: () => World, slotCount: number, onFull: () => void) {
+// What the menus do with the saves: the game's world in, the slots out. Loading and starting a new game reload the
+// page, so they leave a boot request in session storage. The reload waits for every save and log write, so it never
+// cuts one off.
+export function saveStore(slots: SaveSlots, log: RunLog, session: Storage, world: () => World, runId: string, slotCount: number) {
   return {
-    list: () => listSaves(storage, SAVE_KEY, slotCount),
+    list: () => listSaves(slots, slotCount),
     manualSlots: () => manualSlots(slotCount),
-    hasSave: () => hasSave(storage, allSlots(slotCount)),
-    save: (slot: SlotId) => {
-      if (!tryWriteSave(storage, slot, world(), Date.now())) onFull();
+    hasSave: () => hasSave(slots, allSlots(slotCount)),
+    save: (slot: SlotId) => writeSave(slots, slot, world(), runId, Date.now()),
+    reboot: (request: BootRequest) => {
+      requestBoot(session, SAVE_KEY, request);
+      Promise.all([slots.flush(), log.flush()]).then(() => window.location.reload(), reportError);
     },
-    requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
+    // The New game screen asks for the boot request and the reload apart. The reload waits for every write, like reboot.
+    newGame: {
+      requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
+      reload: () => void Promise.all([slots.flush(), log.flush()]).then(() => window.location.reload(), reportError),
+      confirm: (text: string) => window.confirm(text),
+    } satisfies NewGameActions,
   };
 }
 
@@ -266,9 +294,74 @@ export class SaveHold {
   }
 }
 
-export const SAVE_FULL_NOTE = 'Not saved: the browser storage is full. Delete a save slot to make room.';
 export const SAVE_HELD_NOTE = 'Not saved: an error happened since the last good turn.';
+
+export function saveFailedNote(err: unknown): string {
+  return `The game could not save: ${err instanceof Error ? err.message : String(err)}.`;
+}
 
 export function turnFailedNote(err: unknown): string {
   return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
+}
+
+export type Run = { slots: SaveSlots; runId: string; log: RunLog };
+
+// The game's saves and run log: when the world goes into a slot or the log, and when an error holds saving. The
+// slots and the log belong to one run.
+export class GameSaves {
+  private readonly hold = new SaveHold();
+
+  // note shows the player a bad note.
+  constructor(private readonly run: Run, private readonly note: (text: string) => void) {
+    run.slots.onError = (err) => this.failed(err);
+  }
+
+  // What the menus do with the saves. A save by hand waits while an error holds saving.
+  menuActions(world: () => World) {
+    const saves = saveStore(this.run.slots, this.run.log, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
+    return {
+      ...saves,
+      save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot),
+      exportSave: () => this.exportSave(world()),
+      exportLog: () => this.exportLog(world()).catch((err) => this.failed(err)),
+    };
+  }
+
+  // Every world the game takes goes to the log, which keeps what is new in it.
+  logWorld(world: World): void {
+    this.run.log.note(world);
+  }
+
+  private exportSave(world: World): void {
+    const envelope: SaveEnvelope = { ...saveOf(world), savedAt: Date.now(), runId: this.run.runId };
+    download(`roam-save-turn-${world.turn}.json`, JSON.stringify(envelope), 'application/json');
+  }
+
+  private async exportLog(world: World): Promise<void> {
+    const header = { kind: 'header', runId: this.run.runId, version: GAME_VERSION, seed: world.seed, mapHash: world.mapHash, exportedAt: Date.now() };
+    download(`roam-run-${this.run.runId}.jsonl`, await this.run.log.lines(header), 'application/x-ndjson');
+  }
+
+  noteError(): void {
+    this.hold.noteError();
+  }
+
+  beginTurn(): void {
+    this.hold.beginTurn();
+  }
+
+  afterTurn(world: World): void {
+    this.hold.finishTurn();
+    if (!this.hold.held) saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+  }
+
+  afterCommand(world: World): void {
+    if (!this.hold.held) saveInTown(this.run.slots, world, this.run.runId, Date.now());
+  }
+
+  // A write the browser refused. The player sees it, and the error goes where every error goes.
+  private failed(err: unknown): void {
+    this.note(saveFailedNote(err));
+    reportError(err);
+  }
 }

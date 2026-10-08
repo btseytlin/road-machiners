@@ -2,18 +2,18 @@
 // screens: a part or truck with icon stats and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
-import { RULES } from "../data/rules";
 import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
-import type { GridItem, PartInstance, Vehicle } from "../sim/types";
+import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
 import { GOODS } from "../data/goods";
 import { itemTone } from "../render/partLooks";
 import { hashStr } from "../render/noise";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
+import { roundDamage } from "../sim/combat";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -312,7 +312,26 @@ export function conditionRow(part: PartInstance): HTMLElement | null {
   return el("div", { class: "card-cond" }, conditionTag(part), el("span", { class: status.tone }, status.text));
 }
 
+// The stat that best tells parts of one kind apart: the first of partStats(), with its change against the base.
+export function headlineStat(world: World, part: PartInstance, base: PartInstance | null): StatDiff {
+  const first = diffStats(partStats(world, part), base ? partStats(world, base) : null)[0];
+  if (!first) throw new Error(`${part.defId} has no stats to headline`);
+  return first;
+}
+
+// One stat as icon, value, unit and change, for a compact row.
+export function statChip(d: StatDiff): HTMLElement {
+  return el(
+    "span",
+    { class: "stat-chip", title: d.stat.label },
+    createIcon(d.stat.icon),
+    el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+    d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
+  );
+}
+
 export type PartCardOptions = {
+  world: World;
   part: PartInstance;
   base: PartInstance | null; // the part it is weighed against, or null for plain stats
   action: HTMLElement | null;
@@ -321,7 +340,7 @@ export type PartCardOptions = {
 
 export function partCard(o: PartCardOptions): HTMLElement {
   const def = partDef(o.part.defId);
-  const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
+  const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
   const card = el(
     "div",
     { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
@@ -344,6 +363,18 @@ export function partCard(o: PartCardOptions): HTMLElement {
     card.addEventListener("mouseleave", () => hover(false));
   }
   return card;
+}
+
+// What a shop part shows beyond its compact row: wear, comparison, condition meter, every stat and the action.
+export function partDetail(world: World, part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
+  const diffs = diffStats(partStats(world, part), base ? partStats(world, base) : null);
+  return [
+    conditionRow(part),
+    ...(base ? [compareLine(base)] : []),
+    conditionMeter(part),
+    statGrid(diffs),
+    el("div", { class: "card-foot" }, el("span"), action),
+  ].filter((n): n is HTMLElement => n !== null);
 }
 
 // The part a shop card is weighed against: the item the player selected. With nothing selected, or the card
@@ -434,20 +465,20 @@ function signed(value: number, decimals: number): string {
 
 // The few stats that decide a part's job and weakness, most important first, with its wear applied.
 // The condition meter already shows HP.
-export function partStats(part: PartInstance): Stat[] {
+export function partStats(world: World, part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](world, part), stat("mass", "Mass", def.mass, "kg", "less")];
 }
 
-const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
+const KIND_STATS: Record<PartKind, (world: World, part: PartInstance) => Stat[]> = {
   weapon: weaponStats,
-  engine: engineStats,
-  armor: armorStats,
-  cargo: cargoStats,
-  scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
-  store: storeStats,
+  engine: (_, part) => engineStats(part),
+  armor: (_, part) => armorStats(part),
+  cargo: (_, part) => cargoStats(part),
+  scanner: (_, part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  store: (_, part) => storeStats(part),
   core: () => [],
-  utility: utilityStats,
+  utility: (_, part) => utilityStats(part),
 };
 
 // A passive utility shows only its mass.
@@ -491,9 +522,9 @@ function partDefOf<T>(part: PartInstance): T {
   return partDef(part.defId) as T;
 }
 
-function weaponStats(part: PartInstance): Stat[] {
+function weaponStats(world: World, part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const round = d.round.damage * RULES.weaponDamage;
+  const round = roundDamage(world, d);
   const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
   if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [
