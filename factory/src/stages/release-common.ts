@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { readState } from '../state';
-import { RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
+import { readState, updateState } from '../state';
+import { RELEASE_TASK_LABEL, type Card, type Ctx, type ReleaseState } from '../types';
 
 export type Feature = { issue: number; title: string };
 
@@ -38,7 +38,23 @@ export function changeLines(notes: string, features: Feature[]): string[] {
 
 // The release tasks whose cards are not in Done yet.
 export async function openReleaseTasks(ctx: Ctx): Promise<number[]> {
-  return (await ctx.github.cards()).filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+  return openTasks(await ctx.github.cards(), requireRelease(ctx).tasks);
+}
+
+// The board lists a new card or label up to a minute after the factory wrote it. A task the factory recorded therefore
+// stays open until the board shows it in Done, so a job never starts in that gap.
+export function openTasks(cards: Card[], recorded: number[]): number[] {
+  const labeled = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+  const unseen = recorded.filter((issue) => !cards.some((card) => card.issue === issue && card.column === 'Done'));
+  return [...new Set([...labeled, ...unseen])].sort((a, b) => a - b);
+}
+
+// Called before the task's card or label goes on the board, so the gap above is covered from the first moment.
+export function recordReleaseTask(ctx: Ctx, issue: number): void {
+  updateState(ctx.statePath, (state) => {
+    if (state.release === null) throw new Error(`No release is open to record task #${issue}`);
+    return state.release.tasks.includes(issue) ? state : { ...state, release: { ...state.release, tasks: [...state.release.tasks, issue] } };
+  });
 }
 
 export function requireRelease(ctx: Ctx): ReleaseState {

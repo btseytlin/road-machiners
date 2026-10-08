@@ -30,7 +30,7 @@ import {
   sellTruckGood,
   sellTruckPart,
   supplyRoom,
-  tradeReady,
+  canTradeWith,
   truckGoodPrice,
   truckPartPrice,
   truckGoodsForSale,
@@ -44,9 +44,10 @@ import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
+import { PartRows, type PartRow } from "./part-rows";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
+import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters } from "./units";
@@ -57,9 +58,9 @@ import { vehicleHasPerk } from "../sim/progress";
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
-type StockFilter = "all" | Exclude<PartKind, "core">;
+export type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
+export const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -72,6 +73,7 @@ export class TownScreen {
   private tab: Tab = "market";
   private stockFilter: StockFilter = "all";
   private error = "";
+  private rows = new PartRows(() => this.render());
 
   private inventory: InventoryView;
 
@@ -91,6 +93,7 @@ export class TownScreen {
     if (shopAt(this.host.world())) this.host.apply(enterTown(this.host.world()));
     this.root.style.display = "";
     this.error = "";
+    this.rows.collapse();
     this.render();
   }
 
@@ -103,6 +106,10 @@ export class TownScreen {
 
   render(): void {
     if (!this.isOpen()) return;
+    this.rows.keepPlace(this.root, () => this.draw());
+  }
+
+  private draw(): void {
     const w = this.host.world();
     const shopId = shopAt(w);
     if (!shopId) return this.close();
@@ -139,7 +146,7 @@ export class TownScreen {
           class: this.tab === t ? "on" : "",
           onclick: () => {
             this.tab = t;
-            this.render();
+            this.showList();
           },
         },
         createIcon(TAB_ICON[t]),
@@ -159,12 +166,20 @@ export class TownScreen {
     return body[this.tab]();
   }
 
+  // A new tab or filter shows its list closed and from the top.
+  private showList(): void {
+    this.rows.collapse();
+    this.render();
+    this.rows.toTop(this.root);
+  }
+
   // Runs a command; a thrown rule error shows in the screen instead of changing the world.
   private run(cmd: (w: World) => World): void {
     keepFocus(this.root, () => {
       try {
         this.host.apply(cmd(this.host.world()));
         this.error = "";
+        this.rows.collapse();
       } catch (e) {
         this.error = (e as Error).message;
       }
@@ -235,26 +250,34 @@ export class TownScreen {
     const me = playerVehicle(w);
     const stock = shopState(w, shopId).stock;
     const shown = stock.filter((p) => this.stockFilter === "all" || partDef(p.defId).kind === this.stockFilter);
-    const cards = shown.map((p) => {
-      const kind = partDef(p.defId).kind;
+    const payable = (price: number) => w.player.money >= price;
+    const rows = shown.map((p) => {
       const price = partTradePrice(w, me, p, "buy");
-      const buy = this.button(pricedEl("Buy", price), (x) => buyStockPart(x, p.id), w.player.money < price);
-      return partCard({
-        part: p,
-        base: compareBase(this.inventory.selectedPart(), p),
-        // buyStockPart() sends a part that does not fit the grid to garage storage.
-        action: canStowPart(me, p) ? buy : el("div", { class: "buy-stored" }, buy, el("div", { class: "dim" }, "No room: goes to storage")),
-        onHover: this.hintMounts(kind),
-      });
+      return this.partRow(w, p, price, payable(price), "Not enough money", "Buy", (x) => buyStockPart(x, p.id), !canStowPart(me, p));
     });
     return el(
       "div",
       {},
       el("div", { class: "tabs sub" }, ...this.stockFilterButtons(stock)),
-      cards.length
-        ? el("div", { class: "cards" }, ...cards)
+      rows.length
+        ? this.rows.list(rows)
         : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock."),
     );
+  }
+
+  // A stock part that will not fit the grid goes to garage storage, and its Buy button says so.
+  private partRow(w: World, p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World, stored = false): PartRow {
+    const button = this.button(pricedEl(verb, price), cmd, !payable);
+    return {
+      world: w,
+      part: p,
+      base: compareBase(this.inventory.selectedPart(), p),
+      price,
+      payable,
+      unpaidTitle,
+      action: stored ? el("div", { class: "buy-stored" }, button, el("div", { class: "dim" }, "No room: goes to storage")) : button,
+      onHover: this.hintMounts(partDef(p.defId).kind),
+    };
   }
 
   // One button per part kind with its stock count. A kind with nothing in stock is disabled.
@@ -269,7 +292,7 @@ export class TownScreen {
           title: STOCK_FILTER_LABEL[f],
           onclick: () => {
             this.stockFilter = f;
-            this.render();
+            this.showList();
           },
         },
         f === "all" ? "All" : createIcon(FILTER_ICON[f]),
@@ -282,21 +305,15 @@ export class TownScreen {
   private sellParts(w: World): HTMLElement {
     const me = playerVehicle(w);
     const sellable: PartInstance[] = [...w.player.storage, ...spareParts(me)];
-    const cards = sellable.map((p) => {
-      const kind = partDef(p.defId).kind;
-      return partCard({
-        part: p,
-        base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(pricedEl("Sell", partTradePrice(w, me, p, "sell")), (x) => sellPart(x, p.id)),
-        onHover: this.hintMounts(kind),
-      });
-    });
+    const rows = sellable.map((p) =>
+      this.partRow(w, p, partTradePrice(w, me, p, "sell"), true, "", "Sell", (x) => sellPart(x, p.id)),
+    );
     return el(
       "div",
       {},
       el("h3", {}, "Sell spare and stored parts"),
-      cards.length
-        ? el("div", { class: "cards" }, ...cards)
+      rows.length
+        ? this.rows.list(rows)
         : el("div", { class: "dim" }, "No spare or stored parts."),
     );
   }
@@ -392,20 +409,20 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, bountyPays(w));
     const destination = c.kind === "haul" ? c.to : c.shop;
-    if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
-    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
-    return this.button("Deliver", (x) => deliverContract(x, c.id));
+    const verb = c.kind === "bounty" ? "Claim" : "Deliver";
+    if (destination !== shopId) return el("span", { class: "dim" }, `${verb} at ${siteName(destination)}`);
+    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "bounty" ? bountyPays(w) : NOT_READY[c.kind]);
+    return this.button(verb, (x) => deliverContract(x, c.id));
   }
 }
 
-// What a held bounty pays for. A raider that gives up counts only with Bounty talk.
+// What an unmet bounty needs. A raider that gives up counts only with Bounty talk.
 function bountyPays(w: World): string {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
-const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+export const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   all: "All",
   weapon: "Weapons",
   engine: "Engines",
@@ -413,15 +430,17 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   cargo: "Cargo",
   scanner: "Scanners",
   store: "Stores",
+  utility: "Utilities",
 };
 
-const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
+export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
   store: "supplies",
+  utility: "utility",
 };
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -438,6 +457,12 @@ const TAB_ICON: Record<Tab, IconName> = {
   sellParts: "trade",
   trucks: "truck",
   contracts: "clock",
+};
+
+const NOT_READY: Record<Contract["kind"], string> = {
+  haul: "Not enough cargo yet",
+  fetch: "Needs the part",
+  bounty: "Not met yet",
 };
 
 const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
@@ -489,11 +514,13 @@ function bar(share: number): HTMLElement {
   return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
 }
 
-// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due.
+// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due,
+// and a met bounty shows that it is ready to claim.
 function contractRow(w: World, c: Contract, action: HTMLElement, posted = false): HTMLElement {
+  const met = c.kind === "bounty" && c.fulfilled;
   const clock = posted
     ? el("span", { class: "price", title: `${c.window} turns from acceptance` }, createIcon("clock"), contractWindow(c))
-    : el("span", { class: "price", title: `${c.deadline - w.turn} turns left` }, createIcon("clock"), contractDue(c));
+    : el("span", { class: "price", ...(met ? {} : { title: `${c.deadline - w.turn} turns left` }) }, createIcon("clock"), heldContractDue(c));
   return el(
     "div",
     { class: "job" },
@@ -517,13 +544,13 @@ function pressureHint(def: ShopDef, state: ShopState, good: string): { text: str
 }
 
 
-// True when the player already holds what a haul or fetch contract needs to hand in.
+// True when the player already holds what a haul or fetch contract needs to hand in, or a bounty is met.
 function canDeliver(w: World, c: Contract): boolean {
   const me = playerVehicle(w);
   if (c.kind === "haul") return (goodsCount(me)[c.good] ?? 0) >= c.units;
   if (c.kind === "fetch")
     return spareParts(me).some((p) => fitsFetch(c, p)) || w.player.storage.some((p) => fitsFetch(c, p));
-  return false;
+  return c.fulfilled;
 }
 
 function siteName(id: string): string {
@@ -548,6 +575,7 @@ export class TruckTradeScreen {
   private tab: TradeTab = "goods";
   private npcId: string | null = null;
   private error = "";
+  private rows = new PartRows(() => this.render());
   private inventory: InventoryView;
 
   constructor(private host: UiHost) {
@@ -561,13 +589,13 @@ export class TruckTradeScreen {
     return this.npcId !== null;
   }
 
-  // Opens on the driver the player can trade with now. False when there is none.
-  openIfReady(): boolean {
-    const npc = tradeReady(this.host.world());
-    if (!npc) return false;
-    this.npcId = npc.id;
+  // Opens on this driver when the player can trade with them now. False otherwise.
+  openWith(npcId: string): boolean {
+    if (!canTradeWith(this.host.world(), npcId)) return false;
+    this.npcId = npcId;
     this.root.style.display = "";
     this.error = "";
+    this.rows.collapse();
     this.render();
     return true;
   }
@@ -584,6 +612,10 @@ export class TruckTradeScreen {
 
   render(): void {
     if (!this.npcId) return;
+    this.rows.keepPlace(this.root, () => this.draw());
+  }
+
+  private draw(): void {
     const w = this.host.world();
     const npc = w.vehicles.find((v) => v.id === this.npcId);
     if (!npc) throw new Error(`Trade partner ${this.npcId} is gone`);
@@ -603,7 +635,12 @@ export class TruckTradeScreen {
     return (Object.keys(TRADE_TAB_LABEL) as TradeTab[]).map((t) =>
       el(
         "button",
-        { class: this.tab === t ? "on" : "", onclick: () => { this.tab = t; this.render(); } },
+        { class: this.tab === t ? "on" : "", onclick: () => {
+          this.tab = t;
+          this.rows.collapse();
+          this.render();
+          this.rows.toTop(this.root);
+        } },
         createIcon(TRADE_TAB_ICON[t]),
         TRADE_TAB_LABEL[t],
       ),
@@ -622,6 +659,7 @@ export class TruckTradeScreen {
       try {
         this.host.apply(cmd(this.host.world()));
         this.error = "";
+        this.rows.collapse();
       } catch (e) {
         this.error = (e as Error).message;
       }
@@ -681,25 +719,31 @@ export class TruckTradeScreen {
 
   private parts(w: World, npc: Vehicle): HTMLElement {
     const me = playerVehicle(w);
-    const card = (p: PartInstance, action: HTMLElement) => {
-      const kind = partDef(p.defId).kind;
-      return partCard({ part: p, base: compareBase(this.inventory.selectedPart(), p), action, onHover: this.hintMounts(kind) });
-    };
+    const row = (p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World): PartRow => ({
+      part: p,
+      base: compareBase(this.inventory.selectedPart(), p),
+      price,
+      world: w,
+      payable,
+      unpaidTitle,
+      action: this.button(pricedEl(verb, price), cmd, !payable),
+      onHover: this.hintMounts(partDef(p.defId).kind),
+    });
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");
-      return card(p, this.button(pricedEl("Buy", price), (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
+      return row(p, price, w.player.money >= price, "Not enough money", "Buy", (x) => buyTruckPart(x, npc.id, p.id));
     });
     const mine = spareParts(me).map((p) => {
       const price = truckPartPrice(w, p, "sell");
-      return card(p, this.button(pricedEl("Sell", price), (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
+      return row(p, price, npc.resources!.money >= price, "They can't pay that", "Sell", (x) => sellTruckPart(x, npc.id, p.id));
     });
     return el(
       "div",
       {},
       el("h3", {}, "Their spare parts"),
-      theirs.length ? el("div", { class: "cards" }, ...theirs) : el("div", { class: "dim" }, "Nothing spare."),
+      theirs.length ? this.rows.list(theirs) : el("div", { class: "dim" }, "Nothing spare."),
       el("h3", {}, "Your spare parts"),
-      mine.length ? el("div", { class: "cards" }, ...mine) : el("div", { class: "dim" }, "Nothing spare."),
+      mine.length ? this.rows.list(mine) : el("div", { class: "dim" }, "Nothing spare."),
     );
   }
 

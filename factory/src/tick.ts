@@ -1,7 +1,7 @@
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
-import { sweepLogs, sweepWork } from './cleanup';
-import { POOL_OF, cpuSets, vitestWorkersOf } from './cpus';
+import { sweepLogs, sweepTestCache, sweepWork } from './cleanup';
+import { cpuSets, poolOf, vitestWorkersOf } from './cpus';
 import { removeStaleBuilds } from './deploy';
 import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
@@ -11,6 +11,7 @@ import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
+import { openTasks } from './stages/release-common';
 import { readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
@@ -25,7 +26,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDa
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'merge', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
 const CARD_ORDER: Card['column'][] = ['Hardening', 'Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -67,10 +68,11 @@ function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
 }
 
 // The card job of each column in CARD_ORDER.
+// A control move to Approval leaves a Testing card for a checks job that only builds and posts it.
 const COLUMN_STAGE: Partial<Record<Card['column'], (state: FactoryState, issue: number) => JobStage>> = {
-  Hardening: (state, issue) => (checksDue(state, issue) ? 'checks' : 'harden'),
-  Testing: (state, issue) => (checksDue(state, issue) ? 'checks' : 'verify'),
-  Implementation: (state, issue) => (String(issue) in state.patching ? 'patch' : 'implement'),
+  Hardening: () => 'harden',
+  Testing: (state, issue) => (state.postOnly.includes(issue) ? 'checks' : 'verify'),
+  Implementation: () => 'implement',
   Design: () => 'design',
 };
 
@@ -78,10 +80,9 @@ function cardStage(state: FactoryState, card: Card): JobStage {
   return COLUMN_STAGE[card.column]?.(state, card.issue) ?? 'triage';
 }
 
-// A Testing or Hardening card runs the factory checks once its agent stage or a patch set its phase, and the agent stage otherwise.
-function checksDue(state: FactoryState, issue: number): boolean {
-  const phase = state.testPhase[String(issue)];
-  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post';
+// One merge job takes every waiting card of a base, so it needs no issue.
+function mergeJob(state: FactoryState, cards: Card[]): JobPick | null {
+  return openCards(state, cards).some((card) => card.column === 'Merging') ? { stage: 'merge', issue: null } : null;
 }
 
 const has =
@@ -118,10 +119,9 @@ export function readReleaseGate(state: FactoryState, cards: Card[], releaseHead:
   const tracking = cards.find((card) => card.issue === release.issue);
   if (!tracking) return { reason: 'tracking-missing', issues: [] };
   if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
-  return playtestGate(cards, release.playtest, releaseHead);
+  return playtestGate(openTasks(cards, release.tasks), release.playtest, releaseHead);
 }
-function playtestGate(cards: Card[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
-  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+function playtestGate(issues: number[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
   if (issues.length) return { reason: 'release-tasks', issues };
   if (playtest.blocked !== null) return { reason: 'playtest-blocked', issues: [] };
   return releaseHead !== null && playtest.passed === releaseHead ? { reason: 'candidate', issues: [] } : { reason: 'playtest', issues: [] };
@@ -150,10 +150,10 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
   return { stage: 'dev', issue: null };
 }
 
-// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the
-// release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
+// Branch jobs in order: queued approvals, removals, ships and incident entries, then the merge queue, then a stale /dev/, then a due release cut,
+// then the release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
 function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
-  const picks = [queued(state), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
+  const picks = [queued(state), mergeJob(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
@@ -307,8 +307,11 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
 }
 
-// Each queue has its own time limit, since its jobs differ in length by hours.
+// Each queue has its own time limit, since its jobs differ in length by hours. The release playtest plays and fixes several rounds in one job,
+// and the merge job runs the full checks and fixes them, so each has its own.
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
+  if (stage === 'playtest') return cfg.playtestTimeoutMinutes;
+  if (stage === 'merge') return cfg.mergeTimeoutMinutes;
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
     triage: cfg.triageTimeoutMinutes,
@@ -366,7 +369,7 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const stamp = ctx.now().toISOString().replaceAll(':', '');
   const id = `${pick.stage}-${pick.issue ?? '-'}-${stamp}`;
   const log = join(ctx.cfg.home, 'logs', `${id}.log`);
-  const pool = POOL_OF[QUEUE_OF[pick.stage]];
+  const pool = poolOf(pick.stage);
   const cpus = cpuSets(ctx.cfg, deps.cores())[pool];
   const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus, vitestWorkersOf(ctx.cfg, pool));
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
@@ -406,10 +409,10 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> 
 }
 
 // Removes builds no card in Approval or Hardening still needs. A Hardening card keeps the build the committee played.
-// Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
+// Testing, checks and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
+  if (state.jobs.some((job) => job.stage === 'verify' || !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
   const keep = cards.filter((card) => card.column === 'Approval' || card.column === 'Hardening').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
@@ -424,8 +427,15 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+  cleanArchives(ctx);
+}
+
+// Agent transcripts and the game test cache age out on their own clocks.
+function cleanArchives(ctx: Ctx): void {
   const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
   if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
+  const cached = sweepTestCache(join(ctx.cfg.home, 'test-cache'), ctx.now(), ctx.cfg.testCacheDays);
+  if (cached > 0) ctx.log('tick', null, `removed ${cached} test cache files older than ${ctx.cfg.testCacheDays} days`);
 }
 
 // A plain approval reply that Hermes did not route in time becomes an incident, so the incident watch wakes Hermes and the reply is never lost.

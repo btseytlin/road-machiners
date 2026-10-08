@@ -3,7 +3,7 @@ import { playerAid, readyAid } from "../sim/aid";
 import { aidData } from "../sim/states";
 import { aidGoods } from "./format";
 import { balanceNumber } from "./money";
-import { tradePartner, tradeReady } from "../sim/economy";
+import { inMeetingReach, isMeeting, playerTrades } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
@@ -18,7 +18,7 @@ import { playerTow } from "../sim/tow";
 import { heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { SalvageStock, Vehicle, World } from "../sim/types";
+import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kg, kph } from "./units";
@@ -28,7 +28,7 @@ import { contextKey, type ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedListNear, emptySalvageNear, lootBlockerHere, salvageListNear } from '../sim/locations';
+import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
 import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
@@ -79,23 +79,28 @@ export class ContextPicker {
 // Every action in reach, the default first. The player picks between them with the arrow keys.
 export function getContextActions(world: World, playing: boolean): ContextAction[] {
   if (playing || !playerCanAct(world)) return [];
-  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
-  const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
+  // An aid handover or a trade the player arranged shows only while its own driver is in reach. It wins over the place once both trucks are parked side by side.
+  const deals = [getAidAction(world), ...getTradeActions(world)].filter((d) => d !== null);
   return [...deals.filter((d) => d.ready), ...getPlaceActions(world), ...deals.filter((d) => !d.ready)];
+}
+
+function awaitsStart(s: NpcState): boolean {
+  return aidData(s).agreed && !aidData(s).started;
 }
 
 // An agreed aid deal the player has not started yet.
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
-  if (!s || !aidData(s).agreed || aidData(s).started) return null;
+  if (!s || !awaitsStart(s) || !inMeetingReach(world, s)) return null;
   const npc = npcName(vehicleById(world, s.holder));
   const label = aidData(s).giver === "player" ? `Give ${aidGoods(s)} to ${npc}` : `Take ${aidGoods(s)} from ${npc}`;
-  return { label, ready: readyAid(world) !== null, target: { kind: 'aid' } };
+  return { label, ready: readyAid(world)?.id === s.id, target: { kind: 'aid', id: s.holder } };
 }
 
-function getTradeAction(world: World): ContextAction | null {
-  const partner = tradePartner(world);
-  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null, target: { kind: 'trade' } };
+function getTradeActions(world: World): ContextAction[] {
+  return playerTrades(world)
+    .filter((s) => inMeetingReach(world, s))
+    .map((s) => ({ label: `Trade with ${npcName(vehicleById(world, s.holder))}`, ready: isMeeting(world, s), target: { kind: 'trade', id: s.holder } }));
 }
 
 function getPlaceActions(world: World): ContextAction[] {
@@ -115,7 +120,7 @@ function getSiteActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   if (oasis?.kind === 'oasis') actions.push({ label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
-  actions.push(...stocks.map((stock) => getStockAction(world, stock)));
+  actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
     if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
@@ -123,16 +128,26 @@ function getSiteActions(world: World): ContextAction[] {
   return actions;
 }
 
-// A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
-function getStockAction(world: World, stock: SalvageStock): ContextAction {
-  const target = { kind: 'stock', id: stock.id } as const;
-  const searched = world.player.scavenged.includes(stock.id);
-  const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: stockLabel(searched ? 'Loot' : 'Search', stock), ready: false, hint: `${blocker.name} is looting it`, target };
-  const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: stockLabel('Loot', stock), ready: reachable, target };
+// A stock offers a search while it hides units or the player never searched it, and its revealed loot once the player
+// searched it. Both can show, the search first.
+function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
+  const actions: ContextAction[] = [];
+  if (needsSearch(world, stock)) actions.push(getSearchAction(world, stock));
+  if (hasLootFor(world, stock)) actions.push(withBlocker(world, stock, { label: stockLabel('Loot', stock), ready: canReachSalvage(playerVehicle(world), stock), target: { kind: 'loot', id: stock.id } }));
+  return actions;
+}
+
+// A search needs no combat. Looting a searched stock does not.
+function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: stockLabel('Search', stock), ready: combat === undefined && reachable, combat, target };
+  const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
+  return withBlocker(world, stock, { label: stockLabel('Search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });
+}
+
+// Neither starts while another truck loots the stock.
+function withBlocker(world: World, stock: SalvageStock, action: ContextAction): ContextAction {
+  const blocker = lootBlockerHere(world, stock.id);
+  return blocker ? { label: action.label, ready: false, hint: `${blocker.name} is looting it`, target: action.target } : action;
 }
 
 // The verb alone at a loot spot that has no name, else the verb and the stock's name.

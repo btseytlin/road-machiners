@@ -7,6 +7,7 @@ import { reportFailure } from './fail';
 import { markPost } from './post-status';
 import { postDraft, publishPost } from './release-post';
 import { deny, routeFeedback } from './stages/approval';
+import { recordReleaseTask } from './stages/release-common';
 import { updateState } from './state';
 import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type Route } from './types';
 
@@ -206,7 +207,7 @@ async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<strin
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
   if (card?.column !== 'Approval') throw new Error(`Issue #${issue} is not waiting for approval.`);
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
-  return `Approval of #${issue} is queued. The merge into dev starts on a coming tick.`;
+  return `Approval of #${issue} is queued. Hardening starts on a coming tick.`;
 }
 
 async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<string> {
@@ -225,6 +226,7 @@ async function openReleaseTask(ctx: Ctx, command: InboxCommand, by: string): Pro
   const text = requireText(command).trim();
   const title = text.split('\n')[0].trim().slice(0, TITLE_LIMIT);
   const n = await ctx.github.createIssue(title, `${text}\n\nRequested by ${by} in the committee chat as a task of release ${release.day}.`, [RELEASE_TASK_LABEL]);
+  recordReleaseTask(ctx, n);
   await addCard(ctx, n, 'Design', 'release-task');
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   return `Opened #${n} as a task of release ${release.day}. A new candidate follows when it is done.`;

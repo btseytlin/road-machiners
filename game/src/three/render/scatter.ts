@@ -16,7 +16,7 @@ import type { Obstacle } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
 import { instancedModel } from './models';
 import type { RenderScope } from './scope';
-import { TERRAIN_CHUNK } from './terrain';
+import { deckFloorCap, TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
 export const ROAD_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of scatter
@@ -84,11 +84,27 @@ function chunkScatter(t: Terrain, look: readonly LookType[], blocked: Uint8Array
   for (let y = cy; y < Math.min(cy + TERRAIN_CHUNK, t.size); y++) for (let x = cx; x < Math.min(cx + TERRAIN_CHUNK, t.size); x++) {
     const i = y * t.size + x;
     const kind = blocked[i] ? null : tileScatter(look[i], x, y, rocky[i] === 1);
-    if (kind === null) continue;
+    if (kind === null || onLoweredGround(t, x, y)) continue;
     const model = modelOf(kind, desertWeight(look[i]) > 0);
     chunk[model].push(placed(t, x, y, model));
   }
   return chunk;
+}
+
+const TILE_CORNERS = [[0, 0], [1, 0], [0, 1], [1, 1]];
+
+// Whether ground at this height is drawn lower than the baked ground at a map point, under a deck.
+function drawnLower(t: Terrain, x: number, y: number, ground: number): boolean {
+  const cap = deckFloorCap(t, x, y);
+  return cap !== null && ground > cap;
+}
+
+// Whether tile x, y's scatter would stand where terrain.ts draws the ground lower under a deck, so a tuft there
+// would float over the drawn ground or poke through the deck.
+export function onLoweredGround(t: Terrain, x: number, y: number): boolean {
+  const p = tilePoint(x, y);
+  if (drawnLower(t, p.x, p.y, groundAt(t, p.x, p.y))) return true;
+  return TILE_CORNERS.some(([i, j]) => drawnLower(t, x + i, y + j, t.heights[(y + j) * (t.size + 1) + x + i]));
 }
 
 type ScatterKind = 'pebbles' | 'scrub' | 'cactus';
@@ -112,10 +128,11 @@ function tileScatter(look: LookType, x: number, y: number, byRock: boolean): Sca
 
 type Chances = { pebbles: number; scrub: number; cactus: number };
 
-// Shares of tiles of a ground type with a stone cluster, a scrub clump and a cactus. Ground that takes no desert
-// look keeps the sparse base chances, shoulders included. Open desert moves from them toward the desert chances by
-// its desert weight, and its shoulders hold stones only.
+// Shares of tiles of a ground type with a stone cluster, a scrub clump and a cactus. Fused glass holds none, since
+// only spires stand on its plates. Other ground that takes no desert look keeps the sparse base chances, shoulders
+// included. Open desert moves from them toward the desert chances by its desert weight, and its shoulders hold stones only.
 function chances(type: LookType, shoulder: boolean, byRock: boolean): Chances {
+  if (type === 'glass') return { pebbles: 0, scrub: 0, cactus: 0 };
   const w = desertWeight(type);
   if (w === 0) return { pebbles: PEBBLE_CHANCE, scrub: SCRUB_ELSEWHERE, cactus: 0 };
   if (shoulder) return { pebbles: PEBBLE_ON_SHOULDER, scrub: 0, cactus: 0 };

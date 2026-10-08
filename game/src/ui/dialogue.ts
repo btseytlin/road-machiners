@@ -50,9 +50,9 @@ function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
   return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts, unit: 'part' } });
 }
 
-// A town's goods prices in words: "salt buy 14 sell 9 M's, grain buy 6 sell 4".
+// A town's goods prices in words: "salt buy 5 M's sell 3 M's, grain buy 2 M's sell 2 M's".
 function pricesText(v: Extract<CallVar, { kind: 'prices' }>): string {
-  return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${g.buy} sell ${moneyText(g.sell)}`).join(', ');
+  return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${moneyText(g.buy)} sell ${moneyText(g.sell)}`).join(', ');
 }
 
 // Fuel and supplies in words: "12 L of fuel and 3 supplies", leaving out a zero part.

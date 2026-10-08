@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection } from '../media';
-import { changesSaveMajor } from '../save-guard';
+import { CommitteeDecisionError, guardDiff } from '../diff-guard';
 import { isAnswered } from '../questions';
-import { resumedStage, roundSession } from '../sessions';
+import { resumeError, resumedStage, roundSession } from '../sessions';
 import { readCommitteeMedia } from '../reply-media';
 import { issueReports } from '../error-reports/service';
 import { readState } from '../state';
@@ -99,8 +99,8 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
 }
 
 // The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
-// design-sonnet moves design to the build model. implementation-opus moves implementation to the design model; verify stays on the build model.
-// Triage and patch always run on the build model. A patch is a small change on top of a reviewed build, so the label that judged the whole issue does not apply.
+// design-sonnet moves design to the build model. implementation-opus moves implementation to the design model.
+// Triage, testing and hardening always run on the build model.
 // The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
 export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
   if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;
@@ -137,6 +137,12 @@ export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): P
 // A resumed round continues its own conversation, so it needs no prompt but this note. A round that had finished ends at once.
 export const RESUME_NOTE = 'A stop cut this job off. The work clone keeps your commits and changed files. Read them with git log and git status, then continue from there. If your task is already done, say so and stop.';
 
+// A job that failed on an error resumes with it, so the agent fixes what stopped the stage.
+function resumeNote(ctx: Ctx, issue: number): string {
+  const error = resumeError(ctx.cfg.home, issue);
+  return error === null ? RESUME_NOTE : `${RESUME_NOTE}\n\nThe job stopped on this error. Fix its cause if it is in your work:\n\n${error}`;
+}
+
 // The job on this issue lost its process once, so its agents continue their sessions.
 // runJob keeps the sessions only for a job of the stage that died, so their stage mark means this job resumes.
 export function isResuming(ctx: Ctx, issue: number): boolean {
@@ -151,13 +157,13 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
-// `evidenceCheck` gives the agent the command that runs the factory's evidence checks on its clone.
 // `disallowedTools` names Claude Code tools the agent cannot use.
-export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean; disallowedTools?: string[] };
+// `continue` sends the prompt as the next message of the round's session, so the agent that did the work gets its failure.
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; disallowedTools?: string[]; continue?: boolean };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
-  const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
-  if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
+  const session = roundSession(ctx.cfg.home, issue, round, extras.continue === true || (extras.fresh !== true && isResuming(ctx, issue)));
+  if (session.resume) ctx.log(stage, issue, `${extras.continue === true ? 'continuing' : 'resuming'} round ${round}, session ${session.id}`);
   return session;
 }
 
@@ -170,10 +176,10 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
   const reports = issueReports(ctx.cfg.home, issue);
-  const full = session.resume ? RESUME_NOTE : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
+  const full = session.resume ? (extras.continue === true ? prompt : resumeNote(ctx, issue)) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, disallowedTools: extras.disallowedTools });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
@@ -202,16 +208,7 @@ export async function askAuthor(ctx: Ctx, issue: number, questions: string[], st
 // The agent may stop early and ask the committee for a decision.
 export function throwIfNeedsCommittee(home: string): void {
   const text = readOutput(home, 'needs-committee.md');
-  if (text !== null) throw new Error(`The agent needs a committee decision: ${text.trim()}`);
-}
-
-// Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
-// which GitHub would run with the repo's secrets as soon as the factory pushes them.
-const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks|-media)?\//;
-
-export function factoryPaths(diff: string): string[] {
-  const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
-  return [...new Set(paths)].filter((path) => FORBIDDEN_PATH.test(path));
+  if (text !== null) throw new CommitteeDecisionError(`The agent needs a committee decision: ${text.trim()}`);
 }
 
 // Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
@@ -234,14 +231,10 @@ async function guardedHead(ctx: Ctx, issue: number, base: string, stage: CardSta
   const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
   if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
-  const diff = await ctx.repo.diff(base, head);
-  const leaked = factoryPaths(diff);
-  if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
-  if (changesSaveMajor(diff)) {
-    throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
-  }
+  guardDiff(await ctx.repo.diff(base, head));
   return head;
 }
+
 
 // Merges the commits that reached the issue branch on GitHub since the work clone last saw it. An agent resolves a conflict at once, in the same job.
 // Returns false when GitHub held nothing new.
@@ -257,4 +250,20 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
   if (!(await ctx.repo.isMerged(commit, head))) throw new Error(`The agent left the merge of ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
   return true;
+}
+
+// The base moved on since design cut the branch. Testing and Hardening merge the current base in first,
+// so the committee plays what the merge will take, and conflicts reach the stage's agent in `.factory/merge-conflicts.md`.
+// The issue branch itself may have moved on GitHub too, so its new commits come in first.
+// Returns the base commit it merged.
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
+  await catchUpBranch(ctx, issue, stage);
+  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
+  return commit;
+}
+
+// Checks the commit merged above, not the base branch. A parallel merge may move the base on meanwhile.
+export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }

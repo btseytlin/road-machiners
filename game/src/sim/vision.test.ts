@@ -8,13 +8,14 @@ import { addVehicle, emptyWorld, practiceOf, settleStorms } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
-import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
+import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, practiceContacts, refreshVision, sightRadius, visibleTiles } from './vision';
 import { TEST_MAP } from '../test/map';
 import { START_KITS } from '../data/start';
 import { DECKS, deckAt } from './bridge';
 import type { World } from './types';
 import type { Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -200,19 +201,26 @@ describe('contact practice', () => {
 
   it('pays the player once for a newly heard truck, harder near the edge of hearing', () => {
     const { w, buggy } = heardBuggy();
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     const [event] = practiceOf(w, 'contact');
     expect(event.amount).toBe(1);
     expect(event.difficulty).toBeCloseTo(15 / soundRange(w, buggy));
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     expect(practiceOf(w, 'contact')).toHaveLength(1);
   });
 
   it('pays nothing for a truck in sight', () => {
     const { w, buggy } = heardBuggy();
     buggy.pos = { x: 34, y: 30 };
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+
+  it('rebuilds the view without paying, so a load awards nothing', () => {
+    const { w, buggy } = heardBuggy();
+    const xp = w.player.xp;
+    expect(refreshVision(w).map((c) => c.vehicleId)).toEqual([buggy.id]);
+    expect([practiceOf(w, 'contact'), w.player.xp]).toEqual([[], xp]);
   });
 
   it('pays nothing when an NPC hears a truck', () => {
@@ -349,7 +357,7 @@ describe('sight from the wing', () => {
   const at = (p: Vec, along: number, side: number): Vec => ({ x: p.x + span.axis.x * along + across.x * side, y: p.y + span.axis.y * along + across.y * side });
 
   function wingWorld(): World {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     // The player watches from near the wing, so the meetings play by the full rules.
     w.vehicles[0].pos = at(mid, 0, -5);

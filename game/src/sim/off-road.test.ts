@@ -28,7 +28,7 @@ describe('keepsOffRoads', () => {
 
   it('holds for a stranded raider whatever its goal', () => {
     const w = emptyWorld();
-    const dry = driver(w, 'raiders', 'patrol');
+    const dry = driver(w, 'raiders', 'sell');
     dry.resources!.fuel = 0;
     const geared = driver(w, 'raiders', 'fight');
     corePart(geared, 'transmission').hp = 0;
@@ -37,9 +37,18 @@ describe('keepsOffRoads', () => {
     expect([dry, geared, engineless].map((v) => keepsOffRoads(w, v))).toEqual([true, true, true]);
   });
 
-  it('leaves a healthy raider on patrol, raid or fight on the roads', () => {
+  it('leaves a healthy raider not hunting on the roads', () => {
     const w = emptyWorld();
-    for (const goal of ['patrol', 'raid', 'fight', null] as const) expect(keepsOffRoads(w, driver(w, 'raiders', goal))).toBe(false);
+    for (const goal of ['sell', 'fight', null] as const) expect(keepsOffRoads(w, driver(w, 'raiders', goal))).toBe(false);
+  });
+
+  it('sends a raider out on a raid, a patrol or an investigation off the roads', () => {
+    const w = emptyWorld();
+    for (const goal of ['raid', 'patrol', 'investigate'] as const) {
+      const v = driver(w, 'raiders', goal);
+      v.brain!.traits = ['raider'];
+      expect(keepsOffRoads(w, v)).toBe(true);
+    }
   });
 
   it('leaves other factions and the player on the roads', () => {
@@ -58,7 +67,7 @@ describe('the recorder world log', () => {
     const w = emptyWorld();
     w.turn = 20;
     const runner = driver(w, 'raiders', 'flee');
-    const healthy = driver(w, 'raiders', 'patrol');
+    const healthy = driver(w, 'raiders', 'sell');
     const trucks = worldLine(w, [])!.trucks!;
     expect(trucks.find((t) => t.id === runner.id)).toMatchObject({ offRoad: true, onRoad: true });
     expect(trucks.find((t) => t.id === healthy.id)).toMatchObject({ offRoad: false, onRoad: true });
@@ -122,7 +131,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     expect(dist(v.pos, pad)).toBeLessThan(3);
   }, 120_000);
 
-  it('sends a stranded raider beside the road while a stranded trader and a raider on patrol keep their roads', () => {
+  it('sends a stranded raider beside the road while a stranded trader and a raider not hunting keep their roads', () => {
     let w = campRoad();
     const dry = raider(w, { x: 325, y: 300 });
     dry.resources!.fuel = 0;
@@ -130,7 +139,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
     trader.resources!.fuel = 0;
     const patrol = raider(w, { x: 325, y: 220 });
-    patrol.brain!.goals = [{ kind: 'patrol', targetId: 'kiln', destination: { x: 325, y: 370 }, phase: 'travel', reason: 'test patrol' }];
+    patrol.brain!.goals = [{ kind: 'sell', targetId: 'kiln', destination: { x: 325, y: 370 }, phase: 'travel', reason: 'test patrol' }];
     w = play(w, 7, (w) => {
       expect(byId(w, trader.id).brain!.farRoute?.offRoad).toBe(false);
       expect(byId(w, patrol.id).brain!.farRoute?.offRoad).toBe(false);
@@ -139,7 +148,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     });
     expect(topGoal(byId(w, dry.id))?.kind).toBe('resupply');
     expect(onRoad(w, byId(w, dry.id))).toBe(false);
-    // The raider on patrol runs dry on the road, and its next route turns off it.
+    // The raider selling runs dry on the road, and its next route turns off it.
     byId(w, patrol.id).resources!.fuel = 0;
     w = play(w, 6, () => {});
     expect(byId(w, patrol.id).brain!.farRoute?.offRoad).toBe(true);

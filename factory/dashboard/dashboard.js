@@ -1,7 +1,7 @@
-const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', harden: 'Harden', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
+const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', harden: 'Harden', checks: 'Test', approve: 'Approval', merge: 'Merge', playtest: 'Playtest', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
 const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit','needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval', held: 'Held until resumed' };
-const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
+const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Merging', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
 const pages = new Map();
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
@@ -24,6 +24,11 @@ function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return '—';
   const minutes = Math.floor(Math.max(0, ms) / 60000);
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+// The average number of cards waiting at once, over the clock time the scheduler was measured.
+function formatAverageWaiting(summary) {
+  if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
+  return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
 }
 function formatAge(at) {
   if (!at) return 'unknown';
@@ -321,7 +326,7 @@ function renderCounters(summary) {
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
   setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
-  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
+  setCounter('usage-wait', formatAverageWaiting(summary), summary.waitingMs === null ? null : `${formatDuration(summary.waitingMs)} summed card-time`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function renderTokenCounters(tokens) {
@@ -426,7 +431,7 @@ function renderStageChart(summary) {
   replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
-function readStageModelLabel(stage) { return stage === null ? 'Total' : stage === 'verify' ? 'Verify + review' : stages[stage]; }
+function readStageModelLabel(stage) { return stage === null ? 'Total' : stages[stage]; }
 function createStageModelCell(stage, model, usage, measure) {
   const value = usage ? measure === 'input' ? countInputTokens(usage) : usage.output : null;
   const cell = createNode('td', formatNumber(value), 'numeric');
@@ -472,7 +477,7 @@ function renderAnalytics() {
   renderStageModels(summary);
 }
 const dwellNames = { triage: 'Triage', design: 'Design', implementation: 'Implementation', preview: 'Testing', approval: 'Committee approval', harden: 'Hardening', merge: 'Merge queue' };
-const loopNames = { questions: 'Design asks the author', rebuild: 'Visual review: rebuild', 'plan-wrong': 'Visual review: plan wrong', 'review-failed': 'Code review fails twice', patch: 'Committee patch', redesign: 'Committee redesign', 'patch-replan': 'Patch needs a new plan', conflict: 'Merge conflict', removed: 'Removed from release', unbundled: 'Bundle lead dropped' };
+const loopNames = { questions: 'Design asks the author', rebuild: 'Visual review: rebuild', 'plan-wrong': 'Testing finds the plan wrong', 'review-failed': 'Code review fails twice', patch: 'Committee patch', redesign: 'Committee redesign', 'patch-replan': 'Patch needs a new plan', conflict: 'Merge conflict', removed: 'Removed from release', unbundled: 'Bundle lead dropped' };
 const gateNames = { triage: 'Triage wont-do', design: 'Design wont-do', committee: 'Committee Deny' };
 function readDelivery() { return readSummary()?.delivery ?? null; }
 function formatRate(part, whole) { return whole ? `${Math.round(100 * part / whole)}%` : '—'; }

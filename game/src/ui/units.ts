@@ -47,3 +47,20 @@ export function hp(value: number): number {
 export function damage(value: number): number {
   return Math.ceil(value);
 }
+
+// Money is cents in the sim. It reads in whole M, with any part of an M rounded away from zero,
+// so a price, fee or debt never reads smaller than it is. Cents round first, to drop float noise.
+const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+export function moneyAmount(cents: number): string {
+  const whole = Math.round(cents);
+  if (whole === 0) return '0';
+  const m = Math.ceil(Math.abs(whole) / UNITS.centsPerM);
+  return WHOLE_M.format(Math.sign(whole) * m);
+}
+
+// Money in running text, with its unit: log lines, talk and titles.
+export function moneyText(cents: number): string {
+  const amount = moneyAmount(cents);
+  return `${amount} ${amount === '1' ? UNITS.currency.one : UNITS.currency.many}`;
+}

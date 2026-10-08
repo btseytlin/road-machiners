@@ -9,9 +9,9 @@ const browser = await chromium.launch();
 const read = (page) => page.evaluate(() => ({
   selected: [...document.querySelectorAll('.inv-item.selected')].map(n => n.title.split('\n')[0]),
   inspect: document.querySelector('.inv-inspection')?.innerText.split('\n')[0] ?? '',
-  cards: document.querySelectorAll('.town-shop .card').length,
+  cards: document.querySelectorAll('.town-shop .part-row').length,
   compares: [...document.querySelectorAll('.town-shop .card-compare')].map(n => n.innerText),
-  deltas: document.querySelectorAll('.town-shop .card .delta').length,
+  deltas: document.querySelectorAll('.town-shop .part-row .delta').length,
   chips: [...document.querySelectorAll('.town-screen h3 .chip')].map(n => n.title || n.innerText),
   repair: document.querySelector('.town-repair')?.innerText ?? '',
 }));
@@ -48,9 +48,11 @@ try {
     let r = await read(page);
     assert.equal(r.selected.length, 1, `${spot}: a click must select the mounted weapon`);
     assert(r.inspect.includes(r.selected[0].split(' (')[0]), `${spot}: inspection must name the selection`);
-    assert(r.cards > 0 && r.compares.length === r.cards, `${spot}: every card must compare with the selection`);
-    assert(r.compares.every(t => t.includes(r.inspect)), `${spot}: cards must compare with ${r.inspect}`);
-    assert(r.deltas > 0, `${spot}: cards must show deltas`);
+    assert(r.cards > 0 && r.deltas > 0, `${spot}: compact rows must show deltas`);
+    await page.locator('.town-shop .part-sum').first().click();
+    r = await read(page);
+    assert(r.compares.length === 1 && r.compares[0].includes(r.inspect), `${spot}: an opened row must compare with ${r.inspect}`);
+    await page.locator('.town-shop .part-sum').first().click();
     await gun().click();
     await page.waitForTimeout(500);
     r = await read(page);
@@ -64,7 +66,7 @@ try {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
     r = await read(page);
-    assert(r.compares.length === r.cards && r.cards > 0, `${spot}: Enter must select and compare`);
+    assert(r.deltas > 0, `${spot}: Enter must select and compare`);
     // Labels.
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
     for (const t of ["M's", 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);

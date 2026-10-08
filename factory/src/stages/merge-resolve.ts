@@ -2,10 +2,11 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { changesSaveMajor } from '../save-guard';
 import { GAME_DIR, MergeConflictError, RevertConflictError, type Ctx, type MergeStep, type Resolution, type Stage } from '../types';
-import { agentHome, factoryPaths, fillPrompt, resetOutputs } from './common';
+import { factoryPaths } from '../diff-guard';
+import { agentHome, fillPrompt, resetOutputs } from './common';
 import { releaseLog } from './release-common';
 
-// An issue branch that conflicts is the approval's business: it goes back to Hardening, where the issue's own agent resolves it.
+// A hotfix branch that conflicts is the approval's business: it goes back to Testing, where the issue's own agent resolves it.
 const ISSUE_BRANCH = /^factory\/issue-\d+$/;
 
 // Merges and pushes the steps. A conflict between branches is routine work, so an agent resolves it in a work clone, and the steps go on.

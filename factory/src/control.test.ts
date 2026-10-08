@@ -16,7 +16,7 @@ type Command = Parameters<typeof applyControl>[1];
 const ROOT = resolve('tmp/factory-control-test');
 const statePath = join(ROOT, 'state.json');
 const NOW = new Date('2026-09-29T10:00:00Z');
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 const JOB: Job = { id: 'verify-4-x', stage: 'verify', issue: 4, pid: 77, startedAt: '2026-09-29T09:00:00Z', log: 'l' };
 
 let calls: string[] = [];
@@ -73,7 +73,7 @@ function busyCard(): void {
   cards = [card(4, 'Testing', ['factory-stuck', 'needs-info', 'hotfix'])];
   seed({
     jobs: [JOB, { ...JOB, id: 'verify-5-x', issue: 5, pid: 78 }],
-    testPhase: { 4: 'fix', 5: 'fix' }, patching: { 4: 'abc' }, interrupted: [4, 5],
+    postOnly: [4, 5], interrupted: [4, 5],
     pendingApprovals: { 4: 'Bob', 5: 'Bob' }, approvedResolving: { 4: 'Bob' },
     approvalPosts: { 42: 4, 43: 5 }, postCaptions: { 42: 'Post four', 43: 'Post five' },
     unroutedReplies: { 9: { issue: 4, postId: 42, text: 't', at: 'a' }, 10: { issue: 5, postId: 43, text: 't', at: 'a' } },
@@ -199,8 +199,7 @@ describe('move', () => {
     const state = readState(statePath);
     expect(killed).toEqual(['77 verify-4-x']);
     expect(state.jobs.map((job) => job.id)).toEqual(['verify-5-x']);
-    expect(state.testPhase).toEqual({ 5: 'fix' });
-    expect(state.patching).toEqual({});
+    expect(state.postOnly).toEqual([5]);
     expect(state.interrupted).toEqual([5]);
     expect(state.pendingApprovals).toEqual({ 5: 'Bob' });
     expect(state.approvedResolving).toEqual({});
@@ -234,23 +233,22 @@ describe('move', () => {
     expect(existsSync(replyMediaDir(ROOT, 43))).toBe(true);
   });
 
-  // The busy card is approved, so its checks and its build run in Hardening.
+  // A move to approval asks the committee again, so only Hardening and Merging keep the approval.
   it.each([
-    ['triage', 'Triage', {}, false],
-    ['implement', 'Implementation', {}, false],
-    ['verify', 'Testing', {}, false],
-    ['checks', 'Hardening', { 4: 'checks' }, true],
-    ['approval', 'Hardening', { 4: 'post' }, true],
-    ['harden', 'Hardening', {}, true],
-    ['done', 'Done', {}, false],
-  ] as const)('to %s sets column %s and phase %j, and keeps approval only for later positions (%s)', async (to, column, phase, keepsApproval) => {
+    ['triage', 'Triage', false, false],
+    ['implement', 'Implementation', false, false],
+    ['verify', 'Testing', false, false],
+    ['approval', 'Testing', true, false],
+    ['harden', 'Hardening', false, true],
+    ['merging', 'Merging', false, true],
+    ['done', 'Done', false, false],
+  ] as const)('to %s sets column %s, marks a post-only build (%s), and keeps approval only for later positions (%s)', async (to, column, postOnly, keepsApproval) => {
     busyCard();
     await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }));
     const state = readState(statePath);
     expect(calls).toContain(`move 4 ${column}`);
-    expect(Object.fromEntries(Object.entries(state.testPhase).filter(([key]) => key === '4'))).toEqual(phase);
+    expect(state.postOnly.includes(4)).toBe(postOnly);
     expect(String(4) in state.approvedResolving).toBe(keepsApproval);
-    expect(state.patching).toEqual({});
     expect(state.pendingApprovals).toEqual({ 5: 'Bob' });
     expect(cardDrift(card(4, column as Column), state)).toEqual([]);
   });
@@ -294,6 +292,16 @@ describe('move', () => {
     expect(calls).toEqual([]);
   });
 
+  it('changes nothing for a Merging card while the merge job runs, though that job has no issue (IV4)', async () => {
+    cards = [card(4, 'Merging')];
+    const state = readState(statePath);
+    writeState(statePath, { ...state, jobs: [{ ...JOB, id: 'merge---x', stage: 'merge', issue: null }] });
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('merging now');
+    expect(readState(statePath)).toEqual(before);
+    expect(killed).toEqual([]);
+  });
+
   it('changes nothing when a post of the card has no caption (IV4)', async () => {
     busyCard();
     const state = readState(statePath);
@@ -314,16 +322,16 @@ describe('move', () => {
 });
 
 describe('merge', () => {
-  it('moves an approved card to Approval with its merge queued under the actor', async () => {
+  it('moves a card to the merge queue under the actor', async () => {
     busyCard();
     await applyControl(fakeCtx(), command({ action: 'merge', issue: 4 }));
     const state = readState(statePath);
     expect(killed).toEqual(['77 verify-4-x']);
     expect(state.approvedResolving).toEqual({ 4: 'Ann' });
-    expect(state.pendingApprovals).toEqual({ 4: 'Ann', 5: 'Bob' });
-    expect(state.testPhase).toEqual({ 5: 'fix' });
+    expect(state.pendingApprovals).toEqual({ 5: 'Bob' });
+    expect(state.postOnly).toEqual([5]);
     expect(state.approvalPosts).toEqual({ 43: 5 });
-    expect(calls).toContain('move 4 Approval');
+    expect(calls).toContain('move 4 Merging');
     expect(calls).toContain('removeLabel 4 factory-stuck');
     expect(ctrlLines()).toHaveLength(1);
   });
@@ -341,7 +349,7 @@ describe('merge', () => {
     cards = [card(6, 'Approval')];
     seed({ approvalPosts: { 50: 6 }, postCaptions: { 50: 'P' } });
     await applyControl(fakeCtx(), command({ action: 'merge', issue: 6, by: '11' }));
-    expect(readState(statePath).pendingApprovals).toEqual({ 6: 'Ann' });
+    expect(readState(statePath).approvedResolving).toEqual({ 6: 'Ann' });
     expect(readState(statePath).approvalPosts).toEqual({});
   });
 
@@ -349,7 +357,8 @@ describe('merge', () => {
     cards = [card(6, 'Approval')];
     seed({ pendingApprovals: { 6: 'Bob' } });
     await applyControl(fakeCtx(), command({ action: 'merge', issue: 6, by: 'hermes' }));
-    expect(readState(statePath).pendingApprovals).toEqual({ 6: 'Hermes' });
+    expect(readState(statePath).approvedResolving).toEqual({ 6: 'Hermes' });
+    expect(readState(statePath).pendingApprovals).toEqual({});
   });
 });
 
@@ -370,11 +379,18 @@ describe('move and merge preconditions and write order', () => {
     expectUntouched(before);
   });
 
-  it.each(['approval', 'checks'] as const)('to %s puts a card with no approval in Testing', async (to) => {
+  it('to approval puts the card in Testing for a post with no checks', async () => {
     cards = [card(4, 'Approval')];
     seed({});
-    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }));
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'approval' }));
     expect(calls).toContain('move 4 Testing');
+    expect(readState(statePath).postOnly).toEqual([4]);
+  });
+
+  it('to approval needs no approval file, since the post writes a default text', async () => {
+    busyCard();
+    rmSync(join(workDir(fakeCtx(), 4), 'game', '.factory', 'approval.json'));
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'approval' }))).resolves.toBe('Moved to approval.');
   });
 
   it('to harden records the mover as approver of a card with none', async () => {
@@ -385,24 +401,16 @@ describe('move and merge preconditions and write order', () => {
     expect(readState(statePath).approvedResolving).toEqual({ 4: 'Ann' });
   });
 
-  it('gates a move to harden of a card the committee has not approved, like a merge', () => {
+  it('gates a move to harden or merging of a card the committee has not approved, like a merge', () => {
     seed({});
     expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'harden' }))).toBe(true);
+    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'merging' }))).toBe(true);
     seed({ approvedResolving: { 4: 'Bob' } });
     expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'harden' }))).toBe(false);
-    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'checks' }))).toBe(false);
+    expect(isGated(fakeCtx(), command({ action: 'move', issue: 4, to: 'approval' }))).toBe(false);
   });
 
-  it.each(['approval', 'checks'] as const)('move to %s needs the approval file, and names the position that writes it', async (to) => {
-    busyCard();
-    seed({ ...readState(statePath), approvedResolving: {} });
-    rmSync(join(workDir(fakeCtx(), 4), 'game', '.factory', 'approval.json'));
-    const before = readState(statePath);
-    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to }))).rejects.toThrow(/approval\.json.*move it to verify/);
-    expectUntouched(before);
-  });
-
-  it.each(['approval', 'checks', 'verify'] as const)('move to %s needs the branch, and names design', async (to) => {
+  it.each(['approval', 'verify', 'merging'] as const)('move to %s needs the branch, and names design', async (to) => {
     busyCard();
     branches = [];
     const before = readState(statePath);
@@ -444,7 +452,7 @@ describe('move and merge preconditions and write order', () => {
     const half = readState(statePath);
     expect(calls).toContain('move 4 Design');
     expect(half.approvalPosts).toEqual({ 42: 4, 43: 5 });
-    expect(half.testPhase).toEqual({ 5: 'fix' });
+    expect(half.postOnly).toEqual([5]);
     expect(half.pendingApprovals).toEqual({ 5: 'Bob' });
     expect(calls.some((call) => call.startsWith('removeLabel'))).toBe(false);
     expect(ctrlLines()).toEqual([]);

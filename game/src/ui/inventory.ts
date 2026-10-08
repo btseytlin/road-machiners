@@ -7,6 +7,7 @@ import { partDef } from "../data/parts";
 import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
+import { instantMoveItem } from "../sim/cheats";
 import { canRebuild, partRepairCost, repairPart } from "../sim/economy";
 import {
   freeCells,
@@ -30,7 +31,7 @@ import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
-import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
+import { canLootTruck, hasStores, hiddenUnits, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
@@ -109,10 +110,13 @@ export class InventoryView {
   private truck: string | null = null; // knocked-out truck whose grid shows on the right, for looting
   private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
 
+  // instant: parts move at once anywhere, in combat too, as in the full shop (src/ui/full-shop.ts), instead of by
+  // garage or field refit rules.
   constructor(
     private host: UiHost,
     private onChange: () => void,
     private dumpZone: boolean,
+    private instant = false,
   ) {
     window.addEventListener("pointermove", (e) => this.onMove(e));
     window.addEventListener("pointerup", (e) => this.onDrop(e));
@@ -168,7 +172,6 @@ export class InventoryView {
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     this.showFan(me, this.selectedGun(me));
-    const atShop = shopAt(w) !== null;
     this.root.replaceChildren(
       el(
         "div",
@@ -183,15 +186,7 @@ export class InventoryView {
           "div",
           { class: "inv-side" },
           ...this.refitBanner(me),
-          this.loot
-            ? this.lootEl(w, this.loot)
-            : atShop
-              ? this.storageEl(w)
-              : el(
-                  "div",
-                  { class: "dim" },
-                  "Park at a shop to use garage storage. Drag onto a mount to start a refit.",
-                ),
+          this.sideList(w),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           // Below the lists, so selecting an item never moves the chips a second click aims at.
           this.inspection,
@@ -356,7 +351,7 @@ export class InventoryView {
     const now = Date.now();
     const double = isDoubleClick(this.lastClick, c.item.id, now);
     this.lastClick = double ? null : { id: c.item.id, at: now };
-    const cmd = double ? doubleClickCommand(this.host.world(), c) : null;
+    const cmd = double ? doubleClickCommand(this.host.world(), c, this.instant) : null;
     if (cmd) {
       this.selectedItem = null;
       this.run(cmd);
@@ -385,12 +380,20 @@ export class InventoryView {
     ];
   }
 
+  // Beside the grid: a searched stock to loot, the garage storage at a shop, or how parts move here.
+  private sideList(w: World): HTMLElement {
+    if (this.loot) return this.lootEl(w, this.loot);
+    if (this.instant) return el("div", { class: "dim" }, "Parts fit at once: drag them onto a mount or off it.");
+    return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage. Drag onto a mount to start a refit.");
+  }
+
+  // The actions come right under the name, so Patch stays on screen when a short window cuts off the stats.
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
-      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
+      ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, mounted) : []),
+      ...(item.kind === "part" && !this.instant && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
     );
   }
 
@@ -482,14 +485,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(part)} parts`,
+        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(me, part)} parts`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startStrip(world, part.id));
         },
       },
-      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(part)}p`,
+      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(me, part)}p`,
     );
   }
 
@@ -603,7 +606,8 @@ export class InventoryView {
     ];
   }
 
-  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
+  // The revealed loot, what searches turned up. Drag a chip onto the grid to take it; the rest stays here. Hidden
+  // loot never shows.
   private lootEl(w: World, stockId: string): HTMLElement {
     const stock = w.salvage.find((s) => s.id === stockId);
     if (!stock) throw new Error(`Unknown salvage ${stockId}`);
@@ -619,7 +623,7 @@ export class InventoryView {
       el("h3", {}, `Salvage${site ? `: ${site.name}` : ""}`),
       ...(chips.length
         ? chips
-        : [el("div", { class: "dim" }, "Nothing left here.")]),
+        : [el("div", { class: "dim" }, hiddenUnits(stock) > 0 ? "Nothing found yet." : "Nothing left here.")]),
       ...(chips.length
         ? [
             el(
@@ -680,7 +684,7 @@ export class InventoryView {
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
-      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
+      ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, false) : []),
     );
   }
 
@@ -759,7 +763,7 @@ export class InventoryView {
     if (!item || item.kind !== "part") return;
     const id = item.id;
     this.run((w) =>
-      moveItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }),
+      this.moveGridItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }),
     );
   }
 
@@ -847,7 +851,7 @@ export class InventoryView {
 
   private dropOnGrid(w: World, d: Drag): World {
     const to = { x: d.item.x, y: d.item.y, rot: d.item.rot };
-    if (d.source === "grid") return moveItem(w, d.id, to);
+    if (d.source === "grid") return this.moveGridItem(w, d.id, to);
     if (d.source === "storage") return takeFromStorage(w, d.id, to);
     if (d.source === "truck") return takeFromTruck(w, this.truck!, d.id, to);
     return takeLoot(
@@ -879,6 +883,10 @@ export class InventoryView {
   }
 
   // With quiet set, a command the sim refuses changes nothing and shows no error, like a drop on an invalid spot.
+  private moveGridItem(w: World, itemId: string, to: Spot): World {
+    return this.instant ? instantMoveItem(w, itemId, to) : moveItem(w, itemId, to);
+  }
+
   private run(cmd: (w: World) => World, quiet = false): void {
     try {
       const next = cmd(this.host.world());
@@ -1016,14 +1024,14 @@ function shopOnlyPatch(part: PartInstance): HTMLElement | null {
 }
 
 // A part's condition and stats. A spare shows the change against the mounted part of its kind.
-function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
+function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
   const row = conditionRow(part);
   return [
     ...(row ? [row] : []),
     conditionMeter(part),
-    statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
+    statGrid(diffStats(partStats(w, part), base ? partStats(w, base) : null)),
     base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }

@@ -16,8 +16,13 @@ function requireHoldable(state: FactoryState, card: Card | undefined, issue: num
   if (card.column === 'Done') throw new Error(`Issue #${issue} is Done and runs nothing.`);
   const hold = state.held[String(issue)];
   if (hold !== undefined) throw new Error(`Issue #${issue} is held already, by ${hold.by} since ${hold.at}: ${hold.reason}`);
-  const branchJob = state.jobs.find((job) => job.issue === issue && !CARD_JOBS.includes(job.stage));
+  const branchJob = branchJobOf(state, card);
   if (branchJob !== undefined) throw new Error(`Issue #${issue} runs a ${branchJob.stage} job, which a hold never stops. Repeat the order after it ends.`);
+}
+
+// The merge job has no issue, and it merges every free card in Merging.
+function branchJobOf(state: FactoryState, card: Card): Job | undefined {
+  return state.jobs.find((job) => (job.issue === card.issue && !CARD_JOBS.includes(job.stage)) || (job.stage === 'merge' && card.column === 'Merging'));
 }
 
 // The kill comes first, so the job cannot write to the state after the hold. A job that left the list meanwhile ended on its own:

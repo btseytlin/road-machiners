@@ -22,6 +22,6 @@ describe('trading tip text', () => {
 
 describe('currency in dialogue', () => {
   it("groups an amount and names the unit", () => {
-    expect(fillLine('{fee} when we get there.', { fee: { kind: 'money', amount: 1500 } })).toBe("1,500 M's when we get there.");
+    expect(fillLine('{fee} when we get there.', { fee: { kind: 'money', amount: 150000 } })).toBe("1,500 M's when we get there.");
   });
 });

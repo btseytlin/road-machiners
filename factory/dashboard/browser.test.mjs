@@ -15,7 +15,7 @@ const cardColumns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval'
 function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
-  return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+  return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingSpanMs: 1800000, waitingGaps: 1, missingUsage: 2,
     wasted: { cost: 4.25, tokens: { input: 400000, output: 50000, cacheRead: 0, cacheWrite: 0 } },
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
     buckets: [...(days > 1 ? [{ start: yesterday, cost: 2, tokens: null, stages: { design: { cost: 2, tokens: 0 } }, models: { unattributed: { cost: 2, tokens: 0 } } }] : []),
@@ -165,6 +165,8 @@ async function checkCounters(page) {
   assert.equal(await page.locator('.token-counter .panel').count(), 0);
   assert.deepEqual(await page.locator('.token-counter .counter span').allTextContents(), ['Total tokens', 'Input incl. cache', 'Output']);
   assert.equal(await page.locator('#usage-wasted-cost').textContent(), '$4.25');
+  assert.equal(await page.locator('#usage-wait').textContent(), '2.0 cards');
+  assert.equal(await page.locator('#usage-wait').getAttribute('data-exact'), '1h 0m summed card-time');
   assert.equal(await page.locator('#usage-wasted-tokens').textContent(), '450K tokens');
   assert.equal(await page.locator('#usage-input').textContent(), '1.3M');
   assert.equal(await page.locator('#usage-input').getAttribute('data-exact'), '1300000');
@@ -269,7 +271,7 @@ async function checkPause(page) {
   paused.live.value.scheduler.status = 'paused';
   paused.live.value.scheduler.counts = {};
   await sendSnapshot(page, paused);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['8', '8', '8', '7', '7', '7']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['8', '8', '8', '7', '7', '0', '7']);
   assert.match(await page.locator('#source-status').textContent(), /Paused.*Claude weekly usage limit/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), false);
   await page.screenshot({ path: `${evidence}/paused-${page.viewportSize().width}.png` });
@@ -340,15 +342,15 @@ async function checkUntrustedAndMissingData(page) {
   assert.equal(await page.locator('#committee-rate').textContent(), '—');
   await page.locator('#overview-tab').click();
   await waitForRender(page);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—', '—']);
   const empty = structuredClone(fixture);
   empty.github.value.cards = [];
   await sendSnapshot(page, empty);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['0', '0', '0', '0', '0', '0']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['0', '0', '0', '0', '0', '0', '0']);
   const stale = structuredClone(fixture);
   stale.github.status = 'stale';
   await sendSnapshot(page, stale);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—', '—']);
 }
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 await mkdir(evidence, { recursive: true });

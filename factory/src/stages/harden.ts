@@ -1,56 +1,33 @@
 import { cardFlow, moveCard } from '../card-events';
-import { readState } from '../state';
-import { BRANCH, GAME_DIR, isCleanupTask, type Ctx } from '../types';
-import { approvedAlready, queueMerge } from './checks';
-import { agentHome, baseBranchFor, catchUpBranch, docsOnly, fillPrompt, guardAndPush, prepareOutputs, runAgent, workDir, writeIssueInput } from './common';
-import { reviewGate } from './review';
-import { agentRound, fixRound, requireBaseMerged, setPhase } from './verify';
+import { BRANCH, GAME_DIR, INCIDENT_LOG, TASK_FILE, type Ctx } from '../types';
+import { BASE_BRANCH, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, prepareOutputs, readOutput, requireBaseMerged, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
-// The agent half of the Hardening column. The committee approved the card, and Testing already checked the build it played.
-// Hardening runs the harden round and the review. The checks run again only when the branch head moved past that build.
-// A cleanup task skips Testing, so it has no build and always gets the checks. It gets no harden round, and neither does a docs change.
-// Phase `fix` runs the fix of a failed check, and `resolve` resolves a conflict that stopped approve.
+const PRINCIPLES = `${GAME_DIR}/docs/architecture/principles.md`;
+
+// Hardening in one session. The committee approved the card, or it is a cleanup task. The agent attacks the change,
+// runs the code review, and fixes what both find. No checks run here. The full suite runs on the merged result in Merging.
+// The base is merged first, so the merge queue meets only the conflicts of cards that harden at the same time.
+// A docs change has no code to harden, so it goes on with no agent unless the base merge needs one.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
-  const approver = approvedAlready(ctx, issue, item.labels);
-  if (approver === null) throw new Error(`Issue #${issue} is in Hardening with no recorded approval`);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  const phase = readState(ctx.statePath).testPhase[String(issue)];
-  if (phase === 'fix') return fixRound(ctx, issue, base, 'harden');
-  if (phase === 'resolve') return resolveRound(ctx, issue, base);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  await catchUpBranch(ctx, issue, 'harden');
-  await hardenRound(ctx, issue, base, item.labels);
-  if (!(await reviewGate(ctx, issue, base, 'harden', async () => { await agentRound(ctx, issue, 'harden', 'test-fix', 'review-fix', base, false); }))) return;
-  const head = await ctx.repo.headHash(BRANCH(issue));
-  if (head !== readState(ctx.statePath).builds[String(issue)]) return setPhase(ctx, issue, 'checks');
-  ctx.log('harden', issue, `the head is still the checked build ${head}, so no checks run`);
-  await moveCard(ctx, issue, 'Approval', 'hardened', cardFlow(item.labels));
-  queueMerge(ctx, issue, approver);
-}
-
-// The design and build of a cleanup task already were the cleanup, and a docs change has no code to verify, so the review alone checks them.
-async function hardenRound(ctx: Ctx, issue: number, base: string, labels: string[]): Promise<void> {
-  if (isCleanupTask(labels) || await docsOnly(ctx, issue, base)) return ctx.log('harden', issue, 'a cleanup task or a docs change, so no harden round');
-  await agentRound(ctx, issue, 'harden', 'harden', 'harden', base, false);
-}
-
-// Approve hit a conflict with the base. The change already passed hardening and the review, and only the merge is new.
-// A merge agent resolves the conflict, and the checks test the result before approve merges it.
-async function resolveRound(ctx: Ctx, issue: number, base: string): Promise<void> {
-  prepareOutputs(ctx, issue, agentHome(workDir(ctx, issue), GAME_DIR));
-  await catchUpBranch(ctx, issue, 'harden');
-  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
-  ctx.log('harden', issue, `merged ${base} at ${commit.slice(0, 7)}${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
-  if (conflicts.length > 0) {
-    const files = conflicts.map((file) => `- ${file}`).join('\n');
-    const source = `The factory merged the current ${base} into your branch. It holds work the committee approved after this issue was tested.`;
-    await runAgent(ctx, issue, 'harden', 'base-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), source, files }));
-  }
+  const merged = await mergeBase(ctx, issue, base, home, 'harden');
+  if (readOutput(home, 'merge-conflicts.md') === null && await docsOnly(ctx, issue, base)) ctx.log('harden', issue, 'a docs change, so no hardening agent');
+  else await runAgent(ctx, issue, 'harden', 'harden', await hardenPrompt(ctx, issue, base));
+  throwIfNeedsCommittee(home);
   await guardAndPush(ctx, issue, base, 'harden');
-  await requireBaseMerged(ctx, issue, base, commit);
-  setPhase(ctx, issue, 'checks');
+  await requireBaseMerged(ctx, issue, base, merged);
+  await moveCard(ctx, issue, 'Merging', 'hardened', cardFlow(item.labels));
+}
+
+// The incident log and the principles come from dev, where incidents land, so a hotfix branch from main gets them too.
+export async function hardenPrompt(ctx: Ctx, issue: number, base: string): Promise<string> {
+  return fillPrompt('harden', {
+    issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base,
+    incidentLog: await ctx.repo.readFile(BASE_BRANCH, INCIDENT_LOG), principles: await ctx.repo.readFile(BASE_BRANCH, PRINCIPLES),
+  });
 }

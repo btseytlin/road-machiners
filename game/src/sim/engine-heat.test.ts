@@ -18,6 +18,7 @@ import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { heatAt } from './sun';
 import type { Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
 const NIGHT = 1 + ((23 - TIME.startHour) * TIME.turnsPerDay) / 24;
@@ -44,6 +45,19 @@ describe('engine heat', () => {
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);
     expect(engine(w).hp).toBe(hp - 2 * ENGINE_HEAT.overheatDamage);
+  });
+
+  it('never warms or hurts an engine shut down by an emitter pulse, even rolling fast at noon', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const me = w.vehicles[0];
+    me.speed = 6;
+    me.shutDown = { from: w.turn, until: w.turn + 2 };
+    w.player.engineHeat = 1;
+    const hp = engine(w).hp;
+    advanceEngineHeat(w);
+    expect(w.player.engineHeat).toBeLessThan(1);
+    expect(engine(w).hp).toBe(hp);
   });
 
   it('never warms while driving at night', () => {
@@ -154,7 +168,7 @@ describe('engine heat on the road', () => {
   }
 
   it('overheats every engine on the shortest Bowl to Nose trip at top speed from 10:00', () => {
-    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP);
+    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP, defaultSetup('roaming'));
     base.weather = [];
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const nose = REGION.towns.find((t) => t.id === 'nose')!;

@@ -1,6 +1,6 @@
 # Sight and detection
 
-Sight, engine sound, dust, the radio scanner and how NPCs react to contacts. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+Sight, engine sound, dust, the radio scanner, flares and how NPCs react to contacts. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
 Sight reaches 20 tiles with line of sight, halved at night and cut in dust storms. A vehicle within 3 tiles is seen even behind a hill. Gray vision shows ground and buildings out to four sight radii, but no vehicles. Beyond sight, a moving vehicle still gives itself away: engine sound, dust clouds, or a mounted radio scanner.
 
@@ -11,5 +11,9 @@ Engine sound reaches far, by the engine and the vehicle's speed. A crawling truc
 Dust clouds are objects in the world. Every turn a truck moving faster than a crawl on dusty ground leaves a cloud behind it. A stranded truck raises none, whatever its speed. Roads and mud raise little dust, sand and ash raise more, and none rises at night. A cloud rises, drifts back along its truck's route and with the wind, wanders a little, and fades after a few turns. Once risen it is seen from far beyond sight and over hills. So a line of clouds shows where a truck passed, a little late.
 
 A radio scanner is a part that mounts on a deck cell, so it competes with a gun. It detects every moving vehicle within 160 tiles, through hills, and shows it as a steady blip. Bowl, Nose and the Pump Station sell it.
+
+A truck shut down by an emitter pulse makes no engine sound and its scanner is off, see [Turns, driving and combat](turns.md).
+
+The Flare cannon fires a red flare at a point 4 to 24 tiles away, with no sight of the point needed. The flare burns for 6 turns and lights 10 tiles around its point. At night, sight to a point inside its light skips the night's halving. Hills and props still block sight there, and dust storms still cut it. By day a flare changes nothing. At night a flare also gives its launcher away. In the turn it fires, every truck within 80 tiles of the launcher gets a contact of the launcher. While it burns, every truck within 80 tiles of the flare sees its light, as a contact of the launcher at the flare. Hills do not hide a flare in the sky. The player sees a red light, a ring at the edge of its light and the launcher's contact. NPCs react to these contacts like any other.
 
 NPCs detect the player and each other with the same rules. A meeting far from the player is simpler: out of the player's live range, a truck sees another inside its sight radius whatever stands between them, and dust risen over hills is not seen. Any meeting with a truck inside the live range uses the full rules. A contact makes an NPC react only when its circle is small enough for the NPC's traits. Vague distant sounds stay audible without redirecting an NPC. Scanner and beacon contacts stay useful from farther away. A useful hostile contact fires one decision: keep, investigate or flee. Raiders mostly investigate, and traders and scavengers mostly flee. An investigation drives to where the contact first was. It ends on arrival, or as soon as the driver sees the truck it heard, which it then judges like any hostile in sight. A fighter that loses sight of its target drives to where it last saw it. Each turn it hears the engine or sees the dust, it turns toward that contact. After about 6 turns with neither, it gives up. A driver busy with trade, salvage, service or repairs mostly keeps on.

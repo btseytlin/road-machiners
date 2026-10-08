@@ -3,18 +3,15 @@
 // beside the number and carry the full text in title and aria-label, so value never rests on the icon alone.
 // The coin is owned here and sized in em by the text it sits in. It has no tooltip, so it never shadows the amount's.
 
-import { UNITS } from "../data/units";
 import { el } from "./dom";
+import { moneyAmount, moneyText } from "./units";
 
-const GROUPING = new Intl.NumberFormat("en-US");
+export { moneyText };
 
-export function moneyNumber(amount: number): string {
-  if (!Number.isFinite(amount) || amount < 0) throw new Error(`Not a currency amount: ${amount}`);
-  return GROUPING.format(amount);
-}
-
-export function moneyText(amount: number): string {
-  return `${moneyNumber(amount)} ${amount === 1 ? UNITS.currency.one : UNITS.currency.many}`;
+// Money is cents in the sim. The number reads in whole M.
+export function moneyNumber(cents: number): string {
+  if (!Number.isFinite(cents)) throw new Error(`Not a currency amount: ${cents}`);
+  return moneyAmount(cents);
 }
 
 // Negative money is debt. It shows as a positive amount owed.

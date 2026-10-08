@@ -1,6 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runAgentCheck } from './agent-check';
@@ -12,7 +11,6 @@ let home = '';
 let out = '';
 
 const git = (...args: string[]): string => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: home, encoding: 'utf8' }).trim();
-const sha = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -23,18 +21,11 @@ beforeEach(() => {
   git('commit', '-q', '--allow-empty', '-m', 'first');
 });
 
-// Writes a full passing round at the current head: approval, screenshot, manifest and visual review.
+// Writes a full passing round: approval, screenshot and manifest.
 function capture(): void {
-  const head = git('rev-parse', 'HEAD');
   writeFileSync(join(out, 'approval.json'), JSON.stringify({ description: 'Adds oil', howToTry: 'Drive on' }));
   writeFileSync(join(out, 'screenshot.png'), pngBytes(0));
-  writeFileSync(join(out, 'evidence.json'), JSON.stringify({ commit: head, features: [{ name: 'Oil', kind: 'item' }], images: [{ file: 'screenshot.png', description: 'Oil patch', covers: ['Oil'], sheet: false }] }));
-  writeFileSync(join(out, 'visual-review.json'), JSON.stringify({
-    commit: head, visual: true, repairs: 0,
-    images: [{ file: 'screenshot.png', sha256: sha(join(out, 'screenshot.png')), observations: 'Oil lies behind the rear axle as a spill.', verdict: 'correct' }],
-    decisions: [{ feature: 'Oil', verdict: 'correct', notes: 'It trails the truck as the issue asks.' }],
-    mismatches: [],
-  }));
+  writeFileSync(join(out, 'evidence.json'), JSON.stringify({ images: [{ file: 'screenshot.png', description: 'Oil patch' }] }));
 }
 
 const lines = (args: string[]): { code: number; text: string } => {
@@ -44,74 +35,64 @@ const lines = (args: string[]): { code: number; text: string } => {
 };
 
 describe('runAgentCheck', () => {
-  it('exits zero and names the checks it cannot run when the evidence is whole', () => {
+  it('exits zero and names the checks it cannot run when the round is whole', () => {
     capture();
     const { code, text } = lines(['test']);
     expect(code).toBe(0);
     expect(text).toContain('Not checked here');
-    expect(text).toContain('the fresh-clone tests');
+    expect(text).toContain('the typecheck, playtest and build');
   });
 
-  it('prints the stale evidence message after a commit that follows the capture', () => {
+  it('passes after a later commit, since evidence is not tied to a commit', () => {
     capture();
     git('commit', '-q', '--allow-empty', '-m', 'later');
-    const { code, text } = lines(['test']);
-    expect(code).toBe(1);
-    expect(text).toMatch(/Failed: The evidence manifest was dropped: \.factory\/evidence\.json is from commit [0-9a-f]{40}, the final branch is at [0-9a-f]{40}/);
-    expect(text).toContain('Failed: .factory/visual-review.json is from commit');
+    expect(lines(['test']).code).toBe(0);
   });
 
   it('lists every failure in one run', () => {
+    writeFileSync(join(out, 'evidence.json'), '{');
     const { code, text } = lines(['test']);
     expect(code).toBe(1);
     expect(text).toContain('Failed: The testing stage wrote no .factory/approval.json');
+    expect(text).toContain('Failed: The testing agent wrote no .factory/screenshot.png. The post leaves out what it cannot show.');
     expect(text).toContain('2 checks failed');
   });
 
-  it('reports a missing screenshot and a missing visual review', () => {
+  it('reports an image the post would leave out', () => {
     capture();
-    rmSync(join(out, 'screenshot.png'));
-    expect(lines(['test']).text).toContain('Failed: The testing agent wrote no .factory/screenshot.png. The post drops the images it cannot show.');
-    capture();
-    rmSync(join(out, 'visual-review.json'));
-    expect(lines(['test']).text).toContain('Failed: The testing stage wrote no .factory/visual-review.json');
+    writeFileSync(join(out, 'evidence.json'), JSON.stringify({ images: [{ file: 'gone.png', description: 'x' }] }));
+    expect(checkClone(home).failures.join(' ')).toContain('gone.png is left out');
   });
 
-  it('skips the review for a patch', () => {
-    capture();
-    git('commit', '-q', '--allow-empty', '-m', 'later');
-    expect(lines(['patch']).text).toContain('evidence.json is from commit');
-    expect(lines(['patch']).text).not.toContain('visual-review.json');
+  it('guards the staged change: a protected path or a SAVE_MAJOR bump refuses the commit, other work passes', () => {
+    writeFileSync(join(home, 'a.ts'), 'export const a = 1;\n');
+    git('add', 'a.ts');
+    expect(lines(['guard'])).toEqual({ code: 0, text: '' });
+    mkdirSync(join(home, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(home, '.github', 'workflows', 'x.yml'), 'on: push\n');
+    git('add', '.github');
+    expect(lines(['guard'])).toEqual({ code: 1, text: expect.stringContaining('The factory refuses this commit: The branch touches paths an agent may not push: .github/workflows/x.yml') });
+    git('rm', '-r', '-q', '--cached', '.github');
+    mkdirSync(join(home, 'game', 'src', 'three'), { recursive: true });
+    writeFileSync(join(home, 'game', 'src', 'three', 'save-migrations.ts'), 'export const SAVE_MAJOR = 9;\n');
+    git('add', 'game');
+    expect(lines(['guard']).text).toContain('bumps SAVE_MAJOR');
   });
 
   it('refuses a missing or unknown round', () => {
     expect(lines([]).code).toBe(2);
     expect(lines(['full']).code).toBe(2);
-    expect(lines(['waived']).code).toBe(2);
-    expect(lines(['test', 'patch']).code).toBe(2);
-  });
-
-  it('notes a valid send-back as no failure', () => {
-    capture();
-    const path = join(out, 'visual-review.json');
-    const review = JSON.parse(readFileSync(path, 'utf8'));
-    review.decisions[0].verdict = 'wrong';
-    review.mismatches = [{ description: 'The oil is a perfect circle', scope: 'rebuild' }];
-    writeFileSync(path, JSON.stringify(review));
-    const report = checkClone(home, git('rev-parse', 'HEAD'), 'test');
-    expect(report.failures).toEqual([]);
-    expect(report.notes.join(' ')).toContain('sends the card back to implementation');
+    expect(lines(['patch']).code).toBe(2);
+    expect(lines(['test', 'test']).code).toBe(2);
   });
 });
 
 describe('the bundled command', () => {
   it('runs under plain node with the same messages as the factory code', async () => {
-    capture();
-    git('commit', '-q', '--allow-empty', '-m', 'later');
     const dir = await buildCheckBundle(join(home, 'factory-home'));
     const result = spawnSync('node', [join(dir, 'check.mjs'), 'test'], { cwd: home, encoding: 'utf8' });
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('Failed: The evidence manifest was dropped: .factory/evidence.json is from commit');
+    expect(result.stdout).toContain('Failed: The testing stage wrote no .factory/approval.json');
     expect(result.stdout).toBe(`${lines(['test']).text}\n`);
   });
 });

@@ -16,6 +16,7 @@ import {
   type ScrubRules,
 } from '../data/terrain';
 import { chance, randInt, randRange, type Rng } from '../sim/rng';
+import { isTerritory, territoryRoads } from '../sim/territory';
 import type { BakedProp, PropKind } from '../sim/terrain';
 import { DEG, dist, polylineDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
@@ -52,6 +53,8 @@ export const BUILT_TRACK = 6;
 export const BUILT_CANAL = 7;
 // The territory layer's mark for a farm's concrete pads.
 export const BUILT_PAD = 8;
+// The territory layer's mark for fused glass, from a territory's glass rules (src/mapgen/glass.ts).
+export const BUILT_GLASS = 9;
 
 // A squatter camp: its center and the radius of its fence ring.
 export type Camp = { pos: Vec; radius: number };
@@ -80,9 +83,17 @@ function isPool(code: number): boolean {
   return code === BUILT_DIRTY_WATER || code === BUILT_TOXIC;
 }
 
-// Adds a prop where the old world would, and never in a pool.
+// Territories' dirt spurs. They run out past the site clearance onto open land, and the territory layer marks them
+// after this layer, failing on any prop in their way, so new-world props keep off them as they keep off roads.
+const SPURS = REGION.locations.filter(isTerritory).flatMap((t) => territoryRoads(t).spurs);
+
+function onSpur(p: BakedProp): boolean {
+  return SPURS.some((s) => polylineDist(p.pos, s.points) < s.width / 2 + p.r + O.gap);
+}
+
+// Adds a prop where the old world would, never in a pool and never on a territory's spur.
 function settle(d: MapDraft, p: BakedProp, roadGap: number): boolean {
-  if (isPool(d.built[tileOf(d.size, p.pos)])) return false;
+  if (isPool(d.built[tileOf(d.size, p.pos)]) || onSpur(p)) return false;
   return place(d, p, roadGap);
 }
 

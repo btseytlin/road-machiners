@@ -6,7 +6,7 @@ import { fake, reset } from './test-fakes';
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { remove } = await import('./remove');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 
 beforeEach(() => {
   reset();

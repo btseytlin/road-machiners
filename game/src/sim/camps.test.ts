@@ -89,7 +89,7 @@ describe('raider camps', () => {
       const w = emptyWorld({ x: 30, y: 30 });
       const v = addNpc(w, template === 'trader' ? 'traders' : 'raiders', template, pos);
       getResources(w, v).fuel = 0;
-      getResources(w, v).money = 500;
+      getResources(w, v).money = 16667;
       corePart(v, 'cab').hp = 1;
       return { w, v };
     };

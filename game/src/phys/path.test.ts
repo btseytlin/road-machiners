@@ -11,6 +11,7 @@ import { buildDrive, freeDrive, GROUND, initPhysics, type Drive } from './drive'
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from '../sim/settings';
 
 beforeAll(async () => {
   await initPhysics();
@@ -36,7 +37,7 @@ function play(w: World, max: number, afterTurn: (w: World) => boolean = () => fa
 
 it('the player drives from Bowl to Nose without a serious hit on a static obstacle', () => {
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  let w = setMoveOrder(newWorld(1337, START_KITS.standard, TEST_MAP), { kind: 'stopAt', dest: nose.pos });
+  let w = setMoveOrder(newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')), { kind: 'stopAt', dest: nose.pos });
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   w.player.fuel = 100;
   const me = w.player.vehicleId;

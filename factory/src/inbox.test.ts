@@ -78,7 +78,7 @@ describe('drainInbox', () => {
     writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), builds: { 4: 'abc1234' } }));
     put('1.json', { kind: 'route', route: 'patch', issue: 4, text: 'make the horn louder', by: 'hermes', byName: null, messageId: null });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
-    expect(readState(statePath).patching).toEqual({ 4: 'abc1234' });
+    expect(calls).toContain('move 4 Testing');
     expect(calls).toContain('edit -5 42 Post\n\n🔧 Patch from Hermes. Sonnet fixes the build, then the checks run again.');
   });
 
@@ -158,8 +158,7 @@ describe('drainInbox', () => {
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
     const state = readState(statePath);
     expect(state.unroutedReplies).toEqual({ 8: { issue: 5, postId: 77, text: 'y', at: 'a' } });
-    expect(state.patching).toEqual({ 4: 'abc1234' });
-    expect(calls).toEqual([expect.stringContaining('routed as patch:\n\nUse top-down icons in the grid.'), 'move 4 Implementation', 'edit -5 42 Post\n\n🔧 Patch from Ann. Sonnet fixes the build, then the checks run again.']);
+    expect(calls).toEqual([expect.stringContaining('routed as patch:\n\nUse top-down icons in the grid.'), 'move 4 Testing', 'edit -5 42 Post\n\n🔧 Patch from Ann. Sonnet fixes the build, then the checks run again.']);
   });
 
   it('records an answer on the issue and leaves the post open and silent', async () => {
@@ -230,7 +229,7 @@ describe('drainInbox', () => {
   });
 });
 
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } }));
 
 describe('release commands', () => {
@@ -303,6 +302,7 @@ describe('release commands', () => {
     await drainInbox(fakeCtx([], sent, calls));
     expect(calls[0]).toBe('create The horn is too quiet|The horn is too quiet\nMake it louder\n\nRequested by Ann in the committee chat as a task of release 2026-09-29.|release-task');
     expect(calls[1]).toBe('addCard 9 Design');
+    expect(readState(statePath).release?.tasks).toEqual([9]);
     expect(readState(statePath).release?.postId).toBeNull();
     expect(readState(statePath).pendingShip).toBeNull();
     expect(sent).toEqual([]);
