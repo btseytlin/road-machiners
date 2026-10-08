@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -385,7 +385,7 @@ function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contact
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
   if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
-  if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
+  if (firepower(world, vehicle) <= 0) return 'no gun left to fight with';
   return fightTargetLost(world, vehicle, target, contacts) ? 'lost the target' : null;
 }
 

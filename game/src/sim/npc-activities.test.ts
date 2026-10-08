@@ -9,7 +9,8 @@ import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { partDef } from '../data/parts';
-import { getKnownSite, getUpkeepReserve, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
+import { damagePart } from './wear';
+import { getKnownSite, getUpkeepReserve, judgeDanger, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
 import { affordableBuyCount, getLotTradePrice, getTradePrice } from './economy';
 import { cargoRoom } from './inventory';
 import { ECONOMY, GOODS } from '../data/goods';
@@ -1132,6 +1133,29 @@ describe('hunting a lost fight target', () => {
     w.turn++;
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).not.toBe('fight');
+  });
+
+  it('drops the fight once every mounted gun is broken', () => {
+    const { w, raider } = raiderLosesPlayer();
+    const gun = vehicleStats(w, raider).weapons[0].part;
+    damagePart(gun, gun.hp, 0);
+    w.turn++;
+    planNpcOrders(w);
+    expect(vehicleStats(w, raider).weapons).toHaveLength(1);
+    expect(topGoal(raider)?.kind).not.toBe('fight');
+  });
+
+  it('runs from a hostile in sight once every mounted gun is broken', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const gun = vehicleStats(w, raider).weapons[0].part;
+    damagePart(gun, gun.hp, 0);
+    const weights = optionWeights(w, raider, 'hostileSeen', player.id, judgeDanger(w, raider, player));
+    expect(weights.fight).toBeUndefined();
+    const heaviest = Object.entries(weights).sort((a, b) => b[1] - a[1])[0][0];
+    expect(heaviest).toBe('flee');
   });
 
   it('re-aims at the heard engine of the target and restarts the search', () => {
