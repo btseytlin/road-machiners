@@ -240,6 +240,12 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       await gitIn(dir, ['checkout', '--quiet', '-B', branch, `origin/${branch}`]);
       return (await gitIn(dir, ['rev-parse', 'HEAD'])).trim();
     },
+    async cloneCommit(commit, dir) {
+      if (existsSync(dir)) throw new Error(`${dir} exists already`);
+      await initClone(dir);
+      await gitIn(dir, ['checkout', '--quiet', '--detach', commit]);
+      return (await gitIn(dir, ['rev-parse', 'HEAD'])).trim();
+    },
     async untrackFactoryFiles(dir) {
       const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`, `:(glob)**/${MEDIA_DIR}/**`]));
       if (tracked.length === 0) return [];

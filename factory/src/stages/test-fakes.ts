@@ -77,6 +77,12 @@ export function fake(): Fake {
         mkdirSync(join(dir, 'game', 'dist', 'assets'), { recursive: true });
         writeFileSync(join(dir, 'game', 'dist', 'assets', 'index.js.map'), '{}');
       },
+      cloneCommit: async (commit: string, dir: string) => {
+        note(`clone ${commit}`);
+        mkdirSync(join(dir, 'game', 'dist', 'assets'), { recursive: true });
+        writeFileSync(join(dir, 'game', 'dist', 'assets', 'index.js.map'), '{}');
+        return commit.padEnd(40, '0');
+      },
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),

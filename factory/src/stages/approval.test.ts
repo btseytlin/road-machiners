@@ -64,7 +64,7 @@ describe('approve', () => {
     writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'comment 7 Approved by bob in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into dev by itself, with no new post.',
+      'comment 7 Approved by bob in the committee chat. Hardening and the review run now. If they change the code, the factory merges the current dev in and checks that commit. Then the factory merges it into dev by itself, with no new post.',
       'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);

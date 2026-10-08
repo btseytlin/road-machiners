@@ -57,7 +57,7 @@ async function harden(ctx: Ctx, issue: number, by: string, base: string): Promis
   if (build === undefined) throw new Error(`Issue #${issue} was approved with no recorded build`);
   forgetPosts(ctx, issue, true);
   updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by }, builds: { ...state.builds, [String(issue)]: build } }));
-  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into ${base} by itself, with no new post.`);
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. Hardening and the review run now. If they change the code, the factory merges the current ${base} in and checks that commit. Then the factory merges it into ${base} by itself, with no new post.`);
   await moveCard(ctx, issue, 'Hardening', 'approved');
   ctx.log('approve', issue, `approved by ${by}, to Hardening`);
 }
