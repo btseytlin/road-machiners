@@ -21,7 +21,9 @@ async function setup() {
   const cfg = { home, repo: 'o/r' } as FactoryConfig;
   const repo = hostRepo(realRun, cfg);
   const statePath = join(home, 'state.json');
-  const ctx = { cfg, repo, statePath, run: realRun, now: () => new Date('2026-10-07T10:00:00Z'), log: () => undefined } as unknown as Ctx;
+  const unstuck: number[] = [];
+  const github = { removeLabel: async (issue: number, label: string) => { if (label === 'factory-stuck') unstuck.push(issue); } };
+  const ctx = { cfg, repo, statePath, run: realRun, github, now: () => new Date('2026-10-07T10:00:00Z'), log: () => undefined } as unknown as Ctx;
   const git = async (cwd: string, ...a: string[]) => must(await realRun('git', [...ID, ...a], { cwd }), `git ${a.join(' ')}`);
   mkdirSync(origin);
   await git(origin, 'init', '--bare', '-b', 'main');
@@ -46,7 +48,7 @@ async function setup() {
   };
   const hub = async (ref: string) => (await git(origin, 'rev-parse', ref)).trim();
   const setState = (change: Partial<FactoryState>) => writeState(statePath, { ...structuredClone(EMPTY_STATE), ...change });
-  return { home, ctx, git, work, push, hub, setState };
+  return { home, ctx, git, work, push, hub, setState, unstuck };
 }
 
 function factoryFiles(work: string): void {
@@ -71,7 +73,9 @@ const backups = (home: string) => (existsSync(backupRoot(home)) ? readdirSync(ba
 
 describe('repairClone', () => {
   it(`backs up ${DEV_FILES} staged and unstaged changes of an aborted dev merge and checks out the branch fresh`, async () => {
-    const { home, ctx, git, work, push, hub } = await setup();
+    const { home, ctx, git, work, push, hub, setState, unstuck } = await setup();
+    const failure = (issue: number) => ({ stage: 'checks' as const, issue, error: 'boom', log: null, at: '2026-10-07T09:00:00Z' });
+    setState({ failures: [failure(5), failure(6)] });
     await push('dev', Object.fromEntries(Array.from({ length: DEV_FILES }, (_, i) => [`d${i}.txt`, `${i}\n`])));
     await ctx.repo.fetch();
     factoryFiles(work);
@@ -95,7 +99,9 @@ describe('repairClone', () => {
     expect((await git(work, 'rev-parse', 'HEAD')).trim()).toBe(await hub('factory/issue-5'));
     expect(existsSync(join(work, 'd0.txt'))).toBe(false);
     expect(existsSync(join(work, 'node_modules'))).toBe(false);
-    expect(out.join('\n')).toContain('factory retry 5');
+    expect(out.join('\n')).toContain('are cleared');
+    expect(unstuck).toEqual([5]);
+    expect(readState(ctx.statePath).failures.map((row) => row.issue)).toEqual([6]);
   });
 
   it('keeps the factory folders, from any agent folder, in the new clone', async () => {
@@ -224,10 +230,11 @@ describe('repairClone', () => {
   });
 
   it('leaves the clone in place when the move into the backup fails', async () => {
-    const { home, ctx, work } = await setup();
+    const { home, ctx, work, unstuck } = await setup();
     writeFileSync(join(work, 'f.txt'), 'dirty\n');
     const fs: RepairFs = { move: () => { throw new Error('disk gone'); }, copy: () => undefined };
     await expect(repairClone(ctx, ORDER, fs)).rejects.toThrow(/stays where it was: disk gone/);
+    expect(unstuck).toEqual([]);
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('dirty\n');
     expect(manifest(onlyBackup(home))).toMatchObject({ outcome: 'failed', error: 'disk gone' });
   });

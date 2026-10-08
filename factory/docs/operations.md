@@ -61,7 +61,7 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit. A stage resumes its own unfinished merge of the base or of the issue branch, so those need no repair. Any other open merge fails the stage again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
 
 1. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.
-2. Check the new clone, then run `factory retry N`.
+2. Check the new clone. A repair that works already removed the stuck label and the failures, so the next tick continues the card.
 
 The command needs no pause and no other idle card. It holds the card for its duration, takes the clone lock `$FACTORY_HOME/locks/issue-N`, and lifts only the hold it placed. A hold that was there before stays, and so does the `interrupted` mark, so a held card resumes in the new clone after `resume-card`. A job start, `prepareWorkClone` and the tick sweep of `work/issue-N` wait for that lock or skip the clone. The command acts at once. It refuses, and changes nothing in `work/`, when:
 
@@ -73,7 +73,7 @@ The command needs no pause and no other idle card. It holds the card for its dur
 
 A repair fetches the host clone, then clones GitHub's `factory/issue-N` exactly, with fresh `origin/*` refs like `dev`. It moves the whole old clone, with its tracked, untracked and ignored files, to `$FACTORY_HOME/clone-backups/issue-N-<time>/clone`. `repair.json` beside it records who, why, the old HEAD and branch, the open operation, the conflicted files, the commits on no GitHub branch and the outcome. `status.txt` holds the old `git status`. Only the `.factory`, `.factory-tasks` and `.factory-media` folders are copied into the new clone. The repair passes only when the new clone's `git status` is clean and its HEAD is the branch head.
 
-A failure after the move keeps the backup where it is, moves the half-made clone to `failed-fresh` in the backup and leaves `work/issue-N` free. The error prints the `mv` that restores the old clone. Nothing deletes a backup. The tick sweep reads only `work/`, so Hermes deletes a backup once the card is past the trouble. The stuck label and the failures stay, so only `retry` sends the card on.
+A failure after the move keeps the backup where it is, moves the half-made clone to `failed-fresh` in the backup and leaves `work/issue-N` free. The error prints the `mv` that restores the old clone. Nothing deletes a backup. The tick sweep reads only `work/`, so Hermes deletes a backup once the card is past the trouble. A failed repair leaves the stuck label and the failures in place.
 
 ## Failures and Hermes
 
