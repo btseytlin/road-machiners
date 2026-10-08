@@ -50,6 +50,13 @@ Check it after an install:
 - `https://<domain>/factory/health` answers, and `https://<domain>/factory/` updates through `/factory/api/events`.
 - A `POST` returns 405, and a private path returns 404.
 
+## Staying in step with the factory
+
+- The page's words for columns, job stages, queues, activities, wait reasons, delivery stages, loops and gates live in `src/dashboard/labels.ts`. Each list is keyed by the factory's own type, so a new column, stage, queue, activity or wait reason fails `npm run typecheck` until it has a label. The snapshot carries the labels to the page, and a key with no label shows as itself.
+- `dashboard.js` is type-checked by `dashboard/tsconfig.json` against the server's `Snapshot` type. A field the server renames or drops fails the check.
+- The funnel and the card counts follow the labels, so a new column needs no CSS or page edit.
+- A commit that touches this folder or `src/dashboard/` runs the browser check below in the pre-commit hook.
+
 ## Browser check
 
 From the repo root, with root, factory and game dependencies installed, this runs the page against fixtures with no network. It checks desktop fit, pagination, live updates, keyboard use, missing data and escaped markup. The image must match the installed Playwright version.
