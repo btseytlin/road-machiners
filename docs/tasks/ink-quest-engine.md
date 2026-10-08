@@ -233,5 +233,4 @@ Verified by: `npm run playtest` PASS, plus the CK1 terminal run of the full Goal
 - PH3: a fifth helper, `dropQuest(world, quest)`, removes a whole quest. Stage 2 needs it to retire the sample quests.
 - PH4: the checker is `game/src/test/quest-check.ts`, `checkQuests(sources, world, limit)`, which compiles the sources itself with ink's count-all-visits option so it can see which sections were reached. It drives only the runner's public commands. The terminal player numbers choices from 1, so `--picks` is 1-based.
 
-### Deferred (needs user input)
-- Rescue drops quest state — `carriedWorld()` in `game/src/sim/world.ts` rebuilds a new game and carries progression, but not `player.quests`. Rescue runs exactly when saved state may not match the content, so carrying quest variables means dropping the names `questProblems()` rejects. Decide whether rescue should carry the valid quest variables.
+- User decision: rescue carries the quest variables that still fit. `fittingQuestVars()` keeps each variable the bundle declares with the same type, lists the rest as lost, and the open quest closes.

@@ -117,6 +117,26 @@ export function questProblems(state: QuestState, bundle: QuestBundle): string[] 
   ];
 }
 
+export type CarriedQuestVars = { world: Record<string, unknown>; local: Record<string, Record<string, unknown>> };
+
+export function fittingQuestVars(carried: CarriedQuestVars, bundle: QuestBundle): { world: QuestVars; local: Record<string, QuestVars>; lost: string[] } {
+  const world = fitting(carried.world, bundle.world, (name) => name);
+  const locals = Object.entries(carried.local).map(([id, vars]) => [id, fitting(vars, bundle.quests[id]?.vars ?? {}, (name) => `${id}.${name}`)] as const);
+  const local = Object.fromEntries(locals.filter(([, fit]) => Object.keys(fit.kept).length > 0).map(([id, fit]) => [id, fit.kept]));
+  return { world: world.kept, local, lost: [...world.lost, ...locals.flatMap(([, fit]) => fit.lost)] };
+}
+
+function fitting(vars: Record<string, unknown>, decls: Record<string, QuestVarDecl>, label: (name: string) => string): { kept: QuestVars; lost: string[] } {
+  const kept: QuestVars = {};
+  const lost: string[] = [];
+  for (const [name, value] of Object.entries(vars)) {
+    const decl = decls[name];
+    if (!decl || typeof value !== decl.type) lost.push(label(name));
+    else if (value !== decl.init) kept[name] = value as QuestVars[string];
+  }
+  return { kept, lost };
+}
+
 function localProblems(id: string, vars: QuestVars, bundle: QuestBundle): string[] {
   const quest = bundle.quests[id];
   if (!quest) return [`Quest ${id} does not exist`];

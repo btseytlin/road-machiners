@@ -39,6 +39,7 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 
 - A save holds `player.quests` without `live`, so it holds no ink state.
 - Load raises a `SaveError` on a stored quest, variable, type or checkpoint the current bundle does not declare.
+- The rescue screen then carries every variable the bundle still declares with the same type, lists the rest as lost, and closes the open quest. `fittingQuestVars()` decides.
 - `src/three/save-shape.json` records every saved variable name with its type and every checkpoint. Removing, renaming or retyping one needs a migration step, and `npm run save:shape` refuses it under the recorded format. Additions need no step.
 - `src/three/save-migrations.ts` has pure helpers for those steps: `renameQuestVar()`, `dropQuestVar()`, `moveQuestCheckpoint()`, `endQuestSession()` and `dropQuest()`. A null quest means a world variable.
 

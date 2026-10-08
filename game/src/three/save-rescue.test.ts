@@ -154,6 +154,22 @@ describe('rescueSave', () => {
     expect(rescued.report.settingsReset).toEqual([]);
   });
 
+  it('carries the quest variables that still fit, lists the rest as lost and closes any open quest', () => {
+    const slots = makeSlots();
+    const save = currentSave() as unknown as { format: unknown; world: SavedWorld & { player: { quests: unknown } } };
+    save.world.mapHash = 'old-map';
+    save.world.player.quests = {
+      world: { sample_wagon_heard: true, retired_flag: true },
+      local: { sample_bowl: { trust: 2, paid: 'yes' }, gone_quest: { n: 1 } },
+      session: { quest: 'sample_bowl', checkpoint: 'start.talk', seed: 3 },
+    };
+    slots.put('auto', save);
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 2000);
+    expect(rescued?.world.player.quests).toEqual({ world: { sample_wagon_heard: true }, local: { sample_bowl: { trust: 2 } }, session: null, live: null });
+    expect(rescued?.report.lost).toEqual(expect.arrayContaining(['retired_flag', 'sample_bowl.paid', 'gone_quest.n']));
+    expect(loadWorld(slots, 'auto', TEST_MAP)?.player.quests.world).toEqual({ sample_wagon_heard: true });
+  });
+
   it('gives nothing for an unparsable or non-object save', () => {
     const slots = makeSlots();
     expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
