@@ -264,7 +264,7 @@ export class Game {
       apply: (next) => this.apply(next),
       pushEvents: () => this.hud.pushEvents(this.world),
       note: (text) => this.hud.note(this.world, text, "bad"),
-      openTrade: () => this.trade.openIfReady(),
+      openTrade: (id) => this.trade.openWith(id),
       openTown: () => this.town.open(),
       openDowned: (id) => this.inventory.openDowned(this.world, id),
       openLoot: (id) => this.inventory.openLoot(id),

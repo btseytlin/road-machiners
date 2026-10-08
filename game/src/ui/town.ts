@@ -30,7 +30,7 @@ import {
   sellTruckGood,
   sellTruckPart,
   supplyRoom,
-  tradeReady,
+  canTradeWith,
   truckGoodPrice,
   truckPartPrice,
   truckGoodsForSale,
@@ -576,11 +576,10 @@ export class TruckTradeScreen {
     return this.npcId !== null;
   }
 
-  // Opens on the driver the player can trade with now. False when there is none.
-  openIfReady(): boolean {
-    const npc = tradeReady(this.host.world());
-    if (!npc) return false;
-    this.npcId = npc.id;
+  // Opens on this driver when the player can trade with them now. False otherwise.
+  openWith(npcId: string): boolean {
+    if (!canTradeWith(this.host.world(), npcId)) return false;
+    this.npcId = npcId;
     this.root.style.display = "";
     this.error = "";
     this.render();
