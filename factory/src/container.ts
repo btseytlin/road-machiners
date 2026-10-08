@@ -154,6 +154,10 @@ function effortArgs(effort: string | undefined): string[] {
   return effort === undefined ? [] : ['--effort', effort];
 }
 
+function advisorArgs(advisor: string | undefined): string[] {
+  return advisor === undefined ? [] : ['--advisor', advisor];
+}
+
 function disallowedArgs(tools: string[] | undefined): string[] {
   return tools === undefined ? [] : ['--disallowedTools', tools.join(',')];
 }
@@ -196,7 +200,7 @@ function recordedSession(cfg: FactoryConfig, jobId: string | null, session: Agen
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null, testWorkers: number | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session: issueSession, skill, effort, disallowedTools }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session: issueSession, skill, effort, disallowedTools, advisor }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       const session = recordedSession(cfg, jobId, issueSession);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
@@ -208,7 +212,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly);
       const args = [
         ...baseArgs(jobId, cpus, testWorkers, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), ...disallowedArgs(disallowedTools), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
+        'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), ...advisorArgs(advisor), ...disallowedArgs(disallowedTools), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir, cfg.agentJobMaxMinutes), prompt].filter((part) => part !== undefined).join('\n\n');
       openRecordedRun(cfg, jobId, model, session);

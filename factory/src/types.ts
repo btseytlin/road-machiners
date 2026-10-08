@@ -28,6 +28,8 @@ export type FactoryConfig = {
   sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
   designModel: string;
   buildModel: string;
+  triageModel: string;
+  advisorModel: string;
   triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
   designEffort: string; // reasoning effort of the design agent, passed to claude --effort
   tokenPrices: Record<string, TokenPrice>; // list prices per model id, to price a run that ended with no result event
@@ -257,9 +259,10 @@ export interface Telegram {
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
+// `advisor` is a model id passed to claude --advisor. Absent means no advisor.
 // `disallowedTools` names Claude Code tools the agent cannot use, passed to claude --disallowedTools.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[]; advisor?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.
@@ -402,7 +405,7 @@ export const QUESTION_HEADING = '## Committee question';
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
-// Model routing. Baseline without labels: design Opus, implementation and testing Sonnet. Triage labels trivial and intermediate cards design-sonnet. Explicit labels beat anything triage decided.
+// Model routing. Baseline without labels: triage Haiku, design Opus, implementation and testing Sonnet. Triage labels trivial and intermediate cards design-sonnet. Explicit labels beat anything triage decided.
 export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
 export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation runs on the design (Opus) model; verification stays on Sonnet
 export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.

@@ -10,7 +10,7 @@ Intake runs last in each tick, so a card it adds starts on the next tick. It rea
 
 ## Triage
 
-Triage runs Sonnet at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with `game/docs/DESIGN.md`, and writes `.factory/triage.json`.
+Triage runs Haiku, set by `FACTORY_TRIAGE_MODEL`, at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with `game/docs/DESIGN.md`, and writes `.factory/triage.json`.
 
 - `ready` moves the card to Design and rates its complexity, as Model routing says.
 - `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done.
@@ -31,7 +31,7 @@ Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It
 
 ## Implementation
 
-Implementation runs Sonnet with up:uexecute on the task file. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan and `game/docs/DESIGN.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
+Implementation runs Sonnet with up:uexecute on the task file, and Opus advises it through `claude --advisor` with `FACTORY_ADVISOR_MODEL`. A card with `implementation-opus` runs on Opus and gets no advisor. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan and `game/docs/DESIGN.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
 
 ## Testing
 
@@ -140,11 +140,11 @@ A member can ask Hermes for one-off work, like "simulate 10 battles and tell me 
 
 ## Model routing
 
-The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
+The baseline is triage Haiku, design Opus, implementation Sonnet with an Opus advisor, and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id, `FACTORY_BUILD_MODEL` the Sonnet id and `FACTORY_TRIAGE_MODEL` the Haiku id. The issue's labels at the moment an agent starts decide its model.
 
 - `design-sonnet` runs design on Sonnet.
 - `implementation-opus` runs implementation on Opus. Testing and hardening stay on Sonnet.
-- The release playtest, candidate, incident and factory change agents always run Opus. Triage, merge, ad hoc and waste review agents always run Sonnet.
+- The release playtest, candidate, incident and factory change agents always run Opus. Triage always runs Haiku. Merge, ad hoc and waste review agents always run Sonnet.
 - The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.
