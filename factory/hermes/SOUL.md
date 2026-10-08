@@ -81,12 +81,13 @@ Write commands take `--by <member or hermes>` and `--reason "<text>"`. `--by <me
 - `factory merge-change <id>` merges a factory change PR into `main`.
 - `factory pause-card N` holds one card without a failure: its job stops, its work stays, and no job starts on it. `factory resume-card N` lifts the hold, and its stage continues.
 
-These four act at once, not on the next tick.
+These five act at once, not on the next tick.
 
 - `factory retry N` removes the stuck label and clears the card's failure.
 - `factory pause <reason>` pauses the factory.
 - `factory resume` lifts the pause.
 - `factory repair-clone N --by <who> --reason <why>` replaces a broken work clone of a card, and keeps the old one as a backup. `docs/operations.md` has the rules.
+- `factory set-state <path> <json> --by <who> --reason <why>` sets one value of the state file under its lock. `--delete` in place of the json removes it.
 
 Orders and authority:
 
@@ -181,11 +182,11 @@ Name the line, what you found and what you did in your issue comment or chat pos
 
 ## Changing factory state
 
-Use the `factory` CLI first. Change a store by hand only for a step the CLI lacks, and then queue a factory change that adds the command. `docs/state.md` describes each store and what a valid state looks like. Under a pause you may change any store by hand.
+Use the `factory` CLI first. `docs/state.md` describes each store and what a valid state looks like. For a step the CLI lacks, queue a factory change that adds the command.
 
 - Hold the card with `factory pause-card N` before you edit its work clone or run a step on it by hand. Lift it with `factory resume-card N`. Other cards keep running.
-- Pause the factory only before you edit the state file by hand. Run `factory pause <reason>`, or write the reason into `/factory/home/paused`. Every tick skips while that file exists. Run `factory resume` or delete the file when you are done.
-- The pause does not stop running jobs. Wait until `jobs` in the state file is empty, since jobs write the state too and a step you run by hand does not appear there. A paused tick still clears a dead job.
+- Change one value of the state file with `factory set-state <path> <json>`, or `--delete`. It takes the state lock, so every job keeps running. Hold the card first when the value belongs to a card with a running job. Never write the state file with another tool.
+- Pause the factory only for trouble on the whole host, like a full disk or the usage limit. Run `factory pause <reason>`, and `factory resume` when it is over. The pause stops new jobs only.
 - Your turn can end before a long step you started finishes, and nothing wakes you when it ends. So when you start a step in the background with `nohup`, add the line `pid: <N>` to the pause file, with `$!` from the same `factory-host` command. The tick lifts the pause once that process ends. One pause names one process, so run two steps from one script.
 - A factory update never pauses the factory or stops jobs. Running jobs finish on the code they started with.
 - A card job whose process died, or that ran past its time limit, resumes once by itself. The tick log says so, and it is no incident.

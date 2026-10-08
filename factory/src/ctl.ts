@@ -6,6 +6,7 @@ import { repairClone } from './repair-clone';
 import { clearStuck } from './stuck';
 import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
+import { editState } from './state-edit';
 import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
 
 const SNAPSHOT_AGENT = 'curl/8.0';
@@ -32,6 +33,7 @@ const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> =
   retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, so a new playtest job runs, and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
+  'set-state': { usage: 'set-state <path> <json>|--delete --by <who> --reason <why>', help: 'set or delete one value of the state file under its lock, like release.postId null, while every job keeps running. Prints the old and the new value', run: setStateCommand },
   'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs no running job of the card, and holds the card while it works. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. A repair that works also removes the stuck label and the failures of the card, like retry", run: repairCloneCommand },
 };
 
@@ -106,6 +108,18 @@ async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
   if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
   const actor = resolveActor(ctx, by.value, false);
   for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
+}
+
+function setStateCommand(ctx: Ctx, args: string[]): void {
+  const by = takeFlag(args, '--by');
+  const reason = takeFlag(by.rest, '--reason');
+  const remove = reason.rest.includes('--delete');
+  const [path, json, ...extra] = reason.rest.filter((arg) => arg !== '--delete');
+  if (path === undefined || (json === undefined) !== remove || extra.length > 0) throw new Error(`Usage: ${IMMEDIATE['set-state'].usage}`);
+  const actor = resolveActor(ctx, by.value, false);
+  const { before, after } = editState(ctx.statePath, path, remove ? null : json);
+  ctx.log('tick', null, `${actor} set ${path} from ${JSON.stringify(before)} to ${JSON.stringify(after)}: ${reason.value}`);
+  console.log(`${path}: ${JSON.stringify(before)} -> ${after === undefined ? 'deleted' : JSON.stringify(after)}`);
 }
 
 async function status(ctx: Ctx): Promise<void> {

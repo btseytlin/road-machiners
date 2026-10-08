@@ -52,6 +52,7 @@ type ItemsPage = {
 const NOT_THIS_KIND = /Could not resolve to an? (User|Organization)/;
 
 const RATE_LIMITED = /rate limit|HTTP 429|submitted too quickly/i;
+const TAG_EXISTS = /a release with the same tag name already exists/;
 
 type Wait = (ms: number) => Promise<void>;
 const sleep: Wait = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -212,7 +213,8 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
       await setStatus(card.itemId, column);
     },
     async createRelease(tag, target, title, notes) {
-      await gh(['release', 'create', tag, '-R', repo, '--target', target, '--title', title, '--notes', notes]);
+      const result = await call(['release', 'create', tag, '-R', repo, '--target', target, '--title', title, '--notes', notes]);
+      if (!TAG_EXISTS.test(result.stderr)) must(result, 'gh release create');
     },
     async openPullRequest(branch, base, title, body) {
       const out = await gh(['pr', 'create', '-R', repo, '--head', branch, '--base', base, '--title', title, '--body', body]);

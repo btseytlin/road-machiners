@@ -89,6 +89,18 @@ describe('ship', () => {
     expect(f.calls.filter((call) => call === 'close completed')).toHaveLength(2);
   });
 
+  it('ships the features it found before the merge when it runs again after the release reached main', async () => {
+    const f = shippable();
+    f.ctx.github.createRelease = async () => { throw new Error('killed'); };
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('killed');
+    expect(readState(f.ctx.statePath).release?.shipping?.features).toEqual([{ issue: 3, title: 'faster trucks' }]);
+    const again = shippable();
+    again.changelog = [];
+    await ship(again.ctx, 11, 'Ann');
+    expect(again.calls).toContain('removeLabel 3 release-candidate');
+    expect(readState(again.ctx.statePath).release).toBeNull();
+  });
+
   it('queues an incident job for each shipped issue labeled bug, and for no other', async () => {
     const f = shippable();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #4: new horn'];

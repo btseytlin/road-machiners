@@ -58,6 +58,12 @@ describe('ghClient', () => {
     await expect(client.candidates(['bug'])).rejects.toThrow('over 100 thumbs-up');
   });
 
+  it('counts a release tag that already exists as made, and fails on any other error', async () => {
+    const failing = (stderr: string): Run => async () => ({ code: 1, stdout: '', stderr });
+    await ghClient(failing('a release with the same tag name already exists: release-x'), CFG).createRelease('release-x', 'main', 't', 'n');
+    await expect(ghClient(failing('HTTP 500'), CFG).createRelease('release-x', 'main', 't', 'n')).rejects.toThrow('gh release create');
+  });
+
   it('waits twice as long before each retry of a rate-limited call', async () => {
     const waits: number[] = [];
     let calls = 0;

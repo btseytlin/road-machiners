@@ -14,7 +14,7 @@ import { agentLog, fillPrompt, resetOutputs } from './common';
 import { checkAndPush, landingAgent, mergeIn, type Landing } from './merge';
 import { queueIncidents } from './incident';
 import { mergeResolving } from './merge-resolve';
-import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
+import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, type Feature } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
 
@@ -78,7 +78,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   if (!existsSync(screenshot) || !existsSync(notesPath)) throw new Error('The candidate screenshot or notes are gone from its work clone, so the public post cannot be made.');
   await ctx.repo.fetch();
   await requirePlayed(ctx, release);
-  const features = await releaseFeatures(ctx, release);
+  const features = await shippingFeatures(ctx, release);
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
   await landRelease(ctx, release);
   await mergeResolving(ctx, 'ship', [{ branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` }]);
@@ -109,6 +109,14 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes. Hermes drafts the public post next.`);
   ctx.log('ship', issue, `shipped ${features.length} changes`);
+}
+
+async function shippingFeatures(ctx: Ctx, release: ReleaseState): Promise<Feature[]> {
+  const sha = await ctx.repo.headHash(release.branch);
+  if (release.shipping?.sha === sha) return release.shipping.features;
+  const features = await releaseFeatures(ctx, release);
+  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, shipping: { sha, features } } }));
+  return features;
 }
 
 async function anyBug(ctx: Ctx, issues: number[]): Promise<boolean> {

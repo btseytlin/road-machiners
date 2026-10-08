@@ -66,6 +66,22 @@ describe('remove', () => {
     expect(readState(f.ctx.statePath).release).toMatchObject({ postId: null, removed: [5] });
   });
 
+  it('goes on with a removal run again after both reverts were pushed and the job stopped', async () => {
+    const f = fake();
+    f.ctx.repo.revertIssueMerge = async () => false;
+    writeState(f.ctx.statePath, { ...readState(f.ctx.statePath), release: { ...RELEASE, removed: [5] } });
+    await remove(f.ctx, 5);
+    expect(f.calls).toContain('reopen 5');
+    expect(readState(f.ctx.statePath).release?.removed).toEqual([5]);
+  });
+
+  it('records the removed issue as soon as both reverts are pushed', async () => {
+    const f = fake();
+    f.ctx.github.reopen = async () => { throw new Error('killed'); };
+    await expect(remove(f.ctx, 5)).rejects.toThrow('killed');
+    expect(readState(f.ctx.statePath).release?.removed).toEqual([5]);
+  });
+
   it('throws when neither branch has the merge, and changes nothing', async () => {
     const f = fake();
     f.ctx.repo.revertIssueMerge = async () => false;

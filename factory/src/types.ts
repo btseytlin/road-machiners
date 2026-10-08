@@ -139,6 +139,7 @@ export type ReleaseState = {
   removed: number[];
   tasks: number[];
   playtest: PlaytestState;
+  shipping?: { sha: string; features: { issue: number; title: string }[] };
 };
 
 export type ReleasePost = {
