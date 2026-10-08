@@ -4,7 +4,7 @@ import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
-import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, standDown } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, knockOutNpc, standDown } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, isLoot } from './grid';
 import { addGoods, dumpItem, moveItem } from './inventory';
 import { scavenge } from './locations';
@@ -473,5 +473,30 @@ describe('gave up', () => {
     expect(gaveUp(npc)).toBe(true);
     npc.defeat!.gaveUp = false;
     expect(gaveUp(npc)).toBe(false);
+  });
+});
+
+describe('defeat of an NPC', () => {
+  // A raider that went home to rearm, fled the player there and lost a fight while it fled.
+  function fleeingRearmer(): { w: World; npc: Vehicle } {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    const at = { x: 0, y: 0 };
+    npc.brain.goals = [
+      { kind: 'rearm', targetId: 'kiln', destination: at, phase: 'act', reason: 'restock ammo', until: 500 },
+      { kind: 'fight', targetId: w.player.vehicleId, destination: at, phase: 'travel', reason: 'attacked' },
+      { kind: 'flee', targetId: w.player.vehicleId, destination: at, phase: 'travel', reason: 'avoid a costly fight', perceived: 0 },
+    ];
+    return { w, npc };
+  }
+
+  it('ends its fight and flee goals and keeps the rest, so the lie-up it held comes on top', () => {
+    for (const lose of [(w: World, npc: Vehicle) => standDown(w, npc, w.player.vehicleId), knockOutNpc]) {
+      const { w, npc } = fleeingRearmer();
+      lose(w, npc);
+      expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['rearm']);
+      expect(isKnockedOut(npc)).toBe(true);
+    }
   });
 });

@@ -23,7 +23,7 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { pushGoal } from "./npc-activities";
+import { dropGoal, pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
 import type { SalvageStock, Vehicle, World } from "./types";
@@ -116,6 +116,13 @@ export function gaveUp(v: Vehicle): boolean {
 function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): void {
   v.defeat = { phase: "out", turns: 0, unseen: 0, foes, gaveUp };
   stopKnockedOut(world, v);
+  endDangerGoals(world, v);
+}
+
+// A defeated driver has no foe until it refits, so its fights and flights end. A flight left on top would sit over the
+// lie-up at home and keep the driver from ever lying up.
+function endDangerGoals(world: World, v: Vehicle): void {
+  for (const goal of v.brain!.goals.filter((g) => g.kind === "fight" || g.kind === "flee")) dropGoal(world, v, goal, "defeated");
 }
 
 // A driver that gives up lies as if knocked out, with no knockout event, death or grudge.
