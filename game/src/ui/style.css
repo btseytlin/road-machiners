@@ -2046,6 +2046,10 @@ canvas.view {
   line-height: 1.45;
   margin-bottom: 4px;
 }
+.quest-screen .qt-speaker {
+  color: var(--muted);
+  font-weight: 600;
+}
 .quest-screen .talk-ask {
   color: var(--muted);
   margin-bottom: 4px;

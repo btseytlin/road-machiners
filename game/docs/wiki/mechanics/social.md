@@ -23,7 +23,7 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Warning off: the player parked beside a wreck, a pile or a knocked-out truck that a peaceful driver is looting can radio it once to back off. The driver leaves the loot, refuses and keeps looting, or fights. Raiders and lawmen fight more, traders and cowards give way more. It pays no XP.
 - Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. A driver whose escort is in sight gives up a tenth as often. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
-- Dead Army wagon: once the player has heard at Bowl of a lost Army wagon, a driver that talks rumors and passed near the wagon can tell where it lies. It needs no perk and marks nothing. Its words go into the journal.
+- Dead Army wagon: once the player has heard at Bowl of a lost Army wagon, a driver that talks rumors and passed near the wagon can tell where it lies. It needs no perk and marks nothing. Its words go into the journal. Asking what else it saw ends the call and goes on in the talk window, about the raiders' tracks, the crew and what is left on the wreck.
 
 ## Settlement talk
 

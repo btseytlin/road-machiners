@@ -55,6 +55,10 @@ export function parseMarkup(text: string): Span[] {
   return spans.filter((s) => s.text !== '');
 }
 
+export function plainText(text: string): string {
+  return parseMarkup(text).map((s) => s.text).join('');
+}
+
 function openMark(name: string, value: string | null, text: string): Mark {
   const def = MARKS[name];
   if (!def) throw new Error(`Unknown markup <${name}> in "${text}". Known: ${Object.keys(MARKS).join(', ')}`);

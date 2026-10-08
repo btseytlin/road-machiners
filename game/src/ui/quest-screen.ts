@@ -41,8 +41,8 @@ export class QuestScreen {
 
   render(): void {
     const live = this.host.world().player.quests.live;
-    if (live === this.shown) return;
     if (!live) return this.hide();
+    if (live.quest === this.shown?.quest && live.ink === this.shown.ink) return;
     this.transcript = extendTranscript(this.transcript, this.shown, live, this.asked);
     this.shown = live;
     this.asked = null;
@@ -83,12 +83,7 @@ export class QuestScreen {
     const box = el('div', { class: newest ? 'quest-exchange' : 'quest-exchange qt-done' });
     if (x.ask !== null) box.append(el('div', { class: 'talk-ask' }, x.ask));
     let at = 0;
-    for (const line of x.lines) {
-      const drawn = renderLine(line.text, line.tags, at);
-      box.append(drawn.el);
-      if (newest && lineStyle(line.tags).flags.includes('work_offer')) box.append(offerCard(w, drawn.endMs));
-      at = drawn.endMs;
-    }
+    for (const line of x.lines) at = drawLine(box, w, line, at, newest);
     return { el: box, endMs: at };
   }
 
@@ -146,6 +141,15 @@ export class QuestScreen {
     e.preventDefault();
     this.root.classList.add('qt-done');
   }
+}
+
+function drawLine(box: HTMLElement, w: World, line: QuestLine, atMs: number, newest: boolean): number {
+  const style = lineStyle(line.tags);
+  const drawn = renderLine(line.text, line.tags, atMs);
+  if (style.speaker) drawn.el.prepend(el('b', { class: 'qt-speaker' }, `${style.speaker}: `));
+  box.append(drawn.el);
+  if (newest && style.flags.includes('work_offer')) box.append(offerCard(w, drawn.endMs));
+  return drawn.endMs;
 }
 
 function offerCard(w: World, atMs: number): HTMLElement {

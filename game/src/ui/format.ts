@@ -30,6 +30,7 @@ import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
 import type { GameEvent, GridItem, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
+import { plainText } from './quest-text';
 
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
   if (job.kind === 'search') return 'Search';
@@ -392,7 +393,7 @@ function aidStartedText(world: World, e: Extract<GameEvent, { t: 'aidStarted' }>
 
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
   const cls = e.speaker === world.player.vehicleId ? 'dim' : '';
-  return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
+  return { text: `${vehicleName(world, e.speaker)}: “${plainText(fillLine(e.text, e.vars))}”`, cls };
 }
 
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {

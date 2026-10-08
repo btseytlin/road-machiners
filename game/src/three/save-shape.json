@@ -1519,7 +1519,8 @@
    "bowl_ruben": {},
    "nose_ibo": {},
    "nose_kovac": {},
-   "nose_lena": {}
+   "nose_lena": {},
+   "radio_wagon_driver": {}
   },
   "checkpoints": {
    "bowl_dag": [
@@ -1545,6 +1546,10 @@
    "nose_lena": [
     "start",
     "start.hub"
+   ],
+   "radio_wagon_driver": [
+    "start",
+    "start.ask"
    ]
   }
  }

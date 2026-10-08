@@ -39,6 +39,15 @@ export const END = 'end';
 export const REFUSED = 'callRefused';
 export const BUSY_LINE = 'Busy here! Off the channel.';
 export const SPARE_LINE = 'You are not worth the trouble.';
+export const QUEST_GO = 'quest:';
+
+export function questGo(quest: string): string {
+  return `${QUEST_GO}${quest}`;
+}
+
+export function handoffQuest(go: string): string | null {
+  return go.startsWith(QUEST_GO) ? go.slice(QUEST_GO.length) : null;
+}
 
 export const TOPICS: Record<TopicId, Topic> = {
   directions: {
@@ -581,6 +590,7 @@ export const TOPICS: Record<TopicId, Topic> = {
       tell: {
         line: 'Army wagon? Yeah, I passed one. It lies in a hollow, closer to the Bowl north road than to the Pump Station track, south of an old farm with a water tower. Nobody was at it that I saw.',
         options: [
+          { text: 'What else did you see out there?', when: [], effects: ['noteWagonRoad', 'settleDone'], go: questGo('radio_wagon_driver') },
           { text: 'Thanks. Something else.', when: [], effects: ['noteWagonRoad', 'settleDone'], go: HUB },
           { text: 'Thanks. Over and out.', when: [], effects: ['noteWagonRoad', 'settleDone'], go: END },
         ],

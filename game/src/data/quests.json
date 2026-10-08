@@ -60,6 +60,14 @@
     "start",
     "start.hub"
    ]
+  },
+  "radio_wagon_driver": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Not much more. Talk fast, I am burning daylight. \",\"#\",\"^speaker: Driver \",\"/#\",\"#\",\"^reveal: char \",\"/#\",\"#\",\"^speed: fast\",\"/#\",\"\\n\",{\"->\":\".^.ask\"},{\"ask\":[[\"#\",\"^checkpoint: start.ask\",\"/#\",\"ev\",\"str\",\"^Anyone still around the wreck?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What happened to the crew?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Is anything left on it?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Over and out.\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Tracks all over the hollow. <b>Raider tracks</b>, the wide kind with chains on. Old, though. Rain came through since. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Walked to Nose, the way I heard it. Lucky. Whoever ran that wagon down was not out for prisoners. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",[\"ev\",\"str\",\"^story-wagon-seven\",\"/str\",{\"x()\":\"searched\",\"exArgs\":1},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You tell me. Sounds like you got there first. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^.3\"},null]}],[{\"->\":\".^.b\"},{\"b\":[\"\\n\",\"^Could be. Raiders strip what they can lift, and an Army gun is <shake>heavy</shake>. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^.3\"},null]}],\"nop\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Over and out. <color=sand>Watch the hollows.</color> \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.ask"
+   ]
   }
  }
 }

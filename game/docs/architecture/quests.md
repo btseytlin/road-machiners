@@ -1,6 +1,12 @@
 # Quests
 
-Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Each local of Bowl and Nose is one quest, named in `LOCALS` in `src/data/locals.ts`. Radio calls keep their own engine in `src/sim/dialogue.ts`.
+Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Each local of Bowl and Nose is one quest, named in `LOCALS` in `src/data/locals.ts`. Radio calls keep their own engine in `src/sim/dialogue.ts`, and share only the text markup and the handoff below.
+
+## Radio handoff
+
+- A radio option with `go: questGo('<quest>')` in `src/data/dialogue.ts` runs its effects, ends the call and opens the quest at `start`, all in one command. A test checks that every handoff names a quest with a `start` checkpoint.
+- The quest cannot read who was on the radio. Its lines name the speaker with `# speaker:`.
+- Radio lines use the same markup and reveal as quest lines. The log prints them without markup.
 
 ## Content
 
@@ -40,7 +46,7 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 ## Text and the talk window
 
 - Inline markup is `<b>`, `<i>`, `<shake>`, `<pop>` and `<color=rust>`, closed by `</name>`. Square brackets would break ink choices, so markup uses angle brackets.
-- A line tag sets how the line reveals: `# reveal: all`, `word` or `char`, and `# speed: slow`, `normal` or `fast`. Words is the default. `# work_offer` shows the town's best offer under the line.
+- A line tag sets how the line reveals: `# reveal: all`, `word` or `char`, and `# speed: slow`, `normal` or `fast`. Words is the default. `# speaker: <name>` puts the name before the line. `# work_offer` shows the town's best offer under the line.
 - `MARKS` and `LINE_TAGS` in `src/ui/quest-text.ts` list them. A new effect is one entry there and its CSS in `style.css`. Unknown or unclosed markup and unknown tags fail `npm run quests:check`.
 - `src/ui/quest-screen.ts` is the talk window. It shows whenever `player.quests.live` is set, so a start, a pick and a load all show it. It lies over every other screen. It keeps the exchanges of this talk above the newest one. Digits pick, a click, Space or Enter shows the rest of the reveal at once, and Escape leaves the quest.
 

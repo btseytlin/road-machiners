@@ -98,13 +98,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export const QUESTS: QuestBundle = parseBundle(BUNDLE);
 
 export function startQuest(world: World, bundle: QuestBundle, questId: string, checkpoint: string): World {
-  return update(world, (w) => {
-    const open = w.player.quests.session;
-    if (open) throw new Error(`Quest ${open.quest} is open`);
-    if (!questOf(bundle, questId).checkpoints.includes(checkpoint)) throw new Error(`Quest ${questId} has no checkpoint ${checkpoint}`);
-    w.player.quests.session = { quest: questId, checkpoint, seed: questSeed(w, questId) };
-    enterCheckpoint(w, bundle);
-  });
+  return update(world, (w) => openQuest(w, bundle, questId, checkpoint));
+}
+
+export function openQuest(w: World, bundle: QuestBundle, questId: string, checkpoint: string): void {
+  const open = w.player.quests.session;
+  if (open) throw new Error(`Quest ${open.quest} is open`);
+  if (!questOf(bundle, questId).checkpoints.includes(checkpoint)) throw new Error(`Quest ${questId} has no checkpoint ${checkpoint}`);
+  w.player.quests.session = { quest: questId, checkpoint, seed: questSeed(w, questId) };
+  enterCheckpoint(w, bundle);
 }
 
 export function chooseQuestOption(world: World, bundle: QuestBundle, index: number): World {
