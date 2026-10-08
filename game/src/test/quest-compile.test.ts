@@ -46,6 +46,10 @@ describe('quest top tags', () => {
     });
   });
 
+  it('fails top tags written below the include, which ink would ignore', () => {
+    expect(compile(sources(`# view: page\n${BODY}`)).errors).toEqual([expect.stringContaining('Put them all at the very top, above INCLUDE world.ink')]);
+  });
+
   it('gives a quest with no top tags the transcript view', () => {
     expect(compile(sources(BODY)).quest).toMatchObject({ view: 'transcript', stats: [], facts: [] });
   });

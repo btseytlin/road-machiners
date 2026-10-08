@@ -64,6 +64,7 @@ export function compileQuest(id: string, sources: QuestSources, countAllVisits: 
   const local = own.parsed.vars.filter((name) => !worldVars.has(name));
   const sections = sectionsOf(own.parsed.flows);
   const header = headerOf(own.parsed.story);
+  header.errors.push(...strayHeaderErrors(sources[`${id}.ink`], own.parsed.story));
   const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed), ...countErrors(own.parsed), ...header.errors];
   if (ruleErrors.length > 0) return { quest: null, errors: ruleErrors, warnings: own.warnings, sections };
   const story = own.parsed.story.ToJson();
@@ -78,6 +79,14 @@ function headerOf(story: Story): Header {
   const header: Header = { view: 'transcript', stats: [], facts: [], errors: [] };
   for (const tag of story.globalTags ?? []) readHeaderTag(header, story, tag);
   return header;
+}
+
+const HEADER_LINE = /^\s*#\s*(view|stat|fact)\s*:/;
+
+function strayHeaderErrors(source: string, story: Story): string[] {
+  const written = source.split('\n').filter((line) => HEADER_LINE.test(line)).length;
+  const read = (story.globalTags ?? []).length;
+  return written > read ? ['A view, stat or fact tag sits below other content, so the quest ignores it. Put them all at the very top, above INCLUDE world.ink.'] : [];
 }
 
 function readHeaderTag(header: Header, story: Story, tag: string): void {

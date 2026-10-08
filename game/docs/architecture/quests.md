@@ -1,6 +1,6 @@
 # Quests
 
-Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Each local of Bowl and Nose is one quest, named in `LOCALS` in `src/data/locals.ts`. Radio calls keep their own engine in `src/sim/dialogue.ts`, and share only the text markup and the handoff below.
+Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Each local of Bowl and Nose is one quest, named in `LOCALS` in `src/data/locals.ts`. Radio calls keep their own engine in `src/sim/dialogue.ts`, and share only the text markup and the handoff below. [Writing quests](../quest-authoring.md) walks through adding and changing a quest.
 
 ## Radio handoff
 

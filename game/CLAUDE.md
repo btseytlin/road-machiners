@@ -20,6 +20,7 @@ Read the doc for an area before changing it.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
 - [Quests](docs/architecture/quests.md): ink quests, checkpoints, quest state in saves, game functions and the quest tools.
+- [Writing quests](docs/quest-authoring.md): how to add, change and check a quest, the writing rules and what to do when the build or the checker fails.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.
 - [Art pipeline](docs/art.md): Blender models, the truck grid projection and part model rules.
 - [Sound](docs/sound.md), [Publishing](docs/publishing.md), [Wiki](docs/wiki/README.md).
