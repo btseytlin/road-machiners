@@ -86,6 +86,12 @@ async function checkLayout(page, size) {
     await page.screenshot({ path: `${evidence}/${tab}-${size.width}.png` });
     assert.equal(overflow.document, false);
     assert.deepEqual(overflow.panels, []);
+    if (tab === 'overview') {
+      // Every column of the board sits in one visible row. A grid with too few tracks wraps the last column out of sight.
+      const tops = await page.locator('#funnel div').evaluateAll((items) => items.map((item) => item.getBoundingClientRect().top));
+      assert.equal(tops.length, 8);
+      assert.equal(new Set(tops).size, 1);
+    }
     console.log(size, tab, 'fits without scrolling');
   }
 }
