@@ -89,12 +89,6 @@ Each of these stays as it is, with a follow-up where one makes sense.
 - `docs/wiki/` stays English. It reads the English catalog.
 - Follow-up: a native speaker's pass over the Russian copy.
 
-## Russian glossary
+## Russian copy
 
-- truck: грузовик. Player-facing text says «вы»; drivers say «ты» to each other.
-- raider: рейдер. Scavenger: мусорщик. Vulture: стервятник. Roamer: бродяга. Trader: торговец.
-- scrap: лом, scrap metal: металлолом. Wreck: обломки. Loot: добыча.
-- tow: буксир, to tow: тащить на буксире. Patch: ремонт, to patch: подлатать.
-- parked: на стоянке. Pad: площадка. Garage storage: гараж.
-- skill: умение. Perk: навык. XP: опыт. HP of a part: ПЧ, прочность.
-- turn: ход, never on the radio.
+[Russian copy](../russian-style.md) holds the style rules, bad and good examples and the glossary. Read it before writing Russian.
