@@ -78,6 +78,7 @@ export function fake(): Fake {
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
       mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
+      catchUpBase: async () => ({ commit: null, conflicts: [], kept: null }),
       merge: async (steps: MergeStep[], resolutions: Resolution[] = []) => {
         for (const step of steps) {
           note(`merge ${step.branch} ${step.into}`);
