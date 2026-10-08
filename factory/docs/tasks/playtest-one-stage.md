@@ -1,6 +1,6 @@
 # Release playtest in one stage
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** playtest-one-stage
 **Worktree:** .worktrees/playtest-one-stage
 **Goal:** One playtest job takes a release from a fresh head to a passed head, or to a block for a member, with no release task in between. Findings that the release did not cause become bug issues for dev instead of blocking it. Confirming it needs the next real release on the server, since only the server runs the harness on the release.
@@ -159,3 +159,31 @@ Interfaces:
 
 Smoke: `npm run progression:playthrough -- --seed 20261007 --turns 60 --sha main001` on this branch, then `logFacts` on its log — passed.
 Goal: proxy only. The full job needs the server's containers and Opus. The next release playtest on the server confirms it.
+
+## Conclusion
+
+Outcome: the code is built, verified and reviewed at 6bdc686d. The goal needs the next real release playtest on the server.
+
+Invariants:
+- IV1 — no path in `playtest.ts` uses the release-task label, and the job tests check `created`.
+- IV2 — the gate test and the job test hold the playtest for a recorded task the board does not list.
+- IV3 — the round tests stop at `FACTORY_PLAYTEST_RUNS`, and a check failure counts as a play.
+- IV4 — the job tests block factory paths, failed checks and dirty clones before the push.
+- IV5 — `pass` sets `passed` only after a fetch shows the release head at the checked commit. A moved release takes the merge path and passes nothing.
+- IV6 — the review tests block an unfixed important `release` finding and never an `old` one.
+- IV7 — `takeMain` merges main before the clone, and a job test checks it.
+
+### Assumptions check
+- AS1 — unverifiable here. Only the server's agent image can show that resume keeps the session.
+- AS2 — unverifiable here. The first real job shows whether two harness runs fit the pool.
+- AS3 — unverifiable here. The first real job shows whether four plays fit 330 minutes.
+
+### Unknowns outcome
+- UK1 — resolved. `candidates(['bug'])` lists the open bug issues for `open-bugs.md`.
+- UK2 — still open. The first real job shows whether the agent sorts findings by cause well enough.
+
+Plan adherence: three deviations. A replay could open a second bug issue for the same old finding, fixed in 1e0e812f. `guardDiff` moved out of `guardedHead` so the playtest reuses its checks, per PC2. `fillRelease` drops the old `streak` field from saved state.
+
+Review findings:
+- Critical: none.
+- Important: none. The baseline read moved before the merge of main in 6bdc686d, so a moving main cannot leave the baseline outside the release.
