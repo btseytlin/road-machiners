@@ -2,18 +2,21 @@ import { GEAR_SCORE, PRIORITY_TOP, type LoadoutPriorities } from '../data/npcs';
 import { PARTS, partDef, type WeaponDef } from '../data/parts';
 import { makePart } from './factory';
 import { gunsBySide, killRate, targetOf, THREATS } from './fight-odds';
-import { baseGrid, itemCells, mountedItems, plateSide, type SideLetter } from './grid';
+import { baseGrid, freeCells, itemCells, mountedItems, plateSide, type SideLetter } from './grid';
 import { vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
 import { wornDef } from './wear';
 
-// How a spawning driver judges its gear. The score is the template's three priorities, each over PRIORITY_TOP,
+// How a spawning driver judges its gear. The score is the template's four priorities, each over PRIORITY_TOP,
 // times how well the truck does at it:
 // - armor: on each side, the mean quality of the armor over the side's edge cells, a bare cell counting 0, then a
 //   curve that rewards the first plates most. The truck's armor is the mean of its four sides.
 // - firepower: on each side, the kill rate of the guns that can fire toward it, saturating. The truck's firepower is
 //   the mean of its four sides, so a gun that covers a bare side beats a second gun on a covered one.
 // - speed: the top speed over the top speed of the chassis with only its engine.
+// - cargo: the free cells over the free cells of the chassis with only its engine, on a curve that makes the first
+//   cells given up cheap. Flank armor sits on cells that hold no cargo, so it costs no room. Front and rear armor and
+//   deck gear like guns do.
 // The damage rules come from src/sim/fight-odds.ts.
 
 const SIDE_LETTERS: readonly SideLetter[] = ['F', 'L', 'R', 'B'];
@@ -45,6 +48,7 @@ export function gearScorer(world: World, p: LoadoutPriorities, bare: Vehicle): (
   const tierOne = Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon' && d.tier === 1 && d.line === undefined);
   const saturation = (GEAR_SCORE.gunSaturation * tierOne.reduce((sum, def) => sum + killRate(def, target, 'front'), 0)) / tierOne.length;
   const bareSpeed = vehicleStats(world, bare).maxSpeed;
+  const bareCells = freeCells(bare);
   // A gun's kill rate depends on its def and wear alone.
   const rates = new Map<string, number>();
   const rateOf = (def: WeaponDef) => {
@@ -76,5 +80,6 @@ export function gearScorer(world: World, p: LoadoutPriorities, bare: Vehicle): (
   return (v) =>
     (p.armor / PRIORITY_TOP) * armorValue(v) +
     (p.firepower / PRIORITY_TOP) * fireValue(v) +
-    GEAR_SCORE.speedWeight * (p.speed / PRIORITY_TOP) * (vehicleStats(world, v).maxSpeed / bareSpeed);
+    GEAR_SCORE.speedWeight * (p.speed / PRIORITY_TOP) * (vehicleStats(world, v).maxSpeed / bareSpeed) +
+    (p.cargo / PRIORITY_TOP) * (1 - (1 - Math.min(1, freeCells(v) / bareCells)) ** GEAR_SCORE.cargoCurvePower);
 }

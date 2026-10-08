@@ -7,7 +7,7 @@ import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
-import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
+import { callLawmen, inCombat, inCombatWith, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
+  canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -632,6 +632,16 @@ export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): voi
   interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
 }
 
+// A trapped driver that can fight turns back on a visible foe it is in combat with, or holds a fight goal on, even if
+// combat state expired while it fled. Any other driver returns false, so the caller's recovery runs.
+export function turnCornered(world: World, vehicle: Vehicle): boolean {
+  if (topGoal(vehicle)?.kind === 'fight') return false;
+  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === 'fight' && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
+  if (!foe) return false;
+  fightCornered(world, vehicle, foe);
+  return true;
+}
+
 type HostileDecision = 'hostileSeen' | 'contactHeard';
 
 // Rolls the driver's first choice on a hostile it sees or hears at `at`, and tracks the truck with it. When only keep
@@ -1236,9 +1246,10 @@ function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 }
 
 // A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it
-// still perceives it, so it does not flee again from the same truck.
+// still perceives it, so it does not flee again from the same truck. A driver its foe followed to the point is
+// cornered, so it turns and fights rather than go back to its errand under fire and run again.
 function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'nowhere farther to run');
+  if (reachedDestination(world, vehicle, activity) && !turnCornered(world, vehicle)) finishGoal(world, vehicle, 'nowhere farther to run');
 }
 
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {

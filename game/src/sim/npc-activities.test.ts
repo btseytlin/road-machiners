@@ -2,7 +2,7 @@ import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
 import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
-import { planNpcOrders, turnCornered } from './ai';
+import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -17,7 +17,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { backOffLoot, finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, turnCornered } from './npc-activities';
 import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
@@ -1321,6 +1321,36 @@ describe('a trader too poor to trade', () => {
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
     expect(chances.trade).toBeUndefined();
     expect(chances.haul!).toBeGreaterThan(chances.wait! * 5);
+  });
+});
+
+describe('flee at its point', () => {
+  // The errand below, the flee on top.
+  const fleeing = (foeId: string, at: { x: number; y: number }) => [
+    { kind: 'scavenge' as const, targetId: null, destination: { x: 40, y: 40 }, phase: 'travel' as const, reason: 'collect visible salvage' },
+    { kind: 'flee' as const, targetId: foeId, destination: { ...at }, phase: 'travel' as const, reason: 'escape an attacker', perceived: 0 },
+  ];
+
+  it('turns on the foe that followed it there instead of going back to its errand', () => {
+    const { w, npc } = createScavenger();
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    startCombat(w, foe, npc);
+    npc.brain!.goals = fleeing(foe.id, npc.pos);
+    refreshVision(w);
+
+    resolveNpcActivities(w);
+
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: foe.id, reason: 'cornered' });
+  });
+
+  it('ends the run once no foe is in sight', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = fleeing('gone', npc.pos);
+    refreshVision(w);
+
+    resolveNpcActivities(w);
+
+    expect(npc.brain!.goals.some((goal) => goal.kind === 'flee')).toBe(false);
   });
 });
 

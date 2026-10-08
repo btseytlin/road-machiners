@@ -311,29 +311,33 @@ describe('trader spare parts', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
-    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 2, weight: 1 }] };
+    // A plate mounts only on edge cells, so on a free deck cell it is a spare.
+    template.loadout.spares = { pool: [{ value: 'steelPlate', weight: 1 }], count: [{ value: 2, weight: 1 }] };
     // A poor truck carries the least armor, which leaves rated mass for spares.
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template, null, 'poor');
     expect(loadout.spares.length).toBeGreaterThan(0);
     for (const spare of loadout.spares) {
-      expect(spare.defId).toBe('mg');
+      expect(spare.defId).toBe('steelPlate');
       expect(spare.wear).toBeGreaterThanOrEqual(0);
       expect(spare.wear).toBeLessThanOrEqual(CONDITION.maxWear);
     }
   });
 
-  it('carries no spare heavier than the rated mass left', () => {
+  it('carries no more spares than the rated mass takes', () => {
     const template = structuredClone(NPCS.trader);
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
     const heaviest = Object.values(PARTS).filter((d) => d.kind !== 'core').reduce((a, d) => (d.mass > a.mass ? d : a));
-    template.loadout.spares = { pool: [{ value: heaviest.id, weight: 1 }], count: [{ value: 3, weight: 1 }] };
+    // More of the heaviest part than any buggy can hold.
+    const count = Math.ceil(CHASSIS.buggy.ratedMass / heaviest.mass);
+    template.loadout.spares = { pool: [{ value: heaviest.id, weight: 1 }], count: [{ value: count, weight: 1 }] };
 
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template, null, 'standard');
+    const truck = makeVehicle(fixture, { ...loadout, cargo: {}, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
 
-    expect(heaviest.mass).toBeGreaterThan(CHASSIS.buggy.ratedMass - vehicleMass(makeVehicle(fixture, { ...loadout, spares: [], cargo: {}, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 })));
-    expect(loadout.spares).toEqual([]);
+    expect(loadout.spares.length).toBeLessThan(count);
+    expect(vehicleMass(truck)).toBeLessThanOrEqual(CHASSIS.buggy.ratedMass);
   });
 
   it('never rolls spares for a template with no spare table', () => {
