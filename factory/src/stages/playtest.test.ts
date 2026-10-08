@@ -174,6 +174,13 @@ describe('playtest', () => {
     expect(comments(run.f)[0]).toContain('Old bugs opened: #11');
   });
 
+  it('opens an old bug once, also when a replay lists it again without its new number', async () => {
+    const run = setup();
+    run.turns = [{ ...fixed('fix0001'), review: review({ verdict: 'fixed', findings: [releaseBug, oldBug], fixes: ['a'] }) }, { review: review({ findings: [oldBug] }) }];
+    await playtest(run.f.ctx, 11);
+    expect(run.f.created.map((issue) => issue.title)).toEqual(['Escorts to a territory never end']);
+  });
+
   it('gives a failed check to the agent, replays its fix and pushes the commit that passed both', async () => {
     const run = setup();
     run.checkFailures = 1;

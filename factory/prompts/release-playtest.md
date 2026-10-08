@@ -7,7 +7,7 @@ Change only game code, its tests and its docs, and commit each fix. Do not push,
 
 The factory played one progression run of the release and one of the baseline: seed {{seed}}, {{turns}} turns, the markov bot, which plays a random one of the other bot archetypes for a stretch of turns, then draws again.
 - `.factory/playtest/log.jsonl` is the release at commit {{sha}}.
-- `.factory/playtest/baseline.jsonl` is the baseline at commit {{baseline}}, {{baselineKind}}.
+- `.factory/playtest/baseline.jsonl` is the baseline at commit {{baseline}}, {{baselineKind}}. Its harness may be older, so read its `run` line for its bot and limits.
 Each line is JSON with a `k` field:
 - `run`: the seed, turns, commit and the limits of the harness.
 - `event`: one game event with its turn. `e.t` names the event. `src/sim/types.ts`, type `GameEvent`, describes each one.

@@ -25,7 +25,8 @@ export type RunMeta = {
 // The commit whose run tells an old finding from one the release caused: the last commit this release passed, or main before any pass.
 type Baseline = { branch: string; sha: string; kind: string };
 // One playtest job. Its agent keeps one session over every round, so its scope stays the one it found on the first play.
-type Session = { release: ReleaseState; dir: string; home: string; start: string; baseline: Baseline; log: string; agent: (prompt: string) => Promise<void> };
+// `bugs` maps the title of each old bug the job opened to its issue, since a replay may list the same finding again.
+type Session = { release: ReleaseState; dir: string; home: string; start: string; baseline: Baseline; log: string; bugs: Map<string, number>; agent: (prompt: string) => Promise<void> };
 type Ending = { outcome: 'clean' | 'blocked'; reason: string; head: string };
 type Next = { sha: string; prompt: string };
 type Step = Next | { end: Ending };
@@ -84,7 +85,7 @@ async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: 
     await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.designModel, prompt, log, session: agentSession });
     agentSession = { ...agentSession, resume: true };
   };
-  return { release, dir, home, start, baseline: await baselineOf(ctx, release), log, agent };
+  return { release, dir, home, start, baseline: await baselineOf(ctx, release), log, bugs: new Map(), agent };
 }
 
 async function baselineOf(ctx: Ctx, release: ReleaseState): Promise<Baseline> {
@@ -257,11 +258,12 @@ function setPlaytest(ctx: Ctx, change: (playtest: PlaytestState) => PlaytestStat
 
 // An important bug the baseline has too does not block the release. It becomes a bug issue that waits for votes like any other.
 async function openOldBugs(ctx: Ctx, session: Session, sha: string, review: Review): Promise<number[]> {
-  const fresh = review.findings.filter((finding) => finding.cause === 'old' && finding.severity === 'important' && finding.known === null);
+  const fresh = review.findings.filter((finding) => finding.cause === 'old' && finding.severity === 'important' && finding.known === null && !session.bugs.has(finding.title));
   const opened: number[] = [];
   for (const finding of fresh) {
     const n = await ctx.github.createIssue(finding.title, oldBugBody(session, sha, finding), [BUG_LABEL]);
     appendFileSync(join(session.home, OUT_DIR, 'open-bugs.md'), `- #${n} ${finding.title}\n`);
+    session.bugs.set(finding.title, n);
     opened.push(n);
   }
   return opened;
