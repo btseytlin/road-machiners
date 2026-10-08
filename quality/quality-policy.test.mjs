@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SEPARATOR, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
 
 function makeSource(lines) {
   return Array.from({ length: lines }, (_, index) => `export const value${index} = ${index};`).join('\n');
@@ -50,4 +50,15 @@ test('rejects invalid syntax and invalid policy limits', () => {
 test('names each line with the middle dot separator', () => {
   const texts = new Map([['game/src/hud.ts', `ok\nCab ${SEPARATOR} 40%\nfine`], ['README.md', 'Cab: 40%']]);
   assert.deepEqual(checkSeparators(texts), ['game/src/hud.ts:2: middle dot separator. Use a comma or a colon.']);
+});
+
+test('allows a short module docstring and no other comment', () => {
+  const codes = source => checkComments('game/src/example.ts', source, 3).map(finding => finding.code);
+  assert.deepEqual(codes('// one\n// two\n// three\nexport const a = 1;\n'), []);
+  assert.deepEqual(codes('// one\n// two\n// three\n// four\nexport const a = 1;\n'), ['quality/long-docstring']);
+  assert.deepEqual(codes('export const a = 1;\n// later\nexport const b = 2;\n'), ['quality/no-comment']);
+  assert.deepEqual(codes('export const a = 1; // trailing\n'), ['quality/no-comment']);
+  assert.deepEqual(codes('export const url = "https://example.com"; export const b = "// text";\n'), []);
+  assert.deepEqual(codes('// only\n// comments\n'), []);
+  assert.throws(() => checkComments('game/src/example.ts', '', undefined), /must be a positive integer/);
 });

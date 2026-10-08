@@ -17,6 +17,23 @@ export function inspectSource(file, source) {
   return { findings, lines };
 }
 
+export function checkComments(file, source, maxDocstringLines) {
+  if (!Number.isInteger(maxDocstringLines) || maxDocstringLines <= 0) throw new Error('maxDocstringLines must be a positive integer.');
+  const parsed = parseSync(file, source);
+  const codeStart = parsed.program.body[0]?.start ?? source.length;
+  const findings = parsed.comments.filter(comment => comment.end > codeStart)
+    .map(comment => ({ filename: file, code: 'quality/no-comment', message: comment.value.trim() }));
+  if (docstringLines(source, parsed.comments.filter(comment => comment.end <= codeStart)) > maxDocstringLines) {
+    findings.push({ filename: file, code: 'quality/long-docstring', message: `module docstring over ${maxDocstringLines} lines` });
+  }
+  return findings;
+}
+
+function docstringLines(source, header) {
+  if (!header.length) return 0;
+  return source.slice(header[0].start, header.at(-1).end).split('\n').length;
+}
+
 export function collectComponents(sources) {
   const components = new Map();
   const production = [...sources].filter(([file]) => file.startsWith('game/src/') && !testPattern.test(file));
@@ -45,7 +62,6 @@ export function checkFragmentation(current, previous, limit) {
   });
 }
 
-// The middle dot is a mark of machine-written text. Every text file in the repo is checked, with no debt allowance.
 export const SEPARATOR = String.fromCharCode(0xb7);
 
 export function checkSeparators(texts) {

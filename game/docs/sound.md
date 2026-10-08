@@ -64,8 +64,15 @@ A cue with several prompts is a family of different sounds, one prompt per varia
 
 - Every prompt starts with the `SOUND_STYLE` of the cue's setup, so a set of sounds shares one microphone and place. Combat accents use the `stinger` style, and base loops use `score`.
 - Prompt style plus subject must stay under 450 characters, or the API refuses it.
-- Generated heavy sounds come out thin. Check the spectrogram and process the take with ffmpeg rather than generating again. The horn and air brake comments in `sounds.ts` show the processing used.
+- Generated heavy sounds come out thin. Check the spectrogram and process the take with ffmpeg rather than generating again. [Processed takes](#processed-takes) lists the processing used.
 - Raw takes stay in `tmp/sfx-raw/`, and each file's tag names its source. After an import change, `npm run sfx:reimport` rebuilds every file from those sources.
+
+## Processed takes
+
+These takes went through ffmpeg before import. Each filter chain is the `-af` argument.
+
+- Horns came out thin and high. Each generated take runs through `asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh`.
+- Air brakes are the one approved take, `arrive-1790459643829.mp3`. It runs through `asetrate=44100*<rate>,aresample=44100,lowpass=f=1400:p=1,highpass=f=60,afade=t=in:d=0.12` at rates 0.88, 0.8 and 0.95.
 
 ## Beat loops
 
