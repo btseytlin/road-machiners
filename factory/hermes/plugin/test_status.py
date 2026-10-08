@@ -19,13 +19,15 @@ def test_returns_the_dashboard_json_unchanged(monkeypatch):
     calls = []
 
     def fetch_status(request, *, timeout):
-        calls.append((request.full_url, timeout))
+        calls.append((request.full_url, sorted(request.header_items()), timeout))
         return io.BytesIO(payload)
 
     monkeypatch.setattr(module, 'urlopen', fetch_status)
     read_status = module.create_status_handler(public_url='https://example.org', timeout_seconds=10)
     assert read_status({}) == payload.decode()
-    assert calls == [('https://example.org/factory/api/snapshot', 10)]
+    assert calls == [('https://example.org/factory/api/snapshot', [
+        ('Accept', 'application/json'), ('Cache-control', 'no-cache'), ('User-agent', 'curl/8.0'),
+    ], 10)]
 
 
 def test_unavailable_endpoint_is_an_error_without_a_second_status_source(monkeypatch):

@@ -120,8 +120,11 @@ describe("queries", () => {
       [
         "battle",
         "damage",
+        "engineheat",
         "fps",
+        "freeze",
         "fuel",
+        "fullshop",
         "give",
         "god",
         "health",

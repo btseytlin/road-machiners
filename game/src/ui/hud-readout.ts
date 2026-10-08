@@ -9,7 +9,7 @@ import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, itemSize } from "../sim/grid";
-import { fuelCap, gunDraw, hasWorkingEngine, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
+import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
 import { fuelLimit } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -27,12 +27,25 @@ import { contextKey, type ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedListNear, emptySalvageNear, lootBlockerHere, salvageListNear } from '../sim/locations';
+import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
 import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { npcName } from '../sim/spawn';
+
+// The overdrive switch: on only while the engine really overdrives, and blocked with the reason while it is too worn.
+export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean; title: string } {
+  const me = playerVehicle(w);
+  const blocked = !canOverdrive(me);
+  return {
+    checked: inOverdrive(w, me),
+    blocked,
+    title: blocked
+      ? `Engine too worn for overdrive: repair it above ${Math.round(RULES.overdriveMinEngineShare * 100)}% [O]`
+      : "Engine overdrive: faster, but the engine heats fast [O]",
+  };
+}
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -101,7 +114,7 @@ function getSiteActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   if (oasis?.kind === 'oasis') actions.push({ label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
-  actions.push(...stocks.map((stock) => getStockAction(world, stock)));
+  actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {
     const empty = emptySalvageNear(world);
     if (empty) actions.push({ label: emptyLabel(empty), ready: false, hint: 'No loot left', target: { kind: 'empty' } });
@@ -109,16 +122,26 @@ function getSiteActions(world: World): ContextAction[] {
   return actions;
 }
 
-// A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
-function getStockAction(world: World, stock: SalvageStock): ContextAction {
-  const target = { kind: 'stock', id: stock.id } as const;
-  const searched = world.player.scavenged.includes(stock.id);
-  const blocker = lootBlockerHere(world, stock.id);
-  if (blocker) return { label: stockLabel(searched ? 'Loot' : 'Search', stock), ready: false, hint: `${blocker.name} is looting it`, target };
-  const reachable = canReachSalvage(playerVehicle(world), stock);
-  if (searched) return { label: stockLabel('Loot', stock), ready: reachable, target };
+// A stock offers a search while it hides units or the player never searched it, and its revealed loot once the player
+// searched it. Both can show, the search first.
+function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
+  const actions: ContextAction[] = [];
+  if (needsSearch(world, stock)) actions.push(getSearchAction(world, stock));
+  if (hasLootFor(world, stock)) actions.push(withBlocker(world, stock, { label: stockLabel('Loot', stock), ready: canReachSalvage(playerVehicle(world), stock), target: { kind: 'loot', id: stock.id } }));
+  return actions;
+}
+
+// A search needs no combat. Looting a searched stock does not.
+function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
-  return { label: stockLabel('Search', stock), ready: combat === undefined && reachable, combat, target };
+  const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
+  return withBlocker(world, stock, { label: stockLabel('Search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });
+}
+
+// Neither starts while another truck loots the stock.
+function withBlocker(world: World, stock: SalvageStock, action: ContextAction): ContextAction {
+  const blocker = lootBlockerHere(world, stock.id);
+  return blocker ? { label: action.label, ready: false, hint: `${blocker.name} is looting it`, target: action.target } : action;
 }
 
 // The verb alone at a loot spot that has no name, else the verb and the stock's name.

@@ -1,5 +1,6 @@
 // Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
+import { FORTRESS_SITES } from '../data/fortress';
 import { STALL_MARKETS } from '../data/market';
 import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
@@ -20,6 +21,11 @@ export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
 const TERRITORIES: readonly LocationDef[] = REGION.locations.filter(isTerritory);
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
+
+// Whether the site stands behind a fortress curtain of baked pieces, in place of a circle collider.
+export function isFortress(site: Site): boolean {
+  return site.id in FORTRESS_SITES;
+}
 
 // Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {
@@ -100,6 +106,11 @@ export function townNear(world: World): TownDef | null {
 // a territory's radius is rejected before any outline work.
 export function isInTerritory(pos: Vec): boolean {
   return TERRITORIES.some((site) => dist(pos, site.pos) <= site.radius && siteGap(site, pos) < 0);
+}
+
+// Whether pos is within reach tiles of a town gate.
+export function isNearTown(pos: Vec, reach: number): boolean {
+  return REGION.towns.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
 }
 
 // Whether pos is within reach tiles of an outpost gate.

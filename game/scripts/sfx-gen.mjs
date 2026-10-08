@@ -7,7 +7,7 @@ import { cueOf, importFile } from './sfx-lib.mjs';
 
 const API = 'https://api.elevenlabs.io/v1';
 const RAW_DIR = 'tmp/sfx-raw';
-const SFX_CREDITS_PER_SECOND = 40; // ElevenLabs price for sound effects with a set duration
+const SFX_CREDITS_PER_SECOND = 10; // ElevenLabs price for sound effects with a set duration; the API asked 12 credits for 1.2 s
 const PROMPT_INFLUENCE = 0.7; // well above the API default of 0.3, so the shared recording setup is followed
 
 // Agent containers get the key in their env and have no .env file.

@@ -1,6 +1,7 @@
 // The Menu button. Its dropdown offers New Game, Save, Load and Help. Save and Load open the slot panels, New Game opens the
 // setup screen, and Help shows the controls. While the dropdown is open it owns the keys and the pointer.
 
+import { ERROR_REPORT_URL } from "../config";
 import type { BootRequest } from "../three/save-slots";
 import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { versionLabel } from "./hud-readout";
@@ -57,6 +58,7 @@ export class HelpPanel {
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
     );
+    if (ERROR_REPORT_URL) root.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
     this.root = root;
     window.addEventListener("keydown", this.onKey);
   }
