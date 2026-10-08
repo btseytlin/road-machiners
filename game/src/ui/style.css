@@ -783,10 +783,12 @@ body {
   border-bottom: 1px solid #1d231840;
   margin-bottom: 2px;
 }
+/* A broadcast longer than the screen scrolls like a pager: the newest line shows, and the start is a scroll away. */
 .radio-lcd {
   position: relative;
   height: calc(var(--radio-line) * var(--radio-lines));
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
   font-size: 12px;
   line-height: var(--radio-line);
 }
@@ -1767,6 +1769,14 @@ body {
   }
 }
 @media (max-width: 720px) {
+  /* The menu row on top and the camera switch under it, at the right edge, so neither reaches the help guide. */
+  .top-right {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  #ui .top-right > .camera-mode {
+    order: 1;
+  }
   .speed-tip {
     position: fixed;
     left: 12px;
@@ -1818,12 +1828,13 @@ body {
     padding: 20px 16px;
     height: calc(100dvh - 350px);
   }
-  /* The top-right menu fills the top row, so the action button and the notes below it move down a row. */
+  /* The top-right menu and the camera switch under it fill the top two rows, so the action button and the notes
+     below it move down under them. */
   #ui .action {
-    top: 112px;
+    top: 122px;
   }
   #ui .toast {
-    top: 158px;
+    top: 168px;
   }
   .inv-wrap {
     flex-direction: column;
@@ -2736,7 +2747,7 @@ canvas.view {
 /* Below the action button, which moves down a row in the narrow layout, and right of the condition panel. */
 @media (max-width: 720px) {
   #ui .tip {
-    top: 158px;
+    top: 168px;
     left: auto;
     right: 14px;
     transform: none;

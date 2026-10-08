@@ -243,6 +243,7 @@ export class RadioPanel {
   readonly faceplate = el('div', { class: 'radio-faceplate' });
   readonly keys = el('div', { class: 'radio-keys' });
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
+  private lcd: HTMLElement;
   private streaming: { text: string; start: number } | null = null;
   // The broadcast on screen, so a language switch can show it again in the new words.
   private shown: Msg | null = null;
@@ -250,7 +251,13 @@ export class RadioPanel {
   constructor(private station: RadioStation) {
     const band = el('div', { class: 'radio-band' }, el('span', {}, t('radio.band')), el('span', {}, t('radio.frequency')));
     const ghost = el('div', { class: 'radio-ghost', 'aria-hidden': 'true' }, t('radio.ghost', { blocks: '\u2588'.repeat(3 * 30) }));
-    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
+    this.lcd = el('div', { class: 'radio-lcd' }, ghost, this.text);
+    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, this.lcd), this.faceplate);
+  }
+
+  private write(text: string): void {
+    this.text.replaceChildren(text);
+    this.lcd.scrollTop = this.lcd.scrollHeight;
   }
 
   hear(world: World): void {
@@ -263,7 +270,7 @@ export class RadioPanel {
     if (!b) return;
     this.shown = b.text;
     this.streaming = { text: say(b.text), start: performance.now() };
-    this.text.replaceChildren();
+    this.write('');
     this.text.setAttribute('aria-busy', 'true');
     this.text.classList.add('streaming');
     requestAnimationFrame(this.tick);
@@ -274,7 +281,7 @@ export class RadioPanel {
     if (!s) return;
     const shown = revealed(s.text, now - s.start, RADIO.charsPerSecond);
     // Several frames pass per character, so the screen is written only when one appears.
-    if (shown.length !== this.text.textContent?.length) this.text.replaceChildren(shown);
+    if (shown.length !== this.text.textContent?.length) this.write(shown);
     if (shown.length < s.text.length) {
       requestAnimationFrame(this.tick);
       return;
@@ -291,6 +298,6 @@ export class RadioPanel {
     this.streaming = null;
     this.text.setAttribute('aria-busy', 'false');
     this.text.classList.remove('streaming');
-    this.text.replaceChildren(say(this.shown));
+    this.write(say(this.shown));
   }
 }
