@@ -5,7 +5,7 @@ import { must } from '../exec';
 import { roundSession } from '../sessions';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, type AgentSession, type Ctx, type PlaytestState, type ReleaseState } from '../types';
-import { checkFailure, checkScript, checkUntilReal } from './checks';
+import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
 import { agentHome, fillPrompt, guardDiff, playtestCommand, readOutput, resetOutputs } from './common';
 import { mergeResolving } from './merge-resolve';
 import { judge, logFacts, readReview, type Finding, type LogFacts, type Outcome, type Review } from './playtest-review';
@@ -51,11 +51,18 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
   if (!(await cloneAt(ctx, dir, start))) return;
+  await fullSuite(ctx, dir);
   const session = await openSession(ctx, release, dir, start, baseline);
   const { plays, end } = await rounds(ctx, session);
   if (end.outcome === 'blocked') return block(ctx, session, plays, end);
   const next = await pass(ctx, session, end.head);
   await ctx.github.comment(release.issue, comment(session, plays, end, next, report(session)));
+}
+
+// The full game suite runs with no cache, since the cache could hide an input its fingerprint misses.
+// It runs before the first play, so a failing suite fails the job for Hermes and spends no play.
+async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
+  await ctx.container.shell(dir, 'npm ci && npm test', releaseLog(ctx, 'playtest'));
 }
 
 // The release holds all of main before it plays, so a later Ship never brings unplayed game changes in.
@@ -201,7 +208,7 @@ async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<stri
   const log = releaseLog(ctx, 'playtest-checks');
   const check = async (): Promise<string | null> => {
     try {
-      await ctx.container.shell(session.dir, checkScript(playtestCommand(ctx.cfg, false)), log, { BUILD_SCOPE: sha });
+      await ctx.container.shell(session.dir, checkScript(playtestCommand(ctx.cfg, false)), log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
       return null;
     } catch (error) {
       return checkFailure(log, error);

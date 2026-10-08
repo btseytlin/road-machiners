@@ -92,3 +92,24 @@ export function sweepLogs(logRoot: string, state: FactoryState, now: Date, days:
   for (const name of removed) rmSync(join(logRoot, name));
   return removed;
 }
+
+// Deletes files older than `days` under the test cache, then the folders they leave empty. The cache root stays.
+// The tool owns the cache format and touches an entry on each hit, so an entry in use keeps a fresh mtime. Returns how many files it removed.
+export function sweepTestCache(root: string, now: Date, days: number): number {
+  if (!existsSync(root)) return 0;
+  return sweepFolder(root, now.getTime() - days * 24 * 3_600_000, true);
+}
+
+function sweepFolder(dir: string, cutoff: number, isRoot: boolean): number {
+  let removed = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) removed += sweepFolder(path, cutoff, false);
+    else if (oldFile(path, cutoff)) {
+      rmSync(path);
+      removed++;
+    }
+  }
+  if (!isRoot && readdirSync(dir).length === 0) rmSync(dir, { recursive: true });
+  return removed;
+}

@@ -14,6 +14,8 @@ import { setPhase } from './verify';
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
+// The game's cached runner skips test files whose inputs already passed, with its cache mounted at /test-cache.
+// A branch cut before the runner reached dev has no test:cached script and runs the full suite. Remove that path once no open branch lacks the script.
 export const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -22,7 +24,12 @@ npm ci
 step "tests and typecheck"
 npm run typecheck > tmp/typecheck.log 2>&1 &
 typecheck=$!
-npm test
+if grep -q '"test:cached"' package.json; then
+  npm run test:cached -- --cache /test-cache
+else
+  step "branch has no test:cached, full suite"
+  npm test
+fi
 step "tests done"
 if ! wait "$typecheck"; then cat tmp/typecheck.log; exit 1; fi
 step "dev server"
@@ -138,6 +145,13 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg, false)));
 }
 
+// Every run of checkScript mounts the shared test cache, so passes recorded by one job skip tests in the next.
+export function testCacheMount(ctx: Ctx): Record<string, string> {
+  const cache = `${ctx.cfg.home}/test-cache`;
+  mkdirSync(cache, { recursive: true });
+  return { [cache]: '/test-cache' };
+}
+
 async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
@@ -146,7 +160,7 @@ async function runScript(ctx: Ctx, issue: number, base: string, build: string, s
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build }, testCacheMount(ctx));
     return null;
   } catch (error) {
     return checkFailure(log, error);

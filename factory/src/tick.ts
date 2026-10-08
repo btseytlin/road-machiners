@@ -1,6 +1,6 @@
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
-import { sweepLogs, sweepWork } from './cleanup';
+import { sweepLogs, sweepTestCache, sweepWork } from './cleanup';
 import { POOL_OF, cpuSets, vitestWorkersOf } from './cpus';
 import { removeStaleBuilds } from './deploy';
 import { freeGb } from './health';
@@ -380,6 +380,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
   const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+  const cached = sweepTestCache(join(ctx.cfg.home, 'test-cache'), ctx.now(), ctx.cfg.testCacheDays);
+  if (cached > 0) ctx.log('tick', null, `removed ${cached} test cache files older than ${ctx.cfg.testCacheDays} days`);
 }
 
 // A plain approval reply that Hermes did not route in time becomes an incident, so the incident watch wakes Hermes and the reply is never lost.

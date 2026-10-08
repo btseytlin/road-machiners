@@ -63,6 +63,7 @@ export type FactoryConfig = {
   minFreeGb: number; // under this much free disk, a tick starts no job
   minAvailableGb: number; // under this much available memory, Hermes gets a memory incident
   logDays: number; // job logs older than this go
+  testCacheDays: number; // game test cache files older than this go
   cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
   cpuTest: number; // share of the server's CPUs for testing
@@ -269,7 +270,8 @@ export interface Container {
   // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.
   agent(run: AgentRun): Promise<string>;
   // Runs a bash script in the game folder of the clone with no secret. It only runs game npm scripts. Throws on a nonzero exit.
-  shell(clone: string, script: string, log: string, env?: Record<string, string>): Promise<void>;
+  // `mounts` maps host folders to container paths, mounted read write. Only the checks pass one.
+  shell(clone: string, script: string, log: string, env?: Record<string, string>, mounts?: Record<string, string>): Promise<void>;
 }
 
 // Merge `branch` into `into` with a merge commit titled `message`.

@@ -32,7 +32,8 @@ type Run = {
 };
 
 const harnessRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('progression:playthrough'));
-const checkRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('npm test'));
+const checkRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('[checks]'));
+const SUITE = 'npm ci && npm test';
 
 // The fake harness writes the log the command asks for into the clone it ran in. The fake agent writes its review and may commit.
 function setup(state: Partial<ReleaseState> = {}, start = 'abc1234'): Run {
@@ -59,7 +60,8 @@ function setup(state: Partial<ReleaseState> = {}, start = 'abc1234'): Run {
   f.ctx.github.candidates = async () => [{ number: 40, title: 'Old raider loop' } as Issue];
   f.ctx.container.shell = async (clone: string, script: string, _log: string, env: Record<string, string> = {}) => {
     run.shells.push({ clone, script, env });
-    if (script.includes('npm test')) {
+    if (script === SUITE) return;
+    if (script.includes('[checks]')) {
       if (run.checkFailures-- > 0) throw new Error('npm test failed');
       return;
     }
@@ -96,6 +98,7 @@ describe('playtest', () => {
     const run = setup();
     run.turns = [clean];
     await playtest(run.f.ctx, 11);
+    expect(run.shells[0]).toMatchObject({ clone: CLONE, script: SUITE });
     expect(harnessRuns(run).map((shell) => [shell.clone, shell.script])).toEqual([
       [CLONE, `npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`],
       [join(ROOT, 'work', 'release-baseline'), `npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha main001 --out .factory/playtest/log.jsonl`],
@@ -111,6 +114,17 @@ describe('playtest', () => {
     expect(release(run.f).playtest).toMatchObject({ runs: 1, passed: 'abc1234', blocked: null });
     expect(comments(run.f)).toEqual([expect.stringContaining('Release playtest: clean after 1 plays. Seed 20261007, 100 turns, from commit abc1234 to abc1234.\nThe candidate builds from abc1234.')]);
     expect(comments(run.f)[0]).toContain('All good.');
+  });
+
+  it('fails on a failing full suite before the first play, so it spends no play', async () => {
+    const run = setup();
+    run.f.ctx.container.shell = async (clone: string, script: string) => {
+      run.shells.push({ clone, script, env: {} });
+      throw new Error('suite failed');
+    };
+    await expect(playtest(run.f.ctx, 11)).rejects.toThrow('suite failed');
+    expect(run.shells.map((shell) => shell.script)).toEqual([SUITE]);
+    expect(release(run.f).playtest).toMatchObject({ runs: 0, passed: null, blocked: null });
   });
 
   it('plays the last commit the release passed as the baseline once it has one', async () => {
@@ -260,6 +274,7 @@ describe('playtest', () => {
     const shell = run.f.ctx.container.shell;
     run.f.ctx.container.shell = async (clone: string, script: string, log: string) => {
       await shell(clone, script, log);
+      if (script === SUITE) return;
       const sha = /--sha (\S+)/.exec(script)?.[1] ?? '';
       writeFileSync(join(clone, 'game', '.factory', 'playtest', 'log.jsonl'), logText({ end: { reason: 'error', message: 'the player truck stalled' } }, { seed: SEED, turns: 100, sha }));
     };
