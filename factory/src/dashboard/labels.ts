@@ -2,7 +2,7 @@ import type { CardStep } from '../card-events';
 import type { Activity } from '../observability';
 import type { WaitReason } from '../tick';
 import type { Column, JobStage, Queue } from '../types';
-import type { DeliveryStage, Gate } from './delivery';
+import type { DeliveryStage, Gate } from './vocabulary';
 
 const columns: Record<Column, string> = {
   Triage: 'Triage', Design: 'Design', Implementation: 'Implement', Testing: 'Test', Approval: 'Approval', Hardening: 'Hardening', Merging: 'Merging', Done: 'Done',
