@@ -7,6 +7,7 @@ import { heightFromElevation } from './terrain';
 import { DEG, polylineDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { defaultSetup } from './settings';
 
 describe('elevationAt', () => {
   it('is deterministic for the same seed and coordinates', () => {
@@ -18,7 +19,7 @@ describe('elevationAt', () => {
   });
 
   it('does not touch world.rngState', () => {
-    const w = newWorld(3, START_KITS.standard, TEST_MAP);
+    const w = newWorld(3, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const before = w.rngState;
     elevationAt(w.seed, 20, 20);
     expect(w.rngState).toBe(before);
@@ -38,22 +39,17 @@ describe('elevationAt', () => {
   });
 });
 
-// The Fallen Sun's basin, measured on the base land the bake starts from, at the map's seed. These read the elevation
-// functions, not the baked map, which PH5 rebakes. Geology runs after them: slump only moves slopes above its rest
-// slope of 0.9, so it cannot soften a cliff below maxSlope, while rain, wind and dunes are measured on the baked map.
 describe('the Fallen Sun basin', () => {
   const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
   const sunBasin = TERRAIN.features.basins.find((b) => b.center.x === sun.pos.x && b.center.y === sun.pos.y)!;
   const height = (p: Vec) => heightFromElevation(elevationAt(MAPGEN.seed, p.x, p.y));
   const at = (bearing: number, r: number): Vec => ({ x: sunBasin.center.x + r * Math.cos(bearing * DEG), y: sunBasin.center.y + r * Math.sin(bearing * DEG) });
   const bearingOf = (k: number) => Math.atan2(sunBasin.floor[k].y, sunBasin.floor[k].x) / DEG;
-  // Radius of the floor edge on a bearing: the last point out from the centre still at the full depth.
   const floorRadius = (bearing: number) => {
     let r = 0;
     while (basin(sunBasin, at(bearing, r + 0.25).x, at(bearing, r + 0.25).y).cut === sunBasin.depth) r += 0.25;
     return r;
   };
-  // Steepest height change per tile between samples a tile apart along a bearing, from r0 out to r1.
   const steepest = (bearing: number, r0: number, r1: number) => {
     let most = 0;
     for (let r = r0; r < r1; r++) most = Math.max(most, Math.abs(height(at(bearing, r + 1)) - height(at(bearing, r))));
@@ -81,17 +77,12 @@ describe('the Fallen Sun basin', () => {
   it('opens a drivable notch between the two crag walls', () => {
     const notch = (bearingOf(5) + bearingOf(6)) / 2;
     const r = floorRadius(notch);
-    // Out to where the north spur ends, past the bank's steepest part.
     expect(steepest(notch, r - 3, r + 13)).toBeLessThan(maxSlope);
-    // The crag walls on both sides of it are cliffs.
     expect(steepest(bearingOf(4), r - 4, r + 4)).toBeGreaterThan(maxSlope);
     expect(steepest(bearingOf(7), r - 4, r + 4)).toBeGreaterThan(maxSlope);
   });
 
-  // The land east of the crater already holds a hill, whose own west face is a cliff about 10 tiles out from the floor
-  // edge. The basin lifts its lip into that hill, and its own share of the inner face stays under maxSlope.
   it('raises a hill on the east rim whose inner face stays drivable', () => {
-    // In height units on land below the mountains, where an elevation unit is TERRAIN.height.hill height units.
     const own = (p: Vec) => {
       const shape = basin(sunBasin, p.x, p.y);
       return shape.rise - shape.cut * TERRAIN.height.hill;
@@ -104,7 +95,6 @@ describe('the Fallen Sun basin', () => {
       expect(face, `vertex ${k}`).toBeLessThan(maxSlope);
       const crest = basin(sunBasin, at(bearingOf(k), r + bank).x, at(bearingOf(k), r + bank).y);
       expect(crest.rise, `vertex ${k}`).toBeCloseTo(sunBasin.rim[k], 6);
-      // The crest stands over the land just outside the hill.
       expect(height(at(bearingOf(k), r + bank)), `vertex ${k}`).toBeGreaterThan(height(at(bearingOf(k), r + 2 * bank + 2)));
     }
   });
@@ -123,7 +113,6 @@ describe('the Fallen Sun basin', () => {
     const heights: number[] = [];
     for (let y = -50; y <= 50; y += 2) for (let x = -50; x <= 50; x += 2) {
       const p = { x: sunBasin.center.x + x, y: sunBasin.center.y + y };
-      // The crash furrow's head cuts into the south of the floor on purpose.
       const furrow = TERRAIN.features.furrow;
       if (basin(sunBasin, p.x, p.y).cut === sunBasin.depth && polylineDist(p, furrow.path) >= furrow.width + furrow.bank) heights.push(height(p));
     }

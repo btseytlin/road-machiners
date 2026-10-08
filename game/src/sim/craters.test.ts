@@ -15,7 +15,6 @@ import { dist, type Vec } from './vec';
 
 const M = PHYSICS.metersPerTile;
 
-// The player's truck swapped for a hauler with one gun, aimed at a raider buggy `range` tiles east, on sand.
 function gunnery(gun: string, range: number): { w: World; me: Vehicle; target: Vehicle } {
   const w = emptyWorld();
   editableTerrain(w).types.fill('sand');
@@ -30,7 +29,6 @@ function gunnery(gun: string, range: number): { w: World; me: Vehicle; target: V
   return { w, me, target };
 }
 
-// Fires the loaded gun once a turn until a shot's rounds pass `want`, with the craters cleared before each turn.
 function fireUntil(w: World, me: Vehicle, want: (rounds: ShotRound[]) => boolean): ShotRound[] {
   for (let i = 0; i < 200; i++) {
     const rounds = fireOnce(w, me);
@@ -39,7 +37,6 @@ function fireUntil(w: World, me: Vehicle, want: (rounds: ShotRound[]) => boolean
   throw new Error('No shot matched in 200 turns');
 }
 
-// Fires the loaded gun once, with the craters cleared, and returns the rounds of its shot.
 function fireOnce(w: World, me: Vehicle): ShotRound[] {
   for (const p of mountedParts(me, 'weapon')) Object.assign(p, gunFor(p.defId));
   w.events = [];
@@ -50,7 +47,6 @@ function fireOnce(w: World, me: Vehicle): ShotRound[] {
   return shot.rounds;
 }
 
-// Fires turn by turn and returns a copy of the world from just before the first shot with a round on the ground.
 function turnBeforeGroundMiss(w: World, me: Vehicle): World {
   for (let i = 0; i < 200; i++) {
     const before = cloneWorld(w);
@@ -181,7 +177,6 @@ describe('digCrater', () => {
 describe('fadeCraters', () => {
   const days = CRATER.days * TIME.turnsPerDay;
 
-  // A crater 3 tiles from the player, dug on turn 0.
   function dug(): { w: World; at: Vec } {
     const w = emptyWorld({ x: 30, y: 30 });
     const at = { x: 33, y: 30 };

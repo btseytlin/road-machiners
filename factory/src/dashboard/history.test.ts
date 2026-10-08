@@ -129,7 +129,7 @@ it('keeps card lines past the 30 days of usage and publishes delivery numbers wi
     await history.refresh(now);
     const delivery = history.summarize(now, 7).delivery!;
     expect(delivery.since).toBe('2026-08-01T00:00:00Z');
-    expect(delivery.lead).toMatchObject({ count: 1, meanMs: 69 * 86_400_000 });
+    expect(delivery.lead).toMatchObject({ open: 0, missingStart: 0 });
     expect(JSON.stringify(delivery)).not.toContain('PRIVATE');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });

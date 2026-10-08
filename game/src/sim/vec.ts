@@ -10,7 +10,6 @@ export function bearing(from: Vec, to: Vec): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
 }
 
-// Signed smallest angle from a to b, in (-PI, PI].
 export function angleDiff(a: number, b: number): number {
   let d = (b - a) % (2 * Math.PI);
   if (d > Math.PI) d -= 2 * Math.PI;
@@ -18,7 +17,6 @@ export function angleDiff(a: number, b: number): number {
   return d;
 }
 
-// True when the direction from `from` to `to` is more than 90 degrees off the direction to `threat`.
 export function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
   return (to.x - from.x) * (threat.x - from.x) + (to.y - from.y) * (threat.y - from.y) < 0;
 }
@@ -31,7 +29,6 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// Distance from p to segment ab.
 export function segmentDist(p: Vec, a: Vec, b: Vec): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -46,7 +43,6 @@ export function polylineDist(p: Vec, line: Vec[]): number {
   return best;
 }
 
-// Whether p lies inside a simple polygon, by the even-odd rule. Points exactly on an edge may fall either way.
 export function pointInPolygon(p: Vec, poly: readonly Vec[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -56,7 +52,6 @@ export function pointInPolygon(p: Vec, poly: readonly Vec[]): boolean {
   return inside;
 }
 
-// Distance from p to the nearest edge of a closed polygon, from inside or outside.
 export function polygonEdgeDist(p: Vec, poly: readonly Vec[]): number {
   let best = Infinity;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) best = Math.min(best, segmentDist(p, poly[j], poly[i]));

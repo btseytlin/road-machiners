@@ -12,9 +12,7 @@ import { stormStrength } from '../../sim/weather';
 const S = PHYSICS.metersPerTile;
 const WRAP_MARGIN = WEATHER.cloud.spread + WEATHER.cloud.diameter;
 
-// Every puff of a bank shares one material, so a fade is one opacity write.
 type Bank = { group: THREE.Group; material: THREE.SpriteMaterial; x: number; y: number; speed: number; height: number };
-// shown is the haze share on screen now, target the sim strength it eases toward, 0 once the storm has ended.
 type StormBank = Bank & { shown: number; target: number };
 type Look = { puffs: number; spread: number; diameter: number; height: number; opacity: number; color: number };
 
@@ -32,7 +30,6 @@ function createDustTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// A stable hash from a storm's id, so its puff layout does not reshuffle every sync.
 function idHash(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
@@ -57,12 +54,9 @@ export class WeatherView {
       this.clouds.push(this.createBank(WEATHER.cloud, x, y, i, false));
     }
     this.sync(world);
-    // A loaded storm shows at its true strength at once, with no full-strength flash and no fade from nothing.
     for (const bank of this.storms.values()) this.show(bank, bank.target);
   }
 
-  // Adds a bank for each new sim storm, aims each bank at its storm's strength, or at 0 for one that ended,
-  // and moves the live ones to their storm's current position. Cheap: world.weather holds only a few events.
   sync(world: World): void {
     for (const bank of this.storms.values()) bank.target = 0;
     for (const e of world.weather) {
@@ -81,8 +75,6 @@ export class WeatherView {
     }
   }
 
-  // Eases each storm bank's haze toward its target, and drops a bank whose storm ended once its haze is gone.
-  // A first frame's clock can run backwards, so a negative dtMs holds the haze still.
   fade(dtMs: number): void {
     const step = (WEATHER.storm.fadePerSecond * Math.max(0, dtMs)) / 1000;
     for (const [id, bank] of this.storms) {
@@ -94,7 +86,6 @@ export class WeatherView {
     }
   }
 
-  // The haze share a storm's bank shows now, or null with no bank for it. For checks.
   shownOf(id: string): number | null {
     return this.storms.get(id)?.shown ?? null;
   }
@@ -128,7 +119,6 @@ export class WeatherView {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
   }
 
-  // Fades the storm banks and drifts the decorative clouds. Storms are repositioned by sync from sim state.
   advance(dtMs: number): void {
     this.fade(dtMs);
     const span = this.terrain.size + WRAP_MARGIN * 2;
@@ -140,12 +130,10 @@ export class WeatherView {
   }
 }
 
-// The screen tint of the player's storm share: hidden at none, and as strong as the share.
 export function stormTintStyle(share: number): { display: string; opacity: string } {
   return { display: share > 0 ? "" : "none", opacity: String(share) };
 }
 
-// Moves shown toward target by at most maxStep.
 export function stepFade(shown: number, target: number, maxStep: number): number {
   return shown < target ? Math.min(target, shown + maxStep) : Math.max(target, shown - maxStep);
 }

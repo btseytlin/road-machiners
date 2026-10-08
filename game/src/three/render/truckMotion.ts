@@ -1,16 +1,13 @@
 // Render-only motion of a truck body and its loose parts. Driving physics never reads it.
 // The body leans on a spring toward a tilt set by the truck's acceleration. It lifts its nose when the truck speeds up,
 // dips it on braking and leans out of turns. A running engine shakes it a little while a turn plays.
-// Loose parts, like the antenna and the tow chain, swing on their own springs from the same acceleration.
-// Body space: +x is the nose, +z the truck's right, +y up.
 
 import * as THREE from 'three';
 import type { VehicleFrame } from '../../phys/frames';
 
-// Radians or meters per m/s^2 of acceleration along the body, and the most the body leans or lifts.
 const SWAY = {
   hz: 1.6,
-  damping: 0.5, // fraction of critical damping; lower bounces longer
+  damping: 0.5,
   pitchPerAccel: 0.007,
   rollPerAccel: 0.0085,
   liftPerAccel: 0.004,
@@ -18,17 +15,11 @@ const SWAY = {
   maxRoll: 0.1,
   maxLift: 0.06,
 };
-// A physics step on a bump gives short acceleration spikes far above what driving gives. Clamping them keeps the lean readable.
-const MAX_ACCEL = 20; // m/s^2
-// A running engine shakes the body at two unrelated frequencies, so the shake never looks like a loop.
+const MAX_ACCEL = 20;
 const IDLE = { liftHz: 11, lift: 0.012, rollHz: 7.3, roll: 0.005 };
-// Springs step at most this long, so stiff springs stay stable on a slow frame.
-const MAX_SUBSTEP = 1 / 120; // seconds
-// A frame gap longer than this, like a hidden tab, restarts the springs from rest.
-const MAX_GAP = 0.25; // seconds
+const MAX_SUBSTEP = 1 / 120;
+const MAX_GAP = 0.25;
 
-// perAccel: radians of swing per m/s^2 of acceleration. A real hanging part swings about atan(a / g). The chain swings a bit more, so it reads at game zoom.
-// up: the part stands up from its hinge, like an antenna, instead of hanging down, like a chain.
 export type WhipKind = { hz: number; damping: number; perAccel: number; max: number; up: boolean };
 export const WHIPS = {
   antenna: { hz: 2.2, damping: 0.2, perAccel: 0.028, max: 0.5, up: true },
@@ -55,7 +46,6 @@ class Spring {
   }
 }
 
-// A loose part hinged at its origin. It swings back when the truck speeds up and out when it turns.
 class Whip {
   private readonly pitch: Spring;
   private readonly roll: Spring;
@@ -67,9 +57,7 @@ class Whip {
     this.roll = new Spring(kind.hz, kind.damping);
   }
 
-  // along and across: body acceleration toward the nose and the right, m/s^2.
   step(along: number, across: number, dt: number): void {
-    // A part standing up leans the same way as the body. A hanging part swings its free end the other way.
     const sign = this.kind.up ? 1 : -1;
     this.pitch.step(clamp(sign * along * this.kind.perAccel, this.kind.max), dt);
     this.roll.step(clamp(-sign * across * this.kind.perAccel, this.kind.max), dt);
@@ -97,8 +85,6 @@ export class TruckMotion {
   private readonly tilt = new THREE.Quaternion();
   private readonly euler = new THREE.Euler();
 
-  // phase: 0 to 1, so trucks side by side do not shake in step.
-  // body: the group that leans. pivot: the body-space point it leans around, near the axles.
   constructor(
     private readonly body: THREE.Object3D,
     private readonly pivot: THREE.Vector3,
@@ -111,13 +97,10 @@ export class TruckMotion {
     this.whips.push(new Whip(obj, kind));
   }
 
-  // Drops the loose parts, for a rebuild of the truck model. The body keeps its lean.
   clearWhips(): void {
     this.whips.length = 0;
   }
 
-  // dt: seconds since the last call. running: the engine runs, so the body shakes.
-  // The same frame again means the turn is paused, so the whole truck holds still, engine shake included.
   step(f: VehicleFrame, dt: number, running: boolean): void {
     if (!(dt >= 0)) throw new Error(`Truck motion step of ${dt} s`);
     this.time += dt;
@@ -151,7 +134,6 @@ export class TruckMotion {
     const roll = this.roll.x + shake * IDLE.roll * Math.sin(t * IDLE.rollHz);
     const lift = this.lift.x + shake * IDLE.lift * Math.sin(t * IDLE.liftHz);
     this.tilt.setFromEuler(this.euler.set(roll, 0, this.pitch.x, 'XZY'));
-    // Leaning around the pivot: the pivot stays put and the rest of the body turns around it.
     this.body.quaternion.copy(this.tilt);
     this.body.position.copy(this.pivot).sub(this.local.copy(this.pivot).applyQuaternion(this.tilt));
     this.body.position.y += lift;

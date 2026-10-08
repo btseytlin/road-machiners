@@ -1,8 +1,6 @@
 // Draws one item or chassis icon from the game's own models, for npm run icons.
 // The style follows the category. An item icon is a vector blueprint from blueprint.ts. A part draws in shades of its
 // category tone, and a good fills its outline with its model's own colors under see-through shading. A chassis portrait is toon: each model keeps its flat colors through a three-step ramp under one key light, with a
-// dark outline and darkened creases. Chassis drawn by the same model are told apart by 45° stripes.
-// Body space as in vehicle.ts: +x is the nose, +z the truck's right, +y up.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -19,26 +17,18 @@ import { weaponHead } from '../render/weaponHead';
 import { blueprintOf, blueprintPlanSvg, blueprintSvg, calmed, GLASS_MATERIAL, paintBlueprint, type BlueprintColors, type Calm } from './blueprint';
 import { boundsOf, edgeBand, solidMask, stripes, type Mask, type Pixels, type Rgba } from './lines';
 
-// Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
 export const ICON_STYLE_VERSION = 11;
 
-// top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
-// right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
 export type IconView = 'top' | 'diagonal';
 export const DIAGONAL_YAW_DEG = 35;
 export const DIAGONAL_PITCH_DEG = 30;
 
-// The view the game shows per category. Every icon is diagonal, since a part seen straight down reads as flat boxes.
-// Flip one and rerun npm run icons.
 export type IconCategory = 'part' | 'good' | 'chassis';
 export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'diagonal', good: 'diagonal', chassis: 'diagonal' };
 
-// The one owner of how each category is drawn, in either view: items as blueprints, chassis portraits as toon. A line
-// blueprint fills in its tone, and a color blueprint in its model's own colors.
 export type IconStyle = 'line' | 'color' | 'toon';
 export const ICON_STYLES: Record<IconCategory, IconStyle> = { part: 'line', good: 'color', chassis: 'toon' };
 
-// The one owner of which view the game shows for an entry.
 export function iconView(entry: IconEntry): IconView {
   return ICON_VIEWS[iconCategory(entry)];
 }
@@ -54,34 +44,26 @@ function iconCategory(entry: IconEntry): IconCategory {
 }
 
 const CELL = PHYSICS.cell;
-const SUPERSAMPLE = 4; // drawn at this multiple of the cell, then scaled down
-// Share of the cell left empty on each side, room for the outline. The manifest carries it.
+const SUPERSAMPLE = 4;
 export const MARGIN = 0.06;
-// Blueprint line widths as a share of one inventory grid row (CELL.along), so every item draws the same weight in the
-// grid whatever its footprint: about 1.7 px for the outer contour and 0.9 px inside at 42 px cells.
 const OUTER_CELLS = 0.04;
 const INNER_CELLS = 0.022;
-// Armor is built as a front plate with its outer face at +x. It turns this far about y, so the face looks at the camera.
 const ARMOR_YAW = -Math.PI / 2;
-// A plan's outline width in screen pixels, and the condition panel's cell size it is judged at.
 const PLAN_STROKE = 2;
 const PLAN_CELL_PX = 30;
-const TOON_OUTLINE_PX = 4; // toon silhouette outline width at cell size
-const RAMP = [0.45, 0.75, 1]; // toon light steps
-// The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
+const TOON_OUTLINE_PX = 4;
+const RAMP = [0.45, 0.75, 1];
 const CREASE = { normal: 0.3, depth: 4 };
-const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
-// How much a color blueprint's shadow darkens and its light brightens the paints under them.
+const CREASE_SHADE = 0.45;
 const COLOR_SHADE = 0.35;
 const COLOR_LIGHT = 0.15;
 const INK = PAL.outline;
-const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
+const GLASS_COLOR = 0x6a7a80;
 const PAINT = 'paint';
 const TRIM = 'trim';
 
 type Vec2 = { x: number; y: number };
 
-// The barrel's head socket and tip as drawn, and the drawn pixel farthest along the barrel, all in cell pixels.
 export type BarrelRead = { head: Vec2; tip: Vec2; pixelTip: Vec2 };
 
 let shared: { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } | null = null;
@@ -98,8 +80,6 @@ function renderer(): { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } 
   return shared;
 }
 
-// The icon at size x size pixels with a transparent background, and for an item its blueprint as one SVG group in
-// size x size units, once in its tone and once in TINT_COLORS.
 export type RenderedIcon = { icon: HTMLCanvasElement; svg: string | null; tint: string | null };
 export function renderIcon(entry: IconEntry, view: IconView, size: number): RenderedIcon {
   const big = size * SUPERSAMPLE;
@@ -130,16 +110,11 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): Rend
   return { icon: shrink(color, size), svg: null, tint: null };
 }
 
-// Blueprint colors from CSS variables, so a screen sets them: the condition panel draws a part in its condition color.
 const TINT_COLORS: BlueprintColors = { line: 'var(--tint-line)', fill: 'var(--tint-fill)', shadow: 'var(--tint-shadow)', glass: 'var(--tint-glass)', light: 'var(--tint-light)' };
-// How much the small drawings calm down, see calmed(). A chassis plan straightens harder, so the truck reads as one
-// clean outline. A tinted icon straightens the small steps of dents and bevels.
 const PLAN_CALM: Calm = { tolerance: 0.012, minArea: 0.03, minPatch: 0 };
 const TINT_CALM: Calm = { tolerance: 0.015, minArea: 0.03, minPatch: 0.08 };
 const TINT_PEN = { outer: 'var(--tint-outer)', inner: 'var(--tint-inner)' };
 
-// A chassis plan: the bare truck's outline from straight above, nose up, as SVG in size x size units. Its box is the
-// inner grid columns and every row, with PLAN_PAD cells around it, so the game can stretch it over those cells.
 export function renderPlan(entry: IconEntry, size: number): string {
   if (entry.section !== 'chassis') throw new Error(`Plan of ${entry.id}: only a chassis has a plan`);
   const { root } = build(entry);
@@ -157,15 +132,12 @@ export function renderPlan(entry: IconEntry, size: number): string {
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld(true);
   camera.updateProjectionMatrix();
-  // Drawing pixels per screen pixel, with the panel's cells PLAN_CELL_PX across.
   const scale = size / ((2 * z) / col) / PLAN_CELL_PX;
   const pen = { outer: PLAN_STROKE * scale, inner: PLAN_STROKE * scale };
   const bp = blueprintOf(scene, camera, size, pen, (m) => draw(scene, camera, size, m));
   return blueprintPlanSvg(calmed(bp, PLAN_CALM), PLAN_STROKE);
 }
 
-// The blueprint's colors from the item's tone: a light line, a deep fill and a deeper shadow of the same hue. Over a
-// color blueprint's paints the shadow darkens and the light brightens whatever lies under them.
 export function blueprintColors(entry: IconEntry): BlueprintColors {
   const tone = new THREE.Color(ITEM_TONES[itemTone(entry.id)]);
   const mix = (to: number, t: number): string => `#${tone.clone().lerp(new THREE.Color(to), t).getHexString()}`;
@@ -174,7 +146,6 @@ export function blueprintColors(entry: IconEntry): BlueprintColors {
   return { ...colors, shadow: `rgba(0,0,0,${COLOR_SHADE})`, light: `rgba(255,255,255,${COLOR_LIGHT})` };
 }
 
-// Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
 export function barrelReads(entry: IconEntry, view: IconView, size: number): BarrelRead {
   if (!entry.weapon) throw new Error(`Icon ${entry.id} is not a weapon`);
   const { scene, camera, head, tip } = stage(entry, view);
@@ -196,16 +167,12 @@ function stage(entry: IconEntry, view: IconView): Stage {
   scene.add(root);
   const camera = frame(root, view);
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
-  // Lit from the viewer's upper left, the same for every icon in a view.
   key.position.copy(camera.position).add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).multiplyScalar(40));
   key.position.add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(-25));
   scene.add(key, new THREE.AmbientLight(0xffffff, 1.1));
   return { scene, camera, head, tip };
 }
 
-// A weapon is its mount stretched to fill the def's footprint, with the head at its authored size on the mount's head
-// socket, aimed forward. The stretch shows the footprint, so weapons of one look but different sizes differ. A chassis
-// is the game's own view of its bare truck, at rest.
 function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THREE.Group } {
   const root = new THREE.Group();
   if (entry.section === 'chassis') {
@@ -231,7 +198,6 @@ function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THRE
   return { root, head: at.clone(), tip: built.tip.add(at) };
 }
 
-// The truck view of a chassis with only its built-in parts, wheels at their rest height.
 function bareTruck(chassisId: string): THREE.Object3D {
   const v = bareVehicle({ nextId: 0 }, { name: chassisId, faction: 'player', chassisId, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const view = new VehicleView(v, false);
@@ -240,28 +206,23 @@ function bareTruck(chassisId: string): THREE.Object3D {
   return view.root;
 }
 
-// Swaps every material for the style's. Toon keeps the material's color on the light ramp, with faction paint as its
-// color. A blueprint reads only the shape and its normals, so it draws unlit.
 function toon(root: THREE.Object3D, style: IconStyle): void {
   const { ramp } = renderer();
   const paint = FACTION_COLORS.player;
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const old = o.material as THREE.MeshLambertMaterial;
-    // The truck view's hidden see-through silhouette and its outline hulls stay hidden: the toon style draws its own ink.
     if (!old.visible || o.userData.outline) {
       o.visible = false;
       return;
     }
     const color = { [PAINT]: paint.top, [TRIM]: paint.cab, [GLASS_MATERIAL]: GLASS_COLOR }[old.name] ?? old.color.getHex();
     o.material = style === 'toon' ? new THREE.MeshToonMaterial({ color, gradientMap: ramp }) : new THREE.MeshBasicMaterial({ color });
-    // A blueprint finds the glass by its material name.
     o.material.name = old.name;
     old.dispose();
   });
 }
 
-// An orthographic camera that fits the model's vertices to the cell with MARGIN on each side.
 function frame(root: THREE.Object3D, view: IconView): THREE.OrthographicCamera {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
   const box = new THREE.Box3().setFromObject(root);
@@ -284,19 +245,16 @@ function frame(root: THREE.Object3D, view: IconView): THREE.OrthographicCamera {
   camera.right = mid.x + half;
   camera.top = mid.y + half;
   camera.bottom = mid.y - half;
-  // Depth runs over the model alone, so the 8-bit depth pass has its full range for creases.
   camera.near = -bounds.max.z - 0.01;
   camera.far = -bounds.min.z + 0.01;
   camera.updateProjectionMatrix();
   return camera;
 }
 
-// From the model toward the camera.
 function viewDir(view: IconView): THREE.Vector3 {
   if (view === 'top') return new THREE.Vector3(0, 1, 0);
   const yaw = DIAGONAL_YAW_DEG * THREE.MathUtils.DEG2RAD;
   const pitch = DIAGONAL_PITCH_DEG * THREE.MathUtils.DEG2RAD;
-  // The side view looks from +z, the truck's right, so +x is the image's right. Yaw moves it toward -x, the rear.
   return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 }
 
@@ -315,7 +273,6 @@ function draw(scene: THREE.Scene, camera: THREE.Camera, size: number, override: 
   return { w: size, h: size, data: ctx.getImageData(0, 0, size, size).data };
 }
 
-// Where the normal or depth pass jumps between solid neighbors, by CREASE.
 function creaseMask(color: Pixels, normal: Pixels, depth: Pixels): Mask {
   const solid = solidMask(color);
   const { w, h } = color;
@@ -328,7 +285,6 @@ function creaseMask(color: Pixels, normal: Pixels, depth: Pixels): Mask {
   return out;
 }
 
-// Rings the silhouette in INK and darkens creases toward it. Every other drawn pixel turns opaque.
 function toonInk(color: Pixels, creases: Mask, outline: number): void {
   const solid = solidMask(color);
   const ring = edgeBand(solid, outline);
@@ -339,7 +295,6 @@ function toonInk(color: Pixels, creases: Mask, outline: number): void {
   }
 }
 
-// A toon pixel inside the ring: a crease darkens toward the ink, and any drawn pixel turns opaque.
 function toonPixel(data: Uint8ClampedArray, at: number, crease: boolean, ink: readonly number[]): void {
   if (crease) for (let c = 0; c < 3; c++) data[at + c] = Math.round(data[at + c] * CREASE_SHADE + ink[c] * (1 - CREASE_SHADE));
   else if (data[at + 3] > 0) data[at + 3] = 255;
@@ -403,15 +358,12 @@ export function hex(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
-// The same FNV-1a as scripts/shape-lib.mjs.
 function fnv1a(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');
 }
 
-// What an icon is drawn from: the style version, its view, its render key and the bytes of every model it draws. The
-// manifest stores it so a test can tell when a model or pick changed without npm run icons.
 export function iconHash(entry: IconEntry, view: IconView, modelBytes: (name: ModelName) => Uint8Array): string {
   const files = entry.models.map((name) => fnv1a(modelBytes(name))).join(',');
   return fnv1a(new TextEncoder().encode(`${ICON_STYLE_VERSION}|${view}|${renderKey(entry)}|${files}`));

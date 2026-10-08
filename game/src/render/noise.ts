@@ -9,7 +9,6 @@ export function hash2(x: number, y: number): number {
 export function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  // Final avalanche so ids that differ in one character land far apart.
   h ^= h >>> 16;
   h = Math.imul(h, 0x85ebca6b);
   h ^= h >>> 13;
@@ -18,7 +17,6 @@ export function hashStr(s: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-// Smooth value noise in [0, 1].
 export function valueNoise(x: number, y: number): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);

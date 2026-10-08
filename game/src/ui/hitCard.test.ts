@@ -143,7 +143,6 @@ describe('hover card rows', () => {
 });
 
 describe('hover card harpoon row', () => {
-  // The player facing east with a harpoon on its deck, and a buggy 5 tiles east in sight.
   function harpoonDuel() {
     const world = emptyWorld();
     const me = world.vehicles[0];

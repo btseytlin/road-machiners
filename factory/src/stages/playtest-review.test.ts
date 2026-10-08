@@ -4,11 +4,13 @@ import { WANT, logText } from './playtest-fixtures';
 
 
 const review = (over: Partial<Review> = {}): Review => ({
-  verdict: 'clean', summary: 's', drama: 'd', observations: [], suspected: [], limitations: ['far mode'], findings: [], plan: [],
+  verdict: 'clean', summary: 's', drama: 'd', observations: [], suspected: [], limitations: ['far mode'], findings: [], fixes: [],
   explanations: { death: null, quiet: null }, blocker: null, ...over,
 });
-const important = { id: 'F1', severity: 'important' as const, title: 'Raiders never stop', evidence: 'turn 40' };
+const important = { id: 'F1', severity: 'important' as const, title: 'Raiders never stop', evidence: 'turn 40', cause: 'release' as const, why: 'the raid goal of #12 never ends', known: null };
+const old = { ...important, id: 'F2', cause: 'old' as const, why: 'the baseline log shows the same loop at turn 300' };
 const facts = (over: Partial<LogFacts> = {}): LogFacts => ({ ...logFacts(logText(), WANT), ...over });
+const play = { moved: false, last: false };
 
 describe('logFacts', () => {
   it('reads the ending, the event count and the summary of the run', () => {
@@ -38,45 +40,61 @@ describe('readReview', () => {
     expect(() => readReview(null)).toThrow('wrote no .factory/playtest.json');
     expect(() => readReview(JSON.stringify(review({ verdict: 'ok' as Review['verdict'] })))).toThrow('verdict ok');
     expect(() => readReview(JSON.stringify(review({ findings: [{ ...important, severity: 'big' as 'important' }] })))).toThrow('severity big');
-    expect(() => readReview(JSON.stringify({ ...review(), plan: undefined }))).toThrow('no plan list');
+    expect(() => readReview(JSON.stringify({ ...review(), fixes: undefined }))).toThrow('no fixes list');
   });
 
-  it('fills missing explanations and blocker with null', () => {
+  it('fails on a finding with no cause, no reason for its cause or a known issue that is not a number', () => {
+    expect(() => readReview(JSON.stringify(review({ findings: [{ ...important, cause: 'maybe' as 'old' }] })))).toThrow('Finding F1 has cause maybe, not release or old');
+    expect(() => readReview(JSON.stringify(review({ findings: [{ ...important, why: ' ' }] })))).toThrow('Finding F1 gives no reason for its cause');
+    expect(() => readReview(JSON.stringify(review({ findings: [{ ...old, known: '12' as unknown as number }] })))).toThrow('Finding F2 has known 12, not an issue number or null');
+  });
+
+  it('fills missing explanations, blocker and known with null', () => {
     const { explanations: _e, blocker: _b, ...rest } = review();
     expect(readReview(JSON.stringify(rest))).toMatchObject({ explanations: { death: null, quiet: null }, blocker: null });
+    const { known: _k, ...unknown } = old;
+    expect(readReview(JSON.stringify(review({ findings: [unknown as typeof old] }))).findings[0].known).toBeNull();
   });
 });
 
 describe('judge', () => {
-  it('passes a clean review of a finished run with no important finding', () => {
-    expect(judge(facts(), review({ findings: [{ ...important, severity: 'minor' }] }))).toEqual({ outcome: 'clean', reason: 'clean' });
+  it('passes a clean review of a finished run with no important release finding, also with important old ones', () => {
+    expect(judge(facts(), review({ findings: [{ ...important, severity: 'minor' }, old] }), play)).toEqual({ outcome: 'clean', reason: 'clean' });
   });
 
   it('blocks a clean review of a run that ended in an error', () => {
-    expect(judge(facts({ ending: 'error', message: 'stalled' }), review()).reason).toContain('ended in an error at turn 101');
+    expect(judge(facts({ ending: 'error', message: 'stalled' }), review(), play).reason).toContain('ended in an error at turn 101');
   });
 
-  it('blocks a clean review that still lists an important finding', () => {
-    expect(judge(facts(), review({ findings: [important] }))).toEqual({ outcome: 'blocked', reason: 'The review called the run clean with 1 important findings.' });
+  it('blocks a clean review that still lists an important release finding', () => {
+    expect(judge(facts(), review({ findings: [important] }), play)).toEqual({ outcome: 'blocked', reason: 'The review called the run clean with 1 important findings the release caused.' });
   });
 
   it('blocks a clean review that leaves a death or a quiet run unexplained, and passes an explained one', () => {
     const died = facts({ ending: 'death' });
-    expect(judge(died, review()).outcome).toBe('blocked');
-    expect(judge(died, review({ explanations: { death: 'raiders at turn 80 after the bot ignored low health', quiet: null } })).outcome).toBe('clean');
+    expect(judge(died, review(), play).outcome).toBe('blocked');
+    expect(judge(died, review({ explanations: { death: 'raiders at turn 80 after the bot ignored low health', quiet: null } }), play).outcome).toBe('clean');
     const quiet = facts({ quiet: ['no shots were fired'] });
-    expect(judge(quiet, review()).reason).toContain('quiet (no shots were fired)');
-    expect(judge(quiet, review({ explanations: { death: null, quiet: 'the fighter day found no target in range' } })).outcome).toBe('clean');
+    expect(judge(quiet, review(), play).reason).toContain('quiet (no shots were fired)');
+    expect(judge(quiet, review({ explanations: { death: null, quiet: 'the fighter day found no target in range' } }), play).outcome).toBe('clean');
   });
 
-  it('asks for fixes only with an important finding and a plan', () => {
-    const plan = [{ priority: 1, finding: 'F1', change: 'end the raid goal', tests: 'npc-decisions' }];
-    expect(judge(facts(), review({ verdict: 'fix', findings: [important], plan }))).toEqual({ outcome: 'fix', reason: '1 planned fixes' });
-    expect(judge(facts(), review({ verdict: 'fix', findings: [important] })).outcome).toBe('blocked');
-    expect(judge(facts(), review({ verdict: 'fix', plan })).outcome).toBe('blocked');
+  it('replays after fixes the agent committed, and blocks fixes with no commit', () => {
+    expect(judge(facts(), review({ verdict: 'fixed', fixes: ['end the raid goal'] }), { moved: true, last: false })).toEqual({ outcome: 'replay', reason: '1 fixes to replay' });
+    expect(judge(facts(), review({ verdict: 'fixed', fixes: ['end the raid goal'] }), play)).toEqual({ outcome: 'blocked', reason: 'The review says it fixed findings but committed nothing.' });
+  });
+
+  it('replays a clean review that committed anyway, since its commits were never played', () => {
+    expect(judge(facts(), review(), { moved: true, last: false }).outcome).toBe('replay');
+  });
+
+  it('blocks on the last play when commits are left to replay', () => {
+    expect(judge(facts(), review({ verdict: 'fixed', fixes: ['a'] }), { moved: true, last: true }).reason).toBe('The last play left fixes that no play checked: a.');
+    expect(judge(facts(), review(), { moved: true, last: true }).outcome).toBe('blocked');
+    expect(judge(facts(), review(), { moved: false, last: true }).outcome).toBe('clean');
   });
 
   it('blocks with the reviewer reason on a blocked verdict', () => {
-    expect(judge(facts(), review({ verdict: 'blocked', blocker: 'Should raiders flee at night? A design call.' }))).toEqual({ outcome: 'blocked', reason: 'Should raiders flee at night? A design call.' });
+    expect(judge(facts(), review({ verdict: 'blocked', blocker: 'Should raiders flee at night? A design call.' }), play)).toEqual({ outcome: 'blocked', reason: 'Should raiders flee at night? A design call.' });
   });
 });

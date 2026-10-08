@@ -9,14 +9,12 @@ const MAX_FILES = 10;
 const REQUIRED = ['Why / user impact', 'What changed', 'How verified'];
 const NOTE = 'The factory never merges this pull request. A human reviews and merges it.';
 
-// The guide the change agent follows, kept in prompts/ so reviewers can change it like any file.
 export function prGuide(): string {
   return readFileSync(GUIDE_PATH, 'utf8');
 }
 
 const SECRETS = [/\b(?:sk|ghp|gho|ghs|github_pat|xox[a-z]|AKIA)[-_A-Za-z0-9]{12,}/g, /\b\d{6,}:[A-Za-z0-9_-]{30,}/g, /\b[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S+/g];
 
-// Masks token-shaped strings, so neither an agent nor a request can leak one into a public pull request.
 export function redact(text: string): string {
   return SECRETS.reduce((out, pattern) => out.replace(pattern, '[redacted]'), text);
 }
@@ -49,7 +47,6 @@ function fallbackBody(request: string, paths: string[]): string {
   ].join('\n\n');
 }
 
-// A scannable body from the agent's summary when it has the required sections, else a short one built from the diff.
 export function prBody(agentBody: string | null, by: string, request: string, paths: string[]): string {
   const clean = agentBody ? redact(agentBody.trim()).slice(0, MAX_BODY) : '';
   const summary = clean && hasSections(clean) ? clean : fallbackBody(request, paths);

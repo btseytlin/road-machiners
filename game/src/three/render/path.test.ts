@@ -7,7 +7,6 @@ import { PathView } from "./path";
 
 const terrain: Terrain = { size: 2, heights: Array(9).fill(0), types: Array(4).fill("road") };
 
-// The order icon is the root child that is not the preview.
 function orderIcon(path: PathView): THREE.Object3D {
   return path.root.children.find((c) => c !== path.preview)!;
 }

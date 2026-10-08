@@ -22,7 +22,6 @@ function shows(views: CraterViews, id: string): boolean {
   return obj.visible;
 }
 
-// A view built at turn 4 with no craters, so craters synced later are new to it.
 function viewsAt(turn: number): CraterViews {
   const w = worldAt(turn, []);
   return new CraterViews(w, new SightLimit(w.size), new THREE.Group());

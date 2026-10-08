@@ -9,9 +9,9 @@ const browser = await chromium.launch();
 const read = (page) => page.evaluate(() => ({
   selected: [...document.querySelectorAll('.inv-item.selected')].map(n => n.title.split('\n')[0]),
   inspect: document.querySelector('.inv-inspection')?.innerText.split('\n')[0] ?? '',
-  cards: document.querySelectorAll('.town-shop .card').length,
+  cards: document.querySelectorAll('.town-shop .part-row').length,
   compares: [...document.querySelectorAll('.town-shop .card-compare')].map(n => n.innerText),
-  deltas: document.querySelectorAll('.town-shop .card .delta').length,
+  deltas: document.querySelectorAll('.town-shop .part-row .delta').length,
   chips: [...document.querySelectorAll('.town-screen h3 .chip')].map(n => n.title || n.innerText),
   repair: document.querySelector('.town-repair')?.innerText ?? '',
 }));
@@ -42,21 +42,21 @@ try {
     await enter(page, spot);
     await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
     const gun = () => page.locator('.inv-item.mounted', { hasText: /turret|rifle|cannon|shotgun|MG/i }).first();
-    // Mouse: select, compare, clear.
     await gun().click();
     await page.waitForTimeout(500);
     let r = await read(page);
     assert.equal(r.selected.length, 1, `${spot}: a click must select the mounted weapon`);
     assert(r.inspect.includes(r.selected[0].split(' (')[0]), `${spot}: inspection must name the selection`);
-    assert(r.cards > 0 && r.compares.length === r.cards, `${spot}: every card must compare with the selection`);
-    assert(r.compares.every(t => t.includes(r.inspect)), `${spot}: cards must compare with ${r.inspect}`);
-    assert(r.deltas > 0, `${spot}: cards must show deltas`);
+    assert(r.cards > 0 && r.deltas > 0, `${spot}: compact rows must show deltas`);
+    await page.locator('.town-shop .part-sum').first().click();
+    r = await read(page);
+    assert(r.compares.length === 1 && r.compares[0].includes(r.inspect), `${spot}: an opened row must compare with ${r.inspect}`);
+    await page.locator('.town-shop .part-sum').first().click();
     await gun().click();
     await page.waitForTimeout(500);
     r = await read(page);
     assert.equal(r.compares.length, 0, `${spot}: clearing the selection must clear the comparison`);
     assert.equal(r.inspect, 'Equipment', `${spot}: clearing must reset the inspection`);
-    // Keyboard: focus alone must not inspect; Enter selects and compares.
     await gun().focus();
     r = await read(page);
     assert.equal(r.inspect, 'Equipment', `${spot}: focus alone must not change the inspection`);
@@ -64,12 +64,10 @@ try {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
     r = await read(page);
-    assert(r.compares.length === r.cards && r.cards > 0, `${spot}: Enter must select and compare`);
-    // Labels.
+    assert(r.deltas > 0, `${spot}: Enter must select and compare`);
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
     for (const t of ['Money', 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
     assert(!r.repair.includes('Nothing broken'), `${spot}: no idle Nothing broken label`);
-    // One broken part shows the count and an enabled repair.
     await page.evaluate(async () => {
       const g = window.__ROAM__;
       const w = structuredClone(g.state);
@@ -84,14 +82,12 @@ try {
     await page.locator('.town-repair button', { hasText: 'Repair all' }).waitFor();
     await page.evaluate(() => window.__ROAM__.town.close());
   }
-  // Stall and inventory keep the chip.
   await enter(page, 'salvage-yard');
   assert((await read(page)).chips.includes('Free cargo cells'), 'stall header must keep free cells');
   await page.evaluate(() => window.__ROAM__.town.close());
   await page.keyboard.press('i');
   assert((await read(page).then(() => page.locator('.modal:visible h3 .chip[title="Free cargo cells"]').count())) === 1, 'inventory header must keep free cells');
   await page.keyboard.press('Escape');
-  // Layout at narrower widths.
   await enter(page, 'nose');
   await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
   await mkdir('.playtest', { recursive: true });

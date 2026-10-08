@@ -9,8 +9,6 @@ import { chance, nextRandom } from "../sim/rng";
 import type { Rng } from "../sim/rng";
 import type { MapDraft } from "./bake";
 
-// Fills d.flow, d.slumped and d.sand and changes d.heights. Wind draws from its own rng keyed by the map
-// seed, so the same seed and draft always give the same result.
 export function geologyLayer(seed: number, d: MapDraft): MapDraft {
   seedSand(d, GEOLOGY.sandStart);
   let t = performance.now();
@@ -25,7 +23,6 @@ export function geologyLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Start sand thickens from nothing at `below` to full depth `fade` units lower.
 function seedSand(d: MapDraft, start: SandStart): void {
   for (let k = 0; k < d.heights.length; k++) {
     const share = Math.min(1, Math.max(0, (start.below - d.heights[k]) / start.fade));
@@ -39,8 +36,6 @@ function logRule(name: string, since: number, note: string): number {
   return now;
 }
 
-// The 8 neighbors of a corner on a grid of n x n corners, as index offsets with the inverse distance in
-// tiles. Rules visit only interior corners, so every offset stays inside the grid without bound checks.
 export type Neighbors = { offsets: Int32Array; invDist: Float64Array };
 
 export function cornerNeighbors(n: number): Neighbors {
@@ -57,32 +52,22 @@ function isInterior(k: number, n: number): boolean {
   return i > 0 && j > 0 && i < n - 1 && j < n - 1;
 }
 
-// Rain: grid hydraulic erosion. Each step rain falls on every corner, and the water runs downhill in one
-// pass from the highest corner to the lowest, so every corner sees all the water from above it. Water
-// splits between lower neighbors by a power of their slope, so it gathers into lines. A share of it
-// evaporates at each corner it passes. Soil is picked up while the water carries less than its capacity,
-// which grows with slope and water, and dropped above it. A corner with no lower neighbor is a pool and
-// keeps all soil that reaches it. Edge corners drain off the map, and the soil they receive leaves too.
-
 
 type RainGrid = {
   n: number;
   nb: Neighbors;
   height: Float64Array;
-  water: Float64Array; // water reaching each corner in the current step
-  soil: Float64Array; // soil carried by that water
-  order: Uint32Array; // corners from highest to lowest
-  weights: Float64Array; // scratch: share weight of each neighbor of the current corner
-  steepest: number; // scratch: steepest slope down from the current corner, units per tile
-  before: Float64Array; // heights before the current step, for spreading its cuts
-  spread: Float64Array; // scratch: this step's height change while it spreads
+  water: Float64Array;
+  soil: Float64Array;
+  order: Uint32Array;
+  weights: Float64Array;
+  steepest: number;
+  before: Float64Array;
+  spread: Float64Array;
   flow: Float32Array;
   outflow: number;
 };
 
-// Runs every rain step on the draft and adds the water that passed each corner to d.flow. Returns the
-// soil carried off the map edge, in height units summed over corners, so the total height before
-// equals the total height after plus this.
 export function rain(d: MapDraft, rules: RainRules): number {
   const g = newRainGrid(d);
   for (let s = 0; s < rules.steps; s++) {
@@ -98,9 +83,6 @@ export function rain(d: MapDraft, rules: RainRules): number {
   return g.outflow;
 }
 
-// Spreads one step's cuts and deposits to the four side neighbors, so water carves gullies a few tiles
-// wide instead of one-tile rills along the grid. Each pass trades change between neighbor pairs, so the
-// total height never changes.
 function spreadCuts(g: RainGrid, rules: RainRules): void {
   const { n, height, before, spread } = g;
   for (let k = 0; k < height.length; k++) spread[k] = height[k] - before[k];
@@ -111,13 +93,11 @@ function spreadCuts(g: RainGrid, rules: RainRules): void {
   for (let k = 0; k < height.length; k++) height[k] = before[k] + spread[k];
 }
 
-// One pass: every pair of side neighbors trades change, read from the pass's start values in start.
 function spreadPass(out: Float64Array, start: Float64Array, n: number, rate: number): void {
   for (let j = 0; j < n; j++) for (let i = 0; i + 1 < n; i++) trade(out, start, j * n + i, j * n + i + 1, rate);
   for (let j = 0; j + 1 < n; j++) for (let i = 0; i < n; i++) trade(out, start, j * n + i, (j + 1) * n + i, rate);
 }
 
-// Moves a share of the difference in change between corners a and b, read from the pass's start values.
 function trade(out: Float64Array, start: Float64Array, a: number, b: number, rate: number): void {
   const t = (start[b] - start[a]) * rate;
   out[a] += t;
@@ -145,7 +125,6 @@ function newRainGrid(d: MapDraft): RainGrid {
   };
 }
 
-// Ties go to the lower index, so the order and the result depend only on the heights.
 function sortByHeight(g: RainGrid): void {
   const h = g.height;
   g.order.sort((a, b) => h[b] - h[a] || a - b);
@@ -154,7 +133,6 @@ function sortByHeight(g: RainGrid): void {
 function route(g: RainGrid, k: number, rules: RainRules): void {
   g.flow[k] += g.water[k];
   const carried = g.soil[k];
-  // Soil that reaches this corner after its turn stays in g.soil and settles at the end of the pass.
   g.soil[k] = 0;
   if (!isInterior(k, g.n)) {
     g.outflow += carried;
@@ -175,7 +153,6 @@ function route(g: RainGrid, k: number, rules: RainRules): void {
   }
 }
 
-// Fills g.weights with the slope to each lower neighbor squared `squarings` times and returns their sum.
 function weighLowerNeighbors(g: RainGrid, k: number, squarings: number): number {
   const { offsets, invDist } = g.nb;
   const h = g.height[k];
@@ -193,8 +170,6 @@ function weighLowerNeighbors(g: RainGrid, k: number, squarings: number): number 
   return total;
 }
 
-// Picks up or drops soil at corner k and returns the soil the water carries on. A pickup never takes
-// more than a share of the drop to the steepest neighbor, so water cannot dig a pit.
 function erode(g: RainGrid, k: number, water: number, rules: RainRules, carried: number): number {
   const slope = g.steepest;
   const free = rules.capacity * Math.max(slope, rules.minSlope) * water - carried;
@@ -203,8 +178,6 @@ function erode(g: RainGrid, k: number, water: number, rules: RainRules, carried:
   return carried + moved;
 }
 
-// Erosion can lower a corner below a neighbor that already took its turn, so water from it reaches that
-// neighbor late. The soil it carries settles there, at the edge it leaves the map.
 function settleLateSoil(g: RainGrid): void {
   for (let k = 0; k < g.height.length; k++) {
     if (g.soil[k] === 0) continue;
@@ -212,11 +185,6 @@ function settleLateSoil(g: RainGrid): void {
     else g.outflow += g.soil[k];
   }
 }
-
-// Slump: thermal erosion. Soil on a corner steeper than the rest slope toward its steepest lower neighbor
-// slides down to that neighbor, a share of the excess per pass. Both corners are marked in d.slumped, so
-// the ground layer can lay scree on them. Only interior corners shed soil, and every neighbor lies on
-// the map, so no soil is lost.
 
 
 export function slump(d: MapDraft, rules: SlumpRules): void {
@@ -244,7 +212,6 @@ function slide(height: Float64Array, slumped: Uint8Array, nb: Neighbors, k: numb
   }
   if (target < 0) return;
   const m = k + offsets[target];
-  // Moving x closes the drop by 2x, so half the excess drop brings the pair to the rest slope.
   const moved = (rules.slideShare * (steepest - rules.restSlope)) / invDist[target] / 2;
   height[k] -= moved;
   height[m] += moved;
@@ -252,30 +219,22 @@ function slide(height: Float64Array, slumped: Uint8Array, nb: Neighbors, k: numb
   slumped[m] = 1;
 }
 
-// Wind: the Werner dune model over d.sand. Each event lifts one slab of sand from a random sandy corner
-// that is not in wind shadow, and carries it downwind in hops until it lands. A slab always lands in wind
-// shadow, and elsewhere lands by chance, more often on sand. Sand steeper than the sand slope avalanches
-// to its lowest neighbor. Slabs carried past the map edge leave the map. At the end, the sand depth adds
-// to the corner heights.
-
 
 type WindGrid = {
   n: number;
   nb: Neighbors;
   ground: Float32Array;
   sand: Float64Array;
-  sandy: Int32Array; // corners that have held sand, the only ones an event may pick
+  sandy: Int32Array;
   sandyCount: number;
   listed: Uint8Array;
-  hopX: number; // tiles one hop moves along x
+  hopX: number;
   hopY: number;
-  upwind: Int32Array; // shadow checks: x offset, y offset per upwind step
-  upwindDrop: Float64Array; // height a crest at each upwind step must rise above a corner to shade it
+  upwind: Int32Array;
+  upwindDrop: Float64Array;
   outflow: number;
 };
 
-// Runs the wind events on the draft and returns the sand blown off the map, in height units summed over
-// corners, so the total sand before equals the total sand after plus this.
 export function wind(d: MapDraft, rules: WindRules, rng: Rng): number {
   const g = newWindGrid(d, rules);
   const events = rules.stepsPerCell * g.sandyCount;
@@ -335,7 +294,6 @@ function onMap(g: WindGrid, x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < g.n && y < g.n;
 }
 
-// A corner is in wind shadow when an upwind crest rises above the shadow line drawn down from it.
 function inShadow(g: WindGrid, k: number): boolean {
   const x = k % g.n;
   const y = (k - x) / g.n;
@@ -358,7 +316,6 @@ function lift(g: WindGrid, k: number, rules: WindRules, rng: Rng): void {
   carry(g, k, slab, rules, rng);
 }
 
-// Hops the slab downwind from corner k until it lands or leaves the map.
 function carry(g: WindGrid, k: number, slab: number, rules: WindRules, rng: Rng): void {
   const x0 = k % g.n;
   const y0 = (k - x0) / g.n;
@@ -384,8 +341,6 @@ function lands(g: WindGrid, k: number, rules: WindRules, rng: Rng): boolean {
   return chance(rng, g.sand[k] > 0 ? rules.depositOnSand : rules.depositOnBare);
 }
 
-// Slides sand from corner k down its steepest sand face until every face on the path rests at the sand
-// slope. Each move leaves the path strictly lower, so it never returns to a corner and always ends.
 function avalanche(g: WindGrid, k: number, sandSlope: number): void {
   let at = k;
   while (isInterior(at, g.n) && g.sand[at] > 0) {
@@ -393,7 +348,6 @@ function avalanche(g: WindGrid, k: number, sandSlope: number): void {
     if (q < 0) return;
     const to = at + g.nb.offsets[q];
     const excess = (surface(g, at) - surface(g, to)) * g.nb.invDist[q] - sandSlope;
-    // Moving x closes the drop by 2x, so half the excess drop brings the face to the sand slope.
     const moved = Math.min(g.sand[at], excess / g.nb.invDist[q] / 2);
     g.sand[at] -= moved;
     g.sand[to] += moved;
@@ -402,7 +356,6 @@ function avalanche(g: WindGrid, k: number, sandSlope: number): void {
   }
 }
 
-// Returns the neighbor slot with the steepest face down from corner k past the sand slope, or -1.
 function steepestFace(g: WindGrid, k: number, sandSlope: number): number {
   const { offsets, invDist } = g.nb;
   const here = surface(g, k);
@@ -417,12 +370,6 @@ function steepestFace(g: WindGrid, k: number, sandSlope: number): number {
   }
   return best;
 }
-
-// Ponds: how deep water stands on each corner, from the heights after every rule. Water in a basin could
-// rise to the level where the basin spills off the map edge, but a dry climate fills only the basin's
-// bottom, up to the lake depth. A priority flood from the edge finds the spill level: it walks inward
-// from the lowest corner reached so far, and each corner it reaches takes the higher of its own height
-// and the level of the corner it came from.
 
 export function pondDepths(heights: ArrayLike<number>, size: number, lakeDepth: number): Float32Array {
   const n = size + 1;
@@ -447,7 +394,6 @@ function spillLevels(heights: ArrayLike<number>, n: number): Float64Array {
   return level;
 }
 
-// Reaches every neighbor of corner k not reached yet, raising its level to k's level.
 function floodFrom(heap: Heap, k: number, offsets: Int32Array, n: number, reached: Uint8Array): void {
   const level = heap.key;
   for (const offset of offsets) {
@@ -459,8 +405,6 @@ function floodFrom(heap: Heap, k: number, offsets: Int32Array, n: number, reache
   }
 }
 
-// Each basin is a connected patch of corners under their spill level. Its lake rises at most lakeDepth
-// above the basin's lowest corner.
 function capLakes(heights: ArrayLike<number>, level: Float64Array, n: number, lakeDepth: number): void {
   const seen = new Uint8Array(n * n);
   const basin = new Int32Array(n * n);
@@ -473,7 +417,6 @@ function capLakes(heights: ArrayLike<number>, level: Float64Array, n: number, la
   }
 }
 
-// Fills basin with the corners under their spill level connected to corner start, and returns their count.
 function collectBasin(heights: ArrayLike<number>, level: Float64Array, n: number, start: number, seen: Uint8Array, basin: Int32Array): number {
   const { offsets } = cornerNeighbors(n);
   seen[start] = 1;
@@ -491,13 +434,10 @@ function collectBasin(heights: ArrayLike<number>, level: Float64Array, n: number
   return count;
 }
 
-// Offsets wrap across rows at the grid sides, so a neighbor counts only within one column and one row.
 function isGridNeighbor(k: number, m: number, n: number): boolean {
   return m >= 0 && m < n * n && Math.abs((m % n) - (k % n)) <= 1;
 }
 
-// A binary min-heap of corners keyed by level. Ties go to the lower index, so the flood order and the
-// result depend only on the heights.
 type Heap = { items: Int32Array; count: number; key: Float64Array };
 
 function newHeap(capacity: number, key: Float64Array): Heap {
@@ -539,7 +479,6 @@ function popHeap(h: Heap): number {
   }
 }
 
-// The slot holding the least item among slot at and its two children.
 function leastOfFamily(h: Heap, at: number): number {
   const left = 2 * at + 1;
   let least = at;
@@ -548,9 +487,6 @@ function leastOfFamily(h: Heap, at: number): number {
   return least;
 }
 
-// Dune fields: deep sand on gentle ground piles into ridges across the wind. Each ridge rises gently on its
-// windward side and drops steeply behind its crest. Noise bends the crest lines, so ridges wander and
-// break. Ridge height grows with sand depth, and the added sand counts as sand for the ground types.
 export function dunes(d: MapDraft, rules: DuneRules, windDirection: number, seed: number): void {
   const n = d.size + 1;
   const angle = (windDirection * Math.PI) / 180;
@@ -567,20 +503,16 @@ export function dunes(d: MapDraft, rules: DuneRules, windDirection: number, seed
   }
 }
 
-// 0 to 1: how much of a full dune ridge a corner carries, from its sand depth, and 0 on slopes too steep
-// for dunes to stand.
 function duneShare(sand: number, slope: number, rules: DuneRules): number {
   if (sand <= rules.minSand || slope > rules.maxSlope) return 0;
   return Math.min(1, (sand - rules.minSand) / (rules.fullSand - rules.minSand));
 }
 
-// Height of a ridge at a phase along the wind, 0 to 1: a long windward rise, then a short lee face.
 function ridgeProfile(phase: number, leeShare: number): number {
   const rise = 1 - leeShare;
   return phase < rise ? phase / rise : (1 - phase) / leeShare;
 }
 
-// Steepest height change per tile from a corner to its four side neighbors.
 function cornerSlope(h: Float32Array, n: number, k: number): number {
   return Math.max(Math.abs(h[k + 1] - h[k - 1]), Math.abs(h[k + n] - h[k - n])) / 2;
 }

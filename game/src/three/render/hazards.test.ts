@@ -8,7 +8,6 @@ import type { Vehicle, World } from '../../sim/types';
 import { cloneWorld } from '../../sim/world';
 import type * as Zones from './zones';
 
-// Every GroundBand mesh made while a test runs, so a view tree can be checked for rings, discs and bands.
 const bands = vi.hoisted(() => new Set<object>());
 vi.mock('./zones', async (load) => {
   const zones = await load<typeof Zones>();
@@ -23,13 +22,11 @@ vi.mock('./zones', async (load) => {
 
 const { HazardViews, cutShare, fieldShown, volleyShown } = await import('./hazards');
 
-// A canvas that takes the texture drawing calls, since Node has no DOM.
 function stubCanvas(): void {
   const ctx = { createRadialGradient: () => ({ addColorStop: () => {} }), fillRect: () => {}, fillStyle: '' };
   vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) });
 }
 
-// The player truck drove 10 tiles east along y = 30 this turn, from x = 20 to x = 30, in 10 even steps.
 function droveEast(world: World): Vehicle {
   const me = world.vehicles[0];
   me.pos = { x: 30, y: 30 };
@@ -45,7 +42,6 @@ describe('fieldShown', () => {
     const world = emptyWorld();
     const me = droveEast(world);
     const before = cloneWorld(world);
-    // The field's near edge lies `behind` = 1 tile behind the rear, so it shows one tile before the turn's end.
     dropField(world, me, 'caltrops', { radius: 1.25, turns: 5, behind: 1 });
     const field = world.fields[0];
 
@@ -66,7 +62,6 @@ describe('fieldShown', () => {
     expect(shownAt(0)).toBe(0);
     expect(shownAt(0.75)).toBeGreaterThan(0);
     expect(shownAt(0.75)).toBeLessThan(OIL.blobs);
-    // The far blobs, laid first along the path, are the ones shown.
     const farFirst = world.fields.map((f) => fieldShown(world, f, clock(before, 0.75)));
     expect(farFirst).toEqual([...farFirst].sort((a, b) => Number(a) - Number(b)));
     expect(shownAt(1)).toBe(OIL.blobs);
@@ -125,9 +120,8 @@ describe('volleyShown', () => {
 });
 
 describe('cutShare', () => {
-  // The player's truck at the origin, seen by a camera looking straight down.
   const cut = { at: new THREE.Vector3(0, 0, 0), look: new THREE.Vector3(0, -1, 0) };
-  const half = 6; // meters, a 3-tile puff
+  const half = 6;
 
   it('thins a puff between the camera and the player truck', () => {
     expect(cutShare(cut, new THREE.Vector3(0.5, 4, 0), half)).toBeLessThan(0.2);
@@ -147,8 +141,6 @@ describe('HazardViews', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  // A turn with no gunfire ends its playback in the frame its movement ends, so the views never see a clock at the
-  // volley. A flare made in it must still fly from its cannon before it lights.
   it('flies a flare made this turn when the playback ended in the volley frame', () => {
     const world = emptyWorld();
     const me = world.vehicles[0];
@@ -170,7 +162,6 @@ describe('HazardViews', () => {
     expect(shown.some((o) => o.material.color.getHex() === PAL.flare.core)).toBe(false);
   });
 
-  // Spikes are drawn in the view of a caltrop field: meshes under the fields' root at the spike's color.
   const spikesOf = (views: InstanceType<typeof HazardViews>): THREE.Mesh[] => {
     const out: THREE.Mesh[] = [];
     views.root.traverse((o) => {
@@ -251,7 +242,6 @@ describe('HazardViews', () => {
     expect(slickWidth()).toBe(0);
   });
 
-  // IV23: hazard views draw no ground ring, disc or band at a hazard's radius.
   it('draws smoke, oil, caltrops, flares and pulses without a ground band', () => {
     const world = emptyWorld();
     const me = world.vehicles[0];

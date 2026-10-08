@@ -3,7 +3,6 @@ import { realRun } from '../exec';
 import { ghClient } from '../github';
 import { ErrorReports, ErrorServer } from './service';
 
-// The error service runs beside the tick as its own systemd unit, on the unix socket in ERROR_SOCKET that Caddy serves at /errors.
 async function startErrorService(): Promise<void> {
   const socket = process.env.ERROR_SOCKET;
   if (!socket) throw new Error('ERROR_SOCKET is not set. The systemd unit sets it.');

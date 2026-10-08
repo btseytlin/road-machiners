@@ -21,12 +21,10 @@ function hitchedPair(towedAt: { x: number; y: number }, towedHeading: number, to
   return { w, tower, towed };
 }
 
-// A tower trail from a path function over substeps; heading follows the path.
 function trailFrom(at: (i: number) => { x: number; y: number }, heading: (i: number) => number): Pose[] {
   return Array.from({ length: SUB + 1 }, (_, i) => ({ ...at(i), heading: heading(i) }));
 }
 
-// Runs turns of a tower trail and returns each turn's towed trail, joined.
 function drive(w: World, tower: Vehicle, towed: Vehicle, turns: Pose[][]): Pose[][] {
   const out: Pose[][] = [];
   for (const t of turns) {
@@ -46,7 +44,6 @@ function bendTurns(): Pose[][] {
   const R = 6;
   const turns: Pose[][] = [];
   const pose = (s: number): Pose => {
-    // 4 tiles straight, then a 90 degree arc of radius R, then straight.
     if (s <= 4) return { x: 30 + s, y: 30, heading: 0 };
     const a = (s - 4) / R;
     if (a <= Math.PI / 2) return { x: 34 + R * Math.sin(a), y: 30 + R * (1 - Math.cos(a)), heading: a };
@@ -64,7 +61,6 @@ describe('a hitched truck on a tow bar', () => {
 
   it('converges to the gap on a straight, and never jumps', () => {
     const { w, tower, towed } = hitchedPair({ x: 26, y: 30.5 }, 0.3);
-    // Hitched 4 tiles behind and off to the side, as a loose hitch can be.
     const turns = drive(w, tower, towed, straightTurns(6, 4 / SUB));
     const hitchSteps = turns.flatMap((t, k) => t.map((p, i) => ({ p, k, i })));
     for (let n = 1; n < hitchSteps.length; n++) {
@@ -96,7 +92,6 @@ describe('a hitched truck on a tow bar', () => {
         expect(Math.abs(sideways)).toBeLessThan(1e-9 + Math.abs(along) * 0.2);
       }
     }
-    // Heading turns smoothly.
     for (const t of turns) for (let i = 1; i < t.length; i++) expect(Math.abs(angleDiff(t[i].heading, t[i - 1].heading))).toBeLessThan(0.1);
     const end = turns[turns.length - 1][SUB];
     expect(dist(end, tower.pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);

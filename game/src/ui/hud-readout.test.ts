@@ -23,6 +23,7 @@ import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
 import { dumpOnPile, emptyHidden, isRoadWreck } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "../sim/settings";
 import { isLootSpot, territoryAt } from "../sim/territory";
 import { propReach } from "../sim/mapgen";
 import type { Obstacle, World } from "../sim/types";
@@ -110,9 +111,8 @@ describe('salvage interaction', () => {
   });
 });
 
-// A real world with the player parked beside the first prop of this look in this territory, or the first road wreck.
 function parkedAt(find: (o: Obstacle) => boolean): { w: World; id: string } {
-  const w = newWorld(1337, startKit('standard'), TEST_MAP);
+  const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   const o = w.obstacles.find(find);
   if (!o) throw new Error('No such prop on the test map');
   const me = playerVehicle(w);
@@ -129,7 +129,6 @@ function stockLabel(w: World, id: string, kind: 'stock' | 'loot' = 'stock'): str
   return getContextActions(w, false).find((a) => a.target.kind === kind && a.target.id === id)?.label;
 }
 
-// Every hidden unit of the stock revealed, so only its loot is left to take.
 function reveal(w: World, id: string): void {
   const stock = w.salvage.find((s) => s.id === id)!;
   for (const [good, n] of Object.entries(stock.hidden.goods)) stock.goods[good] = (stock.goods[good] ?? 0) + (n ?? 0);
@@ -261,7 +260,7 @@ describe('search in combat', () => {
 describe("critical vehicle readout", () => {
   it("keeps money, survival resources and driver condition visible", () => {
     const w = emptyWorld();
-    w.player.money = 1234;
+    w.player.money = 123450;
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
     expect(getHudReadout(w).resources.map((r) => r.label)).toEqual([
@@ -274,7 +273,7 @@ describe("critical vehicle readout", () => {
       getHudReadout(w)
         .resources.slice(0, 3)
         .map((r) => r.value),
-    ).toEqual(["1,234", "93 / 200 L", "7.3"]);
+    ).toEqual(["1,235", "93 / 200 L", "7.3"]);
   });
   it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
@@ -343,18 +342,17 @@ describe("critical vehicle readout", () => {
 describe("rescue readout", () => {
   it("shows negative money as debt with a warning", () => {
     const w = emptyWorld();
-    w.player.money = -1200;
+    w.player.money = -120050;
     expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "Debt 1,200",
+      value: "Debt 1,201",
       warning: true,
     });
   });
   it("tells a stranded player to install a spare engine it carries", () => {
-    const w = newWorld(1337, startKit("combat"), TEST_MAP);
+    const w = newWorld(1337, startKit("combat"), TEST_MAP, defaultSetup('roaming'));
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
-    // The hauler keeps only its built-in parts, so its deck has room to stow the engine.
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
@@ -380,7 +378,6 @@ describe("rescue readout", () => {
 });
 
 describe('trade interaction', () => {
-  // The player parked on a town pad, with a trader beside it that agreed to trade.
   function atTownWithTrader(npcSpeed: number) {
     const town = REGION.towns[0];
     const w = emptyWorld({ ...sitePads(town)[0] });
@@ -443,11 +440,33 @@ describe('aid handover action', () => {
     return { w, npc };
   }
 
-  it('offers giving fuel, not ready while the trucks are apart, ready once side by side', () => {
-    const far = aidScene(60, 'player');
-    expect(getContextActions(far.w, false)[0]).toMatchObject({ label: `Give ${aidGoods(playerAid(far.w)!)} to ${npcName(far.npc)}`, ready: false });
+  it('offers giving fuel unready while the trucks move in reach, ready once parked side by side', () => {
+    const moving = aidScene(34, 'player');
+    moving.npc.speed = RULES.parkedSpeed + 1;
+    expect(getContextActions(moving.w, false)[0]).toMatchObject({ label: `Give ${aidGoods(playerAid(moving.w)!)} to ${npcName(moving.npc)}`, ready: false, target: { kind: 'aid', id: moving.npc.id } });
     const near = aidScene(34, 'player');
-    expect(getContextActions(near.w, false)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true });
+    expect(getContextActions(near.w, false)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true, target: { kind: 'aid', id: near.npc.id } });
+  });
+
+  it('shows no aid action while the agreed driver is out of reach, even beside another driver', () => {
+    const { w, npc } = aidScene(60, 'player');
+    addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    const actions = getContextActions(w, false);
+    expect(actions.filter((a) => a.target.kind === 'aid')).toEqual([]);
+    expect(actions.some((a) => a.label.includes(npcName(npc)))).toBe(false);
+  });
+
+  it('shows one aid action naming the agreed driver when another is also in reach', () => {
+    const { w, npc } = aidScene(34, 'player');
+    addVehicle(w, 'traders', 'scout', [], { x: 26, y: 30 });
+    const aids = getContextActions(w, false).filter((a) => a.target.kind === 'aid');
+    expect(aids).toHaveLength(1);
+    expect(aids[0]).toMatchObject({ target: { kind: 'aid', id: npc.id }, label: expect.stringContaining(npcName(npc)) });
+  });
+
+  it('gives the same actions after a save and reload', () => {
+    const { w } = aidScene(34, 'player');
+    expect(getContextActions(JSON.parse(JSON.stringify(w)), false)).toEqual(getContextActions(w, false));
   });
 
   it('offers taking fuel when the driver gives, and wins over a ready place action', () => {
@@ -456,6 +475,18 @@ describe('aid handover action', () => {
     w.vehicles[0].pos = { ...sitePads(site)[0] };
     npc.pos = { x: w.vehicles[0].pos.x + 4, y: w.vehicles[0].pos.y };
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `Take ${aidGoods(playerAid(w)!)} from ${npcName(npc)}`, ready: true });
+  });
+});
+
+describe('several trades', () => {
+  it('lists only the trade whose driver is in reach, with that driver as target', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const far = addVehicle(w, 'traders', 'scout', [], { x: 90, y: 30 });
+    const near = addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    addState(w, 'trade', far.id, w.player.vehicleId, { kind: 'none' });
+    addState(w, 'trade', near.id, w.player.vehicleId, { kind: 'none' });
+    const trades = getContextActions(w, false).filter((a) => a.target.kind === 'trade');
+    expect(trades).toEqual([{ label: `Trade with ${npcName(near)}`, ready: true, target: { kind: 'trade', id: near.id } }]);
   });
 });
 
@@ -503,15 +534,14 @@ describe('context picker', () => {
 
 describe("moneyChipLabel", () => {
   it("names the amount as money and keeps debt as debt", () => {
-    expect(moneyChipLabel(830)).toBe("830 money");
-    expect(moneyChipLabel(1830)).toBe("1,830 money");
+    expect(moneyChipLabel(83000)).toBe("830 money");
+    expect(moneyChipLabel(183000)).toBe("1,830 money");
     expect(moneyChipLabel(0)).toBe("0 money");
-    expect(moneyChipLabel(-50)).toBe("Debt 50");
+    expect(moneyChipLabel(-5000)).toBe("Debt 50");
   });
 });
 
 describe('overdrive switch', () => {
-  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
   function wornTo(hp: number) {
     const w = emptyWorld();
     const engine = mountedParts(playerVehicle(w), 'engine')[0];
