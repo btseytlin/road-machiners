@@ -12,7 +12,7 @@ import { addState, advanceStates, endState, settleStates, stateOf } from './stat
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive, rngStateForForcedRolls , startCombat } from './testkit';
 import { escortsOf, isOnRope, startEscort, towOf } from './tow';
-import type { GameEvent, NpcState, Vehicle, World } from './types';
+import type { GameEvent, NpcActivity, NpcState, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { endTurn } from './world';
@@ -396,10 +396,10 @@ describe('hiring a merc', () => {
 });
 
 describe('a leader with escorts', () => {
-  function pair(escortX: number): { w: World; convoy: Vehicle } {
+  function pair(escortX: number, leaderGoal: NpcActivity = { kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }): { w: World; convoy: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
-    convoy.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }];
+    convoy.brain!.goals = [leaderGoal];
     const guard = guardAt(w, { x: escortX, y: 60 });
     startEscort(w, guard, convoy, null, 0);
     return { w, convoy };
@@ -423,5 +423,23 @@ describe('a leader with escorts', () => {
     guard.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
     planNpcOrders(w);
     expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('drives on while its escort lags beyond the catch-up gap', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortCatchUpGap - 1);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('drives on to its own service stop while an escort lags', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap - 1, { kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('still waits for an escort at the catch-up gap', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortCatchUpGap);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).toBe('brake');
   });
 });

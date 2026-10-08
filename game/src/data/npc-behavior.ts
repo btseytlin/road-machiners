@@ -25,6 +25,9 @@ export const NPC_BEHAVIOR = {
   // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
   // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
   escortWaitGap: 12,
+  // A leader waits only while the lagging escort is within this many tiles. One farther off is coming back from an
+  // errand of its own and catches up on its own. 40 tiles is two sight radii, about 12 turns of road driving.
+  escortCatchUpGap: 40,
   // Tiles of a lawman town's gate where drivers seldom start a robbery or a fight, since that town's lawmen live,
   // spawn and patrol there. See robNearGuards and fightNearGuards.
   lawGateReach: LAW_GATE_REACH,
