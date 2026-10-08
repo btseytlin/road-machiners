@@ -4,14 +4,12 @@ import type { Weighted } from './npcs';
 
 export type LootRange = [number, number];
 
-// A rare find: a share of the spare parts a table rolls come from a pool of better car parts, in good repair.
 export type RareSpare = {
   share: number; // odds a rolled spare part is a rare one
   parts: string[]; // part def ids of whole car parts, never stacks of the parts good
   wear: Weighted<number>[]; // wear steps, 0 or 1 only, from the market stream
 };
 
-// Wear of a rare find: whole or one step worn, kept dry under a roof or a hull.
 const RARE_WEAR: Weighted<number>[] = [
   { value: 0, weight: 1 },
   { value: 1, weight: 2 },
@@ -43,7 +41,6 @@ export const OLD_PLACES = {
   buildingGap: 12, // tiles between buildings of one place; a settlement's houses stand within 10 tiles, settlements 45 apart
   tankGap: 10, // tiles between hulks of one group; a group's hulks lie within 8 tiles of each other
   roadGap: 5, // tiles between a spot's reach and a road edge, so a spot is a trip off the road, not a roadside stop
-  // Chance a place holds a spot, by type. Most old places are picked clean, so a spot stays a find.
   chance: { homestead: 0.5, hamlet: 0.35, lookout: 0.4, hulks: 0.25 } as Record<OldPlaceType, number>,
   npcShare: 0.3, // share of scavenge trips that head for an old spot near the driver instead of a site
   npcRange: 120, // tiles, the farthest old spot a scavenger heads for
@@ -131,9 +128,7 @@ export const SALVAGE = {
   } as LootTable,
 };
 
-// Loot of old-world places, by place type: a territory loot spot's size, mostly worn, and now and then a good engine.
 export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
-  // Farmsteads: food and cloth, and the odd farm engine under a tarp.
   homestead: {
     goods: { grain: [0, 1], textiles: [0, 1] },
     parts: [0, 1],
@@ -143,7 +138,6 @@ export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
     fuel: [0, 1],
     supplies: [0, 1],
   },
-  // Hamlets: what the houses held, and a car left in a garage.
   hamlet: {
     goods: { scrap: [0, 1], textiles: [0, 1] },
     parts: [0, 1],
@@ -153,7 +147,6 @@ export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
     fuel: [0, 1],
     supplies: [0, 1],
   },
-  // Lone lookout buildings: a hideout's leftovers, meds and a gun.
   lookout: {
     goods: { scrap: [0, 1], meds: [0, 1] },
     parts: [0, 0],
@@ -163,7 +156,6 @@ export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
     fuel: [0, 1],
     supplies: [0, 1],
   },
-  // Tank hulks: armor scrap, and now and then a diesel pulled whole from a hull.
   hulks: {
     goods: { scrap: [1, 2] },
     parts: [0, 1],

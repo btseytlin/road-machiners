@@ -64,8 +64,6 @@ export function isRoadWreck(o: { id: string }): boolean {
 
 export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
 
-// What kind of place holds the stock: a dropped pile, a site's own stock, a wreck (a road wreck, a destroyed truck's
-// wreck or a loot spot with a wreck look), or any other loot spot of a territory or an old-world place.
 export function salvagePlace(stock: SalvageStock): SalvagePlace {
   if (stock.pile) return 'pile';
   if (isSiteStock(stock)) return 'site';
@@ -79,8 +77,6 @@ function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {
   return WRECK_LOOKS.includes(look) ? 'wreck' : 'spot';
 }
 
-// A spare part found in the field: now and then from the table's rare pool, in good repair. Its wear draws from the
-// market stream, so it leaves world RNG draws unchanged. A table with no rare pool makes no rare draw.
 function fieldSpare(world: World, table: LootTable): PartInstance {
   const rare = table.rare && chance(world, table.rare.share) ? table.rare : null;
   const pool = rare ? rare.parts : table.spareParts;
@@ -98,8 +94,6 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
   return { id, pos: { ...pos }, radius, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
 }
 
-// Gives every old-world loot spot of the map its stock, rolled from its place's table. A new game has none of them,
-// and neither has a save from before old spots, so both get them all. A world holding some but not all is broken.
 export function stockOldSpots(world: World, map: BakedMap): void {
   const picks = oldSpotPicks(map);
   const ids = new Set(picks.map(oldStockId));
@@ -110,6 +104,7 @@ export function stockOldSpots(world: World, map: BakedMap): void {
   if (held > 0) throw new Error(`Old spot stocks are partial: ${held} of ${picks.length}`);
   for (const p of picks) world.salvage.push(rollStock(world, OLD_TABLES[p.type], oldStockId(p), p.pos, p.reach));
 }
+
 export function emptyHidden(): HiddenLoot {
   return { goods: {}, parts: [], fuel: 0, supplies: 0 };
 }
@@ -410,7 +405,6 @@ export function removeStocks(world: World, gone: Set<string>): void {
   world.player.scavenged = world.player.scavenged.filter((id) => !gone.has(id));
 }
 
-// Old spot stocks are fixed places like sites: they refill, and never go.
 function requireNoOldSpots(gone: Set<string>): void {
   const old = [...gone].find((id) => oldSpotOf({ id }));
   if (old) throw new Error(`Old spot stock ${old} never leaves the world`);

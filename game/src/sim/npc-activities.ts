@@ -249,8 +249,6 @@ function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
   return isTerritory(site) ? spotGoal(world, site.id) : createSiteActivity('scavenge', site.id, 'search a known salvage site');
 }
 
-// Now and then a scavenger heads off the road for an old-world loot spot near it. Drivers know the old places, not
-// what they hold. With none near, nothing is drawn.
 function oldSpotGoal(world: World, vehicle: Vehicle): NpcActivity | null {
   const near = oldSpotsNear(world.mapHash, vehicle.pos, OLD_PLACES.npcRange);
   if (near.length === 0 || !chance(world, OLD_PLACES.npcShare)) return null;

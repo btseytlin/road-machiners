@@ -165,7 +165,6 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   if (populate) spawnInitial(world);
   initializeShops(world);
-  // Last of the world draws, so old spots leave every other roll of a new game as it was.
   stockOldSpots(world, map);
   refreshVision(world);
   world.events = [];

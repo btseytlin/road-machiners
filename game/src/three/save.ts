@@ -90,7 +90,6 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
   return loaded;
 }
 
-// Gives a save from before old-world loot spots their stocks. A save holding only some of them is broken.
 function stockedOldSpots(world: World, map: BakedMap): void {
   try {
     stockOldSpots(world, map);
