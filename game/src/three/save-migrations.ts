@@ -2,6 +2,7 @@
 // it, load runs every step from the save's minor format on, so the minor format is the number of steps.
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
+import { LAYOUTS_2_34 } from './save-layouts-2-34';
 
 export type SavedJson = Record<string, unknown>;
 
@@ -325,16 +326,23 @@ function withWideMg_34_35(world: SavedJson): SavedJson {
   const player = world.player as Player;
   const storage = [...player.storage];
   const widen = (v: SavedJson): SavedJson => {
+    const layout = LAYOUTS_2_34[v.chassisId as string];
     const defOf = (item: SavedJson) => ((item.part as SavedJson | undefined)?.defId as string | undefined) ?? null;
     const items = v.items as SavedJson[];
     const taken = new Set(items.filter((item) => defOf(item) !== 'mg').flatMap((item) => footprintCells_34_35(item, defOf(item))));
+    const letterAt = (cell: string) => {
+      const [x, y] = cell.split(',').map(Number);
+      return layout[y]?.[x];
+    };
     const kept: SavedJson[] = [];
     for (const item of items) {
       if (defOf(item) !== 'mg') {
         kept.push(item);
         continue;
       }
-      const fit = [item.rot as number, 1 - (item.rot as number)].filter((rot) => rot === 0 || rot === 1).find((rot) => footprintCells_34_35({ ...item, rot }, 'mg').every((c) => !taken.has(c)));
+      const first = letterAt(`${item.x},${item.y}`);
+      const sits = (rot: number) => footprintCells_34_35({ ...item, rot }, 'mg').every((c) => !taken.has(c) && letterAt(c) === first);
+      const fit = [item.rot as number, 1 - (item.rot as number)].find(sits);
       if (fit === undefined) {
         if (v.id === player.vehicleId) storage.push(item.part as SavedJson);
         continue;

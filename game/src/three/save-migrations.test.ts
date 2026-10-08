@@ -39,6 +39,7 @@ import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_34 from './save-fixtures/format-2-34.json';
+import { LAYOUTS_2_34 } from './save-layouts-2-34';
 import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
@@ -780,15 +781,15 @@ describe('save migration 34 to 35', () => {
   const next = MIGRATIONS[34](FORMAT_2_34) as { vehicles: { id: string; items: { id: string; rot: number }[] }[]; player: { storage: { id: string }[] } };
   const itemsOf = (id: string) => next.vehicles.find((v) => v.id === id)!.items;
 
-  it('keeps a machine gun whose second cell is free as it was', () => {
+  it('keeps a machine gun whose second cell is free on the same kind of cell as it was', () => {
     expect(itemsOf('player').filter((it) => ['i1', 'i2'].includes(it.id)).map((it) => it.rot)).toEqual([0, 1]);
   });
 
-  it('turns a machine gun a quarter turn when only that way has room', () => {
-    expect(itemsOf('player').find((it) => it.id === 'i4')!.rot).toBe(1);
+  it('turns a machine gun a quarter turn when only that way keeps it on deck cells', () => {
+    expect(itemsOf('player').find((it) => it.id === 'i4')!.rot).toBe(0);
   });
 
-  it('stows the player machine gun with no room either way and drops an npc one', () => {
+  it('stows the player machine gun with no deck room either way and drops an npc one', () => {
     expect(itemsOf('player').some((it) => it.id === 'i5')).toBe(false);
     expect(next.player.storage.map((p) => p.id)).toEqual(['s1', 'p5']);
     expect(itemsOf('npc-3').some((it) => it.id === 'i8')).toBe(false);
@@ -796,5 +797,9 @@ describe('save migration 34 to 35', () => {
 
   it('leaves every other item alone', () => {
     expect(itemsOf('player').filter((it) => ['i3', 'i6', 'i7'].includes(it.id))).toEqual(FORMAT_2_34.vehicles[0].items.filter((it) => ['i3', 'i6', 'i7'].includes(it.id)));
+  });
+
+  it('holds a copy of the chassis layouts that equals the live chassis data', () => {
+    expect(LAYOUTS_2_34).toEqual(Object.fromEntries(Object.values(CHASSIS).map((c) => [c.id, c.layout])));
   });
 });
