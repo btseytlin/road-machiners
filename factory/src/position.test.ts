@@ -98,7 +98,7 @@ describe('CARD_JOBS', () => {
 });
 
 describe('releaseDrift', () => {
-  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 1, streak: 0, passed: 'abc1234', blocked: null, notes: [] } };
+  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 1, passed: 'abc1234', blocked: null, notes: [] } };
   it('prints nothing with no release or a healthy one', () => {
     expect(releaseDrift(EMPTY_STATE, [])).toEqual([]);
     expect(releaseDrift(withState({ release }), [card('Approval', 300)])).toEqual([]);
@@ -109,6 +109,9 @@ describe('releaseDrift', () => {
   });
   it('flags a missing tracking card', () => {
     expect(releaseDrift(withState({ release }), [])).toEqual(['release tracking card #300 missing']);
+  });
+  it('flags a recorded release task that is not on the board', () => {
+    expect(releaseDrift(withState({ release: { ...release, tasks: [301, 302] } }), [card('Approval', 300), card('Done', 302)])).toEqual(['release task #301 missing from the board']);
   });
   it('flags a pending ship with no current candidate post', () => {
     expect(releaseDrift(withState({ release, pendingShip: 'bob' }), [card('Approval', 300)])).toEqual(['pending ship but no current candidate post']);

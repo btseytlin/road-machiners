@@ -249,6 +249,15 @@ describe('dockerContainer', () => {
     await expect(dockerContainer(fakeRun(2).run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('exit 2');
   });
 
+  it('mounts each given host folder read write in a shell, and mounts none by default', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).shell('/w/c', 'x', '/l.log', {}, { '/h/test-cache': '/test-cache' });
+    expect(runCall(calls).args).toContain('/h/test-cache:/test-cache');
+    const plain = fakeRun();
+    await dockerContainer(plain.run, cfg, null).shell('/w/c', 'x', '/l.log');
+    expect(runCall(plain.calls).args.join(' ')).not.toContain(':/test-cache');
+  });
+
   it('runs a shell script with the given env and no token', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).shell('/w/c', 'npm ci', '/l.log', { SAVE_SCOPE: 'dev' });

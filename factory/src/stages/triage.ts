@@ -4,7 +4,7 @@ import { readState } from '../state';
 import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, OUT_DIR, RELEASE_TASK_LABEL, ROUTING_MARK, WONT_DO_LABEL, type Ctx, type FactoryState, type ReleaseState } from '../types';
 import { addToBundle, bundleCandidates } from './bundle';
 import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, prepareOutputs, readOutput, runAgent, workDir, writeIssueInput } from './common';
-import { featureLine, releaseFeatures } from './release-common';
+import { featureLine, recordReleaseTask, releaseFeatures } from './release-common';
 
 type Complexity = 'trivial' | 'intermediate' | 'hard';
 type Routing = { complexity: Complexity; why: string };
@@ -60,6 +60,7 @@ async function announce(ctx: Ctx, issue: number, reason: string, note: string, {
     return 'hotfix';
   }
   if (releaseFix && release !== null) {
+    recordReleaseTask(ctx, issue);
     await ctx.github.addLabel(issue, RELEASE_TASK_LABEL);
     await ctx.github.comment(issue, `Triage passed as a fix for release ${release.day}: ${reason}\n\nIt branches from ${release.branch}, and its approval merges it into that release.\n\n${note}`);
     return 'release-task';

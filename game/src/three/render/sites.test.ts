@@ -11,7 +11,9 @@ import { GATE_CLEAR, riseFront } from './interiors/nose';
 import { boxDistance, propBoxes, propObstacle, propShape } from '../../sim/mapgen';
 import { noseRocks } from '../../sim/nose';
 import { isFortress, siteGates } from '../../sim/sites';
+import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
+import { TEST_MAP } from '../../test/map';
 
 // The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -599,5 +601,47 @@ describe('landmark scale', () => {
       });
       expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
     }
+  });
+});
+
+describe('deck models', () => {
+  const S = PHYSICS.metersPerTile;
+  const onMap = buildSites(TEST_MAP.terrain).root;
+
+  it('grey by a point on their own deck centre line, in a tile whose centre is on that deck', () => {
+    for (const [name, id] of [['landmark-canyon-bridge', 'canyon-bridge'], ['landmark-wing-deck', 'broken-wing']] as const) {
+      const deck = deckById(id);
+      const meshes: Mesh[] = [];
+      onMap.getObjectByName(name)!.traverse((o) => {
+        if (o instanceof Mesh && o.geometry.getAttribute('sightAt')) meshes.push(o);
+      });
+      expect(meshes.length).toBeGreaterThan(0);
+      for (const mesh of meshes) {
+        const at = mesh.geometry.getAttribute('sightAt');
+        expect(at.itemSize).toBe(2);
+        expect(at.count).toBe(mesh.geometry.getAttribute('position').count);
+        for (let i = 0; i < at.count; i++) {
+          const x = at.getX(i) / S;
+          const y = at.getY(i) / S;
+          const along = (x - deck.from.x) * deck.axis.x + (y - deck.from.y) * deck.axis.y;
+          const across = (y - deck.from.y) * deck.axis.x - (x - deck.from.x) * deck.axis.y;
+          expect(Math.abs(across)).toBeLessThan(1e-3);
+          expect(along).toBeGreaterThanOrEqual(Math.SQRT1_2 - 1e-3);
+          expect(along).toBeLessThanOrEqual(deck.length - Math.SQRT1_2 + 1e-3);
+          expect(deckAt(Math.floor(x) + 0.5, Math.floor(y) + 0.5)?.deck).toBe(deck);
+        }
+      }
+    }
+  });
+
+  it('are the only site meshes with sight sample points', () => {
+    const decks = ['landmark-canyon-bridge', 'landmark-wing-deck'].map((n) => onMap.getObjectByName(n)!);
+    const bridgeModel = (o: Object3D) => {
+      for (let p: Object3D | null = o; p; p = p.parent) if (p.userData.outsideEdge || p === decks[1]) return true;
+      return false;
+    };
+    onMap.traverse((o) => {
+      if (o instanceof Mesh && !bridgeModel(o)) expect(o.geometry.getAttribute('sightAt'), o.name).toBeUndefined();
+    });
   });
 });

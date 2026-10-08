@@ -78,8 +78,7 @@ import { ShadeView } from "./render/shade";
 import { BeaconPulseView } from "./render/beaconPulse";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
-import type { SlotId } from "./save-slots";
-import { SAVE_FULL_NOTE, SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
+import { GameSaves, turnFailedNote, type Run } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -193,9 +192,11 @@ export class Game {
   private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
   private readonly death: DeathScreen;
+  private readonly saves: GameSaves;
 
   constructor(
     world: World,
+    run: Run,
     container: HTMLElement,
     overlay: HTMLElement,
     player: SoundPlayer,
@@ -203,6 +204,7 @@ export class Game {
     radio: RadioPanel,
   ) {
     this.world = world;
+    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"));
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
 
@@ -307,15 +309,14 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       ...aimActions({ world: () => this.world, selected: () => this.selected, canAim: () => this.anim === null && playerCanAct(this.world), apply: (w) => this.apply(w) }),
     }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots, () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
-    const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
-    this.menu = new GameMenu(guarded, () => this.anim !== null, () => setupLabel(this.world.setup));
+    const saves = this.saves.menuActions(() => this.world);
+    this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup));
     this.death = new DeathScreen(saves);
 
     this.bindInput();
@@ -376,7 +377,7 @@ export class Game {
   // A command from a panel: apply it, and save at once on a town pad.
   private applyCommand(next: World): void {
     this.apply(next);
-    if (!this.saves.held) saveInTown(window.localStorage, next, Date.now(), () => this.hud.note(next, SAVE_FULL_NOTE, "bad"));
+    this.saves.afterCommand(next);
   }
 
   // The console's fullshop command: the full shop screen over any other screen, anywhere.
@@ -389,6 +390,7 @@ export class Game {
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
+    this.saves.logWorld(next);
     syncDrive(this.drive, this.world);
     this.refreshUi();
   }
@@ -646,8 +648,7 @@ export class Game {
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
-    if (this.live && f)
-      return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
+    if (this.live && f) return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
     return playerSees(this.world, v.pos);
   }
 
@@ -695,15 +696,8 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
-  private readonly saves = new SaveHold();
-
   holdSaves(): void {
     this.saves.noteError();
-  }
-
-  private saveNow(write: () => void): void {
-    if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
-    write();
   }
 
   // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
@@ -730,6 +724,7 @@ export class Game {
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed, this.frames);
     this.world = world;
+    this.saves.logWorld(world);
     // The score must follow this turn's combat before its crash accents arrive.
     this.updateLoops();
     this.anim = playback;
@@ -805,8 +800,7 @@ export class Game {
     this.breakCues = new BreakCues([]);
     this.phase = null;
     this.idleSince = performance.now();
-    this.saves.finishTurn();
-    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now(), () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
+    this.saves.afterTurn(this.world);
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);

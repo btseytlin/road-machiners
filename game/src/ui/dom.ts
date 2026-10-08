@@ -81,6 +81,15 @@ export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement 
   return p;
 }
 
+// Hands the browser a file to download.
+export function download(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = el('a', { href: url, download: name });
+  link.click();
+  // The download starts after this task, so the file must outlive it.
+  setTimeout(() => URL.revokeObjectURL(url));
+}
+
 // Game keys are bare keys. A keydown with Ctrl, Cmd or Alt held belongs to the browser and the OS.
 export function isBrowserChord(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">): boolean {
   return e.ctrlKey || e.metaKey || e.altKey;

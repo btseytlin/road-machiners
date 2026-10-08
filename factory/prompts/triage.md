@@ -107,7 +107,8 @@ Judge by these checks, never by keywords in the text.
 Read the code the issue touches to answer them.
 
 - `trivial`: all of these hold. The change touches one file or one small, local piece of logic. It needs no new state, save data or cross-system rule. The result is a single visible behavior, such as a value, a text, a one-condition bug or a simple asset.
-- `hard`: any of these holds. The change spans three or more interacting systems, such as combat, pathing, saves, the world map and the UI. Or it changes shared state, a data format or a rule that other code depends on. Or the bug has no known cause and needs tracing across systems. Or the design has real tradeoffs between several workable approaches.
+- `hard`: either of these holds. The bug has no known cause and needs tracing across systems. Or the change alters a save format, or shared data that many systems read.
+- A change that only spans several systems, such as combat, pathing, the world map and the UI, is `intermediate`. Design runs on Opus and its plan settles the hard choices.
 - `intermediate`: everything else, and any case you cannot decide. When in doubt, pick `intermediate`.
 
 `complexityReason` is one short sentence that names the checks you applied, such as the files or systems you found.

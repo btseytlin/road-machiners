@@ -47,13 +47,34 @@ A job whose process dies within its time limit resumes once. This covers a crash
 Every tick, after it checks the running jobs:
 
 - It deletes each folder in the web root except `dev`, `concepts` and the builds of cards in Approval or Hardening. It skips this while a checks or branch job runs, since those deploy builds.
-- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, `release-playtest`, and `release-candidate` with no release open. The playtest audit in `$FACTORY_HOME/playtest/` stays. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
+- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, `release-playtest`, `release-baseline`, and `release-candidate` with no release open. The playtest audit in `$FACTORY_HOME/playtest/` stays. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
 - It deletes job logs older than `FACTORY_LOG_DAYS`, except `tick.log`, `update.log` and the logs that `failures` names.
 - It deletes archived agent transcripts older than `FACTORY_TRANSCRIPT_DAYS`.
+- It deletes files older than `FACTORY_TEST_CACHE_DAYS` in `$FACTORY_HOME/test-cache/`, then the empty folders. The game test tool owns this folder and touches an entry each time it skips a test file on it. Only the checks container mounts the folder, and the release playtest runs the full suite without it.
 
 Every tick writes `$FACTORY_HOME/health` with its time, the free disk and the available memory, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Memory under `FACTORY_MIN_AVAILABLE_GB` blocks nothing, and a host with no `/proc/meminfo` records none.
 
 When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`, so a merge made outside the factory reaches the dev link too. A failed build records its commit in `devFailed` and what broke in `devError`, and the tick skips it until `dev` moves again. The incident watch shows both to Hermes, which fixes `dev` or reverts the merge that broke it.
+
+## Repairing a work clone
+
+A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit, so it fails again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
+
+1. Pause the factory with `factory pause <reason>`, and wait until `factory jobs` prints `none`.
+2. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.
+3. Check the new clone, run `factory resume`, then `factory retry N`.
+
+The command acts at once. It refuses, and changes nothing in `work/`, when:
+
+- the factory is not paused, any job runs, or the card has an interrupted or held job, which continues in its clone;
+- `--by` is no member and not `hermes`;
+- `work/issue-N` holds no clone with a commit, since the next job clones that again;
+- the clone has an open operation or conflicts and no `--backup-merge`;
+- the host clone, freshly fetched, has no `factory/issue-N`.
+
+A repair fetches the host clone, then clones GitHub's `factory/issue-N` exactly, with fresh `origin/*` refs like `dev`. It moves the whole old clone, with its tracked, untracked and ignored files, to `$FACTORY_HOME/clone-backups/issue-N-<time>/clone`. `repair.json` beside it records who, why, the old HEAD and branch, the open operation, the conflicted files, the commits on no GitHub branch and the outcome. `status.txt` holds the old `git status`. Only the `.factory`, `.factory-tasks` and `.factory-media` folders are copied into the new clone. The repair passes only when the new clone's `git status` is clean and its HEAD is the branch head.
+
+A failure after the move keeps the backup where it is, moves the half-made clone to `failed-fresh` in the backup and leaves `work/issue-N` free. The error prints the `mv` that restores the old clone. Nothing deletes a backup. The tick sweep reads only `work/`, so Hermes deletes a backup once the card is past the trouble. The stuck label and the failures stay, so only `retry` sends the card on.
 
 ## Failures and Hermes
 

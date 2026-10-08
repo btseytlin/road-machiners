@@ -64,7 +64,7 @@ describe('approve', () => {
     writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'comment 7 Approved by bob in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into dev by itself, with no new post.',
+      'comment 7 Approved by bob in the committee chat. Hardening, the review and the full checks run now. Then the factory merges it into dev by itself, with no new post.',
       'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
@@ -99,7 +99,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -119,7 +119,7 @@ describe('approve', () => {
 
   it('merges a hardened cleanup task at once, since it reaches Approval only after Hardening and its checks', async () => {
     labels = ['release-task', 'maintenance'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, builds: { 7: 'aaa1111' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { 7: 'aaa1111' } });
     await approve(fakeCtx(), 7, 'the factory');
     expect(calls).toContain('merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn');
     expect(calls).toContain('move 7 Done');
@@ -128,7 +128,7 @@ describe('approve', () => {
 
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
     labels = ['bug', 'hotfix'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     const changelog = 'ROAM hotfix 2026-09-30\n\nFixed: #7 Big horn';
     expect(calls.filter((call) => !call.startsWith('prepare') && !call.startsWith('shell'))).toEqual([
