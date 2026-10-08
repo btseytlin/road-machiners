@@ -19,6 +19,7 @@ Read the doc for an area before changing it.
 - [Rendering and UI](docs/architecture/render.md): outlines, scope, props, debris, tips and audio.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
+- [Quests](docs/architecture/quests.md): ink quests, checkpoints, quest state in saves, game functions and the quest tools.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.
 - [Art pipeline](docs/art.md): Blender models, the truck grid projection and part model rules.
 - [Sound](docs/sound.md), [Publishing](docs/publishing.md), [Wiki](docs/wiki/README.md).
@@ -36,7 +37,8 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
-- `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
+- `npm run models:shapes`, `npm run wiki`, `npm run save:shape` and `npm run quests:build` regenerate checked files. A test fails when they are stale.
+- `npm run quest -- <quest>` plays an ink quest in the terminal, and `npm run quests:check` checks every quest for errors, dead ends and loops with no way out.
 - `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 
