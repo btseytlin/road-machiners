@@ -29,7 +29,8 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { recall, remember } from './memory';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable, STRIPPED } from './salvage';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
@@ -241,7 +242,8 @@ function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopD
 }
 
 export function visibleSalvage(world: World, vehicle: Vehicle): SalvageStock[] {
-  const visible = world.salvage.filter((stock) => seesSalvage(world, vehicle, stock));
+  const stripped = strippedStocks(vehicle);
+  const visible = world.salvage.filter((stock) => seesSalvage(world, vehicle, stock, stripped));
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
 }
 
@@ -259,8 +261,12 @@ function seesLoot(world: World, vehicle: Vehicle, id: string, pos: Vec): boolean
   return !knownUnfit(vehicle, id) && canVehicleSee(world, vehicle, pos);
 }
 
-function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  if (backedOff(stock, vehicle.id) || !seesLoot(world, vehicle, stock.id, stock.pos)) return false;
+function strippedStocks(vehicle: Vehicle): ReadonlySet<string> {
+  return new Set(recall(vehicle, 'stripped').map((m) => m.fact.stock));
+}
+
+function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock, stripped: ReadonlySet<string>): boolean {
+  if (stripped.has(stock.id) || backedOff(stock, vehicle.id) || !seesLoot(world, vehicle, stock.id, stock.pos)) return false;
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
@@ -280,6 +286,13 @@ export function holdFull(vehicle: Vehicle): boolean {
 
 function knownUnfit(vehicle: Vehicle, targetId: string): boolean {
   return vehicle.brain!.unfit?.includes(targetId) ?? false;
+}
+
+export function noteStripped(world: World, vehicle: Vehicle, stockId: string | null): void {
+  const stock = world.salvage.find((s) => s.id === stockId);
+  if (!stock) throw new Error(`${vehicle.id} cannot note ${stockId} as stripped: no such stock`);
+  if (hasSalvage(stock)) throw new Error(`${vehicle.id} cannot note ${stockId} as stripped: it still holds salvage`);
+  remember(world, vehicle, { kind: 'stripped', stock: stock.id });
 }
 
 export function noteCannotHold(world: World, vehicle: Vehicle, targetId: string | null): void {
@@ -326,7 +339,7 @@ export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivi
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
   if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? CANNOT_HOLD : null;
-  if (!hasSalvage(stock)) return 'nothing left to loot';
+  if (!hasSalvage(stock)) return STRIPPED;
   return canTakeAny(world, vehicle, stock) ? null : CANNOT_HOLD;
 }
 
@@ -560,7 +573,7 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
   if (subject === null) throw new Error(`${decision} needs a subject`);
   if (!hasCargoRoom(vehicle) || holdFull(vehicle)) return false;
   const stock = world.salvage.find((entry) => entry.id === subject);
-  if (stock) return seesSalvage(world, vehicle, stock);
+  if (stock) return seesSalvage(world, vehicle, stock, strippedStocks(vehicle));
   const truck = world.vehicles.find((v) => v.id === subject);
   return truck !== undefined && seesDowned(world, vehicle, truck);
 }

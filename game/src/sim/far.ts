@@ -1,6 +1,7 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
 // stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
 // crash, but they cannot drive into another vehicle: a truck in the way holds them just short of it at its speed, and
+// the next route goes around it. A breakable prop on the way breaks.
 
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';

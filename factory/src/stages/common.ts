@@ -217,6 +217,26 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   return true;
 }
 
+export async function catchUpBase(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<string> {
+  await catchUpBranch(ctx, issue, stage);
+  const { commit, conflicts, kept } = await ctx.repo.catchUpBase(workDir(ctx, issue), base);
+  if (kept !== null) {
+    ctx.log(stage, issue, `kept the work clone off the latest ${base}: ${kept}`);
+    return `The factory could not merge the latest ${base} into this clone, because of ${kept}. The clone may lack work merged into ${base} lately.`;
+  }
+  if (commit !== null) ctx.log(stage, issue, `merged ${base} at ${commit.slice(0, 7)} into the work clone${conflicts.length > 0 ? ` with conflicts in ${conflicts.join(', ')}` : ''}`);
+  if (commit !== null && conflicts.length > 0) await resolveBaseMerge(ctx, issue, base, stage, { commit, conflicts });
+  return `The factory merged the latest ${base} into this clone before you started, so it holds every change merged into ${base} so far.`;
+}
+
+async function resolveBaseMerge(ctx: Ctx, issue: number, base: string, stage: CardStage, merge: { commit: string; conflicts: string[] }): Promise<void> {
+  const files = merge.conflicts.map((file) => `- ${file}`).join('\n');
+  const source = `The factory merged the latest ${base} into this clone, since approved work reached ${base} after the clone was made.`;
+  await runAgent(ctx, issue, stage, 'base-merge', fillPrompt('branch-merge', { issue: String(issue), branch: BRANCH(issue), source, files }));
+  const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
+  if (!(await ctx.repo.isMerged(merge.commit, head))) throw new Error(`The agent left the merge of ${base} at ${merge.commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
+}
+
 export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
   await catchUpBranch(ctx, issue, stage);
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);

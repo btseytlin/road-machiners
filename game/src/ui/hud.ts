@@ -23,7 +23,7 @@ import {
 } from "./format";
 import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimMarks } from "./weapons";
+import { aimLine, aimMarks, type AimState } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph, moneyText } from "./units";
@@ -74,6 +74,8 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
+  aimBody: (vehicleId: string) => void;
+  aimState: (vehicleId: string) => AimState;
 };
 export type CameraMode = "centered" | "auto";
 
@@ -529,7 +531,15 @@ export class Hud {
 
   private aimOf(w: World, v: Vehicle): ConditionAim | undefined {
     if (v.id === playerVehicle(w).id) return undefined;
+    if (this.actions.aimState(v.id).locked) return undefined;
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
+  }
+
+  // The aim line above the diagram, for another truck only.
+  private aimControls(w: World, v: Vehicle): HTMLElement[] {
+    if (v.id === playerVehicle(w).id) return [];
+    const line = aimLine(this.actions.aimState(v.id), () => this.actions.aimBody(v.id));
+    return line ? [line] : [];
   }
 
   showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
@@ -550,8 +560,8 @@ export class Hud {
       ),
       el("div", {}, `Speed ${kph(v.speed)} km/h`),
       ...npcLines(w, v),
+      ...this.aimControls(w, v),
       this.inspected.root,
-      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, "Click a part to aim the selected gun at it")] : []),
     );
   }
 }

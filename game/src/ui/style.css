@@ -1076,6 +1076,30 @@ body {
   overflow: auto;
   font-size: 12px;
 }
+.info .aim-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  white-space: nowrap;
+}
+.info .aim-body {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 6px;
+  height: 18px;
+  line-height: 1;
+  font-size: 11px;
+  cursor: crosshair;
+}
+.info .aim-body[aria-pressed="true"] {
+  border-color: #fa3934;
+}
+.info .aim-body .condition-aim {
+  position: static;
+  margin-left: 4px;
+}
 /* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
 #ui .radio.away {
   visibility: hidden;

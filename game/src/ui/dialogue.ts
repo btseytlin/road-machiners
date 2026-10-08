@@ -1,6 +1,6 @@
 // The radio call panel and dialogue text. The panel shows who is on the line, what they said, and the
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
-// hovered truck and H honks.
+// inspected truck and H honks.
 
 import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
@@ -106,12 +106,12 @@ export function canCall(w: World, id: string): boolean {
 
 export type DialogueHost = {
   world(): World;
-  talk(next: World): void;
-  hovered(): string | null;
-  busy(): boolean;
-  commit(next: World): void;
-  log(next: World): void;
-  playHorn(vehicleId: string, delayMs: number): void;
+  talk(next: World): void; // apply a dialogue command and log its lines
+  inspected(): string | null; // the pinned vehicle, else the one under the cursor
+  busy(): boolean; // a turn plays
+  commit(next: World): void; // take a honked world without pausing travel
+  log(next: World): void; // log the events of a command
+  playHorn(vehicleId: string, delayMs: number): void; // sound one truck's horn where it is drawn
 };
 
 const HONK_REPLY_MS = 500;
@@ -182,7 +182,7 @@ export class DialoguePanel {
   }
 
   private onFreeKey(code: string): boolean {
-    if (code === 'KeyT') return this.callHovered();
+    if (code === 'KeyT') return this.callInspected();
     return code === 'KeyH' && this.honk();
   }
 
@@ -214,8 +214,8 @@ export class DialoguePanel {
     this.host.talk(chooseOption(this.host.world(), index));
   }
 
-  private callHovered(): boolean {
-    const id = this.host.hovered();
+  private callInspected(): boolean {
+    const id = this.host.inspected();
     if (!id || !canCall(this.host.world(), id)) return false;
     this.host.talk(callVehicle(this.host.world(), id));
     return true;
