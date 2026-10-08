@@ -83,7 +83,7 @@ export class BootScreen {
 
   // A counted loader reports its first count before track() gets its promise, so either may start the step.
   private begin(step: BootStep, label?: string): void {
-    if (this.progress.state(step) === 'waiting') this.progress.start(step, label);
+    if (!this.progress.failed && this.progress.state(step) === 'waiting') this.progress.start(step, label);
     this.render();
   }
 
