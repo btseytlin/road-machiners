@@ -11,18 +11,18 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home, 'harden');
+  const { commit: merged, note } = await mergeBase(ctx, issue, base, home, 'harden');
   if (readOutput(home, 'merge-conflicts.md') === null && await docsOnly(ctx, issue, base)) ctx.log('harden', issue, 'a docs change, so no hardening agent');
-  else await runAgent(ctx, issue, 'harden', 'harden', await hardenPrompt(ctx, issue, base));
+  else await runAgent(ctx, issue, 'harden', 'harden', await hardenPrompt(ctx, issue, base, note));
   throwIfNeedsCommittee(home);
   await guardAndPush(ctx, issue, base, 'harden');
   await requireBaseMerged(ctx, issue, base, merged);
   await moveCard(ctx, issue, 'Merging', 'hardened', cardFlow(item.labels));
 }
 
-export async function hardenPrompt(ctx: Ctx, issue: number, base: string): Promise<string> {
+export async function hardenPrompt(ctx: Ctx, issue: number, base: string, baseNote: string): Promise<string> {
   return fillPrompt('harden', {
-    issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base,
+    issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base, baseNote,
     incidentLog: await ctx.repo.readFile(BASE_BRANCH, INCIDENT_LOG), principles: await ctx.repo.readFile(BASE_BRANCH, PRINCIPLES),
   });
 }

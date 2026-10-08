@@ -52,6 +52,7 @@ A branch whose every changed file since its base is a Markdown file outside `gam
 
 - Testing runs no session. The factory pushes the base merge and writes the approval text itself: the changed files, and to read the diff in the pull request. Its post checkpoint only builds. A conflict with the base still runs the session, since its agent resolves the conflict.
 - Hardening runs no session unless the base merge conflicts.
+- Testing and Hardening take the base like Design does. They resume their own unfinished base merge, skip a base the clone holds, and tell the agent when a clone with uncommitted changes kept an old base. They list the conflicts in `.factory/merge-conflicts.md` for the agent.
 - The merge checkpoint checks it like any card.
 
 ## Hardening

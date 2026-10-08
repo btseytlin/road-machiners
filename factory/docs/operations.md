@@ -58,7 +58,7 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 
 ## Repairing a work clone
 
-A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit, so it fails again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
+A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit. A stage resumes its own unfinished merge of the base or of the issue branch, so those need no repair. Any other open merge fails the stage again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
 
 1. Pause the factory with `factory pause <reason>`, and wait until `factory jobs` prints `none`.
 2. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.

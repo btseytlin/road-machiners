@@ -149,17 +149,35 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return [...marks.flat(), ...rebases, ...(await conflictedFiles(dir))];
   }
 
-  async function openBaseMerge(dir: string, base: string): Promise<{ commit: string; conflicts: string[] } | null> {
+  async function openMergeOf(dir: string, branch: string): Promise<{ commit: string; conflicts: string[] } | null> {
     if (!(await hasRef(dir, 'MERGE_HEAD'))) return null;
     const commit = (await gitIn(dir, ['rev-parse', 'MERGE_HEAD'])).trim();
-    if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, `origin/${base}`], { cwd: dir })).code !== 0) return null;
+    if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, `origin/${branch}`], { cwd: dir })).code !== 0) return null;
     const conflicts = await conflictedFiles(dir);
     return { commit, conflicts: conflicts.length > 0 ? conflicts : lines(await gitIn(dir, ['diff', '--name-only', 'HEAD', 'MERGE_HEAD'])) };
   }
 
-  async function untouchable(dir: string): Promise<string | null> {
+  async function requireNoOpenWork(dir: string): Promise<void> {
     const open = await openWork(dir);
     if (open.length > 0) throw new Error(`${dir} has an unfinished merge or conflicts (${open.join(', ')}), so the factory left it as it is. Repair it with factory repair-clone.`);
+  }
+
+  async function resumeOrRequireClean(dir: string, branch: string): Promise<{ commit: string; conflicts: string[] } | null> {
+    const open = await openMergeOf(dir, branch);
+    if (open === null) await requireNoOpenWork(dir);
+    return open;
+  }
+
+  async function mergeBranchCommit(dir: string, branch: string, commit: string, message?: string): Promise<{ commit: string; conflicts: string[] }> {
+    const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
+    if (result.code === 0) return { commit, conflicts: [] };
+    const conflicts = await conflictedFiles(dir);
+    if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
+    return { commit, conflicts };
+  }
+
+  async function untouchable(dir: string): Promise<string | null> {
+    await requireNoOpenWork(dir);
     const changed = lines(await gitIn(dir, ['status', '--porcelain', '--untracked-files=no']));
     return changed.length === 0 ? null : `uncommitted changes in ${changed.map((line) => line.slice(3)).join(', ')}`;
   }
@@ -266,18 +284,9 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     async push(commit, branch) {
       await pushAll(new Map([[branch, commit]]));
     },
-    async mergeBaseIntoWork(dir, base) {
-      await gitIn(dir, ['fetch', 'origin']);
-      const commit = (await gitIn(dir, ['rev-parse', `origin/${base}`])).trim();
-      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
-      if (result.code === 0) return { commit, conflicts: [] };
-      const conflicts = await conflictedFiles(dir);
-      if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
-      return { commit, conflicts };
-    },
     async catchUpBase(dir, base) {
       await gitIn(dir, ['fetch', '--quiet', 'origin']);
-      const open = await openBaseMerge(dir, base);
+      const open = await openMergeOf(dir, base);
       if (open !== null) return { ...open, kept: null };
       const kept = await untouchable(dir);
       if (kept !== null) return { commit: null, conflicts: [], kept };
@@ -288,13 +297,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
+      const open = await resumeOrRequireClean(dir, branch);
+      if (open !== null) return open;
       const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
-      const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
-      if (result.code === 0) return { commit, conflicts: [] };
-      const conflicts = await conflictedFiles(dir);
-      if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
-      return { commit, conflicts };
+      return mergeBranchCommit(dir, branch, commit, message);
     },
     async isMerged(base, branch) {
       const result = await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', await ref(base), await ref(branch)], { cwd: path });

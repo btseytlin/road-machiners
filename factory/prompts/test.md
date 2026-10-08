@@ -7,7 +7,7 @@ Read CLAUDE.md first.
 Follow it.
 Run `npm ci` before anything else. The factory removes installed packages from clones between stages, and the commit hook needs them.
 
-The factory merged the current base branch into your branch before you started.
+{{baseNote}}
 If `.factory/merge-conflicts.md` exists, that merge stopped on conflicts in the files it lists.
 Resolve them first.
 Keep what both sides meant, not just one side.

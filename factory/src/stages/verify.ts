@@ -16,10 +16,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home, 'verify');
+  const { commit: merged, note } = await mergeBase(ctx, issue, base, home, 'verify');
   if (readOutput(home, 'merge-conflicts.md') === null && await docsOnly(ctx, issue, base)) return docsRound(ctx, issue, base, home, merged);
   const hotfix = base === HOTFIX_BASE;
-  const spent = await firstRounds(ctx, issue, base, hotfix);
+  const spent = await firstRounds(ctx, issue, base, hotfix, note);
   if (await redesigned(ctx, issue, home)) return;
   let build = '';
   await untilPasses(ctx.cfg.testingBudgetUsd, spent, async () => {
@@ -29,10 +29,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await publishAndPost(ctx, issue, readApproval(home), home, base, build, false);
 }
 
-async function firstRounds(ctx: Ctx, issue: number, base: string, hotfix: boolean): Promise<number> {
+async function firstRounds(ctx: Ctx, issue: number, base: string, hotfix: boolean, baseNote: string): Promise<number> {
   let spent = 0;
-  if (hotfix) spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, await hardenPrompt(ctx, issue, base)));
-  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg, false), task: taskText(await ctx.github.comments(issue)) };
+  if (hotfix) spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, await hardenPrompt(ctx, issue, base, baseNote)));
+  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), baseNote, playtest: playtestCommand(ctx.cfg, false), task: taskText(await ctx.github.comments(issue)) };
   spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, fillPrompt('test', vars), { continue: hotfix }));
   return spent;
 }
@@ -60,7 +60,7 @@ async function redesigned(ctx: Ctx, issue: number, home: string): Promise<boolea
   return true;
 }
 
-async function pushed(ctx: Ctx, issue: number, base: string, merged: string): Promise<string> {
+async function pushed(ctx: Ctx, issue: number, base: string, merged: string | null): Promise<string> {
   await guardAndPush(ctx, issue, base, 'verify');
   await requireBaseMerged(ctx, issue, base, merged);
   return ctx.repo.headHash(BRANCH(issue));
@@ -82,7 +82,7 @@ async function fixRound(ctx: Ctx, issue: number, home: string, failure: string):
   return stream;
 }
 
-async function docsRound(ctx: Ctx, issue: number, base: string, home: string, merged: string): Promise<void> {
+async function docsRound(ctx: Ctx, issue: number, base: string, home: string, merged: string | null): Promise<void> {
   await guardAndPush(ctx, issue, base, 'verify');
   await requireBaseMerged(ctx, issue, base, merged);
   const files = await ctx.repo.changedFiles(base, BRANCH(issue));

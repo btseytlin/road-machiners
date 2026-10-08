@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pngBytes } from '../photo-fixtures';
@@ -24,6 +24,7 @@ let labels: string[] = [];
 let bases: string[] = [];
 let conflicts: string[] = [];
 let merged = true;
+let kept: string | null = null;
 let changed: string[] = [];
 let runs: AgentRun[] = [];
 
@@ -32,6 +33,7 @@ beforeEach(() => {
   albumFails = false;
   conflicts = [];
   merged = true;
+  kept = null;
   changed = ['game/src/sim/far.ts'];
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
@@ -111,7 +113,7 @@ function fakeCtx(agent: (run: AgentRun, index: number) => void, shellFailures: s
       diff: async () => '',
       headHash: async () => 'abc123',
       fetch: async () => undefined,
-      mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
+      catchUpBase: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return kept === null ? { commit: 'base0001', conflicts, kept } : { commit: null, conflicts: [], kept }; },
       mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
       isMerged: async () => merged,
       changedFiles: async () => changed,
@@ -207,6 +209,18 @@ describe('testing in one job', () => {
     expect(bases).toContain('merge dev');
   });
 
+  it('writes the conflicts of a base merge it resumed for the agent', async () => {
+    conflicts = ['game/src/a.ts'];
+    await runVerify(fakeCtx((run) => { expect(readFileSync(`${out(run)}/merge-conflicts.md`, 'utf8')).toBe('- game/src/a.ts\n'); posts(run); }), 7);
+  });
+
+  it('tells the agent when the clone kept an old base and does not check for a base merge', async () => {
+    kept = 'uncommitted changes in f.txt';
+    merged = false;
+    await runVerify(fakeCtx(posts), 7);
+    expect(runs[0]!.prompt).toContain('uncommitted changes in f.txt');
+  });
+
   it('works on the release branch for a release task', async () => {
     labels = ['release-task'];
     await runVerify(fakeCtx(posts), 7);
@@ -298,6 +312,21 @@ describe('hardening in one session', () => {
     expect(runs[0]!.prompt).toContain('Hot code uses an index');
     expect(shellScripts).toEqual([]);
     expect(calls).toContain('push w1 factory/issue-7');
+    expect(calls.at(-1)).toBe('move 7 Merging');
+  });
+
+  it('resumes an open base merge and gives its conflicts to the agent', async () => {
+    conflicts = ['game/src/a.ts'];
+    await runHarden(fakeCtx((run) => { expect(readFileSync(`${out(run)}/merge-conflicts.md`, 'utf8')).toBe('- game/src/a.ts\n'); }), 7);
+    expect(runs).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Merging');
+  });
+
+  it('tells the agent when the clone kept an old base and does not check for a base merge', async () => {
+    kept = 'uncommitted changes in f.txt';
+    merged = false;
+    await runHarden(fakeCtx(() => undefined), 7);
+    expect(runs[0]!.prompt).toContain('uncommitted changes in f.txt');
     expect(calls.at(-1)).toBe('move 7 Merging');
   });
 
