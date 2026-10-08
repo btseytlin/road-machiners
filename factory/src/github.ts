@@ -1,6 +1,6 @@
 import { must } from './exec';
-import { FACTORY_MARK } from './types';
-import type { Card, Column, FactoryConfig, GitHub, Issue, IssueComment, Run, RunResult } from './types';
+import { ERROR_REPORT_LABEL, FACTORY_MARK, fingerprintLine } from './types';
+import type { Card, Column, FactoryConfig, FingerprintIssue, GitHub, Issue, IssueComment, Run, RunResult } from './types';
 
 const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state,author';
@@ -176,7 +176,7 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
     issue,
     async comments(number): Promise<IssueComment[]> {
       const rows = await lines(['api', `repos/${repo}/issues/${number}/comments`, '--paginate',
-        '--jq', '.[] | {login: .user.login, body: .body}']);
+        '--jq', '.[] | {login: .user.login, body: .body, createdAt: .created_at}']);
       return rows.map((row) => JSON.parse(row) as IssueComment);
     },
     async comment(number, body) {
@@ -239,6 +239,18 @@ export function ghClient(run: Run, cfg: ClientConfig, wait: Wait = sleep): GitHu
     },
     async reopen(number) {
       await gh(['issue', 'reopen', String(number), '-R', repo]);
+    },
+    // Search matches words loosely, so the body must hold the exact line.
+    async findByFingerprint(fingerprint) {
+      const out = await gh(['issue', 'list', '-R', repo, '--state', 'all', '--label', ERROR_REPORT_LABEL, '--search', `"${fingerprint}" in:body`, '--json', 'number,state,stateReason,closedAt,body']);
+      const found = (JSON.parse(out) as (FingerprintIssue & { body: string })[]).filter((issue) => issue.body.includes(fingerprintLine(fingerprint)));
+      if (found.length === 0) return null;
+      const { body: _body, ...issue } = found.sort((a, b) => a.number - b.number)[0];
+      return { ...issue, stateReason: issue.stateReason || null, closedAt: issue.closedAt || null };
+    },
+    async errorIssue(number) {
+      const issue = JSON.parse(await gh(['issue', 'view', String(number), '-R', repo, '--json', 'number,state,stateReason,closedAt'])) as FingerprintIssue;
+      return { ...issue, stateReason: issue.stateReason || null, closedAt: issue.closedAt || null };
     },
   };
 }

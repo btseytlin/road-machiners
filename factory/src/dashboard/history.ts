@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { lineTime, type AgentUsage, type LedgerLine, type ModelUsage } from '../ledger';
+import { isFailedOutcome, lineTime, type AgentUsage, type LedgerLine, type ModelUsage } from '../ledger';
 import type { JobStage } from '../types';
 import type { Observation, SchedulerData } from '../observability';
 import { summarizeDelivery, type DeliverySummary } from './delivery';
@@ -55,7 +55,7 @@ function addWaste(summary: Summary, agent: AgentUsage): void {
 }
 function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage, stage: StageRow, issue: IssueRow | null): void {
   addCost(summary, stage, issue, agent.costUsd);
-  if (job.outcome !== 'done') addWaste(summary, agent);
+  if (isFailedOutcome(job.outcome)) addWaste(summary, agent);
   const bucket = getBucket(totals, job.endedAt.slice(0, summary.days === 1 ? 13 : 10));
   bucket.cost += agent.costUsd;
   addSegment(bucket.stages, job.stage, agent.costUsd, 0);
@@ -104,7 +104,7 @@ function addJob(summary: Summary, totals: Totals, job: Job): void {
   if (!Number.isFinite(duration) || duration < 0) throw new Error('Invalid job duration');
   summary.workerMs += duration;
   summary.completed += Number(job.outcome === 'done');
-  summary.failed += Number(job.outcome !== 'done');
+  summary.failed += Number(isFailedOutcome(job.outcome));
   summary.timeouts += Number(job.outcome === 'timeout');
   const publicIssue = getPublicIssue(job);
   summary.activity.push({ stage: job.stage, issue: publicIssue, outcome: job.outcome === 'done' ? 'finished' : job.outcome, at: job.endedAt });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld, update } from '../sim/world';
+import { playerVehicle } from '../sim/damage';
+import { mountedParts } from '../sim/grid';
+import { inOverdrive } from '../sim/stats';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
@@ -72,6 +75,17 @@ describe('local game save', () => {
     writeSave(storage, 'auto', world, 1000);
     const loaded = loadWorld(storage, 'auto', TEST_MAP);
     expect(loaded?.vehicles[0].weaponOrders.w1).toEqual({ targetId: foe.id, aim: 'body' });
+  });
+
+  it('loads a save with overdrive on and a worn engine as not overdriving, and clears the flag on the next update', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    world.player.overdrive = true;
+    mountedParts(world.vehicles[0], 'engine')[0].hp = 5;
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    expect(inOverdrive(loaded, playerVehicle(loaded))).toBe(false);
+    expect(update(loaded, () => {}).player.overdrive).toBe(false);
   });
 
   it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee } from './committee';
+import { holdCard, releaseHold } from './hold';
 import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
 import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
@@ -24,7 +25,9 @@ export type ControlAction =
   | { action: 'cut' }
   | { action: 'remove'; issue: number }
   | { action: 'drop'; queue: DropQueue; id: number | null }
-  | { action: 'merge-change'; id: number };
+  | { action: 'merge-change'; id: number }
+  | { action: 'hold'; issue: number }
+  | { action: 'unhold'; issue: number };
 export type ControlCommand = ControlAction & { by: string; reason: string };
 
 // What an action did: the issue it concerns, if any, and a sentence for the issue comment.
@@ -73,6 +76,8 @@ const SHAPES: { [A in ControlAction['action']]: (data: Data) => Extract<ControlA
   remove: (data) => ({ action: 'remove', issue: requireNumber(data, 'issue') }),
   drop: (data) => ({ action: 'drop', queue: requireOneOf(data, 'queue', DROP_QUEUES), id: requireDropId(data) }),
   'merge-change': (data) => ({ action: 'merge-change', id: requireNumber(data, 'id') }),
+  hold: (data) => ({ action: 'hold', issue: requireNumber(data, 'issue') }),
+  unhold: (data) => ({ action: 'unhold', issue: requireNumber(data, 'issue') }),
 };
 
 export function parseControl(raw: unknown): ControlCommand {
@@ -85,7 +90,8 @@ export function parseControl(raw: unknown): ControlCommand {
   return { ...(SHAPES[name as ControlAction['action']](data) as ControlAction), by, reason };
 }
 
-// `hermes` is Hermes's own name for actions it takes on its judgment. Any other actor must be a committee member, by telegram id, GitHub login or name.
+// `hermes` is Hermes's own name for mechanical actions it takes on its judgment. Any other actor must be a committee member.
+// Hermes passes the sender's telegram id, which the committee file matches exactly. A display name matches only when it equals the name in the file.
 export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   if (by === 'hermes') {
     if (gated) throw new Error('This action needs a committee member, not Hermes. Pass --by <member>.');
@@ -97,10 +103,10 @@ export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   return member.name ?? member.github ?? member.telegram;
 }
 
-// Actions that reach dev, players or the factory code need a member. A move to Hardening approves the card, so it is gated like a merge.
-// A merge or a move to Hardening of a card the committee already approved needs none.
+// Product decisions need a member: Ship, a Remove, a merge of factory code, and an approval. A move to Hardening approves the card, so it is gated like a merge.
+// A merge or a move to Hardening of a card the committee already approved needs none. Route, retry, cut and the other moves are mechanical.
 export function isGated(ctx: Ctx, command: ControlCommand): boolean {
-  if (command.action === 'ship' || command.action === 'merge-change') return true;
+  if (command.action === 'ship' || command.action === 'remove' || command.action === 'merge-change') return true;
   if (!approves(command)) return false;
   const { approvedResolving, pendingApprovals } = readState(ctx.statePath);
   const key = String(command.issue);
@@ -119,6 +125,8 @@ const HANDLERS: Handlers = {
     await ctx.github.mergePullRequest(`factory-change/${command.id}`);
     return { issue: null, text: `Factory change ${command.id} is merged into main. The deploy follows.` };
   },
+  hold: async (ctx, command, by) => ({ issue: command.issue, text: await holdCard(ctx, command.issue, by, command.reason) }),
+  unhold: async (ctx, command) => ({ issue: command.issue, text: releaseHold(ctx, command.issue) }),
 };
 
 // Runs inside the tick's guard, so no job starts between the checks and the changes. A command that cannot apply throws before it changes anything.
@@ -276,12 +284,20 @@ async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' 
     dropsApproval: DROPS_APPROVAL.includes(to),
     enter: (state) => {
       const phased = phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [key]: phase } };
+      const kept = { ...phased, held: keptHold(phased.held, key, to) };
       // A move to Hardening is an approval, like a merge order. A card approved already keeps its approver.
-      return to === 'harden' && !isApproved(phased, card) ? { ...phased, approvedResolving: { ...phased.approvedResolving, [key]: by } } : phased;
+      return to === 'harden' && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
     },
   });
   if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
   return { issue, text: `Moved to ${to}.` };
+}
+
+// A hold outlives other moves, since it is a decision of its own. The move clears the sessions, so the stage starts fresh and no stopped job resumes.
+// Done runs nothing, so a hold there means nothing.
+function keptHold(held: FactoryState['held'], key: string, to: MoveTarget): FactoryState['held'] {
+  if (!(key in held)) return held;
+  return to === 'done' ? omitKey(held, key) : { ...held, [key]: { ...held[key], stage: null } };
 }
 
 // The approve job merges at once for a card in Approval that holds an approval, so the merge needs no post and no hardening.

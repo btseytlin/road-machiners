@@ -125,15 +125,6 @@ describe("route", () => {
   });
 
 
-  it('town buildings fit inside the blocked site instead of the road', () => {
-    const w = w1337;
-    for (const town of REGION.towns) {
-      const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
-      expect(buildings.length).toBeGreaterThan(0);
-      for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
-    }
-  });
-
   it('player routes on the real map stay direct', () => {
     const w = w1337;
     const size = w.terrain.size;

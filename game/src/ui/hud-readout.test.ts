@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
-import { corePart } from "../sim/grid";
+import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
@@ -10,7 +10,7 @@ import { maxHealthOf } from "../sim/health";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clockLabel } from "./format";
-import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
@@ -21,7 +21,7 @@ import { newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
-import { dumpOnPile, isRoadWreck } from "../sim/salvage";
+import { dumpOnPile, emptyHidden, isRoadWreck } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
 import { isLootSpot, territoryAt } from "../sim/territory";
 import { propReach } from "../sim/mapgen";
@@ -63,10 +63,50 @@ describe('salvage interaction', () => {
   it('says a site is picked clean when its stock is empty', () => {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `Search ${site.name}`, ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
+  });
+
+  it('offers a search while units stay hidden and the revealed loot once searched, both at once', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Search ${site.name}`]);
+    w.player.scavenged.push(site.id);
+    expect(getContextActions(w, false)).toEqual([
+      expect.objectContaining({ label: `Search ${site.name}`, ready: true, target: { kind: 'stock', id: site.id } }),
+      expect.objectContaining({ label: `Loot ${site.name}`, ready: true, target: { kind: 'loot', id: site.id } }),
+    ]);
+    w.salvage[0].hidden = emptyHidden();
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Loot ${site.name}`]);
+    w.salvage[0].goods.scrap = 0;
+    expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean` });
+  });
+
+  it('picks the loot of a stock beside its search with the arrows', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    w.player.scavenged.push(site.id);
+    const picker = new ContextPicker();
+    expect(picker.pick(getContextActions(w, false))?.label).toBe(`Search ${site.name}`);
+    picker.cycle(getContextActions(w, false), 1);
+    expect(picker.pick(getContextActions(w, false))?.label).toBe(`Loot ${site.name}`);
+  });
+
+  it('blocks both the search and the loot while another truck loots the stock', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } });
+    w.player.scavenged.push('wreck901');
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
+    npc.speed = 0;
+    beginSearch(w, npc, 'wreck901');
+    expect(getContextActions(w, false)).toEqual([
+      expect.objectContaining({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` }),
+      expect.objectContaining({ label: 'Loot the wreck', ready: false, hint: `${npc.name} is looting it` }),
+    ]);
   });
 });
 
@@ -85,8 +125,16 @@ function spotOf(territory: string, look: string): (o: Obstacle) => boolean {
   return (o) => isLootSpot(o) && o.kind === 'landmark' && o.look === look && territoryAt(o.pos)?.id === territory;
 }
 
-function stockLabel(w: World, id: string): string | undefined {
-  return getContextActions(w, false).find((a) => a.target.kind === 'stock' && a.target.id === id)?.label;
+function stockLabel(w: World, id: string, kind: 'stock' | 'loot' = 'stock'): string | undefined {
+  return getContextActions(w, false).find((a) => a.target.kind === kind && a.target.id === id)?.label;
+}
+
+// Every hidden unit of the stock revealed, so only its loot is left to take.
+function reveal(w: World, id: string): void {
+  const stock = w.salvage.find((s) => s.id === id)!;
+  for (const [good, n] of Object.entries(stock.hidden.goods)) stock.goods[good] = (stock.goods[good] ?? 0) + (n ?? 0);
+  stock.parts.push(...stock.hidden.parts);
+  stock.hidden = emptyHidden();
 }
 
 describe('loot spot wording', () => {
@@ -94,7 +142,8 @@ describe('loot spot wording', () => {
     const { w, id } = parkedAt(spotOf('orchard', look));
     expect(stockLabel(w, id)).toBe('Search');
     w.player.scavenged.push(id);
-    expect(stockLabel(w, id)).toBe('Loot');
+    reveal(w, id);
+    expect(stockLabel(w, id, 'loot')).toBe('Loot');
     w.salvage = w.salvage.filter((s) => s.id === id);
     const stock = w.salvage[0];
     stock.goods = {};
@@ -112,7 +161,8 @@ describe('loot spot wording', () => {
     const { w, id } = parkedAt(find);
     expect(stockLabel(w, id)).toBe('Search the wreck');
     w.player.scavenged.push(id);
-    expect(stockLabel(w, id)).toBe('Loot the wreck');
+    reveal(w, id);
+    expect(stockLabel(w, id, 'loot')).toBe('Loot the wreck');
   }, 30_000);
 
   it('names the driver blocking a shared spot with a plain Search', () => {
@@ -142,12 +192,12 @@ describe('every interaction in reach', () => {
 
   it('lists a pile on a wreck beside the wreck', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     const me = w.vehicles[0];
     const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
     expect(getContextActions(w, false).map((a) => a.target)).toEqual([
       { kind: 'stock', id: 'wreck901' },
-      { kind: 'stock', id: pile.id },
+      { kind: 'loot', id: pile.id },
     ]);
   });
 
@@ -166,7 +216,7 @@ describe('every interaction in reach', () => {
 
   it('lists no stock action while the truck is busy', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     beginSearch(w, w.vehicles[0], 'wreck901');
     expect(getContextActions(w, false)).toEqual([]);
   });
@@ -175,7 +225,7 @@ describe('every interaction in reach', () => {
 describe('shared wreck', () => {
   it('dims the search while another driver searches the wreck, and names the driver', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
@@ -189,7 +239,7 @@ describe('search in combat', () => {
   function siteScene() {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
     const me = playerVehicle(w).pos;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: me.x + 6, y: me.y });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
@@ -410,7 +460,7 @@ describe('aid handover action', () => {
 });
 
 const shop: ContextAction = { label: 'Enter', ready: true, target: { kind: 'shop' } };
-const pile: ContextAction = { label: 'Loot the pile', ready: true, target: { kind: 'stock', id: 'p1' } };
+const pile: ContextAction = { label: 'Loot the pile', ready: true, target: { kind: 'loot', id: 'p1' } };
 const wreck: ContextAction = { label: 'Search the wreck', ready: true, target: { kind: 'stock', id: 'w1' } };
 
 describe('context picker', () => {
@@ -448,5 +498,31 @@ describe('context picker', () => {
     picker.cycle([shop, pile, wreck], 1);
     expect(picker.pick([shop, wreck])).toBe(shop);
     expect(picker.pick([wreck, pile, shop])).toBe(shop);
+  });
+});
+
+describe('overdrive switch', () => {
+  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
+  function wornTo(hp: number) {
+    const w = emptyWorld();
+    const engine = mountedParts(playerVehicle(w), 'engine')[0];
+    engine.wear = 2;
+    engine.hp = hp;
+    return w;
+  }
+
+  it('is blocked at 15% engine HP and says why, with the share from the rule', () => {
+    const w = wornTo(6);
+    w.player.overdrive = true;
+    const s = overdriveSwitch(w);
+    expect(s).toMatchObject({ checked: false, blocked: true });
+    expect(s.title).toBe(`Engine too worn for overdrive: repair it above ${RULES.overdriveMinEngineShare * 100}% [O]`);
+  });
+
+  it('is open one HP above 15% and shows the flag', () => {
+    const w = wornTo(7);
+    expect(overdriveSwitch(w)).toEqual({ checked: false, blocked: false, title: 'Engine overdrive: faster, but the engine heats fast [O]' });
+    w.player.overdrive = true;
+    expect(overdriveSwitch(w).checked).toBe(true);
   });
 });

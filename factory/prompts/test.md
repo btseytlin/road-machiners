@@ -26,7 +26,8 @@ Read every available image with the Read tool.
 When the issue or the task file wants the result to look like an image, a gameplay test is not enough.
 The visual review at the end of this prompt compares the final build with the image.
 An image marked NOT AVAILABLE was not seen.
-When the comparison depends on it, write that to `.factory/needs-committee.md` and stop.
+Compare from the text of the issue and the task file, and write down in your notes what you could not see.
+A missing image never stops your work.
 The skill `blender-image-to-3d` has a compare sheet script, `compose_review.py`, for model renders.
 Use it when the change is a Blender model.
 Its overlap number is a diagnostic only.
@@ -80,6 +81,8 @@ Only a major save bump goes to the committee.
 
 If the work needs a major save format bump, stop.
 Write what the committee must decide to `.factory/needs-committee.md`.
+That file is only for a game design fork or a major save bump.
+When the plan is unclear, pick the most sensible reading and write the assumption into the task file.
 
 Never push.
 

@@ -5,7 +5,7 @@ digraph hardening {
   edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
   HM [label="Merge new\nbranch commits"]; HH [label="Harden round\nverify, review, cost"]; HR [label="/code-review\non Sonnet"];
   HS [label="Head still the\nplayed build?", shape=diamond, margin="0.05,0.05"];
-  HC [label="Checks\ntests, playtest, build"]; HQ [label="Queue merge\nno post"];
+  HC [label="Checks\ntests, playtest, build\ndocs only: build"]; HQ [label="Queue merge\nno post"];
   HM -> HH -> HR -> HS [weight=100];
   HS -> HQ [label="yes", weight=100];
   HS -> HC [label="no"];
@@ -20,6 +20,7 @@ digraph hardening {
   HR -> HR [label="FAIL: one review-fix round"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   XA -> HM;
+  HM -> HR [label="cleanup task or docs only:\nno harden round"];
   XC -> HX;
   HX -> HC [label="no harden, no review"];
   HR -> XD [label="second FAIL"];

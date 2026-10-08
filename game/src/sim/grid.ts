@@ -20,6 +20,7 @@ export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
   core: ['X'],
   scanner: ['D'],
   store: ['D'],
+  utility: ['D'],
 };
 const SIDES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 const CELL_CHARS: readonly string[] = ['D', 'E', 'F', 'B', 'L', 'R', 'X', '.'];

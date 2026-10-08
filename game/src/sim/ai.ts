@@ -9,6 +9,7 @@ import { route, routeLength, type Blocker } from "./path";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
+import { fieldBlockers } from "./hazards";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
@@ -323,14 +324,14 @@ export function fightOrder(world: World, v: Vehicle, target: Vehicle, dest: Vec)
 // a moving vehicle on a collision course will cover. It stops only when that path blocks its way, when it
 // faces off with a parked NPC, or when it is the lower id of two NPCs closing on each other.
 
-// What an NPC routes around: parked vehicles, and the swept path of each moving vehicle on a collision course.
-// A swerve takes a turn to show, and orders are set once per turn, so drivers route around a moving vehicle one
-// turn of closing before it could make them stop. The player routes around parked vehicles only, since the player
-// steers for itself.
+// What an NPC routes around: parked vehicles, the ground fields it has seen, and the swept path of each moving
+// vehicle on a collision course. A swerve takes a turn to show, and orders are set once per turn, so drivers route
+// around a moving vehicle one turn of closing before it could make them stop. The player routes around parked
+// vehicles and seen fields only, since the player steers for itself.
 export function routeBlockers(world: World, v: Vehicle): Blocker[] {
-  const parked = parkedVehicles(world, v.id);
-  if (!v.brain) return parked;
-  return [...parked, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
+  const standing = [...parkedVehicles(world, v.id), ...fieldBlockers(world, v)];
+  if (!v.brain) return standing;
+  return [...standing, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
 }
 
 // Whether v must stop short of `dest` for another vehicle. A moving vehicle stops v only when the route around

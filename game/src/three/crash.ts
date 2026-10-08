@@ -65,6 +65,7 @@ export function crashText(err: unknown, facts: ErrorFacts | null, context: Crash
   );
   return lines.join('\n');
 }
+const sinks: ((err: unknown) => void)[] = [];
 
 export function installCrashScreen(): void {
   window.addEventListener('error', (e) =>
@@ -81,6 +82,11 @@ export function keepRunningOnErrors(to: (text: string) => void): void {
 // Calls `listener` on every error after boot, repeats included, in dev too.
 export function onEveryError(listener: () => void): void {
   listeners.push(listener);
+}
+
+// Calls `sink` with every error itself, boot errors and repeats included, before the crash screen or the debug console.
+export function onReport(sink: (err: unknown) => void): void {
+  sinks.push(sink);
 }
 
 // Routes a handled error like an uncaught one: the crash screen in dev, the debug console outside dev.
@@ -104,13 +110,17 @@ function ignoreForeign(facts: ErrorFacts): void {
 }
 
 function onError(err: unknown, facts: ErrorFacts | null = null): void {
+  for (const sink of sinks) sink(err);
   for (const listener of listeners) listener();
   if (!report) return showCrash(err, facts);
-  const text = err instanceof Error ? err.message : String(err);
-  // The browser logs every error itself. The debug console gets each message once, so a per-frame error does not flood it.
+  reportOnce(report, err instanceof Error ? err.message : String(err));
+}
+
+// The browser logs every error itself. The debug console gets each message once, so a per-frame error does not flood it.
+function reportOnce(send: (text: string) => void, text: string): void {
   if (reported.has(text)) return;
   reported.add(text);
-  report(`Error: ${text}`);
+  send(`Error: ${text}`);
 }
 
 function showCrash(err: unknown, facts: ErrorFacts | null): void {

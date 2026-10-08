@@ -8,7 +8,7 @@ export type LootTable = {
   goods: Record<string, LootRange>; // units rolled per good
   parts: LootRange; // units of the parts good
   sparePartChance: number; // odds the site also holds one mountable spare part
-  spareParts: string[]; // part def ids the spare part is drawn from
+  spareParts: string[]; // part def ids the spare part is drawn from, evenly per entry. A utility is listed twice, so it turns up twice as often.
   fuel: LootRange; // fuel units left in tanks and cans
   supplies: LootRange; // supply units left in crates
 };
@@ -43,7 +43,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
     parts: [1, 2],
     sparePartChance: 0.2,
-    spareParts: ['stockEngine', 'plates', 'cage', 'mg'],
+    spareParts: ['stockEngine', 'plates', 'cage', 'mg', 'emitter', 'emitter', 'scrapersKnife', 'scrapersKnife'], // the emitter is ship tech, found only here
     fuel: [0, 8],
     supplies: [0, 3],
   } as LootTable,
@@ -52,7 +52,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 1] },
     parts: [0, 1],
     sparePartChance: 0.1,
-    spareParts: ['mg', 'cage', 'rack', 'flatFour'],
+    spareParts: ['mg', 'cage', 'rack', 'flatFour', 'caltrops', 'caltrops'],
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
@@ -61,7 +61,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 2] },
     parts: [0, 1],
     sparePartChance: 0.1,
-    spareParts: ['mg', 'cage', 'plates', 'flatFour'],
+    spareParts: ['mg', 'cage', 'plates', 'flatFour', 'oilSpiller', 'oilSpiller'],
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
@@ -79,7 +79,7 @@ export const SALVAGE = {
     goods: { scrap: [0, 1], meds: [0, 1] },
     parts: [0, 1],
     sparePartChance: 0.15,
-    spareParts: ['mg', 'plates', 'cage'],
+    spareParts: ['mg', 'plates', 'cage', 'sprout', 'sprout', 'flareCannon', 'flareCannon', 'smokeMortar', 'smokeMortar', 'harpoon', 'harpoon'],
     fuel: [0, 2],
     supplies: [0, 2],
   } as LootTable,
@@ -87,7 +87,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 3], meds: [0, 1] },
     parts: [1, 2],
     sparePartChance: 0.3,
-    spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox'],
+    spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox', 'patcherCrane', 'patcherCrane'],
     fuel: [4, 12],
     supplies: [2, 6],
   } as LootTable,

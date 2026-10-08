@@ -102,6 +102,26 @@ def test_ship_on_stale_post_queues_nothing(tmp_path, state):
     assert query.markups == []
 
 
+def release_post_state(post_id):
+    return {"approvalPosts": {}, "release": None, "releasePost": {"issue": 40, "day": "d", "postId": post_id, "draft": "Text" if post_id else None}}
+
+
+def test_publish_on_current_draft_queues(tmp_path):
+    query = FakeQuery("factory:publish:40")
+    commands = press(tmp_path, query, release_post_state(55))
+    assert [(c["kind"], c["issue"], c["postId"], c["by"]) for c in commands] == [("publish", 40, 55, "7")]
+    assert query.answers == ["Publish queued"]
+    assert query.markups == [None]
+
+
+@pytest.mark.parametrize("state", [release_post_state(54), release_post_state(None), {"approvalPosts": {}, "releasePost": None}, {"approvalPosts": {}}, None])
+def test_publish_on_stale_draft_queues_nothing(tmp_path, state):
+    query = FakeQuery("factory:publish:40")
+    assert press(tmp_path, query, state) == []
+    assert query.answers == [plugin.DRAFT_STALE]
+    assert query.markups == []
+
+
 def test_ship_by_non_member_is_refused(tmp_path):
     query = FakeQuery("factory:ship:40", user_id=8)
     assert press(tmp_path, query, release_state(55)) == []
