@@ -44,13 +44,14 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.fetch();
   const open = await openReleaseTasks(ctx);
   if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
+  const baseline = await baselineOf(ctx, release);
   await takeMain(ctx, release);
   const start = await ctx.repo.headHash(release.branch);
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
   if (!(await cloneAt(ctx, dir, start))) return;
-  const session = await openSession(ctx, release, dir, start);
+  const session = await openSession(ctx, release, dir, start, baseline);
   const { plays, end } = await rounds(ctx, session);
   if (end.outcome === 'blocked') return block(ctx, session, plays, end);
   const next = await pass(ctx, session, end.head);
@@ -74,7 +75,7 @@ async function cloneAt(ctx: Ctx, dir: string, sha: string): Promise<boolean> {
   return false;
 }
 
-async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: string): Promise<Session> {
+async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: string, baseline: Baseline): Promise<Session> {
   const home = agentHome(dir, GAME_DIR);
   resetOutputs(home);
   writeFileSync(join(home, OUT_DIR, 'playtest-history.md'), history(ctx, release));
@@ -85,9 +86,10 @@ async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: 
     await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.designModel, prompt, log, session: agentSession });
     agentSession = { ...agentSession, resume: true };
   };
-  return { release, dir, home, start, baseline: await baselineOf(ctx, release), log, bugs: new Map(), agent };
+  return { release, dir, home, start, baseline, log, bugs: new Map(), agent };
 }
 
+// Read before the release takes main, so the baseline commit is always in the release, even when main moves meanwhile.
 async function baselineOf(ctx: Ctx, release: ReleaseState): Promise<Baseline> {
   if (release.playtest.passed !== null) return { branch: release.branch, sha: release.playtest.passed, kind: 'the last commit this release passed' };
   return { branch: 'main', sha: await ctx.repo.headHash('main'), kind: 'main, since this release has not passed yet' };
