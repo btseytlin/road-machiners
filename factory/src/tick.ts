@@ -12,7 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
-import { clearQueued, orderKey, readState, updateState } from './state';
+import { clearQueued, isQueued, orderKey, readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -266,10 +266,9 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   await failJob(ctx, job, alive, deps);
 }
 
-const RETRIED_ORDERS: JobStage[] = ['approve', 'remove', 'ship', 'incident'];
-
 function retriesOrder(ctx: Ctx, job: Job): boolean {
-  return RETRIED_ORDERS.includes(job.stage) && !readState(ctx.statePath).retried.includes(orderKey(job.stage, job.issue));
+  const state = readState(ctx.statePath);
+  return isQueued(state, job.stage, job.issue) && !state.retried.includes(orderKey(job.stage, job.issue));
 }
 
 async function stopJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {

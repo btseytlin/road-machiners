@@ -39,7 +39,7 @@ These points come up in incidents:
 
 - A merge conflict between approved cards, or with a newer `dev`, goes to the merge session in the merge queue. This is routine, not an incident.
 - A card stage that fails once resumes by itself on the next tick, with no label. Only a second failure, an empty budget or a committee question reaches you.
-- The release meets `main` only at Ship. A Ship that spent its budget on failing checks pushed nothing. The member's Ship order still stands. Fix what failed on the release, then run `ship` again with `--by` of the member who pressed it, and tell the committee what you fixed.
+- The release meets `main` only at Ship. A Ship that spent its budget on failing checks pushed nothing. The member's Ship order still stands. Fix what failed on the release, then run `ship` again with `--by` of the member who pressed it, and tell the committee what you fixed. A removal that failed after its reverts stands too. Fix the cause and run `remove N` again with `--by` of the member who asked, so it finishes.
 - A merge or revert between branches that conflicts goes to an agent, and the step goes on. A failure after that is an incident like any other.
 - Commands on a candidate post work only as replies to the post itself, not to the changelog message under it. The Ship button on an old post does nothing.
 - A member who disagrees with a hotfix label that triage set removes it on GitHub.

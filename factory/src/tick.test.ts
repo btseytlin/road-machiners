@@ -322,6 +322,14 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath)).toMatchObject({ jobs: [], pendingShip: null, retried: [], failures: [{ stage: 'ship' }] });
   });
 
+  it('reports a dead approve whose approval is no longer queued, instead of retrying nothing', async () => {
+    const approve = job('2026-01-10T11:50:00Z', 'approve', 5);
+    const h = harness(approve, false);
+    writeState(h.ctx.statePath, state({ jobs: [approve], pendingApprovals: {} }));
+    await checkJobs(h.ctx, h.deps);
+    expect(readState(h.ctx.statePath)).toMatchObject({ jobs: [], retried: [], failures: [{ stage: 'approve' }] });
+  });
+
   it('clears the retry mark of an order whose job ends', () => {
     expect(clearQueued(state({ pendingShip: 'Ann', retried: ['ship:20', 'approve:5'] }), 'ship', 20).retried).toEqual(['approve:5']);
   });

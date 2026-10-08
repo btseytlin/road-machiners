@@ -72,4 +72,12 @@ export function clearQueued(state: FactoryState, stage: JobStage, issue: number 
   };
 }
 
-export const orderKey = (stage: JobStage, issue: number | null): string => `${stage}:${issue ?? '-'}`;
+export function isQueued(state: FactoryState, stage: JobStage, issue: number | null): boolean {
+  if (stage === 'approve') return Object.hasOwn(state.pendingApprovals, String(issue));
+  if (stage === 'remove') return state.pendingRemovals.some((item) => item.issue === issue);
+  if (stage === 'ship') return state.pendingShip !== null;
+  if (stage === 'incident') return issue !== null && state.pendingIncidents.includes(issue);
+  return false;
+}
+
+export const orderKey =(stage: JobStage, issue: number | null): string => `${stage}:${issue ?? '-'}`;

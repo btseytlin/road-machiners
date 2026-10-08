@@ -16,6 +16,15 @@ describe('setPath', () => {
     expect(state.release?.postId).toBe(42);
   });
 
+  it('refuses a value of another kind, and a delete outside a map store', () => {
+    const state = { ...structuredClone(EMPTY_STATE), release: RELEASE };
+    expect(() => setPath(state, 'jobs', { a: 1 })).toThrow('"jobs" holds a array, not a object');
+    expect(() => setPath(state, 'release.removed', 5)).toThrow('holds a array, not a number');
+    expect(() => setPath(state, 'release.postId', undefined)).toThrow('Only an entry of a map store');
+    expect(() => setPath(state, 'release', undefined)).toThrow('Only an entry of a map store');
+    expect(setPath(state, 'pendingShip', 'Ann').pendingShip).toBe('Ann');
+  });
+
   it('deletes a key', () => {
     const state = { ...structuredClone(EMPTY_STATE), pendingApprovals: { '5': 'Ann', '6': 'Bob' } };
     expect(setPath(state, 'pendingApprovals.5', undefined).pendingApprovals).toEqual({ '6': 'Bob' });

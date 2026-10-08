@@ -528,6 +528,13 @@ describe('ship, cut and remove', () => {
     expect(calls.find((call) => call.startsWith('comment 5'))).toContain('Ann');
   });
 
+  it('queues a removal that stopped after its reverts again, so it finishes, but not a second copy', async () => {
+    seed({ release: { ...RELEASE, removed: [5] } });
+    await applyControl(fakeCtx(), command({ action: 'remove', issue: 5 }));
+    expect(readState(statePath).pendingRemovals).toHaveLength(1);
+    await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5 }))).rejects.toThrow('already queued');
+  });
+
   it('refuses a removal from Hermes', async () => {
     seed({ release: RELEASE });
     await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5, by: 'hermes' }))).rejects.toThrow('--by <member>');

@@ -293,9 +293,10 @@ export function queueShip(ctx: Ctx, issue: number, by: string): string {
   return `Ship of release ${release.day} is queued. The merge into main starts on a coming tick.`;
 }
 
-export function queueRemoval(ctx: Ctx, issue: number, by: string, text: string): string {
+export function queueRemoval(ctx: Ctx, issue: number, by: string, text: string, finishRemoved = false): string {
   const release = openRelease(ctx);
-  if (release.removed.includes(issue)) throw new Error(`Issue #${issue} is already removed from release ${release.day}.`);
+  if (release.removed.includes(issue) && !finishRemoved) throw new Error(`Issue #${issue} is already removed from release ${release.day}.`);
+  if (readState(ctx.statePath).pendingRemovals.some((item) => item.issue === issue)) throw new Error(`A removal of #${issue} is already queued.`);
   updateState(ctx.statePath, (state) => ({ ...state, pendingRemovals: [...state.pendingRemovals, { issue, by, text }] }));
   return `Removal of #${issue} from release ${release.day} is queued. The revert starts on a coming tick.`;
 }
@@ -306,7 +307,7 @@ async function ship(ctx: Ctx, _command: Extract<ControlCommand, { action: 'ship'
 }
 
 async function remove(ctx: Ctx, command: Extract<ControlCommand, { action: 'remove' }>, by: string): Promise<Outcome> {
-  return { issue: command.issue, text: queueRemoval(ctx, command.issue, by, command.reason) };
+  return { issue: command.issue, text: queueRemoval(ctx, command.issue, by, command.reason, true) };
 }
 
 async function cut(ctx: Ctx): Promise<Outcome> {
