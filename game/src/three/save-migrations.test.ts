@@ -36,6 +36,7 @@ import FORMAT_2_26 from './save-fixtures/format-2-26.json';
 import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
+import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
@@ -619,7 +620,15 @@ describe('save migration 27 to 28', () => {
 });
 
 describe('save migration 28 to 29', () => {
-  const next = MIGRATIONS[28](structuredClone(FORMAT_2_28)) as typeof FORMAT_2_28;
+  it('gives the world the default Roaming setup and keeps every other field', () => {
+    const next = MIGRATIONS[28](FORMAT_2_28);
+
+    expect(next).toEqual({ ...FORMAT_2_28, setup: { mode: 'roaming', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } } });
+  });
+});
+
+describe('save migration 29 to 30', () => {
+  const next = MIGRATIONS[29](structuredClone(FORMAT_2_29)) as typeof FORMAT_2_29;
   const cents = (money: number) => Math.round((money * 100) / 3);
 
   it('turns player money, debt included, cost basis and contract rewards into cents', () => {
@@ -627,35 +636,35 @@ describe('save migration 28 to 29', () => {
     expect(next.player.costBasis).toEqual({ scrap: 350, salt: 700 });
     expect(next.player.contracts[0].reward).toBe(4000);
     expect(next.shops.bowl.contracts[0].reward).toBe(10000);
-    expect(next.shops.bowl.pressure).toEqual(FORMAT_2_28.shops.bowl.pressure);
+    expect(next.shops.bowl.pressure).toEqual(FORMAT_2_29.shops.bowl.pressure);
   });
 
   it('turns the open call\'s money, deal and prices into cents and leaves other vars alone', () => {
     const { vars, line } = next.player.call;
     expect(vars.fee).toEqual({ kind: 'money', amount: 1500 });
-    expect(vars.deal).toEqual({ ...FORMAT_2_28.player.call.vars.deal, price: 1000 });
-    expect(vars.town).toEqual(FORMAT_2_28.player.call.vars.town);
+    expect(vars.deal).toEqual({ ...FORMAT_2_29.player.call.vars.deal, price: 1000 });
+    expect(vars.town).toEqual(FORMAT_2_29.player.call.vars.town);
     expect(line.vars.prices.goods).toEqual([{ good: 'salt', buy: cents(31), sell: 700 }]);
-    expect(line.vars.far).toEqual(FORMAT_2_28.player.call.line.vars.far);
-    expect(line.text).toBe(FORMAT_2_28.player.call.line.text);
+    expect(line.vars.far).toEqual(FORMAT_2_29.player.call.line.vars.far);
+    expect(line.text).toBe(FORMAT_2_29.player.call.line.text);
   });
 
   it('turns driver wallets and pile bases into cents and keeps fuel, memories and stock', () => {
-    expect(next.vehicles[0]).toEqual(FORMAT_2_28.vehicles[0]);
-    expect(next.vehicles[1]).toEqual({ ...FORMAT_2_28.vehicles[1], resources: { ...FORMAT_2_28.vehicles[1].resources, money: cents(1250) } });
+    expect(next.vehicles[0]).toEqual(FORMAT_2_29.vehicles[0]);
+    expect(next.vehicles[1]).toEqual({ ...FORMAT_2_29.vehicles[1], resources: { ...FORMAT_2_29.vehicles[1].resources, money: cents(1250) } });
     expect(next.removed[0].resources.money).toBe(233);
-    expect(next.salvage[0]).toEqual(FORMAT_2_28.salvage[0]);
-    expect(next.salvage[1].pile).toEqual({ ...FORMAT_2_28.salvage[1].pile, basis: { salt: 750 } });
+    expect(next.salvage[0]).toEqual(FORMAT_2_29.salvage[0]);
+    expect(next.salvage[1].pile).toEqual({ ...FORMAT_2_29.salvage[1].pile, basis: { salt: 750 } });
   });
 
   it('turns every fee and price in a deal state into cents and nothing else', () => {
     const data = next.states.map((s) => s.data as Record<string, unknown>);
-    expect(data[0]).toEqual({ ...FORMAT_2_28.states[0].data, fee: cents(55), waived: 0 });
-    expect(data[1]).toEqual({ ...FORMAT_2_28.states[1].data, fee: 600 });
-    expect(data[2]).toEqual({ ...FORMAT_2_28.states[2].data, fee: 2600 });
-    expect(data[3]).toEqual({ ...FORMAT_2_28.states[3].data, price: cents(32) });
-    expect(data[4]).toEqual({ ...FORMAT_2_28.states[4].data, price: cents(22) });
-    expect(next.states[5]).toEqual(FORMAT_2_28.states[5]);
+    expect(data[0]).toEqual({ ...FORMAT_2_29.states[0].data, fee: cents(55), waived: 0 });
+    expect(data[1]).toEqual({ ...FORMAT_2_29.states[1].data, fee: 600 });
+    expect(data[2]).toEqual({ ...FORMAT_2_29.states[2].data, fee: 2600 });
+    expect(data[3]).toEqual({ ...FORMAT_2_29.states[3].data, price: cents(32) });
+    expect(data[4]).toEqual({ ...FORMAT_2_29.states[4].data, price: cents(22) });
+    expect(next.states[5]).toEqual(FORMAT_2_29.states[5]);
   });
 
   it('turns money in events into cents, and scales only money practice amounts', () => {
@@ -664,24 +673,24 @@ describe('save migration 28 to 29', () => {
     expect(e[1].amount).toBeCloseTo(450);
     expect(e[2].amount).toBeCloseTo(1000);
     expect(e[3].amount).toBeCloseTo(300);
-    expect(e[4]).toEqual(FORMAT_2_28.events[4]);
+    expect(e[4]).toEqual(FORMAT_2_29.events[4]);
     expect((e[5].contract as { reward: number }).reward).toBe(5000);
     expect([e[6].fee, e[7].fee, e[8].fee, e[9].fee]).toEqual([cents(55), 600, 2600, 2600]);
     expect(e[10].paid).toBe(cents(22));
     expect(((e[11].state as { data: { price: number } }).data).price).toBe(500);
     expect(e[12].vars).toEqual({ fee: { kind: 'money', amount: 100 } });
-    expect(e[13]).toEqual(FORMAT_2_28.events[13]);
-    for (const [i, ev] of e.entries()) if (ev.t === 'practice') expect(ev.xp, `event ${i}`).toBe(FORMAT_2_28.events[i].xp);
+    expect(e[13]).toEqual(FORMAT_2_29.events[13]);
+    for (const [i, ev] of e.entries()) if (ev.t === 'practice') expect(ev.xp, `event ${i}`).toBe(FORMAT_2_29.events[i].xp);
   });
 
   it('keeps the turn and touches nothing outside money', () => {
-    expect(next.turn).toBe(FORMAT_2_28.turn);
-    expect(next.player.fuel).toBe(FORMAT_2_28.player.fuel);
+    expect(next.turn).toBe(FORMAT_2_29.turn);
+    expect(next.player.fuel).toBe(FORMAT_2_29.player.fuel);
   });
 
   it('throws on a money field that is not a number', () => {
-    const bad = { ...structuredClone(FORMAT_2_28), player: { ...structuredClone(FORMAT_2_28.player), money: 'x' } };
-    expect(() => MIGRATIONS[28](bad)).toThrow(/player money/);
+    const bad = { ...structuredClone(FORMAT_2_29), player: { ...structuredClone(FORMAT_2_29.player), money: 'x' } };
+    expect(() => MIGRATIONS[29](bad)).toThrow(/player money/);
   });
 
   // A money-named key in the saved shape that the step neither converts nor lists here as not money stays in the old
@@ -709,11 +718,11 @@ describe('save migration 28 to 29', () => {
   });
 });
 
-describe('save migration 29 to 30', () => {
-  const next = MIGRATIONS[29](FORMAT_2_29) as typeof FORMAT_2_29;
+describe('save migration 30 to 31', () => {
+  const next = MIGRATIONS[30](FORMAT_2_30) as typeof FORMAT_2_30;
 
   it('keeps the world as it was', () => {
-    expect(next).toEqual(FORMAT_2_29);
+    expect(next).toEqual(FORMAT_2_30);
   });
 
   it('leaves a raid on its way without a watch end, so it watches once it arrives', () => {

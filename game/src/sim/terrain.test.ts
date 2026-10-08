@@ -25,12 +25,13 @@ import { siteEdgeCrossings, siteGap } from "./sites";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
+import { defaultSetup } from "./settings";
 
 // Several tests below read the start world without changing it (destinations, canyon shape,
 // cliff checks), so they share one.
 let startWorld: World | undefined;
 function worldOnMap(): World {
-  startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP);
+  startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   return startWorld;
 }
 

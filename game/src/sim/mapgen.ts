@@ -17,11 +17,17 @@ import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
 // Baked props come first and never change in play, so a save leaves them out and a load puts them back in
-// the same place in the list.
-export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
+// the same place in the list. `fixed` obstacles, like the opening wreck, follow the sites, so road wrecks keep off
+// them. One that lands on a prop, a site or a deck throws.
+export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
   const baked = mapObstacles(map);
   const sites = placeSites();
   const out = [...baked, ...sites];
+  for (const o of fixed) {
+    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(o.pos, o.r) || !clearOfDecks(o.pos, o.r))
+      throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
+    out.push(o);
+  }
   placeRoadWrecks(world, out);
   return out;
 }

@@ -7,6 +7,7 @@ import { heightFromElevation } from './terrain';
 import { DEG, polylineDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { defaultSetup } from './settings';
 
 describe('elevationAt', () => {
   it('is deterministic for the same seed and coordinates', () => {
@@ -18,7 +19,7 @@ describe('elevationAt', () => {
   });
 
   it('does not touch world.rngState', () => {
-    const w = newWorld(3, START_KITS.standard, TEST_MAP);
+    const w = newWorld(3, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const before = w.rngState;
     elevationAt(w.seed, 20, 20);
     expect(w.rngState).toBe(before);

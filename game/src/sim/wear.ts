@@ -162,6 +162,13 @@ export function damagePart(part: PartInstance, amount: number, floor: number): v
   part.wear = partDef(part.defId).kind === 'core' ? Math.min(CONDITION.maxWear, part.wear + 1) : part.wear + 1;
 }
 
+// Lowers a fresh part to `share` of its max HP for a new game's start. It keeps at least 1 HP, so it adds no wear step.
+export function setStartHp(part: PartInstance, share: number): void {
+  if (!(share > 0 && share <= 1)) throw new Error(`Start HP share ${share} for ${part.id} is outside (0, 1]`);
+  if (part.hp !== maxHp(part)) throw new Error(`${part.id} is not fresh`);
+  damagePart(part, part.hp - Math.round(maxHp(part) * share), 1);
+}
+
 // Raises HP to `hp`, capped at max HP. Throws for a junk part rising from 0 HP and for a restore that lowers HP.
 export function restorePart(part: PartInstance, hp: number): void {
   const next = Math.min(maxHp(part), hp);

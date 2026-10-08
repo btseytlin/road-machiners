@@ -33,6 +33,7 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
 import { hasLineOfFire } from './vision';
 import { isWatching, watchPost } from './watch-posts';
+import { defaultSetup } from './settings';
 import { endTurn, newWorld } from './world';
 
 const CAMPS = REGION.locations.filter((l) => l.kind === 'camp');
@@ -44,7 +45,7 @@ const RAIDER_RADIUS = Math.max(
 
 // The real map with its fixed props only: no road wrecks, which come and go.
 function mapWorld(): World {
-  const w = newWorld(1, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   w.obstacles = w.obstacles.filter((o) => !isTransientWreck(o));
   return w;
 }

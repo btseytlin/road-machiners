@@ -7,6 +7,7 @@ import { propsAlong, propsAround, propSlotsAlong, shadeCastersAround } from './p
 import type { Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 const SIGHT_KINDS: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
@@ -22,7 +23,7 @@ function lcg(seed: number): () => number {
 }
 
 function worldAndSamples(): { w: World; points: Vec[] } {
-  const w = newWorld(1, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   const next = lcg(7);
   const points = Array.from({ length: 80 }, () => ({ x: next() * w.size, y: next() * w.size }));
   return { w, points };

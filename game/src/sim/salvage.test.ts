@@ -30,6 +30,7 @@ import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 describe('player piles', () => {
   it('goods the player dumps and takes back keep their cost basis', () => {
@@ -338,7 +339,7 @@ describe('road wreck salvage', () => {
   it('gives every wreck placed on a road its own stock to search', async () => {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    const w = newWorld(1337, startKit('standard'), TEST_MAP);
+    const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const wrecks = w.obstacles.filter((o) => /^wreck\d+$/.test(o.id));
     expect(wrecks.length).toBeGreaterThan(0);
     for (const o of wrecks) {
@@ -753,7 +754,7 @@ describe('territory loot spots', () => {
   async function realWorld(): Promise<World> {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    return newWorld(1337, startKit('standard'), TEST_MAP);
+    return newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   }
   const spotsOf = (w: World) => w.obstacles.filter(isLootSpot);
 
@@ -871,7 +872,7 @@ describe('salvage place', () => {
   async function realWorld(): Promise<World> {
     const { newWorld } = await import('./world');
     const { startKit } = await import('../data/start');
-    return newWorld(1337, startKit('standard'), TEST_MAP);
+    return newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   }
 
   function spotStock(w: World, territory: string, look: string): SalvageStock {

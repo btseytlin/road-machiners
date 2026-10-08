@@ -1,5 +1,5 @@
 {
- "format": "2.30",
+ "format": "2.31",
  "shape": {
   "broken": [],
   "craters": [],
@@ -862,6 +862,14 @@
    "rngState": "number"
   },
   "seed": "number",
+  "setup": {
+   "mode": "string",
+   "settings": {
+    "damage": "number",
+    "fuelUse": "number",
+    "supplyUse": "number"
+   }
+  },
   "shops": {
    "bowl": {
     "contracts": [

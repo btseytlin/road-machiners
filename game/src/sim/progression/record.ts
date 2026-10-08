@@ -21,7 +21,7 @@ import { isStranded } from '../stats';
 import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
-import type { GameEvent, NpcActivity, Vehicle, World, XpSource } from '../types';
+import type { GameEvent, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
@@ -29,6 +29,7 @@ import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions, type Policy } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
+import { defaultSetup, parseSetup } from '../settings';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
@@ -45,7 +46,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, options.kit, 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
@@ -61,7 +62,7 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, options.kit, 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
@@ -112,10 +113,15 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
+// Roaming with the named settings changed and the rest at their defaults.
+function roamingSetup(settings: Record<string, number> = {}): WorldSetup {
+  return parseSetup({ mode: 'roaming', settings: { ...defaultSetup('roaming').settings, ...settings } });
+}
+
 // A new world on the start kit with no XP, every skill at `rank`, and no XP logged today. It picks no perks.
-export function startWorld(seed: number, kit = 'standard', rank = 0): World {
+export function startWorld(seed: number, kit = 'standard', rank = 0, settings?: Record<string, number>): World {
   if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
-  return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
+  return update(newWorld(seed, startKit(kit), TEST_MAP, roamingSetup(settings)), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {

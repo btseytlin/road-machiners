@@ -18,6 +18,7 @@ import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { heatAt } from './sun';
 import type { Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
 const NIGHT = 1 + ((23 - TIME.startHour) * TIME.turnsPerDay) / 24;
@@ -167,7 +168,7 @@ describe('engine heat on the road', () => {
   }
 
   it('overheats every engine on the shortest Bowl to Nose trip at top speed from 10:00', () => {
-    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP);
+    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP, defaultSetup('roaming'));
     base.weather = [];
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const nose = REGION.towns.find((t) => t.id === 'nose')!;
