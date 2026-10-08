@@ -161,7 +161,6 @@ describe("field refit plan", () => {
     const mg = partOf(w, "mg");
     const away = stowSpot(me, mg);
     if (!away) throw new Error("No storage room");
-    // A half turn keeps the footprint, so the turned gun fits the same cells.
     const turned = { ...away, rot: ((away.rot + 2) % 4) as Rot };
     let plan = planAfterMove(me, {}, mg.id, away);
     plan = planAfterMove(me, plan, mg.id, turned);

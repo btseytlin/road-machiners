@@ -60,15 +60,11 @@ import { nearestPad } from './sites';
 import { openingObstacles, setUpOpening } from './opening';
 import { clamp, dist, type Vec } from './vec';
 
-// The world seed and the random streams it starts.
 export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng' | 'searchRng'> {
   if (!Number.isInteger(seed)) throw new Error(`Seed must be an integer, got ${seed}`);
   return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed), searchRng: searchStream(seed) };
 }
 
-// A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
-// `setup` is the mode and world settings picked at New game. `populate` false leaves the map with no NPCs and no spawn
-// draws, for tools that place their own trucks.
 export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
@@ -176,13 +172,10 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   return world;
 }
 
-// Rebuilds the truck's built-in parts at the kit's wear step.
 function wearCoreParts(world: World, truck: Vehicle, wear: number): void {
   for (const item of truck.items) if (item.kind === "part" && partDef(item.part.defId).kind === "core") item.part = makePart(world, item.part.defId, wear);
 }
 
-// The player's start: REGION.playerStart.offset tiles to the right of the point REGION.playerStart.distance tiles
-// along its road, facing back toward that point.
 export function startPose(): { pos: Vec; heading: number } {
   const { road, distance, offset } = REGION.playerStart;
   const points = REGION.roads[road];
@@ -197,7 +190,6 @@ export function startPose(): { pos: Vec; heading: number } {
     }
     const along = Math.atan2(b.y - a.y, b.x - a.x);
     const t = left / length;
-    // Map y points down, so (-sin, cos) of the heading points to the right of travel.
     return {
       pos: { x: a.x + (b.x - a.x) * t - Math.sin(along) * offset, y: a.y + (b.y - a.y) * t + Math.cos(along) * offset },
       heading: along - Math.PI / 2,
@@ -206,7 +198,6 @@ export function startPose(): { pos: Vec; heading: number } {
   throw new Error(`Player start lies ${distance} tiles along road ${road}, past its end`);
 }
 
-// The pad of the town nearest the new-game start, facing away from the town: where a carried-over save parks.
 export function townStart(): { pos: Vec; heading: number } {
   const from = startPose().pos;
   const town = [...REGION.towns].sort((a, b) => dist(from, a.pos) - dist(from, b.pos))[0];
@@ -220,7 +211,6 @@ export function cloneWorld(world: World): World {
   return { ...structuredClone(state), terrain };
 }
 
-// Clone, apply, return. Every command and the turn go through this.
 export function update(world: World, fn: (draft: World) => void): World {
   const draft = cloneWorld(world);
   draft.events = [];
@@ -231,37 +221,30 @@ export function update(world: World, fn: (draft: World) => void): World {
   return draft;
 }
 
-// Overdrive cuts out once the engine is too worn for it, whatever wore it down. Only the player turns it back on.
 function settleOverdrive(w: World): void {
   if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
   w.player.overdrive = false;
   w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
-// Whether player commands are allowed now. The UI checks it before issuing one.
 export function playerCanAct(world: World): boolean {
   return world.player.state === 'active' && !isTowed(world) && !world.player.call;
 }
 
-// Player commands need an awake, living driver who is not on a tow rope or the radio. Unhitch checks the
-// rope itself, and the dialogue commands run the call.
 export function requireActivePlayer(world: World): void {
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
   if (isTowed(world)) throw new Error('Player is towed');
   if (world.player.call) throw new Error('A radio call is open');
 }
 
-// Turns run on their own while the player cannot act, knocked out or towed. They also run while the player waits
-// on the beacon: parked with no move order and no offer open. A beacon wait is too many turns to end by hand.
 export function autoRuns(world: World): boolean {
   const p = world.player;
-  if (p.call) return false; // an open call stops every turn until it ends
+  if (p.call) return false;
   if (p.state === 'knockedOut' || isTowed(world)) return true;
-  if (readyAid(world)) return false; // the handover waits for the player's [E]
+  if (readyAid(world)) return false;
   return waitsOnBeacon(world);
 }
 
-// Slower than `RULES.parkedSpeed` with no move order.
 export function isAtRest(v: Vehicle): boolean {
   return v.speed <= RULES.parkedSpeed && (v.order === null || v.order.kind === 'brake');
 }
@@ -272,7 +255,6 @@ function waitsOnBeacon(world: World): boolean {
   return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
-// A player command: rejected unless the player is active and not towed, then applied like any update.
 export function playerCommand(world: World, fn: (draft: World) => void): World {
   requireActivePlayer(world);
   return update(world, fn);
@@ -293,8 +275,6 @@ export function setMoveOrder(world: World, order: MoveOrder | null): World {
   });
 }
 
-// move resolves this turn's driving on the draft. The game always plugs in the physics engine
-// via src/phys/turn.ts; tests that need a real turn build a Drive and pass physicsMove.
 export function endTurn(
   world: World,
   move: (w: World) => void,
@@ -390,7 +370,6 @@ export function setWeaponOrder(
   });
 }
 
-// Sets or clears the player's order to use a utility or arm a claymore ram this turn. Throws when the part refuses it.
 export function setUtilityOrder(world: World, partId: string, order: UtilityOrder | null): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
@@ -404,7 +383,6 @@ export function setUtilityOrder(world: World, partId: string, order: UtilityOrde
   });
 }
 
-// The player drops the rest of a gun's magazine, so it reloads from empty.
 export function reloadWeapon(world: World, weaponId: string): World {
   return playerCommand(world, (w) => {
     const mw = vehicleStats(w, playerVehicle(w)).weapons.find((m) => m.part.id === weaponId);
@@ -413,14 +391,12 @@ export function reloadWeapon(world: World, weaponId: string): World {
   });
 }
 
-// The player lets go of the line its harpoon holds.
 export function cutPlayerLine(world: World, harpoonId: string): World {
   return playerCommand(world, (w) => {
     cutLine(w, playerVehicle(w), harpoonId);
   });
 }
 
-// Manual mode: the player's truck skips the route planner and drives straight at its order's point.
 export function setDirect(world: World, on: boolean): World {
   return playerCommand(world, (w) => {
     playerVehicle(w).direct = on;
@@ -442,8 +418,6 @@ export function setOverdrive(world: World, on: boolean): World {
   });
 }
 
-// The one switch that flips while a turn plays, so it skips update(): that would empty the events and removed
-// vehicles the turn is still showing. No rule reads the lamps, so nothing else needs settling.
 export function setHeadlights(world: World, on: boolean): World {
   return { ...world, player: { ...world.player, headlights: on } };
 }
@@ -458,8 +432,6 @@ export function hostileToPlayer(world: World, v: Vehicle): boolean {
   return isHostile(world, playerVehicle(world), v);
 }
 
-// ---- Carry-over: a new world on the current map around what a player cannot get back from an old save.
-// The reader in src/three/save-rescue.ts hands in plain values. This section knows what the ids mean.
 
 export type CarriedPart = { defId: string; wear: number; hp: number; rebuilt: boolean };
 export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: Rot };
@@ -467,8 +439,8 @@ export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good';
 export type Carried = {
   seed: number | null;
   money: number | null;
-  xp: number | null; // unspent XP
-  ranks: Partial<Record<string, number>>; // bought ranks per skill id
+  xp: number | null;
+  ranks: Partial<Record<string, number>>;
   xpBySource: Partial<Record<string, number>>;
   perks: string[];
   discovered: string[];
@@ -480,15 +452,14 @@ export type Carried = {
   costBasis: Record<string, number>;
   truck: { chassisId: string; name: string | null; items: CarriedItem[] } | null;
   storage: CarriedPart[];
-  setup: unknown; // the saved world setup as stored, undefined in a save from before world settings
+  setup: unknown;
 };
 
-// Part and good ids. The UI names them.
 export type CarryReport = {
-  toGarage: string[]; // known parts that lost their spot and went to garage storage
-  sold: { good: string; units: number; money: number }[]; // goods with no room, sold at base value
-  lost: string[]; // ids the current data does not know
-  settingsReset: (keyof WorldSettings)[]; // world settings that were bad and went back to their defaults
+  toGarage: string[];
+  sold: { good: string; units: number; money: number }[];
+  lost: string[];
+  settingsReset: (keyof WorldSettings)[];
 };
 
 const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
@@ -497,7 +468,6 @@ export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, fre
   const { setup, reset } = carriedSetup(carried.setup);
   const report: CarryReport = { toGarage: [], sold: [], lost: [], settingsReset: reset };
   const truckKit = carriedKit(carried, kit, report);
-  // A carried save starts at a town, not stranded, and keeps auto patch on unless it saved the switch off.
   const world = newWorld(pick(carried.seed, freshSeed()), { ...truckKit, opening: null, autoRepair: true }, map, setup, true, townStart());
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
@@ -508,12 +478,10 @@ export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, fre
   return { world, report };
 }
 
-// The saved setup with its bad settings reset. A save from before world settings played the default Roaming setup.
 function carriedSetup(setup: unknown): ReturnType<typeof repairSetup> {
   return setup === undefined ? { setup: defaultSetup('roaming'), reset: [] } : repairSetup(setup);
 }
 
-// The start kit, with the carried chassis and no parts when the chassis is known. An unknown one keeps the kit.
 function carriedKit(carried: Carried, kit: StartKit, report: CarryReport): StartKit {
   const saved = carried.truck;
   if (!saved) return kit;
@@ -524,12 +492,10 @@ function carriedKit(carried: Carried, kit: StartKit, report: CarryReport): Start
   return { ...kit, chassis: saved.chassisId, name: pick(saved.name, kit.name), parts: [], storage: [], cargo: {}, costBasis: {} };
 }
 
-// A carried value, or the fallback when the save held none.
 function pick<T>(value: T | null | undefined, fallback: T): T {
   return value === null || value === undefined ? fallback : value;
 }
 
-// Progression and settings. Time-bound fields keep the new-game values.
 function carryPlayer(world: World, c: Carried): void {
   const p = world.player;
   Object.assign(p, {
@@ -547,7 +513,6 @@ function carryPlayer(world: World, c: Carried): void {
   carryPerks(world, c.perks);
 }
 
-// A perk stays when its skill reached its rank and no perk of its pair is picked yet.
 function carryPerks(world: World, perks: string[]): void {
   for (const perk of perks.filter(isPerkId)) {
     const { skill, level } = PERKS[perk];
@@ -555,12 +520,10 @@ function carryPerks(world: World, perks: string[]): void {
   }
 }
 
-// Cost basis for the goods the truck still holds.
 function heldBasis(truck: Vehicle, basis: Record<string, number>): Record<string, number> {
   return Object.fromEntries(Object.entries(basis).filter(([good]) => truck.items.some((it) => it.kind === 'good' && it.good === good)));
 }
 
-// Fills the truck and the garage. `stay` is false when the chassis is gone: then every part goes to the garage.
 function carryTruck(world: World, c: Carried, stay: boolean, report: CarryReport): void {
   const truck = playerVehicle(world);
   const goods: Record<string, number> = {};
@@ -573,7 +536,6 @@ function carryTruck(world: World, c: Carried, stay: boolean, report: CarryReport
   carryGoods(world, truck, goods, stay, report);
 }
 
-// Puts a carried part item on the truck. False when it belongs in the garage, which the report then names.
 function carryPartItem(world: World, truck: Vehicle, item: CarriedItem & { kind: 'part' }, stay: boolean, report: CarryReport): boolean {
   const { defId } = item.part;
   if (!isKnownPart(defId)) report.lost.push(defId);
@@ -602,7 +564,6 @@ function isCore(defId: string): boolean {
   return partDef(defId).kind === 'core';
 }
 
-// A carried part as a new instance at its clamped wear and HP. A junk part keeps the junk step.
 function carryPart(world: World, c: CarriedPart): PartInstance {
   const wear = Math.min(CONDITION.maxWear + 1, Math.max(0, Math.round(c.wear)));
   const part = makePart(world, c.defId, Math.min(wear, CONDITION.maxWear));
@@ -612,7 +573,6 @@ function carryPart(world: World, c: CarriedPart): PartInstance {
   return part;
 }
 
-// A built-in part takes the wear and HP of the carried one with the same id. A chassis without it has nothing to take.
 function carryCore(world: World, truck: Vehicle, c: CarriedPart, stay: boolean): void {
   const core = truck.items.find((it) => it.kind === 'part' && it.part.defId === c.defId);
   if (!stay || core?.kind !== 'part') return;
@@ -621,7 +581,6 @@ function carryCore(world: World, truck: Vehicle, c: CarriedPart, stay: boolean):
   carryHp(core.part, carried.hp);
 }
 
-// Puts a carried part on its spot. False when the spot is off the grid or taken.
 function placePart(world: World, truck: Vehicle, item: CarriedItem & { kind: 'part' }): boolean {
   const placed: GridItem = { id: newId(world, 'i'), kind: 'part', part: carryPart(world, item.part), x: item.x, y: item.y, rot: item.rot };
   if (placementError(gridOf(truck), truck.items, placed, placed.id)) return false;
@@ -629,7 +588,6 @@ function placePart(world: World, truck: Vehicle, item: CarriedItem & { kind: 'pa
   return true;
 }
 
-// Goods go back in the grid. Units with no room, or all of them when the chassis is gone, sell at base value.
 function carryGoods(world: World, truck: Vehicle, goods: Record<string, number>, stay: boolean, report: CarryReport): void {
   for (const [good, units] of Object.entries(goods)) {
     if (!(good in GOODS)) report.lost.push(good);

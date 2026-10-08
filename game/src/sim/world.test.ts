@@ -108,14 +108,12 @@ describe('the overdrive cutoff', () => {
   });
 });
 
-// The start truck's engine at full HP. The cutoff is a share of this worn max HP, not of the def HP.
 function stockHp(): number {
   return maxHp(mountedParts(playerVehicle(emptyWorld()), 'engine')[0]);
 }
 
 describe('the start kit', () => {
   it('gives every part the kit wear at full worn HP, built-in parts and storage included', () => {
-    // No opening, which starts some parts below full HP.
     const world = newWorld(7, { ...START_KITS.standard, storage: ['plates'], opening: null }, TEST_MAP, defaultSetup('roaming'), false);
     const parts = [...playerVehicle(world).items.flatMap((it) => (it.kind === 'part' ? [it.part] : [])), ...world.player.storage];
     expect(parts.some((p) => partDef(p.defId).kind === 'core')).toBe(true);

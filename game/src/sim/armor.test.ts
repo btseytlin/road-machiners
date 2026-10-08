@@ -16,7 +16,6 @@ const partAt = (v: Vehicle, x: number, y: number) =>
   mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const defOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
-// A scout with plates on the nose: a 3x1 plate at (2,0), the engine at (2,1)-(3,2) behind it and the cab behind that.
 function plated() {
   const w = emptyWorld();
   const v = addVehicle(w, 'raiders', 'scout', ['plates', 'stockEngine'], { x: 40, y: 40 });
@@ -50,7 +49,7 @@ describe('walkLane', () => {
   it('enters each side from its own edge', () => {
     const { w, v } = plated();
     const last = gridOf(v).h - 1;
-    const round = { damage: 1, pen: 2, blast: false, armorShare: 1 }; // the scout's edge cells are empty, so a round needs to pass one cell
+    const round = { damage: 1, pen: 2, blast: false, armorShare: 1 };
     expect(walkLane(w, v, 'front', 2, round)[0].part).toBe(partAt(v, 2, 0).id);
     expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 1, 1).id);
     expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 5, 1).id);
@@ -69,7 +68,6 @@ describe('walkLane', () => {
     const fresh = plated();
     const worn = plated();
     worn.plate.wear = 3;
-    // Large enough that a few percent of armor shows past whole-HP rounding.
     const round = { damage: 100, pen: 20, blast: false, armorShare: 1 };
     const freshHits = walkLane(fresh.w, fresh.v, 'front', 2, round);
     const wornHits = walkLane(worn.w, worn.v, 'front', 2, round);
@@ -236,7 +234,6 @@ describe('lane depth', () => {
 });
 
 describe('blast armor', () => {
-  // A scout with a rebar cage on the nose in front of its engine.
   function caged() {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', ['cage', 'stockEngine'], { x: 40, y: 40 });
@@ -263,8 +260,6 @@ describe('blast armor', () => {
   });
 });
 
-// The longbed's cab fills columns 3 to 5 of rows 3 and 4, with a deck row behind it and a deck pair at (5,1) and (5,2)
-// beside the engine. The courier's seat fills (2,5) and (3,5), with deck cells behind it.
 function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number; rot?: Rot }[]): Vehicle {
   const v = addVehicle(w, 'player', chassisId, ['stockEngine'], { x: 40, y: 40 });
   for (const [i, p] of parts.entries()) {
@@ -277,12 +272,10 @@ function itemOf(v: Vehicle, defId: string): GridItem {
   return mountedItems(v).find((it) => it.part.defId === defId)!;
 }
 
-// Spans rounded to a tenth of a degree, so angles from corner geometry compare as literals.
 function rounded(spans: FireSpan[]): FireSpan[] {
   return spans.map((s) => ({ from: Math.round(s.from * 10) / 10, to: Math.round(s.to * 10) / 10 }));
 }
 
-// Degrees off the nose of a grid offset from the gun's center to a cell corner.
 function cornerAngle(dx: number, dy: number): number {
   return (Math.atan2(dx, -dy) * 180) / Math.PI;
 }
@@ -290,14 +283,12 @@ function cornerAngle(dx: number, dy: number): number {
 describe('shadows of tall parts', () => {
   it('a gun in the bed cannot fire forward across the cab, however far it stands', () => {
     const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
-    // The gun's center is (4.5, 9). The cab's near corners are (3, 5) and (6, 5).
     const edge = cornerAngle(1.5, -4);
     expect(gunSpans(v, itemOf(v, 'mg'))).toEqual([{ from: -135, to: -edge }, { from: edge, to: 135 }]);
   });
 
   it('a heavy machine gun beside the cab loses the angles over the cab and keeps the rest', () => {
     const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'heavyMg', x: 1, y: 4 }]);
-    // The gun's center is (1.5, 5). The cab's corner (3, 3) starts its shadow, and its bottom edge at row 5 ends it.
     expect(gunSpans(v, itemOf(v, 'heavyMg'))).toEqual([{ from: -135, to: cornerAngle(1.5, -2) }, { from: 90, to: 135 }]);
   });
 
@@ -313,7 +304,6 @@ describe('shadows of tall parts', () => {
 
   it('a gun behind the hauler cab loses the slice the cab covers, off its own lane', () => {
     const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'mg', x: 2, y: 5 }]);
-    // The gun's center is (2.5, 6). The cab fills columns 5 and 6 of rows 1 to 3.
     expect(gunSpans(v, itemOf(v, 'mg'))).toEqual([{ from: -135, to: cornerAngle(2.5, -5) }, { from: cornerAngle(4.5, -2), to: 135 }]);
   });
 
@@ -386,7 +376,6 @@ describe('gun blockers', () => {
 });
 
 describe('gun layout', () => {
-  // Score = covered sides * (360 * guns + 1) + open degrees summed.
   it('scores a bed gun turned away from the cab above the same gun facing the cab', () => {
     const facingCab = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8 }]);
     const facingAway = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 4, y: 8, rot: 2 }]);

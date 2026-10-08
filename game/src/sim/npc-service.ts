@@ -21,15 +21,11 @@ import { isOnRope } from './tow';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 
-// ---- Service.
 
-// The sites that serve a stranded driver: its bases if it has any, else any town.
 export function servingSiteIds(profile: NpcProfile): string[] {
   return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
 }
 
-// A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
-// for. If that leaves it stranded, it lies up there for fresh gear. A driver already lying up was served.
 export function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   if (!parkedStranded(world, vehicle) || holdsRearm(vehicle)) return;
   const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
@@ -43,13 +39,10 @@ function parkedStranded(world: World, vehicle: Vehicle): boolean {
   return isStranded(world, vehicle) && !isOnRope(world, vehicle.id) && vehicle.speed <= RULES.parkedSpeed;
 }
 
-// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank. A stall
-// is no serving site.
 function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string): void {
   if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
 }
 
-// A driver that service leaves needing fresh gear lies up at the site, when the site serves it.
 export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
@@ -63,7 +56,6 @@ export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcAct
   } else finishGoal(world, vehicle, 'finished service');
 }
 
-// An oasis fills supplies, a camp serves raiders, a stall and a town garage serve in full.
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
   if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
@@ -72,9 +64,7 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
 
-// ---- The lie-up.
 
-// Defeated, stranded, or a raider unfit to hunt.
 function needsFreshGear(world: World, vehicle: Vehicle): boolean {
   return isDefeated(vehicle) || isStranded(world, vehicle) || (huntsPrey(vehicle) && !fitToHunt(world, vehicle));
 }
@@ -83,14 +73,12 @@ export function holdsRearm(vehicle: Vehicle): boolean {
   return vehicle.brain!.goals.some((g) => g.kind === 'rearm');
 }
 
-// The template's refill time: the turns its spawn site takes to regain a full cap.
 function rearmTurns(vehicle: Vehicle): number {
   const template = NPCS[vehicle.brain!.templateId];
   if (!template) throw new Error(`${vehicle.id} has unknown template ${vehicle.brain!.templateId}`);
   return template.cap * template.interval;
 }
 
-// Starts a lie-up at the site. It replaces a retreat home, and a lie-up already held keeps its until turn and spot.
 export function beginRearm(world: World, vehicle: Vehicle, site: Site): void {
   if (!servingSiteIds(npcProfile(vehicle)).includes(site.id)) throw new Error(`${vehicle.id} cannot lie up at ${site.id}`);
   const retreat = vehicle.brain!.goals.find((g) => g.kind === 'retreat');
@@ -100,8 +88,6 @@ export function beginRearm(world: World, vehicle: Vehicle, site: Site): void {
   pushGoal(world, vehicle, { kind: 'rearm', targetId: site.id, destination: lieUpSpot(world, vehicle, site), phase: 'travel', reason: 'lie up for fresh gear', until });
 }
 
-// A random free spot beyond the site's edge and off its pads that the driver can reach from where it stands. A
-// stranded driver cannot drive there, so it lies up where it stands, as does one that finds no such spot.
 function lieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec {
   if (isStranded(world, vehicle)) return { ...vehicle.pos };
   for (let i = 0; i < SPAWN.tries; i++) {
@@ -111,7 +97,6 @@ function lieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec {
   return { ...vehicle.pos };
 }
 
-// One random point in the ring around the site, or null when it is on a pad, crowded or out of reach.
 function tryLieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec | null {
   const { gap, spacing } = NPC_BEHAVIOR.lieUp;
   const radius = vehicleStats(world, vehicle).radius;
@@ -123,7 +108,6 @@ function tryLieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec | null {
   return dist(end, spot) <= RULES.arriveRadius ? spot : null;
 }
 
-// The driver lies up at its spot. A lie-up driven off by danger is not lying up until it is back.
 export function liesUp(vehicle: Vehicle): boolean {
   const top = topGoal(vehicle);
   return top?.kind === 'rearm' && dist(vehicle.pos, top.destination!) <= NPC_BEHAVIOR.lieUp.reach;
@@ -133,7 +117,6 @@ export function rearmInvalid(world: World, vehicle: Vehicle): string | null {
   return needsFreshGear(world, vehicle) ? null : 'fit again';
 }
 
-// Fresh gear comes only here, once the lie-up has lasted to its until turn.
 export function resolveRearm(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (activity.until === undefined) throw new Error(`${vehicle.id} lies up with no until turn`);
   if (!liesUp(vehicle)) return;

@@ -4,16 +4,12 @@
 
 import type { Weighted } from './npcs';
 
-// Lawmen light up the night and hook runners.
 const LAW_UTILITY: Weighted<string | null>[] = [
   { value: null, weight: 1.5 },
   { value: 'flareCannon', weight: 3 },
   { value: 'harpoon', weight: 3 },
 ];
 
-// Keyed by NPC template id. A utility is the usual outcome. The drivers who patch and tow others, scavengers, roamers
-// and convoys, favor the crane. Where a deck often has no room for a 1x2 part, a 1x1 utility is weighted up, so the
-// template still carries one.
 export const NPC_UTILITY_PARTS: Record<string, Weighted<string | null>[]> = {
   buggy: [{ value: null, weight: 1.5 }, { value: 'caltrops', weight: 3 }, { value: 'oilSpiller', weight: 1 }, { value: 'harpoon', weight: 1 }],
   gunwagon: [{ value: null, weight: 1.5 }, { value: 'harpoon', weight: 2 }, { value: 'caltrops', weight: 2 }],
@@ -26,7 +22,6 @@ export const NPC_UTILITY_PARTS: Record<string, Weighted<string | null>[]> = {
   vulture: [{ value: null, weight: 1.5 }, { value: 'harpoon', weight: 2 }, { value: 'caltrops', weight: 3 }, { value: 'scrapersKnife', weight: 1 }],
   convoy: [{ value: null, weight: 1.5 }, { value: 'patcherCrane', weight: 3 }, { value: 'sprout', weight: 1 }],
   convoyGuard: [{ value: null, weight: 1.5 }, { value: 'smokeMortar', weight: 2 }, { value: 'flareCannon', weight: 2 }, { value: 'sprout', weight: 1 }],
-  // Ship tech: few merc decks keep a 2x2 spot beside the main gun. When one does, the emitter is the likely pick.
   merc: [
     { value: null, weight: 1.5 },
     { value: 'harpoon', weight: 2 },

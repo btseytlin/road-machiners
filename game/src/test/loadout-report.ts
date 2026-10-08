@@ -18,16 +18,15 @@ import { moneyAmount } from '../ui/units';
 export type TemplateStats = {
   id: string;
   rolls: number;
-  levels: Record<GearLevel, number>; // share of rolls at each level
-  guns: number; // per truck
-  armor: number; // share of chassis edge cells armored
-  speed: number; // top speed as a share of the chassis top speed
-  spent: number; // list price of the mounted parts past the chassis and its core parts
+  levels: Record<GearLevel, number>;
+  guns: number;
+  armor: number;
+  speed: number;
+  spent: number;
 };
 
 let base: World | undefined;
 
-// One world to draw ids from, with its randomness reset per roll.
 function worldFor(seed: number): World {
   base ??= newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   return { ...base, vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };

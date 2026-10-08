@@ -18,8 +18,6 @@ await loadModels(async (name) => {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
 
-// The gun's drawn bearing off the truck heading in degrees, after aiming at a map bearing in degrees.
-// The scout has no two-wide deck spot, so a gun turned a quarter goes on the longbed's open deck at `spot`.
 function drawn(gun: string, headingDeg: number, aimDeg: number | null, rot: Rot = 0, spot?: { chassis: string; x: number; y: number }): number {
   const w = emptyWorld();
   const v = addVehicle(w, 'raiders', spot?.chassis ?? 'scout', [gun, 'stockEngine'], { x: 40, y: 40 }, headingDeg * DEG);

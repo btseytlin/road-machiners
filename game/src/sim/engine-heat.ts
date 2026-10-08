@@ -17,7 +17,6 @@ import type { PartInstance, Vehicle, World } from './types';
 import { isShutDown } from './utility';
 import { playerCommand } from './world';
 
-// The engine drives the truck: it moves and is not shut down by an emitter pulse. A shut-down engine cools as if parked.
 function enginePulls(world: World, me: Vehicle): boolean {
   return me.speed > RULES.parkedSpeed && !isShutDown(world, me);
 }
@@ -30,8 +29,6 @@ export function advanceEngineHeat(world: World): void {
   let next: number;
   if (enginePulls(world, me)) {
     const share = Math.min(1, me.speed / vehicleStats(world, me).maxSpeed);
-    // The engine and skill scale airflow cooling as much as sun heating, so every engine starts heating at the
-    // same sun heat, where the ground shimmers, and differs only in how fast.
     const rate = engineHeatMult(me) * (1 - skillEffect(world, me, 'machining', 'engineHeat'));
     next = before + rate * (ENGINE_HEAT.gain * (heat - 1) * share + overdriveGain(world, me) - ENGINE_HEAT.coolDriving);
   } else {
@@ -48,23 +45,19 @@ export function advanceEngineHeat(world: World): void {
   world.events.push({ t: 'info', text: `Engine overheated: engine -${ENGINE_HEAT.overheatDamage} HP` });
 }
 
-// Whether heat costs the player's engine HP this turn: full heat, driving, and a working engine to damage.
 export function engineOverheating(world: World): boolean {
   const me = playerVehicle(world);
   return world.player.engineHeat >= 1 && enginePulls(world, me) && heatedEngines(me).length > 0;
 }
 
-// The mounted engines that heat can still damage.
 function heatedEngines(v: Vehicle): PartInstance[] {
   return mountedParts(v).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
 }
 
-// Whether dousing would help: enough supplies and a warm engine.
 export function canDouse(world: World): boolean {
   return world.player.supplies >= ENGINE_HEAT.douseSupplies && world.player.engineHeat > 0;
 }
 
-// The player pours water from the supplies over the engine, which cools it at once.
 export function douseEngine(world: World): World {
   return playerCommand(world, (w) => {
     if (!canDouse(w)) throw new Error('Cannot douse: needs supplies and a warm engine');
@@ -74,14 +67,11 @@ export function douseEngine(world: World): World {
   });
 }
 
-// The player practices toughness each turn it drives in heat above shade, harder toward full noon sun. A heat wave
-// can pass full noon sun and counts as the hardest.
 function practiceHeat(world: World, speed: number, heat: number): void {
   if (speed <= RULES.parkedSpeed || heat <= 1) return;
   practice(world, 'heat', 1, Math.min(1, (heat - 1) / (TIME.sunHeat - 1)), regionOf(playerVehicle(world).pos));
 }
 
-// The sun heat the engine feels. The Desert rat perk caps the sun height, while practice still reads the real heat.
 function engineSunHeat(world: World, me: Vehicle, sunHeat: number): number {
   return vehicleHasPerk(world, me, 'desertRat') ? cappedHeatAt(world, me.pos, PERK_NUMBERS.desertRat.sunShare) : sunHeat;
 }
@@ -90,7 +80,6 @@ function overdriveGain(world: World, v: Vehicle): number {
   return inOverdrive(world, v) ? ENGINE_HEAT.overdriveGain : 0;
 }
 
-// How fast the sun heats the mounted engine. A truck with no engine has nothing to heat.
 function engineHeatMult(v: Vehicle): number {
   const engine = mountedParts(v, 'engine')[0];
   return engine ? wornDef<EngineDef>(engine).heat : 0;

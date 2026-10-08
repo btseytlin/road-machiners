@@ -130,7 +130,7 @@ describe('part cheats', () => {
 
   it('gives parts as spares and goods as cargo', () => {
     const start = emptyWorld();
-    removeAllGoods(playerVehicle(start)); // the start cargo fills most of the panniers row
+    removeAllGoods(playerVehicle(start));
     const w = give(give(start, 'plates', 1), 'salt', 2);
     const me = playerVehicle(w);
     expect(spareParts(me).map((p) => p.defId)).toContain('plates');
@@ -216,8 +216,6 @@ describe('frozen NPCs', () => {
   });
 
   it('keeps a hostile NPC from raising a radio call', () => {
-    // A hostile that judges the fight lost flees without a call, so it always fights back here. A mugger that
-    // attacks at once starts combat, which holds the demand call, so it always demands.
     forceOption('attacked', 'fightBack');
     forceOption('mugging', 'demand');
     const called = (frozen: boolean): boolean => {
@@ -241,7 +239,6 @@ describe('frozen NPCs', () => {
 });
 
 describe('instantMoveItem', () => {
-  // The player out in the field, in combat with a raider.
   function fighting(): World {
     const { w, id } = withSpawned(emptyWorld(), 'buggy', true);
     startCombat(w, playerVehicle(w), w.vehicles.find((v) => v.id === id)!);

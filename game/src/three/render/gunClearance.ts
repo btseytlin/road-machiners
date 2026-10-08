@@ -4,18 +4,12 @@
 import * as THREE from 'three';
 import type { FireSpan } from '../../sim/armor';
 
-// The head in its own space: +x along the barrel, y up, origin at the receiver.
-// core: the largest top view radius of the receiver and extra, which the head sweeps all the way round.
-// reach: the barrel tip's top view radius. halfWidth: the barrel's largest |z|. bottom: the head's lowest y.
 export type HeadShape = { core: number; reach: number; halfWidth: number; bottom: number };
 
-// An upright box in body space.
 export type Obstacle = { x0: number; x1: number; z0: number; z1: number; top: number };
 
 type Flat = { x: number; z: number };
 
-// Reads the shape from the head's meshes. muzzleX is where the barrel joins: vertices before it are receiver and extra.
-// Throws when the head has no barrel past the muzzle.
 export function headShape(head: THREE.Object3D, muzzleX: number): HeadShape {
   head.updateMatrixWorld(true);
   const shape: HeadShape = { core: 0, reach: 0, halfWidth: 0, bottom: Infinity };
@@ -40,12 +34,10 @@ export function headShape(head: THREE.Object3D, muzzleX: number): HeadShape {
   return shape;
 }
 
-// The yaws a head turns through: its fire spans if it turns and has any, else along its facing in degrees off the nose.
 export function sweepOf(spans: readonly FireSpan[], turns: boolean, facing = 0): readonly FireSpan[] {
   return turns && spans.length > 0 ? spans : [{ from: facing, to: facing }];
 }
 
-// True when a point can be inside the head at some yaw of the sweep.
 export function swept(p: Flat, pivot: Flat, shape: HeadShape, sweep: readonly FireSpan[]): boolean {
   const dx = p.x - pivot.x;
   const dz = p.z - pivot.z;
@@ -57,7 +49,6 @@ export function swept(p: Flat, pivot: Flat, shape: HeadShape, sweep: readonly Fi
   return sweep.some((s) => within(bearing, s, widen));
 }
 
-// True when a bearing, or the same bearing a turn either way, lies in the span widened by widen degrees.
 function within(bearing: number, span: FireSpan, widen: number): boolean {
   for (let turn = -360; turn <= 360; turn += 360) {
     const b = bearing + turn;
@@ -66,9 +57,8 @@ function within(bearing: number, span: FireSpan, widen: number): boolean {
   return false;
 }
 
-const GRID = 0.05; // meters between the points tried inside a box
+const GRID = 0.05;
 
-// The highest top plus gap of the obstacles that have a point the head sweeps over, or -Infinity.
 export function clearTop(pivot: Flat, shape: HeadShape, sweep: readonly FireSpan[], obstacles: readonly Obstacle[], gap: number): number {
   let best = -Infinity;
   for (const o of obstacles) {

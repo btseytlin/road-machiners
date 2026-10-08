@@ -53,7 +53,6 @@ const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
 
-// The start truck begins with every part rebuilt twice. This gives the same truck with every part new.
 const pristineAtBowl = () => {
   const w = startAtBowl();
   for (const part of mountedParts(w.vehicles[0])) {
@@ -62,7 +61,6 @@ const pristineAtBowl = () => {
   }
   return w;
 };
-// A longbed at Bowl, for trades bigger than the start scout's cargo room. Its money is back to the start amount.
 const longbedAtBowl = () => {
   const start = startAtBowl();
   const money = start.player.money;
@@ -717,7 +715,6 @@ describe("debt", () => {
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
     expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
     expect(() => repairAll(w)).toThrow(/money/);
-    // A chassis swap that costs nothing is still a purchase.
     w.player.money = -1;
     expect(() => buyChassis(w, "courier")).toThrow(/money/);
   });

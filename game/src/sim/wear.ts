@@ -30,7 +30,6 @@ function wearVehicle(world: World, v: Vehicle): void {
   const speedFactor = 1 + WEAR.speedWeight * v.speed;
   const weatherWear = weatherOn(world, v).wear;
   const oddsScale = distance * terrainWear * speedFactor * weatherWear;
-  // Wear never breaks the cab. Only a fight or a crash can knock the driver out.
   const cab = corePart(v, 'cab').id;
   const floor = (id: string): number => (id === cab ? 1 : 0);
 
@@ -51,7 +50,6 @@ function breakDown(world: World, v: Vehicle, oddsScale: number, floor: (id: stri
   world.events.push({ t: 'breakdown', vehicle: v.id, part: part.id });
 }
 
-// A failure takes the first engine or the transmission to 0 HP, so the truck strands.
 function failDrive(world: World, v: Vehicle, oddsScale: number): void {
   const engine = mountedParts(v, 'engine')[0];
   const working = [engine, corePart(v, 'transmission')].filter((p): p is PartInstance => p !== undefined && p.hp > 0);
@@ -62,7 +60,6 @@ function failDrive(world: World, v: Vehicle, oddsScale: number): void {
   world.events.push({ t: 'breakdown', vehicle: v.id, part: part.id });
 }
 
-// Distance driven this turn and the wear multiplier of the ground it crossed, weighted by distance.
 function trailWear(world: World, v: Vehicle): { distance: number; terrainWear: number } {
   let distance = 0;
   let weighted = 0;
@@ -73,7 +70,6 @@ function trailWear(world: World, v: Vehicle): { distance: number; terrainWear: n
   return { distance, terrainWear: distance > 0 ? weighted / distance : 0 };
 }
 
-// Each step of this turn's trail with its length in tiles and the ground under its middle.
 function trailSegments(world: World, v: Vehicle): { len: number; type: TerrainTypeId }[] {
   const trail = v.trail;
   const out: { len: number; type: TerrainTypeId }[] = [];
@@ -86,7 +82,6 @@ function trailSegments(world: World, v: Vehicle): { len: number; type: TerrainTy
   return out;
 }
 
-// Ground roughness from 0 on the smoothest ground to 1 on the roughest, read from the wear multipliers.
 const GROUND_WEARS = Object.values(TERRAIN_TYPES).map((t) => t.wear);
 const SMOOTHEST = Math.min(...GROUND_WEARS);
 const ROUGHEST = Math.max(...GROUND_WEARS);
@@ -95,8 +90,6 @@ function roughness(type: TerrainTypeId): number {
   return (TERRAIN_TYPES[type].wear - SMOOTHEST) / (ROUGHEST - SMOOTHEST);
 }
 
-// The player practices driving on tiles crossed off the smoothest ground, harder on rougher ground. A towed
-// truck is not driven.
 function practiceRoughGround(world: World): void {
   if (isTowed(world)) return;
   let tiles = 0;
@@ -110,13 +103,11 @@ function practiceRoughGround(world: World): void {
   if (tiles > 0) practice(world, 'roughTiles', tiles, weighted / tiles, regionOf(playerVehicle(world).pos));
 }
 
-// ---- Part condition.
 
 export function maxHp(part: PartInstance): number {
   return Math.round(partDef(part.defId).hp * worse(part.wear));
 }
 
-// The share of a stat a part keeps after `steps` wear steps, and the share a cost of it grows to.
 function worse(steps: number): number {
   return 1 - CONDITION.stepLoss * steps;
 }
@@ -125,7 +116,6 @@ function costlier(steps: number): number {
   return 1 + CONDITION.stepLoss * steps;
 }
 
-// The def with the part's worn max HP and job stat. The caller names the def type it knows the part has.
 export function wornDef<T extends PartDef>(part: PartInstance): T {
   const def = partDef(part.defId);
   const steps = part.wear;
@@ -150,19 +140,17 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
       return { ...def, hp, armor: def.armor * keep, blastArmor: def.blastArmor * keep } as T;
     case 'scanner':
       return { ...def, hp, range: def.range * keep } as T;
-    case 'utility': // a passive utility loses max HP only
+    case 'utility':
       return { ...def, hp, reload: wornReloadTurns(def.reload, steps) } as T;
-    default: // cargo and core parts lose max HP only
+    default:
       return { ...def, hp } as T;
   }
 }
 
-// A reload in turns after `steps` wear steps. Integer percent math, so 10 turns at one step is exactly 11.
 export function wornTurns(turns: number, steps: number): number {
   return Math.ceil((turns * (100 + CONDITION.reloadPercent * steps)) / 100);
 }
 
-// A passive utility has no reload to wear.
 function wornReloadTurns(reload: number | null, steps: number): number | null {
   return reload === null ? null : wornTurns(reload, steps);
 }
@@ -171,8 +159,6 @@ export function isJunk(part: PartInstance): boolean {
   return part.wear > CONDITION.maxWear;
 }
 
-// Lowers HP by `amount`, but not below `floor` and never upward. The drop to 0 adds one wear step.
-// A built-in core part stops at the last step: it cannot be swapped out, so it never turns to junk.
 export function damagePart(part: PartInstance, amount: number, floor: number): void {
   if (!(amount >= 0) || !(floor >= 0)) throw new Error(`Bad damage ${amount} with floor ${floor} on ${part.id}`);
   const wasWorking = part.hp > 0;
@@ -181,14 +167,12 @@ export function damagePart(part: PartInstance, amount: number, floor: number): v
   part.wear = partDef(part.defId).kind === 'core' ? Math.min(CONDITION.maxWear, part.wear + 1) : part.wear + 1;
 }
 
-// Lowers a fresh part to `share` of its max HP for a new game's start. It keeps at least 1 HP, so it adds no wear step.
 export function setStartHp(part: PartInstance, share: number): void {
   if (!(share > 0 && share <= 1)) throw new Error(`Start HP share ${share} for ${part.id} is outside (0, 1]`);
   if (part.hp !== maxHp(part)) throw new Error(`${part.id} is not fresh`);
   damagePart(part, part.hp - Math.round(maxHp(part) * share), 1);
 }
 
-// Raises HP to `hp`, capped at max HP. Throws for a junk part rising from 0 HP and for a restore that lowers HP.
 export function restorePart(part: PartInstance, hp: number): void {
   const next = Math.min(maxHp(part), hp);
   if (next < part.hp) throw new Error(`Restore of ${part.id} to ${hp} HP would lower it from ${part.hp}`);
@@ -196,13 +180,11 @@ export function restorePart(part: PartInstance, hp: number): void {
   part.hp = next;
 }
 
-// Sets HP for a part carried over from an old save, within 0 to max HP. A working part keeps at least 1 HP.
 export function carryHp(part: PartInstance, hp: number): void {
   const floor = isJunk(part) ? 0 : 1;
   part.hp = Math.min(maxHp(part), Math.max(floor, hp));
 }
 
-// A junk part goes back to the last wear step at full HP, once per part. The Rebuild perk's town garage work.
 export function rebuildJunk(part: PartInstance): void {
   const name = partDef(part.defId).name;
   if (!isJunk(part)) throw new Error(`${name} is not junk`);
@@ -212,14 +194,11 @@ export function rebuildJunk(part: PartInstance): void {
   part.hp = maxHp(part);
 }
 
-// The scrap patch raises a part to `share` of max HP. A junk part first goes back to the last wear step.
 export function scrapPatchPart(part: PartInstance, share: number): void {
   if (isJunk(part)) part.wear = CONDITION.maxWear;
   part.hp = Math.max(part.hp, Math.ceil(maxHp(part) * share));
 }
 
-// The wear factor applied to a part's base value, read off CONDITION.valueFactor. A fractional wear, as
-// from averaging several parts' wear steps, interpolates between the two steps it falls between.
 export function wearFactor(wear: number): number {
   const table = CONDITION.valueFactor;
   const lo = Math.min(Math.floor(wear), table.length - 1);
@@ -228,12 +207,10 @@ export function wearFactor(wear: number): number {
   return table[lo] * (1 - frac) + table[hi] * frac;
 }
 
-// Scrap value from mass alone, the sell floor for any part and the whole value of a junk part.
 export function scrapValue(part: PartInstance): number {
   return ECONOMY.scrapPerKg * partDef(part.defId).mass;
 }
 
-// A part's current worth: base value times the wear factor. Junk is worth its scrap value only.
 export function partValue(part: PartInstance): number {
   if (isJunk(part)) return scrapValue(part);
   return partDef(part.defId).value * wearFactor(part.wear);

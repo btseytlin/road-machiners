@@ -18,8 +18,6 @@ function bumped(def: Unpriced<PartDef>, field: string): Unpriced<PartDef> {
   return copy as Unpriced<PartDef>;
 }
 
-// A utility's priced stats: how long its effect lasts and how far it reaches, by its shot, its farthest point or
-// its radius.
 function bumpUtility(copy: Record<string, unknown>, field: 'turns' | 'reach'): void {
   const effect = copy.effect as Record<string, number>;
   const shot = copy.shot as { range: number } | undefined;
@@ -29,7 +27,6 @@ function bumpUtility(copy: Record<string, unknown>, field: 'turns' | 'reach'): v
   else effect.radius += 1;
 }
 
-// A passive utility has no priced stat. An oil spill's reach is the shared slick in OIL, not a stat of the part.
 function pricedStats(def: PartDef): string[] {
   if (def.kind === 'utility' && def.reload === null) return [];
   if (def.kind === 'utility' && def.effect.type === 'oil') return ['turns'];
@@ -69,9 +66,7 @@ describe('item prices', () => {
     expect(PARTS.tankMid.value).toBeLessThan(PARTS.tankHeavy.value);
   });
 
-  // These grids have more rows or columns than their models, so they count more deck cells for the same deck.
   const FINER_GRID = ['buggy', 'courier', 'jeep', 'wagon'];
-  // The carrier is an armored hull. Its price holds what it cost before the cab rules cut its deck to 18 cells.
   const KEPT_PRICE = ['carrier'];
 
   it('never prices a chassis with more deck cells below one of the same tier with fewer', () => {
@@ -119,7 +114,6 @@ describe('money in cents', () => {
   });
 });
 
-// Before money was cents, 1 money was a third of an M. XP bought with money pays the same for the same deal.
 describe('XP per money in cents', () => {
   const OLD_PER_CENT = 3 / 100;
 

@@ -242,7 +242,6 @@ const TABLES: WikiTable[] = [
 
 export const WIKI_TABLES: Record<string, WikiTable> = Object.fromEntries(TABLES.map((t) => [t.id, t]));
 
-// The src/data exports wiki prose may name by data path. Add one when prose needs it.
 export const WIKI_ROOTS: Record<string, unknown> = {
   RULES, ECONOMY, EFFORT, CONTRACTS, PRICE_FACTOR, DISTANCE_PREMIUM, PRESSURE_MAX,
   PART_PRICE_MODIFIERS, CHASSIS_PRICE_MODIFIERS, CONDITION, WEAR, REPAIR, PATCH, SALVAGE, STRIP,

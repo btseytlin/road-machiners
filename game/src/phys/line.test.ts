@@ -16,11 +16,8 @@ beforeAll(async () => {
 });
 
 const S = PHYSICS.metersPerTile;
-// A pace in tiles per turn whose throttle, at a standstill, is half of full.
 const HALF_THROTTLE = ((0.5 / PHYSICS.driver.throttleGain) * PHYSICS.turnSeconds) / S;
 
-// A parked truck with a harpoon and a target truck 3 tiles ahead of it, both facing east, held by a line that is just
-// taut. The target drives east at the given pace in tiles per turn, or as fast as it can, from the given speed.
 function tethered(opts: { pace?: number; from?: string; to?: string; speed?: number } = {}): { w: World; hauler: Vehicle; scout: Vehicle } {
   const w = emptyWorld();
   const hauler = addVehicle(w, 'traders', opts.from ?? 'hauler', ['stockEngine', 'harpoon'], { x: 30, y: 30 });
@@ -38,7 +35,6 @@ function tethered(opts: { pace?: number; from?: string; to?: string; speed?: num
   return { w, hauler, scout };
 }
 
-// Meters between the anchors on the ground plane, from the trucks' sim poses.
 function anchorGap(scout: Vehicle, hauler: Vehicle, line: LineAnchor): number {
   const at = (v: Vehicle, p: { x: number; z: number }) => ({
     x: v.pos.x * S + Math.cos(v.heading) * p.x - Math.sin(v.heading) * p.z,
@@ -49,8 +45,6 @@ function anchorGap(scout: Vehicle, hauler: Vehicle, line: LineAnchor): number {
   return Math.hypot(b.x - a.x, b.z - a.z);
 }
 
-// Plays turns of physics, carrying the drive from turn to turn, and applies each turn's result to the world.
-// Ages nothing, so only the pull ends the line. Returns each turn's result before its drive is freed.
 function play(w: World, turns: number, each: (r: TurnResult, turn: number) => void): void {
   let d: Drive = buildDrive(w);
   for (let i = 0; i < turns; i++) {
@@ -77,7 +71,6 @@ describe('harpoon line physics', () => {
     expect(w.lines).toHaveLength(1);
   });
 
-  // The braced harpoon keeps the scout's wheels on the ground, so its brakes hold it to a slow slide of a few tiles.
   it.each(['hauler', 'bus', 'tractor'])('lets a %s drag a braking scout away for the line\'s 10 turns', (to) => {
     const { w, hauler: scout } = tethered({ from: 'scout', to });
     const start = scout.pos.x;
@@ -117,7 +110,6 @@ describe('harpoon line physics', () => {
     expect(held.hp).toBe(hp - HARPOON.tearDamage);
   });
 
-  // At half throttle the scout pulls about 8 kN, which the 30000 N/m spring holds at well under a meter.
   it('holds a scout at half throttle within half a meter of its length', () => {
     const { w, hauler, scout } = tethered({ pace: HALF_THROTTLE });
     let worst = 0;
@@ -139,8 +131,6 @@ describe('harpoon line physics', () => {
     expect(worst).toBeLessThanOrEqual(0.5);
   });
 
-  // The shooter faces north with the target 3 tiles east of it, so the line runs across the shooter. `mover` drives
-  // away at full throttle: the target east along its length, or the shooter north across the target.
   function across(from: string, to: string, mover: 'target' | 'shooter', slack: number): { w: World; shooter: Vehicle; target: Vehicle } {
     const w = emptyWorld();
     const shooter = addVehicle(w, 'traders', from, ['stockEngine', 'harpoon'], { x: 30, y: 30 }, Math.PI / 2);
@@ -156,7 +146,6 @@ describe('harpoon line physics', () => {
     return { w, shooter, target };
   }
 
-  // Most tilt of a truck over the turns, in degrees from upright.
   function worstTilt(w: World, ids: string[], turns: number): Record<string, number> {
     const worst = Object.fromEntries(ids.map((id) => [id, 0]));
     play(w, turns, (r) => {

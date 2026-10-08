@@ -55,8 +55,6 @@ export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
 }
 
-// Sides at odds: a feud either way, or a raider against anyone else outside a truce.
-// A defeated NPC is nobody's foe until it refits at home. A truck on a tow rope is a foe only to its own tower.
 export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id || isOutOfFight(world, a, b)) return false;
   if (inFeud(world, a, b)) return true;
@@ -77,19 +75,16 @@ function inTruce(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "truce", a.id, b.id) !== null || stateOf(world, "truce", b.id, a.id) !== null;
 }
 
-// Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held or the vehicle is a lawman.
 export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
   if (!isFoe(world, a, b)) return false;
   if (inFeud(world, a, b) || isLawPair(a, b)) return true;
   return hasLoot(a.faction === "raiders" ? b : a);
 }
 
-// A raider sees a non-raider only for its loot: no feud and no lawman pair makes them foes.
 export function huntsForLoot(world: World, raider: Vehicle, target: Vehicle): boolean {
   return raider.faction === "raiders" && target.faction !== "raiders" && !inFeud(world, raider, target) && !isLawPair(raider, target);
 }
 
-// A lawman and a raider, either way round.
 function isLawPair(a: Vehicle, b: Vehicle): boolean {
   return (isLawman(a) && b.faction === "raiders") || (isLawman(b) && a.faction === "raiders");
 }
@@ -98,18 +93,14 @@ function isLawman(v: Vehicle): boolean {
   return v.brain?.traits.includes("lawman") === true;
 }
 
-// What a shot is fired from. Only its def counts.
 export type ShotSource = { def: WeaponDef };
-// A mounted shot source and where it can fire, its arc minus the shadows of the tall parts around it.
 export type AimedSource = ShotSource & { spans: FireSpan[]; facing: number };
 
 
-// The target lies in the gun's own arc and outside the shadows of the tall parts on the truck.
 export function inArc(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
   return inGunArc(shooter, mw, target) && clearOfTall(shooter, mw, target);
 }
 
-// The arc is centered on the way the gun faces, which turns with the truck.
 function inGunArc(shooter: Vehicle, src: AimedSource, target: Vehicle): boolean {
   const { arc } = src.def;
   if (arc >= 360) return true;
@@ -120,8 +111,6 @@ function clearOfTall(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolea
   return spansHold(mw.spans, angleDiff(shooter.heading, bearing(shooter.pos, target.pos)) / DEG);
 }
 
-// Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver and a truck an emitter
-// pulse shut down fire nothing. The player only shoots what it sees.
 export function fireBlock(
   world: World,
   shooter: Vehicle,
@@ -133,7 +122,6 @@ export function fireBlock(
   return weaponBlock(mw) ?? lineBlock(world, shooter, mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
 }
 
-// A gun with a line holds fire while its line is still out: its rope is on the other truck.
 function lineBlock(world: World, shooter: Vehicle, mw: MountedWeapon): FireBlock | null {
   const out = mw.def.line && world.lines.some((l) => l.from === shooter.id && l.fromPart === mw.part.id);
   return out ? "lineOut" : null;
@@ -147,21 +135,17 @@ function weaponBlock(mw: MountedWeapon): FireBlock | null {
   return null;
 }
 
-// The fire state of a weapon part. Every weapon part has one.
 export function gunOf(part: PartInstance): GunState {
   if (!part.gun) throw new Error(`Weapon part ${part.id} has no gun state`);
   return part.gun;
 }
 
-// Drops the rest of the magazine, so the gun reloads from empty.
 export function dropMagazine(part: PartInstance): void {
   const gun = gunOf(part);
   gun.ammo = 0;
   gun.reloadWork = 0;
 }
 
-// After the fire phase. Cooldown counts down. A gun that did not fire works one turn on its reload when it is empty
-// or was not cooling down this turn, and a full reload fills the magazine.
 function tickGuns(world: World, fired: Set<string>): void {
   for (const v of world.vehicles)
     for (const part of mountedParts(v, "weapon")) tickGun(part, fired.has(part.id));
@@ -184,8 +168,6 @@ function tickGun(part: PartInstance, fired: boolean): void {
   gun.reloadWork = 0;
 }
 
-// Why a gun cannot reach the target right now, or null. Two trucks on a radio call hold fire at
-// each other.
 export function targetBlock(world: World, shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock | null {
   if (onCall(world, shooter, target)) return "talking";
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
@@ -200,49 +182,44 @@ function arcBlock(shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock
 }
 
 export type HitOdds = {
-  chance: number; // per round, to hit the aimed part or, for a body shot, the truck; clamped to RULES.minHit and RULES.maxHit
-  bodyChance: number; // per round, to hit the truck anywhere; an aimed miss that lands on the truck hits where it lands
-  damageChance: number; // per round, to damage the aimed part, or for a body shot any part; the chance the player sees
-  distance: number; // meters
-  width: number; // meters the target, or the aimed part, shows across the line of fire
-  halfAngle: number; // radians
-  spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
+  chance: number;
+  bodyChance: number;
+  damageChance: number;
+  distance: number;
+  width: number;
+  halfAngle: number;
+  spread: number;
   causes: {
     weapon: number;
     range: number;
     crossing: number;
     own: number;
-    recoil: number; // the gun's kick, smaller on a heavier truck
+    recoil: number;
     skill: number;
     weather: number;
-    smoke: number; // the line from shooter to target touches a smoke cloud
-    still: number; // negative: a target standing still is easy to aim at
-  }; // radians
+    smoke: number;
+    still: number;
+  };
 };
 
 const M = PHYSICS.metersPerTile;
 const KG_PER_TONNE = 1000;
 
-// Tiles per turn to m/s.
 function mps(tilesPerTurn: number): number {
   return (tilesPerTurn * M) / PHYSICS.turnSeconds;
 }
 
-// Unit vector across the line of fire, to the shooter's right. Map heading grows toward +y, a right turn.
 function across(shooter: Vehicle, target: Vehicle): Vec {
   const b = bearing(shooter.pos, target.pos);
   return { x: -Math.sin(b), y: Math.cos(b) };
 }
 
-// Width in meters the body shows to the shooter: its length seen broadside, its width seen head-on.
 export function presentedWidth(shooter: Vehicle, target: Vehicle): number {
   const half = bodyOf(target.chassisId).half;
   const a = angleDiff(target.heading, bearing(shooter.pos, target.pos));
   return 2 * (Math.abs(half.x * Math.sin(a)) + Math.abs(half.z * Math.cos(a)));
 }
 
-// The lanes of a side spread evenly over the presented width. From the front and the right side, the shooter's
-// right falls on the low lanes: column 0 is the target's left, row 0 its nose. From the rear and left, on the high lanes.
 function laneSign(side: Side): number {
   return side === "front" || side === "right" ? -1 : 1;
 }
@@ -266,8 +243,6 @@ function laneCenter(
   return laneSign(side) * ((lane + 0.5) / lanes - 0.5) * width;
 }
 
-// Where a shot aims. A body shot aims at the center of the presented width. An aimed shot aims at the center
-// of its part's lane and has the part's width, from its cells across the struck side.
 type Aiming = {
   side: Side;
   lanes: number;
@@ -298,7 +273,6 @@ function aiming(shooter: Vehicle, target: Vehicle, aim: Aim): Aiming {
   };
 }
 
-// Abramowitz and Stegun 7.1.26, error below 1.5e-7.
 function erf(x: number): number {
   const t = 1 / (1 + 0.3275911 * Math.abs(x));
   const y =
@@ -315,7 +289,6 @@ function rawChance(o: Pick<HitOdds, "halfAngle" | "spread">): number {
   return erf(o.halfAngle / (o.spread * Math.SQRT2));
 }
 
-// Chance a round aimed at center, with offset error sd in meters, lands between lo and hi.
 function landChance(
   center: number,
   sd: number,
@@ -330,8 +303,6 @@ function landChance(
   );
 }
 
-// Chance to hit the truck anywhere. A round that misses the part by the Gaussian draw still hits when it lands on
-// the body, unless the clamp roll turned that miss into a part hit. Rounds the clamp turns into misses land off the truck.
 function bodyChanceOf(
   a: Aiming,
   o: Pick<HitOdds, "chance" | "halfAngle" | "spread" | "distance">,
@@ -350,7 +321,6 @@ function bodyChanceOf(
   return o.chance + (1 - promoted) * (onBody - onBoth);
 }
 
-// F2. A round hits when its angular error is smaller than the target's half-angle as seen from the gun.
 export function hitOdds(
   world: World,
   shooter: Vehicle,
@@ -376,8 +346,6 @@ export function hitOdds(
   return { ...odds, damageChance };
 }
 
-// The chance one round of a body shot lands on the target, as hitOdds() gives it, without walking the parts in the
-// way. Cheap enough to judge many spots a turn.
 export function bodyHitChance(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): number {
   const halfAngle = aiming(shooter, target, "body").width / (2 * shotDistance(shooter, target));
   const spread = totalSpread(mw.def, spreadCauses(world, shooter, mw.def, target));
@@ -396,9 +364,6 @@ function totalSpread(shot: WeaponDef, causes: HitOdds["causes"]): number {
   return spread;
 }
 
-// F3. The chance one round damages what it aims at: the aimed part, or for a body shot any part of the target.
-// It follows the fire phase exactly. Rounds enter lanes as rollAim() and landRound() send them, each lane walks as
-// walkLane() does, and splash lands as explode() does. So parts in the way and lost pen lower the chance.
 type Reach = {
   world: World;
   shooter: Vehicle;
@@ -419,7 +384,6 @@ function reachesAim(c: Reach, hits: { part: PartInstance; amount: number }[]): b
   return hits.some((h) => wholeDamage(h.amount) > 0 && (c.aim === "body" || h.part.id === c.aim));
 }
 
-// Gaussian odds and the clamp's two corrections: promoted misses become hits, and kept hits stay hits.
 function clampShares(o: Spread): { raw: number; promoted: number; keep: number } {
   const raw = rawChance(o);
   return {
@@ -429,16 +393,12 @@ function clampShares(o: Spread): { raw: number; promoted: number; keep: number }
   };
 }
 
-// Offsets across the line of fire, in meters, that fall in a lane.
 function laneSpan(a: Aiming, lane: number): [number, number] {
   const c = laneCenter(a.side, a.body, a.lanes, lane);
   const half = a.body / a.lanes / 2;
   return [c - half, c + half];
 }
 
-// The chance a round enters each lane of the target. An aimed hit enters the aimed lane, and an aimed miss that
-// lands on the truck enters the lane under it. A body hit enters the lane under it, and a promoted body hit lands
-// anywhere on the truck with even odds.
 function laneEntries(o: Spread, a: Aiming): number[] {
   const sd = o.spread * o.distance;
   const half = o.halfAngle * o.distance;
@@ -453,25 +413,20 @@ function laneEntries(o: Spread, a: Aiming): number[] {
   return entries;
 }
 
-// A round that enters a lane walks it, as a crit or not, and its splash lands on the lane's face.
 function laneReach(c: Reach, lane: number): number {
   if (splashReaches(c, lanePoint(c.target, c.a.side, lane), lane)) return 1;
   const walks = (crit: boolean) => Number(reachesAim(c, planLane(c.target, c.a.side, lane, directRound(c.world, c.round, crit))));
   return (1 - RULES.critChance) * walks(false) + RULES.critChance * walks(true);
 }
 
-// Whether a round exploding at this point splashes the aim. skip is the lane the round itself entered.
 function splashReaches(c: Reach, point: Vec, skip: number | null): boolean {
   if (c.round.splashRadius <= 0) return false;
   const { side, lanes } = blastLanes(c.target, point, c.round.splashRadius);
   return lanes.some((lane) => lane !== skip && reachesAim(c, planLane(c.target, side, lane, splashRound(c.world, c.round))));
 }
 
-// Splash reach changes only where a lane face enters the blast radius. This many steps per side keeps each step a
-// few centimeters wide, far under a lane, so the sum is exact to well under a percent.
 const OFF_TRUCK_STEPS = 64;
 
-// A round that misses the truck can still splash it. Beyond the truck's corners plus the blast radius it cannot.
 function offTruckReach(c: Reach, o: Spread): number {
   if (c.round.splashRadius <= 0) return 0;
   const half = bodyOf(c.target.chassisId).half;
@@ -486,8 +441,6 @@ function offTruckReach(c: Reach, o: Spread): number {
   return sum;
 }
 
-// The chance a round lands off the truck at an offset between x0 and x1 on one side. Misses land where they strayed.
-// A clamped-away hit lands past the edge by its distance from the aim point, as rollAim() pushes it.
 function offTruckChance(o: Spread, a: Aiming, sign: number, x0: number, x1: number): number {
   const sd = o.spread * o.distance;
   const half = o.halfAngle * o.distance;
@@ -501,7 +454,6 @@ function offTruckChance(o: Spread, a: Aiming, sign: number, x0: number, x1: numb
   return missed + pushed;
 }
 
-// A miss off the truck explodes where it lands, or strays into another truck and explodes on one of its lanes.
 function missReach(c: Reach, offset: number): number {
   const miss = missPoint(c.shooter.pos, c.target.pos, offset);
   const own = Number(splashReaches(c, miss, null));
@@ -520,8 +472,6 @@ function strayReach(c: Reach, candidates: { value: Vehicle; weight: number }[]):
   }, 0);
 }
 
-// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away. A target that
-// stands still takes a share off the whole spread, so a stuck or parked truck is easy to hit.
 function spreadCauses(world: World, shooter: Vehicle, shot: WeaponDef, target: Vehicle): HitOdds["causes"] {
   const weapon = shot.spread * DEG;
   const n = across(shooter, target);
@@ -545,9 +495,6 @@ function spreadCauses(world: World, shooter: Vehicle, shot: WeaponDef, target: V
   return { ...base, still };
 }
 
-// One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
-// Gaussian draw decides, so a miss lands where it strayed. When the clamp moved the chance, an extra roll turns some
-// hits into misses that land off the truck, or some misses into hits, so rounds hit exactly as often as hitOdds says.
 function rollRound(world: World, o: HitOdds, a: Aiming): Roll {
   return { ...rollAim(world, o, a), crit: chance(world, RULES.critChance) };
 }
@@ -573,7 +520,6 @@ function rollAim(
   return { hit, error };
 }
 
-// crit applies only when the round lands on the truck: it multiplies damage and pen by the crit rules.
 type Roll = { hit: boolean; error: number; crit: boolean };
 type Shot = {
   shooter: Vehicle;
@@ -585,7 +531,6 @@ type Shot = {
   rolls: Roll[];
 };
 
-// All rounds of the turn are rolled before any damage lands, so fire is simultaneous.
 export function fireWeapons(world: World): void {
   const shots: Shot[] = [];
   for (const shooter of world.vehicles) {
@@ -612,11 +557,9 @@ export function fireWeapons(world: World): void {
     }
   }
   for (const s of shots) applyShot(world, s);
-  // Cooldown counts down at the end of the fire phase, so cooldown 1 means ready every turn.
   tickGuns(world, new Set(shots.map((s) => s.mw.part.id)));
 }
 
-// A shot takes one round from the magazine and starts the cooldown. The last round pushes an empty event.
 function spendShot(world: World, s: Shot): void {
   const gun = gunOf(s.mw.part);
   gun.cooldown = s.mw.def.cooldown;
@@ -625,8 +568,6 @@ function spendShot(world: World, s: Shot): void {
   if (gun.ammo === 0) world.events.push({ t: "empty", vehicle: s.shooter.id, weapon: s.mw.part.id });
 }
 
-// A shot counts as an attack on its target even when it misses: the target and witnesses saw it fired at them.
-// Every other truck its rounds damage takes unintended damage, which noteStray() judges.
 function applyShot(world: World, s: Shot): void {
   spendShot(world, s);
   noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
@@ -639,8 +580,6 @@ function applyShot(world: World, s: Shot): void {
   world.events.push(event);
 }
 
-// A gun with a line ties it where its first round to strike the target landed (heldPart), even when the round's pen
-// ran out before the part, since the barbs catch on whatever they reach.
 function tieLine(world: World, s: Shot, rounds: ShotRound[]): void {
   const line = s.mw.def.line;
   const k = rounds.findIndex((r) => r.struck === s.target.id);
@@ -650,7 +589,6 @@ function tieLine(world: World, s: Shot, rounds: ShotRound[]): void {
   if (held) attachLine(world, { from: s.shooter, fromPart: s.mw.part.id, to: s.target, toPart: held.id }, line.turns);
 }
 
-// Part hits of a shot per truck, direct and blast.
 export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   const out = new Map<string, PartHit[]>();
   const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
@@ -661,7 +599,6 @@ export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   return out;
 }
 
-// Every part hit of this turn per truck, from shots, collisions and claymore blasts.
 export function turnPartHits(world: World): Map<string, PartHit[]> {
   const out = new Map<string, PartHit[]>();
   const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
@@ -677,10 +614,6 @@ function eventHits(e: GameEvent): [string, PartHit[]][] {
   return [];
 }
 
-// The truck that beat v: the source that dealt v the most part damage this turn, the earliest first on a tie. A shot
-// counts for its shooter, a crash for the other truck, a claymore blast for the ram's owner and caltrops for the truck
-// that dropped them. With no damage this turn,
-// as when wear broke the cab, it is the last damage source. The one rule for kill credit.
 export function beatenBy(world: World, v: Vehicle): string {
   vehicleById(world, v.id);
   let best: string | null = null;
@@ -694,7 +627,6 @@ export function beatenBy(world: World, v: Vehicle): string {
   return best ?? v.lastHitBy ?? "unknown";
 }
 
-// Part damage dealt to one truck this turn per source, in the order each source first damaged it.
 function damageBySource(world: World, id: string): Map<string, number> {
   const out = new Map<string, number>();
   for (const e of world.events) {
@@ -707,14 +639,12 @@ function damageBySource(world: World, id: string): Map<string, number> {
 
 type Blow = { source: string; hits: PartHit[] };
 
-// The source and part hits of one event on a truck.
 function blowOn(world: World, e: GameEvent, id: string): Blow | null {
   if (e.t === "shot") return { source: e.shooter, hits: hitsOn(e, id) };
   if (e.t === "collision") return crashBlowOn(world, e, id);
   return utilityBlowOn(e, id);
 }
 
-// A claymore blast counts for the ram's owner on the other truck, and caltrops for the truck that dropped them.
 function utilityBlowOn(e: GameEvent, id: string): Blow | null {
   if (e.t === "claymore") return e.other === id ? { source: e.vehicle, hits: e.hits } : null;
   return e.t === "caltrops" && e.vehicle === id ? { source: e.source, hits: e.hits } : null;
@@ -724,7 +654,6 @@ function hitsOn(e: { rounds: ShotRound[] }, id: string): PartHit[] {
   return shotDamage(e).get(id) ?? [];
 }
 
-// A crash counts for the other truck. A crash into the ground or an obstacle has no source.
 function crashBlowOn(world: World, e: Extract<GameEvent, { t: "collision" }>, id: string): Blow | null {
   if (e.b === id) return { source: e.a, hits: e.hitsB };
   if (e.a !== id || !isTruckId(world, e.b)) return null;
@@ -741,7 +670,6 @@ function vehicleById(world: World, id: string): Vehicle {
   return v;
 }
 
-// Where a round landed: the truck it struck and the lane it entered, or the ground.
 type Landing = { struck: Vehicle | null; lane: number | null; hits: PartHit[]; point: Vec };
 
 function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
@@ -753,16 +681,12 @@ function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
   return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast, burst };
 }
 
-// An exploding round that struck no truck bursts on the ground at the point explode() splashed, and digs a crater
-// there if it is made to. Any other round has no burst point.
 function burstPoint(world: World, r: WeaponDef["round"], landing: Landing): Vec | null {
   if (landing.struck !== null || r.splashRadius <= 0) return null;
   if (r.craterRadius > 0) digCrater(world, landing.point, r.craterRadius);
   return { ...landing.point };
 }
 
-// A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
-// the lane under its offset. A miss off the truck may stray into another truck near the line of fire.
 function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const lane = enteredLane(s.aiming, roll, offset);
   if (lane === null) return strayRound(world, s, missPoint(s.shooter.pos, s.target.pos, offset));
@@ -770,14 +694,11 @@ function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   return { struck: s.target, lane, hits, point: lanePoint(s.target, s.aiming.side, lane) };
 }
 
-// The target's lane a round enters, or null when it lands off the truck.
 function enteredLane(a: Aiming, roll: Roll, offset: number): number | null {
   if (!roll.hit && Math.abs(offset) >= a.body / 2) return null;
   return roll.hit && a.lane !== null ? a.lane : laneOfOffset(a.side, a.body, a.lanes, offset);
 }
 
-// The round that walks the lane it landed in. A crit multiplies its damage and pen. The world's Damage setting scales
-// every round after its rolls.
 function directRound(world: World, r: WeaponDef["round"], crit: boolean): Round {
   const k = crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
   return { damage: r.damage * k.damage * RULES.weaponDamage * damageScale(world), pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare };
@@ -787,12 +708,10 @@ function splashRound(world: World, r: WeaponDef["round"]): Round {
   return { damage: r.splashDamage * RULES.weaponDamage * damageScale(world), pen: r.splashPen, blast: true, armorShare: r.armorShare };
 }
 
-// The damage of one round of the weapon that is not a crit, in this world. The UI shows it.
 export function roundDamage(world: World, def: WeaponDef): number {
   return directRound(world, def.round, false).damage;
 }
 
-// A stray round enters a random lane of the side facing the shooter, with its full damage and pen.
 function strayRound(world: World, s: Shot, miss: Vec): Landing {
   const victim = strayVictim(world, s, miss);
   if (!victim) return { struck: null, lane: null, hits: [], point: miss };
@@ -803,16 +722,12 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
   return { struck: victim, lane, hits, point: lanePoint(victim, side, lane) };
 }
 
-// Where a round that missed the truck lands: beside the target, at its offset across the line of fire.
 export function missPoint(from: Vec, target: Vec, offset: number): Vec {
   if (from.x === target.x && from.y === target.y) throw new Error('missPoint needs a shooter apart from its target');
   const b = bearing(from, target);
   return { x: target.x - (Math.sin(b) * offset) / M, y: target.y + (Math.cos(b) * offset) / M };
 }
 
-// Trucks other than shooter and target whose center lies within reach of the line of fire, which runs from the
-// shooter through the miss point and on by reach. The stray chance is rolled only when one exists, and nearer
-// trucks to the line weigh more.
 function strayVictim(world: World, s: Shot, miss: Vec): Vehicle | null {
   const candidates = strayCandidates(world, s.shooter, s.target, miss);
   if (candidates.length === 0 || !chance(world, s.mw.def.stray)) return null;
@@ -829,7 +744,6 @@ function strayCandidates(world: World, shooter: Vehicle, target: Vehicle, miss: 
     .filter((c) => c.weight > 0);
 }
 
-// How far a point lies from the line from a along dir for len tiles, or Infinity past either end.
 function lineOffset(a: Vec, dir: Vec, len: number, p: Vec): number {
   const rel = { x: p.x - a.x, y: p.y - a.y };
   const along = rel.x * dir.x + rel.y * dir.y;
@@ -837,8 +751,6 @@ function lineOffset(a: Vec, dir: Vec, len: number, p: Vec): number {
   return Math.abs(rel.x * dir.y - rel.y * dir.x);
 }
 
-// A round with a splash radius explodes where it lands. Every truck with a lane center within the radius takes
-// splash in those lanes on the side facing the blast. The lane a direct hit entered takes no extra splash.
 function explode(world: World, r: WeaponDef["round"], landing: Landing): VehicleHits[] {
   if (r.splashRadius <= 0) return [];
   const out: VehicleHits[] = [];
@@ -850,15 +762,11 @@ function explode(world: World, r: WeaponDef["round"], landing: Landing): Vehicle
   return out;
 }
 
-// One truck's share of a blast at p: the round walks each of its lanes on the side facing p whose face center lies
-// within radius meters, except skip. The caller judges the attack.
 export function blastTruck(world: World, v: Vehicle, p: Vec, radius: number, round: Round, skip: number | null): PartHit[] {
   const { side, lanes } = blastLanes(v, p, radius);
   return lanes.filter((lane) => lane !== skip).flatMap((lane) => walkLane(world, v, side, lane, round));
 }
 
-// The player practices perception from each round that hits as rolled, harder at a lower hit chance. A miss
-// that lands on the truck anyway does not count.
 function practiceHits(world: World, s: Shot): void {
   if (s.shooter.id !== world.player.vehicleId) return;
   const hits = s.rolls.filter((roll) => roll.hit).length;
@@ -874,47 +782,37 @@ function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, targ
   );
 }
 
-// An escort of the target that sees the shooter defends the target wherever it is.
 function escortSees(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   return stateOf(world, "escort", v.id, target.id) !== null && canVehicleSee(world, v, shooter.pos);
 }
 
-// Starts the combat state from aggressor to target, or sets its timer back to full. A refresh keeps the state's id and
-// born, so its end check still runs every turn.
 function engage(world: World, aggressor: Vehicle, target: Vehicle): void {
   const held = stateOf(world, "combat", aggressor.id, target.id);
   if (held) held.turnsLeft = STATE_TURNS.combat;
   else addState(world, "combat", aggressor.id, target.id, { kind: "none" });
 }
 
-// True while the aggressor holds a combat state toward the target: the holder of a combat state is the aggressor.
 export function fightsAgainst(world: World, aggressor: Vehicle, target: Vehicle): boolean {
   return stateOf(world, "combat", aggressor.id, target.id) !== null;
 }
 
-// True while v is on either side of a combat state. The one combat test: a hostile in sight is only a warning.
 export function inCombat(world: World, v: Vehicle): boolean {
   return world.states.some((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id));
 }
 
-// True when a combat state holds a and b, in either order.
 export function inCombatWith(world: World, a: Vehicle, b: Vehicle): boolean {
   return world.states.some((s) => s.kind === "combat" && ((s.holder === a.id && s.other === b.id) || (s.holder === b.id && s.other === a.id)));
 }
 
-// True when v is in combat with some truck other than otherId.
 export function inCombatWithOther(world: World, v: Vehicle, otherId: string): boolean {
   return world.states.some((s) => s.kind === "combat" && ((s.holder === v.id && s.other !== otherId) || (s.other === v.id && s.holder !== otherId)));
 }
 
-// The most turns any of v's combat states has left, or null when v is not in combat.
 export function combatTurnsLeft(world: World, v: Vehicle): number | null {
   const left = world.states.filter((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id)).map((s) => s.turnsLeft ?? 0);
   return left.length > 0 ? Math.max(...left) : null;
 }
 
-// An NPC on a top fight goal that sees a hostile target is hunting it, even before its first shot. It runs after the
-// goals resolve, so the calls at the end of the turn see it.
 export function noteEngagements(world: World): void {
   for (const v of world.vehicles) {
     const target = huntedTarget(world, v);
@@ -922,28 +820,21 @@ export function noteEngagements(world: World): void {
   }
 }
 
-// The target of v's top fight goal, if v is a live NPC on one.
 function fightTargetId(v: Vehicle): string | null {
   const top = v.brain?.goals.at(-1);
   return top?.kind === "fight" && !isKnockedOut(v) ? top.targetId ?? null : null;
 }
 
-// True when a and b hold a combat state in either direction, or a live NPC among them has its top fight goal on the
-// other, seen or not.
 export function engagedWith(world: World, a: Vehicle, b: Vehicle): boolean {
   return fightsAgainst(world, a, b) || fightsAgainst(world, b, a) || fightTargetId(a) === b.id || fightTargetId(b) === a.id;
 }
 
-// The hostile truck v hunts on a top fight goal and sees, if any.
 function huntedTarget(world: World, v: Vehicle): Vehicle | null {
   const id = fightTargetId(v);
   const target = id ? world.vehicles.find((t) => t.id === id) : undefined;
   return target && isHostile(world, v, target) && canVehicleSee(world, v, target.pos) ? target : null;
 }
 
-// A shot, hit or miss, marks its shooter as an attacker of the target, of faction mates nearby that see both, and of
-// escorts of the target that see the shooter. Each NPC decides once on the latest shots. Hidden targets are not
-// broadcast.
 function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   engage(world, shooter, target);
   for (const observer of world.vehicles) {
@@ -956,9 +847,6 @@ function learnsAttack(world: World, observer: Vehicle, shooter: Vehicle, target:
   return observer.id === target.id || witnessesAttack(world, observer, shooter, target) || escortSees(world, observer, shooter, target);
 }
 
-// The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
-// and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
-// An NPC attacked by a truck it had a deal with wants revenge on it.
 export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
   recordAttack(world, attacker, victim);
   if (!calm) return;
@@ -967,10 +855,6 @@ export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, cal
   callLawmen(world, attacker, victim);
 }
 
-// Damage a shot dealt to trucks other than its target. A foe of the shooter was attacked and fights back. A faction
-// mate or deal partner of the shooter, like a convoy's own guard, forgives it. Any other NPC sums the unintended
-// damage in a strayFire state, and past RULES.stray.feudDamage takes it as an attack. The player decides its own
-// hostility, and a shooter caught in its own blast blames nobody.
 function noteStray(world: World, s: Shot, e: { rounds: ShotRound[] }): void {
   for (const [id, hits] of shotDamage(e)) {
     if (id === s.target.id || id === s.shooter.id) continue;
@@ -984,7 +868,6 @@ export function judgeStray(world: World, shooter: Vehicle, victim: Vehicle, dama
   else if (victim.brain && !sidesWith(world, victim, shooter)) sumStray(world, shooter, victim, damage);
 }
 
-// Trucks of one faction, or with a deal between them, stand on one side.
 function sidesWith(world: World, a: Vehicle, b: Vehicle): boolean {
   return a.faction === b.faction || boundTo(world, a.id, b.id);
 }
@@ -1000,8 +883,6 @@ function sumStray(world: World, shooter: Vehicle, victim: Vehicle, damage: numbe
   noteAttack(world, shooter, victim, true);
 }
 
-// Aggression against a neutral NPC, one outside the raiders, calls every lawman that sees both trucks. Each starts
-// a feud with the aggressor. Lawmen do not protect the player.
 export function callLawmen(world: World, aggressor: Vehicle, victim: Vehicle): void {
   if (!victim.brain || victim.faction === "raiders") return;
   for (const v of world.vehicles) {
@@ -1016,10 +897,6 @@ function answersCall(world: World, v: Vehicle, aggressor: Vehicle, victim: Vehic
   return canVehicleSee(world, v, aggressor.pos) && canVehicleSee(world, v, victim.pos);
 }
 
-// A crash damages both sides, and the event does not name a striker. A slow bump deals no damage and counts for
-// nothing. Between hostiles, each damaged side was attacked by the other. Between trucks at peace, a crash is
-// most likely an accident: each damaged NPC holds a grievance and decides later whether to forgive it. A tower and
-// the truck it tows or offers to tow never attack each other by contact.
 export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
   if (towPair(world, a, b)) return;
   const calm = !isHostile(world, a, b);
@@ -1035,8 +912,6 @@ function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
 }
 
-// The target and the drivers that stand by it start a feud with the shooter. The shooter never feuds itself, even as
-// a faction mate of its target.
 export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
     if (v.id === shooter.id || !joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
@@ -1045,17 +920,12 @@ export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): voi
   }
 }
 
-// The target, its faction mates nearby that see the shooter, and its escorts that see the shooter. The player
-// decides its own hostility.
 function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   if (v.faction === "player") return false;
   if (v.id === target.id || escortSees(world, v, shooter, target)) return true;
   return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
-// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. A cab below half may knock the
-// driver out first, and that never kills. Health at 0 kills it, and so
-// does a shot that damages it while it is defeated. The player's broken cab is a knockout in src/sim/defeat.ts.
 export function resolveDestroyed(world: World): void {
   const shot = damagedByShots(world);
   for (const v of world.vehicles.filter((x) => x.faction !== "player")) {
@@ -1067,8 +937,6 @@ export function resolveDestroyed(world: World): void {
   settleAims(world);
 }
 
-// Keeps every weapon order readable. An order whose target is gone ends. An aim at a part that left its target is a
-// body shot, since the truck the order chose is still there. Readers stay strict and throw on a missing part.
 export function settleAims(world: World): void {
   for (const v of world.vehicles) {
     for (const [wid, order] of Object.entries(v.weaponOrders)) {
@@ -1079,7 +947,6 @@ export function settleAims(world: World): void {
   }
 }
 
-// The defeated state is checked before the cab, since a knocked-out truck lies with a broken cab.
 function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
   if (getResources(world, v).health <= 0) return "dies";
   if (isDefeated(v)) return shot.has(v.id) ? "dies" : null;
@@ -1094,7 +961,6 @@ function brokenCabFate(world: World): "dies" | "knockedOut" {
   return chance(world, RULES.npcDeathChance) ? "dies" : "knockedOut";
 }
 
-// Vehicles that took damage from a gun this turn.
 function damagedByShots(world: World): Set<string> {
   const hurt = new Set<string>();
   for (const e of world.events) {
@@ -1104,8 +970,6 @@ function damagedByShots(world: World): Set<string> {
   return hurt;
 }
 
-// The truck leaves the world as a wreck obstacle with a stock of what it carried. The wreck is the truck's chassis as a
-// hulk, where and how it lay when it died.
 export function wreckVehicle(world: World, v: Vehicle): void {
   const by = beatenBy(world, v);
   createWreckSalvage(world, v);
@@ -1125,7 +989,6 @@ export function wreckVehicle(world: World, v: Vehicle): void {
   });
 }
 
-// Kill wrecks are pushed in order, so the first ones found are the oldest.
 function clearOldWrecks(world: World): void {
   const kills = world.obstacles.filter((o) => o.id.startsWith("wreck-"));
   const drop = new Set(
@@ -1139,8 +1002,6 @@ function clearOldWrecks(world: World): void {
   }
 }
 
-// An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
-// goals. A robber is no defender: its victim's return fire does not let it shoot once the robbery is off its goals.
 function canNpcEngage(world: World, v: Vehicle, target: Vehicle): boolean {
   if (!v.brain) return true;
   if (target.id in v.brain.attackers && !robs(world, v, target)) return true;
@@ -1157,8 +1018,6 @@ function opensFireOn(goals: NpcActivity[], target: Vehicle): boolean {
   return top?.kind === 'fight' && top.targetId === target.id;
 }
 
-// Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
-// only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);

@@ -23,7 +23,6 @@ import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { budget } from '../test/budget';
 import { defaultSetup } from './settings';
 
-// A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
   ...CHASSIS.scout,
   id: 'tiny',
@@ -43,7 +42,6 @@ function describeLoadout(v: Vehicle): string {
   return JSON.stringify({ chassis: v.chassisId, parts: mountedParts(v).map((p) => p.defId), goods: v.items.filter((i) => i.kind === 'good').map((i) => i.good) });
 }
 
-// The value of a loadout's mounted, non-core parts: what its gear money bought.
 const gearCost = (parts: { defId: string }[]) => parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
 
 describe('NPC equipment generation', () => {
@@ -78,7 +76,6 @@ describe('NPC equipment generation', () => {
     }
   });
 
-  // A copy of a template with some of its priorities changed.
   const withPriorities = (template: NpcTemplate, change: Partial<LoadoutPriorities>): NpcTemplate => ({ ...template, loadout: { ...template.loadout, priorities: { ...template.loadout.priorities, ...change } } });
   const rolled = (template: NpcTemplate, level: GearLevel | null, seed: number): Vehicle => {
     const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
@@ -91,12 +88,9 @@ describe('NPC equipment generation', () => {
     for (let seed = 1; seed <= ROLLS; seed++) total += of(rolled(template, level, seed));
     return total / ROLLS;
   };
-  // The guns a driver chose to carry. The harpoon is gear from its utility roll, not one of its guns.
   const guns = (v: Vehicle) => mountedItems(v, 'weapon').filter((item) => !(partDef(item.part.defId) as WeaponDef).line).length;
-  // The share of the chassis edge cells that carry armor.
   const edgeCells = (v: Vehicle) => baseGrid(v.chassisId).cells.flat().filter((cell) => cell === 'F' || cell === 'L' || cell === 'R' || cell === 'B').length;
   const coverage = (v: Vehicle) => mountedItems(v, 'armor').reduce((sum, item) => sum + itemCells(item).length, 0) / edgeCells(v);
-  // The top speed on the truck's worn engine with its gear, in calm weather.
   const topSpeed = (v: Vehicle) => vehicleStats(fixture, v).maxSpeed;
 
   describe('loadout priorities', () => {
@@ -155,7 +149,6 @@ describe('NPC equipment generation', () => {
     expect(turned).toBeGreaterThan(0);
   }, budget(120_000));
 
-  // Wagons on worn heavy diesels spawned barely faster than a crawl and could not patrol or reach a stranded truck.
   it.each(Object.values(NPCS))('keeps $id at MIN_NPC_SPEED on its worn engine at every gear level', (template) => {
     for (const level of GEAR_LEVEL_IDS) {
       for (let seed = 1; seed <= 3; seed++) {
@@ -167,7 +160,6 @@ describe('NPC equipment generation', () => {
     }
   }, budget(120_000));
 
-  // A floor met by handing out fresh engines would make every NPC engine worth stripping.
   it('rolls engine wear by the same odds as other parts', () => {
     const wears = Object.values(NPCS).flatMap((template) => Array.from({ length: 8 }, (_, i) => mountedParts(rolled(template, 'standard', i + 1), 'engine')[0].wear));
     const table = GEAR_LEVELS.standard.wear;
@@ -177,7 +169,6 @@ describe('NPC equipment generation', () => {
   }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
-    // The first roll whose speed floor holds fewer tools than its free cells, so the floor is what stops the load.
     const rolls = Array.from({ length: 20 }, (_, i) => {
       const world = { ...structuredClone(fixture), rngState: i + 1 };
       const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
@@ -228,7 +219,6 @@ describe('NPC equipment generation', () => {
     for (let attempt = 0; attempt < Math.max(...Object.values(NPCS).map((t) => t.cap)) + 2; attempt++) {
       for (const template of Object.values(NPCS)) world.spawnTimer[template.id] = 1;
       spawnNpcs(world);
-      // Spawned drivers leave the gates before the next round, as they drive off in play.
       world.vehicles.filter((v) => v.brain).forEach((v, i) => { v.pos = { x: 5 + (i % 40) * 4, y: world.size - 5 - Math.floor(i / 40) * 4 }; });
     }
     for (const template of Object.values(NPCS)) {
@@ -311,9 +301,7 @@ describe('trader spare parts', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
-    // A plate mounts only on edge cells, so on a free deck cell it is a spare.
     template.loadout.spares = { pool: [{ value: 'steelPlate', weight: 1 }], count: [{ value: 2, weight: 1 }] };
-    // A poor truck carries the least armor, which leaves rated mass for spares.
     const loadout = generateNpcLoadout({ ...fixture, rngState: 5 }, template, null, 'poor');
     expect(loadout.spares.length).toBeGreaterThan(0);
     for (const spare of loadout.spares) {
@@ -329,7 +317,6 @@ describe('trader spare parts', () => {
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
     const heaviest = Object.values(PARTS).filter((d) => d.kind !== 'core').reduce((a, d) => (d.mass > a.mass ? d : a));
-    // More of the heaviest part than any buggy can hold.
     const count = Math.ceil(CHASSIS.buggy.ratedMass / heaviest.mass);
     template.loadout.spares = { pool: [{ value: heaviest.id, weight: 1 }], count: [{ value: count, weight: 1 }] };
 
@@ -376,8 +363,6 @@ describe('spawned NPCs', () => {
     const npcs = world.vehicles.filter((v) => v.brain !== null);
     const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
     expect(parts.some((p) => p.wear > 0)).toBe(true);
-    // A world rolls about five traders, and a trader often carries no spare, so one world may roll none. Four worlds
-    // roll about twenty.
     const traders = [1, 2, 3, 4].flatMap((seed) => newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).vehicles.filter((v) => v.brain?.templateId === 'trader'));
     expect(traders.some((v) => v.items.some((it) => it.kind === 'part' && !isMounted(v.chassisId, it)))).toBe(true);
   });
@@ -407,8 +392,6 @@ describe('NPC loadout tables', () => {
     }
   });
 
-  // A refit keeps the driver's chassis. A chassis with no engine that holds MIN_NPC_SPEED at its most worn wear
-  // would throw in play. The poor level wears most and has the least gear money.
   it('every chassis in every table holds the speed floor on its most worn engine', () => {
     for (const tpl of Object.values(NPCS)) {
       for (const { value } of tpl.loadout.chassis) {
@@ -448,7 +431,6 @@ describe('raider gear levels', () => {
   });
 });
 
-// Swaps a template's utility pool until the test ends.
 function withUtilityPool(templateId: string, pool: Weighted<string | null>[]): void {
   const saved = NPC_UTILITY_PARTS[templateId];
   NPC_UTILITY_PARTS[templateId] = pool;
@@ -499,7 +481,6 @@ describe('NPC utility parts', () => {
     expect(shares.reduce((sum, share) => sum + share, 0) / shares.length).toBeGreaterThanOrEqual(0.5);
   }, budget(120_000));
 
-  // Small neighboring seeds roll alike at first, so the sample spans 80 of them.
   it('mounts the claymore ram on some gunwagons', () => {
     let rams = 0;
     for (let seed = 1; seed <= 80; seed++) rams += generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.gunwagon).parts.filter((p) => p.defId === 'claymoreRam').length;

@@ -29,7 +29,6 @@ function duel(targetPos = { x: 33, y: 30 }) {
   return { w, me, buggy, mg };
 }
 
-// The player's scout swapped for a hauler with a forward cannon on deck beside its cab, where the cannon can fire forward.
 function cannonHauler(w: World): Vehicle {
   const old = w.vehicles[0];
   const v = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], old.pos, old.heading);
@@ -44,7 +43,7 @@ function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
 
 describe('combat', () => {
   it('does not fire out of range', () => {
-    const { w, me, buggy, mg } = duel({ x: 44, y: 30 }) // 14 tiles: past the gun's 13.5, still in sight;
+    const { w, me, buggy, mg } = duel({ x: 44, y: 30 })
     order(me, mg.part.id, buggy.id);
     fireWeapons(w);
     expect(w.events.filter((e) => e.t === 'shot')).toHaveLength(0);
@@ -197,7 +196,6 @@ describe('combat', () => {
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {
-      // A raider radios its demand first. Refusing keeps the fight.
       if (world.player.call) world = chooseOption(world, currentOptions(world).findIndex((o) => o.text === 'Come and get it.'));
       world = endTurn(world, testDrive);
       if (world.events.some((e) => e.t === 'shot' && e.shooter === buggy.id && e.target === me.id)) shotAt = true;
@@ -209,7 +207,6 @@ describe('combat', () => {
 type Shot = Extract<GameEvent, { t: 'shot' }>;
 const shotsBy = (events: GameEvent[], id: string) => events.filter((e): e is Shot => e.t === 'shot' && e.shooter === id);
 
-// Player at (30, 30) facing +x, a buggy `d` tiles ahead. Heading PI / 2 shows its left side, PI its nose.
 function range(d: number, heading: number, speed = 0) {
   const { w, me, buggy, mg } = duel({ x: 30 + d, y: 30 });
   buggy.heading = heading;
@@ -217,7 +214,6 @@ function range(d: number, heading: number, speed = 0) {
   return { w, me, buggy, mg };
 }
 
-// The player on a scout with one gun, and a whole target truck d tiles ahead that never loses HP.
 function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
   const w = emptyWorld();
   const old = w.vehicles[0];
@@ -229,7 +225,6 @@ function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
   return { w, me, target, gun: vehicleStats(w, me).weapons[0] };
 }
 
-// Fires many shots and checks the share of rounds that damage the aim, directly or by splash, against damageChance.
 function expectShownChance(t: ReturnType<typeof aimTest> & { aim: string }) {
   const { w, me, target, gun, aim } = t;
   const shown = hitOdds(w, me, gun, target, aim).damageChance;
@@ -386,7 +381,7 @@ describe('rounds', () => {
   it('rounds hit as often as the odds say', () => {
     const { w, me, buggy, mg } = range(5, Math.PI / 2, 5);
     me.speed = 3;
-    for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
+    for (const p of mountedParts(buggy)) p.hp = 1e9;
     order(me, mg.part.id, buggy.id);
     const p = hitOdds(w, me, mg, buggy, 'body').chance;
     let hits = 0;
@@ -405,8 +400,8 @@ describe('rounds', () => {
 
   it('an aimed miss that lands on the truck hits the lane where it landed', () => {
     const { w, me, buggy, mg } = range(4, Math.PI);
-    for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
-    const wheel = mountedItems(buggy).find((it) => it.x === 1 && it.y === 1)!.part; // front left, lane 1 from the front
+    for (const p of mountedParts(buggy)) p.hp = 1e9;
+    const wheel = mountedItems(buggy).find((it) => it.x === 1 && it.y === 1)!.part;
     order(me, mg.part.id, buggy.id, wheel.id);
     const odds = hitOdds(w, me, mg, buggy, wheel.id);
     expect(odds.bodyChance).toBeGreaterThan(odds.chance);
@@ -422,7 +417,6 @@ describe('rounds', () => {
         rounds++;
         if (!r.hit) continue;
         hits++;
-        // A round in an empty armor column lane grazes the skin and hits no part.
         if (r.hits.length > 0) struck.add(r.hits[0].part);
       }
     }
@@ -468,10 +462,8 @@ describe('rounds', () => {
 
   it('a hit lands on the lane under its offset', () => {
     const n = 4;
-    // Seen from behind, the shooter's right is the target's right, the high columns.
     expect(laneOfOffset('rear', 1.9, n, 0.9)).toBe(n - 1);
     expect(laneOfOffset('rear', 1.9, n, -0.9)).toBe(0);
-    // Seen from the front, the shooter's right is the target's left, column 0.
     expect(laneOfOffset('front', 1.9, n, 0.9)).toBe(0);
     expect(laneOfOffset('front', 1.9, n, -0.9)).toBe(n - 1);
   });
@@ -577,7 +569,7 @@ describe('NPC attack records and defensive fire', () => {
       w.events = [];
       raider.weaponOrders = { [mountedParts(raider, 'weapon')[0].id]: { targetId: target.id, aim: 'body' } };
       raider.pos = { x: target.pos.x + 4, y: target.pos.y };
-      raider.heading = Math.PI; // the machine gun's 270 degree arc has a blind spot behind, so the raider faces the target
+      raider.heading = Math.PI;
       fireWeapons(w);
       expect(w.events.some((e) => e.t === 'shot' && e.target === target.id)).toBe(true);
       getResources(w, target).health = RULES.maxHealth;
@@ -615,7 +607,6 @@ describe('NPC attack records and defensive fire', () => {
     expect(aimed()).toEqual([prey.id]);
   });
 
-  // A robber that gave up its robbery is no defender: the victim's return fire does not reopen its guns.
   it('a robber off its robbery holds its fire even after its victim shoots back', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const gate = siteGates(REGION.towns[0])[0];
@@ -633,7 +624,7 @@ describe('NPC attack records and defensive fire', () => {
 
   it('a truck that fires at a trader at a town gate takes no damage from the gate', () => {
     const gate = siteGates(REGION.towns[0])[0];
-    const w = emptyWorld({ x: gate.x - 3, y: gate.y }); // facing the trader at the gate
+    const w = emptyWorld({ x: gate.x - 3, y: gate.y });
     const me = w.vehicles[0];
     const trader = addVehicle(w, 'traders', 'scout', ['stockEngine'], { ...gate });
     const mg = vehicleStats(w, me).weapons[0];
@@ -703,7 +694,6 @@ describe('aim perks', () => {
     expect(hitOdds(w, buggy, gun, me, 'body').causes.own).toBe(before.causes.own);
   });
 
-  // A storm over both trucks.
   const storm = (w: World) => {
     w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 100, born: w.turn - 100 }];
     settleStorms(w);
@@ -729,7 +719,6 @@ describe('aim perks', () => {
 });
 
 describe('recoil and shake', () => {
-  // A tank gun on the given chassis, facing a buggy 5 tiles ahead.
   function tankGunOn(chassisId: string) {
     const w = emptyWorld();
     const shooter = addVehicle(w, 'player', chassisId, ['stockEngine', 'tankGun'], { x: 60, y: 60 });
@@ -763,7 +752,6 @@ describe('recoil and shake', () => {
 });
 
 describe('weapon damage multiplier', () => {
-  // A cannon on a hauler fires at a sturdy buggy from the given RNG state. Returns the damage of each part hit.
   function dealt(mult: number, rngState: number): number[] {
     const saved = RULES.weaponDamage;
     (RULES as { weaponDamage: number }).weaponDamage = mult;
@@ -781,10 +769,7 @@ describe('weapon damage multiplier', () => {
     }
   }
 
-  // Each hit rounds to whole HP, so each can differ from the exact half by up to 0.5.
   it('scales every hit by the one multiplier', () => {
-    // The first RNG state from 1 whose shot lands, so both multipliers roll the same hits. A shot that
-    // misses a sturdy buggy at 4 tiles in a thousand states in a row fails the length check below.
     let state = 1;
     while (state < 1000 && dealt(1, state).length === 0) state++;
     const full = dealt(1, state);
@@ -830,7 +815,6 @@ describe('betrayal', () => {
 });
 
 describe('who beat a truck', () => {
-  // A raider one hit from breaking its cab, with the player and a Bowl Farmers lawman both firing at it.
   function sharedFight(seed: number) {
     const { w, me, buggy, mg } = duel();
     w.rngState = seed;
