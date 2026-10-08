@@ -2,18 +2,18 @@
 // screens: a part or truck with icon stats and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
-import { RULES } from "../data/rules";
 import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
-import type { GridItem, PartInstance, Vehicle } from "../sim/types";
+import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
 import { GOODS } from "../data/goods";
 import { itemTone } from "../render/partLooks";
 import { hashStr } from "../render/noise";
 import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
+import { roundDamage } from "../sim/combat";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -134,8 +134,6 @@ export function createIcon(name: IconName): HTMLElement {
   return icon;
 }
 
-// The needle's share of the dial. A truck with no top speed, as one shut down by an emitter pulse, shows full while
-// it rolls and empty at rest.
 export function dialShare(speed: number, maxSpeed: number): number {
   if (maxSpeed <= 0) return speed === 0 ? 0 : 1;
   return Math.min(Math.abs(speed) / maxSpeed, 1);
@@ -148,16 +146,11 @@ export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   return dial;
 }
 
-// ---- Item icons: cells of the sprite sheets that npm run icons renders from the game's models. See docs/art.md.
-
 type Sheet = "items" | "chassis";
 type View = "top" | "diagonal";
 
-// A share of a cell: x, y, w, h.
 export type Box = { x: number; y: number; w: number; h: number };
 
-// Where one icon sits on its sheet, as a share of the sheet: col and row of cols and rows cells. box is the share of
-// the cell that holds its drawn pixels, and view how npm run icons drew it.
 export type IconCell = {
   sheet: Sheet;
   label: string;
@@ -200,14 +193,9 @@ function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCe
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-// Items are vector blueprints, so they stay sharp at any slot size. Chassis portraits are toon renders.
 const SHEET_FILES: Record<Sheet, string> = { items: "items.svg", chassis: "chassis.png" };
-// The sheets' URLs carry the manifest's hash, so a browser never pairs a cached old sheet with a new manifest, which
-// would put every icon in the wrong cell.
 const SHEET_VERSION = hashStr(JSON.stringify(ICONS)).toString(36);
 
-// The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
-// crop: the share of the cell to show.
 function sheetIcon(cell: IconCell, cls: string, crop: Box): HTMLElement {
   const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
   const svg = document.createElementNS(SVG_NS, "svg");
@@ -227,7 +215,6 @@ function sheetIcon(cell: IconCell, cls: string, crop: Box): HTMLElement {
   return icon;
 }
 
-// A part's or good's icon, upright and cropped to its drawing, on its tone, named for screen readers and on hover.
 export function createItemIcon(id: string): HTMLElement {
   const cell = itemIconCell(id);
   const icon = sheetIcon(cell, "icon item-icon", cell.box);
@@ -235,7 +222,6 @@ export function createItemIcon(id: string): HTMLElement {
   return icon;
 }
 
-// The inline style that gives an item's box, chip, icon or card its category tone. The stylesheet reads --tone.
 export function toneStyle(id: string): string {
   return `--tone:#${ITEM_TONES[itemTone(id)].toString(16).padStart(6, "0")}`;
 }
@@ -248,20 +234,16 @@ export function itemIconEl(item: GridItem): HTMLElement {
   return item.kind === "good" ? createItemIcon(item.good) : partIconEl(item.part);
 }
 
-// An item's icon in its inventory grid box, upright and fit to the box whatever the item's rotation.
 export function gridItemIcon(item: GridItem): HTMLElement {
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
   return sheetIcon(cell, "icon item-icon", cell.box);
 }
 
-// A truck seen as the shop shows it, beside its grid, cropped to its drawing. The stylesheet gives every truck one box,
-// and the drawing fits inside it.
 export function chassisPortrait(chassisId: string): HTMLElement {
   const cell = chassisPortraitCell(chassisId);
   return sheetIcon(cell, "chassis-portrait", cell.box);
 }
 
-// One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.
 export function statGrid(diffs: StatDiff[]): HTMLElement {
   return el(
     "div",
@@ -279,7 +261,6 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
   );
 }
 
-// The part's cells before rotation, drawn small.
 export function footprint(w: number, h: number): HTMLElement {
   return el(
     "div",
@@ -298,30 +279,45 @@ export function conditionMeter(part: PartInstance): HTMLElement {
   );
 }
 
-// A part's wear in its tier color. Only a pristine part gets the star. Null for a built-in part.
 export function conditionTag(part: PartInstance): HTMLElement | null {
   if (!showsCondition(part)) return null;
   const tier = conditionTier(part);
   return el("span", { class: `cond cond-${tier}` }, ...(tier === "pristine" ? [createIcon("star")] : []), wearLabel(part));
 }
 
-// The row under a part's head: its wear on the left, whether it works on the right. Null for a built-in part.
 export function conditionRow(part: PartInstance): HTMLElement | null {
   if (!showsCondition(part)) return null;
   const status = conditionStatus(part);
   return el("div", { class: "card-cond" }, conditionTag(part), el("span", { class: status.tone }, status.text));
 }
 
+export function headlineStat(world: World, part: PartInstance, base: PartInstance | null): StatDiff {
+  const first = diffStats(partStats(world, part), base ? partStats(world, base) : null)[0];
+  if (!first) throw new Error(`${part.defId} has no stats to headline`);
+  return first;
+}
+
+export function statChip(d: StatDiff): HTMLElement {
+  return el(
+    "span",
+    { class: "stat-chip", title: d.stat.label },
+    createIcon(d.stat.icon),
+    el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+    d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
+  );
+}
+
 export type PartCardOptions = {
+  world: World;
   part: PartInstance;
-  base: PartInstance | null; // the part it is weighed against, or null for plain stats
+  base: PartInstance | null;
   action: HTMLElement | null;
   onHover?: (on: boolean) => void;
 };
 
 export function partCard(o: PartCardOptions): HTMLElement {
   const def = partDef(o.part.defId);
-  const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
+  const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
   const card = el(
     "div",
     { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
@@ -346,18 +342,25 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-// The part a shop card is weighed against: the item the player selected. With nothing selected, or the card
-// showing that same part, the card shows plain stats.
+export function partDetail(world: World, part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
+  const diffs = diffStats(partStats(world, part), base ? partStats(world, base) : null);
+  return [
+    conditionRow(part),
+    ...(base ? [compareLine(base)] : []),
+    conditionMeter(part),
+    statGrid(diffs),
+    el("div", { class: "card-foot" }, el("span"), action),
+  ].filter((n): n is HTMLElement => n !== null);
+}
+
 export function compareBase(selected: PartInstance | null, part: PartInstance): PartInstance | null {
   return selected && selected.id !== part.id ? selected : null;
 }
 
-// What the changes in the stat table are against.
 function compareLine(base: PartInstance): HTMLElement {
   return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name} `, conditionTag(base));
 }
 
-// A truck's grid seen from above, nose up, one colored square per cell.
 export function chassisMap(chassisId: string): HTMLElement {
   const g = baseGrid(chassisId);
   return el(
@@ -371,8 +374,6 @@ function cellClass(c: Cell | null): string {
   if (c === null) return "hole";
   return `c-${c === "." ? "plain" : c}`;
 }
-
-// ---- Stats.
 
 export type StatIcon =
   | "damage"
@@ -405,7 +406,6 @@ export type StatIcon =
   | "tall"
   | "clock";
 
-// better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
   icon: StatIcon;
   label: string;
@@ -432,25 +432,22 @@ function signed(value: number, decimals: number): string {
   return `${value < 0 ? "−" : "+"}${formatNumber(Math.abs(value), decimals)}`;
 }
 
-// The few stats that decide a part's job and weakness, most important first, with its wear applied.
-// The condition meter already shows HP.
-export function partStats(part: PartInstance): Stat[] {
+export function partStats(world: World, part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](world, part), stat("mass", "Mass", def.mass, "kg", "less")];
 }
 
-const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
+const KIND_STATS: Record<PartKind, (world: World, part: PartInstance) => Stat[]> = {
   weapon: weaponStats,
-  engine: engineStats,
-  armor: armorStats,
-  cargo: cargoStats,
-  scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
-  store: storeStats,
+  engine: (_, part) => engineStats(part),
+  armor: (_, part) => armorStats(part),
+  cargo: (_, part) => cargoStats(part),
+  scanner: (_, part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  store: (_, part) => storeStats(part),
   core: () => [],
-  utility: utilityStats,
+  utility: (_, part) => utilityStats(part),
 };
 
-// A passive utility shows only its mass.
 function utilityStats(part: PartInstance): Stat[] {
   const d = wornDef<UtilityDef>(part);
   const reload = d.reload === null ? [] : [stat("reload", "Turns to recharge", d.reload, "t", "less")];
@@ -458,7 +455,6 @@ function utilityStats(part: PartInstance): Stat[] {
   return [...reload, ...utilityReach(d), ...lasts];
 }
 
-// How far a utility sends its effect, the length of its oil slick, or the radius it covers around the truck.
 function utilityReach(d: UtilityDef): Stat[] {
   const e = d.effect;
   if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
@@ -477,12 +473,10 @@ function cargoStats(part: PartInstance): Stat[] {
   return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
 }
 
-// Blast rounds meet an armor part's blast armor instead of its plain armor.
 function penStat(d: WeaponDef): Stat {
   return { ...stat("pen", "Penetration", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
 }
 
-// Tall parts stand higher than a gun, so guns cannot fire across them.
 function tallStat(d: PartDef): Stat {
   return { ...stat("tall", "Height", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
 }
@@ -491,9 +485,9 @@ function partDefOf<T>(part: PartInstance): T {
   return partDef(part.defId) as T;
 }
 
-function weaponStats(part: PartInstance): Stat[] {
+function weaponStats(world: World, part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const round = d.round.damage * RULES.weaponDamage;
+  const round = roundDamage(world, d);
   const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
   if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [
@@ -542,7 +536,6 @@ function fieldRepairStat(repair: FieldRepair): Stat {
   return { ...stat("patch", r.label, r.rank, "", "more"), text: r.text };
 }
 
-// A truck's own numbers, without parts.
 export function chassisStats(chassisId: string): Stat[] {
   const c = chassisDef(chassisId);
   const turning = stat("turning", "Turning",(c.turnFast + c.turnSlow) / 2, "°", "more");
@@ -557,7 +550,6 @@ export function chassisStats(chassisId: string): Stat[] {
   ];
 }
 
-// Each stat against the stat with the same icon in base. With no base, or no such stat, delta is null.
 export function diffStats(stats: Stat[], base: Stat[] | null): StatDiff[] {
   return stats.map((s) => {
     const b = base?.find((x) => x.icon === s.icon);
@@ -572,7 +564,6 @@ function verdictOf(delta: number, better: Stat["better"]): Verdict {
   return (delta > 0) === (better === "more") ? "better" : "worse";
 }
 
-// The mounted part a spare of this kind is weighed against: the most valuable one on the truck.
 export function baselinePart(v: Vehicle, kind: PartKind): PartInstance | null {
   return [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a))[0] ?? null;
 }

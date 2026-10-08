@@ -19,5 +19,5 @@ Commit, then run `npm run itch`. Butler uploads only the changed files, and the 
 
 ## Notes
 
-- Saves live in the browser storage of the itch.io game domain, so players keep them across versions. The `?` menu shows the version as `x.y.z+commit`, where the commit matches the upload name.
+- Saves live in the browser storage of the itch.io game domain, so players keep them across versions. The Help entry of the Menu shows the version as `x.y.z+commit`, where the commit matches the upload name.
 - The debug console with cheats opens in every build.

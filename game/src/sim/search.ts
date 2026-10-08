@@ -14,23 +14,18 @@ import type { Job, SalvageStock, Vehicle, World } from './types';
 import { hasWorkingUtility } from './utility';
 import { playerCommand } from './world';
 
-// The world's stream for search reveals, so a search never shifts combat, NPC or shop randomness.
 const SEARCH_SALT = 0x73656172;
 
 export function searchStream(seed: number): Rng {
   return { rngState: seed ^ SEARCH_SALT };
 }
 
-// Turns a search needs: the stock's hidden units at unitsPerTurn a turn, or its revealed units when nothing is hidden,
-// cut by the player's machining.
 function estimateTurns(world: World, v: Vehicle, stock: SalvageStock): number {
   const units = hiddenUnits(stock) || salvageUnits(stock);
   const cut = 1 - skillEffect(world, v, 'machining', 'search');
   return Math.max(1, Math.ceil((units / SALVAGE.unitsPerTurn) * cut));
 }
 
-// Mutates a draft world: starts a search job at the given stock. Shared by the player command and NPCs. A pile
-// takes a fixed number of turns.
 export function beginSearch(world: World, v: Vehicle, stockId: string): void {
   const stock = world.salvage.find((entry) => entry.id === stockId);
   if (!stock) throw new Error(`Unknown salvage ${stockId}`);
@@ -47,7 +42,6 @@ export function startSearch(world: World, stockId: string): World {
   });
 }
 
-// A truck nudged out of reach while it searches, like a blocked one creeping on toward its order, stops the search.
 export function isSearchStalled(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
   const stock = world.salvage.find((entry) => entry.id === job.stockId);
   return !!stock && !canReachSalvage(v, stock);
@@ -63,7 +57,6 @@ export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: '
   return true;
 }
 
-// One turn of looking: a working scraper raises the reveal chance. The player hears of each find.
 function revealFor(world: World, v: Vehicle, stock: SalvageStock): void {
   const found = revealTurn(world, stock, hasWorkingUtility(v, 'scraper') ? SEARCH.scraperReveal : SEARCH.reveal);
   if (foundAny(found) && v.id === world.player.vehicleId) world.events.push({ t: 'found', vehicle: v.id, stock: stock.id, ...found });

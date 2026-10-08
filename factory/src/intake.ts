@@ -7,7 +7,6 @@ type MarkRules = { minVotes: number; minAgeHours: number; committee: string[] };
 
 const HOUR_MS = 3_600_000;
 
-// An issue is marked when it is old enough and has enough thumbs-up or one from the committee.
 export function isMarked(issue: Issue, now: Date, rules: MarkRules): boolean {
   const ageHours = (now.getTime() - new Date(issue.createdAt).getTime()) / HOUR_MS;
   if (ageHours < rules.minAgeHours) return false;
@@ -15,9 +14,6 @@ export function isMarked(issue: Issue, now: Date, rules: MarkRules): boolean {
   return byCommittee || issue.thumbsUp.length >= rules.minVotes;
 }
 
-// Puts every marked issue that is not yet on the board into Triage.
-// A hotfix goes straight to Design with no votes, since a collaborator chose it by its label.
-// An error report goes to Triage with no votes, since a player's game hit the error. The error service caps how many it opens a day.
 export async function intake(ctx: Ctx): Promise<number[]> {
   const { cfg, github } = ctx;
   const bootstrap = { telegram: cfg.committeeBootstrapTelegram, github: cfg.committeeBootstrapGithub };

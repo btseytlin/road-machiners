@@ -18,6 +18,7 @@ import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { heatAt } from './sun';
 import type { Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
 const NIGHT = 1 + ((23 - TIME.startHour) * TIME.turnsPerDay) / 24;
@@ -77,7 +78,7 @@ describe('engine heat', () => {
     const hp = engine(w).hp;
     advanceEngineHeat(w);
     const sunCooled = 1 - w.player.engineHeat;
-    w.turn = NIGHT; // heat 1, the same as shade
+    w.turn = NIGHT;
     w.player.engineHeat = 1;
     advanceEngineHeat(w);
     expect(1 - w.player.engineHeat).toBeCloseTo(ENGINE_HEAT.coolParked);
@@ -119,7 +120,6 @@ describe('heat practice', () => {
 });
 
 describe('machining on engine heat', () => {
-  // Heat one turn of top speed in the noon sun adds to a cold engine.
   function heating(machining: number): number {
     const w = emptyWorld();
     w.turn = NOON;
@@ -154,7 +154,6 @@ describe('engine heat by engine', () => {
 });
 
 describe('engine heat on the road', () => {
-  // Point d tiles along the polyline, or null past its end.
   function along(points: Vec[], d: number): Vec | null {
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
@@ -167,7 +166,7 @@ describe('engine heat on the road', () => {
   }
 
   it('overheats every engine on the shortest Bowl to Nose trip at top speed from 10:00', () => {
-    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP);
+    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP, defaultSetup('roaming'));
     base.weather = [];
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const nose = REGION.towns.find((t) => t.id === 'nose')!;
@@ -190,7 +189,7 @@ describe('engine heat on the road', () => {
       return w.player.engineHeat < 1;
     });
     expect(cool.map((e) => e.id)).toEqual([]);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+  }, 90_000);
 });
 
 describe('engine overdrive', () => {
@@ -324,7 +323,6 @@ describe('dousing the engine', () => {
 });
 
 describe('desert rat', () => {
-  // Engine heat after one turn of top speed from a cold engine at a turn.
   function heating(turn: number, perks: ReturnType<typeof emptyWorld>['player']['perks']): number {
     const w = emptyWorld();
     w.turn = turn;

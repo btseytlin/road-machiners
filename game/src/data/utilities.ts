@@ -1,15 +1,12 @@
 import type { ClaymoreDef, UtilityDef } from './parts';
 
-// Utility parts: yellow deck parts with one job each. Active ones act once on an explicit order and then recharge
-// for their reload in turns. The crane and the scraper are passive and work while mounted. Prices come from base plus
-// the stat modifier in src/data/parts.ts, and each value sits in its tier's effort band. See src/sim/utility.ts.
 export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   sprout: {
     id: 'sprout',
     kind: 'utility',
     name: 'Sprout',
     hp: 25,
-    base: 130,
+    base: 4333,
     tier: 1,
     w: 1,
     h: 1,
@@ -17,14 +14,14 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 2,
     tall: false,
     reload: 10,
-    effect: { type: 'sprout', radius: 5, turns: 6 }, // black smoke around the truck
+    effect: { type: 'sprout', radius: 5, turns: 6 },
   },
   caltrops: {
     id: 'caltrops',
     kind: 'utility',
     name: 'Caltrops',
     hp: 30,
-    base: 87,
+    base: 2900,
     tier: 1,
     w: 1,
     h: 1,
@@ -39,7 +36,7 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     kind: 'utility',
     name: 'Oil spiller',
     hp: 30,
-    base: 118,
+    base: 3933,
     tier: 1,
     w: 1,
     h: 1,
@@ -47,14 +44,14 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 3,
     tall: false,
     reload: 6,
-    effect: { type: 'oil', turns: 8, behind: 1, fuel: 2 }, // a streak of OIL.blobs patches, see OIL
+    effect: { type: 'oil', turns: 8, behind: 1, fuel: 2 },
   },
   patcherCrane: {
     id: 'patcherCrane',
     kind: 'utility',
     name: 'Patcher crane',
     hp: 50,
-    base: 180,
+    base: 6000,
     tier: 1,
     w: 1,
     h: 2,
@@ -62,14 +59,14 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 4,
     tall: false,
     reload: null,
-    effect: { type: 'crane' }, // refits and roadside patches go faster, see WORK
+    effect: { type: 'crane' },
   },
   smokeMortar: {
     id: 'smokeMortar',
     kind: 'utility',
     name: 'Smoke mortar',
     hp: 36,
-    base: 263,
+    base: 8767,
     tier: 2,
     w: 1,
     h: 2,
@@ -84,7 +81,7 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     kind: 'utility',
     name: 'Flare cannon',
     hp: 28,
-    base: 142,
+    base: 4733,
     tier: 2,
     w: 1,
     h: 1,
@@ -92,14 +89,14 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 2,
     tall: false,
     reload: 10,
-    effect: { type: 'flare', radius: 10, turns: 6, minRange: 4, maxRange: 24 }, // radius: the ground it lights
+    effect: { type: 'flare', radius: 10, turns: 6, minRange: 4, maxRange: 24 },
   },
   scrapersKnife: {
     id: 'scrapersKnife',
     kind: 'utility',
     name: "Scraper's knife",
     hp: 50,
-    base: 280,
+    base: 9333,
     tier: 2,
     w: 1,
     h: 2,
@@ -107,14 +104,14 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 4,
     tall: false,
     reload: null,
-    effect: { type: 'scraper' }, // searches reveal more and strips yield more, see SEARCH and WORK
+    effect: { type: 'scraper' },
   },
   emitter: {
     id: 'emitter',
     kind: 'utility',
     name: 'Emitter',
     hp: 44,
-    base: 728,
+    base: 24267,
     tier: 3,
     w: 2,
     h: 2,
@@ -122,84 +119,61 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
     armor: 4,
     tall: false,
     reload: 10,
-    effect: { type: 'emitter', radius: 6, turns: 2 }, // every other truck in the radius shuts down for the turns
+    effect: { type: 'emitter', radius: 6, turns: 2 },
   },
 };
 
-// Smoke clouds. A shot whose line from shooter to target touches any cloud gets this spread cause, once.
 export const SMOKE = {
-  spread: 0.1, // radians
+  spread: 0.1,
 };
 
 export const CALTROPS = {
-  damage: 8, // to each of the four wheels of a truck that drives through, once per field
+  damage: 8,
 };
 
-// One spill is a streak of `blobs` oil fields along the path behind the truck, `spacing` apart, so they overlap.
-// Grip and kick were swept in src/phys/drive.test.ts with a scout crossing a real streak straight under its route
-// driver, its heading off its dry run at the end of the turn. Kick 0.35 turned it under 1° at 10 tiles per turn, 0.7
-// about 12° and 1.0 only 15-27° by where the streak lay. Kick 1.2 turns it 27-49° at 10 and 25-30° at 9; the cap of
-// 1.6 is reached from 9.3 tiles per turn. Grip 0.3 barely let the swing grow, and grip 0.06 moved a 3 tiles per turn
-// crossing 1 m off its line, against 0.38 m at 0.12. No kick rolled a truck: its up vector stayed level.
-// That spin read as too weak in play. Kick 2.4 with a cap of 3.2 turns the scout 26° at 5 tiles per turn, 46° at 6,
-// 82° at 8, 112° at 10 and 131° at 12, still with no truck rolled. Grip 0.06 on top let a crossing at 4 tiles per
-// turn slide 1 m and swing its tail, so grip stays 0.12.
 export const OIL = {
-  blobs: 6, // oil fields per spill
-  blobR: 0.9, // tiles, the radius of each field
-  spacing: 0.8, // tiles along the path between field centers
-  grip: 0.12, // share of friction slip and side friction stiffness left to a wheel on oil
-  safeSpeed: 4, // tiles per turn; at or below it oil gives no tail kick
-  kick: 2.4, // rad/s of yaw rate change for each safeSpeed of speed above safeSpeed, when a rear wheel first reaches oil
-  maxKick: 3.2, // rad/s, the cap on one tail kick
+  blobs: 6,
+  blobR: 0.9,
+  spacing: 0.8,
+  grip: 0.12,
+  safeSpeed: 4,
+  kick: 2.4,
+  maxKick: 3.2,
 };
 
-// Tiles from one end of a spill's streak to the other, on a straight path.
 export function oilSlickLength(): number {
   return (OIL.blobs - 1) * OIL.spacing + 2 * OIL.blobR;
 }
 
-// The harpoon line: a one-sided spring between the two anchors once they are farther apart than the line's length.
-// Settled in src/phys/line.test.ts at 60 steps per second. Only the stretch pull counts toward a tear. A truck must be
-// able to drag the truck it hooked, so the line holds every drag measured over its 10 turns, each truck at full
-// throttle away from a braking or fleeing scout, buggy or hauler, from rest and at speed. The peak stretch pull: about
-// 15 kN for a scout, 30 to 60 kN for a hauler, van, tractor, carrier or loader, under 100 kN for any one-sided drag,
-// and 108 kN for a bus and a fleeing scout pulling against each other. The rope stretches under a meter in most
-// drags, so it reads as a rope and not a bungee. A softer 5000 N/m rope stretched 9 m behind a hauler.
 export const HARPOON = {
-  stiffness: 30000, // N per meter of stretch
-  damping: 12000, // newton seconds per meter on the separating speed
-  tearForce: 120000, // N; a stretch pull above it tears the line
-  tearDamage: 12, // to the part the line held on the torn truck
+  stiffness: 30000,
+  damping: 12000,
+  tearForce: 120000,
+  tearDamage: 12,
 };
 
 export const EMITTER = {
-  startsAfter: 1, // turns after the pulse the shutdown starts, so no shot fired with the pulse is lost
+  startsAfter: 1,
 };
 
 export const FLARE = {
-  seenRange: 80, // tiles; how far a flare and its launch show at night, gray vision at day sight
+  seenRange: 80,
 };
 
-// The claymore ram's charge. See ClaymoreDef in src/data/parts.ts.
 export const CLAYMORE: ClaymoreDef = {
-  minImpact: 3, // tiles per turn
-  blast: { damage: 60, pen: 12, radius: 2 }, // radius in meters
+  minImpact: 3,
+  blast: { damage: 60, pen: 12, radius: 2 },
   selfBlast: { damage: 25, pen: 6 },
   throw: { impulse: 40000, lift: 0.35 },
   reload: 20,
 };
 
-// Field work. Refits and roadside patches take noCraneTime times as long as before, and a working crane speeds that
-// work up by craneSpeed. A working scraper pays scraperStripShare of a stripped part's value.
 export const WORK = {
   noCraneTime: 2,
   craneSpeed: 1.5,
   scraperStripShare: 0.65,
 };
 
-// Hidden salvage. Each search turn, each hidden unit is revealed with this chance, or scraperReveal with a working
-// scraper.
 export const SEARCH = {
   reveal: 0.35,
   scraperReveal: 0.55,

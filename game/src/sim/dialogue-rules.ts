@@ -26,13 +26,11 @@ import { acceptOffer, canTowNpc, isTowing, hitchNpc, isOnRope, npcTowTerms, play
 import type { Call, CallVar, CallVars, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
-// The top goal is a fight on the player that rolled a demand, and the player has cargo.
 function demandsOnTop(world: World, npc: Vehicle): boolean {
   const top = topGoal(npc);
   return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
 }
 
-// `vars` are the call values, empty on the hub and before a topic's prepare step.
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
 export type Effect = (world: World, npc: Vehicle, call: Call) => void;
 export type Prepare = (world: World, npc: Vehicle) => CallVars;
@@ -45,7 +43,6 @@ function knownTowns(npc: Vehicle): TownDef[] {
   });
 }
 
-// The known town nearest the player, not the NPC: directions are for the one asking.
 function nearestKnownTown(world: World, npc: Vehicle): TownDef {
   const me = playerVehicle(world).pos;
   const towns = knownTowns(npc);
@@ -53,7 +50,6 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
   return towns.reduce((a, b) => (dist(me, a.pos) <= dist(me, b.pos) ? a : b));
 }
 
-// A robber's once-only demand topic is settled when its price came up in a truce call.
 function settleDemand(world: World, npc: Vehicle, outcome: TopicOutcome): void {
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], demand: outcome };
 }
@@ -63,7 +59,6 @@ function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): 
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
 }
 
-// The rolled answer a line waits on, or null before the topic's prepare step.
 function answerOf(vars: CallVars): string | null {
   const v = vars.answer;
   if (v === undefined) return null;
@@ -71,7 +66,6 @@ function answerOf(vars: CallVars): string | null {
   return v.option;
 }
 
-// The plea the player makes in the open topic.
 function playerPlea(call: Call): Plea {
   if (call.topic === 'truce') return 'truce';
   if (call.topic === 'mercy') return 'mercy';
@@ -96,19 +90,15 @@ function warnRefusal(call: Call): 'leave' | 'fight' {
   return option;
 }
 
-// A truck already in a patch deal, as patcher or client.
 function inPatch(world: World, id: string): boolean {
   return world.states.some((s) => s.kind === 'patch' && (s.holder === id || s.other === id));
 }
 
-// The open offer this driver made to the player, or null.
 function offerBy(world: World, npc: Vehicle) {
   const tow = playerTow(world);
   return tow?.holder === npc.id && !towData(tow).hitched ? tow : null;
 }
 
-// Something a driver can tell of with the Rumor mill perk: an undiscovered site, or a wreck stock the player has not
-// searched or heard of that still holds loot. `site` is null for a wreck.
 type Rumor = { id: string; pos: Vec; site: { id: string; name: string } | null };
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
@@ -116,7 +106,6 @@ function isRumorWreck(world: World, stock: SalvageStock): boolean {
   return stock.id.startsWith('wreck') && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
 }
 
-// The rumor nearest the driver within its radius, ties broken by id, or null. Nothing here rolls.
 function heardRumor(world: World, npc: Vehicle): Rumor | null {
   const sites = [...REGION.towns, ...REGION.locations].filter((s) => !world.player.discovered.includes(s.id)).map((s) => ({ id: s.id, pos: s.pos, site: s }));
   const wrecks = world.salvage.filter((s) => isRumorWreck(world, s)).map((s) => ({ id: s.id, pos: s.pos, site: null }));
@@ -125,17 +114,13 @@ function heardRumor(world: World, npc: Vehicle): Rumor | null {
   return near[0] ?? null;
 }
 
-// What a driver tells about prices comes only from what it remembers of its last visits, never the live shop state,
-// so the prices are as they were when it left and fade with the memory.
 type PriceFact = Extract<MemoryFact, { kind: 'prices' }>;
 
-// The driver's newest price memory of a town, or null.
 function lastTownMemory(npc: Vehicle): PriceFact | null {
   const memory = recall(npc, 'prices').find((m) => REGION.towns.some((t) => t.id === m.fact.shop));
   return memory?.fact ?? null;
 }
 
-// The buy and sell prices the player would have met at the remembered pressure, at the player's spread now.
 function rememberedPrices(world: World, fact: PriceFact): { good: string; buy: number; sell: number }[] {
   const margin = spread(world);
   return Object.entries(fact.pressure).map(([good, pressure]) => ({
@@ -147,8 +132,6 @@ function rememberedPrices(world: World, fact: PriceFact): { good: string; buy: n
 
 type TradeTip = { shop: string; good: string; dear: boolean };
 
-// Every remembered price as a share off its good's value, newest memory first, then by good id. The share is of the
-// standing price before spread, rounded so goods with the same price factor tie exactly.
 function rememberedOffsets(npc: Vehicle): (TradeTip & { off: number })[] {
   return recall(npc, 'prices').flatMap(({ fact }) => Object.keys(fact.pressure).sort().map((good) => {
     const ratio = standingPrice(fact.shop, good, fact.pressure[good]) / goodValue(good);
@@ -156,8 +139,6 @@ function rememberedOffsets(npc: Vehicle): (TradeTip & { off: number })[] {
   }));
 }
 
-// The remembered price furthest off its good's value, when at least TRADE_TIP.share off. Ties go to the newer
-// memory, then the good id. Nothing here rolls.
 function tradeTip(npc: Vehicle): TradeTip | null {
   const best = rememberedOffsets(npc).filter((c) => c.off >= TRADE_TIP.share).reduce<(TradeTip & { off: number }) | null>((top, c) => (!top || c.off > top.off ? c : top), null);
   return best && { shop: best.shop, good: best.good, dear: best.dear };
@@ -171,7 +152,6 @@ function aidVar(a: AidAmounts): CallVar {
   return { kind: 'aid', fuel: a.fuel, supplies: a.supplies };
 }
 
-// The fuel and supplies the open topic named.
 function namedAid(call: Call): AidAmounts {
   const v = call.vars.aid;
   if (v?.kind !== 'aid') throw new Error('The topic named no fuel or supplies');
@@ -184,7 +164,6 @@ function namedPrice(call: Call): number {
   return v.amount;
 }
 
-// The aid offer this driver made the player and the player has not answered, or null.
 function pendingAid(world: World, npc: Vehicle): NpcState | null {
   const s = stateOf(world, 'aid', npc.id, world.player.vehicleId);
   return s && !aidData(s).agreed ? s : null;
@@ -196,7 +175,6 @@ function requirePendingAid(world: World, npc: Vehicle): NpcState {
   return s;
 }
 
-// A driver asked for aid gives only when it can spare some, so the roll never sees an unavailable give.
 function aidAnswer(world: World, npc: Vehicle): CallVars {
   const gives = canSpareFor(world, npc) && decide(world, npc, 'aidAsked', world.player.vehicleId, null) === 'give';
   if (!gives) return { answer: { kind: 'answer', option: 'refuse' } };
@@ -213,25 +191,18 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
     const tow = offerBy(world, npc);
     return tow !== null && towData(tow).fee === 0;
   },
-  // A driver already on its way does not need asking.
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
   npcWorn: (world, npc) => canTakeWornPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id) && !isTowing(world, npc.id) && !isStranded(world, playerVehicle(world)),
-  // A towed truck is already being helped. Its tower owns it.
   npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
-  // A driver under attack takes on no tow, patch or trade.
   npcCalm: (world, npc) => !inCombat(world, npc),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
-  // About to attack the player, who carries something worth taking, and chose to call first.
   demandsCargo: (world, npc) => !isStranded(world, npc) && !hasStrandedPrey(world, npc) && demandsOnTop(world, npc),
-  // The stranded player is alone with a robber and has cargo or parts to lose.
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
-  // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.
   demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
-  // The foe is badly broken, and has not yet answered the player's demand to give up.
   npcBeaten: (world, npc) => isWeak(world, npc),
   notOfferedYield: (world, npc) => !offeredSurrenderBy(world, npc, playerVehicle(world)),
   guardsClaim: (world, npc) => guardsClaim(world, npc),
@@ -248,10 +219,8 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
   resists: (_world, _npc, vars) => answerOf(vars) === 'fightBack',
   runs: (_world, _npc, vars) => answerOf(vars) === 'flee',
-  // Loots a wreck or knocked-out truck the player truck is in reach of too.
   claimsPlayerLoot: (world, npc) => lootsBesidePlayer(world, npc),
   holdsOn: (_world, _npc, vars) => answerOf(vars) === 'refuse',
-  // Waits for the player's answer to its warning off a loot target.
   warnsPlayerOff: (world, npc) => pendingWarningTo(world, npc) !== null,
   yieldsLoot: (_world, _npc, vars) => answerOf(vars) === 'leave',
   fightsForLoot: (_world, _npc, vars) => answerOf(vars) === 'fight',
@@ -262,7 +231,6 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   rumorOfSite: (_world, _npc, vars) => vars.site !== undefined,
   rumorOfWreck: (_world, _npc, vars) => vars.site === undefined,
   canPayTruce: (world, npc) => hasPerk(world, 'paidTruce') && world.player.money >= trucePrice(npc),
-  // Low on fuel or supplies, and the player holds some of what it lacks.
   npcLow: (world, npc) => hasAid(wantedAid(world, npc)),
   playerLow: (world) => isLow(world, playerVehicle(world)),
   noAid: (world) => playerAid(world) === null,
@@ -289,7 +257,6 @@ export const EFFECTS: Record<EffectId, Effect> = {
     patchGoal(world, npc, playerVehicle(world), deal.holder === npc.id);
     settle(world, npc, call, 'agreed');
   },
-  // A handover and a threat end at once, so they practice social now. A patch practices when it is done.
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
@@ -312,7 +279,6 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
-  // The only effect that fills call values: the beggar's answer is rolled when the player asks, so taking the cargo never notes the offer.
   askStandDown: (world, npc, call) => { call.vars = PREPARES.yieldAnswer(world, npc); },
   standDownPlea: (world, npc) => {
     standDownBeggar(world, npc);
@@ -335,7 +301,6 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settlePlayerPlea(world, npc, playerPlea(call), false);
     if (answerOf(call.vars) === 'demand') settleDemand(world, npc, 'refused');
   },
-  // The player pays a robber's price for a truce: the same hand-over as the demand topic.
   payToll: (world, npc, call) => {
     if (answerOf(call.vars) !== 'demand') throw new Error('payToll needs a demand answer');
     settlePlayerPlea(world, npc, 'truce', false);
@@ -357,14 +322,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
     if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
   },
-  // A warning pays no XP: the wreck it wins is its own reward.
   settleWarning: (world, npc, call) => {
     const answer = warnAnswer(call);
     playerWarns(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
   },
-  // The player answers a driver's warning off a loot target. The driver's choice on a refusal was rolled when the
-  // call opened. Hanging up before an answer refuses, and after one changes nothing.
   leaveLootWarning: (world, npc, call) => {
     answerLootWarning(world, npc, 'comply', warnRefusal(call));
     settle(world, npc, call, 'agreed');
@@ -380,7 +342,6 @@ export const EFFECTS: Record<EffectId, Effect> = {
   hangUpLootWarning: (world, npc, call) => {
     if (pendingWarningTo(world, npc)) EFFECTS.refuseLootWarning(world, npc, call);
   },
-  // The call holds no turn, so the rumor is the one the prepare step told.
   revealRumor: (world, npc, call) => {
     const rumor = heardRumor(world, npc);
     if (!rumor || (rumor.site !== null) !== (call.vars.site !== undefined)) throw new Error(`${npc.id} has no rumor to reveal`);
@@ -396,7 +357,6 @@ export const EFFECTS: Record<EffectId, Effect> = {
   giveAidPaid: (world, npc, call) => { agreeAid(world, npc, { giver: 'player', ...namedAid(call), price: namedPrice(call), free: false }); },
   giveAidFree: (world, npc, call) => { agreeAid(world, npc, { giver: 'player', ...namedAid(call), price: 0, free: true }); },
   takeAid: (world, npc, call) => { agreeAid(world, npc, { giver: 'npc', ...namedAid(call), price: 0, free: true }); },
-  // The agreed terms are the pending offer's own.
   acceptAidOffer: (world, npc) => {
     const { giver, fuel, supplies, price, free } = aidData(requirePendingAid(world, npc));
     agreeAid(world, npc, { giver, fuel, supplies, price, free });
@@ -412,7 +372,6 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answerWarning(world, npc, playerVehicle(world)) } }),
-  // The driver warns in its own voice. What it does if the player refuses is rolled now, so the line can tell it.
   lootWarningTerms: (world, npc) => ({
     warnLine: { kind: 'line', text: talkOf(npc).warnOff },
     answer: { kind: 'answer', option: warnRefusalOf(world, npc, playerVehicle(world)) },
@@ -421,7 +380,6 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     const { site, fee } = npcTowTerms(world, npc);
     return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };
   },
-  // No `deal` value means the driver cannot offer a patch.
   patchTerms: (world, npc): CallVars => {
     const deal = patchTerms(world, npc);
     return deal ? { deal } : {};
@@ -438,7 +396,6 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     const town = memory.shop;
     return { town: { kind: 'town', id: town }, prices: { kind: 'prices', town, goods: rememberedPrices(world, memory) } };
   },
-  // Bearing and distance are from the player, like directions.
   nearestRumor: (world, npc): CallVars => {
     const rumor = heardRumor(world, npc);
     if (!rumor) throw new Error(`${npc.id} knows no rumor`);

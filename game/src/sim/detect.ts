@@ -26,8 +26,6 @@ import { isCheapMeeting } from './fidelity';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
-// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled, shut down, without a
-// working engine or stranded, since a stranded truck is pushed, not driven. A healthy truck at a crawl is still heard.
 export function soundRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.parkedSpeed || !engineRuns(world, v) || isStranded(world, v)) return 0;
   const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
@@ -38,25 +36,20 @@ function engineRuns(world: World, v: Vehicle): boolean {
   return hasWorkingEngine(v) && !isStalled(world, v) && !isShutDown(world, v);
 }
 
-// A moving observer's own engine drowns out fainter sounds. Parked, it loses nothing.
 function ownHearingPenalty(observer: Vehicle): number {
   return observer.speed <= RULES.parkedSpeed ? 0 : DETECT.sound.ownPenalty * observer.speed;
 }
 
-// Range an observer hears a vehicle's engine from: the sound's reach, widened by the player's perception and cut to
-// the observer's sight for a truck running cold, less what the observer's own engine drowns out.
 function hearingRange(world: World, observer: Vehicle, v: Vehicle): number {
   const reach = soundRange(world, v) * (1 + skillEffect(world, observer, 'perception', 'hearing'));
   const cold = runsCold(world, v) ? Math.min(reach, sightRadius(world, observer)) : reach;
   return cold - ownHearingPenalty(observer);
 }
 
-// Cold running: the player's engine below half its top speed.
 function runsCold(world: World, v: Vehicle): boolean {
   return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed * PERK_NUMBERS.coldRunning.speedShare;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, while stranded, at night, or fully hidden by weather (the storms in the truck shrink it through weatherOn's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.limpSpeed || isStranded(world, v)) return 0;
   if (!sunAt(world.turn)) return 0;
@@ -65,8 +58,6 @@ export function dustRange(world: World, v: Vehicle): number {
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
 
-// Whether an observer at a sees the top of a cloud at b. A cloud rises as it ages, so older clouds clear
-// taller hills than a plain sight line would.
 function dustVisible(world: World, a: Vec, b: Vec, age: number): boolean {
   const eyeA = heightAt(world.terrain, a.x, a.y) + DETECT.dust.eyeHeight;
   const eyeB = heightAt(world.terrain, b.x, b.y) + DETECT.dust.eyeHeight + age * DETECT.dust.riseHeight;
@@ -79,27 +70,22 @@ function dustVisible(world: World, a: Vec, b: Vec, age: number): boolean {
   return true;
 }
 
-// Range a mounted scanner reaches, through hills. Zero without one mounted, or while an emitter pulse shuts the
-// truck down.
 export function scannerRange(world: World, v: Vehicle): number {
   const scanners = mountedParts(v, 'scanner');
   if (scanners.length === 0 || isShutDown(world, v)) return 0;
   return wornDef<ScannerDef>(scanners[0]).range;
 }
 
-// A stable hash of a vehicle id, for keying hashRandom without touching the world rng stream.
 function idKey(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
   return h;
 }
 
-// Contacts within `within` tiles of the observer. Cheap range checks run before any sight line is traced.
 export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
   return sensesOf(world, observer, within).contacts;
 }
 
-// The trucks within `within` tiles that the observer sees, and the contacts of the rest it detects, in one pass.
 export function sensesOf(world: World, observer: Vehicle, within: number): { seen: Vehicle[]; contacts: Contact[] } {
   const seen: Vehicle[] = [];
   const contacts: Contact[] = [];
@@ -115,8 +101,6 @@ export function sensesOf(world: World, observer: Vehicle, within: number): { see
   return { seen, contacts };
 }
 
-// The contact of a truck out of the observer's sight, as a list of one, or none when the observer detects it in no
-// way. `scanned` is the observer's own scanner range, and `clouds` the dust clouds it sees in range.
 function contactWith(world: World, observer: Vehicle, listener: { scanned: number; clouds: DustCloud[] }, v: Vehicle, d: number): Contact[] {
   const dust = newestCloud(listener.clouds, v.id);
   const sources = sourcesOf(world, observer, listener.scanned, v, d, dust !== null);
@@ -125,7 +109,6 @@ function contactWith(world: World, observer: Vehicle, listener: { scanned: numbe
   return [{ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness }];
 }
 
-// How the observer detects a truck `d` tiles off and out of sight. A parked truck makes no sound and no radio signal.
 function sourcesOf(world: World, observer: Vehicle, scanned: number, v: Vehicle, d: number, dusty: boolean): Contact['sources'] {
   const moving = v.speed > RULES.parkedSpeed;
   const sound = moving && hears(world, observer, v, d);
@@ -142,19 +125,16 @@ function hears(world: World, observer: Vehicle, v: Vehicle, d: number): boolean 
   return heard > 0 && d <= heard;
 }
 
-// The observer's sight radius to a point: the night's, or wider in a flare's light. Both are worked out once.
 function sightTo(world: World, observer: Vehicle): (p: Vec) => number {
   const dark = sightRadius(world, observer);
   const lit = sightRadius(world, observer, true);
   return (p) => (litAt(world, p) ? lit : dark);
 }
 
-// Whether the observer sees the vehicle d tiles off. The radius check comes first and spares the sight line.
 function seesNear(world: World, observer: Vehicle, sight: (p: Vec) => number, v: Vehicle, d: number): boolean {
   return d <= sight(v.pos) && canVehicleSee(world, observer, v.pos);
 }
 
-// Each flare sighting of a launcher within `within` and out of sight is a contact of the launcher.
 function addFlares(world: World, observer: Vehicle, within: number, sight: (p: Vec) => number, out: Contact[]): void {
   for (const s of flareSightings(world, observer)) {
     const d = dist(observer.pos, s.launcher.pos);
@@ -162,8 +142,6 @@ function addFlares(world: World, observer: Vehicle, within: number, sight: (p: V
   }
 }
 
-// A contact of its own, or one more source on the contact the observer already has, which then keeps the tighter
-// circle. Every circle holds the true position, so either is right.
 function addFlare(out: Contact[], v: Vehicle, circle: { center: Vec; radius: number }): void {
   const known = out.find((c) => c.vehicleId === v.id);
   if (!known) {
@@ -174,24 +152,19 @@ function addFlare(out: Contact[], v: Vehicle, circle: { center: Vec; radius: num
   if (circle.radius < known.radius) Object.assign(known, circle);
 }
 
-// Like dust, a flare points at where it was seen, with a circle wide enough to reach the launcher: the burning flare,
-// or for the launch flash a smallest circle around the launcher itself.
 function flareCircle(world: World, s: FlareSighting): { center: Vec; radius: number } {
   if (s.at) return { center: { ...s.at }, radius: DETECT.fuzz.base + dist(s.at, s.launcher.pos) };
   return { center: jittered(world, s.launcher, DETECT.fuzz.base), radius: DETECT.fuzz.base };
 }
 
-// Channels that work through hills whether the truck moves or not: the player's beacon and a spotter mark.
 function trackingSources(world: World, observer: Vehicle, v: Vehicle): Contact['sources'] {
   return [...(hearsBeacon(world, observer, v) ? ['beacon' as const] : []), ...(isMarkedFor(world, observer, v) ? ['mark' as const] : [])];
 }
 
-// Spotter: the player tracks a marked truck until the mark's last turn.
 function isMarkedFor(world: World, observer: Vehicle, v: Vehicle): boolean {
   return observer.id === world.player.vehicleId && world.player.marked.some((m) => m.vehicleId === v.id && world.turn <= m.until);
 }
 
-// Why the player cannot mark a truck now, or null when it can.
 export function markError(world: World, vehicleId: string): string | null {
   if (!hasPerk(world, 'spotter')) return 'Marking a truck needs the spotter perk';
   if (!playerCanAct(world)) return 'The player cannot act now';
@@ -200,8 +173,6 @@ export function markError(world: World, vehicleId: string): string | null {
   return playerSees(world, v.pos) ? null : `The player does not see ${vehicleId}`;
 }
 
-// Spotter: marks a truck the player sees, so it stays a contact for PERK_NUMBERS.spotter.turns. A new mark on the
-// same truck replaces the old one.
 export function markVehicle(world: World, vehicleId: string): World {
   const error = markError(world, vehicleId);
   if (error) throw new Error(error);
@@ -211,8 +182,6 @@ export function markVehicle(world: World, vehicleId: string): World {
   });
 }
 
-// How hard a contact was to pick up, from 0 at the observer to 1 at the edge of reach. Each channel that detects the
-// vehicle gives its distance over its reach, and the easiest channel counts. Dust counts from its cloud.
 export function contactDifficulty(world: World, observer: Vehicle, contact: Contact): number {
   const v = world.vehicles.find((x) => x.id === contact.vehicleId);
   if (!v) throw new Error(`Contact with unknown vehicle ${contact.vehicleId}`);
@@ -221,7 +190,6 @@ export function contactDifficulty(world: World, observer: Vehicle, contact: Cont
 }
 
 function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Contact['sources'][number]): number {
-  // A mark takes no skill to follow, and it needs no scanner. A flare in the night sky takes none to see.
   if (source === 'mark' || source === 'flare') return 0;
   if (source === 'dust') {
     const cloud = newestCloud(cloudsSeenBy(world, observer), v.id);
@@ -231,7 +199,6 @@ function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Conta
   return reachShare(dist(observer.pos, v.pos), sourceReach(world, observer, v, source), source);
 }
 
-// Reach of a channel that detects the vehicle itself rather than its dust or a mark.
 function sourceReach(world: World, observer: Vehicle, v: Vehicle, source: Exclude<Contact['sources'][number], 'dust' | 'mark' | 'flare'>): number {
   switch (source) {
     case 'sound': return hearingRange(world, observer, v);
@@ -245,14 +212,10 @@ function reachShare(distance: number, reach: number, source: string): number {
   return distance / reach;
 }
 
-// Whether the player's emergency beacon reaches the observer. Hills do not block it.
 export function hearsBeacon(world: World, observer: Vehicle, v: Vehicle): boolean {
   return world.player.beacon && v.id === world.player.vehicleId && dist(observer.pos, v.pos) <= BEACON.range;
 }
 
-// Sound, radio, a mark and the beacon give a circle around a jittered center, as tight as the best source allows and the
-// player's perception tightens. Dust alone points at its newest seen cloud, with a circle wide enough to reach where
-// the truck has driven since.
 function contactCircle(world: World, observer: Vehicle, v: Vehicle, sources: Contact['sources'], d: number, dust: DustCloud | null): { center: Vec; radius: number } {
   if (sources.length === 1 && dust) return { center: { ...dust.pos }, radius: DETECT.fuzz.base + dist(dust.pos, v.pos) };
   const fix = 1 - skillEffect(world, observer, 'perception', 'contactFix');
@@ -261,19 +224,16 @@ function contactCircle(world: World, observer: Vehicle, v: Vehicle, sources: Con
   return { center: jittered(world, v, radius), radius };
 }
 
-// A center off the vehicle's true position by less than radius, steady through the turn.
 function jittered(world: World, v: Vehicle, radius: number): Vec {
   const key = idKey(v.id);
   const angle = hashRandom(world.seed, world.turn, key, 1) * Math.PI * 2;
-  const frac = hashRandom(world.seed, world.turn, key, 2); // in [0, 1), so the offset always stays inside radius
+  const frac = hashRandom(world.seed, world.turn, key, 2);
   return { x: v.pos.x + Math.cos(angle) * frac * radius, y: v.pos.y + Math.sin(angle) * frac * radius };
 }
 
-// Ages, moves and expires existing clouds, then lets every moving, dusty vehicle raise a new one.
 export function advanceDust(world: World): void {
   const D = DETECT.dust;
   for (const c of world.dustClouds) {
-    // Gusts push each cloud a little off its course every turn, so a line of dust never stays exact.
     const key = idKey(c.id);
     const a = hashRandom(world.seed, world.turn, key, 4) * Math.PI * 2;
     const push = hashRandom(world.seed, world.turn, key, 5) * D.wander;
@@ -294,12 +254,10 @@ export function advanceDust(world: World): void {
   }
 }
 
-// Dust screen: the player's dust at top speed blocks sight like a hill.
 function raisesScreen(world: World, v: Vehicle): boolean {
   return vehicleHasPerk(world, v, 'dustScreen') && v.speed >= vehicleStats(world, v).maxSpeed * PERK_NUMBERS.dustScreen.topShare;
 }
 
-// Clouds an observer sees: any in plain sight, plus risen ones within their range whose tops clear the hills.
 export function cloudsSeenBy(world: World, observer: Vehicle): DustCloud[] {
   const sight = sightTo(world, observer);
   return world.dustClouds.filter((c) => {
@@ -310,7 +268,6 @@ export function cloudsSeenBy(world: World, observer: Vehicle): DustCloud[] {
   });
 }
 
-// A risen cloud within its range shows over hills. Far from the player the cheap rules skip the hill check and show none.
 function seesRisenCloud(world: World, observer: Vehicle, c: DustCloud, d: number): boolean {
   if (c.age < DETECT.dust.riseTurns || d > c.range || isCheapMeeting(world, observer.pos, c.pos)) return false;
   return dustVisible(world, observer.pos, c.pos, c.age);
@@ -322,7 +279,6 @@ function newestCloud(clouds: DustCloud[], vehicleId: string): DustCloud | null {
   return best;
 }
 
-// Dust rises from ground the truck already crossed: partway back along this turn's trail, never at the truck.
 function dustSpawn(v: Vehicle): Vec {
   if (v.trail.length < 2) throw new Error(`${v.id} moved without a trail`);
   const p = v.trail[Math.floor((v.trail.length - 1) * (1 - DETECT.dust.spawnBack))];

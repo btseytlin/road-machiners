@@ -5,7 +5,6 @@ import * as THREE from 'three';
 import type { WeaponLook } from '../../render/partLooks';
 import { model, socket } from './models';
 
-// The head's parts, untinted and unmerged, and the barrel tip in head space.
 export function weaponHead(look: WeaponLook): { head: THREE.Group; tip: THREE.Vector3 } {
   const head = new THREE.Group();
   head.add(model(look.receiver));

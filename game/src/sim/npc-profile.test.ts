@@ -40,7 +40,6 @@ describe('NPC traits', () => {
     npc.brain = npcBrain('scavenger', npc.pos, ['pirate' as TraitId]);
     expect(() => npcTraits(npc)).toThrow(/pirate/);
     expect(() => profileOf(['pirate' as TraitId])).toThrow(/pirate/);
-    // Names on every object's prototype are not traits either.
     expect(() => profileOf(['constructor' as TraitId])).toThrow(/Unknown trait constructor/);
     npc.brain = { ...npcBrain('scavenger', npc.pos, []), traits: undefined as unknown as TraitId[] };
     expect(() => npcTraits(npc)).toThrow();

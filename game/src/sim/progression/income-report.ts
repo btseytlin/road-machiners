@@ -105,7 +105,6 @@ function standardError(xs: readonly number[]): number {
   return Math.sqrt(variance / xs.length);
 }
 
-// The nearest-rank percentile.
 function percentile(xs: readonly number[], q: number): number {
   if (xs.length === 0) throw new Error('Percentile of no values');
   const sorted = [...xs].sort((a, b) => a - b);
@@ -116,30 +115,19 @@ function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-// ---- Gates.
-
-// G1: the selective robber's mean net per hour over the hauler's.
 export const G1_BAND: readonly [number, number] = [1.05, 1.5];
-// G2: the share of the baseline the hauling margin and salvage price indexes keep.
 export const G2_FLOOR = 0.85;
-// G3: guarded convoy attempts needed, and the share of them that must lose money.
 export const G3_MIN_ATTEMPTS = 8;
 export const G3_MIN_LOSING = 0.3;
-// G4: the robber's daily p90 over the hauler's.
 export const G4_P90_RATIO = 2;
-// G6: the day 2 median trader wallet over the day 1 median.
 export const G6_FLOOR = 0.7;
-// G7: NPC knockouts and tows per day over the baseline's.
 export const G7_RATIO = 1.5;
-// The robber's pick rule aims at this ratio.
 export const PICK_TARGET = 1.25;
 
-// The two-sided 80% t quantile, by degrees of freedom.
 const T80: Record<number, number> = { 1: 3.078, 2: 1.886, 3: 1.638, 4: 1.533, 5: 1.476, 6: 1.44, 7: 1.415, 8: 1.397, 9: 1.383, 10: 1.372, 11: 1.363 };
 
 export type PairedDifference = { seeds: number[]; meanDiff: number; ci80: [number, number]; ratio: number };
 
-// The robber's net per hour less the hauler's, paired by seed, with its 80% t-interval, and the ratio of their means.
 export function pairedDifference(robber: readonly IncomeRun[], hauler: readonly IncomeRun[]): PairedDifference {
   sameBuild('G1', [...robber, ...hauler]);
   const seeds = robber.map((r) => r.seed).sort((a, b) => a - b);
@@ -159,7 +147,6 @@ function runOf(runs: readonly IncomeRun[], seed: number): IncomeRun {
   return run;
 }
 
-// Throws when the runs measured more than one build.
 function sameBuild(gate: string, runs: readonly IncomeRun[]): void {
   const builds = [...new Set(runs.map((r) => `${r.candidate} at ${r.commit}`))];
   if (builds.length > 1) throw new Error(`${gate} mixes builds: ${builds.join(', ')}`);
@@ -167,8 +154,6 @@ function sameBuild(gate: string, runs: readonly IncomeRun[]): void {
 
 export type WorldFigures = { V: number; T: number; H: number };
 
-// From the world samples of runs: V, the mean sale value of the cargo of targets the robber would take; T, the mean
-// count of those targets alive at a sample; H, the mean hauling margin index.
 export function worldFigures(runs: readonly IncomeRun[]): WorldFigures {
   const samples = runs.flatMap((r) => r.samples);
   if (samples.length === 0) throw new Error('No world samples');
@@ -179,8 +164,6 @@ export function worldFigures(runs: readonly IncomeRun[]): WorldFigures {
 
 export type Prediction = WorldFigures & { predictedRatio: number };
 
-// The robber over hauler ratio a candidate should give, scaled from candidate A's runs: the robber by cargo value and
-// target count, the hauler by the hauling margin index. Only the candidate's hauler runs are needed.
 export function predictCandidate(runsA: readonly IncomeRun[], runsC: readonly IncomeRun[]): Prediction {
   const a = worldFigures(runsA.filter((r) => r.policy === 'trader'));
   const c = worldFigures(runsC.filter((r) => r.policy === 'trader'));
@@ -192,8 +175,6 @@ export function predictCandidate(runsA: readonly IncomeRun[], runsC: readonly In
 
 type Gate = { id: string; title: string; pass: boolean | null; lines: string[] };
 
-// G1 to G7 on one build's runs against the baseline runs, each with its sample size and inputs. largestLoad is the most
-// one trader load sells for, from largestTraderLoad(). The checks no run can make, like the stuck run, are marked open.
 export function gateReport(runs: readonly IncomeRun[], baseline: readonly IncomeRun[], largestLoad: number): string {
   sameBuild('The gate report', runs);
   sameBuild('The baseline', baseline);

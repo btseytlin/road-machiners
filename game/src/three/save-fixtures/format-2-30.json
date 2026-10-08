@@ -1,0 +1,14 @@
+{
+  "turn": 610,
+  "vehicles": [
+    { "id": "player", "brain": null },
+    {
+      "id": "npc4",
+      "brain": {
+        "goals": [
+          { "kind": "raid", "targetId": null, "destination": { "x": 300.8, "y": 104.2 }, "phase": "travel", "reason": "look for prey at known hunting grounds" }
+        ]
+      }
+    }
+  ]
+}

@@ -38,9 +38,9 @@ import { xpTodayOf } from "../sim/progress";
 import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
+import { UNITS } from "../data/units";
+import { moneyText } from "./units";
 
-// `toggleFps` asks the console to show or hide the frame rate panel, `noclip` to switch noclip flight and
-// `fullShop` to open the full shop screen. All live outside the world.
 export type CommandResult = { world: World | null; lines: string[]; toggleFps?: true; noclip?: true; fullShop?: true };
 
 export type Command = {
@@ -50,7 +50,6 @@ export type Command = {
   run(world: World, args: string[]): CommandResult;
 };
 
-// Builds a command whose name is the first word of its usage line and whose argument count is checked before `run`.
 function command(
   usage: string,
   help: string,
@@ -87,7 +86,6 @@ function changed(world: World, line: string): CommandResult {
   return { world, lines: [line] };
 }
 
-// A command that sets one number through a sim cheat.
 function setter(name: string, help: string, set: (world: World, n: number) => World, verb = "set to"): Command {
   return command(`${name} <n>`, help, { min: 1, max: 1 }, (world, [text], usage) => {
     const n = parseNumber(text, usage);
@@ -95,8 +93,17 @@ function setter(name: string, help: string, set: (world: World, n: number) => Wo
   });
 }
 
+function moneySetter(): Command {
+  return command("money <n>", "Set money in M.", { min: 1, max: 1 }, (world, [text], usage) => {
+    const cents = parseNumber(text, usage) * UNITS.centsPerM;
+    const whole = Math.round(cents);
+    if (Math.abs(cents - whole) > 1e-6) throw new CheatError(`Money takes at most two decimals, got ${text}`);
+    return changed(setMoney(world, whole), `money set to ${moneyText(whole)}`);
+  });
+}
+
 export const COMMANDS: readonly Command[] = [
-  setter("money", "Set money.", setMoney),
+  moneySetter(),
   setter("fuel", "Set fuel, capped by the tanks.", setFuel),
   setter("supplies", "Set supplies, capped by the storage.", setSupplies),
   setter("health", "Set driver health.", setHealth),
@@ -218,7 +225,6 @@ export function runCommand(world: World, line: string): CommandResult {
   return cmd.run(world, args);
 }
 
-// Keeps the DOM small while still holding a full help listing and a few list outputs.
 const LOG_LINES = 200;
 const HINT = "type help for commands";
 const WAIT = "a turn is playing, try again when it ends";
@@ -230,19 +236,14 @@ export type ConsoleGame = {
   openFullShop(): void;
 };
 
-// The view parts noclip flight drives: the ground point at the view center in meters, and the key pan speed.
 export type NoclipView = {
   focus(): { x: number; z: number };
   setSpeed(factor: number): void;
 };
 
-// Noclip pans this many times faster than normal key panning, so crossing the map takes seconds.
 const NOCLIP_PAN_SPEED = 4;
-// Tiles the view center must move before the flying truck follows, so a still view changes no world.
 const NOCLIP_STEP = 0.05;
 
-// Noclip flight: WASD pans the view fast and the truck follows the view center through obstacles, once
-// per frame. Landing moves the truck to the nearest free spot.
 export class Noclip {
   private on = false;
 
@@ -258,7 +259,6 @@ export class Noclip {
     requestAnimationFrame(frame);
   }
 
-  // Returns whether flight is now on. Throws CheatError when the truck cannot land.
   toggle(): boolean {
     if (this.on) this.game.apply(teleport(this.game.state, playerVehicle(this.game.state).pos));
     this.on = !this.on;
@@ -274,7 +274,6 @@ export class Noclip {
   }
 }
 
-// The backquote key, or § by its character, since Mac ISO keyboards report that key under another code.
 function isToggleKey(e: KeyboardEvent): boolean {
   return e.code === "Backquote" || e.key === "§";
 }
@@ -284,7 +283,7 @@ export class DebugConsole {
   private readonly log: HTMLElement;
   private readonly input: HTMLInputElement;
   private readonly history: string[] = [];
-  private cursor = 0; // history index shown in the input; history.length is the fresh line
+  private cursor = 0;
 
   constructor(
     host: HTMLElement,
@@ -307,12 +306,10 @@ export class DebugConsole {
   private onWindowKey(e: KeyboardEvent): void {
     if (!isToggleKey(e) || !this.root.hidden) return;
     if (document.activeElement?.matches("input, select, textarea")) return;
-    // Without this the keystroke types a backquote into the input focused below.
     e.preventDefault();
     this.open();
   }
 
-  // Keys typed in the console never reach the game's window key handler.
   private onInputKey(e: KeyboardEvent): void {
     e.stopPropagation();
     if (isToggleKey(e) || e.code === "Escape") {
@@ -371,7 +368,6 @@ export class DebugConsole {
     }
   }
 
-  // Only bad user input is printed. Any other error is a bug and goes to the crash screen, or to this log outside dev.
   private run(line: string): CommandResult | null {
     try {
       const result = runCommand(this.game.state, line);
@@ -384,7 +380,6 @@ export class DebugConsole {
     }
   }
 
-  // An error the game kept running past, outside dev.
   error(text: string): void {
     this.print(text, "bad");
   }

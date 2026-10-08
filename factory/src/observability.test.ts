@@ -46,3 +46,11 @@ it('rejects traversal and unknown activity names instead of persisting arbitrary
   expect(observations.parseAgentStatus('{"type":"factory_status","milestone":"Testing the tow fee"}')).toEqual({ milestone: 'Testing the tow fee' });
   expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'tests', phase: 'running', source: 'runner', milestone: 'PRIVATE <script>' } as never)).toThrow('milestone');
 });
+it('rejects a scheduler count of an unknown column or a bad count', () => {
+  const home = createHome();
+  const scheduler = (counts: Record<string, number>) => ({ type: 'scheduler', status: 'ready', report: null, counts }) as never;
+  expect(() => observations.recordObservation(home, 'scheduler', scheduler({ Parked: 1 }))).toThrow('Invalid funnel column');
+  expect(() => observations.recordObservation(home, 'scheduler', scheduler({ Merging: -1 }))).toThrow('Invalid funnel count');
+  expect(() => observations.recordObservation(home, 'scheduler', scheduler({ Merging: 1.5 }))).toThrow('Invalid funnel count');
+  expect(observations.readObservation(home, 'scheduler')).toBeNull();
+});

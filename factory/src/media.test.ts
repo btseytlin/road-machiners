@@ -12,7 +12,6 @@ const S3 = 'https://github-production-user-asset-6210df.s3.amazonaws.com/1/2?X-A
 type Reply = { status: number; location?: string; body?: Buffer; length?: string };
 type Seen = { url: string; auth: string | undefined; redirect: string | undefined };
 
-// Answers by URL without a query. Unknown URLs fail the test, since they would be real network.
 function fakeFetch(replies: Record<string, Reply>): { fetch: typeof fetch; seen: Seen[] } {
   const seen: Seen[] = [];
   const fake = async (input: URL | string, init?: RequestInit): Promise<Response> => {

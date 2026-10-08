@@ -91,7 +91,7 @@ describe("contract text", () => {
 
   it("logs a met bounty with its reward and where to claim it", () => {
     const line = eventText(emptyWorld(), { t: "contract", contract: { ...bounty, fulfilled: true }, outcome: "fulfilled" });
-    expect(line).toEqual({ text: "Bounty met: Raider outrider beaten, claim 100 at Bowl", cls: "good" });
+    expect(line).toEqual({ text: "Bounty met: Raider outrider beaten, claim 1 M at Bowl", cls: "good" });
   });
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
@@ -163,7 +163,6 @@ describe("utility log", () => {
 });
 
 describe("harpoon log", () => {
-  // The player with a harpoon and a seen trader hauler, and the player's harpoon shot at it.
   function harpooned(rounds: ShotRound[]) {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -257,7 +256,6 @@ describe("claymore log", () => {
 });
 
 describe("caltrops log", () => {
-  // A hit of 8 on each of the truck's wheels, as a caltrop field deals.
   const wheelHits = (v: { items: { kind: string; part?: PartInstance }[] }) =>
     v.items.flatMap((i) => (i.part && partDef(i.part.defId).kind === "core" && i.part.defId.includes("wheel") ? [{ part: i.part.id, damage: 8 }] : []));
 
@@ -428,15 +426,23 @@ describe("NPC names in the log", () => {
   });
 });
 
+describe("money text", () => {
+  it("reads a money event in M with its sign", () => {
+    const w = emptyWorld();
+    expect(eventText(w, { t: "money", amount: 4067, reason: "Sold salt" })).toEqual({ text: "+41 M: Sold salt", cls: "good" });
+    expect(eventText(w, { t: "money", amount: -100, reason: "Fuel" })).toEqual({ text: "-1 M: Fuel", cls: "bad" });
+  });
+});
+
 describe("tow text", () => {
   it("says free for a fee of 0 and keeps the price otherwise", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
     const town = REGION.towns[0].id;
     expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 0 })?.text).toMatch(/ for free\.$/);
-    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 40 })?.text).toMatch(/ for 40\.$/);
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 4000 })?.text).toMatch(/ for 40 M\.$/);
     expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 0 })).toMatchObject({ text: expect.stringMatching(/tows you into town for free\.$/), cls: "" });
-    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 40 })).toMatchObject({ text: expect.stringMatching(/takes 40\.$/), cls: "bad" });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 4067 })).toMatchObject({ text: expect.stringMatching(/takes 41 M\.$/), cls: "bad" });
     const other = addVehicle(w, "roamers", "buggy", ["stockEngine"], { x: 50, y: 30 });
     expect(eventText(w, { t: "towDone", by: npc.id, client: other.id, fee: 0 })?.text).toMatch(/ in for free\.$/);
   });
@@ -468,19 +474,19 @@ describe("found log", () => {
 
 describe("saleEstimate", () => {
   it("words a loss per unit against the average cost", () => {
-    const e = saleEstimate(11, 12, 20);
-    expect(e).toEqual({ kind: "loss", perUnit: 8, avgCost: 20 });
+    const e = saleEstimate(11, 1200, 2000);
+    expect(e).toEqual({ kind: "loss", perUnit: 800, avgCost: 2000 });
     expect(estimateText(e)).toBe("\u22128");
     expect(estimateTitle(e)).toBe("Avg cost 20");
   });
 
   it("words a gain", () => {
-    expect(estimateText(saleEstimate(1, 38, 5))).toBe("+33");
+    expect(estimateText(saleEstimate(1, 3800, 500))).toBe("+33");
   });
 
   it("calls a rounded zero even, never -0", () => {
-    for (const basis of [37, 37.4]) {
-      const e = saleEstimate(2, 37, basis);
+    for (const basis of [3700, 3700.4]) {
+      const e = saleEstimate(2, 3700, basis);
       expect(e.kind).toBe("even");
       expect(estimateText(e)).toBe("0");
     }
@@ -499,12 +505,12 @@ describe("saleEstimate", () => {
   });
 
   it("keeps multi-digit values whole", () => {
-    expect(estimateText(saleEstimate(12, 987, 1234))).toBe("\u2212247");
+    expect(estimateText(saleEstimate(12, 98700, 123400))).toBe("\u2212247");
   });
 
   it("only ever gives a signed number, ? or nothing", () => {
-    for (const e of [saleEstimate(11, 37, 45), saleEstimate(3, 37, 30), saleEstimate(2, 37, 37), saleEstimate(2, 37, undefined), saleEstimate(0, 37, 1)]) {
-      expect(estimateText(e)).toMatch(/^([+\u2212]\d*[1-9]\d*|0|\?|)$/);
+    for (const e of [saleEstimate(11, 3700, 4500), saleEstimate(3, 3700, 3000), saleEstimate(2, 3700, 3700), saleEstimate(2, 3700, undefined), saleEstimate(0, 3700, 100)]) {
+      expect(estimateText(e)).toMatch(/^([+\u2212]\d[\d,]*|0|\?|)$/);
     }
   });
 
@@ -529,8 +535,8 @@ describe("goods table words", () => {
   });
 
   it("words lot totals", () => {
-    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 180 total");
-    expect(lotTitle("sell", 11, 312)).toBe("Sell all 11 for 312 total");
+    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 2 total");
+    expect(lotTitle("sell", 11, 31200)).toBe("Sell all 11 for 312 total");
   });
 });
 

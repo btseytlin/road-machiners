@@ -14,7 +14,6 @@ import { refreshVision } from './vision';
 
 const WRECK = 'wreck901';
 
-// A road wreck at 30.5,30 beside the parked player at 30,30. Every roll lands mid-range, so a forced option wins.
 function quietWorld(): World {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -30,7 +29,6 @@ function driver(w: World, x: number, y: number, traits: TraitId[] = ['scavenger'
   return npc;
 }
 
-// An NPC searching the wreck, with the player moved away so it is the one looter.
 function npcLooting(w: World): Vehicle {
   playerVehicle(w).pos = { x: 60, y: 60 };
   const looter = driver(w, 31.5, 30);
@@ -39,7 +37,6 @@ function npcLooting(w: World): Vehicle {
   return looter;
 }
 
-// A driver parked at the wreck in its loot goal's travel phase, as on arrival.
 function arriving(w: World): Vehicle {
   const npc = driver(w, 30.5, 31.2);
   pushGoal(w, npc, { kind: 'loot', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'travel', reason: 'loot salvage on the way' });
@@ -194,7 +191,6 @@ describe('a driver that reaches loot another NPC is looting', () => {
     expect(() => answerLootWarning(w, npc, 'comply', 'leave')).toThrow('no loot warning waiting');
   });
 
-  // A roamer has no weights for these decisions.
   it('without traits warns about two times in five, leaves about half the time and seldom fights', () => {
     const w = quietWorld();
     const looter = npcLooting(w);
@@ -214,7 +210,6 @@ describe('a driver that reaches loot another NPC is looting', () => {
 });
 
 describe('a driver that reaches loot the player is looting', () => {
-  // The player parked at the wreck holds it, and the driver warns it off.
   function warned(): { w: World; npc: Vehicle } {
     forceOption('lootContested', 'warn');
     const w = quietWorld();

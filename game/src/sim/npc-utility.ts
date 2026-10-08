@@ -16,7 +16,6 @@ import { canVehicleSee } from './vision';
 import { maxHp } from './wear';
 
 type Npc = Vehicle & { brain: NpcBrain };
-// The order the driver wants to give the part this turn, or null for none.
 type Rule = (world: World, v: Npc, part: PartInstance) => UtilityOrder | null;
 
 const self = (wanted: boolean): UtilityOrder | null => (wanted ? { kind: 'self' } : null);
@@ -33,8 +32,6 @@ const RULES: Record<UseKind, Rule> = {
   scraper: () => null,
 };
 
-// Gives every NPC's utilities the orders its rules want. The player's truck is never touched. An order already given
-// stays.
 export function assignUtilityOrders(world: World): void {
   for (const v of world.vehicles) if (isNpc(world, v)) planUses(world, v);
 }
@@ -43,7 +40,6 @@ function isNpc(world: World, v: Vehicle): v is Npc {
   return v.brain !== null && v.id !== world.player.vehicleId;
 }
 
-// An order the part refuses now is not given: one that is broken, recharging, out of range or shut down.
 function planUses(world: World, v: Npc): void {
   for (const part of chargedParts(v)) {
     if (part.id in v.utilityOrders) continue;
@@ -56,44 +52,37 @@ function fleeing(v: Npc): boolean {
   return topGoal(v)?.kind === 'flee';
 }
 
-// The trucks that shot at the driver and are in its sight, nearest first.
 function seenAttackers(world: World, v: Npc): Vehicle[] {
   const seen = world.vehicles.filter((x) => x.id in v.brain.attackers && canVehicleSee(world, v, x.pos));
   return seen.sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
 }
 
-// Whether `p` lies ahead of the truck's nose, across the line through its center.
 function ahead(v: Vehicle, p: Vec): boolean {
   return Math.cos(v.heading) * (p.x - v.pos.x) + Math.sin(v.heading) * (p.y - v.pos.y) > 0;
 }
 
-// Sprout: an attacker is in sight, and the driver flees a fight or its cab is below NPC_UTILITY.sproutCab.
 function wantsSmoke(world: World, v: Npc): boolean {
   if (seenAttackers(world, v).length === 0) return false;
   const cab = corePart(v, 'cab');
   return (fleeing(v) && inCombat(world, v)) || cab.hp < maxHp(cab) * NPC_UTILITY.sproutCab;
 }
 
-// Caltrops and oil: the driver flees with a hostile in sight behind it, within NPC_UTILITY.dropReach.
 function chased(world: World, v: Npc): boolean {
   return fleeing(v) && visibleHostiles(world, v).some((h) => dist(v.pos, h.pos) <= NPC_UTILITY.dropReach && !ahead(v, h.pos));
 }
 
-// Smoke mortar: a fleeing driver shells the midpoint between itself and its nearest attacker in sight.
 function mortarOrder(world: World, v: Npc): UtilityOrder | null {
   const attacker = fleeing(v) ? seenAttackers(world, v)[0] : undefined;
   if (!attacker) return null;
   return { kind: 'point', pos: { x: (v.pos.x + attacker.pos.x) / 2, y: (v.pos.y + attacker.pos.y) / 2 } };
 }
 
-// Flare cannon: at night, a driver investigating a contact lights the contact's center.
 function flareOrder(world: World, v: Npc): UtilityOrder | null {
   const goal = topGoal(v);
   if (sunAt(world.turn) || goal?.kind !== 'investigate' || !goal.destination) return null;
   return { kind: 'point', pos: { ...goal.destination } };
 }
 
-// Emitter: in a fight, every truck the driver sees within the pulse radius is hostile, and there is at least one.
 function emitterOrder(world: World, v: Npc, part: PartInstance): UtilityOrder | null {
   const def = partDef(part.defId);
   if (def.kind !== 'utility' || def.effect.type !== 'emitter') throw new Error(`${def.name} is not an emitter`);

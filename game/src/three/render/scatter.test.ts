@@ -1,3 +1,4 @@
+import { defaultSetup } from '../../sim/settings';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
@@ -9,7 +10,7 @@ import { newWorld } from '../../sim/world';
 import { TEST_MAP } from '../../test/map';
 import { CACTUS_NEAR_ROCK, OBSTACLE_GAP, ROAD_GAP, SHOULDER_TILES, scatterPlacements, type ScatterChunk } from './scatter';
 
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 const t = world.terrain;
 const chunks = scatterPlacements(t, world.obstacles);
 const all = (c: ScatterChunk) => [...c.pebbles, ...c.scrub, ...c.desert_stones, ...c.desert_scrub, ...c.cactus];
@@ -17,7 +18,6 @@ const placed = chunks.flatMap(all);
 const scrub = chunks.flatMap((c) => [...c.scrub, ...c.desert_scrub]);
 const cacti = chunks.flatMap((c) => c.cactus);
 const pebbles = chunks.flatMap((c) => [...c.pebbles, ...c.desert_stones]);
-// Where a placement stands, in tiles, read back from its matrix.
 const at = (p: { matrix: THREE.Matrix4 }): Vec => ({ x: p.matrix.elements[12] / PHYSICS.metersPerTile, y: p.matrix.elements[14] / PHYSICS.metersPerTile });
 const roadDist = (x: number, y: number) => ROAD_INDEX.nearestWithin(x, y, ROAD_GAP + SHOULDER_TILES);
 const typeAt = (at: Vec) => t.types[Math.floor(at.y) * t.size + Math.floor(at.x)];
@@ -25,7 +25,6 @@ const look = lookTypes(t);
 const lookAt = (at: Vec) => look[Math.floor(at.y) * t.size + Math.floor(at.x)];
 const onShoulder = (at: Vec) => roadDist(at.x, at.y) < ROAD_GAP + SHOULDER_TILES;
 const tileKey = (at: Vec) => Math.floor(at.y) * t.size + Math.floor(at.x);
-// Tiles whose center lies within CACTUS_NEAR_ROCK of a rock or a crag.
 const nearRock = new Set<number>();
 for (const o of world.obstacles) {
   if (o.kind !== 'rock' && !(o.kind === 'landmark' && o.look === 'crag')) continue;
@@ -44,7 +43,6 @@ describe('scatterPlacements', () => {
       byTile.set(key, [...(byTile.get(key) ?? []), at(p)]);
     }
     for (const o of world.obstacles) {
-      // Tiles are blocked by their center, and a placement lies within half a tile diagonal of its tile's center.
       const r = o.r + OBSTACLE_GAP - Math.SQRT1_2;
       for (let y = Math.floor(o.pos.y - r); y <= o.pos.y + r; y++) for (let x = Math.floor(o.pos.x - r); x <= o.pos.x + r; x++)
         for (const at of byTile.get(y * t.size + x) ?? []) expect(Math.hypot(at.x - o.pos.x, at.y - o.pos.y)).toBeGreaterThan(r);
@@ -123,6 +121,13 @@ describe('scatterPlacements', () => {
       expect(kept.flatMap((c) => [...c.desert_stones, ...c.desert_scrub, ...c.cactus]), type).toEqual([]);
       expect(kept.flatMap((c) => c.pebbles).length, type).toBeGreaterThan(100);
     }
+  });
+
+  it('puts no stones, scrub or cacti on fused glass, where only spires stand', () => {
+    const types = t.types.map(() => 'glass' as const);
+    expect(scatterPlacements({ ...t, types }, []).flatMap(all).length).toBe(0);
+    expect(t.types.some((type) => type === 'glass')).toBe(true);
+    for (const p of placed) expect(typeAt(at(p))).not.toBe('glass');
   });
 
   it('places the same scatter on every load', () => {

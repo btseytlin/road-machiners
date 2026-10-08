@@ -120,11 +120,10 @@ it("posts a copy of a snapshot in hand and leaves that snapshot attached", () =>
   const spy = vi.spyOn(drive.world, "takeSnapshot");
   turns.prepareFrom(world, saved);
   const posted = TestWorker.latest.requests[0].drive;
-  // A deep toEqual walks the 1.8 MB snapshot element by element and takes over 30 s on a loaded machine.
   expect(Buffer.from(posted.snapshot).equals(Buffer.from(bytes))).toBe(true);
   expect(saved.snapshot.byteLength).toBe(bytes.byteLength);
   expect(spy).not.toHaveBeenCalled();
-}, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+}, 90_000);
 
 it("prepares from a snapshot once per world", () => {
   const turns = new TurnPreparation();

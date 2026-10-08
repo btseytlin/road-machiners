@@ -22,32 +22,24 @@ export type EffectId =
   | 'leaveLootWarning' | 'refuseLootWarning' | 'fightLootWarning' | 'hangUpLootWarning';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer' | 'lootWarningTerms';
 
-// `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
 export type DialogueNode = { line: string; options: DialogueOption[] };
 
 export type Topic = {
   id: TopicId;
-  once: boolean; // a driver raises or answers it with the player at most once
-  // How the player raises it from the hub. A driver in a feud with the player takes up only topics asked during
-  // feuds.
+  once: boolean;
   ask: { text: string; when: ConditionId[]; duringFeud: boolean } | null;
-  // When an NPC calls the player with it; higher priority wins. A feud stops the call unless `duringFeud`. A player
-  // in combat takes only calls that are part of the fight, marked `duringCombat`.
   raise: { when: ConditionId[]; priority: number; duringFeud: boolean; duringCombat: boolean } | null;
-  prepare: PrepareId | null; // fills the call values when the topic opens
-  hangUp: EffectId[]; // runs when the player hangs up inside the topic
+  prepare: PrepareId | null;
+  hangUp: EffectId[];
   start: string;
   nodes: Record<string, DialogueNode>;
 };
 
 export const HUB = 'hub';
 export const END = 'end';
-// The node, outside any topic, of a call the driver refused. It offers only hang up.
 export const REFUSED = 'callRefused';
-// What a driver busy fighting another truck says when the player calls.
 export const BUSY_LINE = 'Busy here! Off the channel.';
-// A driver that judges the stranded player not worth the trouble says this and leaves in peace.
 export const SPARE_LINE = 'You are not worth the trouble.';
 
 export const TOPICS: Record<TopicId, Topic> = {
@@ -69,7 +61,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver that parked beside the stranded player and made its offer calls with the terms.
   tow: {
     id: 'tow',
     once: false,
@@ -88,7 +79,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The same offer to a player with no money to pay.
   towFree: {
     id: 'towFree',
     once: false,
@@ -107,7 +97,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A stranded player asks a passing driver for help. It comes over and makes its offer by radio.
   askTow: {
     id: 'askTow',
     once: false,
@@ -123,7 +112,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The stranded player asks for a patch. The driver looks, then names its terms or says it cannot help.
   patch: {
     id: 'patch',
     once: false,
@@ -153,7 +141,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver stranded by a broken engine, gearbox or tank asks the player once for a patch.
   patchRequest: {
     id: 'patchRequest',
     once: true,
@@ -179,7 +166,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A raider or robber about to attack the player calls first, once, and asks for the cargo.
   demand: {
     id: 'demand',
     once: true,
@@ -198,9 +184,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A robber that claimed cargo spilled from the player's broken cargo part calls once, even mid-fight. Leaving it
-  // makes peace and keeps the rest of the cargo. Refusing or hanging up keeps the fight. It comes before the plain
-  // claim warning, which it ties and precedes in PARLEY, since the robber is still hostile.
   spillClaim: {
     id: 'spillClaim',
     once: true,
@@ -219,8 +202,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A robber alone with the stranded player calls once. Giving up strips the truck of cargo and the best parts and
-  // ends the fight. Refusing or hanging up makes the robber shoot at the cab.
   surrender: {
     id: 'surrender',
     once: true,
@@ -239,9 +220,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // Any other driver alone with the stranded player, and a robber with nothing to take, calls once, unless it judged the
-  // player not worth the trouble and left. See judgeStrandedFoe() in src/sim/parley.ts. Giving up ends the
-  // fight with a truce and takes nothing. Refusing or hanging up makes every gun shoot at the cab.
   giveUp: {
     id: 'giveUp',
     once: true,
@@ -260,8 +238,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver that claimed a handed-over pile warns the parked player off it, once. Rolling on or hanging up puts the
-  // player on the pile's backed-off list. Refusing starts a fight. See the pile claims in src/sim/parley.ts.
   claim: {
     id: 'claim',
     once: false,
@@ -280,7 +256,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // Both trucks pull over side by side, and E opens the trade screen once both are parked. See src/sim/economy.ts.
   trade: {
     id: 'trade',
     once: false,
@@ -299,9 +274,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player asks a foe for a truce. The driver's answer is rolled when the topic opens. A robber holding up the
-  // player answers with its cargo demand instead. The player asks the same
-  // driver again only after the plea state runs out.
   truce: {
     id: 'truce',
     once: false,
@@ -319,7 +291,6 @@ export const TOPICS: Record<TopicId, Topic> = {
           { text: 'We both drive away.', when: ['demandsToll'], effects: [], go: 'demanded' },
         ],
       },
-      // A robber after the player's cargo names its price instead of granting a free truce.
       demanded: {
         line: 'No free ride. Dump your cargo and roll on, and we call it square.',
         options: [
@@ -331,7 +302,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       refused: { line: 'Too late for talk.', options: [{ text: 'Then we finish this.', when: [], effects: [], go: END }] },
     },
   },
-  // The player gives up to a foe. A driver that spares the player gets the player's cargo and holds a truce.
   mercy: {
     id: 'mercy',
     once: false,
@@ -352,9 +322,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       refused: { line: 'No deals.', options: [{ text: 'Then come and get me.', when: [], effects: [], go: END }] },
     },
   },
-  // The player demands a badly broken foe give up. The driver answers once while it keeps the player in sight, like
-  // a stranded NPC offered a way out. One that agrees gives up where it stands, and the player strips its truck like a
-  // knocked-out one.
   yieldDemand: {
     id: 'yieldDemand',
     once: false,
@@ -375,7 +342,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       refused: { line: 'Not while I can still pull a trigger.', options: [{ text: 'Then we finish this.', when: [], effects: ['settleRefused'], go: END }] },
     },
   },
-  // The player demands the cargo of a driver at peace, once. It gives the cargo up, fights or runs.
   rob: {
     id: 'rob',
     once: true,
@@ -398,8 +364,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       flee: { line: 'Not today!', options: [{ text: 'Run, then.', when: [], effects: [], go: END }] },
     },
   },
-  // The player tells a driver at peace that loots a wreck, pile, loot spot or knocked-out truck in the player's reach to
-  // back off, once. It backs off, keeps looting or fights. See src/sim/loot-warning.ts.
   warnOff: {
     id: 'warnOff',
     once: true,
@@ -422,9 +386,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       fightBack: { line: 'Over my dead body.', options: [{ text: 'Have it your way.', when: [], effects: [], go: END }] },
     },
   },
-  // A driver that reached loot the player is looting warns the player off it in its own voice. Rolling on leaves the
-  // loot to it. On a refusal, or a hang-up before an answer, it backs off or fights, as rolled when the call opened.
-  // Daring it starts a fight. See src/sim/loot-warning.ts.
   lootWarning: {
     id: 'lootWarning',
     once: false,
@@ -447,7 +408,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       fights: { line: 'Then we settle it the hard way.', options: [{ text: 'Bring it.', when: [], effects: [], go: END }] },
     },
   },
-  // A foe hurt in a fight with the player asks for a truce.
   truceOffer: {
     id: 'truceOffer',
     once: false,
@@ -466,8 +426,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A beaten foe gives up. Sparing it leaves its cargo on the ground for the player. The player can instead demand that
-  // it stand down and be stripped, which it answers like the yieldDemand topic.
   mercyPlea: {
     id: 'mercyPlea',
     once: false,
@@ -502,7 +460,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player offers a stranded driver a tow to the town or camp it names, for what it can pay or for free.
   offerTow: {
     id: 'offerTow',
     once: false,
@@ -522,7 +479,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player lets a towed driver off the rope for free.
   releaseTow: {
     id: 'releaseTow',
     once: false,
@@ -535,7 +491,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       released: { line: 'Fine. Thanks for the pull.', options: [{ text: 'Over and out.', when: [], effects: ['releaseNpc'], go: END }] },
     },
   },
-  // The player offers to patch a driver stranded by a broken engine, gearbox or tank.
   offerPatch: {
     id: 'offerPatch',
     once: false,
@@ -561,7 +516,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player offers to patch a driver whose engine, gearbox or tank is worn thin, before it strands.
   offerPatchWorn: {
     id: 'offerPatchWorn',
     once: false,
@@ -587,7 +541,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver back from a town tells its prices. Needs the Market ears perk.
   marketNews: {
     id: 'marketNews',
     once: false,
@@ -606,7 +559,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver tells of an undiscovered site or a wreck with loot near its route, once. Needs the Rumor mill perk.
   rumor: {
     id: 'rumor',
     once: true,
@@ -639,7 +591,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver tells one trading tip from the prices it remembers, or that it has none.
   tips: {
     id: 'tips',
     once: false,
@@ -658,7 +609,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player buys peace from a foe for a share of its truck value. No roll. Needs the Paid truce perk.
   buyTruce: {
     id: 'buyTruce',
     once: false,
@@ -678,8 +628,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       paid: { line: 'Money is in. Guns down.', options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
     },
   },
-  // The player offers a driver low on fuel or supplies some of its own, for what the driver can pay or for free. The
-  // two trucks meet side by side before anything moves. See src/sim/aid.ts.
   offerAid: {
     id: 'offerAid',
     once: false,
@@ -699,7 +647,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A player low on fuel or supplies asks a driver for a little, once. The answer is rolled when the topic opens.
   askAid: {
     id: 'askAid',
     once: true,
@@ -723,7 +670,6 @@ export const TOPICS: Record<TopicId, Topic> = {
       refuse: { line: 'Sorry. Cannot spare any.', options: [{ text: 'Understood.', when: [], effects: [], go: HUB }] },
     },
   },
-  // A driver that saw a poor player low on fuel or supplies offers some, free. Not answering lets the offer expire.
   aidOffer: {
     id: 'aidOffer',
     once: false,
@@ -744,16 +690,12 @@ export const TOPICS: Record<TopicId, Topic> = {
   },
 };
 
-// A trading tip in words. {site} is the shop's site, {good} the good's name and {was} its verb, "was" or "were".
-// The tip never names a number.
 export const TIP_LINES = {
   dear: 'Last time I was at {site}, {good} {was} very overpriced.',
   cheap: 'Last time I was at {site}, {good} {was} going cheap.',
   none: 'Nothing worth telling.',
 };
 
-// Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
-// to. Filled with {price}, and with {parts} as a count with its unit, like "2 parts". Lines never name turns.
 export const DEAL_LINES: Record<PatchDeal, { npcPatches: string; playerPatches: string }> = {
   paid: {
     npcPatches: 'I have the parts. {parts} and the work, {price} all in.',
@@ -769,24 +711,18 @@ export const DEAL_LINES: Record<PatchDeal, { npcPatches: string; playerPatches: 
   },
 };
 
-// How a driver talks. The first of its traits with a voice speaks for it.
 export type Voice = {
-  greeting: string; // the hub line when the player calls
-  repeatLine: string; // the answer to a `once` topic already settled
-  refusal: string; // the answer when a driver in a feud has no topic to take up
-  warnOff: string; // warns the player off loot the driver wants
-  honksBack: boolean; // answers the player's honk when not hostile
+  greeting: string;
+  repeatLine: string;
+  refusal: string;
+  warnOff: string;
+  honksBack: boolean;
 };
 
-// What each trait adds to talk. A driver can take up the union of its traits' topics. Only talkOf() in
-// src/sim/dialogue.ts reads this.
 export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 
-// Tiles a horn carries. It is about as loud as an engine at limp speed, so it reaches a little past sight.
 export const HONK_RANGE = DETECT.sound.limp;
 
-// Every driver can be asked for peace, robbed, warned off loot, towed, patched and given fuel or supplies, can plead
-// for peace, and can warn the player off loot.
 const PARLEY: TopicId[] = ['spillClaim', 'surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'lootWarning', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerPatchWorn', 'offerAid'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {

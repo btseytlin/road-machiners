@@ -10,16 +10,15 @@ import { TreeInstances } from './trees';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
-// The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
   const url = FILES[`/public/models/${name}.glb`];
   if (!url) throw new Error(`Missing model file for ${name}`);
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
-await initPhysics(); // the debris of broken props flies in Rapier
+await initPhysics();
 
-const SIZE = 64; // two terrain chunks a side
+const SIZE = 64;
 
 function flat(): Terrain {
   return { size: SIZE, heights: new Array<number>((SIZE + 1) * (SIZE + 1)).fill(0), types: new Array(SIZE * SIZE).fill('hardpan') };
@@ -29,7 +28,6 @@ function tree(id: string, x: number, y: number): Landmark {
   return { id, pos: { x, y }, r: 0.35, kind: 'landmark', look: 'deadTree', yaw: 0.3 };
 }
 
-// Three trees in the first chunk and one in the chunk east of it.
 const TREES = [tree('deadTree-0', 5, 5), tree('deadTree-1', 7, 6), tree('deadTree-2', 9, 4), tree('deadTree-3', 40, 5)];
 
 function build(): { root: THREE.Group; trees: TreeInstances } {
@@ -38,7 +36,6 @@ function build(): { root: THREE.Group; trees: TreeInstances } {
   return { root, trees: new TreeInstances(scope, flat(), TREES) };
 }
 
-// The drawn tree meshes of one scope chunk, leaving out their outlines.
 function meshesOf(root: THREE.Group, chunk: string): THREE.InstancedMesh[] {
   const group = root.getObjectByName(chunk);
   if (!group) throw new Error(`Missing ${chunk}`);

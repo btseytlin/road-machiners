@@ -5,7 +5,6 @@ import { fake, reset, type Fake } from './test-fakes';
 
 beforeEach(reset);
 
-// A fake whose issue branch moves on GitHub: each push in `rejects` fails once, and each entry of `moves` is what the next catch-up finds.
 function moving(moves: { commit: string | null; conflicts: string[] }[], rejects: number): { f: Fake; prompts: string[] } {
   const f = fake();
   const prompts: string[] = [];
@@ -43,7 +42,7 @@ describe('pushing an issue branch that moved on GitHub', () => {
 
   it('merges again and pushes again when GitHub rejects the push because the branch moved meanwhile', async () => {
     const { f } = moving([{ commit: null, conflicts: [] }, { commit: 'member2', conflicts: ['f.txt'] }], 1);
-    await guardAndPush(f.ctx, 7, 'dev', 'patch');
+    await guardAndPush(f.ctx, 7, 'dev', 'verify');
     expect(f.calls.filter((call) => call !== 'fetch' && call !== 'fetchFromWork')).toEqual(['catch up none', 'push rejected', 'catch up member2', 'agent', 'push work-head factory/issue-7']);
   });
 
