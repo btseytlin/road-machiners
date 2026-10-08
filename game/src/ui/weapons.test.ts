@@ -495,7 +495,12 @@ describe("weapon panel keys and the turn button", () => {
 
 function make() {
   const calls = { n: 0 };
-  return { calls, pin: new InspectPin(() => calls.n++) };
+  const sight = { seen: true };
+  const pass = (pin: InspectPin, id: string, inWorld = true) => {
+    pin.note({ id } as Vehicle, inWorld);
+    pin.settle();
+  };
+  return { calls, sight, pass, pin: new InspectPin(() => calls.n++, () => sight.seen) };
 }
 
 describe("InspectPin", () => {
@@ -511,16 +516,31 @@ describe("InspectPin", () => {
   });
 
   it("clears, and tells only about real changes", () => {
-    const { pin, calls } = make();
+    const { pin, calls, pass } = make();
     pin.clear();
-    pin.keepIf(true);
+    pass(pin, "a");
     expect(calls.n).toBe(0);
     pin.click("a");
-    pin.keepIf(true);
+    pass(pin, "a");
     expect(pin.id).toBe("a");
-    pin.keepIf(false);
+    pin.clear();
     expect(pin.id).toBeNull();
     expect(calls.n).toBe(2);
+  });
+
+  it("drops the pin when its truck is out of sight, gone from the world or not in the pass", () => {
+    const { pin, sight, pass } = make();
+    pin.click("a");
+    sight.seen = false;
+    pass(pin, "a");
+    expect(pin.id).toBeNull();
+    sight.seen = true;
+    pin.click("a");
+    pass(pin, "a", false);
+    expect(pin.id).toBeNull();
+    pin.click("a");
+    pass(pin, "b");
+    expect(pin.id).toBeNull();
   });
 
   it("rejects an empty id", () => {

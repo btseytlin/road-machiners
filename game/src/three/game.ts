@@ -171,7 +171,7 @@ export class Game {
   private hovered: string | null = null;
   // The pointer needs a moment to travel from a truck to its panel.
   private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
-  private readonly pin = new InspectPin(() => this.onInspectChange());
+  private readonly pin = new InspectPin(() => this.onInspectChange(), (v) => this.isVehicleVisible(v));
   private readonly pickRing = new PickRing();
   private selected: string | null = null;
   private readonly sightLimit: SightLimit;
@@ -600,9 +600,7 @@ export class Game {
   }
 
   // The truck the card, keys and arcs follow: the pinned one, else the one under the pointer.
-  private inspected(): string | null {
-    return this.pin.id ?? this.hovered;
-  }
+  private inspected(): string | null { return this.pin.id ?? this.hovered; }
 
   private onInspectChange(): void {
     this.refreshInfo();
@@ -1068,7 +1066,8 @@ export class Game {
     this.radioLights.note(this.world, now);
     const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
-    for (const v of shown) {
+    for (const [i, v] of shown.entries()) {
+      this.pin.note(v, i < this.world.vehicles.length);
       const kept = this.frames[v.id];
       // Between turns, a vehicle moved outside a turn, such as by a debug script, jumps to its new spot.
       const stale = !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
@@ -1096,8 +1095,7 @@ export class Game {
       view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt, seen);
     }
-    // The pin ends with its truck's sight.
-    this.pin.keepIf(this.world.vehicles.some((x) => x.id === this.pin.id && this.isVehicleVisible(x)));
+    this.pin.settle();
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
       this.scene.remove(view.root);

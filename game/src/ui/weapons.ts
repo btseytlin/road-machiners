@@ -680,7 +680,12 @@ export class HoverHold {
 export class InspectPin {
   private current: string | null = null;
 
-  constructor(private readonly onChange: () => void) {}
+  private seen = false;
+
+  constructor(
+    private readonly onChange: () => void,
+    private readonly visible: (v: Vehicle) => boolean,
+  ) {}
 
   get id(): string | null {
     return this.current;
@@ -696,9 +701,15 @@ export class InspectPin {
     this.set(null);
   }
 
-  // Keeps the pin while its truck is seen, and drops it otherwise.
-  keepIf(seen: boolean): void {
-    if (!seen) this.set(null);
+  // Called once per truck in a frame's pass. Only the pinned truck, when still in the world, is tested for sight.
+  note(v: Vehicle, inWorld: boolean): void {
+    if (v.id === this.current && inWorld && this.visible(v)) this.seen = true;
+  }
+
+  // Ends the frame's pass: drops the pin when its truck was not seen.
+  settle(): void {
+    if (this.current !== null && !this.seen) this.set(null);
+    this.seen = false;
   }
 
   private set(id: string | null): void {
