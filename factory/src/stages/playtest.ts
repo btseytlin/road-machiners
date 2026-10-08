@@ -1,5 +1,6 @@
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { phaseLine, stepScript } from '../activity';
 import { checkScope } from '../deploy';
 import { must } from '../exec';
 import { roundSession } from '../sessions';
@@ -29,15 +30,11 @@ type Step = Next | { end: Ending };
 type Round = { meta: RunMeta; outcome: Outcome; sha: string; head: string; play: number };
 
 export async function playtest(ctx: Ctx, issue: number): Promise<void> {
-  const release = requireRelease(ctx);
-  if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
-  if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
-  await ctx.repo.fetch();
-  const open = await openReleaseTasks(ctx);
-  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
+  const release = await requirePlayable(ctx, issue);
   const baseline = await baselineOf(ctx, release);
   await takeMain(ctx, release);
   const start = await ctx.repo.headHash(release.branch);
+  if (await carryPass(ctx, release, start)) return;
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
@@ -50,8 +47,44 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(release.issue, comment(session, plays, end, next, report(session)));
 }
 
+async function requirePlayable(ctx: Ctx, issue: number): Promise<ReleaseState> {
+  const release = requireRelease(ctx);
+  if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
+  if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
+  await ctx.repo.fetch();
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
+  return release;
+}
+
 async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
-  await ctx.container.shell(dir, 'npm ci && npm test', releaseLog(ctx, 'playtest'));
+  await ctx.container.shell(dir, stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]), releaseLog(ctx, 'playtest'));
+}
+
+async function carryPass(ctx: Ctx, release: ReleaseState, start: string): Promise<boolean> {
+  const passed = release.playtest.passed;
+  if (passed === null) return false;
+  const changed = await sameGame(ctx, passed, start);
+  if (changed === null) return false;
+  await ctx.repo.fetch();
+  const now = await ctx.repo.headHash(release.branch);
+  if (now !== start) {
+    ctx.log('playtest', release.issue, `the release moved to ${now} while the factory compared ${start} with ${passed}. Nothing played, the new head is next.`);
+    return true;
+  }
+  setPlaytest(ctx, (playtest) => ({ ...playtest, passed: start }));
+  const files = changed.length ? `It changed ${changed.length} other files, like ${changed[0]}.` : 'It changed no files.';
+  const note = `Release playtest: carried the pass of ${passed} to ${start} with no play. ${start} only adds commits to ${passed} and changes no file under ${GAME_DIR}/, so it plays the same game. ${files} The candidate builds from ${start}.`;
+  ctx.log('playtest', release.issue, note);
+  await ctx.github.comment(release.issue, note);
+  return true;
+}
+
+async function sameGame(ctx: Ctx, passed: string, start: string): Promise<string[] | null> {
+  if (passed === start) return [];
+  if (!(await ctx.repo.isMerged(passed, start))) return null;
+  const changed = await ctx.repo.changedFiles(passed, start);
+  return changed.some((file) => file.startsWith(`${GAME_DIR}/`)) ? null : changed;
 }
 
 async function takeMain(ctx: Ctx, release: ReleaseState): Promise<void> {
@@ -142,7 +175,7 @@ async function firstPlay(ctx: Ctx, session: Session): Promise<LogFacts> {
 }
 
 async function playRelease(ctx: Ctx, session: Session, sha: string): Promise<LogFacts> {
-  await harness(ctx, session, session.dir, sha);
+  await harness(ctx, session, session.dir, sha, 'Playing the release seed');
   const facts = readFacts(ctx, session.release, join(session.home, LOG), sha);
   writeFileSync(join(session.home, OUT_DIR, 'playtest-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
   return facts;
@@ -154,7 +187,7 @@ async function playBaseline(ctx: Ctx, session: Session): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(baseline.branch, baseline.branch, dir);
   must(await ctx.run('git', ['-C', dir, 'checkout', '--quiet', '--detach', baseline.sha]), 'git checkout of the playtest baseline');
-  await harness(ctx, session, dir, baseline.sha);
+  await harness(ctx, session, dir, baseline.sha, 'Playing the baseline seed');
   const log = join(agentHome(dir, GAME_DIR), LOG);
   const facts = readFacts(ctx, session.release, log, baseline.sha);
   mkdirSync(dirname(join(home, BASELINE_LOG)), { recursive: true });
@@ -162,9 +195,10 @@ async function playBaseline(ctx: Ctx, session: Session): Promise<void> {
   writeFileSync(join(home, OUT_DIR, 'playtest-baseline-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
 }
 
-async function harness(ctx: Ctx, session: Session, dir: string, sha: string): Promise<void> {
+async function harness(ctx: Ctx, session: Session, dir: string, sha: string, phase: string): Promise<void> {
   const { seed } = session.release.playtest;
-  await ctx.container.shell(dir, `npm ci && npm run progression:playthrough -- --seed ${seed} --turns ${ctx.cfg.playtestTurns} --sha ${sha} --out ${LOG}`, session.log);
+  const play = `npm run progression:playthrough -- --seed ${seed} --turns ${ctx.cfg.playtestTurns} --sha ${sha} --out ${LOG}`;
+  await ctx.container.shell(dir, stepScript(phase, [['npm ci', 'npm ci'], ['playtest', play]]), session.log);
 }
 
 function readFacts(ctx: Ctx, release: ReleaseState, path: string, sha: string): LogFacts {
@@ -186,7 +220,7 @@ async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<stri
   const log = releaseLog(ctx, 'playtest-checks');
   const check = async (): Promise<string | null> => {
     try {
-      await ctx.container.shell(session.dir, checkScript(playtestCommand(ctx.cfg, false)), log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
+      await ctx.container.shell(session.dir, `${phaseLine('Checking the playtest fixes')}\n${checkScript(playtestCommand(ctx.cfg, false))}`, log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
       return null;
     } catch (error) {
       return checkFailure(log, error);

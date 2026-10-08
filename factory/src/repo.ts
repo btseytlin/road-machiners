@@ -267,7 +267,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       return git(['show', `${await ref(branch)}:${path}`]);
     },
     async changedFiles(base, branch) {
-      return lines(await git(['diff', '--name-only', `${await ref(base)}...${await ref(branch)}`]));
+      return lines(await git(['diff', '--name-only', '--no-renames', `${await ref(base)}...${await ref(branch)}`]));
     },
     async hasNewCommits(base, branch) {
       return Number((await git(['rev-list', '--count', `${await ref(base)}..${await ref(branch)}`])).trim()) > 0;
