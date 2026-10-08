@@ -1,19 +1,18 @@
 // The catalog check: every key in every language, with the same params and the language's own plural forms.
 import { describe, expect, it } from 'vitest';
 import { EN } from './en';
-import { LOCALES, type EnEntry, type Locale } from './msg';
-import { entryText, parse, placeholders, pluralCategories, schemaOf } from './resolve';
+import { LOCALES, type EnEntry, type Locale, type Noun } from './msg';
+import { entryText, grammarParams, nounOf, parse, placeholders, pluralCategories, schemaOf } from './resolve';
 import { RU } from './ru';
 
-const CATALOGS: Record<Locale, Readonly<Record<string, string | EnEntry>>> = { en: EN, ru: RU };
+const CATALOGS: Record<Locale, Readonly<Record<string, EnEntry | Noun>>> = { en: EN, ru: RU };
 const KEYS = Object.keys(EN);
 
-// Russian text that reads the same as the English on purpose: brands, a language's own name, and numbers or marks.
 const SAME_AS_ENGLISH = new Set(['radio.band', 'radio.frequency', 'language.en', 'language.ru']);
-const hasWords = (text: string): boolean => /\p{L}{2,}/u.test(text.replace(/\{[^}]*\}/g, ''));
+const RU_NOUN = /^(part|chassis|site|terrain|faction)\.[^.]+$|^npc\.[^.]+(\.profession)?$|^good\.[^.]+(\.lower)?$/;
+const RU_NOUN_KEYS = new Set(['vehicle.yours', 'job.theTruck', 'job.somePart', 'log.anObstacle', 'log.something', 'log.you']);
+const hasWords =(text: string): boolean => /\p{L}{2,}/u.test(text.replace(/\{[^}]*\}/g, ''));
 
-// Words that break character on the radio: the drivers and J.J. talk about roads, cargo, money and wrecks, never
-// about the game itself. A stem matches at the start of a word.
 const BANNED: Record<Locale, readonly string[]> = {
   en: ['turn', 'quest', 'xp', 'experience', 'level', 'hp', 'click', 'press', 'key', 'player', 'game', 'tile', 'save'],
   ru: ['ход', 'квест', 'опыт', 'уров', 'игрок', 'игров', 'клик', 'нажм', 'клавиш', 'клетк', 'сохран'],
@@ -52,6 +51,21 @@ describe('the catalog', () => {
         }
       }
     }
+  });
+
+  it('puts only text params in a case or a gender agreement', () => {
+    for (const locale of LOCALES) {
+      for (const key of KEYS) {
+        for (const param of grammarParams(parse(entryText(locale, key)))) expect(schemaOf(key)[param], `${locale} ${key} {${param}}`).toBe('text');
+      }
+    }
+  });
+
+  it('gives every Russian name its forms in every case and its gender', () => {
+    const names = KEYS.filter((key) => RU_NOUN.test(key) || RU_NOUN_KEYS.has(key));
+    expect(names.length).toBeGreaterThan(150);
+    expect(names.filter((key) => nounOf('ru', key) === null)).toEqual([]);
+    for (const key of RU_NOUN_KEYS) expect(KEYS).toContain(key);
   });
 
   it('has Russian words for every entry with words, never the English copied over', () => {

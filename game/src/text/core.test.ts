@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LANGUAGE_KEY, Language, loadLanguage } from './language';
-import { byId, list, num, sameMsg, t, verbatim } from './msg';
+import { byId, list, num, sameMsg, t, verbatim, type Msg } from './msg';
 import { parse, placeholders, pluralCategories, pseudo, resolve } from './resolve';
 
 class FakeStorage {
@@ -16,7 +16,7 @@ class FakeStorage {
 describe('parse', () => {
   it('reads literals and placeholders', () => {
     const parts = parse('{km} km away');
-    expect(parts).toEqual([{ kind: 'arg', name: 'km' }, { kind: 'lit', text: ' km away' }]);
+    expect(parts).toEqual([{ kind: 'arg', name: 'km', case: null }, { kind: 'lit', text: ' km away' }]);
   });
 
   it('reads plurals with # and nested placeholders', () => {
@@ -69,6 +69,41 @@ describe('resolve', () => {
     expect(() => resolve(byId('call.km'), 'en')).toThrow(/needs dec1/);
     expect(() => resolve(byId('menu.save', { n: 1 }), 'en')).toThrow(/extra/);
     expect(() => resolve(byId('call.km', { km: 'far' }), 'ru')).toThrow(/needs dec1/);
+  });
+
+  it('puts a name in the case a sentence asks for, as written inside a sentence', () => {
+    expect(resolve(t('job.repair', { part: byId('part.mg') }), 'ru')).toBe('Ремонт пулемётной турели');
+    expect(resolve(t('job.repair', { part: byId('part.mg') }), 'en')).toBe('Repair MG turret');
+  });
+
+  it('capitalizes a name shown on its own or put in a sentence without a case', () => {
+    expect(resolve(byId('part.mg'), 'ru')).toBe('Пулемётная турель');
+    expect(resolve(t('log.partDamage', { part: byId('part.mg'), n: 3 }), 'ru')).toBe('Пулемётная турель: 3');
+  });
+
+  it('carries the case into a phrase and takes its gender from its first name', () => {
+    const trader = t('vehicle.npc', { profession: byId('npc.trader.profession'), driver: 'Ray Nolan' });
+    expect(resolve(trader, 'ru')).toBe('Торговец Ray Nolan');
+    expect(resolve(t('log.patchDoneThem', { who: trader }), 'ru')).toBe('Торговец Ray Nolan починил ваш грузовик.');
+    expect(resolve(t('job.repair', { part: list([byId('part.mg'), byId('part.plates')]) }), 'ru')).toBe('Ремонт пулемётной турели, стальных плит');
+  });
+
+  it('agrees with the gender of a name, and a list of several is plural', () => {
+    const fixedBy = (who: Msg) => resolve(t('log.patchDoneThem', { who }), 'ru');
+    expect(fixedBy(byId('part.mg'))).toBe('Пулемётная турель починила ваш грузовик.');
+    expect(fixedBy(list([byId('part.mg'), byId('part.plates')]))).toBe('Пулемётная турель, стальные плиты починили ваш грузовик.');
+  });
+
+  it('throws on a case of text with no case forms, and on the gender of text with none', () => {
+    expect(() => resolve(t('job.repair', { part: t('menu.save') }), 'ru')).toThrow(/no gen form/);
+    expect(() => resolve(t('log.patchDoneThem', { who: verbatim('Ray Nolan') }), 'ru')).toThrow(/no gender/);
+  });
+
+  it('parses case and gender, and throws on a bad case or a missing gender', () => {
+    expect(parse('{x, case, acc}')).toEqual([{ kind: 'arg', name: 'x', case: 'acc' }]);
+    expect(() => parse('{x, case, loc}')).toThrow(/bad case/);
+    expect(() => parse('{x, gender, m {a} f {b} n {c}}')).toThrow(/every form/);
+    expect([...placeholders(parse('{x, gender, m {a} f {{y}} n {c} pl {d}}'))].sort()).toEqual(['x', 'y']);
   });
 
   it('pads pseudo text by about 40% inside marks', () => {

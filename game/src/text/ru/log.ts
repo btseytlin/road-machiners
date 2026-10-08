@@ -1,11 +1,11 @@
 import type { LOG as EN } from '../en/log';
-import type { Translation } from '../msg';
+import { noun, type Translation } from '../msg';
 
 export const LOG: Translation<typeof EN> = {
   'job.search': 'Поиски',
   'job.weld': 'Сварить броню из лома',
   'job.somePart': 'деталь',
-  'job.repair': 'Ремонт: {part}',
+  'job.repair': 'Ремонт {part, case, gen}',
   'job.strip': 'Снять: {part}',
   'job.theTruck': 'грузовик',
   'job.remove': 'Снять {part} — {truck}',
@@ -98,7 +98,7 @@ export const LOG: Translation<typeof EN> = {
   'log.patchStartYou': 'Вы начинаете чинить: {who}. Стойте рядом.',
   'log.patchStartThem': '{who} начинает чинить ваш грузовик. Стойте на месте.',
   'log.patchDoneYou': 'Вы починили: {who}.',
-  'log.patchDoneThem': '{who} починил ваш грузовик.',
+  'log.patchDoneThem': '{who} {who, gender, m {починил} f {починила} n {починило} pl {починили}} ваш грузовик.',
   'log.patchLapsed': 'Ремонт отменён ({who}): никто не работал.',
   'log.patchBroken': 'Ремонт отменён: {who}.',
   'log.aidNothing': 'Обмена не было: {who}.',
@@ -354,6 +354,6 @@ export const LOG: Translation<typeof EN> = {
   'refusal.utilityOrder.self': '{part} не требует цели, только запуска',
   'refusal.utilityBlocked': '{part}: {reason}',
   'unit.part': '{n, plural, one {# деталь} few {# детали} many {# деталей} other {# детали}}',
-  'vehicle.yours': 'Ваш грузовик',
+  'vehicle.yours': noun('m', 'ваш грузовик', 'вашего грузовика', 'вашему грузовику', 'ваш грузовик', 'вашим грузовиком', 'вашем грузовике'),
   'vehicle.npc': '{profession} {driver}',
 };

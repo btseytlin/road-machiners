@@ -1,8 +1,8 @@
 import type { NAMES as EN } from '../en/names';
-import type { Translation } from '../msg';
+import { noun, type Translation } from '../msg';
 
 export const NAMES: Translation<typeof EN> = {
-  'part.mg': 'Пулемётная турель',
+  'part.mg': noun('f', 'пулемётная турель', 'пулемётной турели', 'пулемётной турели', 'пулемётную турель', 'пулемётной турелью', 'пулемётной турели'),
   'part.shotgun': 'Дробовик',
   'part.longRifle': 'Длинная винтовка',
   'part.flamer': 'Огнемёт',
@@ -27,7 +27,7 @@ export const NAMES: Translation<typeof EN> = {
   'part.racingV6': 'Гоночный V6',
   'part.heavyDiesel': 'Тяжёлый дизель',
   'part.turbine': 'Турбина',
-  'part.plates': 'Стальные плиты',
+  'part.plates': noun('pl', 'стальные плиты', 'стальных плит', 'стальным плитам', 'стальные плиты', 'стальными плитами', 'стальных плитах'),
   'part.cage': 'Арматурная клетка',
   'part.ram': 'Таранный брус',
   'part.scrapPanels': 'Панели из лома',
@@ -171,7 +171,7 @@ export const NAMES: Translation<typeof EN> = {
   'npc.gunwagon': 'Боевой фургон',
   'npc.gunwagon.profession': 'Рейдер',
   'npc.trader': 'Торговый караван',
-  'npc.trader.profession': 'Торговец',
+  'npc.trader.profession': noun('m', 'торговец', 'торговца', 'торговцу', 'торговца', 'торговцем', 'торговце'),
   'npc.scavenger': 'Мусорщик',
   'npc.scavenger.profession': 'Мусорщик',
   'npc.bowlFarmer': 'Патруль Чаши',

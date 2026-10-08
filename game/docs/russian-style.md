@@ -28,6 +28,18 @@ Translate what the line means where the player sees it, not its words. The key t
 9. Stay close to the English length. A button or label may grow by a third at most. The layout check fails on clipped text.
 10. Use one word per concept, from the glossary below.
 
+## Names in sentences
+
+A name inside a sentence takes the case the grammar needs, and the verb agrees with its gender. [Text and languages](architecture/text.md) has the syntax.
+
+- `log.patchDoneYou`: «Вы починили: {who}.» → «Вы починили {who, case, acc}.»
+- `log.patchDoneThem`: «{who} починил ваш грузовик.» → «{who} {who, gender, m {починил} f {починила} n {починило} pl {починили}} ваш грузовик.»
+- `job.repair`: «Ремонт: {part}» → «Ремонт {part, case, gen}».
+- `log.towOffer`: «…дотащить вас, пункт — {site}…» → «…дотащить вас до {site, case, gen}…».
+- `log.breakdown`: «Сломалось: {part}» → «{part} {part, gender, m {сломался} f {сломалась} n {сломалось} pl {сломались}}».
+
+A new name entry is a `noun()` with all six forms and its gender. Write the forms in lower case unless the name is a proper name, like a place. Check each form in a sentence: «нет …», «дать …», «вижу …», «с …», «о …».
+
 ## Examples
 
 Bad, then good, with the reason.
