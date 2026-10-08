@@ -483,6 +483,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withTracks_22_23,
   // 23 to 24: a track records the turn its truck came in sight, null after loading.
   withSeenSince_23_24,
+  // 24 to 25: a driver may remember a salvage stock it found stripped. Old saves hold only price memories, so nothing changes.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

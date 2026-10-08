@@ -30,6 +30,7 @@ import FORMAT_2_20 from './save-fixtures/format-2-20.json';
 import FORMAT_2_21 from './save-fixtures/format-2-21.json';
 import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
+import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -485,5 +486,11 @@ describe('save migration 23 to 24', () => {
       ...FORMAT_2_23,
       vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
     });
+  });
+});
+
+describe('save migration 24 to 25', () => {
+  it('keeps a save with only price memories as it is', () => {
+    expect(MIGRATIONS[24](structuredClone(FORMAT_2_24))).toEqual(FORMAT_2_24);
   });
 });

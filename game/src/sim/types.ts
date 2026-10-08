@@ -222,7 +222,8 @@ export type Track = { at: Vec; turn: number; sighted: boolean; seenSince: number
 
 // A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
 // prices: a shop's standing pressure for each good it trades, when the driver did business there.
-export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+// stripped: a salvage stock the driver reached and found empty.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> } | { kind: 'stripped'; stock: string };
 export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
