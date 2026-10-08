@@ -116,25 +116,25 @@ describe('read commands', () => {
   });
 
   it('audit prints only the drift lines', async () => {
-    writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5] });
     await run(board(), 'audit');
-    expect(out).toEqual(['#5 testPhase checks but column Design', '#6 column Approval but no open post and no approval']);
+    expect(out).toEqual(['#5 waits for a post but column Design', '#6 column Approval but no open post and no approval']);
   });
 
   it('audit skips a card with a running job, and card still shows its drift and the job', async () => {
     const f = board();
     const running = { id: 'j', stage: 'checks' as const, issue: 5, pid: 1, startedAt: '2026-01-01T00:00:00Z', log: 'l' };
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, jobs: [running], approvalPosts: { '77': 6 } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5], jobs: [running], approvalPosts: { '77': 6 } });
     await run(f, 'audit');
     expect(out).toEqual([]);
     await run(f, 'card', '5');
-    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    expect(out).toContain('drift: #5 waits for a post but column Design');
     expect(out).toContain('note: a checks job is running, so the drift above may pass in seconds');
   });
 
   it('audit and the other read commands change no store', async () => {
     const f = board();
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5] });
     const before = readFileSync(f.ctx.statePath, 'utf8');
     for (const args of [['audit'], ['cards'], ['card', '5'], ['jobs'], ['queues'], ['release'], ['failures'], ['help']]) await run(f, ...args);
     expect(readFileSync(f.ctx.statePath, 'utf8')).toBe(before);
@@ -149,13 +149,13 @@ describe('read commands', () => {
 
   it('card prints one fact per line and its drift', async () => {
     const f = board();
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, builds: { '5': 'abc1234' } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5], builds: { '5': 'abc1234' } });
     await run(f, 'card', '5');
     expect(out).toContain('position: design');
     expect(out).toContain('labels: hotfix');
-    expect(out).toContain('testPhase: checks');
+    expect(out).toContain('post only: yes');
     expect(out).toContain('build: abc1234');
-    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    expect(out).toContain('drift: #5 waits for a post but column Design');
     await expect(run(f, 'card', '99')).rejects.toThrow('No card');
   });
 

@@ -207,7 +207,7 @@ async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<strin
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
   if (card?.column !== 'Approval') throw new Error(`Issue #${issue} is not waiting for approval.`);
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
-  return `Approval of #${issue} is queued. The merge into dev starts on a coming tick.`;
+  return `Approval of #${issue} is queued. Hardening starts on a coming tick.`;
 }
 
 async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<string> {

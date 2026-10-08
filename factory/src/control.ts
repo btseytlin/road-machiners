@@ -4,7 +4,7 @@ import { readCommittee } from './committee';
 import { holdCard, releaseHold } from './hold';
 import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
-import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
+import { CARD_JOBS, MOVE_TARGETS, isMerging, type MoveTarget } from './position';
 import { withStatus } from './post-status';
 import { dropReplyMedia } from './reply-media';
 import { clearSessions } from './sessions';
@@ -12,7 +12,7 @@ import { readState, updateState } from './state';
 import { agentHome, workDir } from './stages/common';
 import { closeCard } from './stages/approval';
 import { moveCard, type CardStep } from './card-events';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, isCleanupTask, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, isCleanupTask, type Card, type Column, type Ctx, type FactoryState, type ReleaseState } from './types';
 
 export const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
 export type DropQueue = (typeof DROP_QUEUES)[number];
@@ -114,7 +114,7 @@ export function isGated(ctx: Ctx, command: ControlCommand): boolean {
 }
 
 function approves(command: ControlCommand): command is Extract<ControlCommand, { action: 'merge' | 'move' }> {
-  return command.action === 'merge' || (command.action === 'move' && command.to === 'harden');
+  return command.action === 'merge' || (command.action === 'move' && APPROVES.includes(command.to));
 }
 
 type Handlers = { [A in ControlAction['action']]: (ctx: Ctx, command: Extract<ControlCommand, { action: A }>, by: string) => Promise<Outcome> };
@@ -139,18 +139,15 @@ export async function applyControl(ctx: Ctx, command: ControlCommand): Promise<s
   return text;
 }
 
-const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', checks: 'Testing', approval: 'Testing', harden: 'Hardening', done: 'Done' };
-const PHASE: Partial<Record<MoveTarget, TestPhase>> = { checks: 'checks', approval: 'post' };
-// A card put back before its build or its preview, or finished, no longer holds the approval it had.
-const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'verify', 'done'];
+// A move to approval goes through Testing, where a checks job builds and posts the branch with no tests.
+const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', approval: 'Testing', harden: 'Hardening', merging: 'Merging', done: 'Done' };
+// A card put back before its build or its post, or finished, no longer holds the approval it had. A new post asks the committee again.
+const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'verify', 'approval', 'done'];
+// A move to Hardening or Merging is an approval, like a merge order.
+const APPROVES: MoveTarget[] = ['harden', 'merging'];
 
-// An approved card runs its checks or its build in Hardening, since an approved card in Testing would skip hardening.
 function isApproved(state: FactoryState, card: Card): boolean {
   return String(card.issue) in state.approvedResolving || isCleanupTask(card.labels);
-}
-
-function targetColumn(ctx: Ctx, card: Card, to: MoveTarget): Column {
-  return (to === 'checks' || to === 'approval') && isApproved(readState(ctx.statePath), card) ? 'Hardening' : COLUMN[to];
 }
 
 async function requireCard(ctx: Ctx, issue: number): Promise<Card> {
@@ -167,11 +164,11 @@ function cardPosts(state: FactoryState, issue: number): string[] {
   return Object.entries(state.approvalPosts).filter(([, number]) => number === issue).map(([id]) => id);
 }
 
-// Checked before a card leaves its position, so a refused order changes nothing.
-// A running merge is never killed, since it may stop between its push and its deploy. Hermes repeats the order after the merge.
-function requireLeavable(ctx: Ctx, issue: number): void {
+// Checked before a card leaves its position, so a refused order changes nothing. Hermes repeats an order refused by a merge after it.
+function requireLeavable(ctx: Ctx, card: Card): void {
+  const { issue } = card;
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => job.issue === issue && job.stage === 'approve')) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
+  if (isMerging(state, card)) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
   const missing = cardPosts(state, issue).find((id) => state.postCaptions[id] === undefined);
   if (missing !== undefined) throw new Error(`No caption is recorded for post ${missing}`);
 }
@@ -203,8 +200,7 @@ function clearCardState(state: FactoryState, issue: number, dropsApproval: boole
   const key = String(issue);
   return {
     ...state,
-    testPhase: omitKey(state.testPhase, key),
-    patching: omitKey(state.patching, key),
+    postOnly: state.postOnly.filter((number) => number !== issue),
     interrupted: state.interrupted.filter((number) => number !== issue),
     pendingApprovals: omitKey(state.pendingApprovals, key),
     approvedResolving: dropsApproval ? omitKey(state.approvedResolving, key) : state.approvedResolving,
@@ -227,13 +223,6 @@ async function requireBranch(ctx: Ctx, issue: number): Promise<void> {
   }
 }
 
-// An approved card merges with no post, so it needs no approval file.
-async function requireApprovalFile(ctx: Ctx, issue: number): Promise<void> {
-  if (isApproved(readState(ctx.statePath), await requireCard(ctx, issue))) return;
-  const path = join(agentHome(workDir(ctx, issue), GAME_DIR), OUT_DIR, 'approval.json');
-  if (!existsSync(path)) throw new Error(`Issue #${issue} has no ${path}; move it to verify, which writes the approval.`);
-}
-
 async function requireTaskFile(ctx: Ctx, issue: number): Promise<void> {
   const path = join(agentHome(workDir(ctx, issue), GAME_DIR), TASK_FILE(issue));
   if (!existsSync(path)) throw new Error(`Issue #${issue} has no task file ${path}; move it to design, which writes the task.`);
@@ -243,9 +232,9 @@ type Need = (ctx: Ctx, issue: number) => Promise<void>;
 const NEEDS: Partial<Record<MoveTarget, Need[]>> = {
   implement: [requireTaskFile],
   verify: [requireBranch],
-  checks: [requireBranch, requireApprovalFile],
-  approval: [requireBranch, requireApprovalFile],
+  approval: [requireBranch],
   harden: [requireBranch],
+  merging: [requireBranch],
 };
 
 // The release flow owns the tracking card.
@@ -261,7 +250,7 @@ type Relocation = { column: Column; step: CardStep; status: string; dropsApprova
 // jobs, board, state, posts, labels. Each step skips what an earlier run did.
 async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): Promise<void> {
   const { issue } = card;
-  requireLeavable(ctx, issue);
+  requireLeavable(ctx, card);
   for (const need of needs) await need(ctx, issue);
   await stopJobs(ctx, issue);
   await moveCard(ctx, issue, plan.column, plan.step);
@@ -274,19 +263,18 @@ async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): 
 async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' }>, by: string): Promise<Outcome> {
   const { issue, to } = command;
   const card = await requireWorkCard(ctx, issue);
-  const phase = PHASE[to];
   const key = String(issue);
   await relocate(ctx, card, NEEDS[to] ?? [], {
-    column: targetColumn(ctx, card, to),
+    column: COLUMN[to],
     // A drop to Done ends the card the way Deny does, so its line says so.
     step: to === 'done' ? 'dropped' : 'moved',
     status: `↪️ Moved to ${to} by ${by}: ${command.reason}`,
     dropsApproval: DROPS_APPROVAL.includes(to),
     enter: (state) => {
-      const phased = phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [key]: phase } };
-      const kept = { ...phased, held: keptHold(phased.held, key, to) };
-      // A move to Hardening is an approval, like a merge order. A card approved already keeps its approver.
-      return to === 'harden' && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
+      const posted = to === 'approval' ? { ...state, postOnly: [...state.postOnly, issue] } : state;
+      const kept = { ...posted, held: keptHold(posted.held, key, to) };
+      // A card approved already keeps its approver.
+      return APPROVES.includes(to) && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
     },
   });
   if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
@@ -300,19 +288,19 @@ function keptHold(held: FactoryState['held'], key: string, to: MoveTarget): Fact
   return to === 'done' ? omitKey(held, key) : { ...held, [key]: { ...held[key], stage: null } };
 }
 
-// The approve job merges at once for a card in Approval that holds an approval, so the merge needs no post and no hardening.
+// The card skips the post and hardening and joins the merge queue, whose checks run on the merged result.
 async function merge(ctx: Ctx, command: Extract<ControlCommand, { action: 'merge' }>, by: string): Promise<Outcome> {
   const { issue } = command;
   const card = await requireWorkCard(ctx, issue);
   const key = String(issue);
   await relocate(ctx, card, [requireBranch], {
-    column: 'Approval',
+    column: 'Merging',
     step: 'merge-ordered',
     status: `↪️ Merge ordered by ${by}: ${command.reason}`,
     dropsApproval: false,
-    enter: (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by }, pendingApprovals: { ...state.pendingApprovals, [key]: by } }),
+    enter: (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by } }),
   });
-  return { issue, text: 'The merge into its base is queued.' };
+  return { issue, text: 'The card joins the merge queue.' };
 }
 
 export function openRelease(ctx: Ctx): ReleaseState {

@@ -38,7 +38,7 @@ describe('chooseJobs card budget', () => {
   });
 
   it('does not charge checks, and lets a hotfix run at the budget', () => {
-    const spent = state({ cardStarts: { 4: starts(5, 3), 6: starts(5, 3) }, testPhase: { 4: 'checks' } });
+    const spent = state({ cardStarts: { 4: starts(5, 3), 6: starts(5, 3) }, postOnly: [4] });
     expect(chooseJobs(spent, [card(4, 'Testing')], NOW, big)).toEqual([{ stage: 'checks', issue: 4 }]);
     expect(chooseJobs(spent, [card(6, 'Implementation', [HOTFIX_LABEL])], NOW, big)).toEqual([{ stage: 'implement', issue: 6 }]);
   });
@@ -285,7 +285,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const pinned: string[] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, needsInfoHours: 24, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, testCacheDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, vitestWorkersImplement: 2, vitestWorkersTest: 4, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, mergeTimeoutMinutes: 30, replyRouteMinutes: 15, needsInfoHours: 24, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, testCacheDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, vitestWorkersImplement: 2, vitestWorkersTest: 4, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch === RELEASE.branch) return 'rel0001'; if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus, testWorkers) => { parseStage(args[0]); spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus} ${testWorkers}`); return 77; }, cores: () => 4 };
@@ -297,9 +297,9 @@ const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | 
 const args = (h: Harness): string[][] => h.spawned.map((call) => call.slice(0, 2));
 
 describe('timeoutOf', () => {
-  it('gives the release playtest its own limit and every other stage its queue limit', () => {
-    const cfg = { verifyTimeoutMinutes: 240, playtestTimeoutMinutes: 330 } as FactoryConfig;
-    expect([timeoutOf(cfg, 'playtest'), timeoutOf(cfg, 'verify')]).toEqual([330, 240]);
+  it('gives the release playtest and the merge their own limits and every other stage its queue limit', () => {
+    const cfg = { verifyTimeoutMinutes: 240, branchTimeoutMinutes: 60, playtestTimeoutMinutes: 330, mergeTimeoutMinutes: 180 } as FactoryConfig;
+    expect([timeoutOf(cfg, 'playtest'), timeoutOf(cfg, 'verify'), timeoutOf(cfg, 'merge'), timeoutOf(cfg, 'approve')]).toEqual([330, 240, 180, 60]);
   });
 });
 
@@ -332,7 +332,7 @@ describe('tick', () => {
 
   it('starts each job on the CPUs and test workers of its pool, verify beside implement and checks alone on the test pool', async () => {
     const h = harness(null, true, [card(3, 'Implementation'), card(4, 'Testing'), card(5, 'Testing')]);
-    writeState(h.ctx.statePath, state({ testPhase: { 5: 'checks' } }));
+    writeState(h.ctx.statePath, state({ postOnly: [5] }));
     await tick(h.ctx, '/code', h.deps);
     expect(h.pinned.sort()).toEqual(['checks 2-3 4', 'implement 1 2', 'verify 1 2']);
   });
@@ -383,34 +383,41 @@ describe('tick', () => {
     expect(() => parseStage('hardening')).toThrow('Unknown stage "hardening"');
   });
 
-  it('skips build cleanup while a checks or branch job runs, not while a verify agent runs', async () => {
-    const h = harness(job('2026-01-10T11:50:00Z', 'checks', 9), true, []);
-    mkdirSync(join(h.ctx.cfg.webRoot, 'fresh01'), { recursive: true });
-    await tick(h.ctx, '/code', h.deps);
-    expect(existsSync(join(h.ctx.cfg.webRoot, 'fresh01'))).toBe(true);
-    const agent = harness(job('2026-01-10T11:50:00Z', 'verify', 9), true, []);
+  it('skips build cleanup while a Testing, checks or branch job runs, since each publishes before it records, not while an implement agent runs', async () => {
+    for (const stage of ['verify', 'checks', 'merge'] as const) {
+      const h = harness(job('2026-01-10T11:50:00Z', stage, 9), true, []);
+      mkdirSync(join(h.ctx.cfg.webRoot, 'fresh01'), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(existsSync(join(h.ctx.cfg.webRoot, 'fresh01'))).toBe(true);
+    }
+    const agent = harness(job('2026-01-10T11:50:00Z', 'implement', 9), true, []);
     mkdirSync(join(agent.ctx.cfg.webRoot, 'fresh01'), { recursive: true });
     await tick(agent.ctx, '/code', agent.deps);
     expect(existsSync(join(agent.ctx.cfg.webRoot, 'fresh01'))).toBe(false);
   });
 
-  it('picks verify for a Testing card with no phase or a fix phase, and checks once verify is done', () => {
-    const cards = [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(4, 'Testing')];
-    const phases = state({ testPhase: { 2: 'checks', 3: 'fix', 4: 'checks-after-fix' } });
-    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
-    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
+  it('picks verify for a Testing card, and checks for one a control move sent to a post', () => {
+    const cards = [card(1, 'Testing'), card(2, 'Testing')];
+    const picks = chooseJobs(state({ postOnly: [2] }), cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
   });
 
-  it('picks harden for a Hardening card, and checks once harden set the phase, ahead of Testing', () => {
-    const cards = [card(1, 'Testing'), card(5, 'Hardening'), card(6, 'Hardening'), card(7, 'Hardening')];
-    const phases = state({ testPhase: { 6: 'checks', 7: 'fix' } });
-    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 3, testWorkers: 2 });
-    expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'checks', issue: 6 }, { stage: 'harden', issue: 7 }, { stage: 'verify', issue: 1 }]);
+  it('picks harden for a Hardening card, ahead of Testing', () => {
+    const cards = [card(1, 'Testing'), card(5, 'Hardening'), card(6, 'Hardening')];
+    const picks = chooseJobs(state({}), cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 3, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'harden', issue: 6 }, { stage: 'verify', issue: 1 }]);
   });
 
-  it('runs a patch for an Implementation card with a queued patch, in the implement queue', () => {
-    const picks = chooseJobs(state({ patching: { 4: 'abc1234' } }), [card(3, 'Implementation'), card(4, 'Implementation')], NOW, { ...CFG, maxJobsPerDay: 10 });
-    expect(picks).toEqual([{ stage: 'implement', issue: 3 }, { stage: 'patch', issue: 4 }]);
+  it('starts one merge job with no issue for every Merging card, uncapped, after queued approvals', () => {
+    const cards = [card(5, 'Merging'), card(6, 'Merging'), card(7, 'Approval')];
+    const full = { jobStarts: [hoursAgo(1)] };
+    expect(chooseJobs(state({ ...full, pendingApprovals: { 7: 'Ann' } }), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'approve', issue: 7 }]);
+    expect(chooseJobs(state(full), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'merge', issue: null }]);
+  });
+
+  it('starts no merge job while every Merging card is stuck or held', () => {
+    const cards = [card(5, 'Merging', [STUCK_LABEL]), card(6, 'Merging')];
+    expect(chooseJobs(state({ held: { 6: { by: 'Ann', reason: 'r', at: 'a', stage: null } } }), cards, NOW, CFG)).toEqual([]);
   });
 
   it('hands a reply Hermes left unrouted past the limit to Hermes as an incident with no stuck label, and keeps a fresh one', async () => {
@@ -441,7 +448,7 @@ describe('tick', () => {
   });
 
   it('runs a checks job beside a verify agent, one per queue', () => {
-    const picks = chooseJobs(state({ testPhase: { 2: 'checks', 3: 'checks' } }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
+    const picks = chooseJobs(state({ postOnly: [2, 3] }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
     expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
   });
 

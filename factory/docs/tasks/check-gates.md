@@ -1,6 +1,7 @@
 # The full game suite runs once per card, right before its merge
 
-**Status:** design
+**Status:** done
+**Superseded by:** [trusted-agent-flow.md](trusted-agent-flow.md). Its merge checkpoint runs the full suite once on the merged batch and fixes failures within a dollar budget.
 **Branch:** none yet
 **Worktree:** none
 **Goal:** A card runs the full game suite once, on the card merged with its current base, before it merges. A failure loops through fix rounds until it passes or reaches the configured round limit.

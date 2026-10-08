@@ -1,5 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { GUARD_HOOK } from './container';
 import { must } from './exec';
 import { withLock } from './lock';
 import { createLockWaitReporter } from './observability';
@@ -24,6 +25,9 @@ function mergeToRevert(log: string, issue: number): string | null {
 }
 
 const lines = (text: string): string[] => text.split('\n').filter(Boolean);
+
+// A message makes a merge commit that carries it. Without one, git's own message stands and a fast-forward is fine.
+const mergeFlags = (message: string | undefined): string[] => (message === undefined ? ['--no-edit'] : ['--no-ff', '-m', message]);
 
 // GitHub holds every branch. The host clone is a cache of it: it keeps GitHub's branches as origin/* refs and no local branch.
 // A write merges in a throwaway worktree and pushes the result. A failed merge or push leaves nothing behind, so a retry starts from GitHub.
@@ -130,16 +134,23 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
   }
 
   // Clones into `dir` unless a working clone is there.
+  // A clone made before the guard hook existed gets it too.
   async function prepareClone(branch: string, base: string, dir: string): Promise<void> {
     // A clone cut short, like by a full disk, has no commit checked out. It holds no work, so it is cloned again.
     // The note goes to the job log, so the replacement is on record.
     if (existsSync(dir)) {
-      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return;
+      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return installGuardHook(dir);
       console.error(`${dir} has no commit checked out, so it is cloned again`);
       rmSync(dir, { recursive: true, force: true });
     }
     await initClone(dir);
     await checkoutBranch(dir, branch, base);
+    installGuardHook(dir);
+  }
+
+  function installGuardHook(dir: string): void {
+    mkdirSync(join(dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(dir, '.git', 'hooks', 'pre-commit'), GUARD_HOOK, { mode: 0o755 });
   }
 
   // A new clone in `dir` with the host clone's refs and no branch checked out yet.
@@ -261,12 +272,12 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
       return { commit, conflicts };
     },
-    async mergeBranchIntoWork(dir, branch) {
+    async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
       const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
-      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
+      const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
       if (result.code === 0) return { commit, conflicts: [] };
       const conflicts = await conflictedFiles(dir);
       if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);

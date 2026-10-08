@@ -1,35 +1,31 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
 import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleasePost, type ReleaseState } from './types';
 
-export type Position = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'fix' | 'checks' | 'post' | 'approval' | 'harden' | 'harden-fix' | 'resolve' | 'harden-checks' | 'done';
-export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'checks', 'approval', 'harden', 'done'] as const;
+// The board column is the position. Only a Testing card that a control move sent to Approval has a second one, `post`.
+export type Position = 'triage' | 'design' | 'implement' | 'verify' | 'post' | 'approval' | 'harden' | 'merging' | 'done';
+export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'approval', 'harden', 'merging', 'done'] as const;
 export type MoveTarget = (typeof MOVE_TARGETS)[number];
 
-// The job each position runs, as cardStage in tick.ts picks it. Done runs nothing.
+// The job each position runs, as cardStage in tick.ts picks it. A merge job serves every Merging card at once. Done runs nothing.
 const POSITION_STAGE: Record<Position, JobStage | null> = {
-  triage: 'triage', design: 'design', implement: 'implement', patch: 'patch', verify: 'verify', fix: 'verify', checks: 'checks', post: 'checks', approval: 'approve',
-  harden: 'harden', 'harden-fix': 'harden', resolve: 'harden', 'harden-checks': 'checks', done: null,
+  triage: 'triage', design: 'design', implement: 'implement', verify: 'verify', post: 'checks', approval: 'approve', harden: 'harden', merging: 'merge', done: null,
 };
 // Lists the jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no position owns them.
-export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'patch', 'verify', 'harden', 'checks'];
+export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'verify', 'harden', 'checks'];
+
+// The merge job has no issue, and it merges every free card in Merging. An approve job ships a hotfix.
+// Neither is ever killed, since it may stop between its push and its deploy.
+export function isMerging(state: FactoryState, card: Card): boolean {
+  return state.jobs.some((job) => (job.stage === 'merge' && card.column === 'Merging') || (job.stage === 'approve' && job.issue === card.issue));
+}
+
+const COLUMN_POSITION: Record<Card['column'], Position> = {
+  Triage: 'triage', Design: 'design', Implementation: 'implement', Testing: 'verify', Approval: 'approval', Hardening: 'harden', Merging: 'merging', Done: 'done',
+};
 
 export function cardPosition(card: Card, state: FactoryState): Position {
-  const key = String(card.issue);
-  if (card.column === 'Testing') return testingPosition(state.testPhase[key]);
-  if (card.column === 'Hardening') return hardeningPosition(state.testPhase[key]);
-  if (card.column === 'Implementation') return key in state.patching ? 'patch' : 'implement';
-  return { Triage: 'triage', Design: 'design', Approval: 'approval', Done: 'done' }[card.column] as Position;
-}
-
-function testingPosition(phase: string | undefined): Position {
-  if (phase === 'fix' || phase === 'post') return phase;
-  return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
-}
-
-function hardeningPosition(phase: string | undefined): Position {
-  if (phase === 'fix') return 'harden-fix';
-  if (phase === 'resolve' || phase === 'post') return phase;
-  return phase === 'checks' || phase === 'checks-after-fix' ? 'harden-checks' : 'harden';
+  if (card.column === 'Testing' && state.postOnly.includes(card.issue)) return 'post';
+  return COLUMN_POSITION[card.column];
 }
 
 // The release tracking card waits in Approval for the whole release, and its post is release.postId, so no store can disagree about it.
@@ -44,19 +40,20 @@ export function runningJobs(card: Card, state: FactoryState): Job[] {
 }
 
 function phaseDrift(card: Card, state: FactoryState): string[] {
-  const key = String(card.issue);
-  const lines: string[] = [];
-  if (key in state.testPhase && card.column !== 'Testing' && card.column !== 'Hardening') lines.push(`#${card.issue} testPhase ${state.testPhase[key]} but column ${card.column}`);
-  if (key in state.patching && card.column !== 'Implementation') lines.push(`#${card.issue} patching set but column ${card.column}`);
-  return lines;
+  return state.postOnly.includes(card.issue) && card.column !== 'Testing' ? [`#${card.issue} waits for a post but column ${card.column}`] : [];
 }
 
-// An approved card hardens in Hardening. In Testing it would get a preview and merge with no hardening.
+// An approved card hardens and merges. In Testing it would get a preview and lose its approval.
 function hardeningDrift(card: Card, state: FactoryState): string[] {
   const approved = String(card.issue) in state.approvedResolving;
   if (approved && card.column === 'Testing') return [`#${card.issue} approved but column Testing`];
-  if (card.column === 'Hardening' && !approved && !isCleanupTask(card.labels)) return [`#${card.issue} column Hardening but no approval`];
+  if (!approved && needsApproval(card)) return [`#${card.issue} column ${card.column} but no approval`];
   return [];
+}
+
+// A cleanup task hardens and merges with no post, so it holds no approval.
+function needsApproval(card: Card): boolean {
+  return (card.column === 'Hardening' || card.column === 'Merging') && !isCleanupTask(card.labels);
 }
 
 function approvalDrift(card: Card, state: FactoryState): string[] {
