@@ -140,12 +140,23 @@ function reconcileModels(current: AgentUsage, previous: AgentUsage): ModelUsage[
     return prior ? subtractModel(model, prior) : model;
   });
 }
+function addModels(total: AgentUsage, run: AgentUsage): ModelUsage[] | undefined {
+  if (!total.modelUsage || !run.modelUsage) return undefined;
+  const rows = total.modelUsage.map((row) => ({ ...row }));
+  for (const model of run.modelUsage) {
+    const row = rows.find((item) => item.model === model.model);
+    if (!row) { rows.push({ ...model }); continue; }
+    row.cost += model.cost; row.input += model.input; row.output += model.output; row.cacheRead += model.cacheRead; row.cacheWrite += model.cacheWrite;
+  }
+  return rows;
+}
 function reconcileAgent(agent: AgentUsage, sessions: Map<string, AgentUsage>): AgentUsage {
   if (!agent.sessionId) return agent;
-  const prior = sessions.get(agent.sessionId);
+  const total = agent.resumed ? sessions.get(agent.sessionId) : undefined;
+  if (!total) { sessions.set(agent.sessionId, agent); return agent; }
+  if (!agent.fromTranscript) { sessions.set(agent.sessionId, { ...agent, costUsd: total.costUsd + agent.costUsd, modelUsage: addModels(total, agent) }); return agent; }
   sessions.set(agent.sessionId, agent);
-  if (!agent.resumed || !prior) return agent;
-  return { ...agent, costUsd: subtractMeasurement(agent.costUsd, prior.costUsd), modelUsage: reconcileModels(agent, prior) };
+  return { ...agent, costUsd: subtractMeasurement(agent.costUsd, total.costUsd), modelUsage: reconcileModels(agent, total) };
 }
 function reconcileJobs(records: LedgerLine[]): Job[] {
   const sessions = new Map<string, AgentUsage>();

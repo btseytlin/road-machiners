@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { appendLedger } from '../ledger';
+import { appendLedger, type AgentUsage } from '../ledger';
 import { DashboardHistory } from './history';
 
 it('streams new ledger lines once and keeps private routes out of public history', async () => {
@@ -77,7 +77,7 @@ it('splits usage into hourly buckets for one day and daily buckets for longer ra
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
-it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed run only for its own part', async () => {
+it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed agent result as its own run', async () => {
   const home = mkdtempSync(resolve('tmp/history-'));
   try {
     const now = new Date('2026-10-10T12:00:00Z');
@@ -96,7 +96,25 @@ it('counts the spend of failed, dead and timed-out jobs as wasted, and a resumed
     const summary = history.summarize(now, 1);
     expect(summary.wasted.cost).toBeCloseTo(2.3, 9);
     expect(summary.wasted.tokens).toEqual({ input: 150, output: 0, cacheRead: 0, cacheWrite: 0 });
-    expect(summary.cost).toBeCloseTo(2.3, 9);
+    expect(summary.cost).toBeCloseTo(2.6, 9);
+    expect(summary.tokens?.input).toBe(250);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+it('counts a resumed transcript reading only past the spend its session already recorded', async () => {
+  const home = mkdtempSync(resolve('tmp/history-'));
+  try {
+    const now = new Date('2026-10-10T12:00:00Z');
+    const usage = (input: number, cost: number) => [{ model: 'opus', input, output: 0, cacheRead: 0, cacheWrite: 0, cost }];
+    const run = (id: string, at: string, outcome: 'died' | 'failed', agent: AgentUsage) => appendLedger(home, { kind: 'job', id, stage: 'implement', issue: 3, startedAt: at, endedAt: at, outcome, agents: [agent] });
+    run('first', '2026-10-10T08:00:00Z', 'failed', { model: 'opus', costUsd: 1, minutes: 1, modelUsage: usage(100, 1), sessionId: 's1', resumed: false });
+    run('second', '2026-10-10T09:00:00Z', 'failed', { model: 'opus', costUsd: 2, minutes: 1, modelUsage: usage(40, 2), sessionId: 's1', resumed: true });
+    run('third', '2026-10-10T10:00:00Z', 'died', { model: 'opus', costUsd: 3.5, minutes: 1, modelUsage: usage(150, 3.5), sessionId: 's1', resumed: true, fromTranscript: true });
+    const history = new DashboardHistory(home, 60000);
+    await history.refresh(now);
+    const summary = history.summarize(now, 1);
+    expect(summary.cost).toBeCloseTo(3.5, 9);
+    expect(summary.tokens?.input).toBe(150);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
