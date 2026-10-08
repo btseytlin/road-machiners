@@ -33,3 +33,8 @@ ID: R6
 repo: game
 what: TOW.base 40 and TOW.perTile 1.5 in game/src/data/tow.ts were set from a guessed profit of one trade run, never checked against what a player earns. A tow of about 240 tiles cost about 400 with no cap. Issue #97 fixed it by deriving the fee from EFFORT.wage tier 1 with a cap of about 167.
 cost: Stranded players got paid tow offers of 300 to 400, about 2.4 days of tier-1 earnings, so a rescue became another money dead end. It shipped until release 2026-10-07. It repeats the class of R5: a price set from an unmeasured number.
+
+ID: R7
+repo: game
+what: restoreDrive() in game/src/phys/drive.ts copied only the top level of the snapshot, so the restored drive shared its obstacle, body and memory records with the playback snapshot. A main-thread sync then wrote new collider handles into the snapshot that the worker read for the next turn. Rapier got a missing handle and threw "Cannot read properties of null (reading 'handle')" in removeCollider. The bug came in on 2026-09-30 and issue #96 fixed it by deep-copying the records and checking every handle with a named error.
+cost: A player on /dev/ could not advance past turn T58, and every retry failed the same way because the bad records carried into the next drive. The game was not saved, so the progress since the last save was lost to a reload. The bug shipped in release 2026-10-01 and stayed until release 2026-10-07, so held-Space and auto-travel turns near props could stop any player's game.
