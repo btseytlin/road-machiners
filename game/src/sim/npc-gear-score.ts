@@ -20,8 +20,8 @@ const SIDE_LETTERS: readonly SideLetter[] = ['F', 'L', 'R', 'B'];
 const LETTER_SIDE = { F: 'front', L: 'left', R: 'right', B: 'rear' } as const;
 
 // A piece's quality is 1 minus e to the minus its shield per cell over armorQualityScale. Its shield is the damage it
-// keeps off the truck against the mean threat round: HP times armor over pen times armorShare. It depends on the part
-// and its wear alone, so it is cached.
+// keeps off the truck against the mean threat round: HP times armor over pen times armorShare, less the damage its
+// own charge deals the truck when it goes off. It depends on the part and its wear alone, so it is cached.
 const qualityCache = new Map<string, number>();
 
 export function armorQuality(world: World, defId: string, wear: number): number {
@@ -29,8 +29,9 @@ export function armorQuality(world: World, defId: string, wear: number): number 
   let quality = qualityCache.get(key);
   if (quality === undefined) {
     const worn = wornDef(makePart(world, defId, wear));
-    const shield = THREATS.reduce((sum, round) => sum + (worn.hp * worn.armor) / (round.pen * round.armorShare), 0) / THREATS.length;
     const def = partDef(defId);
+    const selfHarm = def.kind === 'armor' && def.claymore ? def.claymore.selfBlast.damage : 0;
+    const shield = THREATS.reduce((sum, round) => sum + (worn.hp * worn.armor) / (round.pen * round.armorShare), 0) / THREATS.length - selfHarm;
     quality = 1 - Math.exp(-shield / (def.w * def.h) / GEAR_SCORE.armorQualityScale);
     qualityCache.set(key, quality);
   }

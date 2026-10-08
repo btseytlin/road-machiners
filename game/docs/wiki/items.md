@@ -110,7 +110,7 @@ Each weapon's round:
 | spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 97.5 | 110 | 10 | false | 28 | capped | 1 |  |
 | reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 67.5 | 130 | 4 | false | 26 | capped | 1.2 |  |
 | plowRam | Plow ram | 3 | 201 | 3 x 1 | 157.5 | 170 | 25 | false | 12 | none | 2.8 |  |
-| claymoreRam | Claymore ram | 2 | 140 | 3 x 1 | 142.5 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
+| claymoreRam | Claymore ram | 2 | 132 | 3 x 1 | 142.5 | 60 | 10 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
 | steelPlate | Steel plate | 2 | 66 | 1 x 1 | 30 | 28 | 12 | false | 12 | capped | 1 |  |
 | scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 37.5 | 22 | 5 | false | 5 | full | 1 |  |
 | ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 18.75 | 18 | 22 | false | 8 | none | 1 |  |
