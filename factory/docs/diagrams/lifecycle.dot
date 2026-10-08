@@ -12,7 +12,7 @@ digraph lifecycle {
   T -> D -> I -> P -> A -> H -> G -> M [weight=100];
   // A loop is drawn as a forward edge with its arrow reversed, so it never bends the main line.
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=back, weight=0];
-  T -> W [xlabel="unclear, then answered\nor time limit", dir=both, constraint=false];
+  T -> W [xlabel="unclear game fact, then\nanswered or time limit", dir=both, constraint=false];
   W -> D [label="questions"];
   D -> P [label="plan wrong"];
   P -> A [label="patch"];

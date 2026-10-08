@@ -30,7 +30,7 @@ Each agent stage is one agent session that owns its stage. The agent runs the ch
 
 The loops:
 
-- unclear and questions: the author gets questions and the label `needs-info`. The tick removes the label once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass with no answer. Triage then runs again. With no answer it picks the most sensible reading, and design writes each open question and its reading into the design comment as an assumption.
+- unclear and questions: the author gets questions and the label `needs-info`. A question may only ask what the game should do or show. A question about branches, merges, clones, builds, tests, prerequisite issues or the order of work fails the stage before anything is posted, so Hermes sees it. The tick removes the label once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass with no answer. Triage then runs again. With no answer it picks the most sensible reading, and design writes each open question and its reading into the design comment as an assumption.
 - plan wrong: the testing agent found that the plan itself contradicts the issue or the game docs, so no fix of the build can satisfy both. The card keeps its branch.
 - patch: a small committee change. The card goes back to Testing, whose session takes the reply as its whole task.
 - redesign: the committee reply changes the plan.

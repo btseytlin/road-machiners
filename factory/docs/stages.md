@@ -8,13 +8,19 @@ Intake puts an aged `feature-request` or `bug` issue into Triage. It needs `FACT
 
 Intake runs last in each tick, so a card it adds starts on the next tick. It reads every open candidate issue and its thumbs-up in one GitHub search per 100 issues. GitHub sends no webhook for a new reaction, so intake polls.
 
+## Author questions
+
+Triage and Design run in the work clone of the issue. The clone outlives a stage, so each of them first merges the new commits of the issue branch on GitHub and fast-forwards a clone with no commits of its own to the current base. A clone with its own commits, as in a redesign, keeps them, and Testing merges the base. A broken clone is `factory repair-clone`'s job.
+
+`askAuthor` posts the questions and labels `needs-info` for both stages. It first refuses any question about factory work, like branches, merges, clones, checkouts, builds, tests, `#N` as a prerequisite or the factory itself, by the patterns in `src/questions.ts`. A refused set posts nothing and fails the stage with the questions, so the resume gets them and a second failure goes to Hermes.
+
 ## Triage
 
 Triage runs Haiku, set by `FACTORY_TRIAGE_MODEL`, at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with `game/docs/DESIGN.md`, and writes `.factory/triage.json`.
 
 - `ready` moves the card to Design and rates its complexity, as Model routing says.
 - `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done.
-- `unclear` comments up to three questions, labels the issue `needs-info` and leaves the card in Triage. The committee chat gets one notice per new question set, with no quotes. The tick removes `needs-info` once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass since the questions, and triage runs again. Without an answer, triage and design go on with the most sensible reading, and design writes the assumptions into its comment.
+- `unclear` comments up to three questions about what the game should do or show, labels the issue `needs-info` and leaves the card in Triage. The committee chat gets one notice per new question set, with no quotes. The tick removes `needs-info` once someone answers on GitHub, or once `FACTORY_NEEDS_INFO_HOURS` pass since the questions, and triage runs again. Without an answer, triage and design go on with the most sensible reading, and design writes the assumptions into its comment.
 - A request for a new authored location needs a reference image. Without one, triage is `unclear` and asks once for an upload.
 - Triage can label a bug `hotfix` when it loses saves, crashes the game or blocks play. The committee chat gets a warning.
 - Triage can label a card `release-task` when it fixes a feature of the open release. This works only while the release has no candidate post. New work waits for the next release. The release fix runs on the release branch and merges into it.
@@ -26,6 +32,7 @@ A `ready` issue may bundle other free Triage cards that touch the same code. Eac
 Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
 
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
+- `.factory/blocked.md` fails the stage with its text, for a factory problem the agent cannot fix, like a branch or clone that lacks a prerequisite. The author is not asked.
 - `.factory/wont-do.md` closes the issue as wont-do.
 - A revision reads the issue comments under "## Committee feedback". Comments under "## Committee question" are context only.
 
