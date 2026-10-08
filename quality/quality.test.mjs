@@ -20,7 +20,6 @@ function runCheck(mode = '--staged', env = process.env) {
   return spawnSync(process.execPath, ['quality/quality.mjs', ...args], { cwd: directory, encoding: 'utf8', env });
 }
 
-// A docker that records its arguments and exits with the given status, put first on PATH.
 function fakeDocker(status) {
   const bin = path.join(directory, 'fake-bin');
   mkdirSync(bin, { recursive: true });
@@ -175,7 +174,6 @@ test('checks a first commit without HEAD', () => {
   runGit('checkout', '--orphan', 'first-commit');
   writeSource(Array.from({ length: 200 }, (_, i) => `export const value${i} = ${i};`).join('\n'));
   runGit('add', 'game');
-  // A first commit stages the dashboard files too, so the browser test runs.
   const result = runCheck('--staged', fakeDocker(0).env);
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
@@ -239,7 +237,6 @@ test('rejects a staged middle dot in any text file but skips vendored skills and
   assertRejected(runCheck('--working'), /game\/notes\.md:1/);
 });
 
-// Commits debt on a side branch, adds a commit on the main line, and stops a merge of the side branch before its commit.
 function startMergeOf(debt) {
   const main = runGit('rev-parse', '--abbrev-ref', 'HEAD').trim();
   runGit('checkout', '-qb', 'side');

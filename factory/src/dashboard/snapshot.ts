@@ -19,7 +19,6 @@ export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'st
 type PauseReason = 'agent-usage-limit' | 'operator';
 export type Operations = ReturnType<typeof buildOperations> & { pauseReason: PauseReason | null };
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
-// An issue's merge into dev is the first time the factory put release-candidate on it.
 export type DevMerge = { issue: number; createdAt: string; mergedAt: string };
 export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; merges: DevMerge[]; releaseKey: string; provisional: boolean };
 export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
@@ -34,7 +33,6 @@ type ComparePage = { total_commits: number; commits: Commit[] };
 type PublicIssue = { number: number; title: string; labels: { name: string }[]; pull_request?: unknown };
 type MergedIssue = { number: number; createdAt: string; labels: string[]; mergedAt: string | null };
 
-// GitHub allows 100 events per page. An issue whose first release-candidate event is past that page has no mergedAt and fails loud.
 const MERGES_QUERY = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(labels:["${RELEASE_CANDIDATE_LABEL}"],states:[OPEN,CLOSED],first:50,after:$endCursor){pageInfo{hasNextPage endCursor}nodes{number createdAt labels(first:20){nodes{name}}timelineItems(first:100,itemTypes:[LABELED_EVENT]){nodes{...on LabeledEvent{createdAt label{name}}}}}}}}`;
 const MERGES_JQ = `.data.repository.issues.nodes[]|{number,createdAt,labels:[.labels.nodes[].name],mergedAt:([.timelineItems.nodes[]|select(.label.name=="${RELEASE_CANDIDATE_LABEL}")|.createdAt]|sort|first)}`;
 
@@ -90,7 +88,6 @@ export class PublicGitHub {
     const output = await this.query(['api', `repos/${this.config.repo}/issues?state=open&per_page=100`, '--paginate', '--jq', '.[] | {number,title,labels,pull_request}']);
     return output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as PublicIssue);
   }
-  // Release tasks and ad hoc tasks open themselves, so no vote or wait is behind their age.
   private async readMerges(): Promise<DevMerge[]> {
     const [owner, name] = this.config.repo.split('/');
     const output = await this.query(['api', 'graphql', '--paginate', '-f', `query=${MERGES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '--jq', MERGES_JQ]);

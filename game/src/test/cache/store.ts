@@ -30,7 +30,6 @@ export function passedFingerprints(cache: string, test: string): Input[][] {
   return readdirSync(dir).filter((name) => name.endsWith('.json')).sort().map((name) => readEntry(join(dir, name)));
 }
 
-// A hit touches the entry, since the factory prunes the folder by age.
 export function hasPass(cache: string, test: string, fingerprint: string): boolean {
   const file = entryPath(cache, test, fingerprint);
   if (!existsSync(file)) return false;
@@ -39,7 +38,6 @@ export function hasPass(cache: string, test: string, fingerprint: string): boole
   return true;
 }
 
-// Checks jobs share the folder, so the entry appears whole or not at all.
 export function recordPass(cache: string, test: string, fingerprint: string, inputs: Input[]): void {
   const file = entryPath(cache, test, fingerprint);
   mkdirSync(join(file, '..'), { recursive: true });

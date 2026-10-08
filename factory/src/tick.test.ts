@@ -13,7 +13,6 @@ import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_
 const NOW = new Date('2026-01-10T12:00:00Z');
 const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
 const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, maxJobsPerCard: 2, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
-// One worker per agent queue, so a test sees which card each queue prefers.
 const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
 const FRESH = { lastRelease: '2026-01-09T12:00:00Z', devBuild: DEV };
@@ -293,7 +292,6 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
 }
 
 const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | null = 5): Job => ({ id: `${stage}-job`, stage, issue, pid: 42, startedAt, log: '/l.log' });
-// The spawned args without the job id at the end.
 const args = (h: Harness): string[][] => h.spawned.map((call) => call.slice(0, 2));
 
 describe('timeoutOf', () => {

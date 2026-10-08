@@ -1,8 +1,6 @@
 // Fuel and supply aid between the player and one NPC. One truck gives the other fuel, supplies or both, paid or
 // free. A deal is an `aid` state held by the NPC toward the player. Once agreed, the NPC's meet goal brings the two
 // trucks side by side. The player then starts the handover with [E]: one turn of shared work, paused when a truck moves and
-// broken by combat. When the work is done, the fulfilled hook moves everything once. A truck is low on a supply at or below
-// RULES.lowFuelThreshold of its cap, where its speed halves. Numbers live in AID.
 
 import { ECONOMY } from '../data/goods';
 import { AID } from '../data/npc-behavior';
@@ -43,12 +41,10 @@ export function isLow(world: World, v: Vehicle): boolean {
   return SUPPLIES.some((kind) => isLowOn(world, v, kind));
 }
 
-// A worn truck worth little, like the start scout after some knocks.
 export function looksPoor(v: Vehicle): boolean {
   return bodyCondition(v) < AID.poorCondition && vehicleValue(v) <= AID.poorValue;
 }
 
-// Any aid deal toward the player, from any driver. Only one is open at a time.
 export function playerAid(world: World): NpcState | null {
   return world.states.find((s) => s.kind === 'aid' && s.other === world.player.vehicleId) ?? null;
 }
@@ -57,9 +53,6 @@ function amountsBy(pick: (kind: Supply) => number): AidAmounts {
   return { fuel: pick('fuel'), supplies: pick('supplies') };
 }
 
-// What a low driver asks the player for: whole units of each low supply up to AID.fillShare of its cap, capped by
-// what the player holds. Fuel is also capped by the driver's reserve for the way to a pump, and a driver with a holed
-// tank asks for none, since it would leak away.
 export function wantedAid(world: World, npc: Vehicle): AidAmounts {
   const held = getResources(world, npc);
   const target = (kind: Supply) => {
@@ -71,8 +64,6 @@ export function wantedAid(world: World, npc: Vehicle): AidAmounts {
   return amountsBy((kind) => (isLowOn(world, npc, kind) ? Math.min(want(kind), Math.floor(world.player[kind])) : 0));
 }
 
-// What a driver can spare the player: AID.giftShare of the player's cap per supply the player is low on, only from
-// stock above the driver's trade reserve, and no more than the player has room for.
 export function spareAid(world: World, npc: Vehicle): AidAmounts {
   const me = playerVehicle(world);
   const gift = (kind: Supply) => Math.min(Math.floor(capOf(me, kind) * AID.giftShare), truckSupplyForSale(npc, kind), supplyRoom(world, kind));
@@ -83,45 +74,35 @@ export function hasAid(a: AidAmounts): boolean {
   return a.fuel > 0 || a.supplies > 0;
 }
 
-// The town value of the units: what the player gave in money terms.
 function aidValue(a: AidAmounts): number {
   return a.fuel * ECONOMY.supplyPrice.fuel + a.supplies * ECONOMY.supplyPrice.supplies;
 }
 
-// What the driver pays the player for the units: the town supply price, up to its money.
 export function aidPrice(world: World, npc: Vehicle, a: AidAmounts): number {
   return Math.max(0, Math.min(aidValue(a), getResources(world, npc).money));
 }
 
-// The driver can give the player something, and no aid deal with the player is open. It serves the give and aid
-// options of the aidAsked and needySeen decisions.
 export function canSpareFor(world: World, npc: Vehicle): boolean {
   return hasAid(spareAid(world, npc)) && playerAid(world) === null;
 }
 
-// The driver offers the player what it can spare, free. It waits for the player's answer.
 export function offerAid(world: World, npc: Vehicle): void {
   const data: StateData = { kind: 'aid', giver: 'npc', ...spareAid(world, npc), price: 0, free: true, agreed: false, ...HANDOVER };
   addState(world, 'aid', npc.id, world.player.vehicleId, data);
 }
 
-// Both sides agreed. The agreed terms replace a pending offer from the driver, and the driver comes over, or waits
-// for the player when it cannot drive.
 export function agreeAid(world: World, npc: Vehicle, terms: AidTerms): NpcState {
   const s = addState(world, 'aid', npc.id, world.player.vehicleId, { kind: 'aid', ...terms, agreed: true, ...HANDOVER });
   meetGoal(world, npc, playerVehicle(world), terms.giver === 'npc' ? 'bring fuel and supplies' : 'pick up fuel and supplies');
   return s;
 }
 
-// The player turned the driver's offer down.
 export function refuseAid(world: World, npc: Vehicle): void {
   const s = stateOf(world, 'aid', npc.id, world.player.vehicleId);
   if (!s || aidData(s).agreed) throw new Error(`${npc.name} has no aid offer pending`);
   endState(world, s, 'broken');
 }
 
-// A feud between the two, or combat of either, breaks the deal. An agreed deal is fulfilled once its handover has
-// started and its work is done. A missing party is left to the missing-party rule.
 export function checkAid(world: World, s: NpcState): StateEnding | null {
   const npc = world.vehicles.find((v) => v.id === s.holder);
   const me = world.vehicles.find((v) => v.id === s.other);
@@ -139,12 +120,10 @@ function handoverDone(s: NpcState): boolean {
   return data.agreed && data.started && data.workLeft <= 0;
 }
 
-// An agreed deal's timer holds while both trucks are parked in reach.
 export function refreshAid(world: World, s: NpcState): boolean {
   return aidData(s).agreed && isMeeting(world, s);
 }
 
-// The player's agreed deal that waits for [E]: both trucks parked in reach, nobody in combat.
 export function readyAid(world: World): NpcState | null {
   const s = playerAid(world);
   if (!s || !awaitsStart(s) || !isMeeting(world, s)) return null;
@@ -156,7 +135,6 @@ function awaitsStart(s: NpcState): boolean {
   return data.agreed && !data.started;
 }
 
-// The player starts the handover with this NPC.
 export function startAid(world: World, npcId: string): World {
   return playerCommand(world, (w) => {
     const s = readyAid(w);
@@ -173,23 +151,18 @@ function handingOver(world: World, s: NpcState): boolean {
   return aidData(s).started && world.vehicles.some((v) => v.id === s.holder) && world.vehicles.some((v) => v.id === s.other) && isMeeting(world, s);
 }
 
-// The work left while a started handover has both trucks parked in reach.
 export function aidWork(world: World, s: NpcState): WorkLeft | null {
   if (!handingOver(world, s)) return null;
   const data = aidData(s);
   return { turnsLeft: data.workLeft, total: data.work };
 }
 
-// The turn step: each handover under way loses a turn of work. It runs before advanceStates, which fulfils a
-// finished one.
 export function advanceAid(world: World): void {
   for (const s of world.states) {
     if (s.kind === 'aid' && handingOver(world, s)) aidData(s).workLeft--;
   }
 }
 
-// The one place aid moves: the units, clamped to what the giver can still give and the receiver has room for, then
-// the price of what moved, up to the driver's money. A free gift from the player trains Social.
 export function settleAid(world: World, s: NpcState): void {
   const data = aidData(s);
   const npc = vehicleById(world, s.holder);
@@ -202,7 +175,6 @@ export function settleAid(world: World, s: NpcState): void {
   if (data.free && data.giver === 'player' && hasAid(moved)) practice(world, 'aid', aidValue(moved), null, npc.id);
 }
 
-// Whole units the giver can still give: all a player holds, and what a driver holds above its trade reserve.
 function givable(world: World, giver: Vehicle, kind: Supply): number {
   return giver.brain ? truckSupplyForSale(giver, kind) : Math.floor(getResources(world, giver)[kind]);
 }
@@ -215,14 +187,10 @@ function moveSupply(world: World, giver: Vehicle, receiver: Vehicle, kind: Suppl
   return n;
 }
 
-// ---- The unprompted offer.
-
-// A driver that takes up the unprompted offer, out of danger and not in combat, may help.
 function mayHelp(world: World, npc: Vehicle): boolean {
   return !inDanger(npc) && !inCombat(world, npc) && talkOf(npc).topics.includes('aidOffer');
 }
 
-// A poor player low on fuel or supplies, out of combat.
 function looksNeedy(world: World, me: Vehicle): boolean {
   return isLow(world, me) && looksPoor(me) && !inCombat(world, me);
 }
@@ -233,8 +201,6 @@ function mayOfferAid(world: World, npc: Vehicle): boolean {
   return canVehicleSee(world, npc, me.pos) && !isHostile(world, npc, me) && looksNeedy(world, me);
 }
 
-// The needySeen decision point: once per sighting of a poor, low player, a helper may offer what it can spare. Only
-// one driver offers at a time.
 export function onNeedySeen(world: World, npc: Vehicle): void {
   if (mayOfferAid(world, npc) && react(world, npc, 'needySeen', world.player.vehicleId) === 'aid') offerAid(world, npc);
 }

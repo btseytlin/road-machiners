@@ -20,7 +20,6 @@ const makeSlots = () => new SaveSlots(memoryBackend(), new Map());
 
 type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number }; vehicles: { id: string; items: { x: number }[] }[] };
 
-// A current save of a played world, as JSON.
 function currentSave(): { format: unknown; world: SavedWorld } {
   const world = newWorld(1337, KIT, TEST_MAP, defaultSetup('roaming'));
   world.player.money = 4321;

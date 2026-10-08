@@ -21,14 +21,12 @@ const ENTRIES: { entry: MenuEntry; label: string }[] = [
   { entry: "help", label: "Help" },
 ];
 
-// Save and New Game wait for the turn to end. Load also needs a filled slot. Help is always there.
 export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean): boolean {
   if (entry === "help") return true;
   if (entry === "load") return !busy && hasSave;
   return !busy;
 }
 
-// The controls guide. It is not modal, so the player can keep driving while it is open.
 export class HelpPanel {
   constructor(private setup: () => string) {}
 

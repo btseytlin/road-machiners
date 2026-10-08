@@ -4,18 +4,14 @@
 import { reportError } from './crash';
 import { slotKey, type SlotId } from './save-slots';
 
-// A run log entry before it is stored. turn and day place it in the run.
 export type LogEntry = { kind: string; turn: number; day: number } & Record<string, unknown>;
 
-// A stored run log entry. seq rises by one per record within a run.
 export type LogRecord = LogEntry & { runId: string; seq: number };
 
 export type SaveBackend = {
   readAll(): Promise<Map<SlotId, unknown>>;
   put(slot: SlotId, envelope: unknown): Promise<void>;
   remove(slot: SlotId): Promise<void>;
-  // Numbers the entries on from the run's last stored record, in the same transaction, so two tabs on one run never
-  // take the same number.
   appendLog(runId: string, entries: readonly LogEntry[]): Promise<void>;
   readLog(runId: string): Promise<LogRecord[]>;
 };
@@ -23,7 +19,6 @@ export type SaveBackend = {
 const SAVES = 'saves';
 const LOG = 'log';
 
-// The database of one save scope. Version 1 holds the saves by slot and the log by run id and seq.
 export async function idbBackend(name: string): Promise<SaveBackend> {
   const db = await opened(name);
   return {
@@ -69,7 +64,6 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
-// A write that resolves once the browser has put it on disk, not when it reached the browser's memory.
 function written(db: IDBDatabase, store: string, write: (store: IDBObjectStore) => void): Promise<void> {
   const tx = db.transaction(store, 'readwrite', { durability: 'strict' });
   write(tx.objectStore(store));
@@ -95,18 +89,12 @@ export function memoryBackend(): SaveBackend {
   };
 }
 
-// The save slots, mirrored in memory so the game reads and writes them at once. A write goes on to the backend in the
-// background, and a failed one goes to onError. flush() waits for the writes, so a reload never cuts one off.
 export class SaveSlots {
   onError: (err: unknown) => void = reportError;
   private pending = new Set<Promise<void>>();
 
-  // envelopes must be what the backend holds.
   constructor(readonly backend: SaveBackend, private envelopes: Map<SlotId, unknown>) {}
 
-  // Opens the slots and moves every save left in local storage by older builds into the backend. A local storage save
-  // replaces a slot only when it is newer, since a tab of an old build may still write there. A save that does not
-  // parse moves as its raw text into an empty slot, so load reports it like any other unreadable save.
   static async open(backend: SaveBackend, legacy: Storage, base: string, slots: readonly SlotId[]): Promise<SaveSlots> {
     const stored = await backend.readAll();
     for (const slot of slots) {
@@ -120,7 +108,6 @@ export class SaveSlots {
     return new SaveSlots(backend, await backend.readAll());
   }
 
-  // A copy, so the world loaded from it never changes the mirror.
   get(slot: SlotId): unknown {
     const envelope = this.envelopes.get(slot);
     return envelope === undefined ? null : structuredClone(envelope);
@@ -141,7 +128,6 @@ export class SaveSlots {
     this.track(this.backend.remove(slot));
   }
 
-  // Resolves once every write made so far has landed or failed.
   async flush(): Promise<void> {
     await Promise.all(this.pending);
   }
@@ -152,7 +138,6 @@ export class SaveSlots {
   }
 }
 
-// When a save was written, 0 for a save from before slots or one that does not parse.
 function savedAtOf(envelope: unknown): number {
   const savedAt = (envelope as { savedAt?: unknown } | null)?.savedAt;
   return typeof savedAt === 'number' ? savedAt : 0;

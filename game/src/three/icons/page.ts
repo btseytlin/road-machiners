@@ -1,8 +1,6 @@
 // The dev-only icons page that npm run icons drives in headless Chromium. It renders every catalog entry in both views,
 // then lays out the two unlabeled sprite sheets the game reads, the three labeled atlases (top-down, diagonal and the
 // view the game shows), the closest-pairs report and the manifest body. The items sheet is an SVG of vector blueprints,
-// and the chassis sheet a PNG. Item tiles sit on their category tone. It checks that weapon barrels read the right way.
-// scripts/icons.mjs writes the files and fails on the check.
 
 import { CHASSIS } from '../../data/chassis';
 import { GOODS } from '../../data/goods';
@@ -30,10 +28,10 @@ import {
 const CELL = { items: 128, chassis: 192 };
 const COLS = { items: 16, chassis: 8 };
 const VIEWS: readonly IconView[] = ['top', 'diagonal'];
-const SMALL = [36, 22]; // the card and chip sizes the atlas shows beside each large icon
+const SMALL = [36, 22];
 const REPORT_SIZE = 36;
 const REPORT_PAIRS = 10;
-const PLAN_SIZE = 512; // a plan's drawing square, which sets how fine its raster passes are
+const PLAN_SIZE = 512;
 
 const SECTION_TITLES: Record<IconSection, string> = {
   weapon: 'Weapons',
@@ -46,21 +44,17 @@ const SECTION_TITLES: Record<IconSection, string> = {
   chassis: 'Chassis',
 };
 
-// Atlas layout in pixels.
 const ATLAS = { cols: 6, tileW: 300, tileH: 176, big: 128, pad: 12, heading: 44, title: 56 };
 const TOP_CAPTION = 'Top-down, nose up';
 const DIAGONAL_CAPTION = `Diagonal: side view, nose right, ${DIAGONAL_YAW_DEG}° toward the rear and ${DIAGONAL_PITCH_DEG}° up`;
 const GAME_CAPTION = 'The view the game shows';
-const PANEL = 0x272b2e; // the UI panel color, behind chassis portraits as in the truck shop
+const PANEL = 0x272b2e;
 const PAGE = 0x1b1c1d;
 const TEXT = 0xe0d8ca;
 const MUTED = 0xaaa69e;
 
 type Sheet = 'items' | 'chassis';
-// svg: an item's blueprint in the view the game shows, as an SVG group in cell units. Null for a chassis.
-// tint: the same blueprint in colors from CSS variables. Null for a chassis.
 type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement>; svg: string | null; tint: string | null };
-// A drawn extent as shares of the cell: x, y, w, h.
 type Box = [number, number, number, number];
 type Cell = { index: number; hash: string; box: Box };
 type Manifest = {
@@ -119,12 +113,10 @@ function inSheet(rendered: readonly Rendered[], sheet: Sheet): Rendered[] {
   return rendered.filter((r) => r.sheet === sheet);
 }
 
-// A sheet's cells in order, each entry in the view the game shows. manifestOf() numbers them the same way.
 function cellsOf(rendered: readonly Rendered[], sheet: Sheet): HTMLCanvasElement[] {
   return inSheet(rendered, sheet).map((r) => r.views[iconView(r.entry)]);
 }
 
-// The items sheet as one SVG, each blueprint in its cell, in the order manifestOf() numbers them.
 function svgSheetOf(rendered: readonly Rendered[]): string {
   const items = inSheet(rendered, 'items');
   const cell = CELL.items;
@@ -137,8 +129,6 @@ function svgSheetOf(rendered: readonly Rendered[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${cells.join('')}</svg>\n`;
 }
 
-// The tint sheet: every part's blueprint in colors from CSS variables, one symbol tint-<id> each, cropped to its
-// drawing. The condition panel joins it to the page and colors each part by its condition.
 function tintSheetOf(rendered: readonly Rendered[]): string {
   const cell = CELL.items;
   const symbols = inSheet(rendered, 'items').flatMap((r) => {
@@ -180,7 +170,6 @@ function manifestOf(rendered: readonly Rendered[], bytes: Map<ModelName, Uint8Ar
   };
 }
 
-// Where a cell's drawn pixels lie, outline included, so a slot can fit the drawing to its box.
 function boxOf(icon: HTMLCanvasElement): Box {
   const { width: w, height: h } = icon;
   const { data } = context(icon).getImageData(0, 0, w, h);
@@ -195,7 +184,6 @@ function boxOf(icon: HTMLCanvasElement): Box {
   return [x0 / w, y0 / h, (x1 - x0) / w, (y1 - y0) / h];
 }
 
-// Every weapon's barrel must read from lower left to upper right in the diagonal view, by its sockets and its pixels.
 function orientationOf(catalog: readonly IconEntry[]): Orientation[] {
   return catalog.flatMap((entry) => {
     if (!entry.weapon) return [];
@@ -205,7 +193,6 @@ function orientationOf(catalog: readonly IconEntry[]): Orientation[] {
   });
 }
 
-// The atlas sections in ICON_SECTIONS order, each entry in viewOf's view.
 function sectionsOf(rendered: readonly Rendered[], viewOf: (entry: IconEntry) => IconView): AtlasSection[] {
   return ICON_SECTIONS.flatMap((s) => {
     const list = rendered.filter((r) => r.entry.section === s);
@@ -213,7 +200,6 @@ function sectionsOf(rendered: readonly Rendered[], viewOf: (entry: IconEntry) =>
   });
 }
 
-// What an entry's icon sits on: an item's category tone, or the panel behind a chassis portrait.
 function backdrop(entry: IconEntry): string {
   return hex(entry.section === 'chassis' ? PANEL : ITEM_TONES[itemTone(entry.id)]);
 }
@@ -264,7 +250,6 @@ function tile(ctx: CanvasRenderingContext2D, entry: IconEntry, icon: HTMLCanvasE
   ctx.fillText(entry.id, x + 8, y + ATLAS.big + 40, ATLAS.tileW - 16);
 }
 
-// The item pairs that differ least at the card size, per view, each over its tone. A diagnostic, not a gate.
 function reportOf(rendered: readonly Rendered[]): string {
   const items = inSheet(rendered, 'items');
   const lines: string[] = [`Closest item pairs at ${REPORT_SIZE} px by mean RGB difference (0-255), each over its tone.`];
@@ -304,8 +289,6 @@ declare global {
   }
 }
 
-// The plans sheet: each chassis outline from straight above as one SVG symbol, plan-<id>, which the condition panel
-// stretches over its grid.
 async function plans(): Promise<Record<string, string>> {
   await loadModels();
   const catalog = iconCatalog(PARTS, GOODS, CHASSIS, ICON_WEAPON_PICKS).filter((e) => e.section === 'chassis');

@@ -72,7 +72,6 @@ describe("equipment variety", () => {
     }
   });
 
-  // The harpoon is no class's gun: it fires to tie a line, not to damage.
   it("gives each tier one gun per class set: three pure classes and three pairs, beside the harpoon", () => {
     const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon" && p.line === undefined);
     for (const tier of [1, 2, 3]) {
@@ -191,7 +190,6 @@ describe("equipment variety", () => {
   });
 
   it("adds five goods with profitable routes and real buy/sell transactions", () => {
-    // three base goods, five trade goods, parts for field repair, and fuel drums and water for supply convoys
     expect(Object.keys(GOODS)).toHaveLength(11);
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
@@ -286,8 +284,6 @@ describe("one-cell armor plates", () => {
   });
 });
 
-// Every part must pay for its strengths somewhere other than its price. Higher is better on every axis.
-// Armor compares per cell, because a longer plate covers more of a side rather than being worse.
 function partAxes(def: PartDef): number[] {
   const cells = def.w * def.h;
   const tall = def.tall ? -1 : 0;
@@ -312,7 +308,6 @@ function partAxes(def: PartDef): number[] {
   }
 }
 
-// Utilities compare only within one effect, since each effect does a different job.
 function dominates(a: PartDef, b: PartDef): boolean {
   if (a.kind === "weapon" && b.kind === "weapon" && a.round.blast !== b.round.blast) return false;
   if (a.kind === "utility" && b.kind === "utility" && a.effect.type !== b.effect.type) return false;
@@ -322,11 +317,9 @@ function dominates(a: PartDef, b: PartDef): boolean {
 }
 
 describe("part weight by tier", () => {
-  // Armor, weapons and engines weigh per cell. Cargo parts weigh per extra row they add.
   const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
   const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-  // Armor compares within its job: rams against rams, other armor against other armor.
   const isRam = (p: PartDef): boolean => p.kind === "armor" && p.look === "ram";
   const meanAt = (defs: PartDef[], tier: number): number => mean(defs.filter((p) => p.tier === tier).map(perUnit));
 
@@ -385,7 +378,6 @@ describe("chassis drive parts", () => {
 });
 
 describe("NPC wallets and trade stakes", () => {
-  // Every driver may roll a trade at the minimum chance, so every trait needs a stake.
   it("gives every trait a trade stake", () => {
     for (const [id, trait] of Object.entries(TRAITS)) expect(trait.tradeStake, id).toBeGreaterThan(0);
   });

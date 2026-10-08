@@ -9,7 +9,6 @@ import { getHudReadout, powerChip, speedNotes, speedRows } from './hud-readout';
 import { kph } from './units';
 import { vehicleStats } from '../sim/stats';
 
-// The test world's player truck, with the given change applied.
 function playerWith(tweak: (w: World, v: Vehicle) => void = () => undefined): { w: World; v: Vehicle } {
   const w = emptyWorld();
   const v = w.vehicles[0];

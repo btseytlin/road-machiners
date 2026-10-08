@@ -62,7 +62,6 @@ describe('fortress layer', () => {
     const draft = flatDraft();
     const nose = REGION.towns.find((t) => t.id === 'nose')!;
     const { u, v } = noseFrame(nose);
-    // 40 tiles back from the center lies under the mountain. 40 tiles toward the south gate is open sand.
     const buried = { x: nose.pos.x + v.x * 40, y: nose.pos.y + v.y * 40 };
     const open = { x: nose.pos.x - v.x * 40 + u.x, y: nose.pos.y - v.y * 40 + u.y };
     draft.props = [buried, open].map((pos) => ({ kind: 'rock', pos, r: 1, yaw: 0, group: 0, step: 0 }));
@@ -75,7 +74,6 @@ describe('fortress layer', () => {
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const h = d.heights[j * n + i];
-        // Nose's raised ground is the only ground over the rim.
         if (h >= RIM) continue;
         const p = { x: i, y: j };
         expect(insideCurtain(bowl, p, pit.margin), `corner ${i},${j}`).toBe(true);

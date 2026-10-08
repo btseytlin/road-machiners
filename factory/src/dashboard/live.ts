@@ -8,7 +8,6 @@ export function createWorkerKey(id: string): string { return createHash('sha256'
 function isPrivateStage(stage: JobStage): boolean { return ['change', 'adhoc'].includes(stage); }
 function readPublicIssue(stage: JobStage, issue: number | null): number | null { return isPrivateStage(stage) ? null : issue; }
 function readFreshness(record: Observation, now: Date, heartbeatMs: number): 'ok' | 'stale' {
-  // Three missed heartbeats distinguish reporting delay from one slow refresh.
   return now.getTime() - Date.parse(record.at) > heartbeatMs * 3 ? 'stale' : 'ok';
 }
 function readWorkerActivity(home: string, job: Job, state: FactoryState, now: Date, heartbeatMs: number) {
@@ -16,7 +15,6 @@ function readWorkerActivity(home: string, job: Job, state: FactoryState, now: Da
   const key = createWorkerKey(job.id);
   if (record === null || record.data.type !== 'activity') return { key, activity: null, status: 'unavailable' };
   const value = record.data;
-  // A private task's milestone may name its private work, so only public stages show it.
   const milestone = isPrivateStage(job.stage) ? null : value.milestone ?? null;
   return { key, activity: value.activity, milestone, phase: value.phase, source: value.source, progressAt: value.progressAt ?? null, since: record.since,
     status: readFreshness(record, now, heartbeatMs), waitingFor: readLockOwner(value, state) };

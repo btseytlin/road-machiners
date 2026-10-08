@@ -4,7 +4,6 @@ import { join } from 'node:path';
 
 export type Input = { path: string; kind: 'file' | 'dir' | 'missing' };
 
-// The version holds the commit hash, so it differs on every commit and no test result depends on its value.
 const PER_COMMIT_DEFINES = new Set(['__GAME_VERSION__']);
 
 const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
@@ -19,7 +18,6 @@ function testSupportFiles(root: string, dir: string): string[] {
     });
 }
 
-// What every test file depends on, so a change here invalidates every cached pass.
 export function globalKey(root: string, define: Record<string, unknown>, env: NodeJS.ProcessEnv): string {
   const files = ['package-lock.json', 'vitest.config.ts', join('scripts', 'test-cache.mjs'), ...testSupportFiles(root, join('src', 'test'))];
   const parts = files.map((file) => `${file}\0${sha256(readFileSync(join(root, file)))}`);
@@ -40,7 +38,6 @@ function stateOf(root: string, path: string, states: Map<string, string>): strin
   return state;
 }
 
-// The states map lets one selection pass hash a shared file once.
 export function fingerprint(root: string, key: string, inputs: Input[], states = new Map<string, string>()): string {
   const parts = inputs.map((input) => `${input.path}\0${stateOf(root, input.path, states)}`);
   return sha256([key, ...parts].join('\n'));

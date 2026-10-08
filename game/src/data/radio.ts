@@ -20,25 +20,21 @@ export type RadioTopic =
   | 'wisdom';
 
 export const RADIO = {
-  minGapTurns: 35, // minimum turns between broadcasts
-  gapJitterTurns: 45, // add a random 0..45 turns so J.J. never broadcasts on a metronome
-  clockChance: 0.25, // a clock crossing is occasional color, not an hourly announcement
-  queueCap: 3, // broadcasts waiting at once; the oldest filler goes first when full
-  staleTurns: 65, // old news and clock calls expire instead of playing in a burst
-  placeCooldownTurns: 150, // turns before a second raid report at the same place
-  idleTurns: 240, // quiet turns before J.J. fills the air with banter
-  charsPerSecond: 24, // real-time typing speed of the pager screen
-  nearTiles: 60, // a place farther than this from the news is named by basin direction instead
-  maxChars: 90, // a filled line fits the three-line screen
-  // Out-of-character words J.J. never says, matched at the start of a word.
+  minGapTurns: 35,
+  gapJitterTurns: 45,
+  clockChance: 0.25,
+  queueCap: 3,
+  staleTurns: 65,
+  placeCooldownTurns: 150,
+  idleTurns: 240,
+  charsPerSecond: 24,
+  nearTiles: 60,
+  maxChars: 90,
   banned: ['turn', 'quest', 'xp', 'experience', 'level', 'hp', 'click', 'press', 'key', 'player', 'game', 'tile', 'save'],
 };
 
-// Hours of the clock calls. Dawn and dusk follow TIME.sunrise and TIME.sunset.
 export const RADIO_HOURS = { noon: 12, midnight: 0 };
 
-// Slots: {place} is "near X" for a found place or a basin direction, {heading} a compass word, {shop} and {to}
-// found site names, {good} a good name, {part} a part name, {target} a driver name.
 export const RADIO_LINES: Record<RadioTopic, readonly string[]> = {
   ident: [
     'This is J.J. on Waste Of Time Radio, wasting your time since the sky fell.',
@@ -102,7 +98,6 @@ export const RADIO_LINES: Record<RadioTopic, readonly string[]> = {
     'Another rig went quiet {place}. Raiders, by the sound of it.',
     'A rig sits dead {place}. Raiders took their cut. Nobody take more.',
   ],
-  // Banter stays in-world; hints, where present, are oblique, never instructions.
   wisdom: [
     'The noon sun has opinions about engines. The shade keeps its own counsel.',
     "Town guns have a longer memory than the town clerk.",
@@ -127,7 +122,6 @@ export const RADIO_LINES: Record<RadioTopic, readonly string[]> = {
   ],
 };
 
-// Basin directions for places the listener has not found, clockwise from east. North is -y on the map.
 export const BASIN_DIRECTIONS = [
   'out east',
   'in the southeast basin',
@@ -139,5 +133,4 @@ export const BASIN_DIRECTIONS = [
   'in the northeast basin',
 ] as const;
 
-// Compass words for which way a storm drifts, clockwise from east.
 export const HEADINGS = ['east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'north', 'northeast'] as const;

@@ -55,7 +55,6 @@ function planText(task: string): string {
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-// The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
 async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
   const body = fitComment(taskFile, 'the factory work clone');
   await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);

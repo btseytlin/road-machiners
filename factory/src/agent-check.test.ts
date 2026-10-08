@@ -21,7 +21,6 @@ beforeEach(() => {
   git('commit', '-q', '--allow-empty', '-m', 'first');
 });
 
-// Writes a full passing round: approval, screenshot and manifest.
 function capture(): void {
   writeFileSync(join(out, 'approval.json'), JSON.stringify({ description: 'Adds oil', howToTry: 'Drive on' }));
   writeFileSync(join(out, 'screenshot.png'), pngBytes(0));

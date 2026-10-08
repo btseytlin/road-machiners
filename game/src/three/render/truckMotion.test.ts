@@ -3,12 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { VehicleFrame } from '../../phys/frames';
 import { TruckMotion, WHIPS } from './truckMotion';
 
-// A truck facing +x with the given world acceleration, m/s^2.
 function frame(acc: { x: number; y: number; z: number }): VehicleFrame {
   return { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, acc, wheels: [] };
 }
 
-// Steps one second of new frames with the same acceleration, as a playing turn does.
 function drive(motion: TruckMotion, acc: { x: number; y: number; z: number }): void {
   for (let i = 0; i < 60; i++) motion.step(frame(acc), 1 / 60, false);
 }
@@ -28,7 +26,6 @@ describe('truck motion', () => {
     const { body, antenna, chain, motion } = setup();
     drive(motion, { x: 8, y: 0, z: 0 });
     expect(body.rotation.z).toBeGreaterThan(0.01);
-    // The antenna tip leans toward -x, and the chain's hanging end swings toward -x.
     expect(new THREE.Vector3(0, 1, 0).applyEuler(antenna.rotation).x).toBeLessThan(0);
     expect(new THREE.Vector3(0, -1, 0).applyEuler(chain.rotation).x).toBeLessThan(0);
   });
@@ -41,7 +38,6 @@ describe('truck motion', () => {
 
   it('leans out of a right turn', () => {
     const { body, motion } = setup();
-    // Turning right pulls the truck toward +z, its right. The roof leans left, toward -z.
     drive(motion, { x: 0, y: 0, z: 8 });
     expect(new THREE.Vector3(0, 1, 0).applyQuaternion(body.quaternion).z).toBeLessThan(-0.01);
   });
@@ -49,7 +45,6 @@ describe('truck motion', () => {
   it('keeps the lean within its cap on a hard bump', () => {
     const { body, motion } = setup();
     drive(motion, { x: 500, y: 0, z: 500 });
-    // The spring may pass its capped target by its overshoot, under a third of the cap.
     expect(Math.abs(body.rotation.z)).toBeLessThan(0.13);
     expect(Math.abs(body.rotation.x)).toBeLessThan(0.13);
   });

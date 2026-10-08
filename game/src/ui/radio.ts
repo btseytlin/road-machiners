@@ -26,7 +26,6 @@ const WEATHER_TOPICS: Record<WeatherEvent['kind'], Partial<Record<'started' | 'e
   storm: { started: 'stormStart', ended: 'stormEnd' },
 };
 
-// The clock calls in the order they come after midnight.
 const CLOCK_CALLS: { topic: RadioTopic; hour: number }[] = [
   { topic: 'midnight', hour: RADIO_HOURS.midnight },
   { topic: 'dawn', hour: TIME.sunrise },
@@ -34,7 +33,6 @@ const CLOCK_CALLS: { topic: RadioTopic; hour: number }[] = [
   { topic: 'dusk', hour: TIME.sunset },
 ];
 
-// Fills a line's {slots}. An unknown slot is a content bug, so it throws.
 export function fill(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, slot: string) => {
     const value = vars[slot];
@@ -48,10 +46,10 @@ export class RadioStation {
   private seed: number | null = null;
   private board = new Set<string>();
   private queue: Broadcast[] = [];
-  private lastSent: number | null = null; // turn of the last broadcast sent
-  private nextAir = 0; // randomized earliest turn for the next broadcast
-  private lastAir = 0; // turn of the last broadcast queued or sent, for the idle filler
-  private placeHeard = new Map<string, number>(); // raid place word -> turn it was last reported
+  private lastSent: number | null = null;
+  private nextAir = 0;
+  private lastAir = 0;
+  private placeHeard = new Map<string, number>();
   private lastText = new Map<RadioTopic, string>();
 
   constructor(private random: () => number) {}
@@ -73,12 +71,10 @@ export class RadioStation {
     if (this.queue.length === 0 && world.turn - this.lastAir >= RADIO.idleTurns) this.push('wisdom', {}, 'filler');
   }
 
-  // A load or a new game: the seed changed or the clock went back.
   private retuned(world: World, prev: number): boolean {
     return world.seed !== this.seed || world.turn < prev;
   }
 
-  // The best broadcast that is not stale, or null while the gap since the last one lasts.
   next(): Broadcast | null {
     if (this.turn === null) return null;
     const now = this.turn;
@@ -96,7 +92,6 @@ export class RadioStation {
     return null;
   }
 
-  // A new game, a load or a first world: everything on the boards counts as old, and J.J. says hello.
   private tuneIn(world: World): void {
     this.turn = world.turn;
     this.seed = world.seed;
@@ -121,7 +116,6 @@ export class RadioStation {
     this.push(topic, w.kind === 'storm' ? { place: placeWord(world, w.pos), heading: compass(w.vel, HEADINGS) } : {}, 'news');
   }
 
-  // A raider's robbery or knockout of another driver, never one touching the player.
   private raidNews(world: World, topic: RadioTopic, attackerId: string, victimId: string): void {
     const place = raidPlace(world, attackerId, victimId);
     if (place === null || this.recentlyHeard(place, world.turn)) return;
@@ -134,7 +128,6 @@ export class RadioStation {
     return heard !== undefined && turn - heard < RADIO.placeCooldownTurns;
   }
 
-  // The best paid contract posted since the last world, on a found board to a found place.
   private contractNews(world: World): void {
     const old = this.board;
     const fresh: Contract[] = [];
@@ -152,11 +145,9 @@ export class RadioStation {
     if (best) this.push(best.kind, contractVars(best), 'news');
   }
 
-  // The latest clock call crossed between two heard worlds.
   private timeCall(prevTurn: number, turn: number): void {
     const from = hoursOf(prevTurn);
     const to = hoursOf(turn);
-    // Calls fall on whole hours, so none lies between two times in the same hour.
     if (Math.floor(from) === Math.floor(to)) return;
     const latest = clockCalls(from, to).filter((c) => c.at > from && c.at <= to).at(-1);
     if (latest && this.random() < RADIO.clockChance) this.push(latest.topic, {}, 'time');
@@ -168,7 +159,6 @@ export class RadioStation {
     while (this.queue.length > RADIO.queueCap) this.queue.splice(this.queue.indexOf(dropFirst(this.queue)), 1);
   }
 
-  // A random variant, never the same one twice in a row.
   private pick(topic: RadioTopic): string {
     const all = RADIO_LINES[topic];
     const options = all.length > 1 ? all.filter((t) => t !== this.lastText.get(topic)) : all;
@@ -178,7 +168,6 @@ export class RadioStation {
   }
 }
 
-// Every clock call on the days from one hour count to another, in order.
 function clockCalls(from: number, to: number): { topic: RadioTopic; at: number }[] {
   const calls: { topic: RadioTopic; at: number }[] = [];
   for (let day = Math.floor(from / 24); day <= Math.floor(to / 24); day++) {
@@ -187,7 +176,6 @@ function clockCalls(from: number, to: number): { topic: RadioTopic; at: number }
   return calls;
 }
 
-// Where a raider robbed or knocked out another driver. Null for anything touching the player or not by raiders.
 function raidPlace(world: World, attackerId: string, victimId: string): string | null {
   if ([attackerId, victimId].includes(world.player.vehicleId)) return null;
   const victim = vehicleIn(world, victimId);
@@ -195,7 +183,6 @@ function raidPlace(world: World, attackerId: string, victimId: string): string |
   return placeWord(world, victim.pos);
 }
 
-// The queued broadcast to drop when full: the oldest of the lowest rank.
 function dropFirst(queue: Broadcast[]): Broadcast {
   for (const rank of [...RANKS].reverse()) {
     const oldest = queue.find((b) => b.rank === rank);
@@ -215,19 +202,15 @@ function contractVars(c: Contract): Record<string, string> {
   return { shop, target: c.targetName };
 }
 
-// A vehicle can leave the world in the step that reported it. It then has no place to report.
 function vehicleIn(world: World, id: string): Vehicle | undefined {
   return world.vehicles.find((v) => v.id === id);
 }
 
-// Hours since the start of day 1.
 function hoursOf(turn: number): number {
   const { day, hour } = clockOf(turn);
   return (day - 1) * 24 + hour;
 }
 
-// "near X" for the nearest found site within reach, else the basin direction from the map's center.
-// Unfound sites stay unnamed, so the radio never does the Rumor mill perk's work.
 function placeWord(world: World, pos: Vec): string {
   const nearest = SITES.reduce((a, b) => (dist(b.pos, pos) < dist(a.pos, pos) ? b : a));
   if (dist(nearest.pos, pos) <= RADIO.nearTiles && world.player.discovered.includes(nearest.id)) return `near ${nearest.name}`;
@@ -235,24 +218,19 @@ function placeWord(world: World, pos: Vec): string {
   return compass({ x: pos.x - center, y: pos.y - center }, BASIN_DIRECTIONS);
 }
 
-// One of eight words clockwise from east for a direction on the map, where north is -y.
 function compass<T extends string>(v: Vec, words: readonly T[]): T {
   const turns = Math.atan2(v.y, v.x) / (2 * Math.PI);
   return words[(Math.round(turns * 8) + 8) % 8];
 }
 
-// The start of a broadcast shown after some real time of typing.
 export function revealed(text: string, elapsedMs: number, charsPerSecond: number): string {
   return text.slice(0, Math.max(0, Math.floor((elapsedMs / 1000) * charsPerSecond)));
 }
 
-// The car radio above the log. It only streams and draws. The station picks every line.
 export class RadioPanel {
   readonly root = panel('radio', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
-  // The transport keys sit in a strip above the screen.
   readonly keys = el('div', { class: 'radio-keys' });
-  // Screen readers wait for aria-busy to clear, so they read a broadcast once, whole.
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
   private streaming: { text: string; start: number } | null = null;
 
@@ -267,7 +245,6 @@ export class RadioPanel {
     if (!this.streaming) this.play();
   }
 
-  // Starts the next broadcast. A finished one stays on screen until a new one replaces it.
   private play(): void {
     const b = this.station.next();
     if (!b) return;
@@ -282,7 +259,6 @@ export class RadioPanel {
     const s = this.streaming;
     if (!s) return;
     const shown = revealed(s.text, now - s.start, RADIO.charsPerSecond);
-    // Several frames pass per character, so the screen is written only when one appears.
     if (shown.length !== this.text.textContent?.length) this.text.textContent = shown;
     if (shown.length < s.text.length) {
       requestAnimationFrame(this.tick);

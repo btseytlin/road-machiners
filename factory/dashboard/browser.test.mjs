@@ -13,7 +13,6 @@ const now = new Date().toISOString();
 function createSource(value) { return { status: 'ok', at: now, value }; }
 const jobs = Array.from({ length: 45 }, (_, i) => ({ key: `job-${i}`, issue: i + 1, stage: ['design', 'implement', 'verify'][i % 3], startedAt: new Date(Date.now() - 900000).toISOString() }));
 const cardColumns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
-// The funnel shows one column per label, so these follow the factory's own board instead of a fixed number.
 const boardColumns = Object.keys(LABELS.columns);
 const fill = (value) => boardColumns.map(() => value);
 function createSummary(days) {
@@ -34,7 +33,6 @@ function createSummary(days) {
     ],
     activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })), delivery: createDelivery(days) };
 }
-// Issue ages of 50h, 10h and 120h, merged 2 hours, 3 days and 20 days ago. Each range then holds a different set.
 function createMerges() {
   const hour = 3600000;
   const merge = (issue, ageHours, mergedHoursAgo) => {
@@ -92,7 +90,6 @@ async function checkLayout(page, size) {
     assert.equal(overflow.document, false);
     assert.deepEqual(overflow.panels, []);
     if (tab === 'overview') {
-      // Every column of the board sits in one visible row. A grid with too few tracks wraps the last column out of sight.
       const tops = await page.locator('#funnel div').evaluateAll((items) => items.map((item) => item.getBoundingClientRect().top));
       assert.equal(tops.length, boardColumns.length);
       assert.equal(new Set(tops).size, 1);

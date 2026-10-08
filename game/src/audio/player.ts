@@ -10,31 +10,26 @@ export type SoundSelection = { file: string; rate: number };
 
 export type LoopHandle = {
   setGain(gain: number, rampSeconds: number): void;
-  // Fades in, moves rate and gain in a straight line over the span, and fades out at its end.
   glide(g: Glide): void;
-  // Plays the loop through the points once, moving rate and gain in straight lines between them, then stops.
   once(points: readonly EnvelopePoint[]): void;
   stop(fadeMs: number): void;
 };
 
-// A loop started on its beat. Duck dips it under an accent at an audio time and recovers over the release.
-// Tone moves its low-pass cutoff, which muffles it when low.
 export type BeatLoopHandle = LoopHandle & {
-  readonly duration: number; // seconds of one pass
+  readonly duration: number;
   duck(time: number, gain: number, attackSeconds: number, releaseSeconds: number): void;
   setTone(cutoffHz: number, rampSeconds: number): void;
 };
 
-const PEAK_WINDOW_SECONDS = 0.02; // short enough to find a hit's attack, long enough to skip single-sample spikes
+const PEAK_WINDOW_SECONDS = 0.02;
 
-// One point of a loop played once: playback rate and level, seconds from the start.
 export type EnvelopePoint = { at: number; rate: number; gain: number };
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
 
 
 export class SoundPlayer {
   private last = new Map<string, number>();
-  private peaks = new Map<string, number>(); // loudest moment per file, measured on first use
+  private peaks = new Map<string, number>();
   private voices = new VoiceLimiter();
 
   constructor(private mixer: Mixer, private bank: Bank, private sounds: Record<string, Cue>) {}
@@ -58,7 +53,6 @@ export class SoundPlayer {
     this.mixer.setBusTone(bus, cutoffHz, rampSeconds);
   }
 
-  // Audio time in seconds, the clock every scheduled play uses.
   now(): number {
     return this.mixer.ctx.currentTime;
   }
@@ -71,7 +65,6 @@ export class SoundPlayer {
     return this.loopHandle(src, gain, cue);
   }
 
-  // Starts silent at audio time when, offset seconds into the file, so layers started together share a beat.
   beatLoop(id: string, file: string, when: number, offset: number): BeatLoopHandle {
     const cue = this.loopCue(id);
     const buffer = this.getBuffer(id, cue, file);
@@ -159,8 +152,6 @@ export class SoundPlayer {
     return cue;
   }
 
-  // The file for a cue's next play, never the last one when there is a choice, and the seconds to its loudest
-  // moment, so a caller can land that moment on a beat or an event.
   chooseWithPeak(id: string): { file: string; peak: number } {
     const file = this.cue(id).files[this.nextIndex(id, this.cue(id))];
     let peak = this.peaks.get(file);
@@ -184,7 +175,6 @@ export class SoundPlayer {
     return buf;
   }
 
-  // Source -> gain -> pan -> bus. Returns the gain for live changes.
   private chain(src: AudioNode, cue: Cue, at: Placement): GainNode {
     const ctx = this.mixer.ctx;
     const gain = ctx.createGain();

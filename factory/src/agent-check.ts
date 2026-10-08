@@ -2,12 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { CLONE_ROUNDS, HOST_ONLY_CHECKS, checkClone } from './clone-checks';
 import { guardDiff } from './diff-guard';
 
-// The commit hook of every work clone runs this round on the staged change.
 export const GUARD_ROUND = 'guard';
 const USAGE = `Usage: factory-check <${[...CLONE_ROUNDS, GUARD_ROUND].join('|')}>, run from your folder after your last commit`;
 
-// The command an agent runs in its container as its last step, from its folder. Argument: the round.
-// It prints each failure with the factory's own message and returns the exit code. The factory still gates after the stage.
 export function runAgentCheck(args: string[], cwd: string, print: (line: string) => void): number {
   const round = args.length === 1 ? args[0] : undefined;
   if (round === GUARD_ROUND) return runGuard(cwd, print);
@@ -27,10 +24,8 @@ function runRound(cwd: string, print: (line: string) => void): number {
   return failures.length === 0 ? 0 : 1;
 }
 
-// Node reads 1 MB of output by default. A staged map or data file is text and can be far larger, and a cut diff would fail the commit.
 const DIFF_BUFFER_BYTES = 256 * 1024 * 1024;
 
-// The diff guard on the staged change, so the agent learns of a protected path or a major save bump at its commit, not at the push.
 function runGuard(cwd: string, print: (line: string) => void): number {
   try {
     guardDiff(execFileSync('git', ['diff', '--cached'], { cwd, encoding: 'utf8', maxBuffer: DIFF_BUFFER_BYTES }));

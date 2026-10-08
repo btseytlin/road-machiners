@@ -32,7 +32,6 @@ function idOf(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-// Each own entry with a finite non-negative number.
 function countsOf(value: unknown): Record<string, number> {
   const entries = Object.entries(objectOf(value) ?? {}).map(([key, n]) => [key, countOf(n)] as const);
   return Object.fromEntries(entries.filter((e): e is [string, number] => e[1] !== null));
@@ -83,7 +82,6 @@ const NO_CARRIED: Carried = {
   autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined,
 };
 
-// What a save holds of the player's progression. Never throws: anything of the wrong type reads as missing.
 export function readCarried(raw: unknown): Carried {
   const world = objectOf(objectOf(raw)?.world);
   const player = objectOf(world?.player);
@@ -104,12 +102,10 @@ export function readCarried(raw: unknown): Carried {
     costBasis: Object.fromEntries(Object.entries(countsOf(player.costBasis)).map(([good, basis]) => [good, basis * scale])),
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
-    setup: world.setup, // carriedWorld() checks and repairs it
+    setup: world.setup,
   };
 }
 
-// Money in a save from before format 2.30 is in the old unit, a third of an M per fuel unit, as the 29 to 30 step
-// reads it. A save with no format is older still. A newer major format is not old money.
 function moneyScale_29_30(raw: unknown): number {
   const format = objectOf(objectOf(raw)?.format);
   const part = (key: 'major' | 'minor'): number => (typeof format?.[key] === 'number' ? format[key] : 0);
@@ -121,16 +117,11 @@ function centsOf(value: unknown, scale: number): number | null {
   return money === null ? null : Math.round(money * scale);
 }
 
-// The XP pool and skill ranks. A save from before format 2.10 holds XP per skill, which reads as the 2.9 to 2.10 step
-// reads it.
 function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
   if (objectOf(player.ranks)) return { xp: countOf(player.xp), ranks: countsOf(player.ranks) };
   return pooledSkills_9_10(countsOf(player.skills));
 }
 
-// Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
-// save is not a JSON object, which leaves nothing to carry.
-// The rescued world stays in the save's run, so its log goes on.
 export function rescueSave(slots: SaveSlots, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, freshRunId: () => string, savedAt: number): { world: World; report: CarryReport; runId: string } | null {
   const parsed = storedSave(slots, slot);
   if (objectOf(parsed) === null) return null;

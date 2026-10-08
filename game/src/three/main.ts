@@ -42,18 +42,14 @@ function element(id: string): HTMLElement {
   return el;
 }
 
-// The baked map, fetched relative to the page. A missing or broken file stops boot with the crash screen.
 async function fetchMap(): Promise<BakedMap> {
   const response = await fetch(MAPGEN.file);
   if (!response.ok) throw new Error(`Map file ${MAPGEN.file} failed to load: ${response.status} ${response.statusText}`);
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
-// The world boot plays, the run it belongs to, and the slot it loaded from, null for a new or rescued world.
 type Booted = { world: World; runId: string; loadedFrom: SlotId | null; fresh: boolean };
 
-// The world the boot request names, else the newest save, else a new one. A save that cannot load goes to the player:
-// migrate it or start over. `fresh` is true for a new game, never for a loaded or rescued save.
 async function bootWorld(): Promise<Booted> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
   if (typeof request === 'object' && request !== null) return freshRun(request.new);
@@ -74,8 +70,6 @@ async function bootSlot(slot: SlotId): Promise<Booted> {
   }
 }
 
-// A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
-// autosave does not load an older run's save.
 function freshRun(setup: WorldSetup): Booted {
   clearGame(slots, window.localStorage);
   return newGameSaved(setup);
@@ -88,7 +82,6 @@ function newGameSaved(setup: WorldSetup): Booted {
   return { world, runId, loadedFrom: null, fresh: true };
 }
 
-// Migrate carries the save over. New game opens the New game screen, whose Start reloads into the new game.
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   const stored = storedSave(slots, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
@@ -99,9 +92,7 @@ async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   return { world: rescued.world, runId: rescued.runId, loadedFrom: null, fresh: false };
 }
 
-// Asks the browser to keep saves under disk pressure. A refusal leaves them best-effort storage, as before.
 async function persistSaves(): Promise<void> {
-  // The storage manager exists only on https pages.
   if (!navigator.storage) return console.warn('The page is not secure, so it cannot ask the browser to keep saves under disk pressure');
   if (!(await navigator.storage.persist())) console.warn('The browser did not grant persistent storage, so it may evict saves under disk pressure');
 }
@@ -119,26 +110,22 @@ const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SO
 const map = await fetchMap();
 const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStorage, SAVE_KEY, allSlots(CONFIG.saveSlots));
 persistSaves().catch(reportError);
-// The New game screen of the boot save screen. The reload waits for the slots' writes.
 const newGameActions: NewGameActions = {
   requestBoot: (request) => requestBoot(window.sessionStorage, SAVE_KEY, request),
   reload: () => void slots.flush().then(() => window.location.reload(), reportError),
   confirm: (text) => window.confirm(text),
 };
-// The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
 const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
 groundTexture(world);
 const [, , bank] = await loading;
-// UI code may use Math.random(), and the radio changes no rule.
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
 const overlay = element('overlay');
 const game = new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
-// A new game opens with the kit's story line, once. A reload loads the save and never repeats it.
 const opening = startKit(CONFIG.startKit).opening;
 if (fresh && opening) game.hud.note(world, opening.log, "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
@@ -152,7 +139,6 @@ if (import.meta.env.DEV) {
   (window as any).__ROAM_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
 }
 
-// Route grids build after boot, one per task, the player's first. Any route asked for earlier builds its own grid.
 function warmAfterBoot(radii: number[]): void {
   const radius = radii.shift();
   if (radius === undefined) return;
@@ -160,13 +146,10 @@ function warmAfterBoot(radii: number[]): void {
   setTimeout(() => warmAfterBoot(radii));
 }
 
-// A random 32-bit integer. Boot is outside the sim, so it may use Math.random().
 function freshSeed(): number {
   return Math.floor(Math.random() * 2 ** 32) | 0;
 }
 
-// 16 random bytes in hex. crypto.randomUUID() exists only on https pages, and the game also runs over plain http on a
-// local network.
 function freshRunId(): string {
   return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

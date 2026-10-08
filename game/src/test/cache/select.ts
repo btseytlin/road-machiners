@@ -18,7 +18,6 @@ function kindOf(root: string, path: string): Input['kind'] {
   return stat.isDirectory() ? 'dir' : 'file';
 }
 
-// A path outside the repo has no content the fingerprint can cover, so the test file stays uncacheable.
 export function inputsOf(root: string, test: string, graphFiles: string[], reads: string[]): Input[] | null {
   const paths = new Set<string>([test]);
   for (const file of [...graphFiles, ...reads]) {
@@ -30,7 +29,6 @@ export function inputsOf(root: string, test: string, graphFiles: string[], reads
   return [...paths].sort().map((path) => ({ path, kind: kindOf(root, path) }));
 }
 
-// Returns how many of the test files were uncacheable.
 export function recordRun(root: string, cache: string, key: string, results: RunResult[]): number {
   let uncacheable = 0;
   for (const { test, passed, graphFiles, reads } of results) {

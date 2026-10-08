@@ -3,8 +3,6 @@ import { join } from 'node:path';
 import type { ModelUsage } from './ledger';
 import type { TokenPrice } from './types';
 
-// Claude Code saves a conversation as `<projects>/<working folder>/<id>.jsonl` and each subagent's as `<id>/subagents/<agent>.jsonl` beside it.
-// Every assistant message there holds its final token counts, which the result event of a finished run sums. A resumed session keeps one file, so its counts run from the session's start, like its result event.
 function transcriptFiles(projects: string, id: string): string[] {
   if (!existsSync(projects)) return [];
   return readdirSync(projects, { withFileTypes: true }).filter((entry) => entry.isDirectory()).flatMap((entry) => {
@@ -25,7 +23,6 @@ const count = (value: unknown, at: string): number => {
   return value;
 };
 
-// Claude Code repeats a message once per content block, with the same counts, so each id counts once.
 function readMessages(file: string): Message[] {
   return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '').flatMap((line) => {
     const event = JSON.parse(line) as { type?: string; message?: { id?: string; model?: string; usage?: Record<string, unknown> } };
@@ -35,7 +32,6 @@ function readMessages(file: string): Message[] {
   });
 }
 
-// A message without the cache split predates it, and its writes cannot be priced.
 function countsOf(message: Message, at: string): Counts {
   const usage = message.usage;
   const written = count(usage.cache_creation_input_tokens, at);
@@ -49,8 +45,6 @@ function countsOf(message: Message, at: string): Counts {
 const priceOf = (counts: Counts, price: TokenPrice): number =>
   (counts.input * price.input + counts.output * price.output + counts.cacheRead * price.cacheRead + counts.cacheWrite5m * price.cacheWrite5m + counts.cacheWrite1h * price.cacheWrite1h) / 1_000_000;
 
-// Per model, the tokens and list-price cost a session's transcripts record. Null when Claude Code saved nothing, as when a container died before its first message.
-// Claude Code marks its own error replies with the model `<synthetic>`. They used no tokens.
 export function transcriptUsage(projects: string, id: string, prices: Record<string, TokenPrice>): ModelUsage[] | null {
   const files = transcriptFiles(projects, id);
   if (files.length === 0) return null;

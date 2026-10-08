@@ -1,8 +1,6 @@
 // First-time tips for driving and the horn, and a farewell once the player heads out. A tip shows while its moment lasts, one at a time. It goes away for good
 // once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
 // A new game first runs the opening tips: reach the opening wreck, search it, loot it, patch the engine and mount the
-// cage. The step comes from saved world facts. While an opening tip waits, no other tip shows or counts as done, so
-// the driving tips start whole after it.
 
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
@@ -27,15 +25,13 @@ export type TipId = OpeningStep | "waypoint" | "drive" | "autoStop" | "stop" | "
 type Tip = {
   id: TipId;
   text: string;
-  opening?: true; // an opening tip, which holds the others while it waits
-  after?: TipId; // shows only once this tip is seen
-  seenWhenOver?: true; // counts as seen once its moment ends while it shows
-  when: (w: World, auto: boolean, o: OpeningState) => boolean; // auto: turns follow each other without a key press
+  opening?: true;
+  after?: TipId;
+  seenWhenOver?: true;
+  when: (w: World, auto: boolean, o: OpeningState) => boolean;
   done: (w: World, o: OpeningState) => boolean;
 };
 
-// Tiles from spawn for the farewell. Bots first see a trader 43 to 61 tiles from spawn, so this is the farthest of
-// those plus one sight radius.
 const FAREWELL_DISTANCE = 80;
 const spawn = startPose().pos;
 
@@ -45,7 +41,6 @@ const npcInSight = (w: World): boolean =>
 const hostileInSight = (w: World): boolean =>
   w.vehicles.some((v) => v.brain && !isKnockedOut(v) && hostileToPlayer(w, v) && playerSees(w, v.pos));
 
-// Faster than parked. A truck that parked after a drive keeps a tiny speed from physics.
 const moving = (w: World): boolean => playerVehicle(w).speed > RULES.parkedSpeed;
 
 const hasWaypoint = (w: World): boolean => {
@@ -53,14 +48,12 @@ const hasWaypoint = (w: World): boolean => {
   return kind === "through" || kind === "stopAt";
 };
 
-// The opening wreck and the step it puts the player at, found once per frame for every tip.
 type OpeningState = { stock: SalvageStock | null; step: OpeningStep | null };
 
 const searchedOpening = (w: World, { stock }: OpeningState): boolean => stock !== null && w.player.scavenged.includes(stock.id);
 
 const inOpeningReach = (w: World, { stock }: OpeningState): boolean => stock !== null && canReachSalvage(playerVehicle(w), stock);
 
-// The engine's patch to the field cap still needs parts.
 const engineNeedsPatch = (w: World): boolean => {
   const me = playerVehicle(w);
   const engine = mountedParts(me).find((p) => partDef(p.defId).kind === "engine");
@@ -74,8 +67,6 @@ const holdsLooseCage = (w: World): boolean => {
   return me.items.some((it) => it.kind === "part" && it.part.defId === "cage" && !isMounted(me.chassisId, it));
 };
 
-// The step of the new-game opening, from saved facts, or null outside it. A game without the opening wreck, like an
-// old save, has none. Each step goes moot when its facts go: an NPC empties the wreck, the player drives off.
 export function openingStep(w: World): OpeningStep | null {
   return openingState(w).step;
 }
@@ -109,7 +100,6 @@ const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningSt
   done,
 });
 
-// List order is priority when two tips could show at once.
 const TIPS: readonly Tip[] = [
   openingTip(
     "wreck",
@@ -201,17 +191,14 @@ const TIPS: readonly Tip[] = [
   },
 ];
 
-// The opening holds the other tips while its step's tip waits to be seen.
 const openingLive = (o: OpeningState, seen: ReadonlySet<TipId>): boolean => o.step !== null && !seen.has(o.step);
 
-// Tips the player has just done, whether or not they were on screen. Only opening tips while the opening runs.
 export function doneTips(world: World, seen: ReadonlySet<TipId>): TipId[] {
   const o = openingState(world);
   const live = openingLive(o, seen);
   return TIPS.filter((t) => (t.opening || !live) && t.done(world, o)).map((t) => t.id);
 }
 
-// The tip to show now. The shown tip keeps its place while its moment lasts, so a new tip never swaps it out.
 export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>, shown: TipId | null): TipId | null {
   if (!playerCanAct(world)) return null;
   const o = openingState(world);
@@ -255,7 +242,6 @@ export class Tips {
     this.render();
   }
 
-  // The shown tip leaves the screen. A tip marked seenWhenOver has done its job.
   private passShown(): void {
     const tip = TIPS.find((t) => t.id === this.shown);
     if (tip?.seenWhenOver) this.markSeen(tip.id);
@@ -279,7 +265,6 @@ export class Tips {
     const tip = TIPS.find((t) => t.id === this.shown);
     this.box.style.display = tip ? "" : "none";
     if (!tip) return;
-    // An opening tip names steps in the inventory, so it stays on screen while a modal is open.
     this.box.classList.toggle("opening-tip", tip.opening === true);
     this.box.replaceChildren(
       el("span", {}, tip.text),

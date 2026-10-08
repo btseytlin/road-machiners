@@ -5,7 +5,6 @@ import { must, realRun } from './exec';
 import { hostRepo } from './repo';
 import { MergeConflictError, RevertConflictError, type FactoryConfig, type Run } from './types';
 
-// Each test runs dozens of real git commands against a local stand-in for GitHub.
 vi.setConfig({ testTimeout: 30_000 });
 
 const cfg = (home: string): FactoryConfig => ({ home, repo: 'o/r' }) as FactoryConfig;
@@ -17,7 +16,6 @@ function tmpHome(): string {
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
 
-// A bare repo stands in for GitHub. Main holds two files and dev starts from it. `author` is a second clone, like a person on GitHub.
 async function setup() {
   const home = tmpHome();
   const origin = join(home, 'origin.git');
@@ -37,7 +35,6 @@ async function setup() {
   await by('push', 'origin', 'HEAD:main', 'HEAD:dev');
   await gitAt(home, 'clone', origin, repo.path);
   await repo.fetch();
-  // Pushes a commit to `branch` on GitHub, cut from `from` when the branch is new.
   const commit = async (branch: string, file: string, text: string, from = 'dev') => {
     await by('fetch', '--prune', 'origin');
     const exists = (await realRun('git', ['rev-parse', '--verify', '--quiet', `origin/${branch}`], { cwd: author })).code === 0;
@@ -46,7 +43,6 @@ async function setup() {
     await by('commit', '-am', `${branch} changes ${file}`);
     await by('push', 'origin', branch);
   };
-  // An issue branch on GitHub, merged into `into` the way approval merges it.
   const feature = async (issue: number, file: string, text: string, into = 'dev') => {
     await commit(`factory/issue-${issue}`, file, text, into);
     await repo.fetch();
@@ -54,7 +50,7 @@ async function setup() {
   };
   const show = async (branch: string, file: string) => hub('show', `${branch}:${file}`);
   const head = async (branch: string) => (await hub('rev-parse', branch)).trim();
-  return { home, origin, repo, hub, host, commit, feature, show, head };
+  return { home, origin, repo, hub, host, by, commit, feature, show, head };
 }
 
 describe('hostRepo', () => {
@@ -179,6 +175,16 @@ describe('merging on GitHub', () => {
     expect(await repo.changedFiles('main', 'dev')).toEqual(['f.txt']);
     expect(await repo.isMerged('main', 'dev')).toBe(true);
     expect(await repo.hasNewCommits('main', 'dev')).toBe(true);
+  });
+
+  it('lists both paths of a moved file', async () => {
+    const { repo, by } = await setup();
+    await by('checkout', '-B', 'dev', 'origin/dev');
+    await by('mv', 'g.txt', 'moved.txt');
+    await by('commit', '-m', 'move g');
+    await by('push', 'origin', 'dev');
+    await repo.fetch();
+    expect((await repo.changedFiles('main', 'dev')).sort()).toEqual(['g.txt', 'moved.txt']);
   });
 });
 
@@ -349,7 +355,6 @@ describe('work clones', () => {
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('nine\n');
   });
 
-  // An issue branch cut from dev, then a dev commit to `file` that the branch lacks. The work clone holds the branch.
   async function behindDev(file: string) {
     const env = await setup();
     await env.commit('factory/issue-5', 'f.txt', 'five\n');
@@ -386,7 +391,6 @@ describe('work clones', () => {
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toContain('<<<<<<<');
   });
 
-  // The work clone commits to `file` while a member pushes to `pushed` on the same branch on GitHub.
   async function branchMoved(file: string, pushed: string) {
     const env = await setup();
     await env.commit('factory/issue-12', 'f.txt', 'twelve\n');
