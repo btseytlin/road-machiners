@@ -93,7 +93,6 @@ export const CONTRACTS = {
   },
 };
 
-
 export type ShopKind = 'garage' | 'stall';
 
 export const PRICE_FACTOR = { make: 0.75 };

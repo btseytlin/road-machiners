@@ -409,6 +409,7 @@ describe('towing', () => {
     const outward = Math.atan2(pad.y - town.pos.y, pad.x - town.pos.x);
     const along = (me.pos.x - pad.x) * Math.cos(outward) + (me.pos.y - pad.y) * Math.sin(outward);
     expect(Math.abs(along)).toBeLessThan(REGION.sites.pad.length / 2 - 0.5);
+    expect(canUseSite(me.pos, town)).toBe(true);
     expect(autoRuns(w)).toBe(false);
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);
@@ -871,6 +872,13 @@ describe('the player towing an NPC', () => {
     return { w: pick(pick(callVehicle(w, npc.id), OFFER), HITCH), npc };
   }
 
+  it('hitching an NPC drops its kept far route', () => {
+    const { w, npc } = strandedNpc();
+    npc.brain!.farRoute = { dest: { ...bowl.pos }, points: [{ ...npc.pos }, { ...bowl.pos }], offRoad: false };
+    const r = pick(pick(callVehicle(w, npc.id), OFFER), HITCH);
+    expect(find(r, npc.id).brain!.farRoute).toBeUndefined();
+  });
+
   it('a player tower that can no longer drive drops the tow and earns no fee', () => {
     let { w, npc } = hitched();
     w = runUntil(setMoveOrder(w, { kind: 'stopAt', dest: gate }), 2, () => false).w;
@@ -1058,6 +1066,54 @@ describe('NPCs towing each other', () => {
     expect(goal.destination).toEqual(before);
     thinkNpc(r.w, towing);
     expect(towing.brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  function expectDelivered(s: { w: World; client: Vehicle; tower: Vehicle }): void {
+    const r = runUntil(s.w, 400, (w) => w.turn > 5 && towOf(w, s.client.id) === null);
+    const done = r.events.filter((e) => e.t === 'towDone');
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ client: s.client.id });
+    expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toContain('fulfilled');
+    expect(canUseSite(find(r.w, s.client.id).pos, bowl)).toBe(true);
+    const after = runUntil(r.w, 20, () => false);
+    expect(after.events.some((e) => e.t === 'towHitched' && e.client === s.client.id)).toBe(false);
+    expect(after.events.some((e) => e.t === 'stall')).toBe(false);
+  }
+
+  it.each([-80, -60, -40, 40, 60, 80])('a tower brings a stranded NPC client onto the town pad from a side approach at %i degrees', (deg) => {
+    const gate = siteGates(bowl)[0];
+    const base = Math.atan2(gate.y - bowl.pos.y, gate.x - bowl.pos.x) + (deg * Math.PI) / 180;
+    const reach = dist(gate, bowl.pos) + 30;
+    const at = (d: number): Vec => ({ x: bowl.pos.x + Math.cos(base) * (reach + d), y: bowl.pos.y + Math.sin(base) * (reach + d) });
+    const w = emptyWorld(bowl.pos);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
+    const client = withTower(w, ...TRADER, at(0));
+    client.resources!.fuel = 0;
+    client.resources!.money = 1000;
+    expectDelivered({ w, client, tower: withTower(w, ...SCAVENGER, at(8)) });
+  });
+
+  it('a short tow from just off the pad ends with the client on it', () => {
+    const w = emptyWorld(bowl.pos);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
+    const pad = nearestPad(bowl, outFrom(bowl, 5));
+    const out = Math.atan2(pad.y - bowl.pos.y, pad.x - bowl.pos.x);
+    const beside = (side: number): Vec => ({ x: pad.x - Math.sin(out) * side, y: pad.y + Math.cos(out) * side });
+    const client = withTower(w, ...TRADER, beside(REGION.sites.pad.width / 2 + 1.5));
+    client.resources!.fuel = 0;
+    client.resources!.money = 1000;
+    expectDelivered({ w, client, tower: withTower(w, ...SCAVENGER, beside(REGION.sites.pad.width / 2 + 4)) });
+  });
+
+  it('a hitched client drops its kept far route, so it drives on from the drop point', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    s.client.brain!.farRoute = { dest: { ...bowl.pos }, points: [{ ...s.client.pos }, { ...bowl.pos }], offRoad: false };
+    const hitch = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id));
+    expect(find(hitch.w, s.client.id).brain!.farRoute).toBeUndefined();
   });
 
   it('a scavenger hitches a stranded trader and tows it to its nearest town for a fee', () => {

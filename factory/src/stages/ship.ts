@@ -37,17 +37,9 @@ async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
   if (release.candidateSha !== head) throw new Error(`The release moved to ${head} after the candidate of ${release.candidateSha ?? 'an unknown commit'} was posted, so the committee has not played it. A new candidate follows.`);
 }
 
-async function takeMain(ctx: Ctx, issue: number, branch: string): Promise<MergeStep[] | null> {
+async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
   if (await ctx.repo.isMerged('main', branch)) return [];
-  const unplayed = (await ctx.repo.changedFiles(branch, 'main')).filter((file) => file.startsWith(`${GAME_DIR}/`));
-  const step = { branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` };
-  if (unplayed.length === 0) return [step];
-  await mergeResolving(ctx, 'ship', [step]);
-  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
-  const note = `main changed ${unplayed.length} game files that ${branch} lacked, like ${unplayed[0]}, so the committee had not played them. The factory merged main into ${branch}. A new candidate follows, and Ship works on that one.`;
-  await ctx.github.comment(issue, note);
-  ctx.log('ship', issue, note);
-  return null;
+  return [{ branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` }];
 }
 
 export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
@@ -73,8 +65,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await requirePlayed(ctx, release);
   const features = await releaseFeatures(ctx, release);
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
-  const taken = await takeMain(ctx, issue, release.branch);
-  if (taken === null) return;
+  const taken = await takeMain(ctx, release.branch);
   await mergeResolving(ctx, 'ship', [
     ...taken,
     { branch: release.branch, into: 'main', message: `Release ${release.day}` },
