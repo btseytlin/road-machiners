@@ -16,7 +16,8 @@ function spoken(line: string): string | null {
   const choice = CHOICE.exec(text);
   if (choice) return choice[1];
   if (text === '' || LOGIC.test(text)) return null;
-  return text.replace(/#.*$/, '').replace(/->.*$/, '').replace(/<[^>]*>/g, '').trim();
+  const words = text.replace(/\{[^{}]*?:([^{}]*)\}/g, (_, options: string) => options.replace(/\|/g, ' ')).replace(/\{[^{}]*\}/g, '');
+  return words.replace(/#.*$/, '').replace(/->.*$/, '').replace(/<[^>]*>/g, '').trim();
 }
 
 function lines(): { where: string; text: string }[] {
