@@ -1,7 +1,7 @@
 // Towing a stranded truck. An NPC that sees a stranded truck may choose to help at its strandedSeen decision. It
 // drives over and claims the job, so no other driver answers. A tow is a `tow` state held by the tower toward its
-// client. Once hitched, the client leaves physics and is pulled by the tower on a tow bar. Arrival fulfils the state,
-// and its hook in src/sim/states.ts takes the fee, even into debt.
+// client. Once hitched, the client leaves physics and is pulled by the tower on a tow bar. Arrival means the towed truck stands on
+// the site's pad, and it fulfils the state, and its hook in src/sim/states.ts takes the fee, even into debt.
 // A player client gets an offer over the radio, for a fee (free when the player has no money) to the tower's known town nearest it. Refusing, driving
 // away or unhitching breaks it for free, and the tower holds `turnedDown` toward the player, so it rarely offers
 // again. A stranded player can switch on an emergency beacon, which calls towers from beyond sight, and raiders too.
@@ -295,7 +295,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     return 'the player drove away from the tow offer';
   }
   if (held) {
-    if (!canUseSite(vehicle.pos, getKnownSite(towData(held).site))) return null;
+    if (!canUseSite(vehicleById(world, held.other).pos, getKnownSite(towData(held).site))) return null;
     activity.phase = 'act';
     endState(world, held, 'fulfilled');
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';

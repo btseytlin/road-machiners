@@ -39,7 +39,7 @@ import { clamp, dist, pointsAway, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
 import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
-import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, ropeClientOf, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
@@ -151,7 +151,7 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
   const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => pointsAway(vehicle.pos, site.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
-  const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius, 0) : away;
+  const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius) : away;
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
@@ -1144,7 +1144,24 @@ function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destina
 // A territory has no pad, so a driver stops at the destination it was given, a road end.
 function padStop(world: World, vehicle: Vehicle, activity: NpcActivity, site: Site, out: number): Vec {
   if (isTerritory(site)) return activity.destination!;
-  return parkedOn(vehicle, site) ? { ...vehicle.pos } : siteSpot(world, vehicle, site, out, activity.kind === 'tow' ? TOW.gap / 2 : 0);
+  if (activity.kind === 'tow') return towStop(world, vehicle, site);
+  return parkedOn(vehicle, site) ? { ...vehicle.pos } : siteSpot(world, vehicle, site, out);
+}
+
+// A tower that is parked on the pad with its client on it too has arrived. Else it drives to its spot.
+function towStop(world: World, vehicle: Vehicle, site: Site): Vec {
+  const client = ropeClientOf(world, vehicle.id);
+  const delivered = client !== null && canUseSite(vehicleById(world, client).pos, site);
+  return delivered && parkedOn(vehicle, site) ? { ...vehicle.pos } : towSpot(vehicle, site);
+}
+
+// A tower stops on the pad's center line, TOW.gap / 2 inward. Within arriveRadius of it, its client trails within
+// TOW.gap of the tower, so the client lies inside the pad's half width and its half length unless the tower
+// drove out of the site.
+function towSpot(vehicle: Vehicle, site: Site): Vec {
+  const pad = nearestPad(site, vehicle.pos);
+  const angle = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
+  return { x: pad.x - Math.cos(angle) * TOW.gap / 2, y: pad.y - Math.sin(angle) * TOW.gap / 2 };
 }
 
 // A driver parked on a pad of the site already uses it. Its own spot may lie under a truck parked there since,
@@ -1154,14 +1171,13 @@ function parkedOn(vehicle: Vehicle, site: Site): boolean {
 }
 
 // Each driver keeps its own spot across the pad nearest it, so drivers bound for one site do not all stop on one
-// point and queue for it. `out` keeps the vehicle clear of the pad's side edges. `inward` moves the spot toward
-// the gate, so a tower stops far enough in for the truck it trails to stand on the pad too.
-function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number, inward: number): Vec {
+// point and queue for it. `out` keeps the vehicle clear of the pad's side edges.
+function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number): Vec {
   const spot = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes(site.id));
   const pad = nearestPad(site, vehicle.pos);
   const angle = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
   const side = (REGION.sites.pad.width / 2 - out) * (2 * spot - 1);
-  return { x: pad.x - Math.sin(angle) * side - Math.cos(angle) * inward, y: pad.y + Math.cos(angle) * side - Math.sin(angle) * inward };
+  return { x: pad.x - Math.sin(angle) * side, y: pad.y + Math.cos(angle) * side };
 }
 
 function charCodes(text: string): number[] {

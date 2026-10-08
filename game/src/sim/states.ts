@@ -289,7 +289,7 @@ function payTow(w: World, s: NpcState): void {
   const tower = vehicleById(w, s.holder);
   getResources(w, towed).money -= tow.fee;
   getResources(w, tower).money += tow.fee;
-  // An NPC client needs no tow at its destination. A player client may still be stranded in town, and no offer
+  // An NPC client stands on its destination pad, so it needs no tow there. A player client may still be stranded in town, and no offer
   // should follow there.
   if (towed.brain) forgetClient(tower, s.other);
   towed.speed = 0;

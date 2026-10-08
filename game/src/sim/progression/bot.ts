@@ -437,8 +437,33 @@ function nearestShop(world: World): Site {
 // The fuel the straight way to the nearest shop takes at the heat where the truck stands, times the reserve an NPC
 // driver keeps for it. The bot heads for a shop once its tank holds no more.
 function fuelForWayToShop(world: World): number {
+  return fuelForWay(world, dist(playerVehicle(world).pos, nearestShop(world).pos));
+}
+
+function fuelForWay(world: World, tiles: number): number {
   const me = playerVehicle(world);
-  return dist(me.pos, nearestShop(world).pos) * vehicleStats(world, me).fuelPerTile * heatAt(world, me.pos) * NPC_UPKEEP.fuelReserve;
+  return tiles * vehicleStats(world, me).fuelPerTile * heatAt(world, me.pos) * NPC_UPKEEP.fuelReserve;
+}
+
+// Whether a chain of fuel stops gets the bot to the site. The first hop starts from where the bot stands (or `from`)
+// with the fuel it holds, and every later hop from a shop with a full tank. A hop is affordable when its fuel with the
+// reserve fits the tank: a longer one turns back to the shop before its midpoint, once the tank falls to the low-fuel
+// rule. Each step goes to the affordable shop nearest the site, if that is nearer than where the bot stands.
+export function fuelReaches(world: World, site: Site, from?: { pos: Vec; fuel: number }): boolean {
+  const full = fuelCap(playerVehicle(world));
+  let at = from ?? { pos: playerVehicle(world).pos, fuel: world.player.fuel };
+  for (let step = 0; step <= SHOP_SITES.length; step++) {
+    if (fuelForWay(world, dist(at.pos, site.pos)) <= at.fuel) return true;
+    const stops = SHOP_SITES.filter((s) => fuelForWay(world, dist(at.pos, s.pos)) <= at.fuel && dist(s.pos, site.pos) < dist(at.pos, site.pos));
+    const next = stops.reduce<Site | null>((best, s) => (!best || dist(s.pos, site.pos) < dist(best.pos, site.pos) ? s : best), null);
+    if (!next) return false;
+    at = { pos: next.pos, fuel: full };
+  }
+  return false;
+}
+
+function reachable<T extends Site>(world: World, sites: readonly T[]): T[] {
+  return sites.filter((s) => fuelReaches(world, s));
 }
 
 function needsService(o: Orders): boolean {
@@ -530,7 +555,7 @@ function takeHaul(o: Orders): boolean {
   if (!shop || o.world.player.money < 0) return false;
   const here = siteOf(shop).pos;
   const pay = (c: Haul) => c.reward / estimateTurns(here, siteOf(c.to).pos);
-  const offers = shopState(o.world, shop).contracts.filter((c): c is Haul => c.kind === 'haul' && c.deadline > o.world.turn && c.units <= freeCells(o.me));
+  const offers = shopState(o.world, shop).contracts.filter((c): c is Haul => c.kind === 'haul' && c.deadline > o.world.turn && c.units <= freeCells(o.me) && fuelReaches(o.world, siteOf(c.to)));
   const best = offers.reduce<Haul | null>((top, c) => (!top || pay(c) > pay(top) ? c : top), null);
   if (best) o.run((w) => acceptContract(w, best.id));
   return best !== null;
@@ -539,10 +564,10 @@ function takeHaul(o: Orders): boolean {
 // With nothing it can do here, a bot looks at the board of the nearest other shop.
 function checkNextBoard(o: Orders): void {
   const here = shopAt(o.world);
-  const others = SHOP_SITES.filter((s) => s.id !== here);
+  const others = reachable(o.world, SHOP_SITES.filter((s) => s.id !== here));
   const pos = o.me.pos;
-  const next = others.reduce((best, s) => (dist(pos, s.pos) < dist(pos, best.pos) ? s : best));
-  driveToSite(o, next);
+  const next = others.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
+  if (next) driveToSite(o, next);
 }
 
 // A scavenger with no stock left to search and no salvage site left to find trades instead. Too poor to trade, it
@@ -559,13 +584,21 @@ type Purchase = { town: TownDef; good: string; count: number; profit: number; pe
 // between known towns that it can afford above its upkeep reserve and repair bill. With no such trade it drives to find a new town.
 // Returns false when it has nothing to do: no affordable trade and every town known.
 function trade(o: Orders): boolean {
-  if (hasCargo(o.world, o.me) && !sellAtMarket(o)) return true;
+  const selling = sellCargoFirst(o);
+  if (selling !== null) return selling;
   const buy = bestPurchase(o.world);
   if (buy) return buyThere(o, buy);
-  const town = nearestUndiscovered(o.world, REGION.towns);
+  const town = nearestUndiscovered(o.world, reachable(o.world, REGION.towns));
   if (!town) return false;
   driveToSite(o, town);
   return true;
+}
+
+// Null once the cargo is sold or when there is none. True while the bot drives to a market, false with none in reach.
+function sellCargoFirst(o: Orders): boolean | null {
+  if (!hasCargo(o.world, o.me)) return null;
+  if (!marketFor(o.world)) return false;
+  return sellAtMarket(o) ? null : true;
 }
 
 function buyThere(o: Orders, buy: Purchase): true {
@@ -574,10 +607,16 @@ function buyThere(o: Orders, buy: Purchase): true {
   return true;
 }
 
-// Sells the cargo in its best market, or drives there. True once the cargo is sold.
+// The town to sell the cargo in that the fuel stops reach. The player starts knowing no town, so the first market is
+// the nearest town it finds.
+function marketFor(world: World): TownDef | null {
+  return knownTowns(world).length > 0 ? bestMarket(world) : nearestUndiscovered(world, reachable(world, REGION.towns));
+}
+
+// Sells the cargo in its best market, or drives there. True once the cargo is sold. False with no market in reach.
 function sellAtMarket(o: Orders): boolean {
-  // The player starts knowing no town, so the first market is the nearest town it finds.
-  const market = knownTowns(o.world).length > 0 ? bestMarket(o.world) : nearestUndiscovered(o.world, REGION.towns)!;
+  const market = marketFor(o.world);
+  if (!market) return false;
   if (townAt(o.world)?.id !== market.id) {
     driveToSite(o, market);
     return false;
@@ -587,10 +626,10 @@ function sellAtMarket(o: Orders): boolean {
 }
 
 // The known town where the cargo for sale brings the most profit over what it cost. Nearest first on a tie.
-function bestMarket(world: World): TownDef {
+function bestMarket(world: World): TownDef | null {
   const cargo = Object.entries(cargoForSale(world, playerVehicle(world)));
   const profit = (town: TownDef) => cargo.reduce((sum, [good, n]) => sum + n * (sellAt(world, town, good) - (world.player.costBasis[good] ?? 0)), 0);
-  return byDistance(world, knownTowns(world)).reduce((best, town) => (profit(town) > profit(best) ? town : best));
+  return byDistance(world, reachable(world, knownTowns(world))).reduce<TownDef | null>((best, town) => (!best || profit(town) > profit(best) ? town : best), null);
 }
 
 // The money for a full repair stays out of the load, so a trader leaves town with a sound truck. The best trade pays
@@ -599,8 +638,9 @@ function bestMarket(world: World): TownDef {
 function bestPurchase(world: World): Purchase | null {
   const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
+  const full = fuelCap(playerVehicle(world));
   const room = freeCells(playerVehicle(world));
-  const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
+  const options = reachable(world, towns).flatMap((source) => towns.filter((t) => t.id !== source.id && fuelReaches(world, t, { pos: source.pos, fuel: full })).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
   return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.perTurn > (best?.perTurn ?? 0) ? p : best), null);
 }
 
