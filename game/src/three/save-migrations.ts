@@ -597,6 +597,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
     return { ...world, player };
   },
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

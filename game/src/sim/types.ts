@@ -208,7 +208,7 @@ export type NpcBrain = {
 export type TrackChoice = 'keep' | 'fight' | 'flee' | 'investigate';
 export type Track = { at: Vec; turn: number; sighted: boolean; seenSince: number | null; choice: TrackChoice | null; chosenInSight: boolean };
 
-export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> } | { kind: 'stripped'; stock: string };
 export type Memory = { turn: number; fact: MemoryFact };
 
 export type Vehicle = {

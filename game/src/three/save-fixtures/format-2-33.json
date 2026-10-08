@@ -1,0 +1,16 @@
+{
+  "turn": 900,
+  "vehicles": [
+    { "id": "player", "pos": { "x": 30, "y": 30 }, "brain": null },
+    {
+      "id": "npc-2",
+      "pos": { "x": 40, "y": 40 },
+      "brain": {
+        "noticed": {},
+        "goals": [],
+        "tracks": {},
+        "memories": [{ "turn": 880, "fact": { "kind": "prices", "shop": "bowl", "pressure": { "salt": 0.5 } } }]
+      }
+    }
+  ]
+}
