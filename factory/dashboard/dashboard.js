@@ -505,11 +505,25 @@ function readDeliveryNotes(delivery) {
   if (!delivery) return '';
   return `${delivery.legacy} cards joined before records. ${delivery.excluded} hotfix, release or private cards left out. ${delivery.lead.missingStart} merges lack a start.`;
 }
+// Issue age at its merge into dev, for issues that merged in the selected range. It comes from GitHub, so card records do not limit it.
+function renderIssueToDev() {
+  const merges = snapshot.github.value?.merges;
+  const end = Date.parse(snapshot.generatedAt);
+  const ages = (merges ?? []).filter((merge) => Date.parse(merge.mergedAt) > end - selectedDays * 86400000 && Date.parse(merge.mergedAt) <= end).map((merge) => Date.parse(merge.mergedAt) - Date.parse(merge.createdAt)).sort((a, b) => a - b);
+  if (!ages.length) {
+    const reason = merges ? 'No issue merged into dev in the period' : null;
+    setCounter('issue-mean', '—', reason);
+    return setCounter('issue-median', '—', reason);
+  }
+  const mean = ages.reduce((sum, age) => sum + age, 0) / ages.length;
+  const middle = Math.floor(ages.length / 2);
+  const median = ages.length % 2 ? ages[middle] : (ages[middle - 1] + ages[middle]) / 2;
+  setCounter('issue-mean', formatDuration(mean), `${mean} ms mean of ${ages.length} issues`);
+  setCounter('issue-median', formatDuration(median), `${median} ms median of ${ages.length} issues`);
+}
 function renderDeliveryCounters(delivery) {
   if (!delivery) return clearDeliveryCounters();
   const { lead } = delivery;
-  setCounter('lead-mean', formatDuration(lead.meanMs), lead.count ? `${lead.meanMs} ms mean of ${lead.count} cards` : null);
-  setCounter('lead-median', formatDuration(lead.medianMs), lead.count ? `${lead.medianMs} ms median of ${lead.count} cards` : null);
   setCounter('lead-open', String(lead.open), lead.open ? `${lead.open} cards, mean age ${formatDuration(lead.openMeanMs)}` : 0);
   setCounter('loop-rate', formatRate(delivery.looped, delivery.issues), `${delivery.looped} of ${delivery.issues} cards`);
   for (const row of delivery.rejections) {
@@ -517,12 +531,13 @@ function renderDeliveryCounters(delivery) {
   }
 }
 function clearDeliveryCounters() {
-  for (const id of ['lead-mean', 'lead-median', 'lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
+  for (const id of ['lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
 }
 function renderDelivery() {
   const delivery = readDelivery();
   setText('delivery-coverage', readDeliveryCoverage(delivery));
   getElement('delivery-coverage').dataset.exact = readDeliveryNotes(delivery);
+  renderIssueToDev();
   renderDeliveryCounters(delivery);
   if (!delivery) return renderDeliveryEmpty(snapshot.analytics.value ? 'No card moves recorded yet' : 'Unavailable');
   const maximum = Math.max(1, ...delivery.stages.map((row) => row.meanMs ?? 0));

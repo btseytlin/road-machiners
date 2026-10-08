@@ -37,7 +37,7 @@ class FixtureGithub extends PublicGitHub {
   failed = false;
   override async read(state: FactoryState) {
     if (this.failed) throw new Error('PRIVATE credential failure');
-    return { cards: [], features: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
+    return { cards: [], features: [], merges: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
   }
 }
 class FixtureHost extends HostSampler {

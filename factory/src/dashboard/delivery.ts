@@ -14,7 +14,7 @@ type Gate = 'triage' | 'design' | 'committee';
 
 export type DeliverySummary = {
   since: string; issues: number; excluded: number; legacy: number;
-  lead: Stat & { open: number; openMeanMs: number | null; missingStart: number };
+  lead: { open: number; openMeanMs: number | null; missingStart: number };
   stages: (Stat & { stage: DeliveryStage; open: number; openMeanMs: number | null })[];
   loops: { step: CardStep; events: number; issues: number }[]; looped: number;
   retries: { stage: JobStage; runs: number; issues: number }[];
@@ -104,7 +104,7 @@ function summarizeStages(issues: CardLine[][], window: Window): DeliverySummary[
   });
 }
 
-// Lead time runs from the first triage acceptance to the first merge into dev after it, the merge that adds release-candidate.
+// A card in flight was accepted by triage and has not merged into dev, the merge that adds release-candidate. It is open since its first acceptance.
 // A card closed after acceptance is not open. A merge with no recorded acceptance has no start and is counted apart.
 type Lead = { start: number | null; end: number | null; closed: boolean };
 function readLead(events: CardLine[]): Lead {
@@ -115,10 +115,9 @@ function readLead(events: CardLine[]): Lead {
 }
 function summarizeLead(issues: CardLine[][], window: Window): DeliverySummary['lead'] {
   const leads = issues.map(readLead);
-  const done = leads.filter((lead) => lead.start !== null && lead.end !== null && inside(window, lead.end)).map((lead) => lead.end! - lead.start!);
   const open = leads.filter((lead) => lead.start !== null && lead.end === null && !lead.closed).map((lead) => window.end - lead.start!);
   const missingStart = leads.filter((lead) => lead.start === null && lead.end !== null && inside(window, lead.end)).length;
-  return { ...measure(done), open: open.length, openMeanMs: mean(open), missingStart };
+  return { open: open.length, openMeanMs: mean(open), missingStart };
 }
 
 function summarizeLoops(recent: CardLine[][]): Pick<DeliverySummary, 'loops' | 'looped'> {

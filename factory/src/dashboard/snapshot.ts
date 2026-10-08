@@ -8,7 +8,7 @@ import { readState } from '../state';
 import { featureMerges, type Feature } from '../stages/release-common';
 import { DashboardHistory } from './history';
 import { createWorkerKey, readLiveOperations } from './live';
-import { ADHOC_LABEL, QUEUE_OF, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
+import { ADHOC_LABEL, QUEUE_OF, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
 import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
 import type { DashboardConfig } from './config';
 import type { HostSampler, HostLoad } from './host';
@@ -18,7 +18,9 @@ export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'st
 type PauseReason = 'agent-usage-limit' | 'operator';
 export type Operations = ReturnType<typeof buildOperations> & { pauseReason: PauseReason | null };
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
-export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
+// An issue's merge into dev is the first time the factory put release-candidate on it.
+export type DevMerge = { issue: number; createdAt: string; mergedAt: string };
+export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; merges: DevMerge[]; releaseKey: string; provisional: boolean };
 export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
 export type Snapshot = {
   generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
@@ -28,6 +30,11 @@ export type Snapshot = {
 export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
 type ComparePage = { total_commits: number; commits: Commit[] };
 type PublicIssue = { number: number; title: string; labels: { name: string }[]; pull_request?: unknown };
+type MergedIssue = { number: number; createdAt: string; labels: string[]; mergedAt: string | null };
+
+// GitHub allows 100 events per page. An issue whose first release-candidate event is past that page has no mergedAt and fails loud.
+const MERGES_QUERY = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(labels:["${RELEASE_CANDIDATE_LABEL}"],states:[OPEN,CLOSED],first:50,after:$endCursor){pageInfo{hasNextPage endCursor}nodes{number createdAt labels(first:20){nodes{name}}timelineItems(first:100,itemTypes:[LABELED_EVENT]){nodes{...on LabeledEvent{createdAt label{name}}}}}}}}`;
+const MERGES_JQ = `.data.repository.issues.nodes[]|{number,createdAt,labels:[.labels.nodes[].name],mergedAt:([.timelineItems.nodes[]|select(.label.name=="${RELEASE_CANDIDATE_LABEL}")|.createdAt]|sort|first)}`;
 
 function createSource<T>(): Source<T> { return { value: null, at: null, status: 'unavailable' }; }
 function recordFailure<T>(source: Source<T>, name: string, error: unknown): Source<T> {
@@ -81,6 +88,16 @@ export class PublicGitHub {
     const output = await this.query(['api', `repos/${this.config.repo}/issues?state=open&per_page=100`, '--paginate', '--jq', '.[] | {number,title,labels,pull_request}']);
     return output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as PublicIssue);
   }
+  // Release tasks and ad hoc tasks open themselves, so no vote or wait is behind their age.
+  private async readMerges(): Promise<DevMerge[]> {
+    const [owner, name] = this.config.repo.split('/');
+    const output = await this.query(['api', 'graphql', '--paginate', '-f', `query=${MERGES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '--jq', MERGES_JQ]);
+    const issues = output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as MergedIssue);
+    return issues.filter((issue) => !issue.labels.includes(RELEASE_TASK_LABEL) && !issue.labels.includes(ADHOC_LABEL)).map((issue) => {
+      if (issue.mergedAt === null) throw new Error(`Issue ${issue.number} has ${RELEASE_CANDIDATE_LABEL} but no label event`);
+      return { issue: issue.number, createdAt: issue.createdAt, mergedAt: issue.mergedAt };
+    });
+  }
   private async readHead(branch: string): Promise<string> {
     const head = (await this.query(['api', `repos/${this.config.repo}/commits/${encodeURIComponent(branch)}`, '--jq', '.sha'])).trim();
     if (!/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid GitHub head');
@@ -102,8 +119,8 @@ export class PublicGitHub {
   async read(state: FactoryState): Promise<GithubSnapshot> {
     const visibility = (await this.query(['api', `repos/${this.config.repo}`, '--jq', '.visibility'])).trim();
     if (visibility !== 'public') throw new Error('Dashboard requires a public repository');
-    const [cards, issues, features] = await Promise.all([this.github.cards(), this.readIssues(), this.readFeatures(state)]);
-    return { cards: selectPublicCards(cards, issues), features, releaseKey: getReleaseKey(state), provisional: state.release === null };
+    const [cards, issues, features, merges] = await Promise.all([this.github.cards(), this.readIssues(), this.readFeatures(state), this.readMerges()]);
+    return { cards: selectPublicCards(cards, issues), features, merges, releaseKey: getReleaseKey(state), provisional: state.release === null };
   }
 }
 
