@@ -7,6 +7,7 @@ import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
 import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
+import { suppliesCap } from "../sim/stats";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clockLabel } from "./format";
@@ -84,6 +85,20 @@ describe('salvage interaction', () => {
     expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Loot ${site.name}`]);
     w.salvage[0].goods.scrap = 0;
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean` });
+  });
+
+  it('keeps offering a search beside revealed supplies the full tank cannot take', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.player.supplies = suppliesCap(w.vehicles[0]);
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: {}, parts: [], supplies: 20, hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    w.player.scavenged.push(site.id);
+    expect(getContextActions(w, false)).toEqual([
+      expect.objectContaining({ label: `Search ${site.name}`, ready: true }),
+      expect.objectContaining({ label: `Loot ${site.name}`, ready: true }),
+    ]);
+    w.salvage[0].hidden = emptyHidden();
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Loot ${site.name}`]);
   });
 
   it('picks the loot of a stock beside its search with the arrows', () => {

@@ -7,6 +7,7 @@ import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { beginSearch, startSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, practiceOf, testDrive } from './testkit';
 import { goodsCount } from './grid';
+import { suppliesCap } from './stats';
 import { canLoot, canScavenge, lootBlockerHere, salvageListNear, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
 import { resolveNpcActivities } from './npc-activities';
 import { sitePads } from './sites';
@@ -530,5 +531,28 @@ describe('finite hidden salvage', () => {
     for (let turn = 0; turn < 10; turn++) { a = endTurn(a, testDrive); b = endTurn(b, testDrive); }
     expect(b.salvage).toEqual(a.salvage);
     expect(b.searchRng).toEqual(a.searchRng);
+  });
+
+  it('searches again past revealed supplies the full tank cannot take', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    w.player.supplies = suppliesCap(me);
+    const stock = hiddenStock('rich', { x: 30, y: 30 }, { goods: { scrap: SALVAGE.unitsPerTurn * 2 } });
+    stock.supplies = 20;
+    w.salvage.push(stock);
+    w.player.scavenged.push('rich');
+    expect(canScavenge(w, 'rich')).toBe(true);
+    const before = stockTotal(stock) + (goodsCount(me).scrap ?? 0);
+    let next = scavenge(w, 'rich');
+    expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search' }));
+    for (let turns = 0; next.vehicles[0].job; turns++) {
+      next = endTurn(next, testDrive);
+      if (turns > 20) throw new Error('search never finished');
+    }
+    const after = next.salvage.find((entry) => entry.id === 'rich')!;
+    expect(after.supplies).toBe(20);
+    expect(next.player.supplies).toBeLessThanOrEqual(suppliesCap(next.vehicles[0]));
+    expect(stockTotal(after) + (goodsCount(next.vehicles[0]).scrap ?? 0)).toBe(before);
   });
 });

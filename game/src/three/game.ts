@@ -393,6 +393,11 @@ export class Game {
     return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
   }
 
+  private blockingModalOpen(): boolean {
+    const screens = [this.town, this.fullShop, this.trade, this.character];
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
+  }
+
   private displayWorld(): World {
     return this.anim && !this.anim.impacts ? this.anim.before : this.world;
   }
@@ -511,18 +516,19 @@ export class Game {
 
   private runKey(code: string): void {
     const key = this.keys[code];
-    if (!key || (key.noModal && this.modalOpen()) || (key.idle && this.travel.isPlaying(this.anim))) return;
+    if (!key || (key.noModal && (key.inventoryOk ? this.blockingModalOpen() : this.modalOpen())) || (key.idle && this.travel.isPlaying(this.anim))) return;
+    if (key.inventoryOk && this.inventory.isOpen()) this.inventory.close();
     key.run();
   }
 
-  private readonly keys: Record<string, { run: () => void; noModal?: true; idle?: true }> = {
+  private readonly keys: Record<string, { run: () => void; noModal?: true; idle?: true; inventoryOk?: true }> = {
     KeyF: { run: () => this.follow.recenter() },
     KeyM: { run: () => this.toggleMute() },
     KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
     ...Object.fromEntries(Array.from({ length: SLOT_KEYS }, (_, i) => [`Digit${i + 1}`, { run: () => this.weapons.pressKey(i + 1), noModal: true as const, idle: true as const }])),
-    KeyE: { run: () => this.context.use(), noModal: true },
+    KeyE: { run: () => this.context.use(), noModal: true, inventoryOk: true },
     ArrowLeft: { run: () => this.cycleContext(-1), noModal: true, idle: true },
     ArrowRight: { run: () => this.cycleContext(1), noModal: true, idle: true },
     KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
