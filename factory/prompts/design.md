@@ -64,13 +64,23 @@ If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.
 Then stop.
 
-If a real blocker makes design impossible, do not write a task file.
+The factory brought this clone up to date with the base on GitHub before you started.
+Branches, merges, clones, checkouts, cherry-picks, prerequisite issues, builds, tests and the order of work are the factory's job.
+Never ask the author about them.
+When the clone, a branch or a missing prerequisite blocks the design and you cannot fix it here, do not write a task file.
+Write what is wrong and what would fix it to `.factory/blocked.md`.
+Then stop.
+The stage fails, and Hermes fixes it.
+
+If a missing fact about the request makes design impossible, do not write a task file.
+That is a fact only the author knows: what the game should do or show, and no sensible reading exists.
 Write the questions to `.factory/questions.md`, one per line.
 Then stop.
 Use this only for a real blocker.
 When in doubt, make a reasonable choice.
 Write it in the task file as an assumption.
 The committee corrects it at approval.
+The factory refuses a question about its own work, and the stage fails.
 
 A comment under "Questions from the factory" with no reply after it means the author did not answer in time.
 Never ask those questions again.

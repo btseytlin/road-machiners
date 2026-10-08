@@ -61,6 +61,10 @@ For `unclear`, ask at most three questions.
 Each question is one line the author can answer in one line.
 Use the author's words, not code terms.
 Ask about the game, not the implementation.
+Ask only for a fact the author knows: what the game should do or show.
+Never ask about branches, merges, clones, prerequisite issues, builds, tests, the order of work or the factory.
+Those are the factory's job and never make the verdict `unclear`.
+The factory refuses such a question, and the stage fails.
 
 For `ready`, also decide which other requests to bundle into this card.
 `.factory/related.md` lists the other requests waiting in Triage.

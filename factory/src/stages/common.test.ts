@@ -287,6 +287,13 @@ describe('fillPrompt', () => {
   it('throws on an unfilled variable', () => {
     expect(() => fillPrompt('design', { issue: '7' })).toThrow('unfilled {{');
   });
+
+  it('keeps factory work out of the author questions of triage and design, and gives design a blocker file', () => {
+    const design = fillPrompt('design', { issue: '7', taskFile: 'docs/tasks/issue-7.md', branch: 'factory/issue-7' });
+    const triage = fillPrompt('triage', { issue: '7' });
+    for (const text of [design, triage]) expect(text).toMatch(/Never ask (the author )?about (them|branches, merges, clones)/);
+    expect(design).toContain('`.factory/blocked.md`');
+  });
 });
 
 describe('factoryPaths', () => {

@@ -15,6 +15,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
   await runAgent(ctx, issue, 'design', 'design', prompt, { effort: ctx.cfg.designEffort });
   throwIfNeedsCommittee(home);
+  throwIfBlocked(home);
   const questions = readOutput(home, 'questions.md');
   if (questions !== null) return askBack(ctx, issue, questions);
   const reason = readOutput(home, 'wont-do.md');
@@ -23,6 +24,11 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await guardAndPush(ctx, issue, base, 'design');
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
   await moveCard(ctx, issue, 'Implementation', 'planned');
+}
+
+function throwIfBlocked(home: string): void {
+  const text = readOutput(home, 'blocked.md');
+  if (text !== null) throw new Error(`Design is blocked by factory work, so the author was not asked. Fix it, then delete .factory/blocked.md: ${text.trim()}`);
 }
 
 async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {

@@ -157,6 +157,15 @@ describe('design stage', () => {
     expect(calls.at(-1)).toBe('move 7 Triage');
   });
 
+  it('fails with the blocker for Hermes, before any question, when design is blocked by factory work', async () => {
+    const ctx = fakeCtx((run) => {
+      writeFileSync(`${run.clone}/${run.dir}/.factory/blocked.md`, 'dev lacks #242, which this plan builds on.\n');
+      writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Which horn?');
+    });
+    await expect(runStage(ctx, 7)).rejects.toThrow('Design is blocked by factory work, so the author was not asked. Fix it, then delete .factory/blocked.md: dev lacks #242, which this plan builds on.');
+    expect(calls.filter((call) => /^(comment|addLabel|message|move|push) /.test(call))).toEqual([]);
+  });
+
   it('throws on an empty questions file', async () => {
     await expect(runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, '\n')), 7)).rejects.toThrow('empty questions.md');
   });
