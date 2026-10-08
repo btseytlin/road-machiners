@@ -40,12 +40,7 @@ type Round = { meta: RunMeta; outcome: Outcome; sha: string; head: string; play:
 // session, up to FACTORY_PLAYTEST_RUNS plays. A clean end lands the fixes on the release after the factory checks, and passes
 // that commit. Old bugs become bug issues for dev. Any other end blocks the release for a member.
 export async function playtest(ctx: Ctx, issue: number): Promise<void> {
-  const release = requireRelease(ctx);
-  if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
-  if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
-  await ctx.repo.fetch();
-  const open = await openReleaseTasks(ctx);
-  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
+  const release = await requirePlayable(ctx, issue);
   const baseline = await baselineOf(ctx, release);
   await takeMain(ctx, release);
   const start = await ctx.repo.headHash(release.branch);
@@ -60,6 +55,17 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   if (end.outcome === 'blocked') return block(ctx, session, plays, end);
   const next = await pass(ctx, session, end.head);
   await ctx.github.comment(release.issue, comment(session, plays, end, next, report(session)));
+}
+
+// The tracking issue of an open release that is not blocked and has every task merged.
+async function requirePlayable(ctx: Ctx, issue: number): Promise<ReleaseState> {
+  const release = requireRelease(ctx);
+  if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
+  if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
+  await ctx.repo.fetch();
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}. The playtest runs on a release with all its tasks merged.`);
+  return release;
 }
 
 // The full game suite runs with no cache, since the cache could hide an input its fingerprint misses.
