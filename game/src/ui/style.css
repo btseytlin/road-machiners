@@ -2549,12 +2549,13 @@ canvas.view {
   color: var(--muted);
 }
 
-/* Trucks: the layout map beside the stats. */
+/* Trucks: the layout map beside the stats. The stats wrap below the pictures when the card is narrow. */
 .cards.trucks {
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
 }
 .truck-card {
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .truck-card.own {
@@ -2563,8 +2564,11 @@ canvas.view {
 .truck-body .card-name {
   flex: none;
 }
+.truck-card .card-foot {
+  flex-wrap: wrap;
+}
 .truck-body {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2579,6 +2583,7 @@ canvas.view {
   display: flex;
   gap: 6px;
   align-self: flex-start;
+  flex: none;
 }
 .chassis-portrait {
   display: block;
