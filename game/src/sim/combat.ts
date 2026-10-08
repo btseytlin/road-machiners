@@ -896,6 +896,11 @@ export function inCombat(world: World, v: Vehicle): boolean {
   return world.states.some((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id));
 }
 
+// True when a combat state holds a and b, in either order.
+export function inCombatWith(world: World, a: Vehicle, b: Vehicle): boolean {
+  return world.states.some((s) => s.kind === "combat" && ((s.holder === a.id && s.other === b.id) || (s.holder === b.id && s.other === a.id)));
+}
+
 // True when v is in combat with some truck other than otherId.
 export function inCombatWithOther(world: World, v: Vehicle, otherId: string): boolean {
   return world.states.some((s) => s.kind === "combat" && ((s.holder === v.id && s.other !== otherId) || (s.other === v.id && s.holder !== otherId)));
@@ -1138,7 +1143,7 @@ function clearOldWrecks(world: World): void {
 function canNpcEngage(world: World, v: Vehicle, target: Vehicle): boolean {
   if (!v.brain) return true;
   if (target.id in v.brain.attackers && !robs(world, v, target)) return true;
-  return opensFireOn(v, v.brain.goals, target);
+  return opensFireOn(v.brain.goals, target);
 }
 
 function robs(world: World, v: Vehicle, target: Vehicle): boolean {
@@ -1146,7 +1151,7 @@ function robs(world: World, v: Vehicle, target: Vehicle): boolean {
   return feud !== null && feudData(feud).robbery;
 }
 
-function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
+function opensFireOn(goals: NpcActivity[], target: Vehicle): boolean {
   const top = goals[goals.length - 1];
   return top?.kind === 'fight' && top.targetId === target.id;
 }

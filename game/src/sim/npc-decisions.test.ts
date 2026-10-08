@@ -343,6 +343,13 @@ describe('fight back', () => {
     expect(back(coward)).toBeLessThan(back(plain));
   });
 
+  it('a trader with no working gun is never offered fightBack', () => {
+    const { w, trader, raider } = shotTrader(['trader'], 18);
+    trader.items = trader.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'weapon'));
+    const weights = optionWeights(w, trader, 'attacked', raider.id, judgeDanger(w, trader, raider));
+    expect(weights.fightBack ?? 0).toBe(0);
+  });
+
   it('a brave trader almost never runs from a shot or begs', () => {
     const brave = shotTrader(['trader', 'brave'], 18);
     const chances = (decision: 'attacked' | 'parley') => optionChances(optionWeights(brave.w, brave.trader, decision, brave.raider.id, judgeDanger(brave.w, brave.trader, brave.raider)));

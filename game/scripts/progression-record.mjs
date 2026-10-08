@@ -23,6 +23,7 @@ const { TIME } = await import('../src/data/time.ts');
 const { isArchetype } = await import('../src/sim/progression/bot.ts');
 const { recordTurns } = await import('../src/sim/progression/record.ts');
 const { turnLine, worldLine } = await import('../src/sim/progression/turn-log.ts');
+const { JobTally } = await import('../src/sim/progression/job-checks.ts');
 
 const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true] [--kit <id>] [--settings <id=value,...>] [--out <dir>] [--patch <file>]';
 
@@ -151,7 +152,7 @@ function recordOne({ archetype, seed }, turns, options, place) {
   writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options, patch: place.patch })}\n`);
   const progress = { count: 0, end: null, lastTurn: 1 };
   try {
-    writeSteps({ fd, turnsFd, worldFd }, name, recordTurns(seed, archetype, turns, options), progress);
+    writeSteps({ fd, turnsFd, worldFd }, name, archetype, recordTurns(seed, archetype, turns, options), progress);
   } catch (error) {
     // A bot or rule error ends this run with an error marker, so the batch and the report go on without it.
     console.error(error);
@@ -172,18 +173,24 @@ function recordOne({ archetype, seed }, turns, options, place) {
 }
 
 // Writes each step's trace lines and rows as it comes, and keeps the count, the death marker and the last turn in
-// progress, so an error part way still leaves them.
-function writeSteps({ fd, turnsFd, worldFd }, name, steps, progress) {
+// progress, so an error part way still leaves them. A bot that falls below the floor of its job ends the run with an
+// error, after its last turn is written.
+function writeSteps({ fd, turnsFd, worldFd }, name, archetype, steps, progress) {
+  const job = new JobTally();
   for (const step of steps) {
     const { world, lines, rows } = step;
     const written = [...lines, ...rows];
     if (written.length > 0) writeSync(fd, written.map((line) => `${JSON.stringify(line)}\n`).join(''));
-    writeSync(turnsFd, `${JSON.stringify(turnLine(world, step.events, step.ledger))}\n`);
+    const line = turnLine(world, step.events, step.ledger);
+    writeSync(turnsFd, `${JSON.stringify(line)}\n`);
+    job.note(line);
     const all = worldLine(world, step.events);
     if (all) writeSync(worldFd, `${JSON.stringify(all)}\n`);
     progress.count += lines.length;
     progress.end = step.death;
     progress.lastTurn = world.turn;
     if ((world.turn - 1) % TIME.turnsPerDay === 0) console.log(`${name}: day ${(world.turn - 1) / TIME.turnsPerDay} done, ${progress.count} events`);
+    const failure = job.failure(archetype);
+    if (failure) throw new Error(failure);
   }
 }

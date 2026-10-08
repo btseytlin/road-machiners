@@ -33,7 +33,7 @@ function turn(w: World, d: Drive): { w: World; d: Drive } {
 }
 
 describe('NPC driving', () => {
-  it('backs out after repeated failed drive attempts', () => {
+  it('backs off a rock in its path and drives around it', () => {
     let w = emptyWorld({ x: 40, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
@@ -41,12 +41,14 @@ describe('NPC driving', () => {
     npc.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 300, y: 30 }, reason: 'look for prey at known hunting grounds', phase: 'travel' }];
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
+    const xs: number[] = [];
     let d = buildDrive(w);
-    // The rock is round and the truck nose narrow, so the first turn slides along it before the truck stalls.
-    for (let i = 0; i < RULES.npcStuckTurns + 2; i++) ({ w, d } = turn(w, d));
-    expect(w.vehicles.find((v) => v.id === npc.id)!.brain!.recovery).toBeGreaterThan(0);
-    ({ w, d } = turn(w, d));
-    expect(w.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);
+    for (let i = 0; i < RULES.npcStuckTurns + 4; i++) {
+      ({ w, d } = turn(w, d));
+      xs.push(w.vehicles.find((v) => v.id === npc.id)!.pos.x);
+    }
+    expect(Math.min(...xs)).toBeLessThan(startX);
+    expect(xs.at(-1)).toBeGreaterThan(31.4);
     freeDrive(d);
   });
 

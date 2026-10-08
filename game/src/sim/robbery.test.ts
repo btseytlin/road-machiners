@@ -748,6 +748,8 @@ describe('stranded robbers', () => {
     strand(w, raider);
     thinkNpc(w, raider);
     expect(raider.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);
+    expect(optionWeights(w, raider, 'attacked', target.id, judgeDanger(w, raider, target)).fightBack).toBeUndefined();
+    startCombat(w, target, raider);
     expect(optionWeights(w, raider, 'attacked', target.id, judgeDanger(w, raider, target)).fightBack).toBeGreaterThan(0);
   });
 

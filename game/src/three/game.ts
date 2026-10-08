@@ -991,8 +991,7 @@ export class Game {
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
-    // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
-    // camera cannot pan past it.
+    // Gray vision centers on the drawn truck, so its edge moves with it during a turn. The camera cannot pan past it.
     const sightRadius = grayRadius(this.world) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);

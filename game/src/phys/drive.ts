@@ -791,7 +791,9 @@ function driveStep(c: Car, terrain: Terrain): void {
   applyTerrainGrip(c, terrain, slick);
   oilKick(c, slick);
   const speed = forwardSpeed(c.body);
-  const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
+  const driving = c.plan.dest && !reached(c);
+  if (!driving) c.mem.stall = 0; // a stall count belongs to one push, not to the next order
+  const command = driving ? commandToward(c, c.plan.dest!, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
   if (!c.plan.dest) {
     c.mem.reverse = false;
@@ -875,18 +877,16 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
   return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * c.grip * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
-// Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
-// Reason one: backsToDestination allows it. It starts below reverseBelow and holds while the rule holds.
-// Reason two: something in front stopped it. It backs RULES.reverse.distance tiles from where the back-out
-// began, then tries nose first again. Any other point behind turns the truck around nose first.
+// Whether the truck backs up this step, for one of two reasons.
+// Reason one: the aim is behind the nose and backsToDestination allows it. It starts below reverseBelow and holds
+// while the rule holds.
+// Reason two: something in front stopped it, wherever the aim lies. A truck that turns toward an aim ahead can grind
+// along a rock at a crawl, so pushing without moving counts as blocked too. A block starts with a target of at least pushSpeed, so a truck that
+// arrives or creeps from rest never backs out; once it started, it counts on until the truck moves. It backs RULES.reverse.distance tiles from
+// where the back-out began, then tries nose first again. Any other point behind turns the truck around nose first.
 // at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
 function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
-  if (Math.abs(ang) <= Math.PI / 2) {
-    c.mem.stall = 0;
-    c.mem.backFrom = null;
-    return false;
-  }
-  if (backsToPoint(c, rearAng, far, target, speed)) {
+  if (Math.abs(ang) > Math.PI / 2 && backsToPoint(c, rearAng, far, target, speed)) {
     c.mem.backFrom = null;
     return true;
   }
@@ -906,7 +906,8 @@ function backsToPoint(c: Car, rearAng: number, far: number, target: number, spee
 
 // Counts the seconds a truck pushes forward without moving, and says whether that lasted long enough to back up.
 function blockedInFront(c: Car, target: number, speed: number): boolean {
-  c.mem.stall = target > 0 && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
+  const pushing = target >= D.pushSpeed || (target > 0 && c.mem.stall > 0);
+  c.mem.stall = pushing && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
   return c.mem.stall >= D.stallSeconds;
 }
 

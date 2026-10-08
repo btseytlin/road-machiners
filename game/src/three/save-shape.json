@@ -1373,105 +1373,6 @@
       "rot": "number",
       "x": "number",
       "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "defId": "string",
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     }
-    ],
-    "job": "null",
-    "lastHitBy": "null",
-    "name": "string",
-    "order": "null",
-    "pos": {
-     "x": "number",
-     "y": "number"
-    },
-    "resources": {
-     "fuel": "number",
-     "health": "number",
-     "money": "number",
-     "supplies": "number"
-    },
-    "speed": "number",
-    "stormExposure": {},
-    "trail": [],
-    "utilityOrders": {},
-    "weaponOrders": {}
-   },
-   {
-    "brain": {
-     "attackers": {},
-     "driver": "string",
-     "goal": "null",
-     "goals": [],
-     "home": {
-      "x": "number",
-      "y": "number"
-     },
-     "hurt": "number",
-     "memories": [],
-     "noticed": {},
-     "stepIndex": "number",
-     "templateId": "string",
-     "tracks": {},
-     "traits": [
-      "string"
-     ]
-    },
-    "chassisId": "string",
-    "direct": "boolean",
-    "faction": "string",
-    "heading": "number",
-    "id": "string",
-    "items": [
-     {
-      "good": "string",
-      "id": "string",
-      "kind": "string",
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "defId": "string",
-       "gun": {
-        "ammo": "number",
-        "cooldown": "number",
-        "reloadWork": "number"
-       },
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "defId": "string",
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
      }
     ],
     "job": "null",
@@ -1543,12 +1444,10 @@
       "id": "string",
       "kind": "string",
       "part": {
-       "defId": "string",
-       "gun": {
-        "ammo": "number",
-        "cooldown": "number",
-        "reloadWork": "number"
+       "charge": {
+        "reload": "number"
        },
+       "defId": "string",
        "hp": "number",
        "id": "string",
        "wear": "number"
@@ -1562,6 +1461,11 @@
       "kind": "string",
       "part": {
        "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
        "hp": "number",
        "id": "string",
        "wear": "number"
