@@ -443,3 +443,42 @@ describe('max speed steps', () => {
     expect(workingEngineCapacity(SCENARIOS.brokenEngine.build().v)).toBeNull();
   });
 });
+
+describe('the acceleration scale', () => {
+  const rules = RULES as { accelScale: number };
+  const stats = (overdrive: boolean, parts: string[]) => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', parts, { x: 40, y: 40 });
+    w.player.vehicleId = v.id;
+    w.player.overdrive = overdrive;
+    w.player.fuel = 999;
+    return vehicleStats(w, v);
+  };
+  const withScale = <T>(scale: number, run: () => T): T => {
+    const saved = rules.accelScale;
+    rules.accelScale = scale;
+    try {
+      return run();
+    } finally {
+      rules.accelScale = saved;
+    }
+  };
+
+  it.each([false, true])('scales powered acceleration alone, with overdrive %s', (overdrive) => {
+    const full = withScale(0.6, () => stats(overdrive, ['stockEngine']));
+    const half = withScale(0.3, () => stats(overdrive, ['stockEngine']));
+    expect(half.accel).toBeCloseTo(full.accel / 2);
+    expect(half.maxSpeed).toBe(full.maxSpeed);
+    expect(half.brake).toBe(full.brake);
+    expect(half.turnSlow).toBe(full.turnSlow);
+    expect(half.turnFast).toBe(full.turnFast);
+    expect(half.reverseTurn).toBe(full.reverseTurn);
+    expect(half.limpAccel).toBe(full.limpAccel);
+  });
+
+  it('leaves a truck without an engine as it was', () => {
+    const full = withScale(0.6, () => stats(false, []));
+    const half = withScale(0.3, () => stats(false, []));
+    expect(half.accel).toBe(full.accel);
+  });
+});

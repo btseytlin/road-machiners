@@ -20,7 +20,7 @@ export const PHYSICS = {
     frictionSlip: 2,
     sideFrictionStiffness: 1,
     engineAccel: 12,
-    climbReserve: 0.25,
+    climbReserve: 0.47,
     brakeForce: 60,
     maxSteer: 0.6,
     steerRate: 3,

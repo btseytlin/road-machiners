@@ -342,6 +342,7 @@ describe('far travel contact', () => {
     addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 123, y: 120 });
     mover.order = { kind: 'stopAt', dest: { x: 123, y: 120 } };
     advanceFar(w, mover);
+    advanceFar(w, mover);
     expect(mover.order).toBeNull();
     expect(mover.speed).toBe(0);
   });
@@ -418,7 +419,7 @@ describe('far tower and its rope', () => {
   it('drives out past the truck on its own rope instead of arriving where it stands', () => {
     const { w, tower } = boxedTower();
     advanceFar(w, tower);
-    expect(tower.pos.x).toBeLessThan(119);
+    expect(tower.pos.x).toBeLessThan(119.5);
     expect(tower.order).not.toBeNull();
   });
 

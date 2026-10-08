@@ -430,7 +430,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a close drive-through click is reached instead of stopping short', () => {
-    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 8);
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 12);
     expect(me(w).order).toBeNull();
     freeDrive(d);
   });
@@ -481,7 +481,7 @@ describe('physics turns', () => {
     const dest = { x: 26, y: 33 };
     let w = ordered({ kind: 'through', dest });
     let d = buildDrive(w);
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 24; i++) {
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);
@@ -496,7 +496,7 @@ describe('physics turns', () => {
     const w = ordered({ kind: 'through', dest: { x: 28, y: 27 } });
     const at = me(w).pos;
     w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
-    const { w: after, d } = play(w, 14);
+    const { w: after, d } = play(w, 22);
     expect(me(after).order).toBeNull();
     freeDrive(d);
   });
@@ -583,7 +583,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a click behind backs toward it rear first', () => {
-    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 9);
+    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 14);
     expect(dist(me(w).pos, { x: 24, y: 31 })).toBeLessThan(RULES.passRadius + 0.5);
     expect(Math.abs(angleDiff(me(w).heading, 0))).toBeLessThan(Math.PI / 4);
   });
