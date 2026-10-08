@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { STRIP } from '../data/salvage';
+import { WORK } from '../data/utilities';
 import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf , startCombat } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
-import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
+import { addGoods, moveItem, mountPart, removeGoods, stowPart } from './inventory';
 import { advanceJobs, cancelRefit, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
 import { PERK_NUMBERS } from '../data/skills';
 import { repairPlan } from './repair';
@@ -381,6 +382,23 @@ describe('strip job', () => {
     expect(truck.job).toBeNull();
     expect(truck.items.some((it) => it.kind === 'part' && it.part.id === spare.id)).toBe(false);
     expect((goodsCount(truck).parts ?? 0) - held).toBe(units);
+  });
+
+  it("pays the Scraper's knife share of the part's value with a working scraper", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    if (!mountPart(w, me, makePart(w, 'scrapersKnife', 0))) throw new Error('No deck room for the scraper');
+    const spare = makePart(w, 'mg', 0);
+    if (!stowPart(w, me, spare)) throw new Error('No room for the spare');
+    const held = goodsCount(me).parts ?? 0;
+    const plain = Math.max(1, Math.round((partValue(spare) * STRIP.yieldShare) / GOODS.parts.value));
+    const units = Math.max(1, Math.round((partValue(spare) * WORK.scraperStripShare) / GOODS.parts.value));
+    expect(units).toBeGreaterThan(plain);
+
+    const next = startStrip(w, spare.id);
+    for (let i = 0; i < STRIP.turns; i++) advanceJobs(next);
+
+    expect((goodsCount(next.vehicles[0]).parts ?? 0) - held).toBe(units);
   });
 
   it('strips a broken, junk part too', () => {

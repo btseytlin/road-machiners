@@ -15,6 +15,7 @@ export const CONDITION = {
     accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
     armor: 0.12, // share of an armor part's armor lost
     scannerRange: 0.1, // share of scanner range lost
+    reloadPercent: 10, // percent of an active utility's reload added, rounded up to whole turns
   },
 };
 

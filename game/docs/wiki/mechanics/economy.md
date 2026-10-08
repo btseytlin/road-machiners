@@ -1,6 +1,6 @@
 # Economy
 
-Values, prices, shops, contracts, the effort model, fuel and supplies. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+Values, prices, shops, contracts, the effort model, hidden salvage, fuel and supplies. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
 Money is M. One M is the price of 5 L of fuel at any town or stall, and every price reads against it. The sim and data keep money as whole cents, 100 to an M, so every price, fee and balance is exact to a cent. The UI shows whole M and rounds any part of an M away from zero, so a price, fee or debt never reads smaller than it is: 1.50 M reads 2, and a debt of 12.50 M reads 13. A balance rounds up too, so a balance and a price can read the same whole M while the balance is a few cents short.
 
@@ -32,10 +32,21 @@ Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Gran
 
 Traders and supply convoys carry working capital, so their trade loads are worth taking. Robbing them is a mid-game route beside hauling and salvage. It costs feuds, lawmen near towns and fights with escorts, and the player can demand cargo from each driver only once. A driver hands over its cargo less often when its escort watches, so a guarded convoy mostly means a fight with its guard. The cues are what the player sees: a cargo box or rack, the goal line under the driver, its guns and its escort. `npm run income` measures the route against hauling and salvage.
 
-Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. Spare parts found in the field are mostly worn too. A part sold to a shop joins its stock. Mounting, rebuilds, garage storage and chassis need a town garage.
+Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. Spare parts found in the field are mostly worn too. A part sold to a shop joins its stock. Every shop, town garage or stall, keeps the player's garage storage and mounts parts at once. A bought part that does not fit the grid goes to storage, and stored parts sell at any shop. Storage is one shared store reachable at any shop. Rebuilds and chassis need a town garage.
 
 Shops post contracts, and each offer shows how long it gives. The clock starts when the player takes it, so a stale offer on the board never shortens the window. A held contract shows the game time it is due. The log warns once when a held contract is two game hours from its deadline. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A standard haul pays well above salvage over the round trip. Some hauls are rush jobs: they give a much shorter window and pay a premium. A player in debt cannot take a haul. A fetch asks for a working part of one type, rebuilt at most once, that the shop does not stock. It pays the part's price plus a search fee. A bounty names a raider type, and any truck of that type counts. It pays a fifth of the target's value, and each knockout or wreck of a truck still fighting, by the player's truck, fulfils one bounty. A truck already lying defeated does not count again. A raider that gives up counts only with Bounty talk. Contracts pay money, and a finished one trains Social from the work, not from a part's price. The player holds a few at once.
 
 The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. The tier 1 wage is what salvage earns, about 36.7 M a day. Loot spots in the Fallen Sun add many small stocks of salvage, so more of the map pays at tier 1. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times a few wages, so contracts pay better than salvage. `npm run progression:record` plays bots through the real turn pipeline, and `progression:report` prints wages and the day each upgrade is reached.
+
+Salvage lies hidden until a search turns it up. Sites, territory loot spots and road wrecks roll their stock into hidden loot. Each turn of a search, every hidden unit turns up with a 35% chance, or 55% with a working scraper's knife. Fuel and supplies each count as one unit and turn up whole. So a full stock gives a lot each turn and an emptying one gives less. What turns up stays in the stock, revealed, until somebody takes it. A search lasts one turn per two hidden units, or per two revealed units when nothing is hidden, and Machining shortens it. A loose pile takes one turn. A search never changes how much loot a stock holds. Search rolls use their own random stream, so they shift no other randomness.
+
+- The player can search a stock while it hides units, or until they have searched it once. The Search action shows only then.
+- One finished search opens the stock for looting. From then on every revealed item there can be taken, including what other trucks turned up. The first search of a stock teaches Machining, once.
+- NPCs search with the same job and the same chance. When the job ends they take the revealed loot that fits, and the rest stays for others. They start a search only where something is hidden or revealed loot fits their truck.
+- Two trucks searching one site roll on one pool, so nothing doubles.
+- The daily restock adds to the hidden loot only, and a table's highs cap hidden and revealed together.
+- Wrecks of destroyed trucks and ground piles lie in the open, so their loot starts revealed.
+- A road wreck counts as looted once nothing is hidden or revealed.
+- Saves keep the hidden loot, the revealed loot and a search in progress, so nothing rerolls.
 
 Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn per turn, times heat. A full load lasts about 920 daytime turns. Without supplies the character loses health down to 30. Oases refill supplies.

@@ -4,7 +4,7 @@ Items and goods are in [items.md](items.md). The owner code is `src/sim/economy.
 
 ## Value and price
 
-Money in the sim and data is whole cents, 100 to an M, and one M is the price of 5 L of fuel at a town. Every money number in the data blocks below is in cents. The item tables show values in M. Every price derives from an item's value. A shop sells at value plus a spread of `ECONOMY.spread`, and buys at value minus it, before the Social skill. A truck on the road adds `ECONOMY.roadSpread` on top. Shops make some goods cheaply and need others: `PRICE_FACTOR.make` scales a made good's price. Distance from the source adds `DISTANCE_PREMIUM.perTile` per tile. A part's value is scaled by its wear step with `CONDITION.valueFactor`. The lowest price of a part is its scrap value, `ECONOMY.scrapPerKg` per kilogram.
+Every price derives from an item's value. A shop sells at value plus a spread of `ECONOMY.spread`, and buys at value minus it, before the Social skill. A truck on the road adds `ECONOMY.roadSpread` on top. Shops make some goods cheaply and need others: `PRICE_FACTOR.make` scales a made good's price. Distance from the source adds `DISTANCE_PREMIUM.perTile` per tile. A part's value is scaled by its wear step with `CONDITION.valueFactor`. The lowest price of a part is its scrap value, `ECONOMY.scrapPerKg` per kilogram.
 
 ## Effort model
 
@@ -34,7 +34,7 @@ Repair costs `ECONOMY.repairShare` of a part's value per share of HP restored. A
 
 ## Contracts
 
-The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.valueShare` of the target's worth.
+The player holds at most `CONTRACTS.maxActive` contracts. A contract's window counts from the turn the player accepts it. A haul has a window of `CONTRACTS.haul.durationFactor` times its estimated travel, and pays `CONTRACTS.haul.rewardFactor` tier wages. A share `CONTRACTS.haul.rush.chance` of hauls are rush jobs: their window is `CONTRACTS.haul.rush.durationFactor` times the estimated travel, and they pay `CONTRACTS.haul.rush.premium` times the standard reward. A fetch pays the part's price plus a search fee of `CONTRACTS.fetch.searchFeeTurns` turns of wage. A bounty pays `CONTRACTS.bounty.rewardTurns` turns of tier 1 wage for its raider type, whatever the target carries.
 
 ## Upkeep
 
@@ -52,7 +52,7 @@ The player's truck pays no upkeep. NPC drivers pay under `NPC_UPKEEP`.
 | `CONDITION.valueFactor` | 1, 0.7, 0.55, 0.45, 0.35 |
 | `ECONOMY.scrapPerKg` | 6.33 |
 | `EFFORT.wage` | {"1":12.33,"2":33.33,"3":73.33} |
-| `EFFORT.bands` | {"1":{"weapon":[250,700],"engine":[250,700],"armor":[250,700],"cargo":[250,700],"scanner":[250,700],"store":[250,700],"chassis":[5000,7500],"good":[40,100]},"2":{"weapon":[180,480],"engine":[180,480],"armor":[180,480],"cargo":[180,480],"scanner":[180,480],"store":[180,480],"chassis":[2800,4200],"good":[50,100]},"3":{"weapon":[180,380],"engine":[180,380],"armor":[180,380],"cargo":[180,380],"scanner":[180,380],"store":[180,380],"chassis":[1900,2800],"good":[40,80]}} |
+| `EFFORT.bands` | {"1":{"weapon":[250,700],"engine":[250,700],"armor":[250,700],"cargo":[250,700],"scanner":[250,700],"store":[250,700],"utility":[250,700],"chassis":[5000,7500],"good":[40,100]},"2":{"weapon":[180,480],"engine":[180,480],"armor":[180,480],"cargo":[180,480],"scanner":[180,480],"store":[180,480],"utility":[180,480],"chassis":[2800,4200],"good":[50,100]},"3":{"weapon":[180,380],"engine":[180,380],"armor":[180,380],"cargo":[180,380],"scanner":[180,380],"store":[180,380],"utility":[180,380],"chassis":[1900,2800],"good":[40,80]}} |
 | `ECONOMY.supplyPrice.fuel` | 100 |
 | `ECONOMY.supplyPrice.supplies` | 167 |
 | `ECONOMY.repairShare` | 0.85 |
@@ -69,5 +69,5 @@ The player's truck pays no upkeep. NPC drivers pay under `NPC_UPKEEP`.
 | `CONTRACTS.haul.rush.durationFactor` | 1.5 |
 | `CONTRACTS.haul.rush.premium` | 1.75 |
 | `CONTRACTS.fetch.searchFeeTurns` | 240 |
-| `CONTRACTS.bounty.valueShare` | 0.2 |
+| `CONTRACTS.bounty.rewardTurns` | {"buggy":900,"gunwagon":1350} |
 <!-- /wiki:numbers -->

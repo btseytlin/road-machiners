@@ -1,13 +1,14 @@
 // Trade goods and shared economy numbers. Shop prices come from each good's value; see src/data/market.ts.
 
 import type { Tier } from './market';
+import { MASS_SCALE } from './mass-scale';
 
 // mass in kilograms per unit. value is the base money value of one unit, in cents (100 cents is 1 M, the price of
 // 5 L of fuel); shop prices derive from it. plural marks a
 // name that takes "were" in talk.
 export type GoodDef = { id: string; name: string; mass: number; value: number; tier: Tier; plural?: true };
 
-export const GOODS: Record<string, GoodDef> = {
+const UNSCALED_GOODS: Record<string, GoodDef> = {
   scrap: { id: 'scrap', name: 'Scrap metal', mass: 100, value: 633, tier: 1 },
   salt: { id: 'salt', name: 'Salt', mass: 75, value: 867, tier: 1 },
   meds: { id: 'meds', name: 'Meds', mass: 50, value: 2333, tier: 2, plural: true },
@@ -23,6 +24,11 @@ export const GOODS: Record<string, GoodDef> = {
   fuelDrums: { id: 'fuelDrums', name: 'Fuel drums', mass: 140, value: 933, tier: 1, plural: true },
   water: { id: 'water', name: 'Water', mass: 110, value: 600, tier: 1 },
 };
+
+// Each good's mass takes the cargo MASS_SCALE.
+export const GOODS: Record<string, GoodDef> = Object.fromEntries(
+  Object.entries(UNSCALED_GOODS).map(([id, def]) => [id, { ...def, mass: def.mass * MASS_SCALE.cargo }]),
+);
 
 export const GOOD_IDS = Object.keys(GOODS);
 

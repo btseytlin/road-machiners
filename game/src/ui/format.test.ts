@@ -4,12 +4,15 @@ import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
 import { partDef, PARTS } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
-import type { GameEvent, Job, PartInstance } from "../sim/types";
+import type { GameEvent, Job, PartInstance, ShotRound } from "../sim/types";
+import { makePart } from "../sim/factory";
+import { mountPart } from "../sim/inventory";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
 import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
 import { mountedParts } from "../sim/grid";
+import { fuelLiters } from "./units";
 import { wreckVehicle } from "../sim/combat";
 
 function part(wear: number): PartInstance {
@@ -139,6 +142,147 @@ describe("roundLabel", () => {
   });
 });
 
+describe("utility log", () => {
+  it("logs no line for a utility use, so smoke never reads as mechanical state", () => {
+    const w = emptyWorld();
+    expect(eventText(w, { t: "utility", vehicle: w.player.vehicleId, part: "p1", effect: "sprout", point: null })).toBeNull();
+  });
+});
+
+describe("harpoon log", () => {
+  // The player with a harpoon and a seen trader hauler, and the player's harpoon shot at it.
+  function harpooned(rounds: ShotRound[]) {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const harpoon = makePart(w, "harpoon", 0);
+    if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
+    const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 33, y: 30 });
+    const engine = mountedParts(trader, "engine")[0];
+    const shot: GameEvent = { t: "shot", shooter: me.id, weapon: harpoon.id, target: trader.id, aim: "body", chance: 0.4, damageChance: 0.3, side: "left", rounds };
+    return { w, me, harpoon, trader, engine, shot };
+  }
+
+  it("names the part the player's line holds", () => {
+    const s = harpooned([]);
+    s.w.lines = [{ id: "l1", from: s.me.id, fromPart: s.harpoon.id, to: s.trader.id, toPart: s.engine.id, length: 10, turnsLeft: 3 }];
+    s.shot = { ...(s.shot as Extract<GameEvent, { t: "shot" }>), rounds: [{ hit: true, crit: false, offset: 0, struck: s.trader.id, hits: [{ part: s.engine.id, damage: 2 }], blast: [], burst: null }] };
+
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: line on Stock engine (40%): Stock engine −2`);
+  });
+
+  it("reads a harpoon that holds nothing as a miss", () => {
+    const s = harpooned([{ hit: false, crit: false, offset: 3, struck: null, hits: [], blast: [], burst: null }]);
+
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: missed (40%)`);
+  });
+
+  it("tells the player its truck tore free of a line", () => {
+    const s = harpooned([]);
+    const mine = mountedParts(s.me, "engine")[0];
+
+    expect(eventText(s.w, { t: "lineTorn", line: "l1", vehicle: s.me.id, part: mine.id, damage: 12 })).toMatchObject({ text: `You tear free of a harpoon line: ${partDef(mine.defId).name} −12`, cls: "bad" });
+  });
+});
+
+describe("emitter pulse log", () => {
+  it("names the trucks the player's pulse shuts down", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
+
+    expect(eventText(w, { t: "pulse", vehicle: me, pos: { x: 30, y: 30 }, hit: [trader.id] })).toEqual({ text: `Your emitter pulse shuts down ${vehicleName(w, trader.id)}`, cls: "good" });
+    expect(eventText(w, { t: "pulse", vehicle: me, pos: { x: 30, y: 30 }, hit: [] })).toEqual({ text: "Your emitter pulse catches nobody", cls: "dim" });
+  });
+
+  it("tells the player its truck is shut down and for how long", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    me.shutDown = { from: w.turn + 1, until: w.turn + 2 };
+
+    expect(eventText(w, { t: "pulse", vehicle: raider.id, pos: { x: 33, y: 30 }, hit: [me.id] })).toEqual({ text: `${vehicleName(w, raider.id)}'s emitter pulse shuts your truck down for 2 turns`, cls: "bad" });
+  });
+
+  it("logs nothing for a pulse between other trucks", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 35, y: 30 });
+
+    expect(eventText(w, { t: "pulse", vehicle: raider.id, pos: { x: 33, y: 30 }, hit: [trader.id] })).toBeNull();
+  });
+});
+
+describe("claymore log", () => {
+  it("names the truck the player's claymore ram blasts and the damage it took", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 33, y: 30 });
+    const engine = mountedParts(trader, "engine")[0];
+    const hits = [{ part: engine.id, damage: 20 }];
+
+    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, part: "ram", other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)}: Stock engine −20`, cls: "good" });
+  });
+
+  it("tells the player a claymore ram blasted its truck", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const engine = mountedParts(w.vehicles[0], "engine")[0];
+    const hits = [{ part: engine.id, damage: 20 }];
+
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, part: "ram", other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck: ${partDef(engine.defId).name} −20`, cls: "bad" });
+  });
+
+  it("logs a seen blast between other trucks and nothing for one out of sight", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 35, y: 30 });
+    const far = addVehicle(w, "raiders", "hauler", [], { x: 200, y: 200 });
+    const farTrader = addVehicle(w, "traders", "hauler", [], { x: 202, y: 200 });
+
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, part: "ram", other: trader.id, pos: { x: 34, y: 30 }, hits: [], selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts ${vehicleName(w, trader.id)}`, cls: "dim" });
+    expect(eventText(w, { t: "claymore", vehicle: far.id, part: "ram", other: farTrader.id, pos: { x: 201, y: 200 }, hits: [], selfHits: [] })).toBeNull();
+  });
+});
+
+describe("caltrops log", () => {
+  // A hit of 8 on each of the truck's wheels, as a caltrop field deals.
+  const wheelHits = (v: { items: { kind: string; part?: PartInstance }[] }) =>
+    v.items.flatMap((i) => (i.part && partDef(i.part.defId).kind === "core" && i.part.defId.includes("wheel") ? [{ part: i.part.id, damage: 8 }] : []));
+
+  it("lists the player's wheel damage like a hit", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const hits = wheelHits(me);
+
+    const line = eventText(w, { t: "caltrops", vehicle: me.id, field: "g1", source: me.id, hits });
+
+    expect(hits).toHaveLength(4);
+    expect(line).toMatchObject({ cls: "bad", text: expect.stringMatching(/^You drive into caltrops: (.+ −8, ){3}.+ −8$/) });
+  });
+
+  it("names a seen truck that drives into the player's caltrops, with its wheel damage", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
+
+    const line = eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId, hits: wheelHits(trader) });
+
+    expect(line).toMatchObject({ cls: "good", text: expect.stringMatching(new RegExp(`^${vehicleName(w, trader.id)} drives into caltrops: .*−8`)) });
+  });
+
+  it("logs a caltrops event from an old save with no wheel numbers", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+
+    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me, hits: [] })).toMatchObject({ text: "You drive into caltrops", cls: "bad" });
+  });
+
+  it("logs nothing for a truck out of sight", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 200, y: 200 });
+
+    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id, hits: [] })).toBeNull();
+  });
+});
+
 describe("collision log", () => {
   it("logs no crash, whether into a standing obstacle or through a fence", () => {
     const w = emptyWorld();
@@ -147,6 +291,22 @@ describe("collision log", () => {
     w.broken = [{ obstacle: fence, turn: w.turn }];
     expect(eventText(w, { t: "collision", a: me, b: "fence-3", hitsA: [], hitsB: [] })).toBeNull();
     expect(eventText(w, { t: "collision", a: me, b: "rock7", hitsA: [{ part: "x", damage: 4 }], hitsB: [] })).toBeNull();
+  });
+});
+
+describe("cargo spill log", () => {
+  it("names the player's broken cargo part and how many items fell out", () => {
+    const w = emptyWorld();
+    const panniers = mountedParts(w.vehicles[0], "cargo")[0];
+    const line = eventText(w, { t: "cargoSpilled", vehicle: w.player.vehicleId, part: panniers.id, pile: "spill-1", units: 6 });
+    expect(line).toEqual({ text: "Your panniers broke. 6 items fell out.", cls: "bad" });
+  });
+
+  it("names the NPC whose cargo spilled", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "traders", "hauler", ["rack"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "cargoSpilled", vehicle: npc.id, part: mountedParts(npc, "cargo")[0].id, pile: "spill-2", units: 1 });
+    expect(line).toEqual({ text: `${vehicleName(w, npc.id)}: cargo spilled on the ground`, cls: "good" });
   });
 });
 
@@ -289,6 +449,15 @@ describe("aid handover text", () => {
     const theirs = next.vehicles.find((v) => v.id === npc.id)!;
     expect(workLabel(next, theirs, workOf(next, theirs)!)).toMatch(/^Taking .* from you$/);
     expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
+  });
+});
+
+describe("found log", () => {
+  it("lists the goods, parts, fuel and supplies a search turn found", () => {
+    const w = emptyWorld();
+    const e: GameEvent = { t: "found", vehicle: w.player.vehicleId, stock: "rich", goods: { scrap: 3 }, parts: ["mg"], fuel: 2, supplies: 1 };
+
+    expect(eventText(w, e)).toEqual({ text: `Found 3 Scrap metal, ${partDef("mg").name}, ${fuelLiters(2)} L of fuel and 1 supply.`, cls: "good" });
   });
 });
 

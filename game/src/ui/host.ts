@@ -8,6 +8,8 @@ export type UiHost = {
   announce(next: World): void; // apply, then log the command's events and play their sting
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
+  selectedUtility(): string | null; // the point utility waiting for its target click
+  selectUtility(id: string | null): void;
   pressTurn(): void; // a turn press, as Space keydown
   releaseTurn(): void; // as Space keyup
   runKey(code: string): void; // runs a key's action under that key's gates

@@ -13,8 +13,14 @@ import { mountedParts } from './grid';
 import { practice, regionOf, skillEffect, vehicleHasPerk } from './progress';
 import { inOverdrive, vehicleStats } from './stats';
 import { cappedHeatAt, heatAt } from './sun';
-import type { Vehicle, World } from './types';
+import type { PartInstance, Vehicle, World } from './types';
+import { isShutDown } from './utility';
 import { playerCommand } from './world';
+
+// The engine drives the truck: it moves and is not shut down by an emitter pulse. A shut-down engine cools as if parked.
+function enginePulls(world: World, me: Vehicle): boolean {
+  return me.speed > RULES.parkedSpeed && !isShutDown(world, me);
+}
 
 export function advanceEngineHeat(world: World): void {
   const me = playerVehicle(world);
@@ -22,7 +28,7 @@ export function advanceEngineHeat(world: World): void {
   const heat = engineSunHeat(world, me, sunHeat);
   const before = world.player.engineHeat;
   let next: number;
-  if (me.speed > RULES.parkedSpeed) {
+  if (enginePulls(world, me)) {
     const share = Math.min(1, me.speed / vehicleStats(world, me).maxSpeed);
     // The engine and skill scale airflow cooling as much as sun heating, so every engine starts heating at the
     // same sun heat, where the ground shimmers, and differs only in how fast.
@@ -37,10 +43,20 @@ export function advanceEngineHeat(world: World): void {
   if (before < ENGINE_HEAT.warnAt && world.player.engineHeat >= ENGINE_HEAT.warnAt) {
     world.events.push({ t: 'info', text: 'Engine running hot.' });
   }
-  if (world.player.engineHeat < 1 || me.speed <= RULES.parkedSpeed) return;
-  const engines = mountedParts(me).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
-  for (const e of engines) damagePart(e, ENGINE_HEAT.overheatDamage, 0);
-  if (engines.length > 0) world.events.push({ t: 'info', text: `Engine overheated: engine -${ENGINE_HEAT.overheatDamage} HP` });
+  if (!engineOverheating(world)) return;
+  for (const e of heatedEngines(me)) damagePart(e, ENGINE_HEAT.overheatDamage, 0);
+  world.events.push({ t: 'info', text: `Engine overheated: engine -${ENGINE_HEAT.overheatDamage} HP` });
+}
+
+// Whether heat costs the player's engine HP this turn: full heat, driving, and a working engine to damage.
+export function engineOverheating(world: World): boolean {
+  const me = playerVehicle(world);
+  return world.player.engineHeat >= 1 && enginePulls(world, me) && heatedEngines(me).length > 0;
+}
+
+// The mounted engines that heat can still damage.
+function heatedEngines(v: Vehicle): PartInstance[] {
+  return mountedParts(v).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
 }
 
 // Whether dousing would help: enough supplies and a warm engine.

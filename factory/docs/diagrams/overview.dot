@@ -10,7 +10,9 @@ digraph overview {
   R [label="Release\ncandidate"];
   S [label="Committee\nships", fillcolor="#fde68a", color="#b45309"];
   O [label="main\nand itch.io"];
+  E [label="Game error\nreports"];
   U -> B -> C -> V -> R -> S -> O [weight=100];
+  E -> B [weight=0];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=back, weight=0];
   B -> C [label="feedback"];
   B -> S [label="remove or new task"];

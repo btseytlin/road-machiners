@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
-import { CONDITION, PATCH } from '../data/wear';
+import { CONDITION, PATCH, REPAIR } from '../data/wear';
+
+const PATCH_TURNS_PER_PART = REPAIR.turnsPerPart;
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { maxHp } from './wear';
-import { addGoods, removeGoods } from './inventory';
+import { addGoods, mountPart, removeGoods } from './inventory';
+import { makePart } from './factory';
 import { thinkNpc, topGoal } from './npc-activities';
-import { agreePatch, dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
+import { agreePatch, dealAvailable, needsPatch, patchData, patchPlan, patchTerms, settlePatch } from './patch';
 import { makePeace } from './parley';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
@@ -704,5 +707,61 @@ describe('patching a worn truck that still drives', () => {
     expect(currentOptions(asked).map((o) => o.text)).toContain('My truck is broken down. Can you patch it?');
     expect(dealAvailable('free')(w, npc)).toBe(true);
     expect(patchTerms(w, npc)).toMatchObject({ patcher: 'npc' });
+  });
+});
+
+describe('the Patcher crane on roadside patches', () => {
+  // The player patches a hauler whose engine is dead. Its engine alone takes `parts` units of parts.
+  function playerPatcher(machining: number, crane: boolean): { w: World; client: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.ranks.machining = machining;
+    if (crane && !mountPart(w, playerVehicle(w), makePart(w, 'patcherCrane', 0))) throw new Error('No deck room for the crane');
+    const client = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 34, y: 30 }, Math.PI);
+    breakEngine(client);
+    return { w, client };
+  }
+
+  it.each([
+    { machining: 0, crane: false, turns: 8 },
+    { machining: 0, crane: true, turns: 6 },
+    { machining: 3, crane: false, turns: 6 },
+    { machining: 3, crane: true, turns: 4 },
+  ])('a two-part engine takes $turns turns at Machining $machining, crane $crane', ({ machining, crane, turns }) => {
+    const { w, client } = playerPatcher(machining, crane);
+
+    const plan = patchPlan(w, { patcher: playerVehicle(w), client });
+
+    expect(plan.parts).toBe(2);
+    expect(plan.turns).toBe(turns);
+  });
+
+  it("counts an NPC patcher's crane, and two cranes once", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    breakEngine(playerVehicle(w));
+    const one = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'patcherCrane'], { x: 38, y: 30 }, Math.PI);
+    const two = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'patcherCrane', 'patcherCrane'], { x: 38, y: 34 }, Math.PI);
+    const none = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 38, y: 38 }, Math.PI);
+    const client = playerVehicle(w);
+    const parts = patchPlan(w, { patcher: none, client }).parts;
+
+    expect(patchPlan(w, { patcher: none, client }).turns).toBe(Math.ceil(parts * 2 * 2));
+    expect(patchPlan(w, { patcher: one, client }).turns).toBe(Math.ceil((parts * 2 * 2) / 1.5));
+    expect(patchPlan(w, { patcher: two, client }).turns).toBe(patchPlan(w, { patcher: one, client }).turns);
+  });
+
+  it('keeps the price on the old turn estimate, with or without a crane', () => {
+    const { w, trader } = brokenPlayer(0);
+    setParts(w, playerVehicle(w), 3);
+    forceOption('patchDeal', 'ownParts');
+    const slow = patchTerms(cloneWorld(w), trader);
+    if (!mountPart(w, trader, makePart(w, 'patcherCrane', 0))) throw new Error('No deck room for the crane');
+    forceOption('patchDeal', 'ownParts');
+    const fast = patchTerms(w, trader);
+    if (slow?.kind !== 'deal' || fast?.kind !== 'deal') throw new Error('Expected deal terms');
+
+    const oldTurns = Math.ceil(slow.parts * PATCH_TURNS_PER_PART);
+    expect(slow.price).toBe(Math.round(oldTurns * PATCH.laborPerTurn));
+    expect(fast.price).toBe(slow.price);
+    expect(fast.turns).toBeLessThan(slow.turns);
   });
 });

@@ -20,6 +20,9 @@ const KEYS = {
   repo: 'FACTORY_REPO',
   projectOwner: 'FACTORY_PROJECT_OWNER',
   projectNumber: 'FACTORY_PROJECT_NUMBER',
+  githubRetries: 'FACTORY_GITHUB_RETRIES',
+  githubRetryBaseSeconds: 'FACTORY_GITHUB_RETRY_BASE_SECONDS',
+  githubTimeoutSeconds: 'FACTORY_GITHUB_TIMEOUT_SECONDS',
   home: 'FACTORY_HOME',
   webRoot: 'FACTORY_WEB_ROOT',
   publicUrl: 'FACTORY_PUBLIC_URL',
@@ -35,6 +38,7 @@ const KEYS = {
   tokenPrices: 'FACTORY_MODEL_PRICES',
   minVotes: 'FACTORY_MIN_VOTES',
   minAgeHours: 'FACTORY_MIN_AGE_HOURS',
+  needsInfoHours: 'FACTORY_NEEDS_INFO_HOURS',
   committeeBootstrapTelegram: 'FACTORY_COMMITTEE_BOOTSTRAP',
   committeeBootstrapGithub: 'FACTORY_COMMITTEE_BOOTSTRAP_GITHUB',
   telegramToken: 'TELEGRAM_BOT_TOKEN',
@@ -46,12 +50,16 @@ const KEYS = {
   verifyTimeoutMinutes: 'FACTORY_VERIFY_TIMEOUT_MINUTES',
   testTimeoutMinutes: 'FACTORY_TEST_TIMEOUT_MINUTES',
   branchTimeoutMinutes: 'FACTORY_BRANCH_TIMEOUT_MINUTES',
+  agentJobMaxMinutes: 'FACTORY_JOB_MAX_MINUTES',
   replyRouteMinutes: 'FACTORY_REPLY_ROUTE_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
+  playtestTurns: 'FACTORY_PLAYTEST_TURNS',
+  playtestRuns: 'FACTORY_PLAYTEST_RUNS',
   wasteReviewDays: 'FACTORY_WASTE_REVIEW_DAYS',
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
   maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
+  maxJobsPerCard: 'FACTORY_MAX_JOBS_PER_CARD',
   triageWorkers: 'FACTORY_TRIAGE_WORKERS',
   designWorkers: 'FACTORY_DESIGN_WORKERS',
   implementWorkers: 'FACTORY_IMPLEMENT_WORKERS',
@@ -60,14 +68,24 @@ const KEYS = {
   minFreeGb: 'FACTORY_MIN_FREE_GB',
   minAvailableGb: 'FACTORY_MIN_AVAILABLE_GB',
   logDays: 'FACTORY_LOG_DAYS',
+  transcriptDays: 'FACTORY_TRANSCRIPT_DAYS',
   cpuLight: 'FACTORY_CPU_LIGHT',
   cpuImplement: 'FACTORY_CPU_IMPLEMENT',
   cpuTest: 'FACTORY_CPU_TEST',
+  vitestWorkersImplement: 'FACTORY_VITEST_WORKERS_IMPLEMENT',
+  vitestWorkersTest: 'FACTORY_VITEST_WORKERS_TEST',
+  errorDailyIssues: 'FACTORY_ERROR_DAILY_ISSUES',
+  errorDiskMb: 'FACTORY_ERROR_DISK_MB',
+  errorMapDays: 'FACTORY_ERROR_MAP_DAYS',
+  errorBodyKb: 'FACTORY_ERROR_BODY_KB',
+  errorUnzippedMb: 'FACTORY_ERROR_UNZIPPED_MB',
+  errorIpPerHour: 'FACTORY_ERROR_IP_PER_HOUR',
+  errorOrigins: 'FACTORY_ERROR_ORIGINS',
 } as const satisfies Record<keyof FactoryConfig, string>;
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['observationHeartbeatMs', 'observationMaxEventBytes', 'projectNumber', 'githubRetries', 'githubRetryBaseSeconds', 'githubTimeoutSeconds','sfxMaxGenerations', 'minVotes', 'minAgeHours', 'needsInfoHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes', 'agentJobMaxMinutes', 'replyRouteMinutes', 'releaseDays', 'playtestTurns', 'playtestRuns', 'wasteReviewDays', 'maxJobsPerDay', 'maxJobsPerCard', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'minAvailableGb', 'logDays', 'transcriptDays', 'cpuLight', 'cpuImplement', 'cpuTest', 'vitestWorkersImplement', 'vitestWorkersTest', 'errorDailyIssues', 'errorDiskMb', 'errorMapDays', 'errorBodyKb', 'errorUnzippedMb', 'errorIpPerHour']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

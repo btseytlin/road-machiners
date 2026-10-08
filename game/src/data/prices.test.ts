@@ -13,8 +13,27 @@ import { CONTRACTS, EFFORT } from './market';
 function bumped(def: Unpriced<PartDef>, field: string): Unpriced<PartDef> {
   const copy = structuredClone(def) as Record<string, unknown>;
   if (field === 'damage') (copy.round as { damage: number }).damage += 1;
+  else if (field === 'turns' || field === 'reach') bumpUtility(copy, field);
   else copy[field] = (copy[field] as number) + 1;
   return copy as Unpriced<PartDef>;
+}
+
+// A utility's priced stats: how long its effect lasts and how far it reaches, by its shot, its farthest point or
+// its radius.
+function bumpUtility(copy: Record<string, unknown>, field: 'turns' | 'reach'): void {
+  const effect = copy.effect as Record<string, number>;
+  const shot = copy.shot as { range: number } | undefined;
+  if (field === 'turns') effect.turns += 1;
+  else if (shot) shot.range += 1;
+  else if ('maxRange' in effect) effect.maxRange += 1;
+  else effect.radius += 1;
+}
+
+// A passive utility has no priced stat. An oil spill's reach is the shared slick in OIL, not a stat of the part.
+function pricedStats(def: PartDef): string[] {
+  if (def.kind === 'utility' && def.reload === null) return [];
+  if (def.kind === 'utility' && def.effect.type === 'oil') return ['turns'];
+  return PRICED_STATS[def.kind];
 }
 
 const PRICED_STATS: Record<PartDef['kind'], string[]> = {
@@ -24,6 +43,7 @@ const PRICED_STATS: Record<PartDef['kind'], string[]> = {
   cargo: ['extraRows'],
   store: ['amount'],
   scanner: ['range'],
+  utility: ['turns', 'reach'],
   core: ['hp'],
 };
 
@@ -35,7 +55,7 @@ describe('item prices', () => {
 
   it('raises the value when a priced stat grows', () => {
     for (const def of Object.values(PARTS)) {
-      for (const field of PRICED_STATS[def.kind]) {
+      for (const field of pricedStats(def)) {
         expect(partModifier(bumped(def, field)), `${def.id} ${field}`).toBeGreaterThan(partModifier(def));
       }
     }

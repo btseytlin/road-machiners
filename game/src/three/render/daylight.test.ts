@@ -6,7 +6,7 @@ import { bodyOf } from '../../sim/body';
 import { playerVehicle } from '../../sim/damage';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
 import { setHeadlights } from '../../sim/world';
-import { beamOrder, daylightAt, lampsOn, NightLights, nightLightsWanted, sunLight, vehicleLampsOn, type LitVehicle } from './daylight';
+import { beamOrder, daylightAt, lampsOn, lightScene, VehicleLights, nightLightsWanted, snapToShadowTexels, sunLight, vehicleLampsOn, type LitVehicle } from './daylight';
 
 const turnAt = (hour: number) => 1 + ((hour - TIME.startHour + 24) % 24) * (TIME.turnsPerDay / 24);
 
@@ -32,6 +32,15 @@ const litAt = (x: number, on = true): LitVehicle => ({ chassisId: 'scout', frame
 const spots = (scene: THREE.Scene) => scene.children.filter((c): c is THREE.SpotLight => c instanceof THREE.SpotLight);
 const origin = { x: 0, y: 0, z: 0 };
 
+describe('daylight beam share', () => {
+  it('is 1 from sunset through the night and between 0 and 1 by day', () => {
+    for (const h of [20, 20.5, 23, 5.9]) expect(daylightAt(turnAt(h)).beam).toBe(1);
+    for (const h of [8, 12]) expect(daylightAt(turnAt(h)).beam).toBeLessThan(1);
+    expect(daylightAt(turnAt(12)).beam).toBeGreaterThan(0);
+    expect(daylightAt(turnAt(12)).beam).toBeLessThan(daylightAt(turnAt(19.5)).beam);
+  });
+});
+
 describe('beamOrder', () => {
   it('drops lamp-off vehicles and puts the nearest first', () => {
     const order = beamOrder([litAt(30), litAt(5, false), litAt(0), litAt(10)], origin);
@@ -39,12 +48,12 @@ describe('beamOrder', () => {
   });
 });
 
-describe('NightLights', () => {
+describe('VehicleLights', () => {
   it('casts shadows from only the four nearest beams, and reassigns them as trucks move', () => {
     const scene = new THREE.Scene();
-    const lights = new NightLights(scene);
+    const lights = new VehicleLights(scene);
     const xs = [60, 10, 50, 20, 40, 30];
-    lights.update(true, origin, xs.map((x) => litAt(x)));
+    lights.update(true, 1, origin, xs.map((x) => litAt(x)));
     const shadowed = () => spots(scene).filter((b) => b.castShadow);
     expect(shadowed()).toHaveLength(4);
     expect(shadowed().every((b) => b.shadow.autoUpdate)).toBe(true);
@@ -52,7 +61,7 @@ describe('NightLights', () => {
     const nose = bodyOf('scout').half.x;
     expect(nearNoses).toEqual([10, 20, 30, 40].map((x) => Math.round(x + nose)));
 
-    lights.update(true, { x: 60, y: 0, z: 0 }, xs.map((x) => litAt(x)));
+    lights.update(true, 1, { x: 60, y: 0, z: 0 }, xs.map((x) => litAt(x)));
     expect(shadowed()).toHaveLength(4);
     const moved = shadowed().map((b) => Math.round(b.position.x)).sort((a, b) => a - b);
     expect(moved).toEqual([60, 50, 40, 30].sort((a, b) => a - b).map((x) => Math.round(x + nose)));
@@ -60,9 +69,9 @@ describe('NightLights', () => {
 
   it('zeroes idle beams and stops their shadow passes', () => {
     const scene = new THREE.Scene();
-    const lights = new NightLights(scene);
-    lights.update(true, origin, [litAt(0), litAt(10), litAt(20)]);
-    lights.update(true, origin, [litAt(0, false), litAt(10, false), litAt(20, false)]);
+    const lights = new VehicleLights(scene);
+    lights.update(true, 1, origin, [litAt(0), litAt(10), litAt(20)]);
+    lights.update(true, 1, origin, [litAt(0, false), litAt(10, false), litAt(20, false)]);
     const beams = spots(scene);
     expect(beams.length).toBeGreaterThan(0);
     expect(beams.every((b) => b.intensity === 0)).toBe(true);
@@ -71,15 +80,44 @@ describe('NightLights', () => {
 
   it('removes every beam and frees shadow maps at dawn', () => {
     const scene = new THREE.Scene();
-    const lights = new NightLights(scene);
-    lights.update(true, origin, [0, 10, 20, 30, 40, 50].map((x) => litAt(x)));
+    const lights = new VehicleLights(scene);
+    lights.update(true, 1, origin, [0, 10, 20, 30, 40, 50].map((x) => litAt(x)));
     const maps = spots(scene)
       .filter((b) => b.castShadow)
       .map((b) => vi.spyOn(b.shadow, 'dispose'));
     expect(maps).toHaveLength(4);
-    lights.update(false, origin, []);
+    lights.update(false, 1, origin, []);
     expect(spots(scene)).toHaveLength(0);
     expect(maps.every((d) => d.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('lights the ground ahead of the player by day whenever the switch is on, and nothing else', () => {
+    const scene = new THREE.Scene();
+    const lights = new VehicleLights(scene);
+    const player = { ...litAt(0), player: true };
+    lights.update(false, 0.3, origin, [player, litAt(30, false)]);
+    expect(spots(scene)).toHaveLength(1);
+    expect(spots(scene)[0].intensity).toBeCloseTo(25 * 0.3);
+    expect(spots(scene)[0].position.x).toBeGreaterThan(bodyOf('scout').half.x - 0.01);
+    expect(scene.children.some((c) => c instanceof THREE.PointLight)).toBe(false);
+    lights.update(false, 0.3, origin, [{ ...player, on: false }, litAt(30, false)]);
+    expect(spots(scene)).toHaveLength(0);
+  });
+
+  it('swaps between the day pool and the night pool and glow at the handovers', () => {
+    const scene = new THREE.Scene();
+    const lights = new VehicleLights(scene);
+    const all = [{ ...litAt(0), player: true }, litAt(10), litAt(20)];
+    const glow = () => scene.children.some((c) => c instanceof THREE.PointLight);
+    lights.update(true, 1, origin, all);
+    expect(spots(scene)).toHaveLength(3);
+    expect(glow()).toBe(true);
+    lights.update(false, 0.5, origin, [all[0], litAt(10, false), litAt(20, false)]);
+    expect(spots(scene)).toHaveLength(1);
+    expect(glow()).toBe(false);
+    lights.update(true, 1, origin, all);
+    expect(spots(scene)).toHaveLength(3);
+    expect(glow()).toBe(true);
   });
 
   it('leaves the sun shadow settings alone', () => {
@@ -129,5 +167,46 @@ describe('nightLightsWanted', () => {
 
   it('keeps them at night with every lamp off', () => {
     expect(nightLightsWanted(turnAt(23), [{ player: true, on: false }])).toBe(true);
+  });
+});
+
+describe('lightScene shadow box', () => {
+  const light = daylightAt(turnAt(17));
+  const sky = new THREE.HemisphereLight();
+  const texel = 160 / 2048;
+  const place = (x: number, z: number) => {
+    const sun = sunLight();
+    lightScene(sun, sky, { x, y: 1.2, z }, light);
+    sun.updateMatrixWorld();
+    sun.target.updateMatrixWorld();
+    sun.shadow.updateMatrices(sun);
+    return sun;
+  };
+  const texelOf = (sun: THREE.DirectionalLight, p: THREE.Vector3) => {
+    const c = p.clone().applyMatrix4(sun.shadow.matrix);
+    return [c.x * 2048, c.y * 2048];
+  };
+
+  it('keeps one texel grid on the ground wherever the truck is', () => {
+    const point = new THREE.Vector3(105.3, 2, 291.7);
+    const a = texelOf(place(100.013, 290.02), point);
+    const b = texelOf(place(117.3, 285.77), point);
+    for (let i = 0; i < 2; i++) {
+      const d = a[i] - b[i];
+      expect(Math.abs(d - Math.round(d))).toBeLessThan(1e-3);
+    }
+  });
+
+  it('moves the focus by at most half a texel and not along the light', () => {
+    const sun = place(100.013, 290.02);
+    const t = sun.target.position;
+    const toLight = sun.position.clone().sub(t).normalize();
+    const moved = t.clone().sub(new THREE.Vector3(100.013, 1.2, 290.02));
+    expect(Math.abs(moved.dot(toLight))).toBeLessThan(1e-6);
+    expect(moved.length()).toBeLessThan(texel * Math.SQRT1_2 + 1e-6);
+  });
+
+  it('rejects a bad texel size', () => {
+    expect(() => snapToShadowTexels({ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 1 }, 0)).toThrow();
   });
 });

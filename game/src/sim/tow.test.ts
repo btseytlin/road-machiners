@@ -13,10 +13,10 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
 import { resolveNpcActivities, startTow, thinkNpc, topGoal } from './npc-activities';
-import { optionChances, optionWeights } from './npc-decisions';
+import { optionChances, optionWeights, usefulContacts } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
-import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
+import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, steerToStranded, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
@@ -178,6 +178,7 @@ describe('tow offer', () => {
 
   it('a hostile that only passes by does not hold back a tow offer to the player', () => {
     forceOption('strandedSeen', 'tow');
+    forceOption('hostileSeen', 'keep');
     const s = stranded();
     addVehicle(s.w, 'raiders', 'buggy', [], { x: 24, y: 30 });
     offered(s);
@@ -333,6 +334,29 @@ describe('towing', () => {
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'danger' });
     expect(topGoal(find(w, s.trader.id))?.kind).toBe('flee');
+  });
+
+  it('a tower keeps its tow when it only hears a hostile beyond sight', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(w, testDrive);
+    const tower = find(w, s.trader.id);
+    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
+    raider.speed = 8;
+    for (let d = 20; d <= 120; d += 2) {
+      raider.pos = { x: tower.pos.x + d, y: tower.pos.y };
+      refreshVision(w);
+      if (usefulContacts(w, tower).length > 0 && !canVehicleSee(w, tower, raider.pos)) break;
+    }
+    expect(usefulContacts(w, tower).map((c) => c.vehicleId)).toEqual([raider.id]);
+    expect(canVehicleSee(w, tower, raider.pos)).toBe(false);
+    forceOption('contactHeard', 'flee');
+    w.events = [];
+    thinkNpc(w, tower);
+    expect(playerTow(w)).not.toBeNull();
+    expect(topGoal(tower)?.kind).toBe('tow');
+    expect(w.events.some((e) => e.t === 'towDropped')).toBe(false);
+    expect(tower.brain!.goals.some((g) => g.kind === 'flee')).toBe(false);
   });
 
   it('a tower that can no longer drive drops the tow', () => {
@@ -1052,6 +1076,22 @@ describe('NPCs towing each other', () => {
     c.resources!.money = 33333;
     return { w, client: c, tower: withTower(w, ...tower, outFrom(site, 38)) };
   }
+
+  // A truce ran out and a vulture fought the stranded raider in the same turn, after its tower checked its goal. The
+  // tower's steering threw instead of letting the goal check call the tow off.
+  it('a tower whose client is drawn into a fight this turn keeps its point, and calls the tow off next turn', () => {
+    const { w, client, tower } = roadside(bowl, TRADER, SCAVENGER);
+    const r = runUntil(w, 10, (x) => topGoal(find(x, tower.id))?.kind === 'tow');
+    const towing = find(r.w, tower.id);
+    const goal = topGoal(towing)!;
+    const before = { ...goal.destination! };
+    const foe = addVehicle(r.w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: client.pos.x + 6, y: client.pos.y });
+    startCombat(r.w, foe, find(r.w, client.id));
+    steerToStranded(r.w, towing, goal);
+    expect(goal.destination).toEqual(before);
+    thinkNpc(r.w, towing);
+    expect(towing.brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
 
   it('a scavenger hitches a stranded trader and tows it to its nearest town for a fee', () => {
     const s = roadside(bowl, TRADER, SCAVENGER);

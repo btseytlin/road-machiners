@@ -3,7 +3,7 @@
 // falls short. Past ratedMass it slows hard. See loadFactor() in src/sim/mass.ts.
 //
 // layout is the inventory grid as a top view, nose on row 0. One string per row. Every character except a space is a cell.
-//   D           deck mount: weapons, scanners and cargo frames all compete for these cells
+//   D           deck mount: weapons, scanners, utilities and cargo frames all compete for these cells
 //   E           engine bay. The engine is drawn in the model's hood hole wherever these cells lie, see engineAnchor()
 //   F, B, L, R  armor mounts on the front, back, left and right edges. Armor works when it lies fully on one of them.
 //   X           built-in cells, each filled by a core part listed in core

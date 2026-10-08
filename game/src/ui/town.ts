@@ -40,7 +40,7 @@ import {
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { moneyLabel } from "./hud-readout";
-import { spareParts } from "../sim/inventory";
+import { canStowPart, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -57,9 +57,9 @@ import { vehicleHasPerk } from "../sim/progress";
 type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
-type StockFilter = "all" | Exclude<PartKind, "core">;
+export type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
+export const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -152,7 +152,7 @@ export class TownScreen {
     const body: Record<Tab, () => HTMLElement> = {
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
-      sellParts: () => this.sellParts(w, def),
+      sellParts: () => this.sellParts(w),
       trucks: () => this.trucks(w),
       contracts: () => this.contracts(w, shopId),
     };
@@ -238,10 +238,12 @@ export class TownScreen {
     const cards = shown.map((p) => {
       const kind = partDef(p.defId).kind;
       const price = partTradePrice(w, me, p, "buy");
+      const buy = this.button(`Buy ${moneyText(price)}`, (x) => buyStockPart(x, p.id), w.player.money < price);
       return partCard({
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(`Buy ${moneyText(price)}`, (x) => buyStockPart(x, p.id), w.player.money < price),
+        // buyStockPart() sends a part that does not fit the grid to garage storage.
+        action: canStowPart(me, p) ? buy : el("div", { class: "buy-stored" }, buy, el("div", { class: "dim" }, "No room: goes to storage")),
         onHover: this.hintMounts(kind),
       });
     });
@@ -276,11 +278,10 @@ export class TownScreen {
     });
   }
 
-  // Spares sell at any shop, stored parts only at a garage, as sellPart() accepts.
-  private sellParts(w: World, def: ShopDef): HTMLElement {
+  // Spare and stored parts sell at any shop, as sellPart() accepts.
+  private sellParts(w: World): HTMLElement {
     const me = playerVehicle(w);
-    const garage = def.kind === "garage";
-    const sellable: PartInstance[] = [...(garage ? w.player.storage : []), ...spareParts(me)];
+    const sellable: PartInstance[] = [...w.player.storage, ...spareParts(me)];
     const cards = sellable.map((p) => {
       const kind = partDef(p.defId).kind;
       return partCard({
@@ -293,10 +294,10 @@ export class TownScreen {
     return el(
       "div",
       {},
-      el("h3", {}, garage ? "Sell spare and stored parts" : "Sell spare parts"),
+      el("h3", {}, "Sell spare and stored parts"),
       cards.length
         ? el("div", { class: "cards" }, ...cards)
-        : el("div", { class: "dim" }, garage ? "No spare or stored parts." : "No spare parts."),
+        : el("div", { class: "dim" }, "No spare or stored parts."),
     );
   }
 
@@ -405,7 +406,7 @@ function bountyPays(w: World): string {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
-const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+export const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   all: "All",
   weapon: "Weapons",
   engine: "Engines",
@@ -413,15 +414,17 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   cargo: "Cargo",
   scanner: "Scanners",
   store: "Stores",
+  utility: "Utilities",
 };
 
-const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
+export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
   store: "supplies",
+  utility: "utility",
 };
 
 const TAB_LABEL: Record<Tab, string> = {

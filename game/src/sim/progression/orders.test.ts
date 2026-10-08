@@ -6,6 +6,7 @@ import { makePart } from '../factory';
 import { freeCells, mountedParts } from '../grid';
 import { shopState } from '../market';
 import { nearestPad } from '../sites';
+import { vehicleStats } from '../stats';
 import { emptyWorld } from '../testkit';
 import type { World } from '../types';
 import { Orders, upgradeGear, type UpgradeStyle } from './orders';
@@ -72,7 +73,8 @@ describe('upgradeGear', () => {
 
   it('with keepRoom, takes no gun that would fill cargo cells, where a fighter would', () => {
     const roomOf = (world: World) => freeCells({ ...playerVehicle(world), items: playerVehicle(world).items.filter((it) => it.kind === 'part') });
-    const offer = (world: World) => shopState(world, 'bowl').stock.push(makePart(world, 'heavyMg', 0));
+    // The gun is the only offer, so no cargo part bought beside it adds room.
+    const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
     const trader = atBowl();
     offer(trader);
     const fighter = structuredClone(trader);
@@ -95,5 +97,48 @@ describe('upgradeGear', () => {
     upgradeGear(o, STYLE);
 
     expect(o.world.player.money).toBe(w.player.money);
+  });
+});
+
+describe('upgradeGear for a fighter', () => {
+  // The heavy machine gun is the only part on offer, so no cargo part adds room.
+  const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
+  const roomOf = (world: World) => freeCells(playerVehicle(world));
+  const speedOf = (world: World) => vehicleStats(world, playerVehicle(world)).maxSpeed;
+
+  it('keeps the free cells it was told to keep for loot, where it would fill them otherwise', () => {
+    const w = atBowl();
+    offer(w);
+    const spent = new Orders(structuredClone(w));
+    const kept = new Orders(structuredClone(w));
+
+    upgradeGear(spent, STYLE);
+    upgradeGear(kept, { ...STYLE, lootRoom: roomOf(w) });
+
+    expect(roomOf(spent.world)).toBeLessThan(roomOf(w));
+    expect(roomOf(kept.world)).toBeGreaterThanOrEqual(roomOf(w));
+  });
+
+  it('takes no part that drops the top speed below the speed it keeps', () => {
+    const w = atBowl();
+    offer(w);
+    const spent = new Orders(structuredClone(w));
+    const kept = new Orders(structuredClone(w));
+
+    upgradeGear(spent, STYLE);
+    upgradeGear(kept, { ...STYLE, minSpeed: speedOf(w) });
+
+    expect(speedOf(spent.world)).toBeLessThan(speedOf(w));
+    expect(speedOf(kept.world)).toBeGreaterThanOrEqual(speedOf(w));
+  });
+
+  it('still buys a part that adds speed, with a speed to keep', () => {
+    const w = atBowl();
+    shopState(w, 'bowl').stock.push(makePart(w, 'turbine', 0));
+    const o = new Orders(w);
+
+    upgradeGear(o, { ...STYLE, minSpeed: speedOf(w) });
+
+    expect(engineIds(o.world)).toEqual(['turbine']);
   });
 });

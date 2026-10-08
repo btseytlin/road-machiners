@@ -97,11 +97,11 @@ describe('planVolley', () => {
     expect(() => projectileOf('laser')).toThrow(/No projectile look/);
   });
 
-  it('explodes only rounds with splash, and guard bullets never', () => {
+  it('explodes only rounds with splash', () => {
     expect(blastRadiusOf('grenadeLauncher')).toBeGreaterThan(0);
     expect(blastRadiusOf('cannon')).toBeGreaterThan(0);
     expect(blastRadiusOf('mg')).toBe(0);
-    expect(blastRadiusOf('guard')).toBe(0);
+    expect(blastRadiusOf('harpoon')).toBe(0);
     expect(() => blastRadiusOf('stockEngine')).toThrow();
   });
 });

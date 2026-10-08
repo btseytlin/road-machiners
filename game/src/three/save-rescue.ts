@@ -6,7 +6,7 @@ import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
-import { CENTS_PER_MONEY_18_19, pooledSkills_9_10 } from './save-migrations';
+import { CENTS_PER_MONEY_26_27, pooledSkills_9_10 } from './save-migrations';
 import { storedSave, tryWriteSave } from './save';
 
 type Json = Record<string, unknown>;
@@ -87,7 +87,7 @@ export function readCarried(raw: unknown): Carried {
   const world = objectOf(objectOf(raw)?.world);
   const player = objectOf(world?.player);
   if (!world || !player) return NO_CARRIED;
-  const scale = moneyScale_18_19(raw);
+  const scale = moneyScale_26_27(raw);
   return {
     seed: isGridInt(world.seed) ? world.seed : null,
     money: centsOf(player.money, scale),
@@ -106,12 +106,12 @@ export function readCarried(raw: unknown): Carried {
   };
 }
 
-// Money in a save from before format 2.19 is in the old unit, a third of an M per fuel unit, as the 18 to 19 step
+// Money in a save from before format 2.27 is in the old unit, a third of an M per fuel unit, as the 26 to 27 step
 // reads it. A save with no format is older still. A newer major format is not old money.
-function moneyScale_18_19(raw: unknown): number {
+function moneyScale_26_27(raw: unknown): number {
   const format = objectOf(objectOf(raw)?.format);
   const part = (key: 'major' | 'minor'): number => (typeof format?.[key] === 'number' ? format[key] : 0);
-  return part('major') * 1000 + part('minor') < 2019 ? CENTS_PER_MONEY_18_19 : 1;
+  return part('major') * 1000 + part('minor') < 2027 ? CENTS_PER_MONEY_26_27 : 1;
 }
 
 function centsOf(value: unknown, scale: number): number | null {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
+import { partDef } from '../data/parts';
 import { DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRICE_FACTOR, PRESSURE_MAX, SHOPS } from '../data/market';
 import { dist } from './vec';
 import { emptyWorld, addVehicle, npcBrain } from './testkit';
@@ -95,6 +96,19 @@ describe('market', () => {
     advanceShop(w1, 'salvage-yard', s1);
     advanceShop(w2, 'salvage-yard', s2);
     expect(s1.stock.map((p) => [p.defId, p.wear])).toEqual(s2.stock.map((p) => [p.defId, p.wear]));
+  });
+
+  it.each(Object.values(SHOPS).filter((shop) => shop.kind === 'garage').map((shop) => shop.id))('shows a utility on at least 80%% of %s shelves across 50 restocks', (shopId) => {
+    const w = emptyWorld();
+    const state = initShop(w, shopId);
+    let withUtility = 0;
+    for (let restock = 0; restock < 50; restock++) {
+      state.restockAt = w.turn;
+      advanceShop(w, shopId, state);
+      if (state.stock.some((p) => partDef(p.defId).kind === 'utility')) withUtility++;
+    }
+
+    expect(withUtility / 50).toBeGreaterThanOrEqual(0.8);
   });
 
   it('takeStockPart removes a part and addStockPart inserts one', () => {

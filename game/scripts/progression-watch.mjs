@@ -50,7 +50,6 @@ function truck(w, id) {
 function describe(w, e) {
   if (e.t === 'say') return `say ${e.speaker}: ${e.text}`;
   if (e.t === 'shot') return `shot ${truck(w, e.shooter)}>${truck(w, e.target)} ${e.weapon} hits ${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}`;
-  if (e.t === 'guardShot') return `guardShot ${e.site}>${e.target} hits ${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}`;
   if (e.t === 'money') return `money ${moneyText(e.amount)} ${e.reason}`;
   if (e.t === 'contract') return `contract ${e.outcome} ${e.contract.kind}`;
   const { t, ...rest } = e;
