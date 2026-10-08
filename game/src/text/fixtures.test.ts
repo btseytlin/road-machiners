@@ -7,7 +7,7 @@ import { addVehicle, npcBrain } from '../sim/testkit';
 import type { CallVars, World } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from '../test/map';
-import FORMAT_2_33 from '../three/save-fixtures/format-2-33.json';
+import FORMAT_2_34 from '../three/save-fixtures/format-2-34.json';
 import { loadWorld, saveOf } from '../three/save';
 import { memoryBackend, SaveSlots } from '../three/save-db';
 import { defaultSetup } from '../sim/settings';
@@ -40,8 +40,8 @@ const ENGLISH_REASON = new Map(Object.entries(GOAL_REASONS_2_19).map(([phrase, i
 const ENGLISH_LINE = new Map(Object.entries(LINES_2_19).map(([text, id]) => [id, text]));
 
 describe('old saves in every language', () => {
-  it('the 2.33 fixture migrates and every goal, call, contract and title reads in both languages', () => {
-    const migrated = MIGRATIONS[33](FORMAT_2_33) as unknown as World;
+  it('the 2.34 fixture migrates and every goal, call, contract and title reads in both languages', () => {
+    const migrated = MIGRATIONS[34](FORMAT_2_34) as unknown as World;
     const world = { ...migrated, player: { ...migrated.player, vehicleId: 'player' } } as World;
     const words = renderAll(world);
     expect(words.length).toBeGreaterThan(10);
