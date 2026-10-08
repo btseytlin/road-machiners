@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentUsage, LedgerLine } from './ledger';
+import type { AgentUsage, JobOutcome, LedgerLine } from './ledger';
 import type { JobStage } from './types';
 import { formatNumbers, wasteNumbers } from './waste';
 
@@ -7,7 +7,7 @@ const FROM = new Date('2026-10-01T00:00:00Z');
 const TO = new Date('2026-10-08T00:00:00Z');
 
 let next = 0;
-function job(stage: JobStage, issue: number | null, startedAt: string, endedAt: string, agents: AgentUsage[] = [], outcome: 'done' | 'failed' = 'done'): LedgerLine {
+function job(stage: JobStage, issue: number | null, startedAt: string, endedAt: string, agents: AgentUsage[] = [], outcome: JobOutcome = 'done'): LedgerLine {
   next += 1;
   return { kind: 'job', id: `j${next}`, stage, issue, startedAt, endedAt, outcome, agents };
 }
@@ -31,6 +31,11 @@ const LEDGER: LedgerLine[] = [
 ];
 
 describe('wasteNumbers', () => {
+  it('counts a held job as no failure, since its stage continues', () => {
+    const held = wasteNumbers([job('implement', 5, '2026-10-02T10:00:00Z', '2026-10-02T11:00:00Z', [opus(1, 60)], 'held')], FROM, TO);
+    expect(held.stages[0]).toMatchObject({ stage: 'implement', runs: 1, failed: 0 });
+  });
+
   const n = wasteNumbers(LEDGER, FROM, TO);
 
   it('sums cost and agent minutes per stage and per model inside the window', () => {

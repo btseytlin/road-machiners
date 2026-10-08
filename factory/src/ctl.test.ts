@@ -20,6 +20,9 @@ vi.mock('./control', async (importOriginal) => ({
     return path;
   },
 }));
+// The repair has its own tests with real git. Here it records the order it got.
+const repairs: unknown[] = [];
+vi.mock('./repair-clone', () => ({ repairClone: async (_ctx: unknown, order: unknown) => { repairs.push(order); return ['repaired']; } }));
 const { runCtl } = await import('./ctl');
 
 let out: string[];
@@ -76,6 +79,8 @@ describe('write commands', () => {
     [['drop', 'approval', '5'], { action: 'drop', queue: 'approval', id: 5 }],
     [['drop', 'ship'], { action: 'drop', queue: 'ship', id: null }],
     [['merge-change', '9'], { action: 'merge-change', id: 9 }],
+    [['pause-card', '5'], { action: 'hold', issue: 5 }],
+    [['resume-card', '5'], { action: 'unhold', issue: 5 }],
   ])('%j writes %j', async (args, action) => {
     await run(fake(), ...args, '--by', 'ann', '--reason', 'because');
     expect(stored()).toEqual({ kind: 'control', ...action, by: 'ann', reason: 'because' });
@@ -154,9 +159,37 @@ describe('read commands', () => {
     await expect(run(f, 'card', '99')).rejects.toThrow('No card');
   });
 
+  it('shows a hold in cards, card, status and audit', async () => {
+    const f = board();
+    f.ctx.cfg.publicUrl = 'https://play.test';
+    f.ctx.fetch = (async () => new Response('{"jobs":[]}')) as unknown as typeof fetch;
+    const hold = { by: 'Ann', reason: 'release tasks first', at: '2026-01-01T00:00:00Z', stage: 'design' as const };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { '77': 6 }, held: { '5': hold, '9': hold } });
+    await run(f, 'cards');
+    expect(out).toContain('#5 design Design [hotfix] held by Ann: release tasks first');
+    out.length = 0;
+    await run(f, 'card', '5');
+    expect(out).toContain('held: by Ann since 2026-01-01T00:00:00Z, stopped design: release tasks first');
+    out.length = 0;
+    await run(f, 'status');
+    expect(JSON.parse(out.join('\n')).held).toEqual([{ issue: 5, ...hold }, { issue: 9, ...hold }]);
+    out.length = 0;
+    await run(f, 'audit');
+    expect(out).toEqual(['#9 held by Ann (release tasks first) but not on the board']);
+  });
+
+  it('audit flags a job that runs on a held card, though it skips the card drift of a card with a job', async () => {
+    const f = board();
+    const hold = { by: 'Ann', reason: 'r', at: 'a', stage: null };
+    const job = { id: 'j', stage: 'design' as const, issue: 5, pid: 1, startedAt: 'a', log: 'l' };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { '77': 6 }, held: { '5': hold }, jobs: [job] });
+    await run(f, 'audit');
+    expect(out).toEqual(['#5 held by Ann (r) but a design job is running']);
+  });
+
   it('help lists every command', async () => {
     await run(fake(), 'help');
-    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'retry N', 'pause', 'resume']) {
+    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume', 'repair-clone N']) {
       expect(out.some((line) => line.startsWith(name))).toBe(true);
     }
   });
@@ -228,9 +261,31 @@ describe('immediate commands', () => {
     expect(existsSync(join(ROOT, 'paused'))).toBe(false);
   });
 
+  it('repair-clone passes the card, who, why and --backup-merge to the repair and prints its lines', async () => {
+    repairs.length = 0;
+    await run(fake(), 'repair-clone', '5', '--by', 'hermes', '--reason', 'merge left it dirty');
+    await run(fake(), 'repair-clone', '6', '--backup-merge', '--reason', 'open merge', '--by', 'ann');
+    expect(repairs).toEqual([
+      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false },
+      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true },
+    ]);
+    expect(out).toContain('repaired');
+    expect(inbox()).toEqual([]);
+  });
+
+  it('repair-clone refuses a missing --by or --reason, an unknown actor and stray arguments before it repairs', async () => {
+    repairs.length = 0;
+    await expect(run(fake(), 'repair-clone', '5', '--reason', 'r')).rejects.toThrow('Missing --by');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'hermes')).rejects.toThrow('Missing --reason');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'bob', '--reason', 'r')).rejects.toThrow('unknown actor');
+    await expect(run(fake(), 'repair-clone', '5', '6', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('Unexpected "6"');
+    await expect(run(fake(), 'repair-clone', 'x', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('not an issue number');
+    expect(repairs).toEqual([]);
+  });
+
   it('resume keeps a pause written by hand', async () => {
     writeFileSync(join(ROOT, 'paused'), 'Hermes fixing #5\npid: 12\n');
-    await expect(run(fake(), 'resume')).rejects.toThrow('This pause was written by hand or by a member. Ask the committee before removing it.');
+    await expect(run(fake(), 'resume')).rejects.toThrow('This pause was written by hand or by a member. Once its reason is gone, delete the pause file.');
     expect(existsSync(join(ROOT, 'paused'))).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 # Factory dashboard
 
-A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. The code is in `src/dashboard/`, and the page in this folder.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
@@ -8,7 +8,7 @@ From `factory/`:
 
 1. Run `npm ci` and copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
 2. Set `DASHBOARD_PORT`, or `DASHBOARD_SOCKET` for an absolute socket path.
-3. Set `DASHBOARD_HIDE_TELEGRAM=1` and leave `DASHBOARD_CHANNEL_URL` empty, since the factory has no separate public channel yet.
+3. Leave `DASHBOARD_CHANNEL_URL` empty to get the link of `FACTORY_PUBLIC_CHANNEL` from the bot, or set `DASHBOARD_HIDE_TELEGRAM=1` to show no channel.
 4. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads need `gh` logged in.
 
 ## What the numbers mean
@@ -16,7 +16,7 @@ From `factory/`:
 - Job outcomes, durations, costs and tokens come from the factory ledger. Older lines have cost but no tokens, and a missing count shows as unavailable, never as zero.
 - Review rounds count under Verify, since their ledger job is Verify.
 - The 24-hour, 7-day and 30-day ranges are rolling UTC windows. Hermes chat, agent runs outside the factory and hosting costs are not counted.
-- Waiting time sums the intervals a task spent not running. Gaps longer than three ticks are left out and counted.
+- Cards waiting is the average number of cards held back at once over the measured clock time. A card that waits behind its own running job does not count. Its tooltip and the stage bars show summed card-time, so 20 cards waiting for one hour count as 20 hours. Worker time sums the same way across parallel jobs. Gaps longer than three ticks are left out of both and counted.
 - Runner heartbeats show a job is alive. Agent activity reports are labelled apart and never prove a check passed. Scheduler explanations come from job selection.
 - CPU, container CPU, memory, GPU and disk readings are whole-host percentages. A reading that fails or is not supported shows as unavailable.
 - A pause shows as an amber banner from the pause file. Raw pause notes never leave the server.

@@ -50,6 +50,19 @@ it('measures observed waits once per issue, not once per blocking reason', async
   expect(summary.waitingMs).toBe(60000);
   expect(summary.waitingStages).toEqual([{ stage: 'design', workerMs: 60000 }]);
 });
+it('sums waiting card-time per card and measures the clock time once', async () => {
+  const home = createHome();
+  const decisions = [{ stage: 'verify' as const, issue: 1, reasons: ['queue-full' as const] }, { stage: 'verify' as const, issue: 2, reasons: ['queue-full' as const] }, { stage: 'verify' as const, issue: 3, reasons: ['issue-running' as const] }];
+  const report = { picks: [], decisions, nextCapAt: null, release: { reason: 'uncut' as const, issues: [] } };
+  recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report, counts: {} }, new Date('2026-10-04T10:00:00Z'));
+  recordObservation(home, 'scheduler', { type: 'scheduler', status: 'ready', report: { ...report, decisions: [] }, counts: {} }, new Date('2026-10-04T10:01:00Z'));
+  const history = new DashboardHistory(home, 60000);
+  const now = new Date('2026-10-04T10:02:00Z');
+  await history.refresh(now);
+  const summary = history.summarize(now, 1);
+  expect(summary.waitingMs).toBe(120000);
+  expect(summary.waitingSpanMs).toBe(120000);
+});
 it('keeps unrecorded waiting time unavailable', async () => {
   const home = createHome();
   const history = new DashboardHistory(home, 60000);

@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { must, realRun } from './exec';
 import { hostRepo } from './repo';
-import { MergeConflictError, type FactoryConfig, type Run } from './types';
+import { MergeConflictError, RevertConflictError, type FactoryConfig, type Run } from './types';
 
 // Each test runs dozens of real git commands against a local stand-in for GitHub.
 vi.setConfig({ testTimeout: 30_000 });
@@ -302,6 +302,19 @@ describe('work clones', () => {
     expect(readFileSync(join(broken, 'f.txt'), 'utf8')).toBe('local work\n');
   });
 
+  it('clones the exact issue branch into a new folder, and refuses a missing branch or a used folder', async () => {
+    const { home, repo, commit, head } = await setup();
+    await commit('factory/issue-14', 'f.txt', 'fourteen\n');
+    await repo.fetch();
+    const work = join(home, 'fresh-14');
+    expect(await repo.cloneBranch('factory/issue-14', work)).toBe(await head('factory/issue-14'));
+    expect((await git(work, 'symbolic-ref', '--short', 'HEAD')).trim()).toBe('factory/issue-14');
+    expect(await git(work, 'check-ignore', '.factory-tasks/x.md')).toContain('.factory-tasks');
+    await expect(repo.cloneBranch('factory/issue-14', work)).rejects.toThrow('exists already');
+    await expect(repo.cloneBranch('factory/issue-15', join(home, 'fresh-15'))).rejects.toThrow('not in the host clone');
+    expect(existsSync(join(home, 'fresh-15'))).toBe(false);
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');
@@ -385,5 +398,100 @@ describe('work clones', () => {
     const { repo, work } = await branchMoved('g.txt', 'g.txt');
     expect((await repo.mergeBranchIntoWork(work, 'factory/issue-12')).conflicts).toEqual(['g.txt']);
     expect(readFileSync(join(work, 'g.txt'), 'utf8')).toContain('<<<<<<<');
+  });
+});
+
+describe('resolving a conflict', () => {
+  const agent = async (dir: string, file: string, text: string) => {
+    writeFileSync(join(dir, file), text);
+    await must(await realRun('git', [...ID, 'add', file], { cwd: dir }), 'git add');
+    await must(await realRun('git', [...ID, 'commit', '--no-edit'], { cwd: dir }), 'git commit');
+  };
+  const mainIntoDev = { branch: 'main', into: 'dev', message: 'Merge main into dev' };
+
+  it('pushes a merge that an agent finished, and keeps both sides', async () => {
+    const { home, repo, commit, show, hub } = await setup();
+    await commit('main', 'f.txt', 'main\n', 'main');
+    await commit('main', 'g.txt', 'main g\n', 'main');
+    await commit('dev', 'f.txt', 'dev\n');
+    await repo.fetch();
+    const error = await repo.merge([mainIntoDev]).catch((e: unknown) => e) as MergeConflictError;
+    expect(error).toBeInstanceOf(MergeConflictError);
+    const dir = join(home, 'work', 'merge-dev');
+    await repo.openConflict(dir, error);
+    await agent(dir, 'f.txt', 'both\n');
+    const { resolution, diff } = await repo.closeConflict(dir, error);
+    expect(diff).toContain('+both');
+    expect(diff).not.toContain('main g');
+    await repo.merge([mainIntoDev], [resolution]);
+    expect(await show('dev', 'f.txt')).toBe('both\n');
+    expect(await show('dev', 'g.txt')).toBe('main g\n');
+    expect((await hub('log', '-1', '--format=%s', 'dev')).trim()).toBe('Merge main into dev');
+  });
+
+  it('merges again when the target moved on GitHub after the agent began, and asks again only for a new conflict', async () => {
+    const { home, repo, commit, show } = await setup();
+    await commit('main', 'f.txt', 'main\n', 'main');
+    await commit('dev', 'f.txt', 'dev\n');
+    await repo.fetch();
+    const error = await repo.merge([mainIntoDev]).catch((e: unknown) => e) as MergeConflictError;
+    const dir = join(home, 'work', 'merge-dev');
+    await repo.openConflict(dir, error);
+    await agent(dir, 'f.txt', 'both\n');
+    const { resolution } = await repo.closeConflict(dir, error);
+    await commit('dev', 'g.txt', 'moved\n');
+    await repo.fetch();
+    const again = await repo.merge([mainIntoDev], [resolution]).catch((e: unknown) => e);
+    expect(again).toBeInstanceOf(MergeConflictError);
+    expect(await show('dev', 'g.txt')).toBe('moved\n');
+    expect(await show('dev', 'f.txt')).toBe('dev\n');
+  });
+
+  it('rejects a merge the agent left open, and a commit that drops a side', async () => {
+    const { home, repo, commit, host } = await setup();
+    await commit('main', 'f.txt', 'main\n', 'main');
+    await commit('dev', 'f.txt', 'dev\n');
+    await repo.fetch();
+    const error = await repo.merge([mainIntoDev]).catch((e: unknown) => e) as MergeConflictError;
+    const dir = join(home, 'work', 'merge-dev');
+    await repo.openConflict(dir, error);
+    await expect(repo.closeConflict(dir, error)).rejects.toThrow('unfinished');
+    await must(await realRun('git', [...ID, 'merge', '--abort'], { cwd: dir }), 'git merge --abort');
+    writeFileSync(join(dir, 'f.txt'), 'plain\n');
+    await must(await realRun('git', [...ID, 'commit', '-am', 'plain'], { cwd: dir }), 'git commit');
+    await expect(repo.closeConflict(dir, error)).rejects.toThrow('does not hold');
+    expect((await host('worktree', 'list')).trim().split('\n')).toHaveLength(1);
+  });
+
+  it('resolves a step that merges a commit no branch names yet, in one push with the steps before', async () => {
+    const { home, repo, commit, show, head } = await setup();
+    await commit('factory/issue-6', 'g.txt', 'fix\n', 'main');
+    await commit('dev', 'g.txt', 'dev\n');
+    await repo.fetch();
+    const steps = [{ branch: 'factory/issue-6', into: 'main', message: 'Hotfix #6' }, mainIntoDev];
+    const error = await repo.merge(steps).catch((e: unknown) => e) as MergeConflictError;
+    expect(error.source).not.toBe(await head('main'));
+    const dir = join(home, 'work', 'merge-dev');
+    await repo.openConflict(dir, error);
+    await agent(dir, 'g.txt', 'both\n');
+    const { resolution } = await repo.closeConflict(dir, error);
+    await repo.merge(steps, [...error.done, resolution]);
+    expect(await show('main', 'g.txt')).toBe('fix\n');
+    expect(await show('dev', 'g.txt')).toBe('both\n');
+  });
+
+  it('pushes a revert that an agent finished', async () => {
+    const { home, repo, feature, show } = await setup();
+    await feature(3, 'f.txt', 'three\n');
+    await feature(4, 'f.txt', 'four\n');
+    const error = await repo.revertIssueMerge(3, 'dev').catch((e: unknown) => e) as RevertConflictError;
+    expect(error).toBeInstanceOf(RevertConflictError);
+    const dir = join(home, 'work', 'merge-dev');
+    await repo.openConflict(dir, error);
+    await agent(dir, 'f.txt', 'resolved\n');
+    const { resolution } = await repo.closeConflict(dir, error);
+    expect(await repo.revertIssueMerge(3, 'dev', [resolution])).toBe(true);
+    expect(await show('dev', 'f.txt')).toBe('resolved\n');
+    expect(await repo.revertIssueMerge(3, 'dev')).toBe(false);
   });
 });

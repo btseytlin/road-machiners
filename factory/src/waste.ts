@@ -1,4 +1,4 @@
-import { lineTime, type AgentUsage, type LedgerLine } from './ledger';
+import { isFailedOutcome, lineTime, type AgentUsage, type LedgerLine } from './ledger';
 import { QUEUE_OF, type JobStage, type Queue, type Route } from './types';
 
 // Every number the weekly waste review shows. The agent explains them and never computes its own.
@@ -47,7 +47,7 @@ function group<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
 
 function stageNumbers(jobs: JobLine[]): StageNumbers[] {
   return [...group(jobs, (line) => line.stage)].map(([stage, lines]) => ({
-    stage, runs: lines.length, failed: lines.filter((line) => line.outcome !== 'done').length,
+    stage, runs: lines.length, failed: lines.filter((line) => isFailedOutcome(line.outcome)).length,
     wallMinutes: lines.reduce((sum, line) => sum + minutesBetween(line.startedAt, line.endedAt), 0),
     agentMinutes: Math.round(lines.flatMap((line) => line.agents).reduce((sum, agent) => sum + agent.minutes, 0)),
     costUsd: cost(lines.flatMap((line) => line.agents)),

@@ -8,7 +8,7 @@ import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, OUT_DIR, isCleanupTask, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, docsOnly, playtestCommand, workDir } from './common';
 import { setPhase } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
@@ -46,7 +46,7 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-// The build alone, for a card a control move put in Approval. No test, typecheck or playtest runs.
+// The build alone, for a card a control move put in Approval and for a docs change. No test, typecheck or playtest runs.
 const buildScript = `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -88,7 +88,12 @@ function checksPhase(ctx: Ctx, issue: number): TestPhase {
 }
 
 // The post phase builds once. A failed build throws with the phase kept, so a retry builds again.
+// A docs change builds only, and a failed build gets the fix round like a failed check.
 async function checkOrBuild(ctx: Ctx, issue: number, phase: TestPhase, base: string, build: string): Promise<string | null> {
+  if (phase !== 'post' && await docsOnly(ctx, issue, base)) {
+    ctx.log('checks', issue, 'the branch changes docs only, so it builds with no tests, typecheck or playtest');
+    return runScript(ctx, issue, base, build, buildScript);
+  }
   if (phase !== 'post') return checkPatiently(ctx, issue, base, build);
   const failure = await runScript(ctx, issue, base, build, buildScript);
   if (failure !== null) throw new Error(`The build failed, no factory checks ran.\n${failure}`);

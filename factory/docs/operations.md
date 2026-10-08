@@ -8,7 +8,7 @@ Each job is its own process, started by the tick. [process.md](process.md#tick-a
 
 Jobs share the host clone and the state file. Each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.
 
-GitHub holds every branch. The host clone `$FACTORY_HOME/repo` keeps GitHub's branches as `origin/*`, and each fetch deletes any local branch. A merge or a revert runs in a throwaway worktree and pushes at once. A conflict or a rejected push leaves GitHub as it was, so a retry starts from GitHub. An agent's work reaches GitHub only after the factory checks its diff.
+GitHub holds every branch. The host clone `$FACTORY_HOME/repo` keeps GitHub's branches as `origin/*`, and each fetch deletes any local branch. A merge or a revert runs in a throwaway worktree and pushes at once. A conflict or a rejected push leaves GitHub as it was, so a retry starts from GitHub. A conflict between branches goes to an agent in a work clone named `$FACTORY_HOME/work/merge-<branch>`, and its commit reaches GitHub only after the factory checks it. An agent's work reaches GitHub only after the factory checks its diff.
 
 A work clone with no commit checked out, like one a full disk cut short, holds no work. The next job deletes it and clones again, and its log names the folder.
 
@@ -40,6 +40,8 @@ One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 h
 
 A job whose process dies within its time limit resumes once. This covers a crash, a memory kill or a reboot. Each issue keeps its agents' Claude Code sessions in `$FACTORY_HOME/sessions/issue-N`. The tick removes the dead job's containers, puts the issue in `interrupted` and frees its cap slot. The next tick starts the same stage, and each agent round continues its session with `--resume`. Merges, checks and publishing run again. A second death or a timeout fails the job. A dead branch job always fails, since a restart could repeat a half-done branch move. A job's end clears the sessions and the mark.
 
+`factory pause-card N` uses the same path. It kills the card's job, puts the issue in `interrupted` and frees its cap slot, and the card waits until `resume-card N`. The continued job counts as resumed once, so its death fails it.
+
 ## Cleanup and health
 
 Every tick, after it checks the running jobs:
@@ -51,7 +53,27 @@ Every tick, after it checks the running jobs:
 
 Every tick writes `$FACTORY_HOME/health` with its time, the free disk and the available memory, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Memory under `FACTORY_MIN_AVAILABLE_GB` blocks nothing, and a host with no `/proc/meminfo` records none.
 
-When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`, so a merge made outside the factory reaches the dev link too. A failed build records its commit in `devFailed`, and the tick skips it until `dev` moves again.
+When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`, so a merge made outside the factory reaches the dev link too. A failed build records its commit in `devFailed` and what broke in `devError`, and the tick skips it until `dev` moves again. The incident watch shows both to Hermes, which fixes `dev` or reverts the merge that broke it.
+
+## Repairing a work clone
+
+A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit, so it fails again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
+
+1. Pause the factory with `factory pause <reason>`, and wait until `factory jobs` prints `none`.
+2. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.
+3. Check the new clone, run `factory resume`, then `factory retry N`.
+
+The command acts at once. It refuses, and changes nothing in `work/`, when:
+
+- the factory is not paused, any job runs, or the card has an interrupted or held job, which continues in its clone;
+- `--by` is no member and not `hermes`;
+- `work/issue-N` holds no clone with a commit, since the next job clones that again;
+- the clone has an open operation or conflicts and no `--backup-merge`;
+- the host clone, freshly fetched, has no `factory/issue-N`.
+
+A repair fetches the host clone, then clones GitHub's `factory/issue-N` exactly, with fresh `origin/*` refs like `dev`. It moves the whole old clone, with its tracked, untracked and ignored files, to `$FACTORY_HOME/clone-backups/issue-N-<time>/clone`. `repair.json` beside it records who, why, the old HEAD and branch, the open operation, the conflicted files, the commits on no GitHub branch and the outcome. `status.txt` holds the old `git status`. Only the `.factory`, `.factory-tasks` and `.factory-media` folders are copied into the new clone. The repair passes only when the new clone's `git status` is clean and its HEAD is the branch head.
+
+A failure after the move keeps the backup where it is, moves the half-made clone to `failed-fresh` in the backup and leaves `work/issue-N` free. The error prints the `mv` that restores the old clone. Nothing deletes a backup. The tick sweep reads only `work/`, so Hermes deletes a backup once the card is past the trouble. The stuck label and the failures stay, so only `retry` sends the card on.
 
 ## Failures and Hermes
 
@@ -61,7 +83,7 @@ A failed or timed-out job labels its issue `factory-stuck` and records the failu
 
 An agent run that ends on the Claude weekly usage limit is the exception. The factory writes `Hermes: Claude weekly usage limit; <message>` to `$FACTORY_HOME/paused`, unless a pause is already there. The job still records its failure, but the card takes no label. Hermes resumes the factory after the reset, and the card runs its stage again.
 
-Hermes manages the factory. Its incident watch wakes it on a stuck issue, a failed job, a tick crash in `lastTickError`, a failed `/dev/` build, a failed factory update, low disk, low memory, no tick for 20 minutes or a pause older than an hour. It also wakes on each `drift: <line>`, which is one line of `factory audit`, so Hermes fixes stale state before it blocks a card. Each call to GitHub and to `factory audit` has a time limit. A source that fails or times out repeats its last answer, so no known incident closes, and after 10 minutes it adds a `<source> failed since <time>` line. A failed or killed watch run stays in Hermes's cron log and never reaches the chat. Only Hermes's own messages do. Hermes reads the logs, the state and the chat, then fixes the incident. It asks the committee only about game design or taste, or when it tried and could not fix it. [hermes/SOUL.md](../hermes/SOUL.md) holds its rules.
+Hermes manages the factory. Its incident watch wakes it on a stuck issue, a failed job, a tick crash in `lastTickError`, a failed `/dev/` build, a failed factory update, low disk, low memory, no tick for 20 minutes or a pause older than an hour. It also wakes on each `drift: <line>`, which is one line of `factory audit`, so Hermes fixes stale state before it blocks a card. Each call to GitHub and to `factory audit` has a time limit. A source that fails or times out repeats its last answer, so no known incident closes, and after 10 minutes it adds a `<source> failed since <time>` line. A failed or killed watch run stays in Hermes's cron log and never reaches the chat. Only Hermes's own messages do. Hermes reads the logs, the state and the chat, then fixes the incident. No failure waits for a person. When a fix fails, Hermes tries another approach, and a card that keeps failing goes back to Design with the findings. Hermes reports what it did and asks the committee only about product decisions and game design or taste. Hermes may push a merge to `dev` after the factory checks pass. [hermes/SOUL.md](../hermes/SOUL.md) holds its rules.
 
 Hermes uses the `factory` CLI for every look at the factory and every change. Read commands print the state and change nothing. Write commands become inbox commands, and the next tick applies each one before it picks jobs. A write that cannot apply changes nothing and becomes a failure that names the reason. Each write names who ordered it and why, on the issue and in the ledger. Only a member's order runs `merge` or `move N harden` of a card the committee has not approved, `ship` and `merge-change`. `factory help` lists every command. [state.md](state.md) lists the commands.
 
@@ -77,7 +99,7 @@ When a member acts on a post by button or reply, the factory adds a status line 
 
 ## Ledger and waste review
 
-Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. A finished agent run with no `result` event fails its job.
+Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out, and `pause-card` the line of the job it held, with the outcome `held`. The dashboard and the waste review count a held job as neither finished nor failed, and its spend as no waste, since its stage continues in the same sessions. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. A finished agent run with no `result` event fails its job.
 
 A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died or timed out as wasted.
 
@@ -96,6 +118,16 @@ Every card move adds a card line: the issue, the new column, the time and a step
 A triage `unclear` verdict moves nothing, so its wait for the author stays in Triage. A move by hand on GitHub writes no line.
 
 Every `FACTORY_WASTE_REVIEW_DAYS`, the tick starts a waste review in the triage queue. `wasteNumbers()` in `src/waste.ts` computes the cost per stage and model, the wait per queue, the stages that ran more than once on one issue, the routes and the most expensive issues. It computes the same numbers for the period before, so a jump shows. A Sonnet agent reads those numbers and the records, and writes `.factory/brief.md` with one bottleneck and one change request. The job records them in a closed issue labeled `factory-review` and writes `$FACTORY_HOME/review-pending`. That file is an incident line for Hermes. Hermes checks the review and posts to the committee only when something matters, then deletes the file. A member queues the change by asking Hermes. The first review waits one full period after the deploy.
+
+## Error reports
+
+The release, dev and candidate builds post each new game error to `/errors` on the public site. Card previews post nothing, since an error there belongs to the card's own review. The build that publishes a reporting build moves its source maps to `$FACTORY_HOME/sourcemaps/<commit>/` first, so no map goes public. Dev and candidate maps go after `FACTORY_ERROR_MAP_DAYS`, and release maps stay.
+
+The error service is its own systemd unit, `roam-factory-errors`, with its log in `logs/errors.log`. `src/error-reports/` holds its code. It refuses a report from another origin, one over the size caps, one past `FACTORY_ERROR_IP_PER_HOUR` for its address, one from a commit it has no maps for, and one whose stack maps to no game source. Each refusal counts by reason in `$FACTORY_HOME/error-reports/store.json`.
+
+A report it takes gets a fingerprint from the error and the top game frames. The issue body holds the fingerprint, so the service finds the issue on GitHub even with a lost store. A new fingerprint opens an issue labeled `bug` and `error-report`, at most `FACTORY_ERROR_DAILY_ISSUES` a day. A report from a commit the fingerprint has not seen comments on its open issue, and reopens a completed one when the build was published after the close. A `not planned` close stays closed. The service keeps one report file per fingerprint and commit, up to `FACTORY_ERROR_DISK_MB`. Agent stages of the issue get those files read-only at `/error-reports/`, and `npm run error:replay` in `game/` reruns their turn.
+
+A daily cap, the disk cap or an address past its limit writes a line to `$FACTORY_HOME/error-reports/alert`. Hermes's incident watch prints it, and Hermes deletes the file once handled.
 
 ## Deploying the factory
 

@@ -42,7 +42,7 @@ For a new location, look in the issue body and in every comment for a reference 
 A usable reference image is one in the image list at the end of this prompt that is not marked NOT AVAILABLE.
 A verbal description or a link you cannot open is not a reference image.
 - No usable image: the verdict is `unclear`. Ask one short question that asks the author to upload a reference image of the location on the GitHub issue.
-- An image the list marks NOT AVAILABLE: the verdict is `unclear`. Ask one short question that asks the author to upload it again. Never go on with the text alone.
+- An image the list marks NOT AVAILABLE: the verdict is `unclear`. Ask one short question that asks the author to upload it again. Never go on with the text alone, unless the author already got this question and did not answer.
 - A usable image exists, also from an earlier answer: never ask for one again. Score the issue with the normal rubric.
 Never pick `wont-do` only because the image is missing.
 This question counts toward the cap of three questions.
@@ -51,6 +51,11 @@ The author may have answered earlier questions.
 Look in the comments under the heading "Questions from the factory".
 Use those answers.
 Never ask again what they answered.
+A set of questions with no reply after it means the author did not answer in time.
+Never ask those questions again, and never pick `unclear` for them.
+Pick `ready` or `wont-do` on the most sensible reading of the request.
+The reason names each open question and the reading you took, so design can write it down as an assumption.
+This holds for the visual-reference gate too.
 
 For `unclear`, ask at most three questions.
 Each question is one line the author can answer in one line.
@@ -102,7 +107,8 @@ Judge by these checks, never by keywords in the text.
 Read the code the issue touches to answer them.
 
 - `trivial`: all of these hold. The change touches one file or one small, local piece of logic. It needs no new state, save data or cross-system rule. The result is a single visible behavior, such as a value, a text, a one-condition bug or a simple asset.
-- `hard`: any of these holds. The change spans three or more interacting systems, such as combat, pathing, saves, the world map and the UI. Or it changes shared state, a data format or a rule that other code depends on. Or the bug has no known cause and needs tracing across systems. Or the design has real tradeoffs between several workable approaches.
+- `hard`: either of these holds. The bug has no known cause and needs tracing across systems. Or the change alters a save format, or shared data that many systems read.
+- A change that only spans several systems, such as combat, pathing, the world map and the UI, is `intermediate`. Design runs on Opus and its plan settles the hard choices.
 - `intermediate`: everything else, and any case you cannot decide. When in doubt, pick `intermediate`.
 
 `complexityReason` is one short sentence that names the checks you applied, such as the files or systems you found.

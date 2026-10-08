@@ -1,6 +1,6 @@
 const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', harden: 'Harden', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
 const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit','needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
+const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit','needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval', held: 'Held until resumed' };
 const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
 const pages = new Map();
@@ -24,6 +24,11 @@ function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return '—';
   const minutes = Math.floor(Math.max(0, ms) / 60000);
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+// The average number of cards waiting at once, over the clock time the scheduler was measured.
+function formatAverageWaiting(summary) {
+  if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
+  return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
 }
 function formatAge(at) {
   if (!at) return 'unknown';
@@ -321,7 +326,7 @@ function renderCounters(summary) {
   setCounter('usage-cost', formatCost(summary.cost), summary.cost);
   setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
   setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
-  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
+  setCounter('usage-wait', formatAverageWaiting(summary), summary.waitingMs === null ? null : `${formatDuration(summary.waitingMs)} summed card-time`);
   setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
 }
 function renderTokenCounters(tokens) {

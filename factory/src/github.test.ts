@@ -177,4 +177,24 @@ describe('ghClient', () => {
     expect(calls.map((args) => args.slice(0, 3).join(' '))).toEqual(['label create release-task', 'label create maintenance', 'issue create -R']);
     expect(calls[2]).toEqual(['issue', 'create', '-R', 'o/r', '--title', 'T', '--body', 'B', '--label', 'release-task', '--label', 'maintenance']);
   });
+
+  it('finds the oldest error-report issue whose body holds the exact fingerprint line, open or closed', async () => {
+    const calls: string[][] = [];
+    const found = [
+      { number: 9, state: 'OPEN', stateReason: '', closedAt: '', body: 'mentions 0123456789abcdef in a comment' },
+      { number: 7, state: 'CLOSED', stateReason: 'COMPLETED', closedAt: '2026-10-03T00:00:00Z', body: 'x\nError fingerprint: 0123456789abcdef' },
+      { number: 8, state: 'OPEN', stateReason: '', closedAt: '', body: 'Error fingerprint: 0123456789abcdef' },
+    ];
+    const run: Run = async (_cmd, args) => { calls.push(args); return ok(JSON.stringify(found)); };
+    const client = ghClient(run, CFG);
+    expect(await client.findByFingerprint('0123456789abcdef')).toEqual({ number: 7, state: 'CLOSED', stateReason: 'COMPLETED', closedAt: '2026-10-03T00:00:00Z' });
+    expect(calls[0]).toEqual(['issue', 'list', '-R', 'o/r', '--state', 'all', '--label', 'error-report', '--search', '"0123456789abcdef" in:body', '--json', 'number,state,stateReason,closedAt,body']);
+    const none: Run = async () => ok(JSON.stringify([found[0]]));
+    expect(await ghClient(none, CFG).findByFingerprint('0123456789abcdef')).toBeNull();
+  });
+
+  it('reads an open error-report issue with empty close fields as null', async () => {
+    const run: Run = async () => ok(JSON.stringify({ number: 8, state: 'OPEN', stateReason: '', closedAt: '' }));
+    expect(await ghClient(run, CFG).errorIssue(8)).toEqual({ number: 8, state: 'OPEN', stateReason: null, closedAt: null });
+  });
 });

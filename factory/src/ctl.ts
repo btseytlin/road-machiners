@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from 'node:path';
 import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, type DropQueue } from './control';
 import { pauseFile, pausedReason } from './pause';
-import { MOVE_TARGETS, cardDrift, cardPosition, releaseDrift, runningJobs, type MoveTarget } from './position';
+import { repairClone } from './repair-clone';
+import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
-import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type PlaytestState, type ReleaseState } from './types';
+import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
 
 // The dashboard refuses a browser agent, so the CLI uses the same agent Hermes' status tool uses.
 const SNAPSHOT_AGENT = 'curl/8.0';
@@ -34,6 +35,7 @@ const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> =
   retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, gives the playtest its runs back and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
+  'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs a pause and no running job. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
 };
 
 const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
@@ -44,6 +46,8 @@ const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
   remove: { usage: 'remove N', help: 'take a feature out of the release', build: ([n]) => ({ action: 'remove', issue: number(n) }) },
   drop: { usage: `drop <${DROP_QUEUES.join('|')}> <id>`, help: 'drop one queued entry', build: ([queue, id]) => dropAction(queue, id) },
   'merge-change': { usage: 'merge-change <id>', help: 'merge a factory change PR into main', build: ([id]) => ({ action: 'merge-change', id: number(id) }) },
+  'pause-card': { usage: 'pause-card N', help: "hold a card: stop its job, keep its work clone and agent sessions, and start no job on it until resume-card", build: ([n]) => ({ action: 'hold', issue: number(n) }) },
+  'resume-card': { usage: 'resume-card N', help: 'lift the hold of a card, so its stage continues in the stopped sessions', build: ([n]) => ({ action: 'unhold', issue: number(n) }) },
 };
 
 export async function runCtl(ctx: Ctx, args: string[]): Promise<void> {
@@ -99,16 +103,31 @@ function writeCommand(ctx: Ctx, name: string, args: string[]): void {
   if (paused !== null) console.log(`The factory is paused: ${paused}. The order applies when the pause is lifted.`);
 }
 
+async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
+  const by = takeFlag(args, '--by');
+  const reason = takeFlag(by.rest, '--reason');
+  const backupMerge = reason.rest.includes('--backup-merge');
+  const [n, ...extra] = reason.rest.filter((arg) => arg !== '--backup-merge');
+  if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
+  const actor = resolveActor(ctx, by.value, false);
+  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
+}
+
 async function status(ctx: Ctx): Promise<void> {
   const url = `${ctx.cfg.publicUrl}/factory/api/snapshot`;
   const response = await (ctx.fetch ?? fetch)(url, { headers: { Accept: 'application/json', 'User-Agent': SNAPSHOT_AGENT } });
   if (!response.ok) throw new Error(`${url} answered ${response.status}.`);
-  console.log(JSON.stringify(await response.json(), null, 2));
+  // The public snapshot shows a held card's wait reason only. The holds with who and why come from the state.
+  const held = Object.entries(readState(ctx.statePath).held).map(([issue, hold]) => ({ issue: Number(issue), ...hold }));
+  console.log(JSON.stringify({ ...((await response.json()) as object), held }, null, 2));
 }
 
 async function cards(ctx: Ctx): Promise<void> {
   const state = readState(ctx.statePath);
-  for (const card of await ctx.github.cards()) console.log(`#${card.issue} ${cardPosition(card, state)} ${card.column} [${card.labels.join(', ')}]`);
+  for (const card of await ctx.github.cards()) {
+    const hold = state.held[String(card.issue)];
+    console.log(`#${card.issue} ${cardPosition(card, state)} ${card.column} [${card.labels.join(', ')}]${hold === undefined ? '' : ` held by ${hold.by}: ${hold.reason}`}`);
+  }
 }
 
 async function findCard(ctx: Ctx, value: string | undefined): Promise<Card> {
@@ -150,7 +169,13 @@ function cardFacts(found: Card, state: FactoryState): string[] {
     `build: ${shown(state.builds[key])}`,
     `running job: ${shown(running.join(', '))}`,
     `failures: ${shown(own.join(' | '))}`,
+    `held: ${holdText(state.held[key])}`,
   ];
+}
+
+function holdText(hold: Hold | undefined): string {
+  if (hold === undefined) return 'none';
+  return `by ${hold.by} since ${hold.at}, ${hold.stage === null ? 'no job stopped' : `stopped ${hold.stage}`}: ${hold.reason}`;
 }
 
 // An empty list prints "none", so the reader can tell it from a command that printed nothing by mistake.
@@ -177,11 +202,18 @@ function queues(ctx: Ctx): void {
 function release(ctx: Ctx): void {
   const state = readState(ctx.statePath);
   console.log(`last release: ${state.lastRelease ?? 'none'}`);
+  console.log(`public post: ${publicPost(state.releasePost)}`);
   if (state.release === null) return console.log('open release: none');
   console.log(`open release: #${state.release.issue} branch ${state.release.branch} cut ${state.release.day}`);
   console.log(`candidate post: ${candidatePost(state.release)}`);
   console.log(`removed: ${state.release.removed.map((issue) => `#${issue}`).join(', ') || 'none'}`);
   for (const line of playtestLines(state.release.playtest, ctx.cfg.playtestRuns)) console.log(line);
+}
+
+function publicPost(post: ReleasePost | null): string {
+  if (post === null) return 'none due';
+  if (post.postId === null) return `release ${post.day} waits for Hermes's draft`;
+  return `release ${post.day} draft ${post.postId} waits for Publish`;
 }
 
 function candidatePost(release: ReleaseState): string {
@@ -217,7 +249,7 @@ function log(ctx: Ctx, args: string[]): void {
 async function audit(ctx: Ctx): Promise<void> {
   const state = readState(ctx.statePath);
   const board = await ctx.github.cards();
-  for (const line of [...board.filter((row) => runningJobs(row, state).length === 0).flatMap((row) => cardDrift(row, state)), ...releaseDrift(state, board)]) console.log(line);
+  for (const line of [...board.filter((row) => runningJobs(row, state).length === 0).flatMap((row) => cardDrift(row, state)), ...releaseDrift(state, board), ...holdDrift(state, board)]) console.log(line);
 }
 
 async function retry(ctx: Ctx, args: string[]): Promise<void> {
@@ -250,7 +282,7 @@ function pause(ctx: Ctx, args: string[]): void {
 
 function resume(ctx: Ctx): void {
   const paused = pausedReason(ctx.cfg.home);
-  if (paused !== null && !paused.startsWith(PAUSE_PREFIX)) throw new Error('This pause was written by hand or by a member. Ask the committee before removing it.');
+  if (paused !== null && !paused.startsWith(PAUSE_PREFIX)) throw new Error('This pause was written by hand or by a member. Once its reason is gone, delete the pause file.');
   rmSync(pauseFile(ctx.cfg.home), { force: true });
   console.log('Resumed.');
 }
