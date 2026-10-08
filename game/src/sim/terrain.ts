@@ -30,6 +30,11 @@ export function tileAt(t: Terrain, p: Vec): number {
   return y * t.size + x;
 }
 
+// Whether the tile under a map point is road. Asphalt patches are loose pieces that lead nowhere, so they are not.
+export function isRoadTile(t: Terrain, p: Vec): boolean {
+  return t.types[tileAt(t, p)] === 'road';
+}
+
 // Height at a map point: the deck on a deck outline, else the ground.
 export function heightAt(t: Terrain, x: number, y: number): number {
   const on = deckAt(x, y);

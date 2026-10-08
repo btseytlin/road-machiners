@@ -36,6 +36,7 @@ import FORMAT_2_26 from './save-fixtures/format-2-26.json';
 import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
+import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
@@ -714,5 +715,20 @@ describe('save migration 29 to 30', () => {
     walk(SAVE_SHAPE.shape, '');
     expect(found.length).toBeGreaterThan(0);
     for (const at of found) expect(CONVERTED.has(at), at).toBe(true);
+  });
+});
+
+describe('save migration 30 to 31', () => {
+  const next = MIGRATIONS[30](FORMAT_2_30) as typeof FORMAT_2_30;
+
+  it('keeps the world as it was', () => {
+    expect(next).toEqual(FORMAT_2_30);
+  });
+
+  it('leaves a raid on its way without a watch end, so it watches once it arrives', () => {
+    const raid = next.vehicles[1].brain!.goals[0];
+
+    expect(raid.phase).toBe('travel');
+    expect('watchUntil' in raid).toBe(false);
   });
 });

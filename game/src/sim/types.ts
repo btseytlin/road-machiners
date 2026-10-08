@@ -204,6 +204,7 @@ export type NpcActivity = {
   worn?: { turn: number; condition: number }; // a fight: the last turn it wore its target down, and the target's body condition then
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
   until?: number; // the turn a rearm's fresh gear is ready
+  watchUntil?: number; // the turn a raid's watch at its post ends
 };
 
 export type NpcBrain = {

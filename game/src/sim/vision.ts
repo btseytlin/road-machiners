@@ -131,7 +131,7 @@ export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.
-function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+export function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
   const { a, b } = line;
   const targetDist = dist(a, b);
   return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
@@ -139,9 +139,9 @@ function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obsta
 
 // The line from the viewer's eye to the target's top, in height units over each end's height: a deck where the end
 // stands on one, else the ground. Props and hills both test against it.
-type SightLine = { a: Vec; b: Vec; from: number; to: number };
+export type SightLine = { a: Vec; b: Vec; from: number; to: number };
 
-function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
+export function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
   const eye = TERRAIN.vision.eyeHeight;
   return { a, b, from: heightAt(terrain, a.x, a.y) + eye, to: heightAt(terrain, b.x, b.y) + eye };
 }
@@ -173,7 +173,7 @@ function leaveHeights(line: SightLine, lo: number, hi: number): number {
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.
-function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+export function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
   const { a, b, from, to } = line;
   const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {
