@@ -43,3 +43,8 @@ ID: R8
 repo: game
 what: A tower's `answering` claim on a stranded truck had no timer, and parked on a fixed approach-side spot without checking whether another truck stood there. A tower that could not get through kept its tow goal and its claim for good, since the unstick move counted as progress and no stall was raised. While it held the claim, no other driver could answer. Issue #94 fixed it with a 20-turn claim timer in sight and out of combat, and a free parking spot around the client.
 cost: A tow responder rammed a city patrol on its approach and was killed by its gatling. A blocked tower could leave a stranded truck with no rescue, which breaks the DESIGN.md rule that a stranded truck is never stuck for good. The untimed claim shipped in releases 2026-09-30 and 2026-10-01 and stayed until release 2026-10-07.
+
+ID: R9
+repo: game
+what: offer() in game/src/sim/tow.ts gave a stranded player the full route fee whatever the player's money was, and payTow() in game/src/sim/states.ts took it on arrival even into debt. An NPC client already paid only what it could, so a broke NPC was towed free while a broke player was not. Issue #93 fixed it by making an NPC's offer to a player with money 0 or less free, decided at the offer, with its own "No charge" radio line.
+cost: A stranded player with no money got a rescue offer that could not be paid, and accepting it put the player into debt, where nothing can be bought. It shipped until release 2026-10-07. It repeats the class of R6 and R8: a rescue for a stranded player that ends in a dead end.
