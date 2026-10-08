@@ -204,6 +204,7 @@ describe('testing stage', () => {
   });
 
   it('runs the cached tests with the cache folder mounted, and the full suite on a branch without the script', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
     await runStage(ctx, 7);
     expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
@@ -452,21 +453,28 @@ describe('testing stage', () => {
       expect(bases).not.toContain('merge dev');
     });
 
-    it('runs no checks when hardening left the head on the build the committee played', async () => {
-      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
+    it('runs the preview checks of a new card with no game suite', async () => {
       await runStage(fakeCtx(agent), 7);
-      expect(calls).not.toContain('checks');
-      expect(calls.at(-1)).toBe('move 7 Approval');
-      expect(queued()).toEqual({ 7: 'Ann' });
-      expect(readState(`${home}/state.json`).testPhase).toEqual({});
+      expect(shellScript).toContain('npm run typecheck');
+      expect(shellScript).toContain('npm run playtest');
+      expect(shellScript).toContain('npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('test:cached');
     });
 
-    it('runs the checks when hardening moved the head past the played build', async () => {
-      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+    it('runs the game suite before the merge even when hardening left the head on the played build', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
       await runStage(fakeCtx(agent), 7);
       expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
       expect(calls.at(-1)).toBe('move 7 Approval');
       expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('runs the game suite before a hotfix post, since approve merges it at once', async () => {
+      labels = ['hotfix'];
+      await runStage(fakeCtx(agent), 7);
+      expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
     });
 
     it('refuses to harden a card with no recorded approval', async () => {
@@ -753,14 +761,14 @@ describe('testing stage', () => {
       changed = ['game/docs/wiki/items.md'];
       await runStage(fakeCtx(agent), 7);
       expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
-      expect(shellScript).toContain('npm test');
+      expect(shellScript).toContain('npm run playtest');
     });
 
     it('counts a branch with any other file as code', async () => {
       changed = ['game/docs/tools.md', 'game/scripts/playtest.mjs'];
       await runStage(fakeCtx(agent), 7);
       expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
-      expect(shellScript).toContain('npm test');
+      expect(shellScript).toContain('npm run playtest');
     });
   });
 });

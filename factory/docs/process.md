@@ -66,7 +66,7 @@ Testing is two jobs. Verify runs the testing agent. Checks runs the machine chec
 
 ## Hardening column
 
-Approve moves a card to Hardening. It runs the harden round and the review, and no test that Testing already ran. The card keeps the build the committee played. If hardening left the branch head on that build, the card goes straight to Approval with its merge queued. If hardening changed the code, Checks runs first.
+Approve moves a card to Hardening. It runs the harden round and the review. Then Checks runs with the game suite, and the card goes to Approval with its merge queued. The checks before the committee post skip the game suite, so this is the one suite run of a normal card.
 
 ![Hardening column](diagrams/hardening.svg)
 

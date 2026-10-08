@@ -1,13 +1,12 @@
-import { cardFlow, moveCard } from '../card-events';
 import { readState } from '../state';
 import { BRANCH, GAME_DIR, isCleanupTask, type Ctx } from '../types';
-import { approvedAlready, queueMerge } from './checks';
+import { approvedAlready } from './checks';
 import { agentHome, baseBranchFor, catchUpBranch, docsOnly, fillPrompt, guardAndPush, prepareOutputs, runAgent, workDir, writeIssueInput } from './common';
 import { reviewGate } from './review';
 import { agentRound, fixRound, requireBaseMerged, setPhase } from './verify';
 
-// The agent half of the Hardening column. The committee approved the card, and Testing already checked the build it played.
-// Hardening runs the harden round and the review. The checks run again only when the branch head moved past that build.
+// The agent half of the Hardening column. The committee approved the card, and Testing checked the build it played with no game suite.
+// Hardening runs the harden round and the review. Then the checks always run with the game suite, since the merge follows them.
 // A cleanup task skips Testing, so it has no build and always gets the checks. It gets no harden round, and neither does a docs change.
 // Phase `fix` runs the fix of a failed check, and `resolve` resolves a conflict that stopped approve.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
@@ -25,11 +24,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await catchUpBranch(ctx, issue, 'harden');
   await hardenRound(ctx, issue, base, item.labels);
   if (!(await reviewGate(ctx, issue, base, 'harden', async () => { await agentRound(ctx, issue, 'harden', 'test-fix', 'review-fix', base, false); }))) return;
-  const head = await ctx.repo.headHash(BRANCH(issue));
-  if (head !== readState(ctx.statePath).builds[String(issue)]) return setPhase(ctx, issue, 'checks');
-  ctx.log('harden', issue, `the head is still the checked build ${head}, so no checks run`);
-  await moveCard(ctx, issue, 'Approval', 'hardened', cardFlow(item.labels));
-  queueMerge(ctx, issue, approver);
+  setPhase(ctx, issue, 'checks');
 }
 
 // The design and build of a cleanup task already were the cleanup, and a docs change has no code to verify, so the review alone checks them.
