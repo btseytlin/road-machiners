@@ -9,7 +9,7 @@ import type { Terrain } from '../sim/terrain';
 import { pointInPolygon, polylineDist, type Vec } from '../sim/vec';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from '../test/map';
-import { desertWeight, glassField, groundDiscs, lookTypes, paintGroundCanvas, TERRAIN_MARGIN, type LookType, type PaintCanvas } from './groundPaint';
+import { desertWeight, glassField, lookTypes, paintGroundCanvas, TERRAIN_MARGIN, type LookType, type PaintCanvas } from './groundPaint';
 
 const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const sunBasin = TERRAIN.features.basins.find((b) => b.center.x === sun.pos.x && b.center.y === sun.pos.y)!;
@@ -64,14 +64,6 @@ describe('lookTypes', () => {
       expect(desertWeight(look[i]), `${x},${y}`).toBe(0);
     }
     expect(checked).toBeGreaterThan(50);
-  });
-});
-
-describe('ground discs', () => {
-  it('paints no disc under the outlined Fallen Sun and Old Orchard', () => {
-    const ids = groundDiscs().map((d) => d.id);
-    expect(ids).not.toContain('fallen-sun');
-    expect(ids).not.toContain('orchard');
   });
 });
 
@@ -174,11 +166,9 @@ describe('ground paint over the Fallen Sun', () => {
 
   it('centres no disc on a basin', () => {
     const centres = painted.ops.flatMap((op) => (op.kind === 'image' ? [] : op.shapes.flatMap((s) => (s.kind === 'arc' ? [s] : []))));
-    expect(centres.length).toBeGreaterThan(0);
     for (const b of TERRAIN.features.basins) {
       const at = { x: painted.canvas.toPx(b.center.x), y: painted.canvas.toPx(b.center.y) };
       for (const c of centres) expect(Math.hypot(c.x - at.x, c.y - at.y)).toBeGreaterThan(painted.canvas.res);
-      for (const crater of TERRAIN.features.craters) expect(crater.center).not.toEqual(b.center);
     }
   });
 
@@ -212,10 +202,52 @@ describe('ground paint over the Fallen Sun', () => {
     expect(sunBasin.bank[21]).toBeGreaterThan(20);
     expect(paintOver(painted, onBank(21, sunBasin.bank[21] / 2))).toEqual([]);
   });
+});
 
-  it("keeps the Bowl's scorched crater floor", () => {
-    const bowl = TERRAIN.features.craters[0];
-    expect(paintOver(painted, bowl.center).length).toBeGreaterThanOrEqual(2);
+describe('ground paint around towns, sites and craters', () => {
+  const painted = paintedMap();
+  const places = [...REGION.towns, ...REGION.locations];
+
+  it('centres no circle on a town, site or crater', () => {
+    const arcs = painted.ops.flatMap((op) => (op.kind === 'image' ? [] : op.shapes.flatMap((s) => (s.kind === 'arc' ? [s] : []))));
+    const centres = [...places.map((p) => p.pos), ...TERRAIN.features.craters.map((c) => c.center)];
+    for (const at of centres) {
+      const px = { x: painted.canvas.toPx(at.x), y: painted.canvas.toPx(at.y) };
+      for (const a of arcs) expect(Math.hypot(a.x - px.x, a.y - px.y)).toBeGreaterThan(painted.canvas.res);
+    }
+  });
+
+  it("paints nothing over Bowl's crater floor", () => {
+    const crater = TERRAIN.features.craters[0];
+    let samples = 0;
+    for (let y = -crater.radius; y <= crater.radius; y += 3) for (let x = -crater.radius; x <= crater.radius; x += 3) {
+      if (Math.hypot(x, y) > crater.radius) continue;
+      samples++;
+      expect(paintOver(painted, { x: crater.center.x + x, y: crater.center.y + y }), `${x},${y}`).toEqual([]);
+    }
+    expect(samples).toBeGreaterThan(300);
+  });
+
+  it('paints nothing on or just around a site', () => {
+    const { canyon, dryRiver } = TERRAIN.features;
+    for (const id of ['bowl', 'nose', 'dustwell', 'granary', 'scrapjaw', 'kiln', 'green-pit']) {
+      const place = places.find((p) => p.id === id);
+      if (!place) continue;
+      const reach = place.radius + 3;
+      let samples = 0;
+      let clear = 0;
+      for (let y = -reach; y <= reach; y++) for (let x = -reach; x <= reach; x++) {
+        if (Math.hypot(x, y) > reach) continue;
+        const p = { x: place.pos.x + x, y: place.pos.y + y };
+        samples++;
+        // The canyon and the dry river paint strokes of their own where they pass.
+        if (polylineDist(p, canyon.path) <= canyon.width + canyon.bank) continue;
+        if (polylineDist(p, dryRiver.path) <= dryRiver.width + dryRiver.bank) continue;
+        clear++;
+        expect(paintOver(painted, p), `${id} ${x},${y}`).toEqual([]);
+      }
+      expect(clear / samples, id).toBeGreaterThan(0.8);
+    }
   });
 });
 
