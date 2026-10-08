@@ -54,7 +54,7 @@ async function setup() {
   };
   const show = async (branch: string, file: string) => hub('show', `${branch}:${file}`);
   const head = async (branch: string) => (await hub('rev-parse', branch)).trim();
-  return { home, origin, repo, hub, host, commit, feature, show, head };
+  return { home, origin, repo, hub, host, by, commit, feature, show, head };
 }
 
 describe('hostRepo', () => {
@@ -179,6 +179,17 @@ describe('merging on GitHub', () => {
     expect(await repo.changedFiles('main', 'dev')).toEqual(['f.txt']);
     expect(await repo.isMerged('main', 'dev')).toBe(true);
     expect(await repo.hasNewCommits('main', 'dev')).toBe(true);
+  });
+
+  // A move out of game/ changes the game, so the release playtest and the docs check must see both paths.
+  it('lists both paths of a moved file', async () => {
+    const { repo, by } = await setup();
+    await by('checkout', '-B', 'dev', 'origin/dev');
+    await by('mv', 'g.txt', 'moved.txt');
+    await by('commit', '-m', 'move g');
+    await by('push', 'origin', 'dev');
+    await repo.fetch();
+    expect((await repo.changedFiles('main', 'dev')).sort()).toEqual(['g.txt', 'moved.txt']);
   });
 });
 
