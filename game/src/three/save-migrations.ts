@@ -395,6 +395,21 @@ function withSeenSince_23_24(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// Glass Flats became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it. The step repeats the 8 to 9 one, since a committed step is never edited.
+const RETIRED_STOCK_27_28 = 'glass-flats';
+
+function withoutRetiredStock_27_28(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_27_28 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_27_28),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_27_28) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
 // wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
@@ -561,6 +576,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
   // 26 to 27: every saved bounty starts unfulfilled.
   withFulfilledFlag_26_27,
+  // 27 to 28: Glass Flats is a territory, so its site stock goes.
+  withoutRetiredStock_27_28,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

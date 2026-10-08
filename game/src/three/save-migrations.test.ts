@@ -33,6 +33,7 @@ import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import FORMAT_2_25 from './save-fixtures/format-2-25.json';
 import FORMAT_2_26 from './save-fixtures/format-2-26.json';
+import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -493,6 +494,13 @@ describe('save migration 23 to 24', () => {
 });
 
 describe('save migration 24 to 25', () => {
+  const before = structuredClone(FORMAT_2_24);
+
+  it('does not mutate its input', () => {
+    MIGRATIONS[24](FORMAT_2_24);
+    expect(FORMAT_2_24).toEqual(before);
+  });
+
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
     const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
 
@@ -588,5 +596,21 @@ describe('save migration 26 to 27', () => {
     expect(next.shops.bowl.contracts[1]).toEqual(FORMAT_2_26.shops.bowl.contracts[1]);
     expect(next.shops.nose).toEqual(FORMAT_2_26.shops.nose);
     expect({ ...next, player: { ...next.player, contracts: [] }, shops: {} }).toEqual({ ...FORMAT_2_26, player: { ...FORMAT_2_26.player, contracts: [] }, shops: {} });
+  });
+});
+
+describe('save migration 27 to 28', () => {
+  const before = structuredClone(FORMAT_2_27);
+  const next = MIGRATIONS[27](FORMAT_2_27) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Glass Flats stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(FORMAT_2_27.salvage.map((stock) => stock.id).filter((id) => id !== 'glass-flats'));
+    expect(next.player.scavenged).toEqual(['podfield', 'wreck4']);
+  });
+
+  it('ends a search of the old stock, keeps other searches and does not mutate its input', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_27.vehicles[1]);
+    expect(FORMAT_2_27).toEqual(before);
   });
 });

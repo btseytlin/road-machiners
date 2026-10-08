@@ -476,6 +476,27 @@ describe('NPC activities', () => {
       }
     });
 
+    it('targets a Glass Flats spot and takes its loot on arrival', () => {
+      const { w, npc, restore } = territoryScavenger('glass-flats', { x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const goal = topGoal(npc)!;
+        expect(goal.kind).toBe('scavenge');
+        const spot = territorySpots(w, 'glass-flats').find((s) => s.id === goal.targetId)!;
+        expect(spot).toBeDefined();
+        npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+        let next = w;
+        let took = false;
+        for (let turn = 0; turn < 80 && !took; turn++) {
+          next = endTurn(next, testDrive);
+          took = (goodsCount(next.vehicles.find((v) => v.id === npc.id)!).scrap ?? 0) > 0;
+        }
+        expect(took).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
     it('parks beside the spot, searches it and takes its loot', () => {
       const { w, npc, restore } = territoryScavenger('fallen-sun', { x: 10, y: 10 });
       try {

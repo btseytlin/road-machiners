@@ -557,7 +557,8 @@ describe('hunting grounds', () => {
   it('lie on lonely road stretches and at the pads of salvage sites', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
-    expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
+    // Glass Flats' outline spans 95 tiles and swallows the road stretches inside it, so fewer lonely stretches remain.
+    expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(4);
   });
 
   it('wait at every road into the Fallen Sun', () => {
