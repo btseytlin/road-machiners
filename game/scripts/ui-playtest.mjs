@@ -645,6 +645,7 @@ try {
   await checkCoinSizes(page, 'market 1024');
   await page.setViewportSize(before);
   await page.keyboard.press('Escape');
+  await page.keyboard.press('i');
   for (const width of [1024, 800, 700]) {
     await page.setViewportSize({ width, height: 800 });
     await checkVisibleReadouts(page);
