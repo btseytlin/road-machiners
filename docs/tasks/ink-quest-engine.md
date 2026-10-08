@@ -24,6 +24,8 @@ The quest system for issue #347 is built in four stages. This file covers stage 
 3. Radio: radio lines get the same text styling, and a radio topic can hand off to an ink quest. The radio keeps its own engine.
 4. First full text quest in the Space Rangers style, with its own numbers and endings.
 
+Stages 2 to 4 have their own task files: `ink-quest-talk.md`, `ink-radio-handoff.md` and `ink-text-quest.md`.
+
 ### Content and build
 
 - Quests are `.ink` files in `game/src/data/quests/`, one compiled story per quest. `world.ink` declares the shared world variables and every `EXTERNAL` function, and every quest includes it. Variables a quest declares itself belong to that quest.
