@@ -21,6 +21,7 @@ import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
 import { applyGodMode, freezeDriving, freezeFire } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
+import { cutLine } from './harpoon';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { discoverSites } from './locations';
@@ -409,6 +410,13 @@ export function reloadWeapon(world: World, weaponId: string): World {
     const mw = vehicleStats(w, playerVehicle(w)).weapons.find((m) => m.part.id === weaponId);
     if (!mw) throw new Error(`Player has no weapon ${weaponId}`);
     dropMagazine(mw.part);
+  });
+}
+
+// The player lets go of the line its harpoon holds.
+export function cutPlayerLine(world: World, harpoonId: string): World {
+  return playerCommand(world, (w) => {
+    cutLine(w, playerVehicle(w), harpoonId);
   });
 }
 

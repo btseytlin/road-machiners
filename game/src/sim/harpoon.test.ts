@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { partDef, type WeaponDef } from '../data/parts';
+import { PHYSICS } from '../data/physics';
 import { HARPOON } from '../data/utilities';
 import { fightsAgainst, fireBlock, fireWeapons, gunOf, hitOdds } from './combat';
 import { vehicleStats } from './stats';
@@ -10,12 +11,14 @@ import { endLines, lineAnchors, tearLine } from './harpoon';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GameEvent, PartInstance, Vehicle, World } from './types';
 import { advanceUtilityEffects } from './utility';
+import { cutPlayerLine } from './world';
 
-// The player facing east with a harpoon on its deck, and a trader hauler `gap` tiles east of it, broadside.
+// The player facing west with a harpoon on its deck, and a trader hauler `gap` tiles east of it, broadside. The
+// truck's machine gun covers the front, so auto-mount turns the harpoon to face the rear, toward the trader.
 function duel(gap = 5): { w: World; me: Vehicle; part: PartInstance; trader: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
-  me.heading = 0;
+  me.heading = Math.PI;
   const part = makePart(w, 'harpoon', 0);
   if (!mountPart(w, me, part)) throw new Error('No deck room for the harpoon');
   const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: me.pos.x + gap, y: me.pos.y }, Math.PI / 2);
@@ -177,6 +180,34 @@ describe('the harpoon line', () => {
     endLines(w);
 
     expect(w.lines).toEqual([]);
+  });
+
+  it('ends when the shooter cuts it, with no damage to the held part, and the harpoon fires again once reloaded', () => {
+    const s = hit();
+    const line = s.w.lines[0];
+    const held = s.trader.items.flatMap((it) => (it.kind === 'part' && it.part.id === line.toPart ? [it.part] : []))[0];
+    const hp = held.hp;
+    s.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
+
+    const after = cutPlayerLine(s.w, s.part.id);
+
+    expect(after.lines).toEqual([]);
+    expect(after.vehicles.find((v) => v.id === s.trader.id)!.items.flatMap((it) => (it.kind === 'part' && it.part.id === line.toPart ? [it.part.hp] : []))).toEqual([hp]);
+    const me = after.vehicles.find((v) => v.id === s.me.id)!;
+    expect(fireBlock(after, me, vehicleStats(after, me).weapons.find((m) => m.part.id === s.part.id)!, null)).not.toBe('lineOut');
+  });
+
+  it('cannot cut a line the harpoon does not have out', () => {
+    const s = duel();
+    expect(() => cutPlayerLine(s.w, s.part.id)).toThrow(/no line out/);
+  });
+
+  it('pulls the shooter at its center of mass and the held truck at its body center', () => {
+    const { w } = hit();
+    const [anchor] = lineAnchors(w);
+
+    expect(anchor.fromAt.y).toBe(-PHYSICS.truck.comBelow);
+    expect(anchor.toAt.y).toBe(0);
   });
 
   it('ends when the harpoon breaks', () => {

@@ -446,6 +446,29 @@ describe("weapon panel keys and the turn button", () => {
     expect(Object.keys(playerVehicle(applied).weaponOrders)).toHaveLength(0);
   });
 
+  it("a harpoon shows the cut button in place of reload, enabled only with its line out, and cutting drops the line", () => {
+    let harpoonId = "";
+    const withHarpoon = (out: boolean) => build(false, (w) => {
+      const me = playerVehicle(w);
+      const harpoon = makePart(w, "harpoon", 0);
+      if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
+      harpoonId = harpoon.id;
+      const other = w.vehicles.find((v) => v !== me)!;
+      if (out) w.lines = [{ id: "l1", from: me.id, fromPart: harpoon.id, to: other.id, toPart: mountedParts(other, "engine")[0].id, length: 10, turnsLeft: 5 }];
+    });
+    const cutIn = (b: ReturnType<typeof build>) => b.card(harpoonId).find((n) => n.className === "weapon-cut")!;
+
+    const slack = withHarpoon(false);
+    expect(slack.card(harpoonId).find((n) => n.className === "weapon-reload")).toBeUndefined();
+    expect(cutIn(slack).attrs.has("disabled")).toBe(true);
+
+    const out = withHarpoon(true);
+    expect(cutIn(out).attrs.has("disabled")).toBe(false);
+    cutIn(out).fire("click");
+    const applied = out.host.apply.mock.calls[0][0] as World;
+    expect(applied.lines).toEqual([]);
+  });
+
   it("the turn button presses on pointerdown and releases on pointerup of that press", () => {
     const { host, button } = build();
     button("Space").fire("pointerdown", { button: 2 });
@@ -544,11 +567,11 @@ describe("the utility row", () => {
   });
 
   it("blocks an oil spiller with too little fuel to spill", () => {
-    const { world } = build();
-    const spiller = makePart(world.w, "oilSpiller", 0);
-    mountPart(world.w, world.w.vehicles[0], spiller);
-    world.w.player.fuel = 0;
-    expect(utilityStatus(world.w, spiller, false)).toEqual({ state: "blocked", text: "no fuel" });
+    const w = emptyWorld();
+    const spiller = makePart(w, "oilSpiller", 0);
+    if (!mountPart(w, w.vehicles[0], spiller)) throw new Error("No room for the oil spiller");
+    w.player.fuel = 0;
+    expect(utilityStatus(w, spiller, false)).toEqual({ state: "blocked", text: "no fuel" });
   });
 
   it("throws for a passive utility, which has no slot", () => {

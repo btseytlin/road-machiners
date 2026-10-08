@@ -512,17 +512,20 @@ body {
   gap: 2px;
 }
 #ui .weapon-hold,
-#ui .weapon-reload {
+#ui .weapon-reload,
+#ui .weapon-cut {
   padding: 0;
   font-size: 10px;
   height: 16px;
 }
 .weapon-slots.two-rows .weapon-hold,
-.weapon-slots.two-rows .weapon-reload {
+.weapon-slots.two-rows .weapon-reload,
+.weapon-slots.two-rows .weapon-cut {
   height: 14px;
   font-size: 9px;
 }
-.weapon-reload .icon {
+.weapon-reload .icon,
+.weapon-cut .icon {
   width: 12px;
   height: 12px;
 }

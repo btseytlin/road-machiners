@@ -6,7 +6,7 @@ import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
+import { cutPlayerLine, playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
 import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError, wornReload } from "../sim/utility";
 import { oilShort } from "../sim/hazards";
 import { bottomLeft, el, panel } from "./dom";
@@ -485,7 +485,7 @@ export class WeaponPanel {
         createItemIcon(mw.part.defId),
         this.renderAmmo(mw),
       ),
-      this.renderActions(mw, locked, canHold(w, mw)),
+      this.renderActions(w, mw, locked, canHold(w, mw)),
     );
   }
 
@@ -502,8 +502,9 @@ export class WeaponPanel {
     );
   }
 
-  // The button that drops a gun's order (nothing to hold with no order and auto fire off) and the one that forces a reload.
-  private renderActions(mw: MountedWeapon, locked: boolean, canHold: boolean): HTMLElement {
+  // The button that drops a gun's order (nothing to hold with no order and auto fire off), and the one that forces a
+  // reload or, on a gun with a line, cuts the line it has out.
+  private renderActions(w: World, mw: MountedWeapon, locked: boolean, canHold: boolean): HTMLElement {
     return el(
       "div",
       { class: "weapon-actions" },
@@ -517,7 +518,7 @@ export class WeaponPanel {
         },
         "Hold",
       ),
-      el(
+      mw.def.line ? this.renderCut(w, mw, locked) : el(
         "button",
         {
           class: "weapon-reload",
@@ -529,6 +530,26 @@ export class WeaponPanel {
         createIcon("reload"),
       ),
     );
+  }
+
+  private renderCut(w: World, mw: MountedWeapon, locked: boolean): HTMLElement {
+    const out = w.lines.some((l) => l.from === w.player.vehicleId && l.fromPart === mw.part.id);
+    return el(
+      "button",
+      {
+        class: "weapon-cut",
+        disabled: locked || !out,
+        title: "Cut the line",
+        "aria-label": `Cut the ${mw.def.name} line`,
+        onclick: () => this.cut(mw.part.id),
+      },
+      createIcon("cut"),
+    );
+  }
+
+  private cut(weaponId: string): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.apply(cutPlayerLine(this.host.world(), weaponId));
   }
 
   private forceReload(weaponId: string): void {
