@@ -1,6 +1,6 @@
 import { cardFlow, moveCard } from '../card-events';
 import { BRANCH, GAME_DIR, INCIDENT_LOG, TASK_FILE, type Ctx } from '../types';
-import { BASE_BRANCH, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, prepareOutputs, readOutput, requireBaseMerged, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { BASE_BRANCH, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, unfinishedBaseMerge, workDir, writeIssueInput } from './common';
 
 const PRINCIPLES = `${GAME_DIR}/docs/architecture/principles.md`;
 
@@ -16,7 +16,14 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   else await runAgent(ctx, issue, 'harden', 'harden', await hardenPrompt(ctx, issue, base, note));
   throwIfNeedsCommittee(home);
   await guardAndPush(ctx, issue, base, 'harden');
-  await requireBaseMerged(ctx, issue, base, merged);
+  const unfinished = await unfinishedBaseMerge(ctx, issue, base, merged);
+  if (unfinished !== null) {
+    await runAgent(ctx, issue, 'harden', 'harden', `The factory's check of your pushed branch failed. ${unfinished}`, { continue: true });
+    throwIfNeedsCommittee(home);
+    await guardAndPush(ctx, issue, base, 'harden');
+    const still = await unfinishedBaseMerge(ctx, issue, base, merged);
+    if (still !== null) throw new Error(still);
+  }
   await moveCard(ctx, issue, 'Merging', 'hardened', cardFlow(item.labels));
 }
 

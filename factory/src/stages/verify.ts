@@ -5,7 +5,7 @@ import { BRANCH, FEEDBACK_HEADING, GAME_DIR, OUT_DIR, TASK_FILE, type Ctx, type 
 import { runCost, untilPasses } from './checkpoint';
 import { POST_MARK, postCheckpoint, publishAndPost } from './checks';
 import { hardenPrompt } from './harden';
-import { HOTFIX_BASE, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, playtestCommand, prepareOutputs, readOutput, requireBaseMerged, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { HOTFIX_BASE, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, unfinishedBaseMerge, workDir, writeIssueInput } from './common';
 
 const ROUND = 'test';
 
@@ -23,7 +23,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   if (await redesigned(ctx, issue, home)) return;
   let build = '';
   await untilPasses(ctx.cfg.testingBudgetUsd, spent, async () => {
-    build = await pushed(ctx, issue, base, merged);
+    await guardAndPush(ctx, issue, base, 'verify');
+    const unfinished = await unfinishedBaseMerge(ctx, issue, base, merged);
+    if (unfinished !== null) return unfinished;
+    build = await ctx.repo.headHash(BRANCH(issue));
     return checkpoint(ctx, issue, base, build, hotfix ? 'full' : 'preview', home);
   }, (failure) => fixRound(ctx, issue, home, failure));
   await publishAndPost(ctx, issue, readApproval(home), home, base, build, false);
@@ -60,12 +63,6 @@ async function redesigned(ctx: Ctx, issue: number, home: string): Promise<boolea
   return true;
 }
 
-async function pushed(ctx: Ctx, issue: number, base: string, merged: string | null): Promise<string> {
-  await guardAndPush(ctx, issue, base, 'verify');
-  await requireBaseMerged(ctx, issue, base, merged);
-  return ctx.repo.headHash(BRANCH(issue));
-}
-
 async function checkpoint(ctx: Ctx, issue: number, base: string, build: string, kind: 'preview' | 'full', home: string): Promise<string | null> {
   try {
     readApproval(home);
@@ -84,7 +81,8 @@ async function fixRound(ctx: Ctx, issue: number, home: string, failure: string):
 
 async function docsRound(ctx: Ctx, issue: number, base: string, home: string, merged: string | null): Promise<void> {
   await guardAndPush(ctx, issue, base, 'verify');
-  await requireBaseMerged(ctx, issue, base, merged);
+  const unfinished = await unfinishedBaseMerge(ctx, issue, base, merged);
+  if (unfinished !== null) throw new Error(unfinished);
   const files = await ctx.repo.changedFiles(base, BRANCH(issue));
   const approval = { description: `Docs only, the game does not change: ${files.join(', ')}`, howToTry: 'Read the diff in the pull request.' };
   writeFileSync(`${home}/${OUT_DIR}/approval.json`, JSON.stringify(approval));
