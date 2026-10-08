@@ -57,7 +57,7 @@ function open(confirmed = true) {
   const actions = { requestBoot: (r: BootRequest) => requests.push(r), reload: vi.fn(), confirm: vi.fn(() => confirmed) };
   const onClose = vi.fn();
   openNewGame(actions, onClose);
-  const screen = ui.all((n) => n.className.includes("new-game"))[0];
+  const screen = ui.all((n) => n.className.split(" ").includes("new-game"))[0];
   last = screen;
   const slide = (id: string, value: number) => {
     const input = screen.slider(id);

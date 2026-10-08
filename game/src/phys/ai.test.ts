@@ -138,12 +138,19 @@ describe('NPC driving', () => {
       w.vehicles[0].pos = { x: 300, y: 200 };
       const a = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 264.24, y: 165.07 }, (-48 * Math.PI) / 180);
       const b = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 283.01, y: 143.29 }, (129 * Math.PI) / 180);
+      // The lower id waits, so which truck swerves follows the ids. Pin them to those of the recorded crash, since the id counter shifts with how many trucks a new world starts with.
+      a.id = 'v1062';
+      b.id = 'v1081';
       a.speed = 6.46;
       b.speed = 4.08;
       a.brain = npcBrain('scavenger', a.pos, ['scavenger']);
       b.brain = npcBrain('roamer', b.pos, ['roamer']);
       a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
       b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      // Each has already weighed robbing the other and let it pass. This is traffic: on some world random states the
+      // scavenger rolls a robbery, and the fight that follows closes to contact by design, not by a driving fault.
+      a.brain.noticed[`preySeen:${b.id}`] = w.turn;
+      b.brain.noticed[`preySeen:${a.id}`] = w.turn;
       let d = buildDrive(w);
       let touches = 0;
       for (let i = 0; i < 10; i++) {

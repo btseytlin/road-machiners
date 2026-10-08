@@ -13,10 +13,10 @@ import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
 import { defaultSetup } from './settings';
 
-// Old Orchard stands at (22.8, 56.8), north of its first place.
+// Old Orchard stands at (22.8, 56.8), north of its first place, and Glass Flats at (81, 75.6), north-west of its first.
 const original = [
   [16, 94], [102, 35], [22.8, 56.8], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
-  [106.2, 70], [90.3, 86.3], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
+  [106.2, 70], [81, 75.6], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
   [22, 14], [66, 76],
 ];
 

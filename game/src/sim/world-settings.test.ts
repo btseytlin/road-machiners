@@ -1,19 +1,16 @@
-// The world settings scale the same rules for every truck: the player, NPCs, far NPCs and town guards.
+// The world settings scale the same rules for every truck: the player, NPCs and far NPCs.
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { applyContactCrash, applyGroundCrash, applyLanding } from './crash-contact';
 import { fireWeapons } from './combat';
 import { advanceFar } from './far';
 import { corePart, mountedParts } from './grid';
-import { fireGuards } from './guards';
 import { burnFuel, consumeVehicleSupplies, getResources } from './resources';
 import { parseSetup } from './settings';
-import { siteGates } from './sites';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { PartHit } from './armor';
-import type { GameEvent, Vehicle, World, WorldSettings } from './types';
+import type { Vehicle, World, WorldSettings } from './types';
 import { consumeSupplies, leakFuel } from './supplies';
 
 function withSettings(w: World, settings: Partial<WorldSettings>): World {
@@ -64,27 +61,6 @@ describe('Damage setting', () => {
 
     expectScaled(doubled.byPlayer, base.byPlayer, 2);
     expectScaled(doubled.byNpc, base.byNpc, 2);
-  });
-
-  it('halves the town guards rounds', () => {
-    const guarded = (damage: number, rngState: number) => {
-      const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
-      const gate = siteGates(bowl)[0];
-      const out = (d: number) => ({ x: gate.x + ((gate.x - bowl.pos.x) / bowl.radius) * d, y: gate.y + ((gate.y - bowl.pos.y) / bowl.radius) * d });
-      const w = withSettings(emptyWorld(out(2)), { damage });
-      w.rngState = rngState;
-      const victim = addVehicle(w, 'traders', 'hauler', [], { x: out(6).x + 1.5, y: out(6).y });
-      const raider = sturdy(addVehicle(w, 'raiders', 'hauler', ['mg'], out(6)));
-      raider.weaponOrders[mountedParts(raider, 'weapon')[0].id] = { targetId: victim.id, aim: 'body' };
-      fireWeapons(w);
-      fireGuards(w);
-      return w.events.flatMap((e: GameEvent) => (e.t === 'guardShot' ? e.rounds : [])).flatMap((r) => hitsOf(r.hits));
-    };
-
-    let state = 1;
-    while (state < 1000 && guarded(1, state).length === 0) state++;
-
-    expectScaled(guarded(0.5, state), guarded(1, state), 0.5);
   });
 
   it('doubles a crash between two NPCs on both trucks', () => {

@@ -1,5 +1,11 @@
 {
-  "player": { "vehicleId": "player", "headlights": true, "money": 420 },
-  "turn": 300,
-  "seed": 1337
+  "turn": 1200,
+  "vehicles": [
+    { "id": "player", "brain": null },
+    { "id": "npc1", "brain": { "templateId": "raider", "goals": [], "farRoute": { "dest": { "x": 300, "y": 200 }, "points": [{ "x": 290, "y": 205 }, { "x": 300, "y": 200 }] } } },
+    { "id": "npc2", "brain": { "templateId": "trader", "goals": [] } }
+  ],
+  "removed": [
+    { "id": "npc3", "brain": { "templateId": "raider", "goals": [], "farRoute": { "dest": { "x": 40, "y": 60 }, "points": [{ "x": 40, "y": 60 }] } } }
+  ]
 }

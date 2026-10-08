@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
 import { SALVAGE } from '../data/salvage';
-import { NPCS, type TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision, wreckVehicle } from './combat';
 import { advanceContracts } from './market';
 import { update } from './world';
@@ -12,7 +12,7 @@ import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, standDownTo, yieldTo } from './parley';
-import { hasCargo, lootBlocker, looterOf } from './salvage';
+import { hasCargo, lootBlocker, looterOf, emptyHidden } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -140,6 +140,47 @@ describe('NPC pleas to NPCs', () => {
     expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
   });
 
+  // A robber with two mates, so its group never reads the pleader as a threat.
+  function holdUp(): { w: World; a: Vehicle; b: Vehicle } {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    addGoods(w, a, 'scrap', 2);
+    const b = npcAt(w, 'scavengers', ['scavenger', 'scumbag'], 40);
+    npcAt(w, 'scavengers', ['scavenger'], 40, 28);
+    npcAt(w, 'scavengers', ['scavenger'], 40, 32);
+    addState(w, 'feud', b.id, a.id, { kind: 'feud', robbery: true });
+    addState(w, 'feud', a.id, b.id, { kind: 'feud', robbery: false });
+    return { w, a, b };
+  }
+
+  it('a robber holding up its prey grants no truce, even when the roll would accept', () => {
+    forceOption('truceOffered', 'accept');
+    forceOption('threatened', 'fightBack');
+    const { w, a, b } = holdUp();
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, b, a)).toBe(true);
+    expect(w.events).toContainEqual({ t: 'plea', from: a.id, to: b.id, plea: 'truce', accepted: false });
+    expect(hasCargo(a)).toBe(true);
+  });
+
+  it('prey that complies drops its cargo for the robber and makes peace', () => {
+    forceOption('threatened', 'comply');
+    const { w, a, b } = holdUp();
+    plead(w, a, b, 'truce');
+    expect(hasCargo(a)).toBe(false);
+    expect(isHostile(w, b, a)).toBe(false);
+    expect(stateOf(w, 'plea', a.id, b.id)).toBeNull();
+  });
+
+  it('a weak robber still takes the truce', () => {
+    forceOption('truceOffered', 'accept');
+    const { w, a, b } = holdUp();
+    b.resources = { fuel: 10, supplies: 10, money: 0, health: 1 };
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, b, a)).toBe(false);
+    expect(hasCargo(a)).toBe(true);
+  });
+
   it('an accepted plea leaves no wait, so a driver whose truce breaks can plead again', () => {
     forceOption('truceOffered', 'accept');
     const w = quietWorld();
@@ -186,7 +227,7 @@ describe('NPC pleas to NPCs', () => {
     const gone = npcAt(w, 'raiders', ['raider'], 200, 200);
     feud(w, a, b);
     feud(w, a, gone);
-    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened' });
+    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened', perceived: w.turn - NPC_BEHAVIOR.fleeCalmTurns - 1 });
     a.brain!.hurt = 5;
     a.lastHitBy = b.id;
     thinkNpc(w, a);
@@ -381,7 +422,7 @@ describe('warning a looter off', () => {
   // The parked player at 30,30 beside a road wreck that a scavenger parked on its other side searches.
   function contested(): { w: World; npc: Vehicle; wreckId: string } {
     const w = quietWorld();
-    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
@@ -438,7 +479,7 @@ describe('warning a looter off', () => {
 });
 
 describe('bounty talk', () => {
-  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2 };
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false };
 
   function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
     const w = quietWorld();
@@ -452,12 +493,12 @@ describe('bounty talk', () => {
     return { w, npc };
   }
 
-  it('a driver of the bounty template that gives up to the player pays the bounty', () => {
+  it('a driver of the bounty template that gives up to the player fulfils the bounty, which pays on claim', () => {
     const { w: start } = beggar(['bountyTalk']);
     const w = pick(start, 'Dump your cargo and drive off.');
-    expect(w.player.contracts).toEqual([]);
-    expect(w.player.money).toBe(bounty.reward);
-    expect(w.events).toContainEqual({ t: 'contract', contract: bounty, outcome: 'done' });
+    expect(w.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    expect(w.player.money).toBe(0);
+    expect(w.events).toContainEqual({ t: 'contract', contract: { ...bounty, fulfilled: true }, outcome: 'fulfilled' });
   });
 
   it('pays nothing without the perk', () => {
@@ -491,13 +532,14 @@ describe('bounty talk', () => {
     expect(w.player.money).toBe(0);
   });
 
-  it('a driver that gave up with the perk pays once, though the player then wrecks it', () => {
+  it('a driver that gave up with the perk fulfils the bounty once, though the player then wrecks it', () => {
     const { w: start, npc } = beggar(['bountyTalk']);
     const gaveUp = standsDown(start, npc.id);
-    expect(gaveUp.player.money).toBe(bounty.reward);
-    const w = wreckGivenUp(update(gaveUp, (d) => { d.player.contracts = [{ ...bounty, id: 'ct-b2' }]; }), npc.id);
-    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'done')).toEqual([]);
-    expect(w.player.money).toBe(bounty.reward);
+    expect(gaveUp.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    const w = wreckGivenUp(gaveUp, npc.id);
+    expect(w.events.filter((e) => e.t === 'contract')).toEqual([]);
+    expect(w.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+    expect(w.player.money).toBe(0);
   });
 
   it('pays nothing when the player gives up', () => {

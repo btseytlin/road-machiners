@@ -5,7 +5,7 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { GEAR_LEVEL_IDS, NPCS, type GearLevel } from '../data/npcs';
-import { partDef, type EngineDef } from '../data/parts';
+import { partDef, type EngineDef, type UtilityDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { gridOf, itemCells, mountedItems } from '../sim/grid';
 import { vehicleMass } from '../sim/mass';
@@ -33,6 +33,9 @@ export type TemplateStats = {
   drag: number; // share of top speed the guns' power draw takes
   speed: number; // top speed as a share of the chassis top speed
   cargo: number; // value of goods and loose spares
+  utility: number; // share of trucks with any utility mounted
+  activeUtility: number; // share of trucks with a utility that acts on an order mounted
+  emitter: number; // share of trucks with the emitter mounted
 };
 
 let base: World | undefined;
@@ -46,7 +49,7 @@ function worldFor(seed: number): World {
 export function templateStats(id: string, rolls: number, level: GearLevel | null = null): TemplateStats {
   const tpl = NPCS[id];
   if (!tpl) throw new Error(`Unknown template ${id}`);
-  const s: TemplateStats = { id, rolls, levels: { poor: 0, light: 0, standard: 0, heavy: 0, loaded: 0 }, guns: 0, armor: 0, cab: { front: 0, rear: 0, left: 0, right: 0 }, value: 0, mass: 0, drag: 0, speed: 0, cargo: 0 };
+  const s: TemplateStats = { id, rolls, levels: { poor: 0, light: 0, standard: 0, heavy: 0, loaded: 0 }, guns: 0, armor: 0, cab: { front: 0, rear: 0, left: 0, right: 0 }, value: 0, mass: 0, drag: 0, speed: 0, cargo: 0, utility: 0, activeUtility: 0, emitter: 0 };
   for (let seed = 1; seed <= rolls; seed++) {
     const w = worldFor(seed);
     const loadout = generateNpcLoadout(w, tpl, null, level);
@@ -60,6 +63,10 @@ export function templateStats(id: string, rolls: number, level: GearLevel | null
     s.mass += vehicleMass(v) / chassisDef(v.chassisId).ratedMass / rolls;
     s.drag += (1 - gunDrag(v, (partDef(mountedItems(v, 'engine')[0].part.defId) as EngineDef).capacity)) / rolls;
     s.speed += vehicleStats(w, v).maxSpeed / chassisDef(v.chassisId).maxSpeed / rolls;
+    const utilities = mountedItems(v, 'utility').map((item) => partDef(item.part.defId)).filter((def): def is UtilityDef => def.kind === 'utility');
+    s.utility += (utilities.length > 0 ? 1 : 0) / rolls;
+    s.activeUtility += (utilities.some((def) => def.reload !== null) ? 1 : 0) / rolls;
+    s.emitter += (utilities.some((def) => def.id === 'emitter') ? 1 : 0) / rolls;
     s.cargo += (Object.entries(loadout.cargo).reduce((sum, [good, n]) => sum + GOODS[good].value * n, 0) + loadout.spares.reduce((sum, p) => sum + partDef(p.defId).value, 0)) / rolls;
   }
   return s;
@@ -104,15 +111,15 @@ export function formatLoadoutReport(stats: TemplateStats[]): string {
   const lines = [
     '# NPC loadouts',
     '',
-    `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Gun drag is the top speed the guns take. Speed is the top speed against the chassis top speed. Cab is the share of cab lanes shielded per side: front, rear, left, right.`,
+    `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Gun drag is the top speed the guns take. Speed is the top speed against the chassis top speed. Cab is the share of cab lanes shielded per side: front, rear, left, right. Utility, active and emitter are the shares of trucks with any utility, a utility that acts on an order and the emitter mounted.`,
     '',
-    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | gun drag | speed | cargo value |',
-    '|---|---|---|---|---|---|---|---|---|---|',
+    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | gun drag | speed | cargo value | utility | active | emitter |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const s of stats) {
     const levels = GEAR_LEVEL_IDS.map((l) => pct(s.levels[l])).join(' ');
     const cab = CAB_SIDES.map((side) => pct(s.cab[side])).join(' ');
-    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${Math.round(s.cargo)} |`);
+    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${Math.round(s.cargo)} | ${pct(s.utility)} | ${pct(s.activeUtility)} | ${pct(s.emitter)} |`);
   }
   return lines.join('\n') + '\n';
 }

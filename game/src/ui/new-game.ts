@@ -40,6 +40,8 @@ export function openNewGame(actions: NewGameActions, onClose: () => void): void 
 class NewGameScreen {
   private draft: WorldSetup = defaultSetup("roaming");
   private readonly opener = document.activeElement as HTMLElement | null;
+  // The shade is a box-shadow, which does not take clicks. This layer keeps the Menu and death buttons from being clicked.
+  private readonly block = panel("new-game-block");
   private readonly root = panel("new-game");
   private readonly modes = el("div", { class: "mode-list", role: "radiogroup", "aria-label": "Game mode" });
   private readonly settingsButton = el("button", { class: "settings-toggle", "aria-expanded": "false", onclick: () => this.toggleSettings() }, "World Settings");
@@ -149,6 +151,7 @@ class NewGameScreen {
 
   private close(): void {
     this.root.remove();
+    this.block.remove();
     window.removeEventListener("keydown", this.onKey, true);
     shown = null;
     this.opener?.focus();

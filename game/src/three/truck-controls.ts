@@ -4,6 +4,7 @@ import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
+import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
@@ -36,11 +37,13 @@ export class TruckControls {
     this.host.apply(setAutoRepair(w, !w.player.autoRepair));
   }
 
-  // Overdrive changes speed, so the preview must rerun.
+  // Overdrive changes speed, so the preview must rerun. A worn engine blocks switching it on.
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
-    const on = !w.player.overdrive;
+    const me = playerVehicle(w);
+    const on = !inOverdrive(w, me);
+    if (on && !canOverdrive(me)) return;
     this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
     if (on) this.host.revved();
@@ -66,7 +69,7 @@ export type ContextHost = {
   apply: (next: World) => void;
   pushEvents: () => void;
   note: (text: string) => void;
-  openTrade: () => void;
+  openTrade: (npcId: string) => void;
   openTown: () => void;
   openDowned: (vehicleId: string) => void;
   openLoot: (stockId: string) => void;
@@ -100,21 +103,23 @@ export class TruckContext {
     const target: ContextTarget = action.target;
     const h = this.host;
     const handlers: { [K in ContextTarget['kind']]: () => void } = {
-      aid: () => this.startAid(),
-      trade: h.openTrade,
+      aid: () => 'id' in target && this.startAid(target.id),
+      trade: () => 'id' in target && h.openTrade(target.id),
       shop: () => shopAt(h.world()) && h.openTown(),
       downed: () => 'id' in target && h.openDowned(target.id),
       oasis: () => this.refill(),
-      stock: () => 'id' in target && this.useStock(target.id, action.combat),
+      stock: () => 'id' in target && this.searchStock(target.id, action.combat),
+      loot: () => 'id' in target && this.lootStock(target.id),
       empty: () => undefined,
     };
     handlers[target.kind]();
   }
 
-  private startAid(): void {
+  // Starts the handover with this driver only. A deal that is not ready with them changes nothing.
+  private startAid(npcId: string): void {
     const aid = readyAid(this.host.world());
-    if (!aid) return;
-    this.host.apply(startAid(this.host.world(), aid.holder));
+    if (aid?.holder !== npcId) return;
+    this.host.apply(startAid(this.host.world(), npcId));
     this.host.pushEvents();
   }
 
@@ -126,13 +131,18 @@ export class TruckContext {
   }
 
   // A search that combat blocks says so in the log, with the turns left.
-  private useStock(stockId: string, combat: number | undefined): void {
+  private searchStock(stockId: string, combat: number | undefined): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) this.host.note(combatBlocked(combat));
     else if (canScavenge(w, stockId)) {
       this.host.apply(scavenge(w, stockId));
       this.host.pushEvents();
-    } else if (canLoot(w, stockId)) this.host.openLoot(stockId);
+    }
+  }
+
+  private lootStock(stockId: string): void {
+    const w = this.host.world();
+    if (!isBusy(playerVehicle(w)) && canLoot(w, stockId)) this.host.openLoot(stockId);
   }
 }

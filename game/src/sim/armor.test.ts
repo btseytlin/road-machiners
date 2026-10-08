@@ -1,7 +1,7 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { aimWithin, everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
+import { aimWithin, everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, planLane, sideBlockers, sideToward, walkLane } from './armor';
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
@@ -221,6 +221,16 @@ describe('lane depth', () => {
     const rear = coreParts(v, 'wheel').filter((p) => mountedItems(v).find((it) => it.part.id === p.id)!.y > g.h / 2);
     expect(rear.length).toBe(2);
     for (const p of rear) expect(p.hp).toBeGreaterThan(0);
+  });
+  it('a broken cargo box still slows rounds from the rear', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', ['trailerBox'], { x: 40, y: 40 });
+    const round = { damage: 50, pen: 4, blast: false, armorShare: 1 };
+    const lanes = Array.from({ length: laneCount(v, 'rear') }, (_, lane) => lane);
+    const working = lanes.map((lane) => planLane(v, 'rear', lane, round));
+    mountedParts(v, 'cargo')[0].hp = 0;
+    const broken = lanes.map((lane) => planLane(v, 'rear', lane, round).filter((h) => h.part.defId !== 'trailerBox'));
+    expect(broken).toEqual(working.map((hits) => hits.filter((h) => h.part.defId !== 'trailerBox')));
   });
 });
 

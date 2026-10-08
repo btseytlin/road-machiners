@@ -25,7 +25,11 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, upOf, toPhys, type Quat, type TurnFrames, type V3, type VehicleFrame, type WheelFrame } from './frames';
+import { headingOf, headingQuat, noseRise, rotateBy, toPhys, toPhysCircle, upOf, type Circle, type Quat, type TurnFrames, type V3, type VehicleFrame, type WheelFrame } from './frames';
+import { oilPatches } from '../sim/hazards';
+import { lineAnchors, type BodyPoint, type LineAnchor } from '../sim/harpoon';
+import { claymoreOf, claymoresSetOff, type ClaymoreCrash } from '../sim/claymore';
+import { HARPOON, OIL } from '../data/utilities';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -70,7 +74,8 @@ export type Crash = { a: string; b: string; impact: number; contact: CrashGeomet
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s: the speed into the ground along the contact normal, counted only while also moving downward
-export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
+export type Tear = { line: string; step: number }; // a harpoon line that tore at this physics step
+export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; tears: Tear[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
 
@@ -290,19 +295,23 @@ function noteOwner(owner: Map<number, string>, body: RAPIER.RigidBody, vehicleId
   for (let i = 0; i < body.numColliders(); i++) owner.set(body.collider(i).handle, vehicleId);
 }
 
-type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult };
+// oil holds the oil patches the car can reach this turn, in physics space. kicked is true once oil kicked its tail this turn.
+// grip: the ground's grip under the truck, set each step
+type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult; grip: number; oil: Circle[]; kicked: boolean };
 
 function run(d: Drive, w: World, steps: number): TurnResult {
   const world = RAPIER.World.restoreSnapshot(d.world.takeSnapshot());
   world.timestep = DT;
   const events = new RAPIER.EventQueue(true);
   const memory: Record<string, Memory> = structuredClone(d.memory);
+  // Oil patches are fixed for the turn, so each car keeps the ones it can reach once, and the steps never read the sim.
+  const oil = oilPatches(w);
   const cars: Car[] = w.vehicles.filter((v) => d.bodies[v.id] !== undefined).map((v) => {
     const body = world.getRigidBody(d.bodies[v.id]);
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planOf(w, v, s, body, mem), result: { passed: false, arrived: false }, grip: 1, oil: oilInReach(oil, v, s, body), kicked: false };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
@@ -310,24 +319,81 @@ function run(d: Drive, w: World, steps: number): TurnResult {
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const contacts = new Contacts(w);
+  const throws = new ClaymoreThrows(w, cars);
   const landings = new Landings();
+  // Harpoon lines are fixed for the turn too: their anchors come in body space, so the steps only read the bodies.
+  const lines = new Lines(lineAnchors(w), cars);
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
+    lines.pull(i);
     landings.note(cars, before, i);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w), i);
     });
     smash(world, d, contacts.takeNewBreaks(), cars, before);
+    throws.apply(contacts.takeNewCrashes());
     for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body, before.get(c.v.id)!.velocity));
   }
   for (const c of cars) world.removeVehicleController(c.ctl);
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
   const obstacles = Object.fromEntries(Object.entries(d.obstacles).filter(([id]) => !contacts.isBroken(id)));
-  return { next: { world, bodies: { ...d.bodies }, obstacles, craters: { ...d.craters }, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
+  return { next: { world, bodies: { ...d.bodies }, obstacles, craters: { ...d.craters }, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), tears: lines.tears, results };
+}
+
+// Harpoon lines between two trucks with bodies. A line is a one-sided spring on the ground plane between its anchors:
+// past its length it pulls both trucks toward each other with HARPOON.stiffness per meter of stretch plus
+// HARPOON.damping on the separating speed, and never pushes. A stretch pull above HARPOON.tearForce tears it for the
+// rest of the turn. The damping share does not count toward the tear, so the jerk of a line going taut on a truck
+// that is already driving away does not snap it. A line with a far truck does nothing.
+class Lines {
+  readonly tears: Tear[] = [];
+  private readonly held: { line: LineAnchor; a: Car; b: Car }[];
+
+  constructor(lines: LineAnchor[], cars: Car[]) {
+    const car = (id: string) => cars.find((c) => c.v.id === id);
+    this.held = lines.flatMap((line) => {
+      const a = car(line.from);
+      const b = car(line.to);
+      return a && b ? [{ line, a, b }] : [];
+    });
+  }
+
+  pull(step: number): void {
+    for (const h of this.held) {
+      if (this.tears.some((t) => t.line === h.line.id)) continue;
+      if (!pullLine(h.line, h.a.body, h.b.body)) this.tears.push({ line: h.line.id, step });
+    }
+  }
+}
+
+// Pulls the two bodies together when the line is stretched. Returns false when the stretch tears it instead.
+function pullLine(line: LineAnchor, a: RAPIER.RigidBody, b: RAPIER.RigidBody): boolean {
+  const pa = worldPoint(a, line.fromAt);
+  const pb = worldPoint(b, line.toAt);
+  const gap = Math.hypot(pb.x - pa.x, pb.z - pa.z);
+  if (gap <= line.length) return true;
+  const stretch = HARPOON.stiffness * (gap - line.length);
+  if (stretch > HARPOON.tearForce) return false;
+  const n = { x: (pb.x - pa.x) / gap, z: (pb.z - pa.z) / gap };
+  const va = a.velocityAtPoint(pa);
+  const vb = b.velocityAtPoint(pb);
+  const separating = (vb.x - va.x) * n.x + (vb.z - va.z) * n.z;
+  const force = Math.max(0, stretch + HARPOON.damping * separating);
+  const j = force * DT;
+  a.applyImpulseAtPoint({ x: n.x * j, y: 0, z: n.z * j }, pa, true);
+  b.applyImpulseAtPoint({ x: -n.x * j, y: 0, z: -n.z * j }, pb, true);
+  return true;
+}
+
+// A body-space point of a body in physics space.
+function worldPoint(body: RAPIER.RigidBody, at: BodyPoint): V3 {
+  const t = body.translation();
+  const r = rotateBy(body.rotation(), at);
+  return { x: t.x + r.x, y: t.y + r.y, z: t.z + r.z };
 }
 
 // The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.
@@ -377,13 +443,16 @@ function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
 }
 
 // The turn's crashes and breaks. A contact with a breakable prop at BREAKABLE.breakSpeed or faster breaks it
-// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn.
+// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn:
+// the hardest of its contacts. Two trucks touch through several collider pairs, often in one step, and the first one
+// read can be a side graze at no closing speed while another is the nose hitting at full speed.
 class Contacts {
   readonly crashes: Crash[] = [];
   readonly breaks: Break[] = [];
-  private readonly crashed = new Set<string>();
+  private readonly crashed = new Map<string, number>(); // pair key to its index in crashes
   private readonly breakable: Set<string>;
   private fresh: Break[] = [];
+  private freshCrashes: Crash[] = [];
 
   constructor(w: World) {
     this.breakable = new Set(w.obstacles.filter(isBreakable).map((o) => o.id));
@@ -398,10 +467,25 @@ class Contacts {
       this.fresh.push(b);
       return;
     }
+    this.keepHardest(crash);
+  }
+
+  private keepHardest(crash: Crash): void {
     const key = [crash.a, crash.b].sort().join('|');
-    if (this.crashed.has(key)) return;
-    this.crashed.add(key);
-    this.crashes.push(crash);
+    const known = this.crashed.get(key);
+    if (known === undefined) {
+      this.crashed.set(key, this.crashes.length);
+      this.crashes.push(crash);
+    } else if (crash.impact > this.crashes[known].impact) this.crashes[known] = crash;
+    else return;
+    this.freshCrashes.push(crash);
+  }
+
+  // Crashes that became their pair's hardest since the last call.
+  takeNewCrashes(): Crash[] {
+    const out = this.freshCrashes;
+    this.freshCrashes = [];
+    return out;
   }
 
   isBroken(id: string): boolean {
@@ -414,6 +498,61 @@ class Contacts {
     this.fresh = [];
     return out;
   }
+}
+
+// A crash that sets off a claymore ram, as claymore.ts decides, throws the user back from what it hit and the other
+// truck away from the user, each by the ram's throw impulse, at the step of the crash. Each truck blows once a turn,
+// as its charge goes with the blast. Rails and the map edge are no obstacle and set off nothing.
+class ClaymoreThrows {
+  private readonly blown = new Set<string>();
+
+  constructor(private readonly w: World, private readonly cars: Car[]) {}
+
+  apply(crashes: Crash[]): void {
+    for (const crash of crashes) {
+      const impact = toTilesPerTurn(crash.impact);
+      this.tryBlast(crash.a, crash.b, { impact, own: crash.contact.a, theirs: crash.contact.b });
+      if (crash.contact.b) this.tryBlast(crash.b, crash.a, { impact, own: crash.contact.b, theirs: crash.contact.a });
+    }
+  }
+
+  private tryBlast(userId: string, hitId: string, crash: ClaymoreCrash): void {
+    const user = this.cars.find((c) => c.v.id === userId);
+    const target = this.targetOf(hitId);
+    if (user && target && !this.blown.has(userId)) this.blast(user, target, crash);
+  }
+
+  // What a truck hit: another truck's car and its center, an obstacle's center, or null for a rail or the map edge.
+  private targetOf(id: string): BlastTarget | null {
+    const car = this.cars.find((c) => c.v.id === id);
+    if (car) return { car, at: car.body.translation() };
+    const obstacle = this.w.obstacles.find((o) => o.id === id);
+    return obstacle ? { car: null, at: { x: obstacle.pos.x * S, z: obstacle.pos.y * S } } : null;
+  }
+
+  private blast(user: Car, target: BlastTarget, crash: ClaymoreCrash): void {
+    const rams = claymoresSetOff(this.w, user.v, target.car?.v ?? null, crash);
+    if (rams.length === 0) return;
+    this.blown.add(user.v.id);
+    const away = awayFrom(user.body.translation(), target.at);
+    const { impulse, lift } = claymoreOf(rams[0]).throw;
+    throwBody(user.body, away, impulse, lift);
+    if (target.car) throwBody(target.car.body, { x: -away.x, z: -away.z }, impulse, lift);
+  }
+}
+
+type BlastTarget = { car: Car | null; at: { x: number; z: number } };
+
+// The flat unit direction from `at` to `from`.
+function awayFrom(from: { x: number; z: number }, at: { x: number; z: number }): { x: number; z: number } {
+  const length = Math.hypot(from.x - at.x, from.z - at.z);
+  if (length === 0) throw new Error('A claymore blast between two points in one place has no direction');
+  return { x: (from.x - at.x) / length, z: (from.z - at.z) / length };
+}
+
+function throwBody(body: RAPIER.RigidBody, dir: { x: number; z: number }, impulse: number, lift: number): void {
+  const flat = impulse * Math.sqrt(1 - lift * lift);
+  body.applyImpulse({ x: dir.x * flat, y: impulse * lift, z: dir.z * flat }, true);
 }
 
 // Removes each broken prop's colliders and gives the truck that broke it back its motion from before the hit, less
@@ -568,16 +707,30 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
   const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
-  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
-  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers, v), radius: s.radius } : null;
+  // Without engine force, as while an emitter pulse shuts the truck down, the driver can only keep the speed it has:
+  // it coasts and steers, and brakes only to stop on a stop point.
+  const drive = (next: number) => toMps(engine ? next : speed);
+  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: drive(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
-  return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
+  return { ...base, dest: order.dest, route: path, target: drive(next), stopAt: false };
 }
 
 // A stop order arrives at the route's end, which is the closest point the planner reaches when the order point
 // itself cannot be reached, as in far travel. A careless driver has no route and stops on the order point.
 function stopPoint(path: Vec[] | null, dest: Vec): Vec {
   return path ? path[path.length - 1] : dest;
+}
+
+// The truck's plan for the turn. A frozen NPC (the debug freeze) has no driver: no throttle and no brakes, so it rolls
+// where it is pushed or pulled.
+function planOf(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, mem: Memory): Plan {
+  const plan = planTurn(w, v, full, body, v.order, mem);
+  return isFrozenNpc(w, v) ? { ...plan, engine: false, brakeForce: 0, dest: null, route: null, stopAt: false } : plan;
+}
+
+function isFrozenNpc(w: World, v: Vehicle): boolean {
+  return w.player.frozen && v.brain !== null && v.id !== w.player.vehicleId;
 }
 
 // Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.
@@ -587,19 +740,56 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield.
-function applyTerrainGrip(c: Car, terrain: Terrain): void {
+// the heightfield. Slippery ground, like glass, cuts the tires' hold on top of that, for every truck and skill:
+// grip along the wheel, for speeding up and braking, and side grip across it, so a turning truck slides sideways.
+// Drivers plan their braking with the same grip, so they still stop on a point. They corner as on any ground, so
+// the truck skids through its turns.
+// An oiled wheel, as `slick` says in wheelMounts order, keeps OIL.grip of its friction slip and side friction
+// stiffness on top of that. Overlapping patches count once.
+function applyTerrainGrip(c: Car, terrain: Terrain, slick: readonly boolean[]): void {
   const p = c.body.translation();
-  const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
-  const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
-  for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
+  const ground = TERRAIN_TYPES[terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })]];
+  c.grip = ground.grip;
+  const grip = T.frictionSlip * groundSpeed(c.s, ground.speed) * ground.grip;
+  for (let i = 0; i < 4; i++) {
+    const share = slick[i] ? OIL.grip : 1;
+    c.ctl.setWheelFrictionSlip(i, grip * share);
+    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * ground.sideGrip * share);
+  }
+}
+
+// The oil patches a car can reach this turn: those within its top speed for the turn, or its speed now if faster,
+// plus its half diagonal and the patch's radius. One pass over the turn's patches per car per turn.
+function oilInReach(patches: readonly { pos: Vec; r: number }[], v: Vehicle, s: VehicleStats, body: RAPIER.RigidBody): Circle[] {
+  const half = bodyOf(v.chassisId).half;
+  const reach = Math.max(s.maxSpeed, toTilesPerTurn(flatSpeed(body))) + Math.hypot(half.x, half.z) / S;
+  return patches.filter((p) => dist(p.pos, v.pos) <= reach + p.r).map((p) => toPhysCircle(p.pos, p.r));
+}
+
+const DRY_WHEELS: readonly boolean[] = [false, false, false, false];
+
+// Whether each wheel's hub, in wheelMounts order, lies over any oil patch the car can reach.
+function oiledWheels(c: Car): readonly boolean[] {
+  const oil = c.oil;
+  if (oil.length === 0) return DRY_WHEELS;
+  const p = c.body.translation();
+  const h = headingOf(c.body.rotation());
+  const cos = Math.cos(h);
+  const sin = Math.sin(h);
+  return wheelMounts(c.b).map((m) => {
+    const x = p.x + cos * m.x - sin * m.z;
+    const z = p.z + sin * m.x + cos * m.z;
+    return oil.some((o) => Math.hypot(x - o.x, z - o.z) <= o.r);
+  });
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
 // it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
 function driveStep(c: Car, terrain: Terrain): void {
-  applyTerrainGrip(c, terrain);
+  const slick = oiledWheels(c);
+  applyTerrainGrip(c, terrain, slick);
+  oilKick(c, slick);
   const speed = forwardSpeed(c.body);
   const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
@@ -609,6 +799,41 @@ function driveStep(c: Car, terrain: Terrain): void {
   }
   turnWheels(c, command.steerTo);
   applyPedals(c, command.target, speed);
+}
+
+// The tail kick. At the first step this turn that a rear wheel is on oil, the yaw rate about the truck's up axis jumps
+// by tailKick. Physics then decides how far the swing grows on the low grip.
+function oilKick(c: Car, slick: readonly boolean[]): void {
+  if (c.kicked || !(slick[2] || slick[3])) return;
+  c.kicked = true;
+  const up = rotateBy(c.body.rotation(), { x: 0, y: 1, z: 0 });
+  const spin = c.body.angvel();
+  const kick = tailKick(toTilesPerTurn(flatSpeed(c.body)), slick, spin.x * up.x + spin.y * up.y + spin.z * up.z);
+  c.body.setAngvel({ x: spin.x + up.x * kick, y: spin.y + up.y * kick, z: spin.z + up.z * kick }, true);
+}
+
+// The tail kick's yaw rate change in rad/s about the truck's up axis, for a truck at `speed` tiles per turn whose
+// wheels in wheelMounts order are on oil as `slick` says, turning at `yawRate` rad/s about its up axis. A positive
+// rate turns the nose toward the truck's left. The kick is OIL.kick for each OIL.safeSpeed above OIL.safeSpeed, up
+// to OIL.maxKick. It swings the tail toward the oiled rear wheel. With both rear wheels on oil it adds to the yaw
+// rate, and with no yaw rate it turns the nose left. Throws without a rear wheel on oil.
+export function tailKick(speed: number, slick: readonly boolean[], yawRate: number): number {
+  const size = Math.min(OIL.maxKick, (OIL.kick * Math.max(0, speed - OIL.safeSpeed)) / OIL.safeSpeed);
+  return size * kickSide(slick, yawRate);
+}
+
+// +1 turns the nose left and the tail right, -1 the other way. Wheel 2 is the left rear and 3 the right rear.
+function kickSide(slick: readonly boolean[], yawRate: number): number {
+  if (slick[2] && slick[3]) return yawRate < 0 ? -1 : 1;
+  if (slick[2]) return -1;
+  if (slick[3]) return 1;
+  throw new Error('A tail kick needs a rear wheel on oil');
+}
+
+// The body's speed along the ground in m/s, whichever way it moves.
+function flatSpeed(body: RAPIER.RigidBody): number {
+  const v = body.linvel();
+  return Math.hypot(v.x, v.z);
 }
 
 type Command = { target: number; steerTo: number }; // target in m/s along the nose, steerTo in radians of wheel angle
@@ -635,7 +860,7 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
     const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
     return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
-  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel));
+  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel * c.grip));
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
 }
 
@@ -647,7 +872,7 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
     return c.plan.target;
   }
   if (far < RULES.arriveRadius * S) c.result.arrived = true;
-  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * c.grip * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
 // Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
@@ -694,21 +919,29 @@ function turnWheels(c: Car, steerTo: number): void {
 }
 
 // Throttle toward the target speed, plus the engine share that cancels gravity along the nose,
-// so a truck holds its speed on a slope. Without engine push the truck brakes.
+// so a truck holds its speed on a slope. Without engine push the truck brakes when it is too fast. A truck with no
+// engine force at all coasts while it is too slow.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
   const cap = climbForce(c, target);
   const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target, cap), -1, 1);
-  const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
-  const brake = brakeOf(plan, u, target, pushing);
+  const more = wantsMore(u, target);
+  const pushing = plan.engine && more;
+  const brake = more ? 0 : brakeOf(plan, u, target);
   const force = pushing ? u * cap : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose, at cap force per driven wheel. A truck holding still brakes instead.
+// The throttle asks for more speed along the target's direction, so the driver does not brake.
+function wantsMore(u: number, target: number): boolean {
+  return target !== 0 && Math.sign(u) === Math.sign(target);
+}
+
+// Throttle share that holds the truck against gravity along its nose, at cap force per driven wheel. A truck holding
+// still brakes instead, and a truck with no engine force has no throttle to hold with.
 function slopeThrottle(c: Car, target: number, cap: number): number {
-  if (target === 0) return 0;
+  if (target === 0 || !c.plan.engine) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
   return pull / (2 * cap);
 }
@@ -752,9 +985,8 @@ function climbSine(c: Car, sign: number): number {
   return run === 0 ? 0 : along.y / run;
 }
 
-// No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
-function brakeOf(plan: Plan, u: number, target: number, pushing: boolean): number {
-  if (pushing) return 0;
+// A truck holding still brakes fully on top of the throttle's brake share.
+function brakeOf(plan: Plan, u: number, target: number): number {
   return Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
 }
 

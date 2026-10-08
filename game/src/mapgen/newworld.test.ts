@@ -5,8 +5,9 @@ import { deckAt, deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import type { BakedProp } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
+import { territoryRoads } from '../sim/territory';
 import { padReach } from '../test/sites';
-import { dist, segmentDist, type Vec } from '../sim/vec';
+import { dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { baseLayer, finishLayer, newDraft, tileSteepness, type MapDraft } from './bake';
 import { dunes, rain, slump, wind } from './geology';
 import { BUILT_FIELD, BUILT_NONE, BUILT_OLD_ROAD, oldWorldLayer, roadJunctions } from './oldworld';
@@ -384,6 +385,24 @@ describe('car wrecks', () => {
       expect(p.pos.y).toBeLessThanOrEqual(43);
       expect(Math.cos(p.yaw)).toBeGreaterThan(0.99);
     }
+  });
+});
+
+describe('territory spurs', () => {
+  // The dirt spurs reach out past their territory's site clearance; the territory layer marks them after the new world.
+  const spurs = REGION.locations.filter((l) => l.kind === 'territory').flatMap((t) => territoryRoads(t).spurs);
+  const nearSpur = (p: Vec, reach: number) => spurs.some((s) => polylineDist(p, s.points) < s.width / 2 + reach);
+
+  it('keep car wrecks off every territory spur, even in a wash bed under one', () => {
+    // A wash bed under every spur and the ground round it.
+    const d = newDraft(SIZE);
+    setCorners(d, 'flow', (i, j) => (nearSpur({ x: i, y: j }, 6) ? WASH * 2 : 0));
+
+    carWrecks(SEED, d, [], { ...NEW_WORLD.carWrecks, roadChance: 0, oldRoadChance: 0, campChance: 0, washChance: 1 });
+
+    const besideSpurs = d.props.filter((p) => nearSpur(p.pos, 6));
+    expect(besideSpurs.length).toBeGreaterThan(20);
+    for (const p of besideSpurs) expect(nearSpur(p.pos, p.r + O.gap), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBe(false);
   });
 });
 
