@@ -1,8 +1,9 @@
 // Measures boot, turn, move preview and frame time in Chromium on the real GPU, and fails on any
-// budget miss from scripts/perf-budgets.json, a page error or the crash screen.
+// budget miss from scripts/perf-budgets.json, a page error, the crash screen or software drawing.
 // Usage: npm run perf -- --url http://localhost:5173
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { gpuArgs, isSoftware, rendererOf } from './gpu.mjs';
 
 const arg = (name) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -20,8 +21,15 @@ const VIEW_ZOOM = 0.35; // widest zoom
 const SETTLE_MS = 800; // camera move and first frames after it
 const SAMPLE_MS = 2000;
 
-const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: gpuArgs() });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
+const renderer = await rendererOf(page);
+console.log(`renderer ${renderer}`);
+if (isSoftware(renderer)) {
+  await browser.close();
+  console.error(`FAIL\nPerf got the software renderer ${renderer}. It needs a GPU.`);
+  process.exit(1);
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
