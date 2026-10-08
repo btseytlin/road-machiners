@@ -16,6 +16,12 @@ export const NPC_BEHAVIOR = {
   // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
   // 80 tiles of gray vision, so the driver stays in the same area.
   stallJump: 20,
+  // A driver lies up at a random free spot `gap` tiles beyond its site's edge, off the pad, so trucks resting there
+  // for days leave the pad and each other room. Kiln Camp has one pad, and trucks parked on it boxed each other in.
+  // Within `reach` tiles of its spot the driver counts as lying up, two truck radii, so a neighbour that parked close
+  // does not keep it from arriving. A spot keeps `spacing` tiles more than touching from every truck, room for a
+  // truck to drive between two resting ones.
+  lieUp: { gap: { min: 2, max: 8 }, reach: 1.5, spacing: 1.5 },
   // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
   // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
   // cost about 78, a fifth of the load's profit.

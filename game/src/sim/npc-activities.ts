@@ -41,7 +41,7 @@ import { canVehicleSee } from './vision';
 import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
-import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
+import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -1116,12 +1116,16 @@ export function noteHurt(world: World): void {
   }
 }
 
-// A repair spot is driven to directly. Once there, the driver brakes.
+// A repair spot and a lie-up spot are driven to directly. Once there, the driver brakes.
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
-  if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
+  if (activity.kind === 'repair' || activity.kind === 'rearm') return parksHere(vehicle, activity) ? null : activity.destination;
   if (['fight', 'flee', 'raid', 'prowl', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
+}
+
+function parksHere(vehicle: Vehicle, activity: NpcActivity): boolean {
+  return activity.kind === 'repair' ? repairsHere(vehicle, activity) : liesUp(vehicle);
 }
 
 // Where a driver stops for a site, a stock or a truck it tows: on a site pad, or just outside the radius.

@@ -188,6 +188,8 @@ describe('the retreat home', () => {
     const money = getResources(w, buggy).money;
     thinkNpc(w, buggy);
     resolveNpcActivities(w);
+    // No driving runs here, so the driver is set down on its lie-up spot.
+    buggy.pos = { ...topGoal(buggy)!.destination! };
     w.turn = topGoal(buggy)!.until!;
     thinkNpc(w, buggy);
     resolveNpcActivities(w);

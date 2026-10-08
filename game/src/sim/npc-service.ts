@@ -3,7 +3,7 @@
 // driver is fit again, else at its until turn with a fresh loadout from refitAtHome(). The wait is the template's
 // refill time, so fresh gear comes no faster per template than respawn allows.
 
-import { NPC_UPKEEP, NPCS } from '../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, NPCS, SPAWN } from '../data/npcs';
 import { shopDef } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -11,11 +11,15 @@ import { isDefeated, refitAtHome } from './defeat';
 import { scrapFuel, serviceAtCamp, serviceAtStall, serviceVehicle } from './economy';
 import { dropGoal, finishGoal, isBroke, noteShop, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
 import { fitToHunt, getKnownSite, huntsPrey, npcProfile, type NpcProfile } from './npc-decisions';
+import { route } from './path';
 import { getResources } from './resources';
+import { randRange } from './rng';
 import { canUseSite, type Site } from './sites';
-import { isStranded, suppliesCap } from './stats';
+import { isFree } from './spawn';
+import { isStranded, suppliesCap, vehicleStats } from './stats';
 import { isOnRope } from './tow';
 import type { NpcActivity, Vehicle, World } from './types';
+import { dist, type Vec } from './vec';
 
 // ---- Service.
 
@@ -86,20 +90,43 @@ function rearmTurns(vehicle: Vehicle): number {
   return template.cap * template.interval;
 }
 
-// Starts a lie-up at the site. It replaces a retreat home, and a lie-up already held keeps its until turn.
+// Starts a lie-up at the site. It replaces a retreat home, and a lie-up already held keeps its until turn and spot.
 export function beginRearm(world: World, vehicle: Vehicle, site: Site): void {
   if (!servingSiteIds(npcProfile(vehicle)).includes(site.id)) throw new Error(`${vehicle.id} cannot lie up at ${site.id}`);
   const retreat = vehicle.brain!.goals.find((g) => g.kind === 'retreat');
   if (retreat) dropGoal(world, vehicle, retreat, 'home to lie up');
   if (holdsRearm(vehicle)) return;
   const until = world.turn + rearmTurns(vehicle);
-  pushGoal(world, vehicle, { kind: 'rearm', targetId: site.id, destination: { ...site.pos }, phase: 'act', reason: 'lie up for fresh gear', until });
+  pushGoal(world, vehicle, { kind: 'rearm', targetId: site.id, destination: lieUpSpot(world, vehicle, site), phase: 'travel', reason: 'lie up for fresh gear', until });
 }
 
-// The driver lies up parked at its site. A lie-up driven off by danger is not parked until it is back.
+// A random free spot beyond the site's edge and off its pads that the driver can reach from where it stands. A
+// stranded driver cannot drive there, so it lies up where it stands, as does one that finds no such spot.
+function lieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec {
+  if (isStranded(world, vehicle)) return { ...vehicle.pos };
+  for (let i = 0; i < SPAWN.tries; i++) {
+    const spot = tryLieUpSpot(world, vehicle, site);
+    if (spot) return spot;
+  }
+  return { ...vehicle.pos };
+}
+
+// One random point in the ring around the site, or null when it is on a pad, crowded or out of reach.
+function tryLieUpSpot(world: World, vehicle: Vehicle, site: Site): Vec | null {
+  const { gap, spacing } = NPC_BEHAVIOR.lieUp;
+  const radius = vehicleStats(world, vehicle).radius;
+  const angle = randRange(world, 0, Math.PI * 2);
+  const d = site.radius + randRange(world, gap.min, gap.max);
+  const spot = { x: site.pos.x + Math.cos(angle) * d, y: site.pos.y + Math.sin(angle) * d };
+  if (canUseSite(spot, site) || !isFree(world, spot, radius + spacing, vehicle.id)) return null;
+  const end = route(world, vehicle.pos, spot, radius, [], vehicle).at(-1) ?? vehicle.pos;
+  return dist(end, spot) <= RULES.arriveRadius ? spot : null;
+}
+
+// The driver lies up at its spot. A lie-up driven off by danger is not lying up until it is back.
 export function liesUp(vehicle: Vehicle): boolean {
   const top = topGoal(vehicle);
-  return top?.kind === 'rearm' && canUseSite(vehicle.pos, getKnownSite(top.targetId!));
+  return top?.kind === 'rearm' && dist(vehicle.pos, top.destination!) <= NPC_BEHAVIOR.lieUp.reach;
 }
 
 export function rearmInvalid(world: World, vehicle: Vehicle): string | null {
@@ -109,7 +136,9 @@ export function rearmInvalid(world: World, vehicle: Vehicle): string | null {
 // Fresh gear comes only here, once the lie-up has lasted to its until turn.
 export function resolveRearm(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (activity.until === undefined) throw new Error(`${vehicle.id} lies up with no until turn`);
-  if (!reachSite(vehicle, activity) || world.turn < activity.until) return;
+  if (!liesUp(vehicle)) return;
+  activity.phase = 'act';
+  if (world.turn < activity.until) return;
   refitAtHome(world, vehicle);
   finishGoal(world, vehicle, 'refitted at home');
 }

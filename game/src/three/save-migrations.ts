@@ -332,6 +332,18 @@ function withFleePerceived_20_21(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// A lie-up's destination becomes the spot the driver lies up at. An old lie-up lay on the pad, so the driver lies up
+// where it stands.
+function withLieUpSpot_25_26(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const pos = v.pos as SavedJson;
+    const goal = (g: SavedJson): SavedJson => (g.kind === 'rearm' ? { ...g, destination: { x: pos.x, y: pos.y } } : g);
+    return { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
 // A fight records the last turn it wore its target down. Taken as the save's turn at full condition, so the first
 // check after loading starts a fresh window.
 function withFightWorn_21_22(world: SavedJson): SavedJson {
@@ -498,6 +510,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withSeenSince_23_24,
   // 24 to 25: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
   (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_24_25(o)) }),
+  // 25 to 26: a lie-up holds the spot the driver lies up at, the driver's place for an old one.
+  withLieUpSpot_25_26,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
