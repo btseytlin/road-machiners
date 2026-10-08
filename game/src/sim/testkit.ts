@@ -11,8 +11,12 @@ import { TEST_MAP } from '../test/map';
 import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import { addState } from './states';
-import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
+import type { Faction, GameEvent, NpcBrain, Obstacle, SalvageStock, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
+import { REGION } from '../data/region';
+import { propReach } from './mapgen';
+import { rollStock } from './salvage';
+import { spotTable } from './territory';
 import { refreshVision } from './vision';
 import { openingStockOf } from './opening';
 import { playerVehicle } from './damage';
@@ -56,6 +60,24 @@ export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
   p.heading = 0;
   refreshVision(w);
   return w;
+}
+
+export function addLootSpot(w: World): { spot: Obstacle; stock: SalvageStock } {
+  const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+  const spot: Obstacle = { id: 'farmhouse-1', kind: 'landmark', look: 'farmhouse', pos: { ...orchard.pos }, r: 1.5, yaw: 0 };
+  const stock = rollStock(w, spotTable(spot), spot.id, spot.pos, propReach(spot));
+  w.obstacles.push(spot);
+  w.salvage.push(stock);
+  return { spot, stock };
+}
+
+export function spotWorld(): { w: World; spot: Obstacle; stock: SalvageStock } {
+  const w = emptyWorld();
+  w.salvage = [];
+  const { spot, stock } = addLootSpot(w);
+  w.vehicles[0].pos = { x: spot.pos.x + propReach(spot) + 1, y: spot.pos.y };
+  refreshVision(w);
+  return { w, spot, stock };
 }
 
 export function addVehicle(w: World, faction: Faction, chassisId: string, parts: string[], pos: Vec, heading = 0): Vehicle {

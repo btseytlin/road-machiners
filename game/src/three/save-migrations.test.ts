@@ -41,6 +41,7 @@ import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
+import FORMAT_2_34 from './save-fixtures/format-2-34.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -764,5 +765,55 @@ describe('save migration 32 to 33', () => {
 describe('save migration 33 to 34', () => {
   it('keeps a save with only price memories as it is', () => {
     expect(MIGRATIONS[33](structuredClone(FORMAT_2_33))).toEqual(FORMAT_2_33);
+  });
+});
+
+describe('save migration 34 to 35', () => {
+  const before = structuredClone(FORMAT_2_34);
+  const next = MIGRATIONS[34](FORMAT_2_34) as {
+    salvage: { id: string }[];
+    shops: Record<string, { contracts: unknown[]; pressure: Record<string, number>; stock: unknown[]; restockAt: number }>;
+    obstacles: { id: string }[];
+    player: { scavenged: string[]; discovered: string[] };
+    vehicles: { id: string; job: unknown; brain: { goals: { targetId: string }[]; noticed: Record<string, number>; unfit: string[]; memories: { fact: { kind: string; stock?: string } }[] } | null }[];
+  };
+
+  it('drops the six retired stocks and keeps every other stock', () => {
+    expect(next.salvage.map((s) => s.id)).toEqual(['wreck4', 'farmhouse-1']);
+  });
+
+  it('drops the retired ids from the searched and discovered lists', () => {
+    expect(next.player.scavenged).toEqual(['wreck4', 'farmhouse-1']);
+    expect(next.player.discovered).toEqual(['bowl', 'dustwell']);
+  });
+
+  it('adds both outpost shops empty, to roll their stock on the next turn, and leaves the old shops', () => {
+    expect(next.shops.dustwell).toEqual({ contracts: [], pressure: { water: 0, scrap: 0, tools: 0, meds: 0 }, stock: [], restockAt: 1200 });
+    expect(next.shops['green-pit']).toEqual({ contracts: [], pressure: { water: 0, grain: 0, salt: 0, textiles: 0 }, stock: [], restockAt: 1200 });
+    expect(next.shops.bowl).toEqual(FORMAT_2_34.shops.bowl);
+    expect(next.shops.nose).toEqual(FORMAT_2_34.shops.nose);
+  });
+
+  it('ends a search or a refit pickup of a retired stock and keeps other jobs', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1].job).toBeNull();
+    expect(next.vehicles[2].job).toEqual(FORMAT_2_34.vehicles[2].job);
+  });
+
+  it('drops goals, stripped memories, unfit entries and noticed marks of retired stocks', () => {
+    const brain = next.vehicles[1].brain!;
+    expect(brain.goals.map((g) => g.targetId)).toEqual(['bowl']);
+    expect(brain.memories.map((m) => m.fact.kind)).toEqual(['stripped', 'prices']);
+    expect(brain.memories[0].fact.stock).toBe('wreck4');
+    expect(brain.unfit).toEqual(['wreck4']);
+    expect(brain.noticed).toEqual({ 'salvageSeen:wreck4': 5 });
+  });
+
+  it('drops the retired site and convoy wreck obstacles and keeps the rest', () => {
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-dustwell', 'wreck0', 'rock1']);
+  });
+
+  it('does not mutate its input', () => {
+    expect(FORMAT_2_34).toEqual(before);
   });
 });

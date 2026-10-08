@@ -1,7 +1,5 @@
 import { FIELD_SPARE_WEAR, SALVAGE, type LootRange, type LootTable } from '../data/salvage';
-import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
-import { REGION, type LocationDef } from '../data/region';
 import { BREAKABLE, RULES } from '../data/rules';
 import { WRECK_LOOKS } from '../data/territory';
 import { TIME } from '../data/time';
@@ -24,7 +22,6 @@ import { cancelJob, startJob } from './jobs';
 import type { GridItem, HiddenLoot, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { canUseSite } from './sites';
 import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory';
 import { inTowReach } from './tow';
@@ -34,40 +31,25 @@ import { OPENING_WRECK_ID } from './opening';
 import { maxHp } from './wear';
 
 export function initializeSalvage(world: World): void {
-  const sites = REGION.locations.flatMap((site) => {
-    const table = siteLootTable(site);
-    return table ? [rollStock(world, table, site.id, site.pos, site.radius)] : [];
-  });
   const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
   const wrecks = world.obstacles.filter(isRoadWreck).map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
-  world.salvage = [...sites, ...spots, ...wrecks];
-}
-
-export function siteLootTable(site: LocationDef): LootTable | null {
-  if (site.kind === 'territory' || site.id in SHOPS) return null;
-  if (site.kind === 'convoy') return SALVAGE.convoy;
-  return site.kind === 'landmark' ? SALVAGE.landmark : null;
-}
-
-export function isSiteStock(stock: SalvageStock): boolean {
-  return REGION.locations.some((site) => site.id === stock.id);
+  world.salvage = [...spots, ...wrecks];
 }
 
 export function isRoadWreck(o: { id: string }): boolean {
   return /^wreck\d+$/.test(o.id);
 }
 
-export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
+export type SalvagePlace = 'pile' | 'wreck' | 'spot';
 
 export function salvagePlace(stock: SalvageStock): SalvagePlace {
   if (stock.pile) return 'pile';
-  if (isSiteStock(stock)) return 'site';
   return isRoadWreck(stock) || isTruckWreck(stock) || stock.id === OPENING_WRECK_ID ? 'wreck' : spotPlace(stock);
 }
 
 function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {
   const look = territoryOfStock(stock) ? spotLookOf(stock) : null;
-  if (!look) throw new Error(`Stock ${stock.id} is no pile, site, wreck or loot spot`);
+  if (!look) throw new Error(`Stock ${stock.id} is no pile, wreck or loot spot`);
   return WRECK_LOOKS.includes(look) ? 'wreck' : 'spot';
 }
 
@@ -172,8 +154,7 @@ export function searchTarget(world: World, vehicle: Vehicle, stockId: string | n
 }
 
 export function salvageInRange(vehicle: Vehicle, stock: SalvageStock): boolean {
-  const site = REGION.locations.find((l) => l.id === stock.id);
-  return site ? canUseSite(vehicle.pos, site) : dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
+  return dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
 }
 
 export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, units: number): number {
@@ -387,18 +368,14 @@ export function removeStocks(world: World, gone: Set<string>): void {
 
 export function renewSalvage(world: World): void {
   if (world.turn % TIME.turnsPerDay !== 0) return;
-  for (const site of REGION.locations) {
-    const table = siteLootTable(site);
-    if (table) restockSite(world, siteStock(world, site.id), table);
-  }
-  for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, siteStock(world, o.id), spotTable(o));
+  for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, spotStock(world, o.id), spotTable(o));
   turnOverRoadWrecks(world);
   regrowBroken(world);
 }
 
-function siteStock(world: World, id: string): SalvageStock {
+function spotStock(world: World, id: string): SalvageStock {
   const stock = world.salvage.find((entry) => entry.id === id);
-  if (!stock) throw new Error(`Site ${id} has no salvage stock`);
+  if (!stock) throw new Error(`Spot ${id} has no salvage stock`);
   return stock;
 }
 
@@ -541,7 +518,7 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 
 export function isLootTarget(world: World, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
-  if (stock) return !isSiteStock(stock);
+  if (stock) return true;
   const truck = world.vehicles.find((v) => v.id === targetId);
   return truck !== undefined && isKnockedOut(truck);
 }

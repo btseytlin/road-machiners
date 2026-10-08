@@ -115,8 +115,8 @@ describe("double click outside a garage", () => {
     expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
   });
 
-  it("does nothing on the truck grid on an oasis pad", () => {
-    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "dustwell")!)[0]);
+  it("does nothing on the truck grid on a raider camp pad", () => {
+    const w = emptyWorld(sitePads(REGION.locations.find((l) => l.id === "scrapjaw")!)[0]);
     expect(doubleClickCommand(w, gridClick(partOf(w, "mg")))).toBeNull();
   });
 

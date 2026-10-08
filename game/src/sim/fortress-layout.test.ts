@@ -17,7 +17,7 @@ const isFlush = (s: Site) => FORTRESS_STYLES[FORTRESS_SITES[s.id].style].flush;
 const FLUSH = FORTS.filter(isFlush);
 const CASTLES = FORTS.filter((s) => !isFlush(s));
 const siteOf = (id: string): Site => FORTS.find((s) => s.id === id)!;
-const KEPT = ['green-pit', 'pump-station', 'south-lock', 'scrapjaw', 'kiln'];
+const KEPT = ['green-pit', 'pump-station', 'scrapjaw', 'kiln'];
 
 function covers(site: Site, piece: FortressPiece, p: Vec): boolean {
   const c = fortressFootprint(site, piece);
@@ -39,9 +39,9 @@ function outward(site: Site, p: Vec): Vec {
 }
 
 describe('fortress data', () => {
-  it('names the ten inhabited sites', () => {
-    expect(Object.keys(FORTRESS_SITES).sort()).toEqual(['bowl', 'dustwell', 'granary', 'green-pit', 'kiln', 'nose', 'pump-station', 'salvage-yard', 'scrapjaw', 'south-lock']);
-    expect(FORTS).toHaveLength(10);
+  it('names the nine inhabited sites', () => {
+    expect(Object.keys(FORTRESS_SITES).sort()).toEqual(['bowl', 'dustwell', 'granary', 'green-pit', 'kiln', 'nose', 'pump-station', 'salvage-yard', 'scrapjaw']);
+    expect(FORTS).toHaveLength(9);
   });
 });
 
@@ -126,10 +126,10 @@ describe('fortress layout', () => {
     expect(pieces.filter((p) => p.kind === 'wall').length).toBeGreaterThan(0);
   });
 
-  it('lays Nose flush, with no bastion or inner gate (IV23)', () => {
+  it('lays Nose flush, with no inner gate (IV23)', () => {
     const pieces = fortressPieces(siteOf('nose'));
     expect(FORTRESS_STYLES.shipMetal.flush).toBe(true);
-    expect(pieces.filter((p) => p.kind === 'bastion' || p.kind === 'inner')).toEqual([]);
+    expect(pieces.filter((p) => p.kind === 'inner')).toEqual([]);
     expect(pieces.filter((p) => p.kind === 'gate')).toHaveLength(2);
   });
 
@@ -223,14 +223,10 @@ describe('fortress layout', () => {
     }
   });
 
-  it('puts towers at the corners of a square and bastions at the points of a star', () => {
+  it('puts towers at the corners of a square', () => {
     const square = FORTS.find((s) => FORTRESS_SITES[s.id].shape === 'square')!;
-    const star = FORTS.find((s) => FORTRESS_SITES[s.id].shape === 'star')!;
 
     expect(fortressOutline(square)).toHaveLength(4);
-    expect(fortressOutline(star)).toHaveLength(FORTRESS.starPoints * 2);
-    expect(fortressPieces(star).filter((p) => p.kind === 'bastion').length).toBeGreaterThan(0);
-    expect(fortressPieces(star).filter((p) => p.kind === 'tower')).toEqual([]);
     expect(fortressPieces(square).filter((p) => p.kind === 'tower').length).toBeGreaterThan(0);
   });
 

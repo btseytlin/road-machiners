@@ -1,4 +1,4 @@
-// Discovery, the oasis and scavenging.
+// Discovery and scavenging.
 
 import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
@@ -15,12 +15,11 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { isFortress, locationAt, siteGap, type Site } from './sites';
+import { isFortress, siteGap, type Site } from './sites';
 import { shopAt } from './market';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { playerCommand } from './world';
-import { suppliesCap } from './stats';
 
 export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
@@ -38,20 +37,6 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
   practice(world, 'discover', 1, null, s.id);
-}
-
-export function canUseOasis(world: World): boolean {
-  return locationAt(world)?.kind === 'oasis' && playerVehicle(world).speed <= RULES.parkedSpeed;
-}
-
-export function useOasis(world: World): World {
-  return playerCommand(world, (w) => {
-    const loc = locationAt(w);
-    if (loc?.kind !== 'oasis') throw new Error('Not at an oasis');
-    if (!canUseOasis(w)) throw new Error('Stop the truck first');
-    w.player.supplies = suppliesCap(playerVehicle(w));
-    w.events.push({ t: "info", text: `Filled supplies at ${loc.name}` });
-  });
 }
 
 function seesArea(world: World, site: Site): boolean {

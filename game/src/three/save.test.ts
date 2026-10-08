@@ -169,6 +169,20 @@ describe('game save', () => {
     expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
+  it.each(['dustwell', 'green-pit'])('keeps the shop of the outpost %s across a save and a load and awards nothing', (id) => {
+    const slots = makeSlots();
+    const world = emptyWorld(sitePads(siteOf(id))[0]);
+    world.player.money = 100000;
+    const bought = buyStockPart(world, world.shops[id].stock[0].id);
+    const xp = structuredClone(bought.player.xp);
+    writeSave(slots, 'auto', bought, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    expect(loaded.shops[id]).toEqual(bought.shops[id]);
+    expect(loaded.player.money).toBe(bought.player.money);
+    expect(loaded.player.xp).toEqual(xp);
+    expect(loaded.events).toEqual([]);
+  });
+
   it('stores explored as a string', () => {
     const slots = makeSlots();
     writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);

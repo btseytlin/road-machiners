@@ -1,0 +1,372 @@
+{
+  "turn": 1200,
+  "player": {
+    "vehicleId": "player",
+    "scavenged": [
+      "podfield",
+      "wreck4",
+      "south-lock",
+      "farmhouse-1"
+    ],
+    "discovered": [
+      "bowl",
+      "podfield",
+      "burnt-convoy",
+      "dustwell",
+      "canyon-bridge"
+    ]
+  },
+  "vehicles": [
+    {
+      "id": "player",
+      "job": {
+        "kind": "search",
+        "stockId": "podfield",
+        "turnsLeft": 2
+      },
+      "brain": null
+    },
+    {
+      "id": "npc1",
+      "job": {
+        "kind": "refit",
+        "moves": [],
+        "turnsLeft": 1,
+        "pickup": {
+          "from": "stock",
+          "stockId": "ridge-wrecks",
+          "partId": "p9",
+          "itemId": "i9",
+          "to": {
+            "x": 0,
+            "y": 0,
+            "rot": 0
+          }
+        }
+      },
+      "brain": {
+        "goals": [
+          {
+            "kind": "scavenge",
+            "targetId": "podfield",
+            "destination": {
+              "x": 300,
+              "y": 120
+            },
+            "phase": "travel",
+            "reason": "search a known salvage site"
+          },
+          {
+            "kind": "resupply",
+            "targetId": "bowl",
+            "destination": {
+              "x": 80,
+              "y": 470
+            },
+            "phase": "travel",
+            "reason": "low supplies"
+          }
+        ],
+        "noticed": {
+          "salvageSeen:podfield": 4,
+          "salvageSeen:wreck4": 5
+        },
+        "unfit": [
+          "ridge-wrecks",
+          "wreck4"
+        ],
+        "memories": [
+          {
+            "turn": 3,
+            "fact": {
+              "kind": "stripped",
+              "stock": "burnt-convoy"
+            }
+          },
+          {
+            "turn": 4,
+            "fact": {
+              "kind": "stripped",
+              "stock": "wreck4"
+            }
+          },
+          {
+            "turn": 5,
+            "fact": {
+              "kind": "prices",
+              "shop": "bowl",
+              "pressure": {
+                "scrap": 0.1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "npc2",
+      "job": {
+        "kind": "search",
+        "stockId": "wreck4",
+        "turnsLeft": 1
+      },
+      "brain": {
+        "goals": [],
+        "noticed": {},
+        "memories": []
+      }
+    }
+  ],
+  "salvage": [
+    {
+      "id": "burnt-convoy",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "podfield",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "ridge-wrecks",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "canyon-bridge",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "south-lock",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "broken-wing",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "wreck4",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    },
+    {
+      "id": "farmhouse-1",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "radius": 12,
+      "goods": {},
+      "parts": [],
+      "fuel": 0,
+      "supplies": 0,
+      "hidden": {
+        "goods": {
+          "scrap": 3
+        },
+        "parts": [],
+        "fuel": 2,
+        "supplies": 1
+      }
+    }
+  ],
+  "shops": {
+    "bowl": {
+      "contracts": [],
+      "pressure": {
+        "scrap": 0.1
+      },
+      "stock": [],
+      "restockAt": 1300
+    },
+    "nose": {
+      "contracts": [],
+      "pressure": {},
+      "stock": [],
+      "restockAt": 1300
+    }
+  },
+  "obstacles": [
+    {
+      "id": "site-burnt-convoy",
+      "pos": {
+        "x": 300,
+        "y": 94
+      },
+      "r": 6,
+      "kind": "site"
+    },
+    {
+      "id": "site-podfield",
+      "pos": {
+        "x": 391,
+        "y": 105
+      },
+      "r": 6,
+      "kind": "site"
+    },
+    {
+      "id": "cw-podfield-0",
+      "pos": {
+        "x": 388,
+        "y": 106
+      },
+      "r": 0.65,
+      "kind": "wreck"
+    },
+    {
+      "id": "cw-ridge-wrecks-3",
+      "pos": {
+        "x": 204,
+        "y": 454
+      },
+      "r": 0.65,
+      "kind": "wreck"
+    },
+    {
+      "id": "site-canyon-bridge",
+      "pos": {
+        "x": 531,
+        "y": 350
+      },
+      "r": 6,
+      "kind": "site"
+    },
+    {
+      "id": "pond-dustwell",
+      "pos": {
+        "x": 169,
+        "y": 160
+      },
+      "r": 2.2,
+      "kind": "water"
+    },
+    {
+      "id": "wreck0",
+      "pos": {
+        "x": 120,
+        "y": 120
+      },
+      "r": 0.6,
+      "kind": "wreck"
+    },
+    {
+      "id": "rock1",
+      "pos": {
+        "x": 130,
+        "y": 130
+      },
+      "r": 1,
+      "kind": "rock"
+    }
+  ]
+}

@@ -25,9 +25,9 @@ import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
 import { SHOPS } from '../data/market';
-import { canUseSite, locationAt } from '../sim/sites';
+import { canUseSite } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
+import { downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
 import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
@@ -106,9 +106,7 @@ function getPlaceActions(world: World): ContextAction[] {
 }
 
 function getSiteActions(world: World): ContextAction[] {
-  const oasis = locationAt(world);
   const actions: ContextAction[] = [];
-  if (oasis?.kind === 'oasis') actions.push({ label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
   actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {
@@ -150,14 +148,7 @@ function getSalvageName(stock: SalvageStock): string | null {
   const place = salvagePlace(stock);
   if (place === 'pile') return 'the pile';
   if (place === 'wreck') return 'the wreck';
-  if (place === 'spot') return null;
-  return siteName(stock.id);
-}
-
-function siteName(id: string): string {
-  const site = REGION.locations.find((l) => l.id === id);
-  if (!site) throw new Error(`Unknown site ${id}`);
-  return site.name;
+  return null;
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {

@@ -7,8 +7,7 @@ import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
 import { decide, fitToHunt, holdsUp, huntingGrounds, isWeak, judgeDanger, lawmanTowns, nearLawGate, raiderGrounds, optionChances, optionWeights } from './npc-decisions';
-import { siteLootTable } from './salvage';
-import { isTerritory, siteGap, siteGates, sitePads } from './sites';
+import { isTerritory, siteGap, siteGates } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { chooseOn, trackOf } from './tracks';
@@ -542,11 +541,11 @@ describe('hunting grounds', () => {
 
   const grounds = huntingGrounds();
   const territories = REGION.locations.filter(isTerritory);
-  const lootPads = [...REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l)), ...territories.flatMap(territoryGrounds)];
+  const lootPads = territories.flatMap(territoryGrounds);
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
   const onRoad = (p: Vec) => !isPad(p) && REGION.roads.some((road) => polylineDist(p, road) < 0.01);
 
-  it('lie on lonely road stretches and at the pads of salvage sites', () => {
+  it('lie on lonely road stretches and in the territories', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(4);

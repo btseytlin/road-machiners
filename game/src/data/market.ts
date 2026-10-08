@@ -101,7 +101,6 @@ export const DISTANCE_PREMIUM = { perTile: 0.0021 };
 
 export const GOOD_SOURCES: Record<string, string[]> = {
   fuelDrums: ['pump-station'],
-  water: ['dustwell', 'green-pit'],
 };
 
 const GARAGE_WEAR: Weighted<number>[] = [
@@ -228,6 +227,42 @@ export const SHOPS: Record<string, ShopDef> = {
     priceFactor: PRICE_FACTOR,
     partStock: {
       parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans', 'oilSpiller', 'flareCannon'] as const).map((id) => ({ value: id, weight: 1 })),
+      wear: STALL_WEAR,
+    },
+    stockSize: [2, 4],
+    restockTurns: 300,
+    pressurePerUnit: STALL_PRESSURE_PER_UNIT,
+    driftPerTurn: 0.0075,
+    contractSlots: 1,
+    supplies: ['fuel', 'supplies'],
+  },
+  dustwell: {
+    id: 'dustwell',
+    kind: 'stall',
+    makes: ['water'],
+    needs: ['tools', 'meds'],
+    goods: ['water', 'scrap', 'tools', 'meds'],
+    priceFactor: PRICE_FACTOR,
+    partStock: {
+      parts: (['jerrycans', 'supplyLocker', 'rack', 'panniers', 'scrapPanels', 'plates', 'mg', 'scanner'] as const).map((id) => ({ value: id, weight: 1 })),
+      wear: STALL_WEAR,
+    },
+    stockSize: [2, 4],
+    restockTurns: 300,
+    pressurePerUnit: STALL_PRESSURE_PER_UNIT,
+    driftPerTurn: 0.0075,
+    contractSlots: 1,
+    supplies: ['fuel', 'supplies'],
+  },
+  'green-pit': {
+    id: 'green-pit',
+    kind: 'stall',
+    makes: ['water'],
+    needs: ['salt', 'textiles'],
+    goods: ['water', 'grain', 'salt', 'textiles'],
+    priceFactor: PRICE_FACTOR,
+    partStock: {
+      parts: (['supplyLocker', 'jerrycans', 'flatbed', 'cage', 'scrapSheet', 'shotgun', 'caltrops', 'patcherCrane'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],

@@ -10,9 +10,8 @@ import { isDefeated, refitAtHome } from './defeat';
 import { scrapFuel, serviceAtCamp, serviceAtStall, serviceVehicle } from './economy';
 import { dropGoal, finishGoal, isBroke, noteShop, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
 import { fitToHunt, getKnownSite, huntsPrey, npcProfile, type NpcProfile } from './npc-decisions';
-import { getResources } from './resources';
 import { canUseSite, type Site } from './sites';
-import { isStranded, suppliesCap } from './stats';
+import { isStranded } from './stats';
 import { isOnRope } from './tow';
 import type { NpcActivity, Vehicle, World } from './types';
 
@@ -52,8 +51,7 @@ export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcAct
 
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
-  if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
