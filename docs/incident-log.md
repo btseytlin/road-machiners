@@ -38,3 +38,8 @@ ID: R7
 repo: game
 what: restoreDrive() in game/src/phys/drive.ts copied only the top level of the snapshot, so the restored drive shared its obstacle, body and memory records with the playback snapshot. A main-thread sync then wrote new collider handles into the snapshot that the worker read for the next turn. Rapier got a missing handle and threw "Cannot read properties of null (reading 'handle')" in removeCollider. The bug came in on 2026-09-30 and issue #96 fixed it by deep-copying the records and checking every handle with a named error.
 cost: A player on /dev/ could not advance past turn T58, and every retry failed the same way because the bad records carried into the next drive. The game was not saved, so the progress since the last save was lost to a reload. The bug shipped in release 2026-10-01 and stayed until release 2026-10-07, so held-Space and auto-travel turns near props could stop any player's game.
+
+ID: R8
+repo: game
+what: A tower's `answering` claim on a stranded truck had no timer, and parked on a fixed approach-side spot without checking whether another truck stood there. A tower that could not get through kept its tow goal and its claim for good, since the unstick move counted as progress and no stall was raised. While it held the claim, no other driver could answer. Issue #94 fixed it with a 20-turn claim timer in sight and out of combat, and a free parking spot around the client.
+cost: A tow responder rammed a city patrol on its approach and was killed by its gatling. A blocked tower could leave a stranded truck with no rescue, which breaks the DESIGN.md rule that a stranded truck is never stuck for good. The untimed claim shipped in releases 2026-09-30 and 2026-10-01 and stayed until release 2026-10-07.
