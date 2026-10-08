@@ -188,7 +188,7 @@ Use the `factory` CLI first. Change a store by hand only for a step the CLI lack
 - The pause does not stop running jobs. Wait until `jobs` in the state file is empty, since jobs write the state too and a step you run by hand does not appear there. A paused tick still clears a dead job.
 - Your turn can end before a long step you started finishes, and nothing wakes you when it ends. So when you start a step in the background with `nohup`, add the line `pid: <N>` to the pause file, with `$!` from the same `factory-host` command. The tick lifts the pause once that process ends. One pause names one process, so run two steps from one script.
 - A factory update never pauses the factory or stops jobs. Running jobs finish on the code they started with.
-- A job whose process died resumes once by itself. The tick log says so, and it is no incident.
+- A card job whose process died, or that ran past its time limit, resumes once by itself. The tick log says so, and it is no incident.
 - Every change to the game repo goes through an issue, so the factory tracks it to its release. Open the issue and let the stages run. Never open a pull request of your own.
 - When the committee asks to skip the stages for a game change, open the issue anyway, then run `factory merge N` with the member as `--by`. By hand, merge into `dev` with the title `Merge issue #N: <issue title>`, and add the label `release-candidate` to the issue. The release lists only merges with that title, and it closes their issues when it ships.
 - Prefer the factory's own steps to doing their work by hand. A step also builds, publishes and records what it did. A merge with `gh pr merge` does none of that.

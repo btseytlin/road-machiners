@@ -246,12 +246,18 @@ function minutesSince(ctx: Ctx, iso: string): number {
   return (ctx.now().getTime() - new Date(iso).getTime()) / MINUTE_MS;
 }
 
+function resumeCause(alive: boolean, inTime: boolean): 'died' | 'timeout' | null {
+  if (alive) return inTime ? null : 'timeout';
+  return inTime ? 'died' : null;
+}
+
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   const minutes = minutesSince(ctx, job.startedAt);
   const alive = deps.isAlive(job.pid);
   const inTime = minutes <= timeoutOf(ctx.cfg, job.stage);
   if (alive && inTime) return ctx.log('tick', job.issue, `${job.stage} still running`);
-  if (!alive && inTime && canResume(ctx, job)) return resumeJob(ctx, job, deps);
+  const cause = resumeCause(alive, inTime);
+  if (cause !== null && canResume(ctx, job)) return resumeJob(ctx, job, deps, cause);
   await failJob(ctx, job, alive, deps);
 }
 
@@ -296,12 +302,14 @@ function forgetResume(ctx: Ctx, job: Job): void {
   clearSessions(ctx.cfg.home, job.issue);
 }
 
-async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps): Promise<void> {
+async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps, outcome: 'died' | 'timeout'): Promise<void> {
+  if (outcome === 'timeout') await deps.kill(ctx.run, job.pid, job.id);
   await deps.removeContainers(ctx.run, job.id);
-  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, 'died');
+  recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, outcome);
   markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => interruptJob(state, job));
-  ctx.log('tick', job.issue, `${job.stage} process died, it resumes once on the next start`);
+  const cause = outcome === 'timeout' ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'process died';
+  ctx.log('tick', job.issue, `${job.stage} ${cause}, it resumes once on the next start`);
 }
 
 export function interruptJob(state: FactoryState, job: Job & { issue: number }): FactoryState {

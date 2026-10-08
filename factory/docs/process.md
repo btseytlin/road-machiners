@@ -137,7 +137,7 @@ These jobs run beside the cards.
 
 ## Tick and queues
 
-A timer runs one tick at a time. A tick never waits for a job. Each job runs as its own process. Check jobs kills a job past its time limit, and resumes a dead job once.
+A timer runs one tick at a time. A tick never waits for a job. Each job runs as its own process. Check jobs resumes a dead card job once, and kills a card job past its time limit and resumes it once. A second death or timeout, and any branch job past its limit, fails.
 
 ![One tick](diagrams/tick.svg)
 

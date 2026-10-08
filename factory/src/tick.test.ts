@@ -304,8 +304,9 @@ describe('timeoutOf', () => {
 });
 
 describe('tick', () => {
-  it('kills a job past the timeout by its id, clears it and reports', async () => {
+  it('kills a job past the timeout by its id, clears it and reports, when it already resumed once', async () => {
     const h = harness(job('2026-01-10T11:00:00Z'), true);
+    writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:00:00Z')], interrupted: [5] }));
     await tick(h.ctx, '/code', h.deps);
     expect(h.killed).toEqual(['42 design-job']);
     expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
@@ -545,6 +546,7 @@ describe('tick', () => {
 
   it('labels the tracking issue when a playtest job runs past the verify time limit, so the release stays blocked', async () => {
     const h = harness(job('2026-01-10T11:00:00Z', 'playtest', 20), true);
+    writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:00:00Z', 'playtest', 20)], interrupted: [20] }));
     await tick(h.ctx, '/code', h.deps);
     expect(h.killed).toContain('42 playtest-job');
     expect(h.labels).toEqual([`20:${STUCK_LABEL}`]);
@@ -638,12 +640,46 @@ describe('tick', () => {
       expect(existsSync(sessions(h))).toBe(false);
     });
 
-    it('fails a job past the timeout and never resumes it, dead or alive', async () => {
+    it('kills a card job past the timeout and resumes it once, with a timeout ledger line', async () => {
       const late = '2026-01-10T11:00:00Z';
-      const alive = harness(job(late), true);
-      await tick(alive.ctx, '/code', alive.deps);
-      expect(readState(alive.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'timed out after 30 minutes' }] });
-      const dead = harness(job(late), false);
+      const h = harness(job(late), true, [card(5, 'Design')]);
+      writeState(h.ctx.statePath, state({ jobs: [job(late)], cardStarts: { 5: [late] } }));
+      const logs: string[] = [];
+      h.ctx.log = (_scope, _issue, message) => { logs.push(message); };
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual(['42 design-job', 'containers design-job']);
+      expect(logs).toContain('design timed out after 30 minutes, it resumes once on the next start');
+      expect(args(h)).toEqual([['design', '5']]);
+      expect(resumedStage(h.ctx.cfg.home, 5)).toBe('design');
+      const after = readState(h.ctx.statePath);
+      expect(after).toMatchObject({ interrupted: [5], failures: [] });
+      expect(after.cardStarts).toEqual({ 5: [NOW.toISOString()] });
+      expect(h.labels).toEqual([]);
+      expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'design-job', outcome: 'timeout' }]);
+    });
+
+    it('fails a second timeout of the same card job', async () => {
+      const late = '2026-01-10T11:00:00Z';
+      const h = harness(job(late), true, [card(5, 'Design')]);
+      writeState(h.ctx.statePath, state({ jobs: [job(late)], interrupted: [5] }));
+      await checkJobs(h.ctx, h.deps);
+      expect(h.killed).toEqual(['42 design-job']);
+      expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ error: 'timed out after 30 minutes' }] });
+    });
+
+    it('fails a branch job or a job without an issue that times out', async () => {
+      const late = '2026-01-10T11:00:00Z';
+      const branch = harness(job(late, 'approve', 5), true);
+      await checkJobs(branch.ctx, branch.deps);
+      expect(readState(branch.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ stage: 'approve', error: 'timed out after 30 minutes' }] });
+      const bare = harness(job(late, 'merge', null), true);
+      await checkJobs(bare.ctx, bare.deps);
+      expect(readState(bare.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ stage: 'merge', error: 'timed out after 30 minutes' }] });
+    });
+
+    it('fails a dead job past the timeout and never resumes it', async () => {
+      const dead = harness(job('2026-01-10T11:00:00Z'), false);
       await tick(dead.ctx, '/code', dead.deps);
       expect(readState(dead.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'job process died without finishing' }] });
     });
