@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function fakeCtx(labels: string[], models: string[], prompts: string[] = [], runs: AgentRun[] = []): Ctx {
+function fakeCtx(labels: string[], models: string[], prompts: string[] = [], runs: AgentRun[] = [], isMerged = async (_a: string, _b: string) => false): Ctx {
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet' },
     log: () => undefined,
@@ -23,7 +23,7 @@ function fakeCtx(labels: string[], models: string[], prompts: string[] = [], run
     container: { agent: async (run: AgentRun) => { runs.push(run); models.push(run.model); prompts.push(run.prompt); mkdirSync(`${run.clone}/${run.dir}/.factory`, { recursive: true }); } },
     repo: {
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
-      fetchFromWork: async () => 'w1', isMerged: async () => false, untrackFactoryFiles: async () => [], diff: async () => '', push: async () => undefined,
+      fetchFromWork: async () => 'w1', isMerged, untrackFactoryFiles: async () => [], diff: async () => '', push: async () => undefined,
       fetch: async () => undefined, mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
     },
   };
@@ -47,6 +47,17 @@ describe('implement stage model', () => {
     await runStage(fakeCtx(['implementation-opus'], [], prompts, runs), 7);
     expect(runs[0].disallowedTools).toEqual(['Agent']);
     expect(prompts[0]).toContain('Subagents are off.');
+  });
+});
+
+describe('implement stage end', () => {
+  it('moves on when an earlier run already pushed the work, so this run added no commit', async () => {
+    const pushed = async (_head: string, into: string) => into === 'factory/issue-7';
+    await expect(runStage(fakeCtx([], [], [], [], pushed), 7)).resolves.toBeUndefined();
+  });
+
+  it('fails when the branch holds nothing beyond its base', async () => {
+    await expect(runStage(fakeCtx([], [], [], [], async () => true), 7)).rejects.toThrow('with no commits beyond dev');
   });
 });
 
