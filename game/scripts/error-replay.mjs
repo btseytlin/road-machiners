@@ -1,6 +1,9 @@
 // Reruns the turn of an error report headless, with the same pipeline as the turn worker, and prints what it throws.
 // Usage: npm run error:replay -- <report.json.gz> [--from world|autosave]
 // --from world, the default, loads the world in memory at the error. A failed turn's report also holds the physics drive it
+// started from, so that turn reruns exactly. Without a drive, and always with --from autosave, the drive is built fresh from
+// the world, and physics may differ from the player's run.
+// Run it on the report's commit. A save from another commit may load through migrations but run other code.
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { buildDrive, captureDrive, freeDrive, initPhysics } from '../src/phys/drive.ts';

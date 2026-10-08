@@ -40,6 +40,7 @@ import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
+import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -757,5 +758,11 @@ describe('save migration 32 to 33', () => {
     const { contacts: _c, clouds: _s, ...player } = FORMAT_2_32.player;
 
     expect(next).toEqual({ ...FORMAT_2_32, player });
+  });
+});
+
+describe('save migration 33 to 34', () => {
+  it('keeps a save with only price memories as it is', () => {
+    expect(MIGRATIONS[33](structuredClone(FORMAT_2_33))).toEqual(FORMAT_2_33);
   });
 });

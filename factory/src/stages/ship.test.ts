@@ -117,26 +117,24 @@ describe('ship', () => {
     expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
   });
 
-  it('merges main into the release and stops when main has game changes the release lacks, so a new candidate follows', async () => {
+  it('merges main into the release and ships when main has game changes the release lacks', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
     f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29']);
-    expect(f.calls.some((call) => call.startsWith('run butler') || call.startsWith('photo'))).toBe(false);
-    expect(f.calls).toContain('comment main changed 1 game files that release/2026-09-29 lacked, like game/src/sim/sun.ts, so the committee had not played them. The factory merged main into release/2026-09-29. A new candidate follows, and Ship works on that one.');
-    const state = readState(f.ctx.statePath);
-    expect(state.release).toMatchObject({ postId: null });
-    expect(state.pendingShip).toBeNull();
+    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    expect(f.calls.some((call) => call.startsWith('run butler'))).toBe(true);
+    expect(readState(f.ctx.statePath).release).toBeNull();
   });
 
-  it('has an agent resolve a conflict of main into the release when main has game changes, and pushes the release', async () => {
+  it('has an agent resolve a conflict of main into the release, then ships', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
     f.ctx.repo.changedFiles = async () => ['game/src/sim/sun.ts'];
     f.mergeConflicts = ['main release/2026-09-29'];
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'push release/2026-09-29']);
+    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
   });
 
   it('has an agent resolve a conflict of the release into main, then ships', async () => {

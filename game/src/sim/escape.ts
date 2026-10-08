@@ -1,6 +1,8 @@
 // Escapes: the player gets away from hostile trucks. At each turn's end the player keeps the ids of the hostile
 // trucks in sight. A turn that ends with none of them in sight and no hostile seen practices driving, unless one
 // of them was destroyed, which is a win and not an escape. Only a truck in combat with the player or hunting it
+// counts, since a raider in sight is only a warning. The strongest such truck is the target, so slipping in and out of
+// sight of the same truck soon stops paying.
 
 import { engagedWith, isHostile } from './combat';
 import { playerVehicle } from './damage';
