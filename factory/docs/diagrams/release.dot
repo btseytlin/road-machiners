@@ -7,6 +7,7 @@ digraph release {
   P [label="Committee plays\nthe candidate", fillcolor="#fde68a", color="#b45309"]; S [label="Ship\nmain and itch.io"];
   BL [label="Blocked\nfactory retry", fillcolor="#fde68a", color="#b45309"]; D [label="Bug issue\nfor dev"];
   C -> T -> G -> B -> P -> S [weight=100];
+  G -> B [label="same game tree as\nthe passed commit:\npass with no play", weight=0];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=back, weight=0];
   T -> P [label="new release task"];
   B -> P [label="remove #N"];

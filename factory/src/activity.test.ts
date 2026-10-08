@@ -45,7 +45,7 @@ it('clears the active operation on command failure without replacing its result'
 });
 it('recognizes machine check steps and rejects arbitrary status text', () => {
   expect(activity).toHaveProperty('readActivityLine');
-  expect(activity.readActivityLine('[checks] 12:10:00 playtest')).toEqual({ activity: 'playtest', source: 'runner' });
+  expect(activity.readActivityLine('[checks] 12:10:00 playtest')).toEqual({ activity: 'playtest', step: true, source: 'runner' });
   expect(activity.readActivityLine('{"type":"factory_status","activity":"install"}')).toEqual({ activity: 'install', source: 'agent' });
   expect(activity.readActivityLine('{"type":"factory_status","milestone":"validating"}')).toEqual({ milestone: 'validating', source: 'agent' });
   const toolResult = { type: 'user', message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: '{"type":"factory_status","milestone":"reviewing"}\n' }] }] } };
@@ -61,4 +61,39 @@ it('finds a milestone in chained command output, as agents send it in the factor
   expect(activity.readActivityLine(JSON.stringify(activityOnly))).toEqual({ activity: 'investigate', source: 'agent' });
   const plain = { type: 'user', message: { content: [{ type: 'tool_result', content: 'tests passed' }] } };
   expect(activity.readActivityLine(JSON.stringify(plain))).toEqual({ activity: 'model', source: 'runner' });
+});
+
+it('reads factory script steps and phases, and drops a phase the dashboard may not show', () => {
+  expect(activity.readActivityLine('[step] 12:10:00 npm ci')).toEqual({ activity: 'install', step: true, source: 'runner' });
+  expect(activity.readActivityLine('[step] 12:10:04 playtest')).toEqual({ activity: 'playtest', step: true, source: 'runner' });
+  expect(activity.readActivityLine('[step] 12:10:04 toString')).toBeNull();
+  expect(activity.readActivityLine('[phase] Playing the release seed')).toEqual({ milestone: 'Playing the release seed', source: 'runner' });
+  expect(activity.readActivityLine('[phase] see /opt/secret')).toBeNull();
+});
+
+it('builds a script that names each step before it runs', () => {
+  const script = activity.stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]);
+  expect(script.split('\n')).toEqual(['set -e', activity.STEP_FUNCTION, 'echo "[phase] Release full suite"', 'step "npm ci"', 'npm ci', 'step "tests"', 'npm test', 'step "done"', '']);
+  expect(() => activity.stepScript('rm $HOME', [])).toThrow('Invalid script phase');
+});
+
+it('moves a factory script past npm ci, shows its phase only while it runs, and counts each step as progress', async () => {
+  const home = createHome();
+  const seen: unknown[] = [];
+  const observed = activity.createObservedRun(async (_command, args, opts) => {
+    if (args.includes('factory-agent')) { opts?.onStdout?.('{"type":"factory_status","milestone":"Reviewing the play"}\n'); return { code: 0, stdout: '', stderr: '' }; }
+    for (const line of ['[phase] Playing the release seed', '[step] 12:00:00 npm ci']) opts?.onStdout?.(`${line}\n`);
+    seen.push(readObservation(home, 'job-script')?.data);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    opts?.onStdout?.('added 300 packages in 4s\n[step] 12:00:04 playtest\n');
+    seen.push(readObservation(home, 'job-script')?.data);
+    return { code: 0, stdout: '', stderr: '' };
+  }, home, 'job-script', 10000, 1024 * 1024);
+  await observed('docker', ['run', 'factory-agent']);
+  await observed('docker', ['run', 'image', 'bash', '-lc', 'npm ci && npm run progression:playthrough']);
+  const [installing, playing] = seen as { progressAt: string }[];
+  expect(installing).toMatchObject({ activity: 'install', milestone: 'Playing the release seed', phase: 'running' });
+  expect(playing).toMatchObject({ activity: 'playtest', milestone: 'Playing the release seed', phase: 'running' });
+  expect(Date.parse(playing.progressAt)).toBeGreaterThan(Date.parse(installing.progressAt));
+  expect(readObservation(home, 'job-script')?.data).toMatchObject({ milestone: 'Reviewing the play', phase: 'completed' });
 });

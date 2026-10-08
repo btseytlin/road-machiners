@@ -37,7 +37,7 @@ class FixtureGithub extends PublicGitHub {
   failed = false;
   override async read(state: FactoryState) {
     if (this.failed) throw new Error('PRIVATE credential failure');
-    return { cards: [], features: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
+    return { cards: [], features: [], merges: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
   }
 }
 class FixtureHost extends HostSampler {
@@ -59,6 +59,7 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     await collector.refreshLocal();
     await collector.refreshGithub();
     const good = collector.getSnapshot();
+    expect(good.labels.columns.Merging).toBe('Merging');
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 120_000);
     expect(collector.getSnapshot().operations.status).toBe('stale');

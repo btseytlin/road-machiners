@@ -21,12 +21,16 @@ export function checkComments(file, source, maxDocstringLines) {
   if (!Number.isInteger(maxDocstringLines) || maxDocstringLines <= 0) throw new Error('maxDocstringLines must be a positive integer.');
   const parsed = parseSync(file, source);
   const codeStart = parsed.program.body[0]?.start ?? source.length;
-  const findings = parsed.comments.filter(comment => comment.end > codeStart)
+  const findings = parsed.comments.filter(comment => comment.end > codeStart && !isJsType(file, comment))
     .map(comment => ({ filename: file, code: 'quality/no-comment', message: comment.value.trim() }));
   if (docstringLines(source, parsed.comments.filter(comment => comment.end <= codeStart)) > maxDocstringLines) {
     findings.push({ filename: file, code: 'quality/long-docstring', message: `module docstring over ${maxDocstringLines} lines` });
   }
   return findings;
+}
+
+export function isJsType(file, comment) {
+  return /\.[cm]?jsx?$/.test(file) && comment.type === 'Block' && /^\*\s*@(?:type|typedef|param|returns?|template|satisfies|import|callback|property|overload)\b/.test(comment.value);
 }
 
 function docstringLines(source, header) {

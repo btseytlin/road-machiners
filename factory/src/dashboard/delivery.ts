@@ -7,11 +7,11 @@ type JobLine = Extract<LedgerLine, { kind: 'job' }>;
 export type DeliveryStage = 'triage' | 'design' | 'implementation' | 'preview' | 'approval' | 'harden' | 'merge';
 type Visit = { stage: DeliveryStage; start: number; end: number | null };
 type Stat = { count: number; meanMs: number | null; medianMs: number | null };
-type Gate = 'triage' | 'design' | 'committee';
+export type Gate = 'triage' | 'design' | 'committee';
 
 export type DeliverySummary = {
   since: string; issues: number; excluded: number; legacy: number;
-  lead: Stat & { open: number; openMeanMs: number | null; missingStart: number };
+  lead: { open: number; openMeanMs: number | null; missingStart: number };
   stages: (Stat & { stage: DeliveryStage; open: number; openMeanMs: number | null })[];
   loops: { step: CardStep; events: number; issues: number }[]; looped: number;
   retries: { stage: JobStage; runs: number; issues: number }[];
@@ -101,10 +101,9 @@ function readLead(events: CardLine[]): Lead {
 }
 function summarizeLead(issues: CardLine[][], window: Window): DeliverySummary['lead'] {
   const leads = issues.map(readLead);
-  const done = leads.filter((lead) => lead.start !== null && lead.end !== null && inside(window, lead.end)).map((lead) => lead.end! - lead.start!);
   const open = leads.filter((lead) => lead.start !== null && lead.end === null && !lead.closed).map((lead) => window.end - lead.start!);
   const missingStart = leads.filter((lead) => lead.start === null && lead.end !== null && inside(window, lead.end)).length;
-  return { ...measure(done), open: open.length, openMeanMs: mean(open), missingStart };
+  return { open: open.length, openMeanMs: mean(open), missingStart };
 }
 
 function summarizeLoops(recent: CardLine[][]): Pick<DeliverySummary, 'loops' | 'looped'> {

@@ -62,3 +62,10 @@ test('allows a short module docstring and no other comment', () => {
   assert.deepEqual(codes('// only\n// comments\n'), []);
   assert.throws(() => checkComments('game/src/example.ts', '', undefined), /must be a positive integer/);
 });
+
+test('allows JSDoc type comments only in JavaScript files', () => {
+  const source = 'export const a = 1;\n/** @param {number} x */\nexport function f(x) { return /** @type {number} */ (x); }\n';
+  assert.deepEqual(checkComments('factory/dashboard/page.js', source, 3), []);
+  assert.equal(checkComments('game/src/example.ts', source, 3).length, 2);
+  assert.equal(checkComments('factory/dashboard/page.js', 'export const a = 1;\n/** A prose note. */\n', 3).length, 1);
+});
