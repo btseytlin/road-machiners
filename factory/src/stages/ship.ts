@@ -1,14 +1,16 @@
 import { moveCard } from '../card-events';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
-import { appendLedger } from '../ledger';
+import { releasePostDir } from '../release-post';
+import { reportEnv, takeMaps } from '../sourcemaps';
 import { updateState } from '../state';
-import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
+import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleasePost, type ReleaseState } from '../types';
 import { closeBundle } from './bundle';
 import { agentLog } from './common';
 import { queueIncidents } from './incident';
+import { mergeResolving } from './merge-resolve';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
@@ -38,23 +40,31 @@ async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
 }
 
 // The release merges into main with no conflict once it holds all of main. The cut and hotfixes keep it so, but factory
-// work lands on main directly. A game change on main was never in the played candidate, so Ship stops on it. Anything
-// else merges into the release first. Returns that merge, or nothing when the release holds main already.
-async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
+// work lands on main directly. A game change on main was never in the played candidate, so Ship merges main into the release
+// at once, with an agent for a conflict, and stops. The release moved, so the tick builds a new candidate for the committee to play.
+// Anything else merges into the release inside the ship. Returns that merge, or null when the ship stopped.
+async function takeMain(ctx: Ctx, issue: number, branch: string): Promise<MergeStep[] | null> {
   if (await ctx.repo.isMerged('main', branch)) return [];
   const unplayed = (await ctx.repo.changedFiles(branch, 'main')).filter((file) => file.startsWith(`${GAME_DIR}/`));
-  if (unplayed.length > 0) throw new Error(`main changed ${unplayed.length} game files that ${branch} lacks, like ${unplayed[0]}, so the candidate was not played with them. Merge main into ${branch} and build a new candidate.`);
-  return [{ branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` }];
+  const step = { branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` };
+  if (unplayed.length === 0) return [step];
+  await mergeResolving(ctx, 'ship', [step]);
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
+  const note = `main changed ${unplayed.length} game files that ${branch} lacked, like ${unplayed[0]}, so the committee had not played them. The factory merged main into ${branch}. A new candidate follows, and Ship works on that one.`;
+  await ctx.github.comment(issue, note);
+  ctx.log('ship', issue, note);
+  return null;
 }
 
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
-// The empty save scope keeps the itch save key. Only the butler call gets the key.
+// The empty save scope keeps the itch save key. Only the butler call gets the key. The maps stay on the host.
 export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release-main');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('main', 'main', dir);
   const log = releaseLog(ctx, logName);
-  await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '' });
+  await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '', ...reportEnv(ctx.cfg, 'release') });
+  await takeMaps(ctx, dir, 'release');
   const version = await ctx.repo.headHash('main');
   const args = ['push', join(dir, GAME_DIR, 'dist'), `${keys.itchTarget}:html5`, '--userversion', version];
   must(await ctx.run('butler', args, { env: { BUTLER_API_KEY: keys.butlerKey }, logPath: log }), 'butler push');
@@ -73,17 +83,20 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const features = await releaseFeatures(ctx, release);
   // A changelog that does not match the release fails here, before anything public happens.
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
-  // One atomic push moves the release, main and dev, so a conflict or a rejected push fails here with nothing changed.
-  await ctx.repo.merge([
-    ...(await takeMain(ctx, release.branch)),
+  const taken = await takeMain(ctx, issue, release.branch);
+  if (taken === null) return;
+  // One atomic push moves the release, main and dev, so a failed push fails here with nothing changed. An agent resolves a conflict first.
+  await mergeResolving(ctx, 'ship', [
+    ...taken,
     { branch: release.branch, into: 'main', message: `Release ${release.day}` },
     { branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` },
   ]);
   await publish(ctx, keys, 'ship');
-  const channel = ctx.cfg.publicChannel;
-  await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
-  const postId = await ctx.telegram.sendMessage(channel, changelog);
-  appendLedger(ctx.cfg.home, { kind: 'post', id: postId, channel, text: changelog, at: ctx.now().toISOString() });
+  // The public post waits for Hermes's draft and a member's Publish. The candidate clone goes with the next release, so the screenshot moves to the factory home.
+  const kept = join(releasePostDir(ctx.cfg.home, release.day), 'screenshot.png');
+  mkdirSync(dirname(kept), { recursive: true });
+  copyFileSync(screenshot, kept);
+  const post: ReleasePost = { issue, day: release.day, changelog, screenshot: kept, postId: null, draft: null };
   // Only the factory pushes main, so main still holds the release merge here.
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
@@ -105,9 +118,9 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   updateState(ctx.statePath, (state) => {
     const builds = { ...state.builds };
     delete builds[String(issue)];
-    return { ...state, release: null, lastRelease: ctx.now().toISOString(), builds };
+    return { ...state, release: null, releasePost: post, lastRelease: ctx.now().toISOString(), builds };
   });
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes.`);
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes. Hermes drafts the public post next.`);
   ctx.log('ship', issue, `shipped ${features.length} changes`);
 }
 

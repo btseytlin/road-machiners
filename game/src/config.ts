@@ -4,6 +4,13 @@
 declare const __GAME_VERSION__: string;
 export const GAME_VERSION = __GAME_VERSION__;
 
+// Where error reports go and which factory build sends them, from ERROR_REPORT_URL and ERROR_REPORT_BUILD at build time.
+// Only the factory's release, dev and candidate builds set them. An empty URL sends no reports.
+declare const __ERROR_REPORT_URL__: string;
+declare const __ERROR_REPORT_BUILD__: string;
+export const ERROR_REPORT_URL = __ERROR_REPORT_URL__;
+export const ERROR_REPORT_BUILD = __ERROR_REPORT_BUILD__;
+
 export const CONFIG = {
   startKit: 'standard',
   // A fixed world seed replays the same game. Null rolls a new seed for each new game.

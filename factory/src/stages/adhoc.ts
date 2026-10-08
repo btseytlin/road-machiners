@@ -78,7 +78,7 @@ function analyticsMounts(home: string): Record<string, string> {
   return { [ledger]: FACTORY_LEDGER_MOUNT, [transcriptsDir(home)]: FACTORY_TRANSCRIPTS_MOUNT };
 }
 
-type Reply = { chat: string; messageId: number };
+type Reply = { chat: string; messageId: number | null };
 
 async function deliverable(ctx: Ctx, issue: number, home: string, reply: Reply) {
   let files;

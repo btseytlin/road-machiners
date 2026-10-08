@@ -7,6 +7,7 @@ import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, QUESTION_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
 import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, mediaDir, workDir } from './common';
 import { releaseBundle } from './bundle';
+import { approvedAlready } from './checks';
 import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -37,7 +38,8 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
-  if (base !== HOTFIX_BASE && !(String(issue) in readState(ctx.statePath).approvedResolving)) return harden(ctx, issue, by, base);
+  // A hardened card and a cleanup task reach Approval only after Hardening, so they merge now.
+  if (base !== HOTFIX_BASE && approvedAlready(ctx, issue, item.labels) === null) return harden(ctx, issue, by, base);
   const message = await mergeOrResolve(ctx, issue, item.title, by, base);
   if (message === null) return;
   await moveCard(ctx, issue, 'Done', 'merged', cardFlow(item.labels));

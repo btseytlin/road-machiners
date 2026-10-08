@@ -29,11 +29,11 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key' },
+    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key', errorMapDays: 14 },
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
     log: () => undefined,
-    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: '', stderr: '' }; },
+    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: cmd === 'git' ? 'abc1234'.padEnd(40, '0') : '', stderr: '' }; },
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
@@ -43,7 +43,13 @@ function fakeCtx(): Ctx {
     telegram: { sendMessage: record('message') },
     container: { shell: record('shell') },
     repo: {
-      fetch: record('fetch'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234',
+      fetch: record('fetch'), headHash: async () => 'abc1234',
+      // A clone's build output, as the game's build leaves it, maps included.
+      prepareWorkClone: async (...args: unknown[]) => {
+        calls.push(`prepare ${args.join(' ')}`);
+        mkdirSync(`${String(args[2])}/game/dist`, { recursive: true });
+        writeFileSync(`${String(args[2])}/game/dist/index.js.map`, '{}');
+      },
       merge: async (steps: MergeStep[]) => { for (const step of steps) calls.push(`merge ${step.branch} ${step.into} ${step.message}`); calls.push(`push ${steps.map((step) => step.into).join(' ')}`); },
     },
   };
@@ -111,6 +117,15 @@ describe('approve', () => {
     expect(state.pendingShip).toBeNull();
   });
 
+  it('merges a hardened cleanup task at once, since it reaches Approval only after Hardening and its checks', async () => {
+    labels = ['release-task', 'maintenance'];
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, builds: { 7: 'aaa1111' } });
+    await approve(fakeCtx(), 7, 'the factory');
+    expect(calls).toContain('merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn');
+    expect(calls).toContain('move 7 Done');
+    expect(calls).not.toContain('move 7 Hardening');
+  });
+
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
     labels = ['bug', 'hotfix'];
     writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
@@ -122,6 +137,7 @@ describe('approve', () => {
       'merge main dev Merge main into dev after hotfix #7',
       'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
       'push main dev release/2026-09-29',
+      'run git rev-parse',
       'run butler push',
       `message public ${changelog}`,
       `release hotfix-2026-09-30-issue-7 main ROAM hotfix 2026-09-30 ${changelog}`,
@@ -139,7 +155,7 @@ describe('approve', () => {
 
   it('sends the card back to Hardening on a conflict with dev, keeping the approver, with no chat post', async () => {
     const ctx = fakeCtx();
-    ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step.branch, step.into, ['game/src/a.ts'], 'boom'); };
+    ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step, ['game/src/a.ts'], 'boom', 'b1', 's1'); };
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -151,18 +167,6 @@ describe('approve', () => {
     expect(state.testPhase).toEqual({ 7: 'resolve' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
-  });
-
-  it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
-    labels = ['hotfix'];
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
-    const ctx = fakeCtx();
-    ctx.repo.merge = async (steps: MergeStep[]) => {
-      const step = steps.find((item) => item.branch === 'main');
-      if (step) throw new MergeConflictError(step.branch, step.into, ['x'], 'boom');
-    };
-    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('merge of main into dev failed');
-    expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });
 
   it('clears a kept approver and a leftover test phase once the merge lands', async () => {

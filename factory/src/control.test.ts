@@ -9,7 +9,7 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { TASK_FILE, type Card, type Column, type Ctx, type FactoryConfig, type FactoryState, type Job, type ReleaseState } from './types';
 
 const killed: string[] = [];
-vi.mock('./jobs', () => ({ killJob: async (_run: unknown, pid: number, id: string) => { killed.push(`${pid} ${id}`); } }));
+vi.mock('./jobs', async (original) => ({ ...(await original<object>()), killJob: async (_run: unknown, pid: number, id: string) => { killed.push(`${pid} ${id}`); } }));
 const { applyControl, isGated, parseControl, resolveActor, writeControl } = await import('./control');
 type Command = Parameters<typeof applyControl>[1];
 
@@ -120,7 +120,7 @@ describe('writeControl and parseControl', () => {
   });
 
   it('parses every action', () => {
-    for (const body of [{ action: 'merge', issue: 4 }, { action: 'ship' }, { action: 'cut' }, { action: 'remove', issue: 4 }, { action: 'drop', queue: 'ship', id: null }, { action: 'drop', queue: 'approval', id: 4 }, { action: 'merge-change', id: 12 }]) {
+    for (const body of [{ action: 'merge', issue: 4 }, { action: 'ship' }, { action: 'cut' }, { action: 'remove', issue: 4 }, { action: 'drop', queue: 'ship', id: null }, { action: 'drop', queue: 'approval', id: 4 }, { action: 'merge-change', id: 12 }, { action: 'hold', issue: 4 }, { action: 'unhold', issue: 4 }]) {
       expect(parseControl({ kind: 'control', by: 'Ann', reason: 'r', ...body })).toEqual({ by: 'Ann', reason: 'r', ...body });
     }
   });
@@ -155,6 +155,11 @@ describe('resolveActor', () => {
     expect(resolveActor(fakeCtx(), '13', false)).toBe('13');
   });
 
+  it('resolves the telegram id Hermes passes in --by to its member, and refuses a display name', () => {
+    expect(resolveActor(fakeCtx(), '11', true)).toBe('Ann');
+    expect(() => resolveActor(fakeCtx(), 'Dr. Boris', true)).toThrow('no committee member');
+  });
+
   it('uses the bootstrap member when no committee file exists', () => {
     rmSync(join(ROOT, 'committee'), { recursive: true });
     expect(resolveActor(fakeCtx(), 'boss', true)).toBe('boss');
@@ -173,6 +178,10 @@ describe('isGated', () => {
     expect(isGated(ctx, command({ action: 'merge', issue: 4 }))).toBe(true);
     expect(isGated(ctx, command({ action: 'move', issue: 4, to: 'done' }))).toBe(false);
     expect(isGated(ctx, command({ action: 'cut' }))).toBe(false);
+  });
+
+  it('gates a removal', () => {
+    expect(isGated(fakeCtx(), command({ action: 'remove', issue: 5 }))).toBe(true);
   });
 
   it('does not gate the merge of a card the committee approved', () => {
@@ -448,6 +457,17 @@ describe('move and merge preconditions and write order', () => {
     expect(ctrlLines()).toHaveLength(1);
   });
 
+  it('keeps a hold through a move, and drops it with a move to done', async () => {
+    busyCard();
+    const hold = { by: 'Ann', reason: 'r', at: 'a', stage: null };
+    seed({ ...readState(statePath), held: { 4: hold, 5: hold } });
+    seed({ ...readState(statePath), held: { 4: { ...hold, stage: 'verify' }, 5: hold } });
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }));
+    expect(readState(statePath).held).toEqual({ 4: hold, 5: hold });
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'done' }));
+    expect(Object.keys(readState(statePath).held)).toEqual(['5']);
+  });
+
   it('move to done closes the card the way a denial does', async () => {
     busyCard();
     await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'done' }));
@@ -493,7 +513,17 @@ describe('ship, cut and remove', () => {
     await applyControl(fakeCtx(), command({ action: 'remove', issue: 5 }));
     expect(readState(statePath).pendingRemovals).toEqual([{ issue: 5, by: 'Ann', text: 'the gate failed on load' }]);
     expect(calls.find((call) => call.startsWith('comment 5'))).toContain('Ann');
-    await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5, by: 'hermes' }))).resolves.toContain('#5');
+  });
+
+  it('refuses a removal from Hermes', async () => {
+    seed({ release: RELEASE });
+    await expect(applyControl(fakeCtx(), command({ action: 'remove', issue: 5, by: 'hermes' }))).rejects.toThrow('--by <member>');
+    expect(readState(statePath).pendingRemovals).toEqual([]);
+  });
+
+  it('accepts a cut from Hermes', async () => {
+    await expect(applyControl(fakeCtx(), command({ action: 'cut', by: 'hermes' }))).resolves.toContain('release cut');
+    expect(ctrlLines()[0]).toMatchObject({ action: 'cut', by: 'Hermes' });
   });
 
   it('refuses a removal with no open release', async () => {

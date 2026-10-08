@@ -51,7 +51,8 @@ from_source "stuck list" stuck
 # Each failed job of the last day, with its first error line and log. The log name holds the start time, so each failure prints once.
 jq -r '.failures // [] | .[] | "failed \(.stage)\(if .issue then " #\(.issue)" else "" end): \(.error | split("\n")[0]) (log \(.log // "none"))"' /factory/home/state/state.json
 jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/home/state/state.json
-jq -r '.devFailed // empty | "dev build failed at " + .' /factory/home/state/state.json
+# The line names the commit and the first line of what broke, so Hermes fixes dev or reverts the merge that broke it.
+jq -r 'select(.devFailed != null) | "dev build failed at \(.devFailed)" + (if .devError then ": " + (.devError | split("\n")[0]) else "" end)' /factory/home/state/state.json
 # factory-update could not deploy main. Its log is logs/update.log.
 if [ -f /factory/home/update-failed ]; then echo "update failed: $(cat /factory/home/update-failed)"; fi
 # Every tick, paused or not, writes the health file. A tick waits up to 15 minutes on the repo lock and the timer runs every minute, so 20 minutes without one means ticks stopped.
@@ -64,7 +65,11 @@ else
   echo "tick stalled: no health file, so no tick ran on this code"
 fi
 from_source audit drift
+# A shipped release waits for Hermes's draft of its public post. The line goes once the draft is in the committee chat.
+jq -r '.releasePost // empty | select(.postId == null) | "release post due: release \(.day)"' /factory/home/state/state.json
 # A finished waste review waits for Hermes until Hermes deletes the file.
 if [ -f /factory/home/review-pending ]; then echo "factory review ready: $(cat /factory/home/review-pending)"; fi
+# The error service writes one line per cap it hits, with the day, and Hermes deletes the file once handled.
+if [ -f /factory/home/error-reports/alert ]; then cat /factory/home/error-reports/alert; fi
 # Hermes repairs take minutes, so a pause older than an hour was forgotten or is stuck.
 if [ -n "$(find /factory/home/paused -mmin +60 2>/dev/null)" ]; then echo "paused over an hour: $(cat /factory/home/paused)"; fi

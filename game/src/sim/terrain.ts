@@ -30,6 +30,11 @@ export function tileAt(t: Terrain, p: Vec): number {
   return y * t.size + x;
 }
 
+// Whether the tile under a map point is road. Asphalt patches are loose pieces that lead nowhere, so they are not.
+export function isRoadTile(t: Terrain, p: Vec): boolean {
+  return t.types[tileAt(t, p)] === 'road';
+}
+
 // Height at a map point: the deck on a deck outline, else the ground.
 export function heightAt(t: Terrain, x: number, y: number): number {
   const on = deckAt(x, y);
@@ -150,7 +155,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 
 // Kinds of baked props, in their stored order: the map file keeps a kind as its index here. A change to this order
 // or a removed kind bumps VERSION, so a file with the old codes is refused rather than misread.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'fortMasonryWall', 'fortMasonryTower', 'fortMasonryGate', 'fortMasonryBastion', 'fortMasonryInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapBastion', 'fortScrapInner', 'fortPatchworkWall', 'fortPatchworkTower', 'fortPatchworkGate', 'fortCompoundWall', 'fortCompoundTower', 'fortCompoundGate', 'fortRingWall', 'fortRingGate', 'fortYardWall', 'fortYardTower', 'fortYardGate', 'noseRise', 'noseCrag', 'engineNozzle', 'engineFrame', 'watchtower', 'ruinCompound', 'deadTruck', 'glassSpire', 'scrapWall', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.

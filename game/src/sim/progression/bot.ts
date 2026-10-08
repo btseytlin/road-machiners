@@ -28,7 +28,7 @@ import { itemMass } from '../mass';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
-import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, downedHere, needsSearch, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
 import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
@@ -89,7 +89,8 @@ function huntedSpeed(world: World): number | undefined {
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean };
+// settings are world settings for the run's Roaming world, each missing one at its default.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean; settings?: Record<string, number> };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
@@ -640,7 +641,7 @@ function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-// The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
+// The scavenger loots what it searched, searches the nearest known stock that needs a search, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
 // sellCargo.
@@ -685,12 +686,18 @@ function scavengeOrHunt(o: Orders): void {
   collectOrHunt(o);
 }
 
-// A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
-// at, one per raider template, up to the contract limit.
+// A raider kill fulfils its bounty besides the wreck's loot, and the shop pays it on a claim. So the hunter claims each
+// met bounty of the shop it is parked at, then takes each bounty on the board, one per raider template, up to the
+// contract limit.
 function takeBounties(o: Orders): void {
   const shop = shopAt(o.world);
   if (!shop) return;
+  claimBounties(o, shop);
   for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function claimBounties(o: Orders, shop: string): void {
+  for (const c of o.world.player.contracts) if (c.kind === 'bounty' && c.fulfilled && c.shop === shop) o.run((w) => deliverContract(w, c.id), 'contracts');
 }
 
 function wantsBounty(world: World, c: Contract): boolean {
@@ -1001,11 +1008,11 @@ function postAfterNearest(pos: Vec): Post {
 
 // ---- Salvage.
 
-// Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// Stocks the player knows of that need a search, since they hide units or it never searched them: at a discovered
+// site, or a wreck on explored ground. So the bot searches a stock again while units stay hidden, as NPCs do.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || !needsSearch(world, stock)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -1255,7 +1262,7 @@ function stripForRepair(o: Orders, partId: string): boolean {
 
 function canStrip(o: Orders, partId: string): boolean {
   const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
-  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(o.me, item.part);
 }
 
 // ---- Driving.

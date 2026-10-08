@@ -1,13 +1,14 @@
 import { partDef } from "../data/parts";
-import { RULES } from "../data/rules";
-import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
+import { fireBlock, gunOf, hitOdds, roundDamage, type FireBlock } from "../sim/combat";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { findPart, playerVehicle, vehicleById } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
-import type { Aim, Vehicle, World } from "../sim/types";
+import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
+import { playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
+import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError, wornReload } from "../sim/utility";
+import { oilShort } from "../sim/hazards";
 import { bottomLeft, el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -27,6 +28,9 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   covered: "behind cover",
   talking: "on the radio",
   out: "driver knocked out",
+  unmounted: "not mounted",
+  shutDown: "shut down",
+  lineOut: "line out",
 };
 
 // The same reasons in one short word for the compact panel. A gun with no order shows nothing.
@@ -42,6 +46,9 @@ export const BLOCK_SHORT: Record<FireBlock, string> = {
   covered: "cover",
   talking: "radio",
   out: "out",
+  unmounted: "stowed",
+  shutDown: "off",
+  lineOut: "line",
 };
 
 export const WEAPONS_PER_ROW = 5;
@@ -258,6 +265,150 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
   };
 }
 
+export const UTILITY_SLOTS = 4;
+// The number keys 1 to 9 run the slots in panel order: the guns first, then the utility row. A slot past 9 has no key.
+export const SLOT_KEYS = 9;
+
+// The number key of utility slot i, the next after the truck's guns, or null past SLOT_KEYS.
+export function utilityKey(w: World, i: number): number | null {
+  const key = vehicleStats(w, playerVehicle(w)).weapons.length + i + 1;
+  return key <= SLOT_KEYS ? key : null;
+}
+
+// What a selected slot asks for, and what a slot with an order that acts this turn reads.
+const PICK_TEXT: Record<"point", string> = { point: "aim: click the ground" };
+const FIRES_TEXT = "fires this turn";
+
+// A utility slot's look: an order set, a claymore armed, waiting for its target click, recharging, blocked or ready.
+// Only the selected slot can be aiming. reload: the turns left of the recharge, out of the part's whole reload.
+export type UtilityState = "ready" | "aiming" | "set" | "armed" | "recharging" | "blocked";
+export type UtilityStatus = { state: UtilityState; text: string; reload?: { left: number; total: number } };
+
+// The parts in the utility row, in slot order: active utilities and claymore rams, working or not.
+export function utilitySlots(w: World): PartInstance[] {
+  return chargedParts(playerVehicle(w)).slice(0, UTILITY_SLOTS);
+}
+
+// The slot's state and text. Throws for a passive utility, which has no slot.
+export function utilityStatus(w: World, part: PartInstance, selected: boolean): UtilityStatus {
+  const kind = orderKindOf(part);
+  if (kind === null) throw new Error(`${partDef(part.defId).name} is passive and has no slot`);
+  const order = playerVehicle(w).utilityOrders[part.id];
+  if (order) return { state: "set", text: FIRES_TEXT };
+  if (chargeOf(part).armed) return { state: "armed", text: "armed" };
+  return aimingStatus(w, part, kind, selected) ?? idleStatus(w, part);
+}
+
+// The selected point utility waits for its target click while it can aim, or null.
+function aimingStatus(w: World, part: PartInstance, kind: UtilityOrder["kind"], selected: boolean): UtilityStatus | null {
+  if (!selected || kind === "self" || aimBlock(w, part) !== null) return null;
+  return { state: "aiming", text: PICK_TEXT[kind] };
+}
+
+// A slot with no order, armed charge or aim: recharging with its turns, blocked with the reason, or ready.
+function idleStatus(w: World, part: PartInstance): UtilityStatus {
+  const block = utilityBlock(w, playerVehicle(w), part);
+  if (block === "cooldown") return { state: "recharging", text: utilityBlockText(part, block), reload: { left: chargeOf(part).reload, total: wornReload(part) } };
+  if (block) return { state: "blocked", text: utilityBlockText(part, block) };
+  return noFuel(w, part) ? { state: "blocked", text: "no fuel" } : { state: "ready", text: "ready" };
+}
+
+// Whether the part spills oil the tank holds too little fuel for.
+function noFuel(w: World, part: PartInstance): boolean {
+  const def = partDef(part.defId);
+  return def.kind === "utility" && def.effect.type === "oil" && oilShort(w, playerVehicle(w), def.effect.fuel);
+}
+
+// Why the part cannot be selected to aim, or null when it can.
+export function aimBlock(w: World, part: PartInstance): FireBlock | null {
+  return utilityBlock(w, playerVehicle(w), part);
+}
+
+export function utilityBlockText(part: PartInstance, block: FireBlock): string {
+  if (block === "cooldown") return `recharging ${turns(chargeOf(part).reload)}`;
+  return block === "disabled" ? "broken" : BLOCK_TEXT[block];
+}
+
+// The utility row of the weapon panel. A slot press, by key or click, toggles a self use for this turn, or selects a
+// point utility so the next click on the ground gives its order. A press on a slot with an order
+// clears it.
+// The badge each slot state shows in its corner, drawn by the slot CSS. States without one show none.
+const BADGE: Partial<Record<UtilityState, string>> = { aiming: "crosshair", set: "check", armed: "fuse" };
+
+// A bar along the slot's bottom that fills as the recharge counts down.
+function rechargeBar(reload: { left: number; total: number }): HTMLElement {
+  const share = Math.max(0, (reload.total - reload.left) / reload.total);
+  return el("span", { class: "recharge-bar", "aria-hidden": "true" }, el("span", { style: `width:${Math.round(share * 100)}%` }));
+}
+
+export class UtilityRow {
+  constructor(private host: UiHost) {}
+
+  render(w: World): HTMLElement | null {
+    const parts = utilitySlots(w);
+    if (parts.length === 0) return null;
+    const row = el("div", { class: "weapon-slots utility-slots" }, ...parts.map((part, i) => this.renderSlot(w, part, i)));
+    row.style.setProperty("--weapon-cols", String(parts.length));
+    return row;
+  }
+
+  private renderSlot(w: World, part: PartInstance, i: number): HTMLElement {
+    const selected = this.host.selectedUtility() === part.id;
+    const status = utilityStatus(w, part, selected);
+    const name = partDef(part.defId).name;
+    const key = utilityKey(w, i);
+    return el(
+      "div",
+      { class: "weapon-slot utility-slot", "data-utility": part.id, "data-state": status.state },
+      el(
+        "button",
+        {
+          class: `weapon-pick ${selected ? "on" : ""}`,
+          "aria-pressed": String(selected),
+          "aria-label": `${name}: ${status.text}`,
+          title: key === null ? name : `${name} [${key}]`,
+          onclick: () => (key === null ? this.selectUtility(i) : this.host.runKey(`Digit${key}`)),
+        },
+        el("span", { class: "weapon-number" }, key === null ? "" : `${key}`),
+        el("span", { class: "weapon-name" }, name),
+        createIcon("utility"),
+        BADGE[status.state] ? el("span", { class: "slot-badge", "data-badge": BADGE[status.state], "aria-hidden": "true" }) : null,
+        el("span", { "data-status": "" }, status.text),
+        status.reload ? rechargeBar(status.reload) : null,
+      ),
+    );
+  }
+
+  // The press on slot i. Nothing happens while a turn plays or on an empty slot.
+  selectUtility(i: number): void {
+    if (this.host.getTurnPhase() !== null) return;
+    const w = this.host.world();
+    const part = utilitySlots(w)[i];
+    if (!part) return;
+    if (playerVehicle(w).utilityOrders[part.id]) return this.clearOrder(w, part);
+    if (orderKindOf(part) === "self") return this.useSelf(w, part);
+    this.togglePick(w, part);
+  }
+
+  // Selects a point utility to wait for its target click, or drops the selection on a repeat press. A part
+  // that cannot aim (aimBlock) is not selected. The slot already shows why.
+  private togglePick(w: World, part: PartInstance): void {
+    const repeat = this.host.selectedUtility() === part.id;
+    this.host.selectUtility(repeat || aimBlock(w, part) ? null : part.id);
+  }
+
+  private clearOrder(w: World, part: PartInstance): void {
+    if (this.host.selectedUtility() === part.id) this.host.selectUtility(null);
+    this.host.apply(setUtilityOrder(w, part.id, null));
+  }
+
+  // A refused use changes nothing. The slot already shows why.
+  private useSelf(w: World, part: PartInstance): void {
+    if (utilityOrderError(w, playerVehicle(w), part.id, { kind: "self" }) === null)
+      this.host.apply(setUtilityOrder(w, part.id, { kind: "self" }));
+  }
+}
+
 // The visible state of a gun in a word: the hit chance when it can fire at a target, else why it cannot.
 export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWeaponReadout>): string {
   if (readout.chance !== null) return `${Math.round(readout.chance * 100)}%`;
@@ -278,8 +429,11 @@ export class WeaponPanel {
   private root = panel("weapons", bottomLeft());
   private turn = panel('turn-control');
   private expanded = true;
+  readonly utilities: UtilityRow;
 
-  constructor(private host: UiHost) {}
+  constructor(private host: UiHost) {
+    this.utilities = new UtilityRow(host);
+  }
 
   render(): void {
     const w = this.host.world();
@@ -366,6 +520,7 @@ export class WeaponPanel {
       { disabled: locked },
       slots,
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
+      this.utilities.render(w),
     );
   }
 
@@ -383,7 +538,7 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s). ${readout.status}, ${target}`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${Number(roundDamage(w, mw.def).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s). ${readout.status}, ${target}`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),
@@ -452,6 +607,14 @@ export class WeaponPanel {
   selectWeapon(id: string | null): void {
     if (this.host.getTurnPhase() !== null) return;
     this.host.selectWeapon(id);
+  }
+
+  // Number key n: the gun at that place, or past the guns the utility slot after them.
+  pressKey(n: number): void {
+    const w = this.host.world();
+    const guns = vehicleStats(w, playerVehicle(w)).weapons.length;
+    if (n <= guns) this.selectIndex(n - 1);
+    else this.utilities.selectUtility(n - guns - 1);
   }
 
   // A digit key picks the weapon at that index, and picks all again when it is already selected.

@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchMedia, mediaSection, requireMedia } from '../media';
+import { fetchMedia, mediaSection } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
 import { readCommitteeMedia } from '../reply-media';
+import { issueReports } from '../error-reports/service';
 import { readState } from '../state';
 import { bundleOf } from './bundle';
 import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
@@ -20,6 +21,16 @@ export function baseBranchFor(ctx: Ctx, labels: string[]): string {
   const release = readState(ctx.statePath).release;
   if (release === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);
   return release.branch;
+}
+
+// The game's tests compare the wiki pages with the data, so a wiki edit is not a docs change here.
+const TESTED_DOCS = `${GAME_DIR}/docs/wiki/`;
+
+// Whether the branch changes only Markdown docs. Such a change cannot change the game, so it skips the harden round,
+// the test round and the factory checks. The review still reads it, and the build still runs for the play link.
+export async function docsOnly(ctx: Ctx, issue: number, base: string): Promise<boolean> {
+  const files = await ctx.repo.changedFiles(base, BRANCH(issue));
+  return files.length > 0 && files.every((file) => file.endsWith('.md') && !file.startsWith(TESTED_DOCS));
 }
 
 export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {
@@ -108,14 +119,18 @@ async function githubToken(ctx: Ctx): Promise<string | undefined> {
 }
 
 // Fetches the images of the issue body and every comment, feedback included, into the issue's media folder, and adds the committee's Telegram images.
-// A failed issue image throws before the agent starts, except in a patch. A patch acts on committee text about a build they played,
-// so a dead image only shows as NOT AVAILABLE. Returns the prompt part that lists the images.
+// A failed image is fetched once more. One that still fails shows as NOT AVAILABLE, and the agent works from the text.
+// Returns the prompt part that lists the images.
 export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
   const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
-  const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
+  const options = { fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined };
+  let entries = await fetchMedia(options);
+  if (entries.some((entry) => entry.status === 'failed')) {
+    ctx.log(stage, issue, 'a reference image failed to fetch, fetching again');
+    entries = await fetchMedia(options);
+  }
   for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
-  if (stage !== 'patch') requireMedia(issue, entries);
   return mediaSection([...entries, ...readCommitteeMedia(mediaDir(ctx, issue))]);
 }
 
@@ -154,10 +169,11 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
-  const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
+  const reports = issueReports(ctx.cfg.home, issue);
+  const full = session.resume ? RESUME_NOTE : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.

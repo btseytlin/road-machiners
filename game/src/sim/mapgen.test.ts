@@ -1,12 +1,14 @@
+import { FORT_MODELS } from './fortress';
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
 import { FALLEN_SUN_DECKS, TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
 import { deckAt, deckById, underDeck } from './bridge';
-import { blockingBoxes, boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propKey, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { blockingBoxes, boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propKey, propPose, propReach, propShape, segmentCrossesBox, touchesObstacle } from './mapgen';
 import { hulkBoxes } from './body';
 import { ROAD_INDEX } from './road-index';
+import { isFortress } from './sites';
 import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
@@ -15,6 +17,7 @@ import { boxesOverlap } from '../test/boxes';
 import { deckHeight, groundAt, heightAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import type { PosedBox } from './mapgen';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -24,6 +27,10 @@ const prop = (kind: BakedProp['kind'], x: number, extra: Partial<BakedProp> = {}
 function mapWith(props: BakedProp[]): BakedMap {
   return { ...TEST_MAP, props };
 }
+
+const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && FORT_MODELS.has(o.look);
+// Nose's mountain stands over its site and closes its curtain with the walls. src/sim/fortress.test.ts keeps its roads clear.
+const isNoseRock = (o: Obstacle) => o.kind === 'landmark' && (o.look === 'noseRise' || o.look === 'noseCrag');
 
 describe('baked map obstacles', () => {
   it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
@@ -55,7 +62,7 @@ describe('baked map obstacles', () => {
 
   it('knows every obstacle it makes as baked, and no other', () => {
     const baked = mapObstacles(mapWith([prop('rock', 10), prop('pole', 20, { group: 4, step: 7 }), prop('tank', 30), prop('bridgeSpan', 40)]));
-    const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const others = world.obstacles.filter((o) => !mapObstacles(TEST_MAP).some((b) => b.id === o.id));
     const runtimeWrecks: Obstacle[] = [{ id: 'wreck-v12', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }, { id: 'wreck31', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }];
 
@@ -89,7 +96,7 @@ describe('breakable props', () => {
 });
 
 describe('world from the baked map', () => {
-  const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   const baked = world.obstacles.filter(isBakedObstacle);
 
   it('takes its terrain, hash and baked props from the map', () => {
@@ -100,15 +107,16 @@ describe('world from the baked map', () => {
   });
 
   it('places the same baked props for every world seed', () => {
-    const bakedOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).obstacles.filter(isBakedObstacle);
+    const bakedOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).obstacles.filter(isBakedObstacle);
     expect(bakedOf(7)).toEqual(bakedOf(1337));
   });
 
   it('keeps every baked landmark off every road surface and out of every site', () => {
     // A territory's own props stand inside it.
     const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
+    // Fortress pieces make up the site edge and its gates, which cross roads. src/sim/fortress.test.ts holds them to their circle.
     // The ship wing is the exception: it hangs over its road and reaches the Broken Wing hull by design.
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && o.look !== 'shipWing');
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && !isFortPiece(o) && !isNoseRock(o) && o.look !== 'shipWing');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -125,7 +133,7 @@ describe('world from the baked map', () => {
     const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
     const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // A wreck piece of a territory is long or hollow, so it stands on the ground only under its low boxes: trucks,
     // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
     const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
     const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
@@ -138,6 +146,12 @@ describe('world from the baked map', () => {
       return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
     };
     const overlap = (a: Obstacle, b: Obstacle): boolean => {
+      // Fortress pieces meet end to end and share their joints, and Nose's walls end in its rock, so only the ones of
+      // another kind count. A long wall or the mountain leaves its circle mostly empty, so its boxes decide.
+      const walled = (o: Obstacle) => isFortPiece(o) || isNoseRock(o);
+      if (walled(a) && walled(b)) return false;
+      if (walled(a)) return touchesObstacle(a, world.terrain, b.pos, b.r);
+      if (walled(b)) return touchesObstacle(b, world.terrain, a.pos, a.r);
       if (rimPair(a, b)) return false;
       if (boxed(a) && boxed(b)) return low(a).some((p) => low(b).some((q) => boxesOverlap(p, q)));
       if (boxed(a) || boxed(b)) {
@@ -158,9 +172,17 @@ describe('world from the baked map', () => {
     expect(overlaps).toEqual([]);
   });
 
+  it('puts a pond only at an oasis that is no fortress', () => {
+    const ponds = world.obstacles.filter((o) => o.kind === 'water').map((o) => o.id);
+    expect(ponds).not.toContain('pond-dustwell');
+    expect(ponds).not.toContain('pond-green-pit');
+    const open = REGION.locations.filter((l) => l.kind === 'oasis' && !isFortress(l)).map((l) => `pond-${l.id}`);
+    expect(ponds).toEqual(open);
+  });
+
   it('rejects a map of another size than the region', () => {
     const small: BakedMap = { ...TEST_MAP, terrain: { size: 10, heights: [], types: [] } };
-    expect(() => newWorld(1337, START_KITS.standard, small)).toThrow(/size/);
+    expect(() => newWorld(1337, START_KITS.standard, small, defaultSetup('roaming'))).toThrow(/size/);
   });
 });
 
@@ -331,7 +353,8 @@ describe('prop poses', () => {
 });
 
 // The Fallen Sun's hull piece looks, which stand on their low boxes.
-const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);
+// The looks of every territory's wreck pieces: hull pieces, the engine and its watchtowers.
+const HULL_PIECES = new Set<string>(Object.values(TERRITORIES).flatMap((t) => t.wreck?.pieces.map((p) => p.look) ?? []));
 
 describe('Broken Wing on the baked map', () => {
   const M = PHYSICS.metersPerTile;
@@ -382,7 +405,7 @@ describe('Broken Wing on the baked map', () => {
   });
 
   it('keeps every other prop, road wreck and site off the road under the hoop, on the ramps and on the deck', () => {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const points = [...under, ...stretch];
     const on = w.obstacles.filter((o) => o.id !== hoop.id && o.kind !== 'water' && points.some((p) => dist(o.pos, p) <= o.r));
     expect(on.map((o) => o.id)).toEqual([]);

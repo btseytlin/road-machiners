@@ -43,6 +43,7 @@ import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
+import { isWatching, postsOf } from './watch-posts';
 
 // ---- Traits and the profile they give.
 
@@ -462,9 +463,21 @@ export function nearLawGate(pos: Vec): boolean {
   return lawGates.some((gate) => dist(gate, pos) <= NPC_BEHAVIOR.lawGateReach);
 }
 
-// The hunting grounds a camp's raiders raid: those nearer it than any other camp, and farther than HUNT.lawReach from
-// every gate of a lawman town. Built once per camp from the region.
-export function raiderGrounds(camp: Site): readonly Vec[] {
+// The watch posts a camp's raiders raid from: the posts of the hunting grounds nearer it than any other camp, and
+// farther than HUNT.lawReach from every gate of a lawman town. A camp with none is a map bug.
+export function raiderGrounds(world: World, camp: Site): readonly Vec[] {
+  return campPosts(world, camp, campGrounds(camp), 'raid');
+}
+
+// The posts of a camp's raid or patrol grounds. See src/sim/watch-posts.ts.
+function campPosts(world: World, camp: Site, grounds: readonly Vec[], kind: string): readonly Vec[] {
+  const posts = postsOf(world, `${kind}:${camp.id}`, grounds);
+  if (posts.length === 0) throw new Error(`Camp ${camp.id} has no ${kind} post`);
+  return posts;
+}
+
+// The hunting grounds of a camp's raids. Built once per camp from the region.
+function campGrounds(camp: Site): readonly Vec[] {
   const cached = raiderStops.get(camp.id);
   if (cached) return cached;
   const camps = REGION.locations.filter((site) => site.kind === 'camp');
@@ -475,9 +488,9 @@ export function raiderGrounds(camp: Site): readonly Vec[] {
   return points;
 }
 
-// A raider's camp grounds it has not arrived at.
-export function raiderGroundsAway(vehicle: Vehicle): Vec[] {
-  return raiderGrounds(homeCamp(vehicle)).filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
+// A raider's camp posts it has not arrived at.
+export function raiderGroundsAway(world: World, vehicle: Vehicle): Vec[] {
+  return raiderGrounds(world, homeCamp(vehicle)).filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
 // ---- Patrols, trips and hauls.
@@ -501,15 +514,34 @@ export function patrolSite(vehicle: Vehicle): Site {
 
 const patrolStops = new Map<string, readonly Vec[]>();
 
-// Where a patrol of a town or camp drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
-// NPC_BEHAVIOR.patrolRadius of a gate and outside every site. Built once per site from the region.
+// Where a patrol of a town drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
+// NPC_BEHAVIOR.patrolRadius of a gate and outside every site.
 export function patrolPoints(site: Site): readonly Vec[] {
-  const cached = patrolStops.get(site.id);
+  return roadStops(site, NPC_BEHAVIOR.patrolSpacing);
+}
+
+// Where a raider patrol of its camp drives: the watch posts of road points every HUNT.patrolPostSpacing tiles,
+// within NPC_BEHAVIOR.patrolRadius of a gate and outside every site. A camp with none is a map bug.
+export function raiderPatrolPosts(world: World, camp: Site): readonly Vec[] {
+  return campPosts(world, camp, roadStops(camp, HUNT.patrolPostSpacing), 'patrol');
+}
+
+// The stops of the driver's patrols: posts around its camp for a raider, road points near its town for a lawman.
+export function patrolStopsOf(world: World, vehicle: Vehicle): readonly Vec[] {
+  const site = patrolSite(vehicle);
+  return hasTrait(vehicle, 'raider') ? raiderPatrolPosts(world, site) : patrolPoints(site);
+}
+
+// Points every `spacing` tiles along the roads, within NPC_BEHAVIOR.patrolRadius of a gate of the site and outside
+// every site. Built once per site and spacing from the region.
+function roadStops(site: Site, spacing: number): readonly Vec[] {
+  const key = `${site.id}:${spacing}`;
+  const cached = patrolStops.get(key);
   if (cached) return cached;
   const gates = siteGates(site);
   const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
-  const points = REGION.roads.flatMap((road) => pointsAlong(road, NPC_BEHAVIOR.patrolSpacing)).filter((p) => near(p) && siteUnder(p) === null);
-  patrolStops.set(site.id, points);
+  const points = REGION.roads.flatMap((road) => pointsAlong(road, spacing)).filter((p) => near(p) && siteUnder(p) === null);
+  patrolStops.set(key, points);
   return points;
 }
 
@@ -639,8 +671,8 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
 }
 
 // Only raiders are hostile to trucks with loot, so only they have prey to hunt, on the grounds of their own camp.
-function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return huntsPrey(vehicle) && raiderGroundsAway(vehicle).length > 0;
+function canRaid(world: World, vehicle: Vehicle): boolean {
+  return huntsPrey(vehicle) && raiderGroundsAway(world, vehicle).length > 0;
 }
 
 // Any driver that can drive can prowl to a hunting ground, unless its hold is known full. Only vultures weigh it above
@@ -649,9 +681,9 @@ function canProwl(world: World, vehicle: Vehicle): boolean {
   return canDrive(world, vehicle) && !holdFull(vehicle) && huntingGroundsAway(vehicle).length > 0;
 }
 
-// Lawmen patrol their town and raiders their camp, where they have road to drive.
-function canPatrol(_world: World, vehicle: Vehicle): boolean {
-  return (hasTrait(vehicle, 'lawman') || hasTrait(vehicle, 'raider')) && patrolPoints(patrolSite(vehicle)).length > 0;
+// Lawmen patrol their town and raiders their camp, where they have road or posts to drive to.
+function canPatrol(world: World, vehicle: Vehicle): boolean {
+  return (hasTrait(vehicle, 'lawman') || hasTrait(vehicle, 'raider')) && patrolStopsOf(world, vehicle).length > 0;
 }
 
 function canTravel(_world: World, vehicle: Vehicle): boolean {
@@ -808,12 +840,17 @@ function fightBackFactor(world: World, vehicle: Vehicle, _decision: DecisionId, 
   return danger !== null && isManageable(vehicle, danger) ? NPC_BEHAVIOR.manageableFight : 1;
 }
 
-// A driver busy with work, not weak, mostly keeps on around a hostile that is not aimed at it or its group.
+// A driver busy with work, not weak, mostly keeps on around a hostile that is not aimed at it or its group. A raider
+// watching from its post mostly lies low at a sound beyond sight and lets the prey come on.
 function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
   if (decision !== 'hostileSeen' && decision !== 'contactHeard') return 1;
   const other = subjectOf(world, decision, subject);
   const restrained = isBusy(vehicle) && !isWeak(world, vehicle) && !threatens(world, vehicle, other);
-  return restrained ? NPC_BEHAVIOR.keepWork : 1;
+  return (restrained ? NPC_BEHAVIOR.keepWork : 1) * lyingLow(vehicle, decision);
+}
+
+function lyingLow(vehicle: Vehicle, decision: DecisionId): number {
+  return decision === 'contactHeard' && isWatching(vehicle) ? NPC_BEHAVIOR.watchKeep : 1;
 }
 
 // A ram is weighed by its value against firing, see ramValue() in src/sim/ram-value.ts. One worth nothing is rare.
@@ -918,6 +955,13 @@ function investigateFactor(world: World, vehicle: Vehicle): number {
   return getCombatCondition(world, vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
 }
 
+// A raider back on its raid or patrol after an interruption mostly takes the cargo it carries home to sell.
+function lootedResumeFactor(_world: World, vehicle: Vehicle): number {
+  const base = vehicle.brain!.goals[0].kind;
+  const hunting = base === 'raid' || base === 'patrol';
+  return hasTrait(vehicle, 'raider') && hunting && hasSaleCargo(vehicle) ? NPC_BEHAVIOR.lootedResume : 1;
+}
+
 function scavengeFactor(world: World, vehicle: Vehicle): number {
   return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
@@ -933,7 +977,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   tow: towFactor,
   demand: neutral,
   attack: neutral,
-  resume: neutral,
+  resume: lootedResumeFactor,
   new: neutral,
   trade: neutral,
   scavenge: scavengeFactor,
